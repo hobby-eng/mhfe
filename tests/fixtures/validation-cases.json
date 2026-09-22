@@ -1,0 +1,86 @@
+{
+  "schema": "mhfe-validation-cases-v1",
+  "suite_id": "MHFE-BIP39-256-EXPERIMENTAL-2",
+  "description": "Fast negative, Unicode handoff, boundary, and source-length-classifier cases that do not run the full Argon2id profile.",
+  "pre_normalized_passwords": [
+    {
+      "id": "latin-composed-nfkd",
+      "display_input_utf8_hex": "636166c3a9",
+      "npss_nfkd_utf8_hex": "63616665cc81",
+      "expected": "accepted-verbatim"
+    },
+    {
+      "id": "cyrillic",
+      "display_input_utf8_hex": "d0bfd0b0d180d0bed0bbd18c",
+      "npss_nfkd_utf8_hex": "d0bfd0b0d180d0bed0bbd18c",
+      "expected": "accepted-verbatim"
+    },
+    {
+      "id": "emoji",
+      "display_input_utf8_hex": "f09f9490",
+      "npss_nfkd_utf8_hex": "f09f9490",
+      "expected": "accepted-verbatim"
+    },
+    {
+      "id": "compatibility-character",
+      "display_input_utf8_hex": "e291a0",
+      "npss_nfkd_utf8_hex": "31",
+      "expected": "accepted-verbatim"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "empty-normalized-password",
+      "operation": "NormalizedPassword::from_npss_nfkd_utf8",
+      "repeat_byte_hex": "61",
+      "count": 0,
+      "expected_error_code": "EMPTY_PASSWORD"
+    },
+    {
+      "id": "maximum-normalized-password",
+      "operation": "NormalizedPassword::from_npss_nfkd_utf8",
+      "repeat_byte_hex": "61",
+      "count": 1024,
+      "expected": "accepted"
+    },
+    {
+      "id": "oversized-normalized-password",
+      "operation": "NormalizedPassword::from_npss_nfkd_utf8",
+      "repeat_byte_hex": "61",
+      "count": 1025,
+      "expected_error_code": "PASSWORD_TOO_LONG"
+    },
+    {
+      "id": "pim-above-suite-maximum",
+      "operation": "MhfeEngine::new",
+      "pim": 32,
+      "expected_error_code": "INVALID_PIM"
+    },
+    {
+      "id": "unsupported-source-word-count",
+      "operation": "entropy_bytes_for_words",
+      "source_words": 13,
+      "expected_error_code": "INVALID_SOURCE_WORDS"
+    }
+  ],
+  "automatic_detection_classifier": [
+    {
+      "matching_short_source_words": [],
+      "expected_source_words": 24
+    },
+    {
+      "matching_short_source_words": [18],
+      "expected_source_words": 18
+    },
+    {
+      "matching_short_source_words": [12, 18],
+      "expected_error_code": "AMBIGUOUS_SOURCE_WORDS",
+      "expected_matching_source_words": [12, 18]
+    },
+    {
+      "matching_short_source_words": [12, 15, 18, 21],
+      "expected_error_code": "AMBIGUOUS_SOURCE_WORDS",
+      "expected_matching_source_words": [12, 15, 18, 21]
+    }
+  ]
+}

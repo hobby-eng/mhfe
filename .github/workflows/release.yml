@@ -7,10 +7,13 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned Rust toolchain
@@ -35,30 +38,20 @@ jobs:
         run: scripts/check.sh
       - name: Replay all published vectors in both directions
         run: cargo test --locked --release --test published_vectors -- --ignored --nocapture
-      - name: Install pinned wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
-      - name: Build browser distribution
-        run: scripts/build-wasm.sh
-      - name: Verify Worker-client boundary behavior
-        run: node scripts/verify-worker-client.mjs
-      - name: Exercise operational WASM exports
-        timeout-minutes: 15
-        run: node scripts/verify-wasm-api.mjs --operational
-      - name: Package release assets
-        run: |
-          mkdir -p release/linux release/browser
-          cp target/release/mhfe README.md API.md SECURITY.md LICENSE release/linux/
-          cp -R dist/. release/browser/
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C release/linux -cf - . | gzip -n > "release/mhfe-${GITHUB_REF_NAME}-linux-x86_64.tar.gz"
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C release/browser -cf - . | gzip -n > "release/mhfe-${GITHUB_REF_NAME}-browser-wasm.tar.gz"
-          cd release
-          sha256sum *.tar.gz > SHA256SUMS
+      - name: Build verified release assets in the canonical container
+        run: scripts/build-reproducible.sh canonical-output
+      - name: Print release checksums
+        run: cat canonical-output/release/SHA256SUMS
+      - name: Generate GitHub build-provenance attestations
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: 'canonical-output/release/*'
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            release/*.tar.gz release/SHA256SUMS \
+            canonical-output/release/* \
             --title "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics $GITHUB_REF_NAME" \
             --generate-notes \
             --verify-tag
