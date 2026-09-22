@@ -22,7 +22,7 @@ bench = false
 
 [dependencies]
 argon2 = { version = "=0.5.3", default-features = false, features = ["zeroize"] }
-bip39 = { version = "=2.2.2", features = ["zeroize"] }
+bip39 = { version = "=3.0.0", features = ["zeroize"] }
 blake2 = "=0.10.6"
 hex = "=0.4.3"
 hmac = "=0.12.1"
