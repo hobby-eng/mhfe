@@ -212,10 +212,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     );
                 }
             } else {
+                let automatic = source_words.is_none();
                 let result = match source_words {
                     Some(words) => engine.decrypt_mnemonic(&container, words, &password)?,
                     None => engine.decrypt_mnemonic_auto(&container, &password)?,
                 };
+                if automatic && !result.recovery_verified {
+                    eprintln!(
+                        "warning: no short-source verifier matched; the returned 24-word interpretation is unverified. Confirm wallet identity using known public data."
+                    );
+                }
                 let elapsed_ms = millis(started.elapsed());
                 if json {
                     println!(

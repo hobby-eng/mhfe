@@ -57,6 +57,10 @@ the reviewed bytes, and retain `connect-src 'none'`. The adapter provides:
 - engine disposal, Worker termination, and cancellation;
 - structured errors with stable codes.
 
+The direct WASM constructor and the Worker client both reject non-integer or
+out-of-range PIM values before allocating an Argon2 work area. Direct WASM and
+Worker explicit-length calls likewise accept only 12, 15, 18, 21, or 24.
+
 The Worker stages transferred password bytes into a zeroizing Rust object,
 wipes its reachable JavaScript byte copy before the expensive operation, and
 clears the Rust password in a `finally` path. JavaScript strings cannot be
@@ -81,7 +85,8 @@ execution during that termination path.
 The CLI is explicitly for public vectors and benchmarks. `--test-password` is
 visible in process listings and shell history. The `vector` command includes
 round secrets by design and must never be used with a real recovery phrase or
-password.
+password. Automatic recovery prints a warning to standard error when no short
+verifier matches and the result is therefore an unverified 24-word fallback.
 
 ## Error codes
 

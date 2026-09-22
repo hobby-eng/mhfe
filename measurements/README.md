@@ -12,4 +12,5 @@ Samsung `NP950QED-KA2DE` development machine. It was produced by the vector comm
 forward-round recalculation, and a wrong-PIM verifier-rejection check on the same machine.
 
 `local-browser-pim-0.json` records a complete Chromium module-Worker/WASM round trip against the
-published PIM-0 container and checks the reduced browser-result surface.
+published PIM-0 container and checks the reduced browser-result surface. It records the browser
+build current when the measurement was made; current operational WASM exports are exercised in CI.

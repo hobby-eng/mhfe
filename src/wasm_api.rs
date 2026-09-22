@@ -5,6 +5,28 @@ use crate::{
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
+fn checked_pim(pim: f64) -> Result<u32, JsError> {
+    if !pim.is_finite() || pim.fract() != 0.0 || pim < 0.0 || pim > crate::MAX_PIM as f64 {
+        return Err(JsError::new(&format!(
+            "INVALID_PIM: PIM must be an integer from 0 through {}",
+            crate::MAX_PIM
+        )));
+    }
+    Ok(pim as u32)
+}
+
+fn checked_source_words(source_words: f64) -> Result<usize, JsError> {
+    if !source_words.is_finite()
+        || source_words.fract() != 0.0
+        || ![12.0, 15.0, 18.0, 21.0, 24.0].contains(&source_words)
+    {
+        return Err(JsError::new(
+            "INVALID_SOURCE_WORDS: sourceWords must be 12, 15, 18, 21, or 24",
+        ));
+    }
+    Ok(source_words as usize)
+}
+
 fn js_error(error: MhfeError) -> JsError {
     JsError::new(&format!("{}: {error}", error.code()))
 }
@@ -82,7 +104,8 @@ pub struct WasmMhfeEngine {
 #[wasm_bindgen(js_class = MhfeEngine)]
 impl WasmMhfeEngine {
     #[wasm_bindgen(constructor)]
-    pub fn new(pim: u32) -> Result<WasmMhfeEngine, JsError> {
+    pub fn new(pim: f64) -> Result<WasmMhfeEngine, JsError> {
+        let pim = checked_pim(pim)?;
         Ok(Self {
             inner: MhfeEngine::new(pim).map_err(js_error)?,
             password: None,
@@ -135,11 +158,8 @@ impl WasmMhfeEngine {
     }
 
     #[wasm_bindgen(js_name = decryptJson)]
-    pub fn decrypt_json(
-        &mut self,
-        container: &str,
-        source_words: usize,
-    ) -> Result<String, JsError> {
+    pub fn decrypt_json(&mut self, container: &str, source_words: f64) -> Result<String, JsError> {
+        let source_words = checked_source_words(source_words)?;
         let password = self
             .password
             .as_ref()

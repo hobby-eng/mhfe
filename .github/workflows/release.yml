@@ -12,7 +12,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Verify tag and repository
@@ -39,6 +39,11 @@ jobs:
         run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
       - name: Build browser distribution
         run: scripts/build-wasm.sh
+      - name: Verify Worker-client boundary behavior
+        run: node scripts/verify-worker-client.mjs
+      - name: Exercise operational WASM exports
+        timeout-minutes: 15
+        run: node scripts/verify-wasm-api.mjs --operational
       - name: Package release assets
         run: |
           mkdir -p release/linux release/browser

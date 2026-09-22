@@ -24,11 +24,45 @@ for (const [key, value] of Object.entries(expected)) {
   }
 }
 
-try {
-  new MhfeEngine(32);
-  throw new Error('PIM 32 was unexpectedly accepted.');
-} catch (error) {
-  if (!String(error).includes('INVALID_PIM')) throw error;
+for (const rejectedPim of [32, 2 ** 32, 2 ** 32 + 31, -1, 0.5, Number.NaN]) {
+  try {
+    new MhfeEngine(rejectedPim);
+    throw new Error(`PIM ${String(rejectedPim)} was unexpectedly accepted.`);
+  } catch (error) {
+    if (!String(error).includes('INVALID_PIM')) throw error;
+  }
 }
 
-console.log('Verified generated MHFE WASM API and frozen suite parameters.');
+const sourceWordProbe = new MhfeEngine(0);
+try {
+  sourceWordProbe.decryptJson('unused', 2 ** 32 + 12);
+  throw new Error('Wrapped sourceWords was unexpectedly accepted.');
+} catch (error) {
+  if (!String(error).includes('INVALID_SOURCE_WORDS')) throw error;
+} finally {
+  sourceWordProbe.free();
+}
+
+if (process.argv.includes('--operational')) {
+  const source = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+  const password = 'public test password';
+  const expectedContainer = 'topple stock shiver enforce hire stumble unique trick mansion relief absent thought thunder price buzz crazy depart robust drastic bunker husband wagon salad book';
+  const engine = new MhfeEngine(0);
+  try {
+    engine.setAsciiPassword(password);
+    const encrypted = JSON.parse(engine.encryptJson(source));
+    if (encrypted.encryptedMnemonic !== expectedContainer) {
+      throw new Error('Operational WASM encryption did not match the published vector.');
+    }
+    const recovered = JSON.parse(engine.decryptAutoJson(expectedContainer));
+    if (recovered.recoveredMnemonic !== source || recovered.recoveryVerifier !== 'matched') {
+      throw new Error('Operational WASM automatic decryption did not recover the published vector.');
+    }
+  } finally {
+    engine.clearPassword();
+    engine.free();
+  }
+  console.log('Verified operational MHFE WASM encryption and automatic decryption.');
+} else {
+  console.log('Verified generated MHFE WASM API and frozen suite parameters.');
+}
