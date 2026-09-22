@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Verify standalone dependency graph
+        run: |
+          cargo metadata --locked --format-version 1 | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          root_manifest = data["workspace_root"] + "/Cargo.toml"
+          foreign = [
+              p["manifest_path"]
+              for p in data["packages"]
+              if p["source"] is None and p["manifest_path"] != root_manifest
+          ]
+          if foreign:
+              raise SystemExit(f"unexpected local/path packages: {foreign}")
+          '
+      - name: Native and WASM checks
+        run: scripts/check.sh
+      - name: Install pinned wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
+      - name: Build browser distribution
+        run: scripts/build-wasm.sh
+      - name: Verify browser API outputs
+        run: |
+          test -s dist/wasm/mhfe.js
+          test -s dist/wasm/mhfe_bg.wasm
+          test -s dist/wasm/mhfe.d.ts
+          test -s dist/client.d.ts
+          grep -q 'class MhfeEngine' dist/wasm/mhfe.d.ts
+          grep -q 'suiteParametersJson' dist/wasm/mhfe.d.ts
+          grep -q 'interface MhfeEncryptionResult' dist/client.d.ts
+          node scripts/verify-wasm-api.mjs

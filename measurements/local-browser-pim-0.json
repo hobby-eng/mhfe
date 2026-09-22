@@ -1,0 +1,22 @@
+{
+  "measured_at": "2026-09-22",
+  "suite_id": "MHFE-BIP39-256-EXPERIMENTAL-2",
+  "pim": 0,
+  "effective_passes": 12,
+  "memory_kib": 524288,
+  "lanes": 4,
+  "rounds": 12,
+  "browser": "Chrome for Testing 153.0.8010.12",
+  "execution": "wasm32-unknown-unknown through wasm-bindgen 0.2.128 in a module Web Worker",
+  "measurement": {
+    "encryption_ms": 85237.1,
+    "decryption_ms": 85109.0
+  },
+  "checks": [
+    "Encryption matched vectors/zero-12-pim-0.json.",
+    "Decryption recovered the original mnemonic and matched its recovery verifier.",
+    "The browser result omitted entropy, packed plaintext, round keys, salts, masks, and traces.",
+    "Source length 13 was rejected with INVALID_SOURCE_WORDS."
+  ],
+  "scope": "Single local browser observation; not a performance guarantee or browser-support matrix."
+}
