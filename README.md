@@ -8,11 +8,13 @@
   <img src="assets/mhfe-mascot.png" alt="MHFE penguin mascot carrying a cold-storage plate" width="240">
 </p>
 
-*Experimental Rust implementation*
+*Rust reference implementation of the experimental suite*
 
-This repository contains a minimal library and Linux command-line program for
-`MHFE-BIP39-256-EXPERIMENTAL-2`. It is intended to generate public test vectors,
-check round trips, and measure the current experimental parameters.
+This repository provides a reusable Rust library, a Linux command-line program,
+and an optional browser/WASM API for `MHFE-BIP39-256-EXPERIMENTAL-2`. It
+implements the complete encryption and recovery workflow, including every
+supported BIP39 source length, automatic short-source length detection, PIM
+handling, structured errors, public test-vector generation, and benchmarking.
 
 The protocol text is maintained separately in the companion
 [MHFE specification repository](https://github.com/hobby-eng/mhfe-spec). This repository contains
