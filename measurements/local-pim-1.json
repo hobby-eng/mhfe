@@ -1,0 +1,42 @@
+{
+  "measured_at": "2026-09-22",
+  "suite_id": "MHFE-BIP39-256-EXPERIMENTAL-2",
+  "pim": 1,
+  "effective_passes": 24,
+  "memory_kib": 524288,
+  "lanes": 4,
+  "rounds": 12,
+  "machine": {
+    "vendor": "SAMSUNG ELECTRONICS CO., LTD.",
+    "product_name": "950QED",
+    "board_name": "NP950QED-KA2DE",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "physical_cores": 12,
+    "hardware_threads": 16,
+    "linux_mem_total_kb": 15448300,
+    "kernel": "Linux 7.0.0-31-generic x86_64"
+  },
+  "implementation": {
+    "crate": "mhfe-experimental/0.3.0",
+    "rustc": "1.98.1 (48a229cea 2026-09-01)",
+    "argon2_crate": "0.5.3",
+    "profile": "release"
+  },
+  "measurement": {
+    "command": "mhfe vector",
+    "encryption_ms": 111170.811,
+    "decryption_ms": 118974.944,
+    "process_elapsed_seconds": 230.50,
+    "cpu_utilization_percent": 99,
+    "maximum_resident_set_kib": 527032
+  },
+  "independent_forward_check": {
+    "api": "Python cryptography 46.0.5 Argon2id",
+    "result": "All 12 forward rounds matched."
+  },
+  "negative_check": {
+    "operation": "Decrypt the PIM 1 container with PIM 0 and the correct password/source length",
+    "result": "RECOVERY_VERIFIER_MISMATCH"
+  },
+  "scope": "Single local observation; not a performance guarantee or attack-cost estimate."
+}

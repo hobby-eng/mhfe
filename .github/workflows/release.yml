@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Verify tag and repository
+        run: |
+          package_version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          test "$GITHUB_REF_NAME" = "v$package_version"
+          cargo metadata --locked --format-version 1 | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          root_manifest = data["workspace_root"] + "/Cargo.toml"
+          foreign = [p["manifest_path"] for p in data["packages"] if p["source"] is None and p["manifest_path"] != root_manifest]
+          if foreign:
+              raise SystemExit(f"unexpected local/path packages: {foreign}")
+          '
+      - name: Audit Cargo.lock against RustSec
+        uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1
+        with:
+          createIssues: false
+      - name: Check native and WASM code
+        run: scripts/check.sh
+      - name: Replay all published vectors in both directions
+        run: cargo test --locked --release --test published_vectors -- --ignored --nocapture
+      - name: Install pinned wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
+      - name: Build browser distribution
+        run: scripts/build-wasm.sh
+      - name: Package release assets
+        run: |
+          mkdir -p release/linux release/browser
+          cp target/release/mhfe README.md API.md SECURITY.md LICENSE release/linux/
+          cp -R dist/. release/browser/
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C release/linux -cf - . | gzip -n > "release/mhfe-${GITHUB_REF_NAME}-linux-x86_64.tar.gz"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C release/browser -cf - . | gzip -n > "release/mhfe-${GITHUB_REF_NAME}-browser-wasm.tar.gz"
+          cd release
+          sha256sum *.tar.gz > SHA256SUMS
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release/*.tar.gz release/SHA256SUMS \
+            --title "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

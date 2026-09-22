@@ -1,0 +1,237 @@
+{
+  "$schema": "https://raw.githubusercontent.com/hobby-eng/multi-chain-wallet-tools/main/docs/audit-report.schema.json",
+  "schemaVersion": 1,
+  "auditId": "AUD-001",
+  "auditNumber": 1,
+  "date": "2026-09-22",
+  "title": "MHFE prototype implementation audit",
+  "reviewer": {
+    "name": "OpenAI Codex",
+    "model": "GPT-6 family (exact service snapshot unavailable)",
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": null,
+    "commitComplete": false,
+    "workingTree": "No initial commit; all implementation files were untracked. Audit files are excluded from the fingerprint.",
+    "sourceFingerprint": "7952ef4c8ed8388980d2bf0ac5884046fb8d41b377d840176c60da4e7a86415a"
+  },
+  "scope": {
+    "included": [
+      "BIP39 parsing and universal N-to-24 packing",
+      "recovery verifier",
+      "Feistel, KDF, PRF and inverse wiring",
+      "native, CLI, WASM and Worker APIs",
+      "dependency and release configuration",
+      "published vector integration",
+      "security and user documentation"
+    ],
+    "excluded": [
+      "formal cryptanalysis",
+      "independent specialist certification",
+      "hardware wallet execution",
+      "Firefox runtime acceptance",
+      "cross-platform and reproducible release builds"
+    ],
+    "externalSpecificationSha256": "179a30af6960882b42bcdc9863c6be553194cac8465ef9202c0206913dbd3d45"
+  },
+  "checks": [
+    {
+      "checkId": "CHECK-FUN-001",
+      "outcome": "passed",
+      "evidence": "Seventeen fast library tests passed, including literal byte/bit order, UTF-8 validity and preservation, byte-length boundaries, real packed-state detection, and complete ambiguity reporting."
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "outcome": "passed-with-limitations",
+      "evidence": "Specification/source comparison and previously completed vector traces; no security proof."
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "outcome": "passed-after-remediation",
+      "evidence": "Native/WASM contract review and Chromium byte/module probes."
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "outcome": "passed-after-remediation",
+      "evidence": "Locked native and WASM builds plus standalone API check."
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "outcome": "passed",
+      "evidence": "11 direct crates.io dependencies, no path/Git dependencies; RustSec reported no advisories across 61 packages."
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "outcome": "passed-in-chromium-only",
+      "evidence": "Recorded real-parameter round trip: 85.337 s encrypt, 84.145 s decrypt."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-001-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Operational APIs retained unnecessary secret transcripts and lacked systematic best-effort cleanup",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affected": ["src/lib.rs", "src/wasm_api.rs", "src/main.rs"],
+      "reproduction": "Inspect the initial operational result and buffer ownership paths.",
+      "expected": "Routine operations expose only required outputs and release reachable secret buffers on normal disposal.",
+      "observed": "Early result types exposed plaintext and round transcript material and several owned buffers lacked systematic cleanup.",
+      "impact": "Consumers could retain substantially more sensitive material than required.",
+      "evidence": "Final source separates operational and vector-only results and uses zeroize/Zeroizing on reachable owners.",
+      "recommendedFix": "Separate debug/vector transcripts and apply best-effort cleanup without claiming physical erasure.",
+      "requiredVerification": "Source trace, API tests and browser disposal checks."
+    },
+    {
+      "id": "AUD-001-API001",
+      "category": "API",
+      "kind": "finding",
+      "title": "Worker-owned WASM loading conflicted with offline single-file integration",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affected": ["web/client.js", "web/mhfe-worker.js", "web/README.md"],
+      "reproduction": "Initialize the initial Worker in an embedded document with connect-src none.",
+      "expected": "The Worker starts without network access and signals readiness before operations.",
+      "observed": "The initial Worker needed to fetch its WASM URL.",
+      "impact": "Single-file offline consumers could fail or weaken CSP.",
+      "evidence": "Final Chromium probes passed with caller-supplied WebAssembly.Module and byte initialization.",
+      "recommendedFix": "Pass compiled modules or bytes through an explicit initialization handshake.",
+      "requiredVerification": "Byte/module startup, readiness, failure and cancellation probes under offline CSP."
+    },
+    {
+      "id": "AUD-001-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Release and WASM crate-type integration initially failed to link cleanly",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": true,
+      "affected": ["Cargo.toml", "scripts/build-wasm.sh"],
+      "reproduction": "Build clean native release and browser artifacts under the initial combined crate-type setup.",
+      "expected": "Both native rlib/CLI and WASM cdylib artifacts build from the locked standalone crate.",
+      "observed": "The initial configuration produced output/link integration failures.",
+      "impact": "A release could fail despite successful source-level checks.",
+      "evidence": "Final locked native build, explicit cargo rustc cdylib build, bindings and standalone check passed.",
+      "recommendedFix": "Keep the reusable native rlib default and request cdylib explicitly in the WASM build.",
+      "requiredVerification": "Clean native and WASM release builds and generated API verification."
+    },
+    {
+      "id": "AUD-001-FUN001",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "Required fixed-point refusal was absent",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affected": ["src/lib.rs", "src/wasm_api.rs"],
+      "reproduction": "Review encryption completion against the suite requirement for Y equal to X.",
+      "expected": "A fixed point is refused with a stable error.",
+      "observed": "No equality guard was present.",
+      "impact": "A rare fixed point could expose the source as the apparent container.",
+      "evidence": "The FIXED_POINT path and equality/non-equality unit test pass.",
+      "recommendedFix": "Compare input and output state before encoding the container.",
+      "requiredVerification": "Unit and adapter error-mapping tests."
+    },
+    {
+      "id": "AUD-001-FUN002",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "Recovery required an explicit source length instead of implementing the specified automatic detection",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affected": ["src/lib.rs", "src/main.rs", "src/wasm_api.rs", "web/client.js", "web/mhfe-worker.js"],
+      "reproduction": "Inspect the original recovery APIs and observe that source_words was mandatory and only one verifier layout was tested.",
+      "expected": "After one inverse permutation, every short layout is tested; one match selects it, no match falls back to 24 words, and multiple matches report the complete set.",
+      "observed": "Automatic detection and ambiguity reporting were absent.",
+      "impact": "Recovery depended on separately supplied length metadata and could not implement the specification's ambiguity rule.",
+      "evidence": "The final core, CLI, WASM, and Worker expose automatic recovery; tests cover zero, one, two, three, and four matches and real packed states.",
+      "recommendedFix": "Implement one complete classifier shared by every automatic recovery adapter while retaining explicit length as an override.",
+      "requiredVerification": "Fast classifier tests, WASM library compilation, and JavaScript syntax checks."
+    },
+    {
+      "id": "AUD-001-API002",
+      "category": "API",
+      "kind": "finding",
+      "title": "Argon2 work-area allocation could abort instead of returning a typed error",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affected": ["src/lib.rs", "src/wasm_api.rs"],
+      "reproduction": "Inspect allocation of the 512 MiB Block vector under constrained memory.",
+      "expected": "Reservation failure reaches the caller as a stable error.",
+      "observed": "Direct allocation could terminate before structured error handling.",
+      "impact": "A constrained Worker or CLI could disappear without a useful diagnostic.",
+      "evidence": "Final source uses fallible reservation and maps MEMORY_ALLOCATION_FAILURE; real host OOM was not induced.",
+      "recommendedFix": "Reserve fallibly before initializing the KDF work area.",
+      "requiredVerification": "Error-path unit test or a controlled allocator-failure harness."
+    },
+    {
+      "id": "AUD-001-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Worker termination documentation overstated zeroization guarantees",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affected": ["README.md", "API.md", "web/README.md"],
+      "reproduction": "Compare the original cancellation claim with browser Worker termination semantics.",
+      "expected": "Documentation distinguishes reachable-buffer cleanup from guaranteed physical erasure.",
+      "observed": "Initial wording implied termination runs cleanup and erases memory.",
+      "impact": "Consumers could rely on a guarantee the browser does not provide.",
+      "evidence": "Final documentation consistently describes normal disposal and forced termination limitations.",
+      "recommendedFix": "State cleanup limits explicitly.",
+      "requiredVerification": "Documentation consistency review."
+    }
+  ],
+  "observations": [
+    {
+      "id": "AUD-001-ARC001",
+      "category": "ARC",
+      "kind": "observation",
+      "title": "Prototype repository has no immutable revision history",
+      "severity": "info",
+      "status": "accepted",
+      "releaseBlocking": false,
+      "evidence": "Git reports no HEAD and all implementation paths as untracked.",
+      "reproduction": "Run git status and git rev-parse HEAD.",
+      "expected": "Audit evidence is preferably tied to an immutable commit.",
+      "observed": "Only a manifest fingerprint identifies the reviewed tree.",
+      "impact": "Later provenance and remediation comparisons are harder.",
+      "recommendedFix": "Create an initial reviewed commit before publication.",
+      "requiredVerification": "Record the commit and rerun release gates."
+    }
+  ],
+  "remediation": [
+    {"id": "AUD-001-SEC001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Final source/API review"},
+    {"id": "AUD-001-API001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Chromium module/byte probes"},
+    {"id": "AUD-001-BLD001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Native and WASM builds"},
+    {"id": "AUD-001-FUN001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Unit and API error tests"},
+    {"id": "AUD-001-FUN002", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Fast classifier, WASM library, and JavaScript checks"},
+    {"id": "AUD-001-API002", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Fallible allocation path; real OOM not induced"},
+    {"id": "AUD-001-DOC001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Documentation review"}
+  ],
+  "limitations": [
+    "No independent cryptography-specialist audit or formal security proof.",
+    "No full Unicode 18 normalization implementation.",
+    "No Firefox runtime acceptance, cross-platform release build, Docker run or reproducibility comparison.",
+    "No induced out-of-memory test.",
+    "The expensive vector replay and full Chromium round trip passed before final cleanup-only and documentation/test edits and were not repeated at the owner's request.",
+    "Final fingerprint verification was limited to formatting, seventeen fast library tests, a WASM library check, and JavaScript syntax checks."
+  ],
+  "historicalEvidence": {
+    "publishedVectorReplaySeconds": 682.91,
+    "chromiumEncryptSeconds": 85.337,
+    "chromiumDecryptSeconds": 84.145,
+    "artifactSha256": {
+      "linuxCli": "bd50d8e07704d652ee97ac4995f8dbc217259e8c8116b81705bd27b47697bfb0",
+      "wasm": "0233f29c02aa4ea2560432f261bcc4a2034e5e9c3d9ebc31f31a7b1b2c1d067c",
+      "client": "12dc4f93fc5111f5c00a942479b7fbf085be89cbba0da6649cf830862a872c0a",
+      "worker": "ef4699d1f0b1c0ddfae7eddfe0a9c3cea0a52ffbb4199c88f4fe5f3ed4711b95"
+    }
+  }
+}
