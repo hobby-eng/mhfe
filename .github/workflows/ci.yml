@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned Rust toolchain
@@ -48,3 +48,23 @@ jobs:
       - name: Exercise operational WASM exports
         timeout-minutes: 15
         run: node scripts/verify-wasm-api.mjs --operational
+
+  canonical-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out the exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and verify canonical release assets
+        run: scripts/build-reproducible.sh
+      - name: Print canonical checksums
+        run: cat canonical-output/release/SHA256SUMS
+      - name: Preserve canonical build assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mhfe-canonical-${{ github.sha }}
+          path: canonical-output/release/
+          if-no-files-found: error
+          retention-days: 7

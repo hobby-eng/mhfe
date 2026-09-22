@@ -10,7 +10,7 @@ use bip39::{Language, Mnemonic};
 use blake2::{digest::consts::U32, Blake2b, Digest as BlakeDigest};
 use hmac::{Hmac, Mac};
 use serde::Serialize;
-use sha2::Sha256;
+use sha2::{Digest as ShaDigest, Sha256};
 use std::fmt;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -955,6 +955,75 @@ mod tests {
     fn automatic_detection_uses_unique_match_or_twenty_four_word_fallback() {
         assert_eq!(detect_source_words_with(|_| false).unwrap(), 24);
         assert_eq!(detect_source_words_with(|words| words == 18).unwrap(), 18);
+    }
+
+    #[test]
+    fn machine_readable_validation_cases_match_the_api() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/validation-cases.json")).unwrap();
+
+        for case in fixture["pre_normalized_passwords"].as_array().unwrap() {
+            let bytes = hex::decode(case["npss_nfkd_utf8_hex"].as_str().unwrap()).unwrap();
+            let password = NormalizedPassword::from_npss_nfkd_utf8(&bytes).unwrap();
+            assert_eq!(password.as_bytes(), bytes);
+        }
+
+        for case in fixture["boundaries"].as_array().unwrap() {
+            let id = case["id"].as_str().unwrap();
+            match id {
+                "empty-normalized-password"
+                | "maximum-normalized-password"
+                | "oversized-normalized-password" => {
+                    let byte =
+                        u8::from_str_radix(case["repeat_byte_hex"].as_str().unwrap(), 16).unwrap();
+                    let input = vec![byte; case["count"].as_u64().unwrap() as usize];
+                    let result = NormalizedPassword::from_npss_nfkd_utf8(&input);
+                    if let Some(code) = case["expected_error_code"].as_str() {
+                        let error = match result {
+                            Ok(_) => panic!("invalid password fixture was accepted: {id}"),
+                            Err(error) => error,
+                        };
+                        assert_eq!(error.code(), code);
+                    } else {
+                        assert_eq!(result.unwrap().as_bytes(), input);
+                    }
+                }
+                "pim-above-suite-maximum" => {
+                    let error = match MhfeEngine::new(case["pim"].as_u64().unwrap() as u32) {
+                        Ok(_) => panic!("invalid PIM was accepted"),
+                        Err(error) => error,
+                    };
+                    assert_eq!(error.code(), case["expected_error_code"].as_str().unwrap());
+                }
+                "unsupported-source-word-count" => {
+                    let error =
+                        entropy_bytes_for_words(case["source_words"].as_u64().unwrap() as usize)
+                            .unwrap_err();
+                    assert_eq!(error.code(), case["expected_error_code"].as_str().unwrap());
+                }
+                _ => panic!("unknown validation fixture: {id}"),
+            }
+        }
+
+        for case in fixture["automatic_detection_classifier"]
+            .as_array()
+            .unwrap()
+        {
+            let matches = case["matching_short_source_words"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_u64().unwrap() as usize)
+                .collect::<Vec<_>>();
+            let result = detect_source_words_with(|words| matches.contains(&words));
+            if let Some(expected) = case["expected_source_words"].as_u64() {
+                assert_eq!(result.unwrap(), expected as usize);
+            } else {
+                let error = result.unwrap_err();
+                assert_eq!(error.code(), case["expected_error_code"].as_str().unwrap());
+                assert_eq!(error, MhfeError::AmbiguousSourceWords(matches));
+            }
+        }
     }
 
     #[test]

@@ -1,5 +1,13 @@
 # MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics
 
+[![CI](https://github.com/hobby-eng/mhfe/actions/workflows/ci.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/ci.yml)
+[![Published vectors](https://github.com/hobby-eng/mhfe/actions/workflows/vectors.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/vectors.yml)
+[![RustSec audit](https://github.com/hobby-eng/mhfe/actions/workflows/audit.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/audit.yml)
+
+<p align="center">
+  <img src="assets/mhfe-mascot.png" alt="MHFE penguin mascot carrying a cold-storage plate" width="240">
+</p>
+
 *Experimental Rust implementation*
 
 This repository contains a minimal library and Linux command-line program for
@@ -45,6 +53,20 @@ cargo build --release --locked
 scripts/build-wasm.sh
 ```
 
+Canonical release assets are built in a pinned Linux/amd64 container:
+
+```bash
+scripts/build-reproducible.sh
+```
+
+The container pins its base image by digest, Rust 1.98.1, Node.js 24.20.0,
+`wasm-bindgen-cli` 0.2.128, and every Rust dependency through `Cargo.lock`.
+It emits deterministic Linux and browser/WASM archives plus `SHA256SUMS`.
+The browser archive is the canonical byte sequence for downstream consumers;
+an application embedding MHFE should pin the release and verify its published
+SHA-256 value instead of independently rebuilding a nominally identical WASM
+file.
+
 The binary is written to `target/release/mhfe`. The plain WASM command verifies
 that the reusable core compiles for the browser target; `scripts/build-wasm.sh`
 additionally produces the JavaScript bindings and Worker adapter.
@@ -56,9 +78,10 @@ scripts/check.sh
 ```
 
 Tags matching the package version, for example `v0.3.0`, run the repository's
-own release workflow. It repeats all checks and publishes a Linux x86-64 CLI
-archive, a browser/WASM archive, and `SHA256SUMS`. No wallet-tools checkout is
-used by CI or release builds.
+own release workflow. It repeats all checks, invokes the same canonical
+container build, and publishes a Linux x86-64 CLI archive, a browser/WASM
+archive, and `SHA256SUMS`. No wallet-tools checkout is used by CI or release
+builds.
 RustSec auditing runs when the Cargo dependency files change and on a weekly
 schedule; Dependabot watches both Cargo and GitHub Actions dependencies.
 
