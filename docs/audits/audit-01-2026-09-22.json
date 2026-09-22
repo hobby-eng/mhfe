@@ -14,7 +14,9 @@
     "commit": null,
     "commitComplete": false,
     "workingTree": "No initial commit; all implementation files were untracked. Audit files are excluded from the fingerprint.",
-    "sourceFingerprint": "7952ef4c8ed8388980d2bf0ac5884046fb8d41b377d840176c60da4e7a86415a"
+    "sourceFingerprint": "7952ef4c8ed8388980d2bf0ac5884046fb8d41b377d840176c60da4e7a86415a",
+    "firstPublishedCommit": "12b26a3348798654d9ea2fa08a715fef8e9e8334",
+    "publicationRelationship": "First immutable commit containing all seven verified AUD-001 remediations. AUD-002 independently confirmed their presence there; this does not replace the original pre-commit audit snapshot."
   },
   "scope": {
     "included": [
