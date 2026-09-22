@@ -296,24 +296,24 @@
   "remediation": [
     {
       "id": "AUD-002-API001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Node.js probe on dist/wasm; glue inspection"
+      "status": "verified",
+      "fixCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "verificationCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "evidence": "Rebuilt WASM Node probes reject oversized and fractional PIM values and wrapped source lengths; Worker-client boundary test passed."
     },
     {
       "id": "AUD-002-BLD001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "dist vs web diff; export list; script review"
+      "status": "verified",
+      "fixCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "verificationCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "evidence": "GitHub CI run 35757633265 rebuilt WASM and passed the published-vector encryptJson/decryptAutoJson round trip."
     },
     {
       "id": "AUD-002-DOC001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Private reporting disabled (API); README grep"
+      "status": "verified",
+      "fixCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "verificationCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "evidence": "GitHub API returned enabled true for both repositories; existing specification links were rechecked."
     }
   ],
   "priorFindingsStatus": {
