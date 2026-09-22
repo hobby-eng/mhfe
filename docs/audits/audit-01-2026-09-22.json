@@ -14,7 +14,9 @@
     "commit": null,
     "commitComplete": false,
     "workingTree": "No initial commit; all implementation files were untracked. Audit files are excluded from the fingerprint.",
-    "sourceFingerprint": "7952ef4c8ed8388980d2bf0ac5884046fb8d41b377d840176c60da4e7a86415a"
+    "sourceFingerprint": "7952ef4c8ed8388980d2bf0ac5884046fb8d41b377d840176c60da4e7a86415a",
+    "firstPublishedCommit": "01d8558a8dc66d86b2300871dae4efeebbd23fb9",
+    "publicationRelationship": "First immutable commit containing all seven verified AUD-001 remediations. AUD-002 independently confirmed their presence there; this does not replace the original pre-commit audit snapshot."
   },
   "scope": {
     "included": [
@@ -76,7 +78,11 @@
       "severity": "medium",
       "status": "verified",
       "releaseBlocking": false,
-      "affected": ["src/lib.rs", "src/wasm_api.rs", "src/main.rs"],
+      "affected": [
+        "src/lib.rs",
+        "src/wasm_api.rs",
+        "src/main.rs"
+      ],
       "reproduction": "Inspect the initial operational result and buffer ownership paths.",
       "expected": "Routine operations expose only required outputs and release reachable secret buffers on normal disposal.",
       "observed": "Early result types exposed plaintext and round transcript material and several owned buffers lacked systematic cleanup.",
@@ -93,7 +99,11 @@
       "severity": "medium",
       "status": "verified",
       "releaseBlocking": false,
-      "affected": ["web/client.js", "web/mhfe-worker.js", "web/README.md"],
+      "affected": [
+        "web/client.js",
+        "web/mhfe-worker.js",
+        "web/README.md"
+      ],
       "reproduction": "Initialize the initial Worker in an embedded document with connect-src none.",
       "expected": "The Worker starts without network access and signals readiness before operations.",
       "observed": "The initial Worker needed to fetch its WASM URL.",
@@ -110,7 +120,10 @@
       "severity": "medium",
       "status": "verified",
       "releaseBlocking": true,
-      "affected": ["Cargo.toml", "scripts/build-wasm.sh"],
+      "affected": [
+        "Cargo.toml",
+        "scripts/build-wasm.sh"
+      ],
       "reproduction": "Build clean native release and browser artifacts under the initial combined crate-type setup.",
       "expected": "Both native rlib/CLI and WASM cdylib artifacts build from the locked standalone crate.",
       "observed": "The initial configuration produced output/link integration failures.",
@@ -127,7 +140,10 @@
       "severity": "low",
       "status": "verified",
       "releaseBlocking": false,
-      "affected": ["src/lib.rs", "src/wasm_api.rs"],
+      "affected": [
+        "src/lib.rs",
+        "src/wasm_api.rs"
+      ],
       "reproduction": "Review encryption completion against the suite requirement for Y equal to X.",
       "expected": "A fixed point is refused with a stable error.",
       "observed": "No equality guard was present.",
@@ -144,7 +160,13 @@
       "severity": "medium",
       "status": "verified",
       "releaseBlocking": false,
-      "affected": ["src/lib.rs", "src/main.rs", "src/wasm_api.rs", "web/client.js", "web/mhfe-worker.js"],
+      "affected": [
+        "src/lib.rs",
+        "src/main.rs",
+        "src/wasm_api.rs",
+        "web/client.js",
+        "web/mhfe-worker.js"
+      ],
       "reproduction": "Inspect the original recovery APIs and observe that source_words was mandatory and only one verifier layout was tested.",
       "expected": "After one inverse permutation, every short layout is tested; one match selects it, no match falls back to 24 words, and multiple matches report the complete set.",
       "observed": "Automatic detection and ambiguity reporting were absent.",
@@ -161,7 +183,10 @@
       "severity": "low",
       "status": "verified",
       "releaseBlocking": false,
-      "affected": ["src/lib.rs", "src/wasm_api.rs"],
+      "affected": [
+        "src/lib.rs",
+        "src/wasm_api.rs"
+      ],
       "reproduction": "Inspect allocation of the 512 MiB Block vector under constrained memory.",
       "expected": "Reservation failure reaches the caller as a stable error.",
       "observed": "Direct allocation could terminate before structured error handling.",
@@ -178,7 +203,11 @@
       "severity": "low",
       "status": "verified",
       "releaseBlocking": false,
-      "affected": ["README.md", "API.md", "web/README.md"],
+      "affected": [
+        "README.md",
+        "API.md",
+        "web/README.md"
+      ],
       "reproduction": "Compare the original cancellation claim with browser Worker termination semantics.",
       "expected": "Documentation distinguishes reachable-buffer cleanup from guaranteed physical erasure.",
       "observed": "Initial wording implied termination runs cleanup and erases memory.",
@@ -207,13 +236,55 @@
     }
   ],
   "remediation": [
-    {"id": "AUD-001-SEC001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Final source/API review"},
-    {"id": "AUD-001-API001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Chromium module/byte probes"},
-    {"id": "AUD-001-BLD001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Native and WASM builds"},
-    {"id": "AUD-001-FUN001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Unit and API error tests"},
-    {"id": "AUD-001-FUN002", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Fast classifier, WASM library, and JavaScript checks"},
-    {"id": "AUD-001-API002", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Fallible allocation path; real OOM not induced"},
-    {"id": "AUD-001-DOC001", "status": "verified", "fixCommit": null, "verificationCommit": null, "evidence": "Documentation review"}
+    {
+      "id": "AUD-001-SEC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Final source/API review"
+    },
+    {
+      "id": "AUD-001-API001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Chromium module/byte probes"
+    },
+    {
+      "id": "AUD-001-BLD001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Native and WASM builds"
+    },
+    {
+      "id": "AUD-001-FUN001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Unit and API error tests"
+    },
+    {
+      "id": "AUD-001-FUN002",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fast classifier, WASM library, and JavaScript checks"
+    },
+    {
+      "id": "AUD-001-API002",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fallible allocation path; real OOM not induced"
+    },
+    {
+      "id": "AUD-001-DOC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Documentation review"
+    }
   ],
   "limitations": [
     "No independent cryptography-specialist audit or formal security proof.",
