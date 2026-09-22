@@ -21,6 +21,7 @@ export class MhfeWorkerClient {
   #resolveReady;
   #rejectReady;
   #terminated = false;
+  #maxPim = 31;
 
   static fromUrl(url, wasmModuleOrBytes) {
     return new MhfeWorkerClient(
@@ -42,9 +43,14 @@ export class MhfeWorkerClient {
       this.#resolveReady = resolve;
       this.#rejectReady = reject;
     });
+    // A caller may cancel immediately without ever awaiting ready(). Keep the
+    // original promise rejectable for callers while marking that rejection as
+    // observed so cancellation cannot create an unhandled-rejection event.
+    this.#ready.catch(() => {});
     worker.addEventListener('message', (event) => {
       const response = event.data;
       if (response?.type === 'ready' && !('id' in response)) {
+        this.#maxPim = response.parameters.maxPim;
         this.#resolveReady(response.parameters);
         return;
       }
@@ -96,24 +102,29 @@ export class MhfeWorkerClient {
   }
 
   encryptAscii(mnemonic, passwordAscii, pim = 0) {
+    requirePim(pim, this.#maxPim);
     return this.#request({ type: 'encrypt', mnemonic, passwordAscii, pim });
   }
 
   decryptAscii(container, sourceWords, passwordAscii, pim = 0) {
+    requirePim(pim, this.#maxPim);
     return this.#request({ type: 'decrypt', container, sourceWords, passwordAscii, pim });
   }
 
   decryptAsciiAuto(container, passwordAscii, pim = 0) {
+    requirePim(pim, this.#maxPim);
     return this.#request({ type: 'decryptAuto', container, passwordAscii, pim });
   }
 
   encryptPreNormalizedUtf8(mnemonic, passwordUtf8, pim = 0) {
+    requirePim(pim, this.#maxPim);
     requireUint8Array(passwordUtf8);
     const password = passwordUtf8.slice();
     return this.#request({ type: 'encrypt', mnemonic, passwordUtf8: password, pim }, [password.buffer]);
   }
 
   decryptPreNormalizedUtf8(container, sourceWords, passwordUtf8, pim = 0) {
+    requirePim(pim, this.#maxPim);
     requireUint8Array(passwordUtf8);
     const password = passwordUtf8.slice();
     return this.#request(
@@ -123,6 +134,7 @@ export class MhfeWorkerClient {
   }
 
   decryptPreNormalizedUtf8Auto(container, passwordUtf8, pim = 0) {
+    requirePim(pim, this.#maxPim);
     requireUint8Array(passwordUtf8);
     const password = passwordUtf8.slice();
     return this.#request(
@@ -176,6 +188,12 @@ export class MhfeWorkerClient {
 function requireUint8Array(value) {
   if (!(value instanceof Uint8Array)) {
     throw new TypeError('passwordUtf8 must be a Uint8Array.');
+  }
+}
+
+function requirePim(value, maxPim) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > maxPim) {
+    throw new RangeError(`pim must be an integer from 0 through ${maxPim}.`);
   }
 }
 

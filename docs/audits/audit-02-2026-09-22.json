@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-002",
+  "auditNumber": 2,
+  "date": "2026-09-22",
+  "title": "MHFE implementation conformance, contract and build audit",
+  "reviewer": {
+    "name": "Claude Code (Anthropic), independent read-only reviewer",
+    "model": "claude-fable-5-1",
+    "reasoningEffort": null,
+    "metadataNote": "Reasoning-effort setting was not exposed by the client; null means unrecorded."
+  },
+  "snapshot": {
+    "commit": "12b26a3348798654d9ea2fa08a715fef8e9e8334",
+    "commitComplete": true,
+    "workingTree": "Evidence capture began on an uncommitted tree (15 untracked paths); the commit was created and pushed during the review (author date 2026-09-22T15:51:03Z, GitHub HEAD identical). Recomputed source fingerprint after the commit is unchanged. Working tree clean apart from this audit record.",
+    "sourceFingerprint": "7fee380ec0cc977dc82a38201f29fdb9c9f5b20be24ac1991d3161cf4b6c0236",
+    "fingerprintMethod": "SHA-256 of a sorted per-file SHA-256 manifest of 29 files",
+    "keyFiles": {
+      "src/lib.rs": "412c4790190a85d9",
+      "src/main.rs": "8c3eabf08c64b491",
+      "src/wasm_api.rs": "1f25ea6de2e3f2cc",
+      "tests/published_vectors.rs": "29ee9b500c5124da",
+      "web/client.js": "6a446858ed553f6a",
+      "web/mhfe-worker.js": "cfab863f602420f4",
+      "web/client.d.ts": "d5d9435b3fc60095"
+    },
+    "artifacts": {
+      "target/release/mhfe": "2a16ff3593b3ea7e0c1f99f27a6d43120fc098a7f80caf5051d780ca14cc01f2",
+      "dist/wasm/mhfe_bg.wasm (pre-existing, stale)": "0233f29c02aa4ea2560432f261bcc4a2034e5e9c3d9ebc31f31a7b1b2c1d067c"
+    },
+    "companionSpecification": {
+      "repository": "mhfe_spec",
+      "commit": "4e7d03a1e1cbf68b407c3affd93c786884cd6ed1",
+      "specSha256": "d5e241135d32a3ccd62bc9ebc00f0e6773e1cccfc67afa3882209d3ae2b44812"
+    },
+    "remote": "git@github.com:hobby-eng/mhfe.git",
+    "remoteHeadMatched": true
+  },
+  "scope": [
+    "Full read of Rust core, CLI, WASM API, Worker client, tests, scripts, workflows, manifests and documentation",
+    "Specification conformance trace against SPECIFICATION-PLAIN.md",
+    "Static gates: fmt, clippy (native, wasm32), unit tests, cargo doc, cargo audit, release build",
+    "Repository replay of the six published vectors (ignored test) in release mode",
+    "Differential testing: three new CLI vectors (12/18/24 words, official BIP39 entropies 7f/80/7f, synthetic public password) recomputed by an independent Python implementation in both directions",
+    "Adversarial CLI probes: 10 negative, 4 full-cost semantic",
+    "Node.js probes of the pre-existing dist/wasm build: parameters, PIM boundary and integer wrap, one real round trip",
+    "Dependency provenance, license inventory, workflow pinning, release packaging",
+    "Documentation claim checks including the README password-guessing table",
+    "Exclusions: no cryptanalysis, no browser session, no WASM rebuild, no OOM induction, no cross-platform builds"
+  ],
+  "checks": {
+    "fmt": "pass",
+    "clippyNative": "pass",
+    "clippyWasm32": "pass",
+    "unitTests": {
+      "passed": 17,
+      "failed": 0,
+      "ignored": 1
+    },
+    "cargoDoc": "pass",
+    "cargoAudit": {
+      "crates": 61,
+      "advisoriesLoaded": 1261,
+      "findings": 0,
+      "exit": 0
+    },
+    "releaseBuild": {
+      "binarySha256": "2a16ff3593b3ea7e0c1f99f27a6d43120fc098a7f80caf5051d780ca14cc01f2",
+      "bytes": 1080832
+    },
+    "publishedVectorReplay": {
+      "passed": 1,
+      "failed": 0,
+      "testSeconds": 1275.89,
+      "wallClock": "21:28",
+      "maxRssKib": 527212,
+      "note": "two concurrent Argon2id jobs on the host"
+    },
+    "differentialVectors": {
+      "generated": 3,
+      "sourceWords": [
+        12,
+        18,
+        24
+      ],
+      "independentForward": 3,
+      "independentInverse": 3,
+      "failed": 0,
+      "cliEncryptDecryptSeconds": [
+        [
+          57.8,
+          58.4
+        ],
+        [
+          59.9,
+          61.9
+        ],
+        [
+          60.6,
+          78.2
+        ]
+      ],
+      "scriptSha256": "f0232ff4e884328f1b9bf1a63e1f50b73734598ebbeea46c0db9cfeb6edea5fa"
+    },
+    "negativeProbes": {
+      "run": 10,
+      "behavedAsDocumented": 10
+    },
+    "semanticProbes": {
+      "run": 4,
+      "note": "wrong password under auto-detection yields unverified 24-word fallback (specified); explicit length yields RECOVERY_VERIFIER_MISMATCH; wrong PIM yields fallback; irregular whitespace accepted"
+    },
+    "nodeWasmProbes": {
+      "parameters": "pass",
+      "roundTrip": {
+        "encryptSeconds": 91.8,
+        "decryptSeconds": 92.2,
+        "matchedPublishedContainer": true
+      },
+      "pimWrap": {
+        "2^32": "accepted as 0",
+        "2^32+31": "accepted as 31",
+        "2^32+32": "INVALID_PIM",
+        "-1": "INVALID_PIM"
+      },
+      "sourceWordsWrap": "2^32+12 accepted as 12"
+    },
+    "distVsWebSources": "fail (dist lacks decryptAuto paths; built before last source edits)",
+    "lockfile": {
+      "packages": 61,
+      "registrySources": 60,
+      "gitOrPath": 0,
+      "directDependencies": 11
+    },
+    "licenses": {
+      "resolvedPackages": 54,
+      "nonPermissive": 0
+    },
+    "workflowPinning": "actions-rust-lang/audit SHA-pinned; actions/checkout@v4 tag-pinned",
+    "audit01JsonSchema": "valid",
+    "audit01RemediationsPresent": 7,
+    "repositoryUrl": "HTTP 404 at start of review; HTTP 200 after push (public)",
+    "privateVulnerabilityReporting": {
+      "hobby-eng/mhfe": false,
+      "hobby-eng/mhfe-spec": false
+    }
+  },
+  "findings": [
+    {
+      "id": "AUD-002-API001",
+      "category": "API",
+      "kind": "finding",
+      "title": "Worker and WASM adapters wrap pim values of 2^32 and above instead of rejecting them",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "evidence": "Node.js probe: new MhfeEngine(4294967296) reports pim 0; new MhfeEngine(4294967327) reports pim 31 / effectivePasses 384; decryptJson(container, 4294967308) executes as 12 words. Generated glue passes numbers to i32 parameters without range checks; Worker requireInteger accepts any non-negative safe integer.",
+      "reproduction": "initSync the dist; call new MhfeEngine(2**32) and read engine.pim; call decryptJson(container, 2**32+12) with a staged password.",
+      "expected": "Every adapter rejects pim outside 0..31 with INVALID_PIM and sourceWords outside {12,15,18,21,24} with INVALID_SOURCE_WORDS.",
+      "observed": "Values >= 2^32 are reduced modulo 2^32 and executed; the Worker guards sourceWords but not pim; direct WASM callers are unguarded for both.",
+      "impact": "A caller with an out-of-range PIM silently gets a container at a different work factor; the returned pim field allows detection; the Rust core is correct.",
+      "recommendedFix": "Bound pim to 0..maxPim in web/mhfe-worker.js ensureEngine and in web/client.js; document integer-range responsibility for direct WASM callers; add a Node test for 2**32.",
+      "requiredVerification": "Worker rejects 2**32 and 2**32+31 with INVALID_PIM; PIM 0..31 still pass; boundary covered by verify-wasm-api.mjs or a new test.",
+      "files": [
+        "web/mhfe-worker.js",
+        "web/client.js",
+        "dist/wasm/mhfe.js"
+      ]
+    },
+    {
+      "id": "AUD-002-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Browser operational exports have no automated runtime check; local build is stale",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "evidence": "verify-wasm-api.mjs checks only suite parameters and PIM 32; diff web/*.js dist/*.js shows dist lacks decryptAuto paths; dist/wasm/mhfe.d.ts has no decryptAutoJson; measurements/local-browser-pim-0.json predates automatic detection.",
+      "reproduction": "diff web/client.js dist/client.js; grep decryptAuto dist/wasm/mhfe.d.ts; read scripts/verify-wasm-api.mjs.",
+      "expected": "At least one automated check executes encryptJson, decryptJson and decryptAutoJson of the generated WASM; recorded browser evidence corresponds to the source it describes.",
+      "observed": "No operational export is executed by any automated check; the automatic-detection path has no runtime evidence in any browser build; the stale binary still reproduces the published container under Node.js.",
+      "impact": "A regression confined to the wasm-bindgen boundary of the operational exports would pass CI.",
+      "recommendedFix": "Add a real PIM 0 round trip (about 90 s under Node.js) to verify-wasm-api.mjs or a CI step; rebuild dist with scripts/build-wasm.sh and re-record the browser measurement using the automatic-detection path.",
+      "requiredVerification": "CI log shows the round trip; dist/wasm/mhfe.d.ts contains decryptAutoJson; measurement file names its source fingerprint.",
+      "files": [
+        "scripts/verify-wasm-api.mjs",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        "measurements/local-browser-pim-0.json"
+      ]
+    },
+    {
+      "id": "AUD-002-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Security-reporting channel named in SECURITY.md is not enabled; specification unlinked",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "evidence": "GET /repos/hobby-eng/mhfe/private-vulnerability-reporting returns {\"enabled\": false} (same for mhfe-spec); README has no link to the specification repository; repository was 404 at the start of the review and public after the push.",
+      "reproduction": "Query the private-vulnerability-reporting endpoint unauthenticated; search README.md for a specification URL.",
+      "expected": "The channel named in SECURITY.md is enabled; README links the companion specification.",
+      "observed": "Private vulnerability reporting disabled; Cargo.toml URL now resolves; specification repository unlinked.",
+      "impact": "A reporter following SECURITY.md cannot open a private advisory; the release workflow packages SECURITY.md into archives.",
+      "recommendedFix": "Enable private vulnerability reporting (both repositories) or name an alternative private channel; link https://github.com/hobby-eng/mhfe-spec from README.md.",
+      "requiredVerification": "Endpoint returns {\"enabled\": true}; README link resolves.",
+      "files": [
+        "SECURITY.md",
+        "README.md"
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "id": "AUD-002-SEC001",
+      "category": "SEC",
+      "kind": "observation",
+      "title": "Verifier and fixed-point comparisons are not constant-time",
+      "severity": "info",
+      "status": "open",
+      "releaseBlocking": false,
+      "evidence": "src/lib.rs 723 and 776 use != and == on verifier and state bytes.",
+      "reproduction": "Read the two functions.",
+      "expected": "No requirement in the threat model; noted for reuse elsewhere.",
+      "observed": "Non-constant-time comparisons on values the container holder can compute.",
+      "impact": "None for the current threat model; Argon2id timing dominates.",
+      "recommendedFix": "Optional subtle::ConstantTimeEq.",
+      "requiredVerification": "None."
+    },
+    {
+      "id": "AUD-002-API002",
+      "category": "API",
+      "kind": "observation",
+      "title": "Terminating a client before ready() is observed leaves an unhandled rejection",
+      "severity": "info",
+      "status": "open",
+      "releaseBlocking": false,
+      "evidence": "web/client.js rejects #ready from terminate/cancel/error handlers; no internal handler attached.",
+      "reproduction": "Construct a client and call cancel() before awaiting ready().",
+      "expected": "No unhandledrejection event.",
+      "observed": "Internal promise rejects unobserved; console noise only.",
+      "impact": "Cosmetic.",
+      "recommendedFix": "Attach a no-op catch to #ready while returning the original promise from ready().",
+      "requiredVerification": "None."
+    },
+    {
+      "id": "AUD-002-FUN001",
+      "category": "FUN",
+      "kind": "observation",
+      "title": "Wrong password under automatic detection returns an unverified 24-word result",
+      "severity": "info",
+      "status": "open",
+      "releaseBlocking": false,
+      "evidence": "CLI probe: wrong password without --source-words exits 0 with Detected source words 24 and Recovery verified false; with --source-words 12 exits 1 with RECOVERY_VERIFIER_MISMATCH.",
+      "reproduction": "Decrypt the published 12-word container with a wrong password, with and without --source-words.",
+      "expected": "Specified fallback behaviour; consumers must surface the unverified flag.",
+      "observed": "Behaves as specified across CLI, Rust, WASM and Worker results.",
+      "impact": "A consumer that ignores recovery_verified / recoveryVerifier could present garbage as a recovered phrase.",
+      "recommendedFix": "Print an explicit warning line on the unverified CLI path; keep the flag prominent in consumers.",
+      "requiredVerification": "None."
+    },
+    {
+      "id": "AUD-002-BLD002",
+      "category": "BLD",
+      "kind": "observation",
+      "title": "actions/checkout is tag-pinned while the audit action is SHA-pinned",
+      "severity": "info",
+      "status": "open",
+      "releaseBlocking": false,
+      "evidence": "Four workflows use actions/checkout@v4; audit action pinned to 72c09e02.",
+      "reproduction": "grep uses: .github/workflows/*.yml",
+      "expected": "Uniform SHA pinning.",
+      "observed": "Mixed pinning.",
+      "impact": "Supply-chain posture inconsistency only.",
+      "recommendedFix": "Pin checkout to a SHA with a version comment; Dependabot keeps it updated.",
+      "requiredVerification": "None."
+    },
+    {
+      "id": "AUD-002-DOC002",
+      "category": "DOC",
+      "kind": "observation",
+      "title": "README password-guessing table re-derived; figures are correct",
+      "severity": "info",
+      "status": "open",
+      "releaseBlocking": false,
+      "evidence": "All 24 cells of A^L/2 x 84.145 s and the 2.46x ratio recomputed.",
+      "reproduction": "Recompute the table.",
+      "expected": "Correct figures.",
+      "observed": "Correct figures.",
+      "impact": "None.",
+      "recommendedFix": "None.",
+      "requiredVerification": "None."
+    }
+  ],
+  "remediation": [
+    {
+      "id": "AUD-002-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Node.js probe on dist/wasm; glue inspection"
+    },
+    {
+      "id": "AUD-002-BLD001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "dist vs web diff; export list; script review"
+    },
+    {
+      "id": "AUD-002-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Private reporting disabled (API); README grep"
+    }
+  ],
+  "priorFindingsStatus": {
+    "AUD-001": "all seven remediations verified present in this source state"
+  },
+  "limitations": [
+    "No browser session (Chromium or Firefox) was run; the current Worker source and its automatic-detection path were exercised only by static review and wasm32 clippy.",
+    "Node.js probes used the pre-existing stale WASM binary; the distribution was not rebuilt.",
+    "Host out-of-memory behaviour was not induced.",
+    "No side-channel measurement, cross-platform build, reproducible-build comparison, or cryptanalysis was performed.",
+    "Evidence capture started before the initial commit existed; all evidence was re-attributed to commit 12b26a33 after verifying the tree fingerprint is unchanged."
+  ],
+  "environment": {
+    "os": "Linux 7.0.0-31-generic x86_64",
+    "cpu": "Intel i7-1260P",
+    "memTotalKb": 15448300,
+    "rustc": "1.98.1 (48a229cea 2026-09-01)",
+    "cargo": "1.98.1",
+    "cargoAudit": "0.22.2",
+    "node": "24.19.0",
+    "python": "3.14.4",
+    "cryptography": "46.0.5",
+    "git": "2.53.0"
+  },
+  "evidenceCaptureWindowUtc": {
+    "start": "2026-09-22T15:25:00Z",
+    "end": "2026-09-22T16:10:00Z"
+  }
+}

@@ -3,6 +3,7 @@ import { initSync, MhfeEngine, suiteParametersJson } from './wasm/mhfe.js';
 let engine = null;
 let enginePim = null;
 let initialized = false;
+let maxPim = 31;
 
 function closeEngine() {
   if (engine !== null) engine.free();
@@ -25,6 +26,9 @@ function requireSourceWords(value) {
 
 function ensureEngine(pim) {
   const selected = requireInteger(pim, 'pim');
+  if (selected > maxPim) {
+    throw new Error(`INVALID_PIM: PIM must be an integer from 0 through ${maxPim}.`);
+  }
   if (engine !== null && enginePim === selected) return engine;
   closeEngine();
   engine = new MhfeEngine(selected);
@@ -96,7 +100,9 @@ self.addEventListener('message', (event) => {
       if (initialized) throw new Error('INVALID_REQUEST: Worker is already initialized.');
       initSync({ module: request.module });
       initialized = true;
-      self.postMessage({ type: 'ready', parameters: JSON.parse(suiteParametersJson()) });
+      const parameters = JSON.parse(suiteParametersJson());
+      maxPim = parameters.maxPim;
+      self.postMessage({ type: 'ready', parameters });
     } catch (error) {
       self.postMessage({ type: 'initializationError', error: parseError(error) });
     }
