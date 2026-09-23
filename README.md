@@ -201,10 +201,11 @@ Short-source recovery redundancy also affects how a guess can be recognized:
 | 21 words      | 32 bits           | `2^-32` (about 1 in 4.29 billion) |
 | 24 words      | None              | No internal test        |
 
-For a 21-word source, a uniformly distributed wrong-password output passes the
-32-bit verifier with probability `2^-32`. In an unusually large search, known
-wallet information can provide additional confirmation, but it is not part of
-the recovery protocol.
+For a 21-word source, the built-in check is 32 bits long. If a wrong password
+produces an effectively random result, the chance that it passes this check by
+accident is about 1 in 4.29 billion. Normal recovery does not require any
+additional confirmation. Software testing billions of password guesses can use
+known wallet information to confirm the extremely rare accidental match.
 
 For a 24-word source, the correct password and PIM always recover the exact
 original 256-bit entropy. The ordinary BIP39 checksum is then recomputed
