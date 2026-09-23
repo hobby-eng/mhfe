@@ -17,13 +17,16 @@ use zeroize::{Zeroize, Zeroizing};
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 mod wasm_api;
 
-pub const API_VERSION: u32 = 1;
+pub const API_VERSION: u32 = 2;
 pub const SUITE_ID: &str = "MHFE-BIP39-256-EXPERIMENTAL-2";
 pub const ROUND_COUNT: u32 = 12;
 pub const MEMORY_KIB: u32 = 524_288;
 pub const LANES: u32 = 4;
 pub const BASE_PASSES: u32 = 12;
 pub const MAX_PIM: u32 = 31;
+pub const FINAL_WORD_CYCLE_WALK_PROFILE_ID: &str =
+    "MHFE-BIP39-256-EXPERIMENTAL-2-CYCLE-WALK-FINAL-WORD";
+pub const FINAL_WORD_EXPECTED_ITERATIONS: u64 = 2_048;
 
 const DS_SALT_SUFFIX: &[u8] = b"/ROUND-SALT";
 const DS_MASK_SUFFIX: &[u8] = b"/ROUND-MASK";
@@ -44,6 +47,9 @@ pub enum MhfeError {
     InvalidPasswordUtf8,
     UnsupportedUnicodePassword,
     PasswordNotSet,
+    CycleWalkRequires24Words(usize),
+    CycleWalkCancelled,
+    CycleWalkNoDistinctOutput,
     FixedPoint,
     RecoveryVerifierMismatch,
     AmbiguousSourceWords(Vec<usize>),
@@ -82,6 +88,15 @@ impl fmt::Display for MhfeError {
                  Unicode 18 NPSS-NFKD is not silently approximated"
             ),
             Self::PasswordNotSet => write!(f, "no password is loaded for this operation"),
+            Self::CycleWalkRequires24Words(words) => write!(
+                f,
+                "final-word-preserving cycle walking requires a 24-word source; received {words} words"
+            ),
+            Self::CycleWalkCancelled => write!(f, "final-word-preserving cycle walking was cancelled"),
+            Self::CycleWalkNoDistinctOutput => write!(
+                f,
+                "cycle walking returned to its starting state before finding a distinct output"
+            ),
             Self::FixedPoint => write!(
                 f,
                 "the encrypted state equals the source state; use a different password or PIM"
@@ -120,6 +135,9 @@ impl MhfeError {
             Self::InvalidPasswordUtf8 => "INVALID_PASSWORD_UTF8",
             Self::UnsupportedUnicodePassword => "UNSUPPORTED_UNICODE_PASSWORD",
             Self::PasswordNotSet => "PASSWORD_NOT_SET",
+            Self::CycleWalkRequires24Words(_) => "CYCLE_WALK_REQUIRES_24_WORDS",
+            Self::CycleWalkCancelled => "CYCLE_WALK_CANCELLED",
+            Self::CycleWalkNoDistinctOutput => "CYCLE_WALK_NO_DISTINCT_OUTPUT",
             Self::FixedPoint => "FIXED_POINT",
             Self::RecoveryVerifierMismatch => "RECOVERY_VERIFIER_MISMATCH",
             Self::AmbiguousSourceWords(_) => "AMBIGUOUS_SOURCE_WORDS",
@@ -251,6 +269,55 @@ pub struct DecryptionResult {
     pub recovery_verified: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CycleWalkDirection {
+    Encrypt,
+    Decrypt,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CycleWalkControl {
+    Continue,
+    Cancel,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CycleWalkProgress {
+    pub direction: CycleWalkDirection,
+    pub iterations: u64,
+    pub target_final_word_index: u16,
+    pub current_final_word_index: u16,
+    pub matched: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, Zeroize)]
+#[zeroize(drop)]
+pub struct CycleWalkEncryptionResult {
+    pub suite_id: String,
+    pub profile_id: String,
+    pub pim: u32,
+    pub effective_passes: u32,
+    pub source_words: usize,
+    pub iterations: u64,
+    pub preserved_final_word: String,
+    pub encrypted_mnemonic: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, Zeroize)]
+#[zeroize(drop)]
+pub struct CycleWalkDecryptionResult {
+    pub suite_id: String,
+    pub profile_id: String,
+    pub pim: u32,
+    pub effective_passes: u32,
+    pub source_words: usize,
+    pub iterations: u64,
+    pub preserved_final_word: String,
+    pub recovered_mnemonic: String,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq, Zeroize)]
 #[zeroize(drop)]
 pub struct VectorEncryptionResult {
@@ -372,6 +439,72 @@ impl MhfeEngine {
         })
     }
 
+    /// Encrypt a 24-word mnemonic by repeatedly applying the suite-2
+    /// permutation until the complete final BIP39 word matches the source.
+    pub fn encrypt_preserving_final_word(
+        &mut self,
+        mnemonic: &str,
+        password: &NormalizedPassword,
+    ) -> Result<CycleWalkEncryptionResult, MhfeError> {
+        self.encrypt_preserving_final_word_with_progress(mnemonic, password, |_| {
+            CycleWalkControl::Continue
+        })
+    }
+
+    /// Final-word-preserving encryption with one progress callback after every
+    /// complete suite-2 permutation. Returning `Cancel` stops before the next
+    /// permutation and zeroizes the current state.
+    pub fn encrypt_preserving_final_word_with_progress<F>(
+        &mut self,
+        mnemonic: &str,
+        password: &NormalizedPassword,
+        on_progress: F,
+    ) -> Result<CycleWalkEncryptionResult, MhfeError>
+    where
+        F: FnMut(CycleWalkProgress) -> CycleWalkControl,
+    {
+        let source = Mnemonic::parse_in(Language::English, mnemonic)
+            .map_err(|error| MhfeError::InvalidMnemonic(error.to_string()))?;
+        let source_words = source.word_count();
+        if source_words != 24 {
+            return Err(MhfeError::CycleWalkRequires24Words(source_words));
+        }
+        let entropy = Zeroizing::new(source.to_entropy());
+        let start: [u8; 32] = entropy
+            .as_slice()
+            .try_into()
+            .map_err(|_| MhfeError::Internal("24-word entropy was not 32 bytes".to_owned()))?;
+        let (encrypted, iterations) = cycle_walk_state(
+            start,
+            CycleWalkDirection::Encrypt,
+            |state| {
+                self.permute_forward(state, password, false)
+                    .map(|value| value.0)
+            },
+            final_word_index,
+            on_progress,
+        )?;
+        let encrypted_mnemonic = Mnemonic::from_entropy_in(Language::English, &encrypted)
+            .map_err(|error| MhfeError::Internal(error.to_string()))?
+            .to_string();
+        let preserved_final_word = encrypted_mnemonic
+            .split_whitespace()
+            .next_back()
+            .ok_or_else(|| MhfeError::Internal("missing final mnemonic word".to_owned()))?
+            .to_owned();
+
+        Ok(CycleWalkEncryptionResult {
+            suite_id: SUITE_ID.to_owned(),
+            profile_id: FINAL_WORD_CYCLE_WALK_PROFILE_ID.to_owned(),
+            pim: self.pim,
+            effective_passes: self.effective_passes,
+            source_words,
+            iterations,
+            preserved_final_word,
+            encrypted_mnemonic,
+        })
+    }
+
     /// Generate detailed public test-vector material. Never use this method
     /// with a real recovery phrase or password.
     pub fn encrypt_vector(
@@ -484,6 +617,73 @@ impl MhfeEngine {
             source_words,
             recovered_mnemonic,
             recovery_verified: source_words < 24,
+        })
+    }
+
+    /// Recover a 24-word source from the final-word-preserving cycle-walk
+    /// profile. The caller must select this profile explicitly.
+    pub fn decrypt_preserving_final_word(
+        &mut self,
+        encrypted_mnemonic: &str,
+        password: &NormalizedPassword,
+    ) -> Result<CycleWalkDecryptionResult, MhfeError> {
+        self.decrypt_preserving_final_word_with_progress(encrypted_mnemonic, password, |_| {
+            CycleWalkControl::Continue
+        })
+    }
+
+    /// Final-word-preserving recovery with one progress callback after every
+    /// complete inverse suite-2 permutation.
+    pub fn decrypt_preserving_final_word_with_progress<F>(
+        &mut self,
+        encrypted_mnemonic: &str,
+        password: &NormalizedPassword,
+        on_progress: F,
+    ) -> Result<CycleWalkDecryptionResult, MhfeError>
+    where
+        F: FnMut(CycleWalkProgress) -> CycleWalkControl,
+    {
+        let container = Mnemonic::parse_in(Language::English, encrypted_mnemonic)
+            .map_err(|error| MhfeError::InvalidContainer(error.to_string()))?;
+        if container.word_count() != 24 {
+            return Err(MhfeError::InvalidContainer(format!(
+                "container must contain 24 words; received {}",
+                container.word_count()
+            )));
+        }
+        let encrypted_entropy = Zeroizing::new(container.to_entropy());
+        let start: [u8; 32] = encrypted_entropy
+            .as_slice()
+            .try_into()
+            .map_err(|_| MhfeError::Internal("24-word entropy was not 32 bytes".to_owned()))?;
+        let (recovered, iterations) = cycle_walk_state(
+            start,
+            CycleWalkDirection::Decrypt,
+            |state| {
+                self.permute_inverse(state, password, false)
+                    .map(|value| value.0)
+            },
+            final_word_index,
+            on_progress,
+        )?;
+        let recovered_mnemonic = Mnemonic::from_entropy_in(Language::English, &recovered)
+            .map_err(|error| MhfeError::Internal(error.to_string()))?
+            .to_string();
+        let preserved_final_word = recovered_mnemonic
+            .split_whitespace()
+            .next_back()
+            .ok_or_else(|| MhfeError::Internal("missing final mnemonic word".to_owned()))?
+            .to_owned();
+
+        Ok(CycleWalkDecryptionResult {
+            suite_id: SUITE_ID.to_owned(),
+            profile_id: FINAL_WORD_CYCLE_WALK_PROFILE_ID.to_owned(),
+            pim: self.pim,
+            effective_passes: self.effective_passes,
+            source_words: 24,
+            iterations,
+            preserved_final_word,
+            recovered_mnemonic,
         })
     }
 
@@ -694,6 +894,55 @@ impl Drop for MhfeEngine {
     fn drop(&mut self) {
         self.memory.zeroize();
     }
+}
+
+fn cycle_walk_state<Step, Classify, Progress>(
+    start: [u8; 32],
+    direction: CycleWalkDirection,
+    mut step: Step,
+    classify: Classify,
+    mut on_progress: Progress,
+) -> Result<([u8; 32], u64), MhfeError>
+where
+    Step: FnMut([u8; 32]) -> Result<[u8; 32], MhfeError>,
+    Classify: Fn(&[u8; 32]) -> u16,
+    Progress: FnMut(CycleWalkProgress) -> CycleWalkControl,
+{
+    let target = classify(&start);
+    let mut current = Zeroizing::new(start);
+    let mut iterations = 0u64;
+    loop {
+        let next = step(*current)?;
+        current.zeroize();
+        *current = next;
+        iterations = iterations.checked_add(1).ok_or_else(|| {
+            MhfeError::Internal("cycle-walk iteration counter overflow".to_owned())
+        })?;
+        let current_class = classify(&current);
+        let matched = current_class == target;
+        let control = on_progress(CycleWalkProgress {
+            direction,
+            iterations,
+            target_final_word_index: target,
+            current_final_word_index: current_class,
+            matched,
+        });
+        if matched {
+            if *current == start {
+                return Err(MhfeError::CycleWalkNoDistinctOutput);
+            }
+            return Ok((*current, iterations));
+        }
+        if control == CycleWalkControl::Cancel {
+            return Err(MhfeError::CycleWalkCancelled);
+        }
+    }
+}
+
+/// Return the complete 11-bit final-word index for 256-bit BIP39 entropy.
+pub fn final_word_index(entropy: &[u8; 32]) -> u16 {
+    let checksum = Sha256::digest(entropy)[0];
+    (u16::from(entropy[31] & 0x07) << 8) | u16::from(checksum)
 }
 
 pub fn pack_entropy(entropy: &[u8]) -> Result<([u8; 32], Vec<u8>), MhfeError> {
@@ -1038,6 +1287,86 @@ mod tests {
     }
 
     #[test]
+    fn final_word_index_matches_bip39_encoding() {
+        for last_byte in [0x00, 0x01, 0x07, 0x80, 0xff] {
+            let mut entropy = [0u8; 32];
+            entropy[31] = last_byte;
+            let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy).unwrap();
+            let final_word = mnemonic.words().last().unwrap();
+            let expected = Language::English
+                .word_list()
+                .iter()
+                .position(|word| *word == final_word)
+                .unwrap() as u16;
+            assert_eq!(final_word_index(&entropy), expected);
+        }
+    }
+
+    #[test]
+    fn cycle_walk_requires_a_mandatory_step_and_reports_progress() {
+        let mut start = [0u8; 32];
+        start[0] = 4;
+        let mut reports = Vec::new();
+        let (output, iterations) = cycle_walk_state(
+            start,
+            CycleWalkDirection::Encrypt,
+            |mut state| {
+                state[0] = state[0].wrapping_add(1);
+                Ok(state)
+            },
+            |state| u16::from(state[0] % 4),
+            |progress| {
+                reports.push(progress);
+                CycleWalkControl::Continue
+            },
+        )
+        .unwrap();
+        assert_eq!(iterations, 4);
+        assert_eq!(output[0], 8);
+        assert_eq!(reports.len(), 4);
+        assert_eq!(reports[0].iterations, 1);
+        assert!(!reports[0].matched);
+        assert!(reports[3].matched);
+    }
+
+    #[test]
+    fn cycle_walk_cancellation_zeroes_the_operation_path() {
+        let start = [0u8; 32];
+        let error = cycle_walk_state(
+            start,
+            CycleWalkDirection::Decrypt,
+            |mut state| {
+                state[0] = state[0].wrapping_add(1);
+                Ok(state)
+            },
+            |state| u16::from(state[0] % 7),
+            |progress| {
+                if progress.iterations == 2 {
+                    CycleWalkControl::Cancel
+                } else {
+                    CycleWalkControl::Continue
+                }
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error, MhfeError::CycleWalkCancelled);
+    }
+
+    #[test]
+    fn cycle_walk_rejects_a_cycle_with_no_distinct_class_member() {
+        let start = [0u8; 32];
+        let error = cycle_walk_state(
+            start,
+            CycleWalkDirection::Encrypt,
+            Ok,
+            |_| 0,
+            |_| CycleWalkControl::Continue,
+        )
+        .unwrap_err();
+        assert_eq!(error, MhfeError::CycleWalkNoDistinctOutput);
+    }
+
+    #[test]
     fn fixed_point_guard_rejects_equality() {
         let state = [7u8; 32];
         assert_eq!(
@@ -1162,7 +1491,7 @@ mod tests {
         assert_eq!(
             suite_parameters(),
             SuiteParameters {
-                api_version: 1,
+                api_version: 2,
                 suite_id: "MHFE-BIP39-256-EXPERIMENTAL-2",
                 round_count: 12,
                 memory_kib: 524_288,

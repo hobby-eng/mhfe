@@ -1,6 +1,6 @@
 [package]
 name = "mhfe-experimental"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 rust-version = "1.98.1"
 authors = ["Sergei Semenov"]
@@ -36,10 +36,11 @@ clap = { version = "=4.6.7", features = ["derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { version = "=0.2.128", optional = true }
+js-sys = { version = "=0.3.105", optional = true }
 
 [features]
 default = []
-wasm = ["dep:wasm-bindgen"]
+wasm = ["dep:wasm-bindgen", "dep:js-sys"]
 
 [profile.release]
 codegen-units = 1

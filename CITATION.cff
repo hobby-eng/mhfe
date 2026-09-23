@@ -4,7 +4,7 @@ title: "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics — Experimenta
 authors:
   - family-names: "Semenov"
     given-names: "Sergei"
-version: 0.3.0
+version: 0.3.1
 date-released: 2026-09-22
 license: MIT
 repository-code: "https://github.com/hobby-eng/mhfe"

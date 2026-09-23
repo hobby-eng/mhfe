@@ -1,5 +1,6 @@
 use crate::{
-    suite_parameters, DecryptionResult, EncryptionResult, MhfeEngine, MhfeError,
+    suite_parameters, CycleWalkControl, CycleWalkDecryptionResult, CycleWalkEncryptionResult,
+    CycleWalkProgress, DecryptionResult, EncryptionResult, MhfeEngine, MhfeError,
     NormalizedPassword, API_VERSION,
 };
 use serde::Serialize;
@@ -89,6 +90,81 @@ impl<'a> From<&'a DecryptionResult> for BrowserDecryptionResult<'a> {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserCycleWalkEncryptionResult<'a> {
+    api_version: u32,
+    suite_id: &'a str,
+    profile_id: &'a str,
+    pim: u32,
+    effective_passes: u32,
+    source_words: usize,
+    iterations: u64,
+    preserved_final_word: &'a str,
+    encrypted_mnemonic: &'a str,
+}
+
+impl<'a> From<&'a CycleWalkEncryptionResult> for BrowserCycleWalkEncryptionResult<'a> {
+    fn from(result: &'a CycleWalkEncryptionResult) -> Self {
+        Self {
+            api_version: API_VERSION,
+            suite_id: &result.suite_id,
+            profile_id: &result.profile_id,
+            pim: result.pim,
+            effective_passes: result.effective_passes,
+            source_words: result.source_words,
+            iterations: result.iterations,
+            preserved_final_word: &result.preserved_final_word,
+            encrypted_mnemonic: &result.encrypted_mnemonic,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserCycleWalkDecryptionResult<'a> {
+    api_version: u32,
+    suite_id: &'a str,
+    profile_id: &'a str,
+    pim: u32,
+    effective_passes: u32,
+    source_words: usize,
+    iterations: u64,
+    preserved_final_word: &'a str,
+    recovered_mnemonic: &'a str,
+}
+
+impl<'a> From<&'a CycleWalkDecryptionResult> for BrowserCycleWalkDecryptionResult<'a> {
+    fn from(result: &'a CycleWalkDecryptionResult) -> Self {
+        Self {
+            api_version: API_VERSION,
+            suite_id: &result.suite_id,
+            profile_id: &result.profile_id,
+            pim: result.pim,
+            effective_passes: result.effective_passes,
+            source_words: result.source_words,
+            iterations: result.iterations,
+            preserved_final_word: &result.preserved_final_word,
+            recovered_mnemonic: &result.recovered_mnemonic,
+        }
+    }
+}
+
+fn emit_cycle_walk_progress(
+    callback: &js_sys::Function,
+    progress: CycleWalkProgress,
+) -> Result<CycleWalkControl, String> {
+    let json = serde_json::to_string(&progress).map_err(|error| error.to_string())?;
+    let result = callback
+        .call1(&JsValue::UNDEFINED, &JsValue::from_str(&json))
+        .map_err(|error| format!("{error:?}"))?;
+    Ok(if result.as_bool() == Some(false) {
+        CycleWalkControl::Cancel
+    } else {
+        CycleWalkControl::Continue
+    })
+}
+
 /// Browser-facing MHFE engine.
 ///
 /// Construct and call this object inside a dedicated Web Worker. Each instance
@@ -157,6 +233,36 @@ impl WasmMhfeEngine {
         serde_json::to_string(&BrowserEncryptionResult::from(&result)).map_err(json_error)
     }
 
+    #[wasm_bindgen(js_name = encryptPreservingFinalWordJson)]
+    pub fn encrypt_preserving_final_word_json(
+        &mut self,
+        mnemonic: &str,
+        progress_callback: &js_sys::Function,
+    ) -> Result<String, JsError> {
+        let password = self
+            .password
+            .as_ref()
+            .ok_or(MhfeError::PasswordNotSet)
+            .map_err(js_error)?;
+        let mut callback_error = None;
+        let result = self.inner.encrypt_preserving_final_word_with_progress(
+            mnemonic,
+            password,
+            |progress| match emit_cycle_walk_progress(progress_callback, progress) {
+                Ok(control) => control,
+                Err(error) => {
+                    callback_error = Some(error);
+                    CycleWalkControl::Cancel
+                }
+            },
+        );
+        if let Some(error) = callback_error {
+            return Err(JsError::new(&format!("PROGRESS_CALLBACK_FAILURE: {error}")));
+        }
+        let result = result.map_err(js_error)?;
+        serde_json::to_string(&BrowserCycleWalkEncryptionResult::from(&result)).map_err(json_error)
+    }
+
     #[wasm_bindgen(js_name = decryptJson)]
     pub fn decrypt_json(&mut self, container: &str, source_words: f64) -> Result<String, JsError> {
         let source_words = checked_source_words(source_words)?;
@@ -170,6 +276,36 @@ impl WasmMhfeEngine {
             .decrypt_mnemonic(container, source_words, password)
             .map_err(js_error)?;
         serde_json::to_string(&BrowserDecryptionResult::from(&result)).map_err(json_error)
+    }
+
+    #[wasm_bindgen(js_name = decryptPreservingFinalWordJson)]
+    pub fn decrypt_preserving_final_word_json(
+        &mut self,
+        container: &str,
+        progress_callback: &js_sys::Function,
+    ) -> Result<String, JsError> {
+        let password = self
+            .password
+            .as_ref()
+            .ok_or(MhfeError::PasswordNotSet)
+            .map_err(js_error)?;
+        let mut callback_error = None;
+        let result = self.inner.decrypt_preserving_final_word_with_progress(
+            container,
+            password,
+            |progress| match emit_cycle_walk_progress(progress_callback, progress) {
+                Ok(control) => control,
+                Err(error) => {
+                    callback_error = Some(error);
+                    CycleWalkControl::Cancel
+                }
+            },
+        );
+        if let Some(error) = callback_error {
+            return Err(JsError::new(&format!("PROGRESS_CALLBACK_FAILURE: {error}")));
+        }
+        let result = result.map_err(js_error)?;
+        serde_json::to_string(&BrowserCycleWalkDecryptionResult::from(&result)).map_err(json_error)
     }
 
     #[wasm_bindgen(js_name = decryptAutoJson)]

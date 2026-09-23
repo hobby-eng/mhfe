@@ -1,8 +1,9 @@
 # MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics — implementation API
 
 This repository exposes one cryptographic core through three adapters. All
-adapters implement `MHFE-BIP39-256-EXPERIMENTAL-2`; they do not define separate
-formats. The normative protocol is defined in the
+adapters implement `MHFE-BIP39-256-EXPERIMENTAL-2` and the optional
+`MHFE-BIP39-256-EXPERIMENTAL-2-CYCLE-WALK-FINAL-WORD` profile. The normative
+protocol is defined in the
 [companion MHFE specification](https://github.com/hobby-eng/mhfe-spec).
 
 ## Rust library
@@ -21,6 +22,15 @@ more matches return `AmbiguousSourceWords` with the complete matching-length
 list. `decrypt_mnemonic` retains an explicit source length as a user override.
 Each length defines exactly one candidate mnemonic; ambiguity can occur only
 between different lengths.
+
+`encrypt_preserving_final_word` and `decrypt_preserving_final_word` implement
+the optional 24-word cycle-walking profile. They apply at least one complete
+suite-2 permutation and continue until the complete 11-bit final BIP39 word
+matches the starting state. The `_with_progress` variants call the application
+after every complete permutation and accept `CycleWalkControl::Cancel` before
+the next one begins. The operation has no small worst-case iteration bound.
+Callers must label and select this profile explicitly during recovery; it is not
+encoded in the 24-word container.
 
 `encrypt_vector` and `decrypt_vector` are separate, explicitly test-only APIs.
 Their result objects include source entropy, packed state, round salts, Argon2id
@@ -52,6 +62,8 @@ the reviewed bytes, and retain `connect-src 'none'`. The adapter provides:
 
 - suite-parameter discovery and readiness;
 - ASCII and pre-normalized UTF-8 encryption;
+- ASCII and pre-normalized UTF-8 final-word-preserving cycle walking for
+  24-word sources, with progress callbacks;
 - ASCII and pre-normalized UTF-8 recovery with automatic source-length
   detection or an explicit override;
 - engine disposal, Worker termination, and cancellation;

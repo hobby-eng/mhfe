@@ -8,7 +8,7 @@ initSync({ module: readFileSync(wasmPath) });
 
 const parameters = JSON.parse(suiteParametersJson());
 const expected = {
-  apiVersion: 1,
+  apiVersion: 2,
   suiteId: 'MHFE-BIP39-256-EXPERIMENTAL-2',
   roundCount: 12,
   memoryKib: 524288,
@@ -35,6 +35,9 @@ for (const rejectedPim of [32, 2 ** 32, 2 ** 32 + 31, -1, 0.5, Number.NaN]) {
 
 const sourceWordProbe = new MhfeEngine(0);
 try {
+  for (const method of ['encryptPreservingFinalWordJson', 'decryptPreservingFinalWordJson']) {
+    if (typeof sourceWordProbe[method] !== 'function') throw new Error(`Missing WASM method ${method}.`);
+  }
   sourceWordProbe.decryptJson('unused', 2 ** 32 + 12);
   throw new Error('Wrapped sourceWords was unexpectedly accepted.');
 } catch (error) {
