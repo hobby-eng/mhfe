@@ -29,6 +29,40 @@ export interface MhfeDecryptionResult {
   recoveryVerifier: 'matched' | 'unavailable';
 }
 
+export interface MhfeCycleWalkProgress {
+  direction: 'encrypt' | 'decrypt';
+  iterations: number;
+  targetFinalWordIndex: number;
+  currentFinalWordIndex: number;
+  matched: boolean;
+}
+
+export interface MhfeCycleWalkEncryptionResult {
+  apiVersion: number;
+  suiteId: string;
+  profileId: string;
+  pim: number;
+  effectivePasses: number;
+  sourceWords: 24;
+  iterations: number;
+  preservedFinalWord: string;
+  encryptedMnemonic: string;
+}
+
+export interface MhfeCycleWalkDecryptionResult {
+  apiVersion: number;
+  suiteId: string;
+  profileId: string;
+  pim: number;
+  effectivePasses: number;
+  sourceWords: 24;
+  iterations: number;
+  preservedFinalWord: string;
+  recoveredMnemonic: string;
+}
+
+export type MhfeCycleWalkProgressCallback = (progress: MhfeCycleWalkProgress) => void;
+
 export class MhfeWorkerError extends Error {
   readonly code: string;
   constructor(code: string, message: string);
@@ -44,12 +78,24 @@ export class MhfeWorkerClient {
   ready(): Promise<MhfeSuiteParameters>;
   parameters(): Promise<MhfeSuiteParameters>;
   encryptAscii(mnemonic: string, passwordAscii: string, pim?: number): Promise<MhfeEncryptionResult>;
+  encryptPreservingFinalWordAscii(
+    mnemonic: string,
+    passwordAscii: string,
+    pim?: number,
+    onProgress?: MhfeCycleWalkProgressCallback,
+  ): Promise<MhfeCycleWalkEncryptionResult>;
   decryptAscii(
     container: string,
     sourceWords: 12 | 15 | 18 | 21 | 24,
     passwordAscii: string,
     pim?: number,
   ): Promise<MhfeDecryptionResult>;
+  decryptPreservingFinalWordAscii(
+    container: string,
+    passwordAscii: string,
+    pim?: number,
+    onProgress?: MhfeCycleWalkProgressCallback,
+  ): Promise<MhfeCycleWalkDecryptionResult>;
   decryptAsciiAuto(
     container: string,
     passwordAscii: string,
@@ -60,12 +106,24 @@ export class MhfeWorkerClient {
     passwordUtf8: Uint8Array,
     pim?: number,
   ): Promise<MhfeEncryptionResult>;
+  encryptPreservingFinalWordPreNormalizedUtf8(
+    mnemonic: string,
+    passwordUtf8: Uint8Array,
+    pim?: number,
+    onProgress?: MhfeCycleWalkProgressCallback,
+  ): Promise<MhfeCycleWalkEncryptionResult>;
   decryptPreNormalizedUtf8(
     container: string,
     sourceWords: 12 | 15 | 18 | 21 | 24,
     passwordUtf8: Uint8Array,
     pim?: number,
   ): Promise<MhfeDecryptionResult>;
+  decryptPreservingFinalWordPreNormalizedUtf8(
+    container: string,
+    passwordUtf8: Uint8Array,
+    pim?: number,
+    onProgress?: MhfeCycleWalkProgressCallback,
+  ): Promise<MhfeCycleWalkDecryptionResult>;
   decryptPreNormalizedUtf8Auto(
     container: string,
     passwordUtf8: Uint8Array,

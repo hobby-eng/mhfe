@@ -64,6 +64,10 @@ export class MhfeWorkerClient {
       }
       const pending = this.#pending.get(response?.id);
       if (pending === undefined) return;
+      if (response?.type === 'progress') {
+        if (typeof pending.onProgress === 'function') pending.onProgress(response.progress);
+        return;
+      }
       this.#pending.delete(response.id);
       if (response.ok) pending.resolve(response.result);
       else pending.reject(new MhfeWorkerError(response.error.code, response.error.message));
@@ -106,9 +110,29 @@ export class MhfeWorkerClient {
     return this.#request({ type: 'encrypt', mnemonic, passwordAscii, pim });
   }
 
+  encryptPreservingFinalWordAscii(mnemonic, passwordAscii, pim = 0, onProgress = undefined) {
+    requirePim(pim, this.#maxPim);
+    requireProgressCallback(onProgress);
+    return this.#request(
+      { type: 'encryptPreservingFinalWord', mnemonic, passwordAscii, pim },
+      [],
+      onProgress,
+    );
+  }
+
   decryptAscii(container, sourceWords, passwordAscii, pim = 0) {
     requirePim(pim, this.#maxPim);
     return this.#request({ type: 'decrypt', container, sourceWords, passwordAscii, pim });
+  }
+
+  decryptPreservingFinalWordAscii(container, passwordAscii, pim = 0, onProgress = undefined) {
+    requirePim(pim, this.#maxPim);
+    requireProgressCallback(onProgress);
+    return this.#request(
+      { type: 'decryptPreservingFinalWord', container, passwordAscii, pim },
+      [],
+      onProgress,
+    );
   }
 
   decryptAsciiAuto(container, passwordAscii, pim = 0) {
@@ -123,6 +147,23 @@ export class MhfeWorkerClient {
     return this.#request({ type: 'encrypt', mnemonic, passwordUtf8: password, pim }, [password.buffer]);
   }
 
+  encryptPreservingFinalWordPreNormalizedUtf8(
+    mnemonic,
+    passwordUtf8,
+    pim = 0,
+    onProgress = undefined,
+  ) {
+    requirePim(pim, this.#maxPim);
+    requireProgressCallback(onProgress);
+    requireUint8Array(passwordUtf8);
+    const password = passwordUtf8.slice();
+    return this.#request(
+      { type: 'encryptPreservingFinalWord', mnemonic, passwordUtf8: password, pim },
+      [password.buffer],
+      onProgress,
+    );
+  }
+
   decryptPreNormalizedUtf8(container, sourceWords, passwordUtf8, pim = 0) {
     requirePim(pim, this.#maxPim);
     requireUint8Array(passwordUtf8);
@@ -130,6 +171,23 @@ export class MhfeWorkerClient {
     return this.#request(
       { type: 'decrypt', container, sourceWords, passwordUtf8: password, pim },
       [password.buffer],
+    );
+  }
+
+  decryptPreservingFinalWordPreNormalizedUtf8(
+    container,
+    passwordUtf8,
+    pim = 0,
+    onProgress = undefined,
+  ) {
+    requirePim(pim, this.#maxPim);
+    requireProgressCallback(onProgress);
+    requireUint8Array(passwordUtf8);
+    const password = passwordUtf8.slice();
+    return this.#request(
+      { type: 'decryptPreservingFinalWord', container, passwordUtf8: password, pim },
+      [password.buffer],
+      onProgress,
     );
   }
 
@@ -159,14 +217,14 @@ export class MhfeWorkerClient {
     this.#failAll(reason);
   }
 
-  #request(request, transfer = []) {
+  #request(request, transfer = [], onProgress = undefined) {
     if (this.#terminated) return Promise.reject(new MhfeCancelledError('MHFE Worker is unavailable.'));
     const id = this.#nextId++;
     return this.#ready.then(
       () => {
         if (this.#terminated) throw new MhfeCancelledError('MHFE Worker is unavailable.');
         return new Promise((resolve, reject) => {
-          this.#pending.set(id, { resolve, reject });
+          this.#pending.set(id, { resolve, reject, onProgress });
           try {
             this.#worker.postMessage({ id, ...request }, transfer);
           } catch (error) {
@@ -182,6 +240,12 @@ export class MhfeWorkerClient {
   #failAll(error) {
     for (const pending of this.#pending.values()) pending.reject(error);
     this.#pending.clear();
+  }
+}
+
+function requireProgressCallback(value) {
+  if (value !== undefined && typeof value !== 'function') {
+    throw new TypeError('onProgress must be a function when provided.');
   }
 }
 

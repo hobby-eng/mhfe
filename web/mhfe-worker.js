@@ -67,7 +67,14 @@ function runWithPassword(selected, request, operation) {
   }
 }
 
-function execute(request) {
+function progressReporter(id) {
+  return (progressJson) => {
+    self.postMessage({ id, ok: true, type: 'progress', progress: JSON.parse(progressJson) });
+    return true;
+  };
+}
+
+function execute(request, id) {
   if (!initialized) throw new Error('WORKER_NOT_READY: WASM is not initialized.');
   switch (request.type) {
     case 'parameters':
@@ -76,10 +83,22 @@ function execute(request) {
       const selected = ensureEngine(request.pim);
       return runWithPassword(selected, request, () => selected.encryptJson(request.mnemonic));
     }
+    case 'encryptPreservingFinalWord': {
+      const selected = ensureEngine(request.pim);
+      return runWithPassword(selected, request, () =>
+        selected.encryptPreservingFinalWordJson(request.mnemonic, progressReporter(id))
+      );
+    }
     case 'decrypt': {
       const selected = ensureEngine(request.pim);
       const sourceWords = requireSourceWords(request.sourceWords);
       return runWithPassword(selected, request, () => selected.decryptJson(request.container, sourceWords));
+    }
+    case 'decryptPreservingFinalWord': {
+      const selected = ensureEngine(request.pim);
+      return runWithPassword(selected, request, () =>
+        selected.decryptPreservingFinalWordJson(request.container, progressReporter(id))
+      );
     }
     case 'decryptAuto': {
       const selected = ensureEngine(request.pim);
@@ -111,7 +130,7 @@ self.addEventListener('message', (event) => {
   const id = request?.id;
   if (!Number.isSafeInteger(id) || id < 0) return;
   try {
-    self.postMessage({ id, ok: true, type: request.type, result: execute(request) });
+    self.postMessage({ id, ok: true, type: request.type, result: execute(request, id) });
   } catch (error) {
     self.postMessage({ id, ok: false, type: request?.type ?? 'unknown', error: parseError(error) });
   }

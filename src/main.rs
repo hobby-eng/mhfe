@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
-use mhfe::{MhfeEngine, MhfeError, NormalizedPassword, SUITE_ID};
+use mhfe::{
+    CycleWalkControl, CycleWalkProgress, MhfeEngine, MhfeError, NormalizedPassword,
+    FINAL_WORD_EXPECTED_ITERATIONS, SUITE_ID,
+};
 use serde::Serialize;
 use std::{fs, path::PathBuf, process::ExitCode, time::Instant};
 
@@ -28,6 +31,9 @@ enum Command {
         test_password: String,
         #[arg(long, default_value_t = 0)]
         pim: u32,
+        /// Preserve the original final word by cycle walking (24-word sources only).
+        #[arg(long)]
+        preserve_final_word: bool,
         #[arg(long)]
         trace: bool,
         #[arg(long)]
@@ -43,6 +49,9 @@ enum Command {
         test_password: String,
         #[arg(long, default_value_t = 0)]
         pim: u32,
+        /// Preserve the original final word by cycle walking (24-word sources only).
+        #[arg(long)]
+        preserve_final_word: bool,
         #[arg(long)]
         trace: bool,
         #[arg(long)]
@@ -132,6 +141,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             mnemonic,
             test_password,
             pim,
+            preserve_final_word,
             trace,
             json,
         } => {
@@ -140,6 +150,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let mut engine = MhfeEngine::new(pim)?;
             let allocation_ms = millis(allocation_started.elapsed());
             let started = Instant::now();
+            if trace && preserve_final_word {
+                return Err("--trace and --preserve-final-word cannot be combined".into());
+            }
             if trace {
                 let result = engine.encrypt_vector(&mnemonic, &password)?;
                 let elapsed_ms = millis(started.elapsed());
@@ -156,6 +169,30 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         elapsed_ms,
                         &result.encrypted_mnemonic,
                     );
+                }
+            } else if preserve_final_word {
+                print_cycle_walk_start();
+                let result = engine.encrypt_preserving_final_word_with_progress(
+                    &mnemonic,
+                    &password,
+                    |progress| print_cycle_walk_progress(progress, started),
+                )?;
+                let elapsed_ms = millis(started.elapsed());
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&Timed { elapsed_ms, result })?
+                    );
+                } else {
+                    print_encryption_summary(
+                        pim,
+                        engine.effective_passes(),
+                        allocation_ms,
+                        elapsed_ms,
+                        &result.encrypted_mnemonic,
+                    );
+                    println!("Cycle-walk iterations: {}", result.iterations);
+                    println!("Preserved final word: {}", result.preserved_final_word);
                 }
             } else {
                 let result = engine.encrypt_mnemonic(&mnemonic, &password)?;
@@ -181,6 +218,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             source_words,
             test_password,
             pim,
+            preserve_final_word,
             trace,
             json,
         } => {
@@ -189,6 +227,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let mut engine = MhfeEngine::new(pim)?;
             let allocation_ms = millis(allocation_started.elapsed());
             let started = Instant::now();
+            if trace && preserve_final_word {
+                return Err("--trace and --preserve-final-word cannot be combined".into());
+            }
+            if preserve_final_word && source_words.is_some_and(|words| words != 24) {
+                return Err("--preserve-final-word supports only a 24-word source".into());
+            }
             if trace {
                 let source_words = source_words.ok_or(
                     "--source-words is required with --trace; omit --trace for automatic detection",
@@ -210,6 +254,33 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         result.recovery_verified,
                         &result.recovered_mnemonic,
                     );
+                }
+            } else if preserve_final_word {
+                print_cycle_walk_start();
+                let result = engine.decrypt_preserving_final_word_with_progress(
+                    &container,
+                    &password,
+                    |progress| print_cycle_walk_progress(progress, started),
+                )?;
+                let elapsed_ms = millis(started.elapsed());
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&Timed { elapsed_ms, result })?
+                    );
+                } else {
+                    print_decryption_summary(
+                        pim,
+                        engine.effective_passes(),
+                        allocation_ms,
+                        elapsed_ms,
+                        result.source_words,
+                        false,
+                        &result.recovered_mnemonic,
+                    );
+                    println!("Cycle-walk iterations: {}", result.iterations);
+                    println!("Preserved final word: {}", result.preserved_final_word);
+                    println!("Password verified: false (the preserved word is not authentication)");
                 }
             } else {
                 let automatic = source_words.is_none();
@@ -267,7 +338,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             let vector = PublicVector {
                 warning: WARNING,
-                implementation: "mhfe-experimental-rust/0.3.0",
+                implementation: "mhfe-experimental-rust/0.3.1",
                 suite_id: SUITE_ID,
                 source_mnemonic: canonical_source,
                 test_password_ascii: test_password,
@@ -323,7 +394,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             let report = BenchmarkReport {
                 warning: WARNING,
-                implementation: "mhfe-experimental-rust/0.3.0",
+                implementation: "mhfe-experimental-rust/0.3.1",
                 suite_id: SUITE_ID,
                 pim,
                 effective_passes,
@@ -341,6 +412,44 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+fn print_cycle_walk_start() {
+    eprintln!(
+        "Final-word cycle walking started. The expected value is {FINAL_WORD_EXPECTED_ITERATIONS} complete permutations; actual time depends on hardware and may be much shorter or longer."
+    );
+}
+
+fn print_cycle_walk_progress(progress: CycleWalkProgress, started: Instant) -> CycleWalkControl {
+    let elapsed = started.elapsed();
+    let average_seconds = elapsed.as_secs_f64() / progress.iterations as f64;
+    let expected_remaining =
+        std::time::Duration::from_secs_f64(average_seconds * FINAL_WORD_EXPECTED_ITERATIONS as f64);
+    let median_remaining = std::time::Duration::from_secs_f64(average_seconds * 1_419.0);
+    eprintln!(
+        "Cycle walk: iteration {}; elapsed {}; average/iteration {:.2}s; estimated remaining median {}, mean {}{}",
+        progress.iterations,
+        format_duration(elapsed),
+        average_seconds,
+        format_duration(median_remaining),
+        format_duration(expected_remaining),
+        if progress.matched { "; final word matched" } else { "" },
+    );
+    CycleWalkControl::Continue
+}
+
+fn format_duration(duration: std::time::Duration) -> String {
+    let seconds = duration.as_secs();
+    let hours = seconds / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        format!("{hours}h {minutes}m {seconds}s")
+    } else if minutes > 0 {
+        format!("{minutes}m {seconds}s")
+    } else {
+        format!("{seconds}s")
+    }
 }
 
 fn millis(duration: std::time::Duration) -> f64 {

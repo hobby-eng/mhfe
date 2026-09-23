@@ -34,6 +34,14 @@ back to 24 words, and multiple matches fail with `AMBIGUOUS_SOURCE_WORDS`; its
 message lists every matching length. The explicit-length methods remain
 available as a user override.
 
+For a 24-word source, use
+`encryptPreservingFinalWordAscii`/`decryptPreservingFinalWordAscii` (or the
+pre-normalized UTF-8 equivalents) only when the user explicitly selects the
+final-word profile. Their optional progress callback runs after each complete
+permutation. Call `cancel()` to terminate the Worker and discard the active
+Argon2 memory. The preserved final word is public, the run can take many hours,
+and a matching word does not authenticate the password.
+
 `cancel()` terminates the Worker because a synchronous Argon2id invocation
 cannot process a cancellation message while running. Create a new client for a
 retry. Normal `disposeEngine()` runs the Rust destructor and its best-effort
