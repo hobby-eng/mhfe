@@ -201,10 +201,27 @@ Short-source recovery redundancy also affects how a guess can be recognized:
 | 21 words      | 32 bits           | `2^-32` (about 1 in 4.29 billion) |
 | 24 words      | None              | No internal test        |
 
-For a large 21-word search, a false verifier match still needs confirmation
-against a known public address or other external wallet evidence. A 24-word
-source has no spare bits for an internal verifier, so the format itself cannot
-identify the correct password at all; recovery requires external evidence.
+For a 21-word source, a uniformly distributed wrong-password output passes the
+32-bit verifier with probability `2^-32`. In an unusually large search, known
+wallet information can provide additional confirmation, but it is not part of
+the recovery protocol.
+
+For a 24-word source, the correct password and PIM always recover the exact
+original 256-bit entropy. The ordinary BIP39 checksum is then recomputed
+automatically, producing the original valid 24-word mnemonic; no external
+evidence is required for recovery. The limitation is only password
+verification: every permitted password and PIM produces some 256-bit result
+that can also be encoded as a checksum-valid 24-word mnemonic, so the container
+alone cannot tell the user whether an entered password was the intended one.
+
+The encrypted container does not reveal the original mnemonic’s 8-bit checksum
+or its final word. If either value were already known from another source, a
+wrong-password output would share the checksum with probability `2^-8`, or the
+complete final word with probability `2^-11`. At the 34.26-second native rate
+measured above, deliberately finding such a decoy would take about 256 attempts
+(2.4 hours) or 2,048 attempts (19.5 hours) on average on one sequential worker.
+The search is parallelizable, and either match remains only a weak filter: it
+does not show that the other entropy bits equal the original mnemonic.
 
 The Rust source is licensed under MIT. Published vectors are maintained in the
 [companion specification repository](https://github.com/hobby-eng/mhfe-spec/tree/main/vectors)
