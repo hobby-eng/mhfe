@@ -207,7 +207,8 @@ accident is about 1 in 4.29 billion. Normal recovery does not require any
 additional confirmation. Software testing billions of password guesses can use
 known wallet information to confirm the extremely rare accidental match.
 
-For a 24-word source, the correct password and PIM always recover the exact
+For a 24-word source, the correct password and PIM (only if a non-zero PIM was
+deliberately used; otherwise it defaults to `0`) always recover the exact
 original 256-bit entropy. The ordinary BIP39 checksum is then recomputed
 automatically, producing the original valid 24-word mnemonic; no external
 evidence is required for recovery. The limitation is only password
