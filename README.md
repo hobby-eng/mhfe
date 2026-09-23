@@ -216,14 +216,19 @@ verification: every permitted password and PIM produces some 256-bit result
 that can also be encoded as a checksum-valid 24-word mnemonic, so the container
 alone cannot tell the user whether an entered password was the intended one.
 
-The encrypted container does not reveal the original mnemonic’s 8-bit checksum
-or its final word. If either value were already known from another source, a
-wrong-password output would share the checksum with probability `2^-8`, or the
-complete final word with probability `2^-11`. At the 34.26-second native rate
-measured above, deliberately finding such a decoy would take about 256 attempts
-(2.4 hours) or 2,048 attempts (19.5 hours) on average on one sequential worker.
-The search is parallelizable, and either match remains only a weak filter: it
-does not show that the other entropy bits equal the original mnemonic.
+A separately specified optional mode for 24-word sources can preserve the
+original mnemonic's 8-bit BIP39 checksum without adding a word or storing a
+counter. It repeatedly applies the complete MHFE permutation until the encrypted
+container has the same ordinary BIP39 checksum as the source. Recovery repeats
+the inverse permutation until it returns to that checksum class. Under the
+idealized 1-in-256 match model, each direction requires about 256 complete
+permutations on average; at the 34.26-second native rate measured above, that is
+about 2.4 hours on one sequential worker, with a long unbounded tail.
+
+This checksum-preserving cycle-walking mode is not implemented in the current
+release. It would expose the source checksum as a public class label, and the
+preserved checksum would not authenticate the password: recovery under a wrong
+password would also stop at a candidate in the same checksum class.
 
 The Rust source is licensed under MIT. Published vectors are maintained in the
 [companion specification repository](https://github.com/hobby-eng/mhfe-spec/tree/main/vectors)
