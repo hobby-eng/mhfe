@@ -1,0 +1,351 @@
+{
+  "schema": "mhfe-suite-3-vector-v2",
+  "suite_id": "MHFE-BIP39-256-EXPERIMENTAL-3",
+  "name": "ambiguous-12-21",
+  "warning": "Public test data only. This file contains the password and every round key by design; never use its phrase or password for real funds.",
+  "generator": {
+    "program": "mhfe test-vectors",
+    "version": "0.4.0",
+    "argon2": "reference C implementation, P-H-C/phc-winner-argon2 commit f57e61e19229e23c4445b85494dbf7c07de721cb"
+  },
+  "inputs": {
+    "phrase": "essence drama mule dolphin bitter rain abandon abandon able human mule relax",
+    "password": "public test password",
+    "password_utf8_hex": "7075626c696320746573742070617373776f7264",
+    "password_nfkd_utf8_hex": "7075626c696320746573742070617373776f7264",
+    "pim": 0,
+    "memory_level": 0
+  },
+  "argon2": {
+    "variant": "Argon2id",
+    "version": 19,
+    "memory_kib": 2097152,
+    "passes": 12,
+    "lanes": 4,
+    "output_bytes": 32
+  },
+  "packing": {
+    "words": 12,
+    "entropy_hex": "4d48464520616d62000000004dda455a",
+    "verifier_hex": "85b22f09e43e0ae5de9322dce19210ad",
+    "state_hex": "4d48464520616d62000000004dda455a85b22f09e43e0ae5de9322dce19210ad"
+  },
+  "encryption": {
+    "input_state_hex": "4d48464520616d62000000004dda455a85b22f09e43e0ae5de9322dce19210ad",
+    "rounds": [
+      {
+        "round": 0,
+        "left_before_hex": "4d48464520616d62000000004dda455a",
+        "right_before_hex": "85b22f09e43e0ae5de9322dce19210ad",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c5400000000000000000000000085b22f09e43e0ae5de9322dce19210ad",
+        "salt_hex": "b782b85850ede6c25b9c1ac1ad02a4b1",
+        "argon2_key_hex": "c52b144633192893613014f7cc237973b032da4d1616343696125365a6ef46ad",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b00000000000000000000000085b22f09e43e0ae5de9322dce19210ad",
+        "mask_hex": "a960f180176170777b86c01580c6e9d8",
+        "left_after_hex": "85b22f09e43e0ae5de9322dce19210ad",
+        "right_after_hex": "e428b7c537001d157b86c015cd1cac82"
+      },
+      {
+        "round": 1,
+        "left_before_hex": "85b22f09e43e0ae5de9322dce19210ad",
+        "right_before_hex": "e428b7c537001d157b86c015cd1cac82",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000001e428b7c537001d157b86c015cd1cac82",
+        "salt_hex": "6f5b83c5896fdfe90b1514e7ea34707e",
+        "argon2_key_hex": "5dadbfc0e76bc5751dc948725f7ee679d29135834ce73e0b7448b154db9b496a",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000001e428b7c537001d157b86c015cd1cac82",
+        "mask_hex": "197e052142f6b91e10917ea18eb81163",
+        "left_after_hex": "e428b7c537001d157b86c015cd1cac82",
+        "right_after_hex": "9ccc2a28a6c8b3fbce025c7d6f2a01ce"
+      },
+      {
+        "round": 2,
+        "left_before_hex": "e428b7c537001d157b86c015cd1cac82",
+        "right_before_hex": "9ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c540000000000000000000000029ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "salt_hex": "66fb32e560b84b46602ffbe8e3e6b01f",
+        "argon2_key_hex": "dbe619f86bf8dc6af20801b4bc85e4eee60fc9bfa3aef58b6dcd9979a237446b",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b0000000000000000000000029ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "mask_hex": "2a5f69b9683e4a110b0871857b04bd68",
+        "left_after_hex": "9ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "right_after_hex": "ce77de7c5f3e5704708eb190b61811ea"
+      },
+      {
+        "round": 3,
+        "left_before_hex": "9ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "right_before_hex": "ce77de7c5f3e5704708eb190b61811ea",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000003ce77de7c5f3e5704708eb190b61811ea",
+        "salt_hex": "f2dec823b0a4888f806e61a9bb4b9abe",
+        "argon2_key_hex": "9459201d8ae570a033817fc63d5827a691deffbefbf3f1552475b6ed29f69f7d",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000003ce77de7c5f3e5704708eb190b61811ea",
+        "mask_hex": "b3f48d54edde83aca12cb13e746d8971",
+        "left_after_hex": "ce77de7c5f3e5704708eb190b61811ea",
+        "right_after_hex": "2f38a77c4b1630576f2eed431b4788bf"
+      },
+      {
+        "round": 4,
+        "left_before_hex": "ce77de7c5f3e5704708eb190b61811ea",
+        "right_before_hex": "2f38a77c4b1630576f2eed431b4788bf",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c540000000000000000000000042f38a77c4b1630576f2eed431b4788bf",
+        "salt_hex": "cbedce9402cc0edf105c2b987313a998",
+        "argon2_key_hex": "7cb7bb192b8f5d1ff432d776dc4a976fea9d051d117dcd8d3e3067b85c29d7ad",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b0000000000000000000000042f38a77c4b1630576f2eed431b4788bf",
+        "mask_hex": "2eea2a36c4dbb9e7c1ec3a26999f5f6f",
+        "left_after_hex": "2f38a77c4b1630576f2eed431b4788bf",
+        "right_after_hex": "e09df44a9be5eee3b1628bb62f874e85"
+      },
+      {
+        "round": 5,
+        "left_before_hex": "2f38a77c4b1630576f2eed431b4788bf",
+        "right_before_hex": "e09df44a9be5eee3b1628bb62f874e85",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000005e09df44a9be5eee3b1628bb62f874e85",
+        "salt_hex": "aeb639f13e01dce2818edc7ee2aea340",
+        "argon2_key_hex": "a5134e69ae2c7c033c4cc372132ba8f59f4b428bed5d276bc78462555847df9e",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000005e09df44a9be5eee3b1628bb62f874e85",
+        "mask_hex": "86fa27fe7abaf11d977dae1c7af8a2b8",
+        "left_after_hex": "e09df44a9be5eee3b1628bb62f874e85",
+        "right_after_hex": "a9c2808231acc14af853435f61bf2a07"
+      },
+      {
+        "round": 6,
+        "left_before_hex": "e09df44a9be5eee3b1628bb62f874e85",
+        "right_before_hex": "a9c2808231acc14af853435f61bf2a07",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000006a9c2808231acc14af853435f61bf2a07",
+        "salt_hex": "996f531095b3c6212976cdb8aabedb92",
+        "argon2_key_hex": "f53e8edf954070410d93573c9d1d254eec08fd8f1599f5dc8625d8db1fbb95a8",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000006a9c2808231acc14af853435f61bf2a07",
+        "mask_hex": "88daafd244c049fb87f78ec21b67f2ef",
+        "left_after_hex": "a9c2808231acc14af853435f61bf2a07",
+        "right_after_hex": "68475b98df25a7183695057434e0bc6a"
+      },
+      {
+        "round": 7,
+        "left_before_hex": "a9c2808231acc14af853435f61bf2a07",
+        "right_before_hex": "68475b98df25a7183695057434e0bc6a",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c5400000000000000000000000768475b98df25a7183695057434e0bc6a",
+        "salt_hex": "ed4b4c9a4ef43e131088207cabaa2413",
+        "argon2_key_hex": "bc2e2c3d758cd725de3e821207759c2fb69ad4d56966ef1474c95e28f5dce41b",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b00000000000000000000000768475b98df25a7183695057434e0bc6a",
+        "mask_hex": "6c972411f17c8d790cf4317acee28465",
+        "left_after_hex": "68475b98df25a7183695057434e0bc6a",
+        "right_after_hex": "c555a493c0d04c33f4a77225af5dae62"
+      },
+      {
+        "round": 8,
+        "left_before_hex": "68475b98df25a7183695057434e0bc6a",
+        "right_before_hex": "c555a493c0d04c33f4a77225af5dae62",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000008c555a493c0d04c33f4a77225af5dae62",
+        "salt_hex": "219b586ec720929d396aed9f0bea09b5",
+        "argon2_key_hex": "7dd45d6258fa75d482775e82018b8eb8fade2862bf3ca19b8c3aa7bfa0519cd2",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000008c555a493c0d04c33f4a77225af5dae62",
+        "mask_hex": "549a3648a6310dd311c925e9d2ff8bd9",
+        "left_after_hex": "c555a493c0d04c33f4a77225af5dae62",
+        "right_after_hex": "3cdd6dd07914aacb275c209de61f37b3"
+      },
+      {
+        "round": 9,
+        "left_before_hex": "c555a493c0d04c33f4a77225af5dae62",
+        "right_before_hex": "3cdd6dd07914aacb275c209de61f37b3",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c540000000000000000000000093cdd6dd07914aacb275c209de61f37b3",
+        "salt_hex": "47431b607a4cf348d98b6785d9d62d29",
+        "argon2_key_hex": "695a8ce5af1684d72dde4351c11db19fa72a68b346142e02a0d079ff9df3d5e9",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b0000000000000000000000093cdd6dd07914aacb275c209de61f37b3",
+        "mask_hex": "644fecb8fbe75854497750d78a7d3690",
+        "left_after_hex": "3cdd6dd07914aacb275c209de61f37b3",
+        "right_after_hex": "a11a482b3b371467bdd022f2252098f2"
+      },
+      {
+        "round": 10,
+        "left_before_hex": "3cdd6dd07914aacb275c209de61f37b3",
+        "right_before_hex": "a11a482b3b371467bdd022f2252098f2",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c5400000000000000000000000aa11a482b3b371467bdd022f2252098f2",
+        "salt_hex": "5b15f65a7f8ea153b8241d7e142104a2",
+        "argon2_key_hex": "f7ebf0486c700ba2cc1f6b85f9fceda2dedadc0746ba3b565fc181963c1cbe37",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b00000000000000000000000aa11a482b3b371467bdd022f2252098f2",
+        "mask_hex": "ad3f75a21dbc22e64d3fa4d38879c4d7",
+        "left_after_hex": "a11a482b3b371467bdd022f2252098f2",
+        "right_after_hex": "91e2187264a8882d6a63844e6e66f364"
+      },
+      {
+        "round": 11,
+        "left_before_hex": "a11a482b3b371467bdd022f2252098f2",
+        "right_before_hex": "91e2187264a8882d6a63844e6e66f364",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c5400000000000000000000000b91e2187264a8882d6a63844e6e66f364",
+        "salt_hex": "22d4afe8c56b849882daaaf650d9f62e",
+        "argon2_key_hex": "0d863eca79749ef24a900ed124291e99b69170eeaccd23a022e5ef1a1551cc2e",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b00000000000000000000000b91e2187264a8882d6a63844e6e66f364",
+        "mask_hex": "6d86affcb0b51420512c9376fdd23178",
+        "left_after_hex": "91e2187264a8882d6a63844e6e66f364",
+        "right_after_hex": "cc9ce7d78b820047ecfcb184d8f2a98a"
+      }
+    ],
+    "output_state_hex": "91e2187264a8882d6a63844e6e66f364cc9ce7d78b820047ecfcb184d8f2a98a"
+  },
+  "container": "music awkward broken sing mass birth praise identify example industry rubber sister six initial funny icon able disorder dish glide eternal junk plate flat",
+  "decryption": {
+    "input_state_hex": "91e2187264a8882d6a63844e6e66f364cc9ce7d78b820047ecfcb184d8f2a98a",
+    "rounds": [
+      {
+        "round": 11,
+        "left_before_hex": "91e2187264a8882d6a63844e6e66f364",
+        "right_before_hex": "cc9ce7d78b820047ecfcb184d8f2a98a",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c5400000000000000000000000b91e2187264a8882d6a63844e6e66f364",
+        "salt_hex": "22d4afe8c56b849882daaaf650d9f62e",
+        "argon2_key_hex": "0d863eca79749ef24a900ed124291e99b69170eeaccd23a022e5ef1a1551cc2e",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b00000000000000000000000b91e2187264a8882d6a63844e6e66f364",
+        "mask_hex": "6d86affcb0b51420512c9376fdd23178",
+        "left_after_hex": "a11a482b3b371467bdd022f2252098f2",
+        "right_after_hex": "91e2187264a8882d6a63844e6e66f364"
+      },
+      {
+        "round": 10,
+        "left_before_hex": "a11a482b3b371467bdd022f2252098f2",
+        "right_before_hex": "91e2187264a8882d6a63844e6e66f364",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c5400000000000000000000000aa11a482b3b371467bdd022f2252098f2",
+        "salt_hex": "5b15f65a7f8ea153b8241d7e142104a2",
+        "argon2_key_hex": "f7ebf0486c700ba2cc1f6b85f9fceda2dedadc0746ba3b565fc181963c1cbe37",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b00000000000000000000000aa11a482b3b371467bdd022f2252098f2",
+        "mask_hex": "ad3f75a21dbc22e64d3fa4d38879c4d7",
+        "left_after_hex": "3cdd6dd07914aacb275c209de61f37b3",
+        "right_after_hex": "a11a482b3b371467bdd022f2252098f2"
+      },
+      {
+        "round": 9,
+        "left_before_hex": "3cdd6dd07914aacb275c209de61f37b3",
+        "right_before_hex": "a11a482b3b371467bdd022f2252098f2",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c540000000000000000000000093cdd6dd07914aacb275c209de61f37b3",
+        "salt_hex": "47431b607a4cf348d98b6785d9d62d29",
+        "argon2_key_hex": "695a8ce5af1684d72dde4351c11db19fa72a68b346142e02a0d079ff9df3d5e9",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b0000000000000000000000093cdd6dd07914aacb275c209de61f37b3",
+        "mask_hex": "644fecb8fbe75854497750d78a7d3690",
+        "left_after_hex": "c555a493c0d04c33f4a77225af5dae62",
+        "right_after_hex": "3cdd6dd07914aacb275c209de61f37b3"
+      },
+      {
+        "round": 8,
+        "left_before_hex": "c555a493c0d04c33f4a77225af5dae62",
+        "right_before_hex": "3cdd6dd07914aacb275c209de61f37b3",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000008c555a493c0d04c33f4a77225af5dae62",
+        "salt_hex": "219b586ec720929d396aed9f0bea09b5",
+        "argon2_key_hex": "7dd45d6258fa75d482775e82018b8eb8fade2862bf3ca19b8c3aa7bfa0519cd2",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000008c555a493c0d04c33f4a77225af5dae62",
+        "mask_hex": "549a3648a6310dd311c925e9d2ff8bd9",
+        "left_after_hex": "68475b98df25a7183695057434e0bc6a",
+        "right_after_hex": "c555a493c0d04c33f4a77225af5dae62"
+      },
+      {
+        "round": 7,
+        "left_before_hex": "68475b98df25a7183695057434e0bc6a",
+        "right_before_hex": "c555a493c0d04c33f4a77225af5dae62",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c5400000000000000000000000768475b98df25a7183695057434e0bc6a",
+        "salt_hex": "ed4b4c9a4ef43e131088207cabaa2413",
+        "argon2_key_hex": "bc2e2c3d758cd725de3e821207759c2fb69ad4d56966ef1474c95e28f5dce41b",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b00000000000000000000000768475b98df25a7183695057434e0bc6a",
+        "mask_hex": "6c972411f17c8d790cf4317acee28465",
+        "left_after_hex": "a9c2808231acc14af853435f61bf2a07",
+        "right_after_hex": "68475b98df25a7183695057434e0bc6a"
+      },
+      {
+        "round": 6,
+        "left_before_hex": "a9c2808231acc14af853435f61bf2a07",
+        "right_before_hex": "68475b98df25a7183695057434e0bc6a",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000006a9c2808231acc14af853435f61bf2a07",
+        "salt_hex": "996f531095b3c6212976cdb8aabedb92",
+        "argon2_key_hex": "f53e8edf954070410d93573c9d1d254eec08fd8f1599f5dc8625d8db1fbb95a8",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000006a9c2808231acc14af853435f61bf2a07",
+        "mask_hex": "88daafd244c049fb87f78ec21b67f2ef",
+        "left_after_hex": "e09df44a9be5eee3b1628bb62f874e85",
+        "right_after_hex": "a9c2808231acc14af853435f61bf2a07"
+      },
+      {
+        "round": 5,
+        "left_before_hex": "e09df44a9be5eee3b1628bb62f874e85",
+        "right_before_hex": "a9c2808231acc14af853435f61bf2a07",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000005e09df44a9be5eee3b1628bb62f874e85",
+        "salt_hex": "aeb639f13e01dce2818edc7ee2aea340",
+        "argon2_key_hex": "a5134e69ae2c7c033c4cc372132ba8f59f4b428bed5d276bc78462555847df9e",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000005e09df44a9be5eee3b1628bb62f874e85",
+        "mask_hex": "86fa27fe7abaf11d977dae1c7af8a2b8",
+        "left_after_hex": "2f38a77c4b1630576f2eed431b4788bf",
+        "right_after_hex": "e09df44a9be5eee3b1628bb62f874e85"
+      },
+      {
+        "round": 4,
+        "left_before_hex": "2f38a77c4b1630576f2eed431b4788bf",
+        "right_before_hex": "e09df44a9be5eee3b1628bb62f874e85",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c540000000000000000000000042f38a77c4b1630576f2eed431b4788bf",
+        "salt_hex": "cbedce9402cc0edf105c2b987313a998",
+        "argon2_key_hex": "7cb7bb192b8f5d1ff432d776dc4a976fea9d051d117dcd8d3e3067b85c29d7ad",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b0000000000000000000000042f38a77c4b1630576f2eed431b4788bf",
+        "mask_hex": "2eea2a36c4dbb9e7c1ec3a26999f5f6f",
+        "left_after_hex": "ce77de7c5f3e5704708eb190b61811ea",
+        "right_after_hex": "2f38a77c4b1630576f2eed431b4788bf"
+      },
+      {
+        "round": 3,
+        "left_before_hex": "ce77de7c5f3e5704708eb190b61811ea",
+        "right_before_hex": "2f38a77c4b1630576f2eed431b4788bf",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000003ce77de7c5f3e5704708eb190b61811ea",
+        "salt_hex": "f2dec823b0a4888f806e61a9bb4b9abe",
+        "argon2_key_hex": "9459201d8ae570a033817fc63d5827a691deffbefbf3f1552475b6ed29f69f7d",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000003ce77de7c5f3e5704708eb190b61811ea",
+        "mask_hex": "b3f48d54edde83aca12cb13e746d8971",
+        "left_after_hex": "9ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "right_after_hex": "ce77de7c5f3e5704708eb190b61811ea"
+      },
+      {
+        "round": 2,
+        "left_before_hex": "9ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "right_before_hex": "ce77de7c5f3e5704708eb190b61811ea",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c540000000000000000000000029ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "salt_hex": "66fb32e560b84b46602ffbe8e3e6b01f",
+        "argon2_key_hex": "dbe619f86bf8dc6af20801b4bc85e4eee60fc9bfa3aef58b6dcd9979a237446b",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b0000000000000000000000029ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "mask_hex": "2a5f69b9683e4a110b0871857b04bd68",
+        "left_after_hex": "e428b7c537001d157b86c015cd1cac82",
+        "right_after_hex": "9ccc2a28a6c8b3fbce025c7d6f2a01ce"
+      },
+      {
+        "round": 1,
+        "left_before_hex": "e428b7c537001d157b86c015cd1cac82",
+        "right_before_hex": "9ccc2a28a6c8b3fbce025c7d6f2a01ce",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c54000000000000000000000001e428b7c537001d157b86c015cd1cac82",
+        "salt_hex": "6f5b83c5896fdfe90b1514e7ea34707e",
+        "argon2_key_hex": "5dadbfc0e76bc5751dc948725f7ee679d29135834ce73e0b7448b154db9b496a",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b000000000000000000000001e428b7c537001d157b86c015cd1cac82",
+        "mask_hex": "197e052142f6b91e10917ea18eb81163",
+        "left_after_hex": "85b22f09e43e0ae5de9322dce19210ad",
+        "right_after_hex": "e428b7c537001d157b86c015cd1cac82"
+      },
+      {
+        "round": 0,
+        "left_before_hex": "85b22f09e43e0ae5de9322dce19210ad",
+        "right_before_hex": "e428b7c537001d157b86c015cd1cac82",
+        "salt_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d53414c5400000000000000000000000085b22f09e43e0ae5de9322dce19210ad",
+        "salt_hex": "b782b85850ede6c25b9c1ac1ad02a4b1",
+        "argon2_key_hex": "c52b144633192893613014f7cc237973b032da4d1616343696125365a6ef46ad",
+        "mask_input_hex": "4d4846452d42495033392d3235362d4558504552494d454e54414c2d332f524f554e442d4d41534b00000000000000000000000085b22f09e43e0ae5de9322dce19210ad",
+        "mask_hex": "a960f180176170777b86c01580c6e9d8",
+        "left_after_hex": "4d48464520616d62000000004dda455a",
+        "right_after_hex": "85b22f09e43e0ae5de9322dce19210ad"
+      }
+    ],
+    "output_state_hex": "4d48464520616d62000000004dda455a85b22f09e43e0ae5de9322dce19210ad"
+  },
+  "recovery": [
+    {
+      "words": 12,
+      "verified": true,
+      "phrase": "essence drama mule dolphin bitter rain abandon abandon able human mule relax"
+    },
+    {
+      "words": 21,
+      "verified": true,
+      "phrase": "essence drama mule dolphin bitter rain abandon abandon able human mule relax forest bleak chest march april confirm pill east sock"
+    },
+    {
+      "words": 24,
+      "verified": false,
+      "phrase": "essence drama mule dolphin bitter rain abandon abandon able human mule relax forest bleak chest march april confirm pill east sock simple dress sand"
+    }
+  ]
+}

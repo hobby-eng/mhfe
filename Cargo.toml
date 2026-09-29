@@ -1,6 +1,6 @@
 [package]
 name = "mhfe-experimental"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.98.1"
 authors = ["Sergei Semenov"]
@@ -16,23 +16,55 @@ crate-type = ["rlib"]
 
 [[bin]]
 name = "mhfe"
-path = "src/main.rs"
-test = false
+path = "src/bin/mhfe/main.rs"
+test = true
 bench = false
 
 [dependencies]
-argon2 = { version = "=0.6.0", default-features = false, features = ["zeroize"] }
+# Address encodings for the rehearsal check: Base58Check ("1...", "3...") and Bech32 ("bc1...").
+bech32 = { version = "=0.12.0", default-features = false, features = ["alloc"] }
 bip39 = { version = "=3.0.0", features = ["zeroize"] }
+# RIPEMD-160 for Bitcoin addresses; the same crate bip39 already depends on.
+bitcoin_hashes = { version = "=0.14.101", default-features = false }
 blake2 = "=0.11.0"
+bs58 = { version = "=0.5.1", default-features = false, features = ["alloc", "check"] }
 hex = "=0.4.3"
 hmac = "=0.12.1"
+# secp256k1 arithmetic for BIP32 in the rehearsal check; audited by NCC Group.
+k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sha2 = "=0.10.9"
+# Its UNICODE_VERSION is (17, 0, 0), the version the specification pins for passwords.
+unicode-normalization = "=0.1.25"
 zeroize = { version = "=1.9.0", features = ["zeroize_derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Coloured terminal output; clap already uses both, so they add no new code to the build.
+anstream = "=1.0.0"
+anstyle = "=1.0.14"
 clap = { version = "=4.6.7", features = ["derive"] }
+# Ctrl+C stops the tool at once, also inside an Argon2 round.
+ctrlc = "=3.5.2"
+# Randomness for `mhfe password`, straight from the operating system.
+getrandom = "=0.4.3"
+# Hidden terminal input for phrases and passwords.
+rpassword = "=7.5.4"
+
+# Free-memory queries before the Argon2 work area is reserved.
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "=0.2.189"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_System_SystemInformation"] }
+
+[build-dependencies]
+# Compiles the vendored reference Argon2 C code (build.rs).
+cc = "=1.5.1"
+
+[dev-dependencies]
+# An independent Argon2 implementation, used only to cross-check the C engine in tests.
+argon2 = { version = "=0.6.0", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { version = "=0.2.128", optional = true }
@@ -41,6 +73,10 @@ js-sys = { version = "=0.3.105", optional = true }
 [features]
 default = []
 wasm = ["dep:wasm-bindgen", "dep:js-sys"]
+# x86-64 only: build the Argon2 code with SSSE3, about 5% faster, but the program then stops with
+# "Illegal instruction" on processors without SSSE3, such as some virtual machines. Releases
+# use the SSE2 baseline, which every x86-64 processor has.
+ssse3 = []
 
 [profile.release]
 codegen-units = 1

@@ -1,14 +1,50 @@
+# Canonical release build. It produces, byte for byte the same on every machine:
+#
+#   mhfe-<version>-linux-x86_64.tar.gz    command-line tool for Linux on x86-64
+#   mhfe-<version>-linux-aarch64.tar.gz   command-line tool for Linux on ARM64
+#   mhfe-<version>-windows-x86_64.zip     command-line tool for Windows on x86-64
+#   ...-linux-x86_64-ssse3, ...-windows-x86_64-ssse3   the same, about 5% faster, needing SSSE3
+#   mhfe-<version>-browser.tar.gz         the browser package (dist/)
+#   SHA256SUMS
+#
+# macOS builds need Apple's SDK and are made by the release workflow on macOS runners.
+# Every tool is pinned: the base images by digest, downloads by SHA-256, Ubuntu packages by an
+# archive snapshot date, Rust crates by Cargo.lock.
+
+# Emscripten 6.0.10 (linux/amd64 image) compiles the browser builds of the Argon2 C code.
+FROM emscripten/emsdk:6.0.10@sha256:d4d9b9a07e28f8795ebca83b4b3bf98febb65f956e1364ac32483eea3d99bd8f AS argon2-wasm
+WORKDIR /workspace
+COPY vendor/phc-winner-argon2 vendor/phc-winner-argon2
+COPY scripts/build-argon2-wasm.sh scripts/remove-network-code.mjs scripts/
+RUN scripts/build-argon2-wasm.sh
+
 FROM buildpack-deps:noble@sha256:c2881ab5b526bc3b377a9501a89fec7a82c84f57e89d6cfd2fb9b5cbff75ef7f AS toolchain
 
 ARG NODE_VERSION=24.20.0
 ARG NODE_ARCHIVE_SHA256=2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2
 ARG RUSTUP_VERSION=1.29.1
 ARG RUSTUP_INIT_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
+# Ubuntu archive snapshot for the cross compilers, so that their versions never change.
+ARG UBUNTU_SNAPSHOT=20260929T000000Z
 
 ENV CARGO_HOME=/root/.cargo \
     RUSTUP_HOME=/root/.rustup \
     PATH=/root/.cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
     CI=true
+
+# C cross compilers for ARM64 Linux and for Windows (MinGW-w64); the native C compiler comes with
+# the pinned base image. The update and security suites of the same snapshot are needed too: the
+# base image already carries updated packages, such as binutils-common, that the cross binutils
+# must match.
+RUN for suite in noble noble-updates noble-security; do \
+      printf 'deb [check-valid-until=no] https://snapshot.ubuntu.com/ubuntu/%s %s main universe\n' \
+        "${UBUNTU_SNAPSHOT}" "${suite}"; \
+    done > /etc/apt/sources.list.d/snapshot.list \
+    && rm -f /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
+    && apt-get install --yes --no-install-recommends \
+         gcc-aarch64-linux-gnu libc6-dev-arm64-cross gcc-mingw-w64-x86-64 zip \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN curl --fail --silent --show-error --location \
       "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
@@ -24,43 +60,54 @@ RUN curl --fail --silent --show-error --location \
     && echo "${RUSTUP_INIT_SHA256}  /tmp/rustup-init" | sha256sum --check --strict \
     && chmod 0755 /tmp/rustup-init \
     && /tmp/rustup-init -y --profile minimal --default-toolchain 1.98.1 \
-         --target wasm32-unknown-unknown --component rustfmt --component clippy \
+         --target wasm32-unknown-unknown --target aarch64-unknown-linux-gnu \
+         --target x86_64-pc-windows-gnu --component rustfmt --component clippy \
     && rm /tmp/rustup-init \
     && cargo install wasm-bindgen-cli --version 0.2.128 --locked \
     && test "$(rustc --version | cut -d ' ' -f 1-2)" = "rustc 1.98.1" \
     && test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.128"
 
+# Cross builds: the linkers and the C compilers the cc crate uses for the Argon2 code. The MinGW
+# linker writes the build time into every Windows executable's header, and the header checksum
+# with it; --no-insert-timestamp writes zero instead, so that two builds give the same bytes.
+ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+    CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc \
+    CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
+    CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-arg=-Wl,--no-insert-timestamp" \
+    CC_x86_64_pc_windows_gnu=x86_64-w64-mingw32-gcc
+
 FROM toolchain AS dependencies
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
-RUN cargo fetch --locked --target x86_64-unknown-linux-gnu \
-    && cargo fetch --locked --target wasm32-unknown-unknown
+RUN cargo fetch --locked
 
 FROM dependencies AS verified
 ENV CARGO_NET_OFFLINE=true
 COPY . .
+COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
+# The same fast checks as CI, then the release builds. No network from here on.
 RUN --network=none cargo fmt --all -- --check \
     && cargo clippy --locked --offline --all-targets --all-features -- -D warnings \
-    && cargo test --locked --offline --lib \
-    && cargo build --locked --offline --release --bin mhfe \
-    && scripts/build-wasm.sh \
-    && node scripts/verify-worker-client.mjs
+    && cargo test --locked --offline \
+    && cargo test --locked --offline --features ssse3 --target-dir target/ssse3 \
+    && cargo build --locked --offline --release \
+    && cargo build --locked --offline --release --target aarch64-unknown-linux-gnu \
+    && cargo build --locked --offline --release --target x86_64-pc-windows-gnu \
+    && cargo build --locked --offline --release --features ssse3 --target-dir target/ssse3 \
+    && cargo build --locked --offline --release --features ssse3 --target-dir target/ssse3 \
+         --target x86_64-pc-windows-gnu \
+    && PREBUILT_ARGON2_DIR=/prebuilt-argon2 scripts/build-wasm.sh \
+    && node scripts/verify-argon2-wasm.mjs \
+    && node scripts/verify-browser-package.mjs \
+    && python3 scripts/verify-fast-mode-script.py \
+    && scripts/check-release-artifacts.sh
 
 ARG RELEASE_VERSION
 RUN test -n "${RELEASE_VERSION}" \
     && package_version="$(cargo metadata --locked --offline --no-deps --format-version 1 | \
          python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')" \
     && test "${RELEASE_VERSION}" = "v${package_version}" \
-    && mkdir -p /release/linux /release/browser \
-    && cp target/release/mhfe README.md API.md SECURITY.md LICENSE /release/linux/ \
-    && cp -R dist/. /release/browser/ \
-    && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-         -C /release/linux -cf - . | gzip -n > "/release/mhfe-${RELEASE_VERSION}-linux-x86_64.tar.gz" \
-    && tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-         -C /release/browser -cf - . | gzip -n > "/release/mhfe-${RELEASE_VERSION}-browser-wasm.tar.gz" \
-    && cd /release \
-    && sha256sum *.tar.gz > SHA256SUMS \
-    && rm -rf linux browser
+    && scripts/package-release.sh "${RELEASE_VERSION}" /release
 
 FROM scratch AS artifacts
 COPY --from=verified /release /release

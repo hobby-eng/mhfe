@@ -2,5 +2,6 @@
 .github
 target
 release
-canonical-output
+canonical-output*
+dist
 *.log

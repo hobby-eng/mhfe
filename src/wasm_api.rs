@@ -1,329 +1,280 @@
-use crate::{
-    suite_parameters, CycleWalkControl, CycleWalkDecryptionResult, CycleWalkEncryptionResult,
-    CycleWalkProgress, DecryptionResult, EncryptionResult, MhfeEngine, MhfeError,
-    NormalizedPassword, API_VERSION,
-};
+//! The WebAssembly API that web/mhfe-worker.js calls. Each call runs one whole operation
+//! synchronously inside the worker; the worker reports progress and the page cancels by
+//! terminating the worker.
+//!
+//! Passwords arrive as UTF-8 bytes and are wiped here after use. Results leave as JSON text:
+//! a recovered phrase has to become a JavaScript string to be shown, and such strings cannot be
+//! wiped, so the page should show it only on request and drop it soon after.
+
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
-fn checked_pim(pim: f64) -> Result<u32, JsError> {
-    if !pim.is_finite() || pim.fract() != 0.0 || pim < 0.0 || pim > crate::MAX_PIM as f64 {
-        return Err(JsError::new(&format!(
-            "INVALID_PIM: PIM must be an integer from 0 through {}",
-            crate::MAX_PIM
-        )));
-    }
-    Ok(pim as u32)
-}
+use crate::engine::browser::{BrowserEngine, JsArgon2, HIGHEST_BROWSER_MEMORY_LEVEL};
+use crate::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
+use crate::{
+    Mhfe, MhfeError, Password, PhraseLength, Recovery, Reference, MAX_MEMORY_LEVEL, MAX_PIM,
+    ROUNDS, SUITE_ID,
+};
 
-fn checked_source_words(source_words: f64) -> Result<usize, JsError> {
-    if !source_words.is_finite()
-        || source_words.fract() != 0.0
-        || ![12.0, 15.0, 18.0, 21.0, 24.0].contains(&source_words)
-    {
-        return Err(JsError::new(
-            "INVALID_SOURCE_WORDS: sourceWords must be 12, 15, 18, 21, or 24",
-        ));
-    }
-    Ok(source_words as usize)
-}
+/// Changes when this API changes incompatibly.
+const API_VERSION: u32 = 6;
 
+/// "CODE: message", the form the worker and the client parse.
 fn js_error(error: MhfeError) -> JsError {
     JsError::new(&format!("{}: {error}", error.code()))
 }
 
-fn json_error(error: serde_json::Error) -> JsError {
-    JsError::new(&format!("SERIALIZATION_FAILURE: {error}"))
+fn serialization_error(error: serde_json::Error) -> JsError {
+    JsError::new(&format!("INTERNAL_ERROR: {error}"))
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct BrowserEncryptionResult<'a> {
+struct SuiteParameters {
     api_version: u32,
-    suite_id: &'a str,
-    pim: u32,
-    effective_passes: u32,
-    source_words: usize,
-    encrypted_mnemonic: &'a str,
+    suite_id: &'static str,
+    rounds: u32,
+    max_pim: u32,
+    max_memory_level: u32,
+    highest_browser_memory_level: u32,
 }
 
-impl<'a> From<&'a EncryptionResult> for BrowserEncryptionResult<'a> {
-    fn from(result: &'a EncryptionResult) -> Self {
-        Self {
-            api_version: API_VERSION,
-            suite_id: &result.suite_id,
-            pim: result.pim,
-            effective_passes: result.effective_passes,
-            source_words: result.source_words,
-            encrypted_mnemonic: &result.encrypted_mnemonic,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowserDecryptionResult<'a> {
-    api_version: u32,
-    suite_id: &'a str,
-    pim: u32,
-    effective_passes: u32,
-    source_words: usize,
-    recovered_mnemonic: &'a str,
-    recovery_verifier: &'static str,
-}
-
-impl<'a> From<&'a DecryptionResult> for BrowserDecryptionResult<'a> {
-    fn from(result: &'a DecryptionResult) -> Self {
-        Self {
-            api_version: API_VERSION,
-            suite_id: &result.suite_id,
-            pim: result.pim,
-            effective_passes: result.effective_passes,
-            source_words: result.source_words,
-            recovered_mnemonic: &result.recovered_mnemonic,
-            recovery_verifier: if result.recovery_verified {
-                "matched"
-            } else {
-                "unavailable"
-            },
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowserCycleWalkEncryptionResult<'a> {
-    api_version: u32,
-    suite_id: &'a str,
-    profile_id: &'a str,
-    pim: u32,
-    effective_passes: u32,
-    source_words: usize,
-    iterations: u64,
-    preserved_final_word: &'a str,
-    encrypted_mnemonic: &'a str,
-}
-
-impl<'a> From<&'a CycleWalkEncryptionResult> for BrowserCycleWalkEncryptionResult<'a> {
-    fn from(result: &'a CycleWalkEncryptionResult) -> Self {
-        Self {
-            api_version: API_VERSION,
-            suite_id: &result.suite_id,
-            profile_id: &result.profile_id,
-            pim: result.pim,
-            effective_passes: result.effective_passes,
-            source_words: result.source_words,
-            iterations: result.iterations,
-            preserved_final_word: &result.preserved_final_word,
-            encrypted_mnemonic: &result.encrypted_mnemonic,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct BrowserCycleWalkDecryptionResult<'a> {
-    api_version: u32,
-    suite_id: &'a str,
-    profile_id: &'a str,
-    pim: u32,
-    effective_passes: u32,
-    source_words: usize,
-    iterations: u64,
-    preserved_final_word: &'a str,
-    recovered_mnemonic: &'a str,
-}
-
-impl<'a> From<&'a CycleWalkDecryptionResult> for BrowserCycleWalkDecryptionResult<'a> {
-    fn from(result: &'a CycleWalkDecryptionResult) -> Self {
-        Self {
-            api_version: API_VERSION,
-            suite_id: &result.suite_id,
-            profile_id: &result.profile_id,
-            pim: result.pim,
-            effective_passes: result.effective_passes,
-            source_words: result.source_words,
-            iterations: result.iterations,
-            preserved_final_word: &result.preserved_final_word,
-            recovered_mnemonic: &result.recovered_mnemonic,
-        }
-    }
-}
-
-fn emit_cycle_walk_progress(
-    callback: &js_sys::Function,
-    progress: CycleWalkProgress,
-) -> Result<CycleWalkControl, String> {
-    let json = serde_json::to_string(&progress).map_err(|error| error.to_string())?;
-    let result = callback
-        .call1(&JsValue::UNDEFINED, &JsValue::from_str(&json))
-        .map_err(|error| format!("{error:?}"))?;
-    Ok(if result.as_bool() == Some(false) {
-        CycleWalkControl::Cancel
-    } else {
-        CycleWalkControl::Continue
+/// The fixed suite values and the limits of the browser build.
+#[wasm_bindgen(js_name = suiteParameters)]
+pub fn suite_parameters() -> Result<String, JsError> {
+    serde_json::to_string(&SuiteParameters {
+        api_version: API_VERSION,
+        suite_id: SUITE_ID,
+        rounds: ROUNDS,
+        max_pim: MAX_PIM,
+        max_memory_level: MAX_MEMORY_LEVEL,
+        highest_browser_memory_level: HIGHEST_BROWSER_MEMORY_LEVEL,
     })
+    .map_err(serialization_error)
 }
 
-/// Browser-facing MHFE engine.
+/// Checks an original phrase before anything runs; returns its word count.
+#[wasm_bindgen(js_name = checkPhrase)]
+pub fn check_phrase(phrase: &str) -> Result<u32, JsError> {
+    crate::check_phrase(phrase)
+        .map(|words| words as u32)
+        .map_err(js_error)
+}
+
+/// Checks an original phrase and returns it with every word written out.
+#[wasm_bindgen(js_name = readPhrase)]
+pub fn read_phrase(phrase: &str) -> Result<String, JsError> {
+    crate::read_phrase(phrase)
+        .map(|phrase| phrase.to_string())
+        .map_err(js_error)
+}
+
+/// The lengths other than the phrase's own that automatic detection would also accept after
+/// recovery: almost always empty. When not, the page should tell the user to note the word count
+/// and to choose it during recovery.
+#[wasm_bindgen(js_name = otherDetectedLengths)]
+pub fn other_detected_lengths(phrase: &str) -> Result<Vec<u32>, JsError> {
+    let lengths = crate::other_detected_lengths(phrase).map_err(js_error)?;
+    Ok(lengths.into_iter().map(|words| words as u32).collect())
+}
+
+/// Checks a container and returns it with every word written out.
+#[wasm_bindgen(js_name = checkContainer)]
+pub fn check_container(container: &str) -> Result<String, JsError> {
+    crate::check_container(container).map_err(js_error)
+}
+
+/// Checks a password before anything runs. The bytes are wiped afterwards.
+#[wasm_bindgen(js_name = checkPassword)]
+pub fn check_password(password_utf8: Vec<u8>) -> Result<(), JsError> {
+    password_from(password_utf8).map(|_| ())
+}
+
+/// Encrypts `phrase` and returns the 24-word container once its check has passed.
 ///
-/// Construct and call this object inside a dedicated Web Worker. Each instance
-/// owns and reuses one 512 MiB Argon2 work area. Dropping/freeing the object
-/// zeroizes that reachable work area. Terminating the Worker is the supported
-/// cancellation mechanism for an active synchronous operation.
-#[wasm_bindgen(js_name = MhfeEngine)]
-pub struct WasmMhfeEngine {
-    inner: MhfeEngine,
-    password: Option<NormalizedPassword>,
+/// After the first twelve rounds `on_unverified` receives the container, so that a page can
+/// show it, marked as not yet verified, while the check runs.
+#[wasm_bindgen]
+pub fn encrypt(
+    phrase: &str,
+    password_utf8: Vec<u8>,
+    pim: f64,
+    memory_level: f64,
+    argon2: JsArgon2,
+    on_round: &js_sys::Function,
+    on_unverified: &js_sys::Function,
+) -> Result<String, JsError> {
+    let password = password_from(password_utf8)?;
+    let mut mhfe = mhfe_for(pim, memory_level, argon2)?;
+    let mut on_progress = |round, rounds| report(on_round, round, rounds);
+    let new = mhfe
+        .encrypt_unchecked(phrase, &password, &mut on_progress)
+        .map_err(js_error)?;
+    on_unverified
+        .call1(&JsValue::UNDEFINED, &JsValue::from_str(&new.words))
+        .map_err(|_| js_error(MhfeError::Cancelled))?;
+    mhfe.check_new_container(&new, &password, &mut on_progress)
+        .map_err(js_error)?;
+    Ok(new.words.to_string())
 }
 
-#[wasm_bindgen(js_class = MhfeEngine)]
-impl WasmMhfeEngine {
-    #[wasm_bindgen(constructor)]
-    pub fn new(pim: f64) -> Result<WasmMhfeEngine, JsError> {
-        let pim = checked_pim(pim)?;
-        Ok(Self {
-            inner: MhfeEngine::new(pim).map_err(js_error)?,
-            password: None,
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CandidateJson<'a> {
+    words: usize,
+    verified: bool,
+    phrase: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryJson<'a> {
+    /// "phrase" for one result, "ambiguous" when several lengths passed their check.
+    kind: &'static str,
+    candidates: Vec<CandidateJson<'a>>,
+}
+
+/// Recovers the phrase. `words` is 0 for automatic detection, otherwise the chosen length.
+/// Returns JSON: `{ kind, candidates: [{ words, verified, phrase }] }`.
+#[wasm_bindgen]
+pub fn decrypt(
+    container: &str,
+    password_utf8: Vec<u8>,
+    pim: f64,
+    memory_level: f64,
+    words: f64,
+    argon2: JsArgon2,
+    on_round: &js_sys::Function,
+) -> Result<String, JsError> {
+    let password = password_from(password_utf8)?;
+    let length = match whole_number(words, "INVALID_WORD_COUNT", "the word count")? {
+        0 => PhraseLength::Detect,
+        words => PhraseLength::Words(words as usize),
+    };
+    let mut mhfe = mhfe_for(pim, memory_level, argon2)?;
+    let recovery = mhfe
+        .decrypt(container, &password, length, &mut |round, rounds| {
+            report(on_round, round, rounds)
         })
-    }
+        .map_err(js_error)?;
+    let (kind, phrases) = match recovery {
+        Recovery::Phrase(phrase) => ("phrase", vec![phrase]),
+        Recovery::Ambiguous(candidates) => ("ambiguous", candidates),
+    };
+    let json = RecoveryJson {
+        kind,
+        candidates: phrases
+            .iter()
+            .map(|candidate| CandidateJson {
+                words: candidate.words,
+                verified: candidate.verified,
+                phrase: &candidate.phrase,
+            })
+            .collect(),
+    };
+    serde_json::to_string(&json).map_err(serialization_error)
+}
 
-    #[wasm_bindgen(getter)]
-    pub fn pim(&self) -> u32 {
-        self.inner.pim()
-    }
-
-    #[wasm_bindgen(getter, js_name = effectivePasses)]
-    pub fn effective_passes(&self) -> u32 {
-        self.inner.effective_passes()
-    }
-
-    /// Load an ASCII password. ASCII is unchanged by Unicode 18 NPSS-NFKD.
-    #[wasm_bindgen(js_name = setAsciiPassword)]
-    pub fn set_ascii_password(&mut self, password: &str) -> Result<(), JsError> {
-        self.password = Some(NormalizedPassword::from_test_ascii(password).map_err(js_error)?);
-        Ok(())
-    }
-
-    /// Load already-normalized Unicode 18 NPSS-NFKD UTF-8 bytes. Ownership is
-    /// moved into a zeroizing Rust object without retaining another Rust copy.
-    #[wasm_bindgen(js_name = setPreNormalizedPassword)]
-    pub fn set_pre_normalized_password(&mut self, password_utf8: Vec<u8>) -> Result<(), JsError> {
-        self.password =
-            Some(NormalizedPassword::from_npss_nfkd_utf8_owned(password_utf8).map_err(js_error)?);
-        Ok(())
-    }
-
-    #[wasm_bindgen(js_name = clearPassword)]
-    pub fn clear_password(&mut self) {
-        self.password = None;
-    }
-
-    #[wasm_bindgen(js_name = encryptJson)]
-    pub fn encrypt_json(&mut self, mnemonic: &str) -> Result<String, JsError> {
-        let password = self
-            .password
-            .as_ref()
-            .ok_or(MhfeError::PasswordNotSet)
-            .map_err(js_error)?;
-        let result = self
-            .inner
-            .encrypt_mnemonic(mnemonic, password)
-            .map_err(js_error)?;
-        serde_json::to_string(&BrowserEncryptionResult::from(&result)).map_err(json_error)
-    }
-
-    #[wasm_bindgen(js_name = encryptPreservingFinalWordJson)]
-    pub fn encrypt_preserving_final_word_json(
-        &mut self,
-        mnemonic: &str,
-        progress_callback: &js_sys::Function,
-    ) -> Result<String, JsError> {
-        let password = self
-            .password
-            .as_ref()
-            .ok_or(MhfeError::PasswordNotSet)
-            .map_err(js_error)?;
-        let mut callback_error = None;
-        let result = self.inner.encrypt_preserving_final_word_with_progress(
-            mnemonic,
-            password,
-            |progress| match emit_cycle_walk_progress(progress_callback, progress) {
-                Ok(control) => control,
-                Err(error) => {
-                    callback_error = Some(error);
-                    CycleWalkControl::Cancel
-                }
-            },
-        );
-        if let Some(error) = callback_error {
-            return Err(JsError::new(&format!("PROGRESS_CALLBACK_FAILURE: {error}")));
+/// The rehearsal check; returns only whether the recovery matches the reference.
+///
+/// `reference_kind` is "address", "fingerprint" or "words"; `reference` is the address, the
+/// eight hex digits or the word count; `path` is empty for the standard path search.
+#[allow(clippy::too_many_arguments)]
+#[wasm_bindgen]
+pub fn check(
+    container: &str,
+    password_utf8: Vec<u8>,
+    pim: f64,
+    memory_level: f64,
+    reference_kind: &str,
+    reference: &str,
+    path: &str,
+    passphrase_utf8: Vec<u8>,
+    argon2: JsArgon2,
+    on_round: &js_sys::Function,
+) -> Result<bool, JsError> {
+    // Both secrets are put under a wiping owner before anything can fail, so that no early
+    // return drops either of them unwiped. The passphrase is read in place, without a copy.
+    let passphrase_bytes = Zeroizing::new(passphrase_utf8);
+    let password = password_from(password_utf8)?;
+    let passphrase = std::str::from_utf8(&passphrase_bytes)
+        .map_err(|_| JsError::new("INVALID_PASSPHRASE: the BIP39 passphrase is not UTF-8"))?;
+    let address: BitcoinAddress;
+    let derivation_path: Option<DerivationPath>;
+    let reference = match reference_kind {
+        "address" => {
+            address = reference.parse().map_err(js_error)?;
+            derivation_path = match path {
+                "" => None,
+                text => Some(text.parse().map_err(js_error)?),
+            };
+            Reference::Address {
+                address: &address,
+                passphrase,
+                path: derivation_path.as_ref(),
+                limits: SearchLimits::default(),
+            }
         }
-        let result = result.map_err(js_error)?;
-        serde_json::to_string(&BrowserCycleWalkEncryptionResult::from(&result)).map_err(json_error)
-    }
-
-    #[wasm_bindgen(js_name = decryptJson)]
-    pub fn decrypt_json(&mut self, container: &str, source_words: f64) -> Result<String, JsError> {
-        let source_words = checked_source_words(source_words)?;
-        let password = self
-            .password
-            .as_ref()
-            .ok_or(MhfeError::PasswordNotSet)
-            .map_err(js_error)?;
-        let result = self
-            .inner
-            .decrypt_mnemonic(container, source_words, password)
-            .map_err(js_error)?;
-        serde_json::to_string(&BrowserDecryptionResult::from(&result)).map_err(json_error)
-    }
-
-    #[wasm_bindgen(js_name = decryptPreservingFinalWordJson)]
-    pub fn decrypt_preserving_final_word_json(
-        &mut self,
-        container: &str,
-        progress_callback: &js_sys::Function,
-    ) -> Result<String, JsError> {
-        let password = self
-            .password
-            .as_ref()
-            .ok_or(MhfeError::PasswordNotSet)
-            .map_err(js_error)?;
-        let mut callback_error = None;
-        let result = self.inner.decrypt_preserving_final_word_with_progress(
-            container,
-            password,
-            |progress| match emit_cycle_walk_progress(progress_callback, progress) {
-                Ok(control) => control,
-                Err(error) => {
-                    callback_error = Some(error);
-                    CycleWalkControl::Cancel
-                }
-            },
-        );
-        if let Some(error) = callback_error {
-            return Err(JsError::new(&format!("PROGRESS_CALLBACK_FAILURE: {error}")));
+        "fingerprint" => Reference::Fingerprint {
+            fingerprint: parse_fingerprint(reference).map_err(js_error)?,
+            passphrase,
+        },
+        "words" => Reference::BuiltInCheck {
+            words: reference
+                .parse()
+                .map_err(|_| js_error(MhfeError::InvalidWordCount(0)))?,
+        },
+        other => {
+            return Err(JsError::new(&format!(
+                "INVALID_REQUEST: unknown reference kind {other}"
+            )))
         }
-        let result = result.map_err(js_error)?;
-        serde_json::to_string(&BrowserCycleWalkDecryptionResult::from(&result)).map_err(json_error)
-    }
+    };
+    let mut mhfe = mhfe_for(pim, memory_level, argon2)?;
+    mhfe.check(container, &password, &reference, &mut |round, rounds| {
+        report(on_round, round, rounds)
+    })
+    .map_err(js_error)
+}
 
-    #[wasm_bindgen(js_name = decryptAutoJson)]
-    pub fn decrypt_auto_json(&mut self, container: &str) -> Result<String, JsError> {
-        let password = self
-            .password
-            .as_ref()
-            .ok_or(MhfeError::PasswordNotSet)
-            .map_err(js_error)?;
-        let result = self
-            .inner
-            .decrypt_mnemonic_auto(container, password)
-            .map_err(js_error)?;
-        serde_json::to_string(&BrowserDecryptionResult::from(&result)).map_err(json_error)
+fn password_from(password_utf8: Vec<u8>) -> Result<Password, JsError> {
+    let bytes = Zeroizing::new(password_utf8);
+    Password::from_utf8(&bytes).map_err(js_error)
+}
+
+fn mhfe_for(pim: f64, memory_level: f64, argon2: JsArgon2) -> Result<Mhfe<BrowserEngine>, JsError> {
+    let pim = whole_number(pim, "INVALID_PIM", "the PIM")?;
+    let memory_level = whole_number(memory_level, "INVALID_MEMORY_LEVEL", "the memory level")?;
+    let work = crate::WorkFactor::new(pim, memory_level).map_err(js_error)?;
+    let engine = BrowserEngine::new(argon2, work).map_err(js_error)?;
+    Ok(Mhfe::with_engine(work, engine))
+}
+
+/// A setting or word count as JavaScript passed it. wasm-bindgen would turn a `u32` parameter
+/// into the number modulo 2^32, so that 2^32 became 0 and -1 became 4294967295; taking the
+/// number as it is lets anything but a whole number in the `u32` range be refused with the
+/// error code `code`. The range checks of the caller then apply to the exact value.
+fn whole_number(value: f64, code: &str, name: &str) -> Result<u32, JsError> {
+    // NaN and the infinities have a NaN fractional part, so they fail the first test.
+    if value.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&value) {
+        Ok(value as u32)
+    } else {
+        Err(JsError::new(&format!(
+            "{code}: {name} must be a whole number, not {value}"
+        )))
     }
 }
 
-#[wasm_bindgen(js_name = suiteParametersJson)]
-pub fn suite_parameters_json() -> Result<String, JsError> {
-    serde_json::to_string(&suite_parameters()).map_err(json_error)
+/// Tells the worker that round `round` of `rounds` starts: 24 for an encryption, which checks
+/// its result, and 12 otherwise. An exception thrown there stops the operation.
+fn report(on_round: &js_sys::Function, round: u32, rounds: u32) -> Result<(), MhfeError> {
+    on_round
+        .call2(
+            &JsValue::UNDEFINED,
+            &JsValue::from(round),
+            &JsValue::from(rounds),
+        )
+        .map(|_| ())
+        .map_err(|_| MhfeError::Cancelled)
 }

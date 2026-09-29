@@ -1,22 +1,105 @@
-# MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics — Security
+# Security
 
-MHFE (Memory-Hard Feistel Encryption for BIP39 Mnemonics) is experimental research
-software. It has an internal implementation audit but no independent cryptography-specialist
-review. Do not use it to protect real funds. A successful build, test-vector match, or round trip
-does not establish cryptographic security. The protocol and its security limitations are described
-in the [companion specification](https://github.com/hobby-eng/mhfe-spec).
+MHFE is experimental research software. It has not been reviewed by independent cryptographers; do
+not use it to protect real funds. A passing test or a matching vector does not show that the
+construction is secure. The protocol and its limits are described in the
+[specification](https://github.com/hobby-eng/mhfe-spec).
 
-Report suspected implementation vulnerabilities privately through GitHub's
-security-advisory interface for this repository. Never include a real recovery
-phrase, password, private key, wallet export, or other secret in a report.
+Report a suspected vulnerability privately through GitHub's security advisories for this repository.
+Never include a real recovery phrase, password, private key or wallet file.
 
-The browser Worker is a responsiveness and cancellation boundary. It is not a
-security vault. The browser API performs no network requests; consuming
-applications are responsible for retaining an offline CSP and preventing
-secret-bearing network access.
+## Secrets
 
-Operational APIs avoid vector-only intermediate strings. Reachable password,
-mnemonic, packed-state, round-material, result, and Argon2 work buffers are
-zeroized where their Rust ownership permits. This is memory-hygiene defense in
-depth, not a claim that a compiler, browser, operating system, swap device, or
-hardware cannot retain copies.
+- Secrets are typed at hidden prompts or read from standard input with `--stdin`. The tool never
+  takes them from command-line arguments, never writes them to files and never logs them. Error
+  messages never contain a phrase, a password or any part of them.
+- Every Rust buffer that holds a password, phrase, entropy, state, Argon2 key or mask is wiped when
+  it is dropped. The Argon2 work area is wiped by the C code at the end of every round
+  (`FLAG_clear_internal_memory`, checked by a test); when a round fails, for example because a
+  thread could not be started, the C code returns before that step and the Rust owner wipes the area
+  instead. This is best effort: a compiler, the operating system, swap or a terminal's scrollback
+  can keep copies beyond the program's reach, and so can the standard library's own buffer of
+  standard input. Answers read from standard input are limited to 8192 bytes and read into a buffer
+  of that size, so the program's copy never has to grow and leave an unwiped copy behind.
+- `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
+  again from its words and compares the result with the original phrase: a typing mistake or a
+  hardware fault cannot silently produce a container that no password opens. At a terminal the
+  container is shown during that check, marked as not yet verified, and the outcome is reported;
+  a failed or cancelled check says that the container must not be relied on. With `--stdin`, or
+  when standard output goes to a file or another program, the container is printed only after
+  the check has passed.
+- Nothing connects to a network. The browser package loads no remote resources and contains no
+  network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
+  (`scripts/remove-network-code.mjs`), and the only
+  network code in the tool is `mhfe serve`, which listens on 127.0.0.1 for the one page it serves
+  and never receives a secret (see below).
+- Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
+  memory; buffers are not wiped first, because a round can take hours at a high PIM.
+
+## The C engine and its boundary
+
+Argon2 is the reference C implementation, vendored unchanged (see
+[`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code is in one
+module, `src/engine/ffi.rs`; the rest of the crate forbids it (`#![deny(unsafe_code)]`), and the
+command-line tool forbids it entirely. The module keeps these invariants:
+
+- `argon2_context` is copied field for field; compile-time assertions check its size, alignment and
+  every field offset on 32- and 64-bit targets, and a test proves that every field reaches the C
+  code, including `flags` and the callbacks.
+- Every pointer handed to C refers to a live Rust buffer of the stated length that outlives the
+  call, or is NULL with length 0. Inputs are shared borrows that C only reads: MHFE never sets the
+  flags that would make C write to the password or secret. The output and the work area are
+  exclusive borrows.
+- The work area is allocated once per operation and handed to C by the allocation callback. The C
+  API passes no user data to the callback, so the area travels in a thread-local slot that is set
+  just before and cleared just after each call; C calls the callback on the calling thread.
+- `argon2_ctx` joins its four lane threads before it returns and keeps no other global state, so no
+  pointer outlives a call and calls on different threads do not interfere.
+- Every Argon2 error code is turned into an error with the reference implementation's message.
+
+The only other unsafe calls are the free-memory queries for macOS and Windows in the same module.
+
+## The fast-mode launcher
+
+`mhfe serve` serves one HTML file so that the browser allows the threaded Argon2 build. The browser
+package's `mhfe-fast-mode.py` is the same launcher for computers with Python but without mhfe; it
+uses only the Python standard library, keeps every rule below, and
+`scripts/verify-fast-mode-script.py` tests it on the same cases as `mhfe serve`, including its
+security headers. Their threat model: other programs and web pages on the same computer may try to
+talk to them.
+
+- Each listens on 127.0.0.1 only, on a random port, and answers only `GET` and `HEAD` of `/`.
+- It refuses any request whose `Host` header is not exactly `127.0.0.1:<port>`. A web page on
+  another site whose name was made to resolve to 127.0.0.1 (DNS rebinding) sends its own name as the
+  host and is refused with 403.
+- It sends `Cross-Origin-Opener-Policy`, `Cross-Origin-Embedder-Policy`,
+  `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
+- Each connection is answered in its own thread, at most 16 at a time, and has 10 seconds in
+  total for its request and 10 seconds for receiving the answer, so a slow or stalled client
+  cannot keep the page from loading.
+- It reads no request body, keeps no log, serves no other file and lists no directory. It never
+  receives a secret: the page does all the work in the browser.
+- It serves a page only when the checksum file `mhfe-fast-mode.sha256` next to it names that page
+  with a matching SHA-256, and otherwise refuses with a message and serves nothing. This catches a
+  damaged, swapped or partly updated page. It does not replace checking the release: someone who
+  can change the page can change the checksum file next to it too, so compare the release files
+  with the published `SHA256SUMS` once, after downloading.
+
+A secret typed into a page in standard mode stays in that tab; it is never passed to the fast-mode
+tab.
+
+## The browser
+
+- The package fetches nothing and needs no `connect-src`; it works under a policy that allows
+  scripts only by hash, WebAssembly and `blob:` workers.
+- Each operation runs in its own worker, which is terminated afterwards; that frees the Argon2
+  memory. The worker is a boundary for responsiveness and cancellation, not a vault. If an Argon2
+  round fails in the browser, the C code leaves its work area unwiped, and the worker's memory is
+  discarded with the worker rather than overwritten.
+- The Rust core and the Argon2 bridge wipe their copies of the password, keys and states. A password
+  typed into a page is a JavaScript string, and so is a recovered phrase shown on the page; browsers
+  cannot erase strings. The client refuses a password with an unpaired surrogate instead of letting
+  the browser replace it silently. It checks every setting before it copies a secret into bytes and
+  wipes its copies if the operation cannot start; the core takes both the password and the BIP39
+  passphrase into wiping buffers before anything can fail.

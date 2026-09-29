@@ -1,0 +1,170 @@
+{
+  "description": "Timings of the reference C Argon2 engine for MHFE suite 3, on one laptop. Observations, not guarantees or attack-cost estimates.",
+  "machine": {
+    "computer": "Samsung Galaxy Book2 Pro 360 (NP950QED-KA2DE)",
+    "processor": "Intel Core i7-1260P, 12 cores, 16 threads",
+    "memory": "about 15 GiB",
+    "system": "Ubuntu Linux, kernel 7.0.0-34, x86-64"
+  },
+  "argon2_code": "P-H-C/phc-winner-argon2 f57e61e19229e23c4445b85494dbf7c07de721cb",
+  "single_argon2id_call": {
+    "parameters": "2 GiB, 12 passes, 4 lanes, 32-byte output, password 'public test password', salt '0123456789abcdef'",
+    "tag": "80ffc8d9bb2f27b317141892e8a49c645d43f3f56fff099c7b10b2ab9ea0fdca",
+    "tag_confirmed_by": "OpenSSL through Python cryptography 46.0.5",
+    "series_1": [
+      {
+        "build": "native gcc 15.2 -O3, opt.c, SSE2 only (the release setting), 4 threads",
+        "seconds": [
+          4.62,
+          5.0
+        ]
+      },
+      {
+        "build": "native gcc 15.2 -O3, opt.c with -mssse3, 4 threads",
+        "seconds": [
+          4.39,
+          4.71
+        ]
+      },
+      {
+        "build": "native gcc 15.2 -O3, ref.c, 4 threads",
+        "seconds": [
+          5.6
+        ]
+      },
+      {
+        "build": "Emscripten 6.0.10, ref.c, threaded, headless Chromium 153, served with COOP/COEP",
+        "seconds": [
+          5.65
+        ]
+      },
+      {
+        "build": "Emscripten 6.0.10, ref.c, single-threaded, headless Chromium 153, served",
+        "seconds": [
+          18.78
+        ]
+      },
+      {
+        "build": "Emscripten 6.0.10, ref.c, single-threaded, headless Chromium 153, file://",
+        "seconds": [
+          19.89
+        ]
+      },
+      {
+        "build": "Emscripten 6.0.10, ref.c, threaded, headless Firefox 155, served with COOP/COEP",
+        "seconds": [
+          9.89
+        ]
+      },
+      {
+        "build": "Emscripten 6.0.10, ref.c, single-threaded, headless Firefox 155, served",
+        "seconds": [
+          22.99
+        ]
+      }
+    ],
+    "series_2": {
+      "note": "An earlier series on the same laptop, slower throughout; power state and load differed.",
+      "results": [
+        {
+          "build": "native opt.c, 4 threads (-march=x86-64-v2)",
+          "seconds": [
+            6.7,
+            6.9
+          ]
+        },
+        {
+          "build": "native ref.c, 4 threads",
+          "seconds": [
+            10.7
+          ]
+        },
+        {
+          "build": "native opt.c, 1 thread",
+          "seconds": [
+            22.4
+          ]
+        },
+        {
+          "build": "native ref.c, 1 thread",
+          "seconds": [
+            29.2
+          ]
+        },
+        {
+          "build": "browser pane (Chromium), served with COOP/COEP, 4 threads, SIMD or not",
+          "seconds": [
+            8.76
+          ]
+        },
+        {
+          "build": "browser pane (Chromium), without isolation, 1 thread, ref.c",
+          "seconds": [
+            31.7
+          ]
+        },
+        {
+          "build": "browser pane (Chromium), without isolation, 1 thread, WebAssembly SIMD",
+          "seconds": [
+            32.6
+          ]
+        },
+        {
+          "build": "OpenSSL (Python cryptography), 4 threads",
+          "seconds": [
+            10.3
+          ]
+        },
+        {
+          "build": "RustCrypto argon2 0.6.0 in WebAssembly, 1 thread, 2 GiB minus 16 KiB",
+          "seconds": [
+            34.0
+          ]
+        }
+      ],
+      "findings": [
+        "The threaded Emscripten build does not start without cross-origin isolation: 'SharedArrayBuffer transfer requires self.crossOriginIsolated'.",
+        "Rust on wasm32 cannot allocate exactly 2 GiB in one allocation (at most 2^31 - 1 bytes); the C build can."
+      ]
+    }
+  },
+  "full_operation": {
+    "parameters": "suite 3 defaults: PIM 0, memory level 0, twelve Argon2id calls",
+    "results": [
+      {
+        "what": "mhfe encrypt, command line, 12-word test phrase",
+        "seconds": 73
+      },
+      {
+        "what": "mhfe decrypt of that container",
+        "seconds": 90
+      },
+      {
+        "what": "browser package, fast mode, headless Chromium 153 through mhfe serve: encrypt",
+        "seconds": 111
+      },
+      {
+        "what": "same page: decrypt",
+        "seconds": 104
+      },
+      {
+        "what": "same page: rehearsal check against a receiving address",
+        "seconds": 99
+      },
+      {
+        "what": "browser package, standard mode, headless Chromium 153, page opened as a file: encrypt (other builds ran at the same time)",
+        "seconds": 385
+      },
+      {
+        "what": "browser package core and threaded Argon2 in Node.js 26.10: encrypt",
+        "seconds": 101
+      },
+      {
+        "what": "independent implementation, OpenSSL through Python cryptography: encrypt",
+        "seconds": 124
+      }
+    ],
+    "container": "donate stove tower picnic iron rescue trick shrimp roof rib home cigar bag pledge also nerve cycle famous provide heart ahead chunk caution peace",
+    "note": "All implementations gave the same container for 'abandon ... about' and the password 'public test password'."
+  }
+}

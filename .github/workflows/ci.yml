@@ -28,30 +28,24 @@ jobs:
           if foreign:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
-      - name: Native and WASM checks
-        run: scripts/check.sh
+      - name: Install Emscripten 6.0.10
+        run: |
+          git clone --depth 1 --branch 6.0.10 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install 6.0.10
+          "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.10
       - name: Install pinned wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
-      - name: Build browser distribution
-        run: scripts/build-wasm.sh
-      - name: Verify browser API outputs
+      # Formatting, clippy for native and WebAssembly, the fast tests (including the C/Rust
+      # Argon2 cross-check), both Emscripten builds under Node.js, the browser package and the
+      # release-artifact check. The full-size vector replay runs in vectors.yml.
+      - name: Run all checks
         run: |
-          test -s dist/wasm/mhfe.js
-          test -s dist/wasm/mhfe_bg.wasm
-          test -s dist/wasm/mhfe.d.ts
-          test -s dist/client.d.ts
-          grep -q 'class MhfeEngine' dist/wasm/mhfe.d.ts
-          grep -q 'suiteParametersJson' dist/wasm/mhfe.d.ts
-          grep -q 'interface MhfeEncryptionResult' dist/client.d.ts
-          node scripts/verify-wasm-api.mjs
-          node scripts/verify-worker-client.mjs
-      - name: Exercise operational WASM exports
-        timeout-minutes: 15
-        run: node scripts/verify-wasm-api.mjs --operational
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          scripts/check.sh
 
   canonical-build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Check out the exact revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,7 +56,7 @@ jobs:
       - name: Print canonical checksums
         run: cat canonical-output/release/SHA256SUMS
       - name: Preserve canonical build assets
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mhfe-canonical-${{ github.sha }}
           path: canonical-output/release/
