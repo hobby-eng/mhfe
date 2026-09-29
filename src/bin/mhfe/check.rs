@@ -1,0 +1,371 @@
+//! `mhfe check`: rehearses a recovery and reports only "matches" or "does not match".
+//!
+//! Nothing of the recovered phrase is shown, and a wrong password gives no hint of how close
+//! it was. The strong reference is a receiving address of the wallet; the master key fingerprint
+//! is a quick, weaker check; the built-in check of a short original confirms only that the
+//! password recovers a consistent phrase.
+
+use anstream::{eprintln, println};
+use clap::Args;
+use mhfe::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
+use mhfe::{check_container, Password, Reference};
+use zeroize::Zeroizing;
+
+use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
+use crate::settings::{self, Operation, Settings};
+use crate::style::{self, paint, ACCENT, MUTED, STRONG};
+use crate::terminal::{show_container_read, Input, Progress};
+
+#[derive(Args)]
+#[command(group = clap::ArgGroup::new("reference").args(["address", "fingerprint", "words"]))]
+pub struct Options {
+    #[command(flatten)]
+    settings: Settings,
+
+    /// Compare with a receiving address (strong check)
+    #[arg(long)]
+    address: bool,
+
+    /// Compare with the master key fingerprint (quick, weaker)
+    #[arg(long)]
+    fingerprint: bool,
+
+    /// Only the built-in check of a 12- to 21-word original
+    #[arg(long, value_name = "N")]
+    words: Option<usize>,
+
+    /// With --address: look only at this derivation path
+    #[arg(long, value_name = "PATH", requires = "address")]
+    path: Option<DerivationPath>,
+
+    /// Read the answers from standard input (for scripts)
+    #[arg(long, requires = "reference")]
+    stdin: bool,
+}
+
+/// The reference as typed, before it is read into its type.
+#[derive(Clone, Copy)]
+enum Choice {
+    Address,
+    Fingerprint,
+    BuiltInCheck(usize),
+}
+
+/// The end of `mhfe check --help`.
+pub fn help() -> String {
+    let asks = style::help_section(
+        "What it asks for:",
+        &[
+            ("Container", "shown while typed"),
+            ("Password", "hidden"),
+            (
+                "Reference",
+                "a receiving address, the fingerprint, or the word count",
+            ),
+            (
+                "BIP39 passphrase",
+                "hidden; press Enter if the wallet has none",
+            ),
+        ],
+    );
+    let references = style::help_section(
+        "References:",
+        &[
+            (
+                "--address",
+                "confirms the wallet and its BIP39 passphrase; searches the first 100 receiving \
+                 and change addresses of accounts 0 to 9 on the standard path of the address type",
+            ),
+            (
+                "--path PATH",
+                "with --address, only this path, such as m/84'/0'/0'/0/5",
+            ),
+            (
+                "--fingerprint",
+                "the BIP32 master key fingerprint, eight hex digits",
+            ),
+            (
+                "--words N",
+                "confirms the password only, not the wallet or a passphrase",
+            ),
+        ],
+    );
+    let scripts = style::help_section(
+        "For scripts (--stdin):",
+        &[
+            (
+                "Input",
+                "the container, the password, then with --address or --fingerprint the \
+                 reference and the BIP39 passphrase (an empty line if none), one per line",
+            ),
+            ("Output", "matches, or does not match"),
+        ],
+    );
+    let examples = style::help_section(
+        "Examples:",
+        &[
+            ("mhfe check", "Choose the reference from a list"),
+            ("mhfe check --address", "Compare with a receiving address"),
+            (
+                "mhfe check --fingerprint",
+                "Compare with the master key fingerprint",
+            ),
+            (
+                "mhfe check --words 12",
+                "Built-in check of a 12-word original",
+            ),
+        ],
+    );
+    let note = style::help_note(
+        "The check shows only whether the recovery matches, never any part of the phrase.",
+    );
+    format!(
+        "{asks}\n{references}\n{}\n{scripts}\n{examples}\n{note}",
+        settings::settings_help()
+    )
+}
+
+pub fn run(options: Options) -> Result<i32, Failure> {
+    let work = options.settings.work_factor()?;
+    let mut input = Input::new(options.stdin);
+    settings::announce(work, Operation::Check);
+    settings::check_resources(work)?;
+
+    let container = read_container(&mut input)?;
+    let password = read_password(&mut input)?;
+    let choice = match (options.address, options.fingerprint, options.words) {
+        (true, _, _) => Choice::Address,
+        (_, true, _) => Choice::Fingerprint,
+        (_, _, Some(words)) => Choice::BuiltInCheck(words),
+        _ => ask_for_choice(&mut input)?,
+    };
+
+    // The reference and passphrase are read before the long computation starts, so the user
+    // can walk away while it runs.
+    let address: BitcoinAddress;
+    let passphrase: Zeroizing<String>;
+    let limits = SearchLimits::default();
+    let reference = match choice {
+        Choice::Address => {
+            address = read_parsed(&mut input, "Receiving address of the wallet: ")?;
+            passphrase = read_passphrase(&mut input)?;
+            Reference::Address {
+                address: &address,
+                passphrase: &passphrase,
+                path: options.path.as_ref(),
+                limits,
+            }
+        }
+        Choice::Fingerprint => {
+            let fingerprint = read_fingerprint(&mut input)?;
+            passphrase = read_passphrase(&mut input)?;
+            Reference::Fingerprint {
+                fingerprint,
+                passphrase: &passphrase,
+            }
+        }
+        Choice::BuiltInCheck(words) => Reference::BuiltInCheck { words },
+    };
+
+    let mut mhfe = settings::reserve_memory(work)?;
+    let mut progress = Progress::start();
+    let matches = mhfe.check(&container, &password, &reference, &mut |round, rounds| {
+        progress.round_starts(round, rounds);
+        Ok(())
+    })?;
+    progress.finish();
+
+    eprintln!();
+    if input.is_script() {
+        // Scripts read exactly these words.
+        println!("{}", if matches { "matches" } else { "does not match" });
+    } else if matches {
+        let (meaning, limit) = match_meaning(choice);
+        println!("{} {meaning}", paint(style::GOOD, "✓ matches:"));
+        if let Some(limit) = limit {
+            style::hint(limit);
+        }
+    } else {
+        println!("{}", paint(style::BAD, "✗ does not match"));
+    }
+    if matches {
+        Ok(SUCCESS)
+    } else {
+        style::hint(match choice {
+            Choice::BuiltInCheck(_) => {
+                "The password, PIM, memory level, container or word count may be wrong. The check \
+                 cannot tell which."
+            }
+            _ => {
+                "The password, PIM, memory level, container, BIP39 passphrase or reference may be \
+                 wrong. The check cannot tell which."
+            }
+        });
+        Ok(NO_MATCH)
+    }
+}
+
+/// What a match shows, and its limit. Only an address or a fingerprint identifies the wallet;
+/// the built-in check of a short original says nothing about the wallet or a BIP39 passphrase.
+fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
+    match choice {
+        Choice::Address => (
+            "the recovered wallet, with this BIP39 passphrase, has this receiving address."
+                .to_owned(),
+            None,
+        ),
+        Choice::Fingerprint => (
+            "the recovered wallet, with this BIP39 passphrase, has this master key fingerprint."
+                .to_owned(),
+            Some(
+                "A fingerprint is a quick 32-bit check; a receiving address (--address) confirms \
+                 the wallet more strongly.",
+            ),
+        ),
+        Choice::BuiltInCheck(words) => (
+            format!("the password and settings recover a consistent {words}-word phrase."),
+            Some(
+                "This built-in check does not show that it is your wallet and does not check a \
+                 BIP39 passphrase. Compare a receiving address (--address) for that.",
+            ),
+        ),
+    }
+}
+
+fn ask_for_choice(input: &mut Input) -> Result<Choice, Failure> {
+    eprintln!(
+        "{}",
+        paint(STRONG, "What should the recovered phrase be compared with?")
+    );
+    let choices = [
+        (
+            "A receiving address of the wallet",
+            "recommended: confirms the wallet and its passphrase",
+        ),
+        (
+            "The wallet's master key fingerprint, eight hex digits",
+            "quick, weaker",
+        ),
+        (
+            "Only the built-in check of a 12- to 21-word original",
+            "confirms the password, not the wallet",
+        ),
+    ];
+    for (number, (choice, note)) in choices.iter().enumerate() {
+        eprintln!(
+            "  {} {choice} {}",
+            paint(ACCENT, format!("{}.", number + 1)),
+            paint(MUTED, format!("({note})"))
+        );
+    }
+    loop {
+        let answer = input.visible("Choice [1]: ")?;
+        match answer.trim() {
+            "" | "1" => return Ok(Choice::Address),
+            "2" => return Ok(Choice::Fingerprint),
+            "3" => {
+                let words =
+                    input.visible("How many words does the original have (12, 15, 18 or 21)? ")?;
+                match words.trim().parse() {
+                    Ok(words @ (12 | 15 | 18 | 21)) => return Ok(Choice::BuiltInCheck(words)),
+                    _ => style::retry(
+                        "Type 12, 15, 18 or 21. A 24-word original has no built-in check.",
+                    ),
+                }
+            }
+            _ => style::retry("Type 1, 2 or 3."),
+        }
+    }
+}
+
+fn read_container(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
+    loop {
+        let typed = input.visible("Container, 24 words: ")?;
+        match check_container(&typed) {
+            Ok(container) => {
+                show_container_read(&container, input);
+                return Ok(Zeroizing::new(container));
+            }
+            Err(error) if input.can_ask_again() => {
+                style::retry(format!(
+                    "{}. Please type it again.",
+                    capitalize(&error.to_string())
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+fn read_password(input: &mut Input) -> Result<Password, Failure> {
+    loop {
+        let text = input.secret("Password (hidden): ")?;
+        match Password::new(&text) {
+            Ok(password) => return Ok(password),
+            Err(error) if input.can_ask_again() => {
+                style::retry(format!(
+                    "{}. Please type it again.",
+                    capitalize(&error.to_string())
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+fn read_parsed<T>(input: &mut Input, prompt: &str) -> Result<T, Failure>
+where
+    T: std::str::FromStr<Err = mhfe::MhfeError>,
+{
+    loop {
+        let text = input.visible(prompt)?;
+        match text.parse() {
+            Ok(value) => return Ok(value),
+            Err(error) if input.can_ask_again() => {
+                style::retry(format!(
+                    "{}. Please type it again.",
+                    capitalize(&error.to_string())
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+fn read_fingerprint(input: &mut Input) -> Result<[u8; 4], Failure> {
+    loop {
+        let text = input.visible("Master key fingerprint, eight hex digits: ")?;
+        match parse_fingerprint(&text) {
+            Ok(fingerprint) => return Ok(fingerprint),
+            Err(error) if input.can_ask_again() => {
+                style::retry(format!(
+                    "{}. Please type it again.",
+                    capitalize(&error.to_string())
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+/// The BIP39 passphrase is a separate secret from the MHFE password; most wallets have none.
+fn read_passphrase(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
+    input.secret("BIP39 passphrase of the wallet (hidden; press Enter if it has none): ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_wallet_reference_claims_the_wallet() {
+        let (built_in, limit) = match_meaning(Choice::BuiltInCheck(12));
+        assert!(!built_in.contains("wallet"), "{built_in}");
+        assert!(limit
+            .unwrap()
+            .contains("does not show that it is your wallet"));
+        for choice in [Choice::Address, Choice::Fingerprint] {
+            assert!(match_meaning(choice).0.contains("recovered wallet"));
+        }
+    }
+}

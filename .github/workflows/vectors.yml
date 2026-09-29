@@ -1,23 +1,34 @@
-name: Published vectors
+name: Test vectors
 
+# Replays the full-size suite 3 test vectors with the Rust implementation and checks them again
+# with an independent script that uses OpenSSL's Argon2. It takes about two hours, so it runs only
+# when the implementation or the vectors change, on request, and for every release: release.yml
+# calls it for the tagged commit and publishes only after it has passed.
 on:
   push:
     paths:
       - Cargo.toml
       - Cargo.lock
-      - src/lib.rs
-      - tests/published_vectors.rs
-      - tests/fixtures/validation-cases.json
+      - build.rs
+      - src/**
+      - vendor/phc-winner-argon2/**
+      - tests/suite3_vectors.rs
+      - tests/fixtures/**
+      - scripts/independent-suite3.py
       - .github/workflows/vectors.yml
   pull_request:
     paths:
       - Cargo.toml
       - Cargo.lock
-      - src/lib.rs
-      - tests/published_vectors.rs
-      - tests/fixtures/validation-cases.json
+      - build.rs
+      - src/**
+      - vendor/phc-winner-argon2/**
+      - tests/suite3_vectors.rs
+      - tests/fixtures/**
+      - scripts/independent-suite3.py
       - .github/workflows/vectors.yml
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -25,10 +36,17 @@ permissions:
 jobs:
   replay:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned Rust toolchain
         run: rustup show
-      - name: Replay all published vectors in both directions
-        run: cargo test --locked --release --test published_vectors -- --ignored --nocapture
+      - name: Replay every vector in both directions
+        run: cargo test --locked --release --test suite3_vectors -- --ignored --nocapture
+      - name: Check every vector with an independent implementation
+        run: |
+          python3 -m pip install --user cryptography==46.0.5
+          # Every file listed in SHA256SUMS: the vectors and the negative cases, not the
+          # independent-verification.json record next to them.
+          cd tests/fixtures/suite3-vectors
+          python3 ../../../scripts/independent-suite3.py vector $(cut -d' ' -f3 SHA256SUMS)

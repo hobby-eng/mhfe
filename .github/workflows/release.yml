@@ -6,14 +6,13 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
-  release:
+  # Linux x86-64 and ARM64, Windows x86-64 and the browser package, byte for byte reproducible.
+  canonical:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned Rust toolchain
@@ -22,36 +21,85 @@ jobs:
         run: |
           package_version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           test "$GITHUB_REF_NAME" = "v$package_version"
-          cargo metadata --locked --format-version 1 | python3 -c '
-          import json, sys
-          data = json.load(sys.stdin)
-          root_manifest = data["workspace_root"] + "/Cargo.toml"
-          foreign = [p["manifest_path"] for p in data["packages"] if p["source"] is None and p["manifest_path"] != root_manifest]
-          if foreign:
-              raise SystemExit(f"unexpected local/path packages: {foreign}")
-          '
       - name: Audit Cargo.lock against RustSec
         uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1
         with:
           createIssues: false
-      - name: Check native and WASM code
-        run: scripts/check.sh
-      - name: Replay all published vectors in both directions
-        run: cargo test --locked --release --test published_vectors -- --ignored --nocapture
-      - name: Build verified release assets in the canonical container
+      - name: Build release assets in the canonical container
         run: scripts/build-reproducible.sh canonical-output
-      - name: Print release checksums
-        run: cat canonical-output/release/SHA256SUMS
-      - name: Generate GitHub build-provenance attestations
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: canonical
+          path: canonical-output/release/*.*
+          if-no-files-found: error
+
+  # macOS needs Apple's SDK, so these two are built on macOS runners.
+  macos:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            package: macos-aarch64
+          - target: x86_64-apple-darwin
+            package: macos-x86_64
+          - target: x86_64-apple-darwin
+            package: macos-x86_64-ssse3
+            features: --features ssse3 --target-dir target/ssse3
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned Rust toolchain and target
+        run: |
+          rustup show
+          rustup target add ${{ matrix.target }}
+          brew install gnu-tar
+      - name: Run the fast tests
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: cargo test --locked
+      - name: Build and package
+        run: |
+          cargo build --locked --release --target ${{ matrix.target }} ${{ matrix.features }}
+          scripts/package-release.sh "$GITHUB_REF_NAME" macos-output ${{ matrix.package }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.package }}
+          path: macos-output/*.tar.gz
+          if-no-files-found: error
+
+  # The full-size vectors, replayed natively and checked with the independent script, for the
+  # exact tagged commit. Publishing waits for them, so a release cannot go out before its
+  # conformance is checked, nor after that check failed.
+  vectors:
+    uses: ./.github/workflows/vectors.yml
+
+  publish:
+    needs: [canonical, macos, vectors]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: release
+          merge-multiple: true
+      - name: Write SHA256SUMS for every asset
+        run: |
+          cd release
+          sha256sum -- *.tar.gz *.zip > SHA256SUMS
+          cat SHA256SUMS
+      - name: Generate build-provenance attestations
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: 'canonical-output/release/*'
-      - name: Publish GitHub release
+          subject-path: 'release/*'
+      - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            canonical-output/release/* \
-            --title "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics $GITHUB_REF_NAME" \
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --title "MHFE $GITHUB_REF_NAME" \
             --generate-notes \
             --verify-tag

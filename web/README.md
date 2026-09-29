@@ -1,64 +1,113 @@
-# MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics — Browser API
+# MHFE browser package
 
-The browser build exposes a synchronous WASM engine and an asynchronous Worker
-adapter. Applications should use the Worker adapter so a 30–120 second KDF does
-not freeze the document UI.
+This package runs MHFE suite 3 (`MHFE-BIP39-256-EXPERIMENTAL-3`) in a web page: it encrypts an
+English BIP39 recovery phrase into a 24-word container, recovers the phrase, and rehearses a
+recovery without showing the phrase. All the MHFE logic is the same Rust code as in the `mhfe`
+command-line tool; Argon2 is the same reference C code, compiled to WebAssembly.
 
-Build with `scripts/build-wasm.sh`, serve `dist/` over HTTP, and create a client:
+It is experimental and has not been independently reviewed. Do not use it to protect real funds.
+
+## Files
+
+| File                | What it is                                                               |
+| ------------------- | ------------------------------------------------------------------------ |
+| `client.js`         | The page-side client, an ES module; `client.d.ts` describes its API      |
+| `mhfe-worker.js`    | The worker: the Rust core's glue, the Argon2 bridge and the worker logic |
+| `mhfe_core_bg.wasm` | The Rust core                                                            |
+| `argon2-mt.js`      | Argon2 with four threads, for cross-origin isolated pages                |
+| `argon2-st.js`      | Argon2 with one thread, for every other page, including `file://`        |
+
+Nothing is fetched at run time. The page passes the files to the client as text and bytes, so it
+works under a Content-Security-Policy such as
+`default-src 'none'; script-src 'sha256-...' 'wasm-unsafe-eval'; connect-src 'none'; worker-src blob:`.
+
+## Use
 
 ```js
-import { MhfeWorkerClient } from './client.js';
+import { MhfeClient } from "./client.js";
 
-const wasmBytes = /* Uint8Array embedded in the standalone HTML */;
-const client = MhfeWorkerClient.fromUrl(
-  new URL('./mhfe-worker.js', import.meta.url),
-  wasmBytes,
-);
-const parameters = await client.ready();
-const encrypted = await client.encryptAscii(mnemonic, password, 0);
+const client = new MhfeClient({
+  workerSource, // text of mhfe-worker.js
+  argon2Threaded, // text of argon2-mt.js
+  argon2SingleThreaded, // text of argon2-st.js
+  coreWasm, // mhfe_core_bg.wasm as a Uint8Array or a WebAssembly.Module
+});
+
+const { container } = await client.encrypt({
+  phrase,
+  password,
+  passwordRepeat, // the password typed a second time; a difference is refused
+  onProgress: ({ round, rounds }) => showProgress(round, rounds),
+  // After 12 of the 24 rounds: show it, marked as not yet verified, while the check runs.
+  onUnverified: ({ container }) => showUnverified(container),
+});
+// Resolved only after the check has passed; a failed check rejects with VERIFICATION_FAILED.
+
+const recovery = await client.decrypt({ container, password });
+// recovery.kind is "phrase" or, very rarely, "ambiguous"; show every candidate then.
+
+const { matches } = await client.check({ container, password, reference: { address } });
 ```
 
-Encryption returns `apiVersion`, `suiteId`, `pim`, `effectivePasses`,
-`sourceWords`, and `encryptedMnemonic`. Decryption returns the same public
-context plus `recoveredMnemonic` and `recoveryVerifier`. That verifier status is
-`matched` for 12/15/18/21-word sources and `unavailable` for a 24-word source,
-whose 256-bit payload leaves no room for an internal verifier. The normal browser API
-does not expose packed plaintext, entropy, round keys, salts, or masks. Those
-values exist only in the explicitly test-only CLI vector command.
-`client.d.ts` defines the complete public Worker-client contract.
+An encryption decrypts its container's words again and compares the result with the phrase, so it
+runs 24 rounds and takes twice as long as a recovery; `onProgress` reports `rounds` as 24 then, and
+12 for `decrypt` and `check`. The promise resolves only after this check has passed. So that the
+user can write the container down meanwhile, `onUnverified` receives it after the first 12 rounds.
 
-Use `decryptAsciiAuto` or `decryptPreNormalizedUtf8Auto` for the standard
-recovery flow. The Worker tests all 12-, 15-, 18-, and 21-word verifier layouts
-after one inverse permutation. One match selects that length, no match falls
-back to 24 words, and multiple matches fail with `AMBIGUOUS_SOURCE_WORDS`; its
-message lists every matching length. The explicit-length methods remain
-available as a user override.
+Each operation runs in a new worker, which is terminated when the operation ends; this also frees
+the 2 GiB of Argon2 memory. `client.cancel()` stops a running operation at once. Only one operation
+runs at a time.
 
-For a 24-word source, use
-`encryptPreservingFinalWordAscii`/`decryptPreservingFinalWordAscii` (or the
-pre-normalized UTF-8 equivalents) only when the user explicitly selects the
-final-word profile. Their optional progress callback runs after each complete
-permutation. Call `cancel()` to terminate the Worker and discard the active
-Argon2 memory. The preserved final word is public, the run can take many hours,
-and a matching word does not authenticate the password.
+## Fast and standard mode
 
-`cancel()` terminates the Worker because a synchronous Argon2id invocation
-cannot process a cancellation message while running. Create a new client for a
-retry. Normal `disposeEngine()` runs the Rust destructor and its best-effort
-zeroization. Forced Worker termination discards the Worker realm without a
-guarantee that Rust destructors execute. Only one engine and one 512 MiB work
-area are retained by a Worker.
+`client.mode()` returns `"fast"` when the page is cross-origin isolated and `"standard"` otherwise.
+In fast mode the four Argon2 lanes run in parallel threads: a recovery takes about one to two
+minutes. In standard mode they run one after another, about four to seven minutes. An encryption
+takes twice as long in either mode. A page opened as a file is never isolated; `mhfe serve
+<page.html>` serves it from this computer with the headers that make it isolated. On a computer
+without the mhfe program, the package's `mhfe-fast-mode.py` does the same with Python 3.8 or later
+and nothing else.
 
-The `*PreNormalizedUtf8` methods accept bytes that the caller has already
-normalized using the specification's exact Unicode 18 NPSS-NFKD procedure.
-They validate UTF-8 and length but cannot prove normalization. The `*Ascii`
-methods are self-contained and exact. JavaScript strings cannot be reliably
-erased; transferred password byte arrays are copied and wiped where reachable.
+Both launchers serve a page only when the checksum file `mhfe-fast-mode.sha256` lies next to it:
+one line in the format `sha256sum` writes, the page's SHA-256, two spaces and its file name. Ship
+that file beside the tool's HTML file, always under this name. Without it, with another file name
+in it or with a different SHA-256, the launcher refuses with a message and serves nothing. Started
+without arguments, as by a double-click, a launcher serves the page named in the
+`mhfe-fast-mode.sha256` next to itself; `mhfe serve <page.html>` and
+`python3 mhfe-fast-mode.py <page.html>` serve a page elsewhere, next to its own checksum file.
 
-The Worker performs no network requests and does not invoke the generated
-`wasm-bindgen` fetch-based initializer. Its caller must pass a
-`WebAssembly.Module`, `Uint8Array`, or `ArrayBuffer` during construction. A
-consuming standalone HTML artifact should bundle the reviewed Worker and
-generated binding source, embed the WASM bytes, keep `connect-src 'none'`, and
-allow only the Blob Worker it creates. The Worker is a responsiveness boundary,
-not an independent security vault.
+## Memory
+
+A browser gives WebAssembly at most 4 GiB, and the reference Argon2 code allows 2 GiB on 32-bit
+targets, so the browser supports memory level 0 only. `client.maxSupportedMemLevel()` returns 0, and
+a higher level is refused before anything starts. Use the command-line tool for higher levels.
+Containers made with level 0 in the browser and on the command line are identical.
+
+## What the page should do
+
+The specification asks applications to do some things the client cannot do for them:
+
+- ask for the password twice before `encrypt` (the client refuses two different entries) and advise
+  a different password for each container;
+- show the suite identifier, the word count of the original, and any non-zero PIM or memory level
+  when a container is made, ask the user to keep them for recovery, and explain the choice: next to
+  the container they are hardest to lose, kept apart they do not show that the words are an MHFE
+  container;
+- if it shows the container from `onUnverified`, mark it clearly as not yet verified, and then say
+  how the check ended: verified when the promise resolves, wrong and not to be used on
+  `VERIFICATION_FAILED`, not verified on a cancel or any other error;
+- show the words it has read back to the user in full: `client.readContainer()` and
+  `client.readPhrase()` return them;
+- before encrypting, look at `otherLengths` from `client.readPhrase()`: when it is not empty (about
+  one phrase in four billion), tell the user to note the word count and choose it during recovery,
+  because automatic detection would not give the phrase on its own;
+- warn in standard mode that the operation takes longer, because the four Argon2 lanes then run one
+  after another;
+- start an operation only on an explicit user action and offer a cancel button.
+
+## What the browser cannot wipe
+
+The Rust core and the Argon2 bridge overwrite every copy of the password, the keys and the states
+they hold. A password typed into a page is a JavaScript string, and so is a recovered phrase that
+the page shows; the browser cannot erase strings. Pass the password as a `Uint8Array` where
+possible, keep recovered phrases on screen only as long as needed, and close the tab afterwards.

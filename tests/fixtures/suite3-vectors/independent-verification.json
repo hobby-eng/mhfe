@@ -1,0 +1,155 @@
+{
+  "schema": "mhfe-independent-verification-v1",
+  "verifier": {
+    "program": "scripts/independent-suite3.py",
+    "sha256": "25d578eec0c81c42f5ae831fe99d960b94d09ca4300ef27c6f62cd92d9a66550",
+    "python": "3.14.4",
+    "cryptography": "46.0.5",
+    "openssl": "OpenSSL 3.5.5 27 Jan 2026"
+  },
+  "files": [
+    {
+      "name": "ambiguous-12-21.json",
+      "sha256": "25753ba121d3214a155937daf2fad4bd2c03c25e5b92a5775b7fa66bf2606db9",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "negative-cases.json",
+      "sha256": "e301f073b3c83c3fdc68d024d52e373077a812188e65f7d5dc51ed01051d5e4c",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "nonzero-12.json",
+      "sha256": "8f4b734576fa587b0d4d9501cd1b07b8b8da50da15b2b3fd566a616699dcf36e",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "nonzero-15.json",
+      "sha256": "873ba1bf7ea5ce6869bf033b419cacadcea72faf9ea499a423f3ff33d80d5029",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "nonzero-18.json",
+      "sha256": "1d205a0dee624f5d87e670e753ba000a6ff3b20d41234b8473f5d3bf9e40b644",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "nonzero-21.json",
+      "sha256": "e27709261d4a680555f71d0a1c6a08838cfdc676b408ab256c989da8b018435a",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "nonzero-24.json",
+      "sha256": "003d520febd74ef715a6e092aed138ff5b9a5fa0a889a7d15416c5f3195621d6",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "spaces-password.json",
+      "sha256": "211c46cbfcc3508ba7d0730276c11beeed969f722c64e9d4667cc4be9a02682d",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "unicode-password.json",
+      "sha256": "fb9580bd1d05f95718cacd861481fd1d976673089e3196b85f7d06a349172673",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-12-memory-level-1.json",
+      "sha256": "6c8571515abffae035515d158a5ed54de4cdd392e13cb971f2293d6ac717be0c",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-12-pim-1-memory-level-1.json",
+      "sha256": "08180cfc999c142b507a2fff397db01468b1fb350fccff389f2ad49c8f2af1e5",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-12-pim-1.json",
+      "sha256": "1b1b386c1793fbcb1bcc7e2dddd88430eb748bdc65d12a9b8e3358905580a550",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-12.json",
+      "sha256": "ae05b76a2f8baed5634206631a1ed015dcaaf029cee226f05147a3c650eb036c",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-15.json",
+      "sha256": "e13d3e3ea6a7095c7e78368e1237cce3ef881597f72863e054a6177ba28e380a",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-18.json",
+      "sha256": "3f4c45bf18994820d8382053e535be08e7fda79a275e70eaeaa5fe5006745cd8",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-21.json",
+      "sha256": "eeb426372070570466c0342ebc533a9de39478dbf4952a11e5f54c6d9aaf8503",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-24-pim-1-memory-level-1.json",
+      "sha256": "e7d4827d18a5d237aeebbbe23595848d8c121cab21cee73d44f7044df53b3134",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    },
+    {
+      "name": "zero-24.json",
+      "sha256": "00f592f3498c42643694e9051a0dde0a0b24c433f65698d5c5db52b724739c47",
+      "checks": [
+        "full",
+        "recorded-argon2-keys"
+      ]
+    }
+  ]
+}

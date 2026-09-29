@@ -1,0 +1,213 @@
+//! `mhfe decrypt`: recovers the original phrase from a container.
+
+use anstream::{eprintln, println};
+use clap::Args;
+use mhfe::{check_container, Password, PhraseLength, RecoveredPhrase, Recovery};
+use zeroize::Zeroizing;
+
+use crate::exit::{capitalize, Failure, SUCCESS};
+use crate::settings::{self, Operation, Settings};
+use crate::style::{self, paint, HEADING, STRONG};
+use crate::terminal::{self, show_container_read, Input, Progress};
+
+#[derive(Args)]
+pub struct Options {
+    #[command(flatten)]
+    settings: Settings,
+
+    /// Length of the original if known: 12, 15, 18, 21 or 24
+    #[arg(long, value_name = "N")]
+    words: Option<usize>,
+
+    /// Read the answers from standard input (for scripts)
+    #[arg(long)]
+    stdin: bool,
+}
+
+/// The end of `mhfe decrypt --help`.
+pub fn help() -> String {
+    let asks = style::help_section(
+        "What it asks for:",
+        &[
+            (
+                "Container",
+                "shown while typed; 24 words, four letters per word are enough",
+            ),
+            ("Password", "hidden"),
+        ],
+    );
+    let examples = style::help_section(
+        "Examples:",
+        &[
+            ("mhfe decrypt", "Detect the length of the original"),
+            ("mhfe decrypt --words 24", "The original has 24 words"),
+            (
+                "mhfe decrypt --pim 1 --mem 1",
+                "The settings used for encryption",
+            ),
+        ],
+    );
+    let note = style::help_note(
+        "The recovered phrase is shown on the screen: recover only on a trusted computer \
+         without a network connection.",
+    );
+    let scripts = style::help_section(
+        "For scripts (--stdin):",
+        &[
+            ("Input", "the container, then the password, one per line"),
+            (
+                "Output",
+                "one line per result: <words> <verified|unverified> <phrase>",
+            ),
+        ],
+    );
+    let length = style::help_note(
+        "Without --words the length is detected. Choose --words 24 for a 24-word original \
+         that detection reads as shorter, about once in four billion.",
+    );
+    format!(
+        "{asks}\n{}\n{scripts}\n{examples}\n{length}\n{note}",
+        settings::settings_help()
+    )
+}
+
+pub fn run(options: Options) -> Result<i32, Failure> {
+    let work = options.settings.work_factor()?;
+    let length = match options.words {
+        Some(words) => {
+            if ![12, 15, 18, 21, 24].contains(&words) {
+                return Err(mhfe::MhfeError::InvalidWordCount(words).into());
+            }
+            PhraseLength::Words(words)
+        }
+        None => PhraseLength::Detect,
+    };
+    let mut input = Input::new(options.stdin);
+    settings::announce(work, Operation::Decrypt);
+    settings::check_resources(work)?;
+
+    let container = read_container(&mut input)?;
+    let password = read_password(&mut input)?;
+    let mut mhfe = settings::reserve_memory(work)?;
+    style::warn(
+        "The recovered phrase will be shown on the screen.",
+        "Recover only on a trusted computer without a network connection.",
+    );
+    eprintln!();
+
+    let mut progress = Progress::start();
+    let recovery = mhfe.decrypt(&container, &password, length, &mut |round, rounds| {
+        progress.round_starts(round, rounds);
+        Ok(())
+    })?;
+    progress.finish();
+
+    match recovery {
+        Recovery::Phrase(phrase) => show_single(&phrase, length, &input),
+        Recovery::Ambiguous(candidates) => show_ambiguous(&candidates, &input),
+    }
+    style::hint("When you are done, clear the screen and close this terminal.");
+    Ok(SUCCESS)
+}
+
+fn read_container(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
+    loop {
+        let typed = input.visible("Container, 24 words: ")?;
+        match check_container(&typed) {
+            Ok(container) => {
+                show_container_read(&container, input);
+                return Ok(Zeroizing::new(container));
+            }
+            Err(error) if input.can_ask_again() => {
+                style::retry(format!(
+                    "{}. Please type it again.",
+                    capitalize(&error.to_string())
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+fn read_password(input: &mut Input) -> Result<Password, Failure> {
+    loop {
+        let text = input.secret("Password (hidden): ")?;
+        match Password::new(&text) {
+            Ok(password) => return Ok(password),
+            Err(error) if input.can_ask_again() => {
+                style::retry(format!(
+                    "{}. Please type it again.",
+                    capitalize(&error.to_string())
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
+    eprintln!();
+    if phrase.verified {
+        style::ok(format!(
+            "{} a {}-word phrase that passed its built-in check.",
+            paint(style::GOOD, "Verified:"),
+            phrase.words
+        ));
+        // The built-in check confirms the password and settings, never which wallet this is.
+        style::hint("This confirms the password and settings, not the wallet: mhfe check --address does that.");
+    } else if length == PhraseLength::Detect {
+        style::warn(
+            "Not verified: no shorter length passed its check, so the result is read as 24 words.",
+            "If your original has 24 words, compare this phrase with your wallet. If it has \
+             fewer, this usually means a wrong password, PIM, memory level or container.",
+        );
+    } else {
+        style::warn(
+            "Not verified: read as 24 words, as you chose.",
+            "A 24-word phrase has no built-in check, so any password gives a valid phrase: compare \
+             it with your wallet.",
+        );
+    }
+    eprintln!();
+    eprintln!(
+        "{}",
+        paint(HEADING, format!("Recovered phrase, {} words", phrase.words))
+    );
+    print_result(phrase, input);
+}
+
+fn show_ambiguous(candidates: &[RecoveredPhrase], input: &Input) {
+    eprintln!();
+    style::warn(
+        "Several lengths passed their check.",
+        "This happens by accident for about one container in four billion. Compare each phrase \
+         with your wallet, or run again with --words N if you know the length.",
+    );
+    for candidate in candidates {
+        let status = if candidate.verified {
+            "passed its check"
+        } else {
+            "not verified"
+        };
+        eprintln!();
+        eprintln!(
+            "{} {}",
+            paint(HEADING, format!("{} words", candidate.words)),
+            paint(STRONG, status)
+        );
+        print_result(candidate, input);
+    }
+}
+
+fn print_result(phrase: &RecoveredPhrase, input: &Input) {
+    if input.is_script() {
+        let status = if phrase.verified {
+            "verified"
+        } else {
+            "unverified"
+        };
+        println!("{} {status} {}", phrase.words, *phrase.phrase);
+    } else {
+        terminal::print_phrase(&phrase.phrase, input);
+    }
+}

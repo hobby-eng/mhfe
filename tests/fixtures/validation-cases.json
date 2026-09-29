@@ -1,86 +1,356 @@
 {
-  "schema": "mhfe-validation-cases-v1",
-  "suite_id": "MHFE-BIP39-256-EXPERIMENTAL-2",
-  "description": "Fast negative, Unicode handoff, boundary, and source-length-classifier cases that do not run the full Argon2id profile.",
-  "pre_normalized_passwords": [
+  "schema": "mhfe-validation-cases-v2",
+  "suite_id": "MHFE-BIP39-256-EXPERIMENTAL-3",
+  "description": "Fast negative, boundary and Unicode cases for suite 3. None of them runs Argon2id: every rejection must happen before the first Argon2id call.",
+  "license": "CC0-1.0",
+  "passwords": [
     {
-      "id": "latin-composed-nfkd",
-      "display_input_utf8_hex": "636166c3a9",
-      "npss_nfkd_utf8_hex": "63616665cc81",
-      "expected": "accepted-verbatim"
+      "id": "ascii",
+      "input_utf8_hex": "7075626c696320746573742070617373776f7264",
+      "expected_nfkd_utf8_hex": "7075626c696320746573742070617373776f7264"
     },
     {
-      "id": "cyrillic",
-      "display_input_utf8_hex": "d0bfd0b0d180d0bed0bbd18c",
-      "npss_nfkd_utf8_hex": "d0bfd0b0d180d0bed0bbd18c",
-      "expected": "accepted-verbatim"
+      "id": "spaces-and-case-kept",
+      "input_utf8_hex": "20205075626c696320546573742050617373776f72642020",
+      "expected_nfkd_utf8_hex": "20205075626c696320546573742050617373776f72642020",
+      "note": "no trimming, no case folding"
+    },
+    {
+      "id": "embedded-nul",
+      "input_utf8_hex": "610062",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "U+0000 is a control character; a password is ordinary text and never contains it"
+    },
+    {
+      "id": "composed-e-acute",
+      "input_utf8_hex": "636166c3a9",
+      "expected_nfkd_utf8_hex": "63616665cc81",
+      "note": "NFKD decomposes; NFKC would not"
+    },
+    {
+      "id": "decomposed-e-acute",
+      "input_utf8_hex": "63616665cc81",
+      "expected_nfkd_utf8_hex": "63616665cc81",
+      "note": "canonically equivalent to composed-e-acute and encoded to the same bytes"
+    },
+    {
+      "id": "ligature-fi",
+      "input_utf8_hex": "efac81",
+      "expected_nfkd_utf8_hex": "6669"
+    },
+    {
+      "id": "fullwidth-letter",
+      "input_utf8_hex": "efbcb0",
+      "expected_nfkd_utf8_hex": "50"
+    },
+    {
+      "id": "circled-digit",
+      "input_utf8_hex": "e291a0",
+      "expected_nfkd_utf8_hex": "31"
+    },
+    {
+      "id": "cyrillic-short-i",
+      "input_utf8_hex": "d0b9",
+      "expected_nfkd_utf8_hex": "d0b8cc86"
+    },
+    {
+      "id": "hangul-syllable",
+      "input_utf8_hex": "ed959c",
+      "expected_nfkd_utf8_hex": "e18492e185a1e186ab"
     },
     {
       "id": "emoji",
-      "display_input_utf8_hex": "f09f9490",
-      "npss_nfkd_utf8_hex": "f09f9490",
-      "expected": "accepted-verbatim"
+      "input_utf8_hex": "f09f9490",
+      "expected_nfkd_utf8_hex": "f09f9490"
     },
     {
-      "id": "compatibility-character",
-      "display_input_utf8_hex": "e291a0",
-      "npss_nfkd_utf8_hex": "31",
-      "expected": "accepted-verbatim"
-    }
-  ],
-  "boundaries": [
-    {
-      "id": "empty-normalized-password",
-      "operation": "NormalizedPassword::from_npss_nfkd_utf8",
-      "repeat_byte_hex": "61",
-      "count": 0,
-      "expected_error_code": "EMPTY_PASSWORD"
+      "id": "private-use",
+      "input_utf8_hex": "ee8080f3b08080f48fbfbd",
+      "expected_nfkd_utf8_hex": "ee8080f3b08080f48fbfbd",
+      "note": "Private Use characters are assigned and allowed"
     },
     {
-      "id": "maximum-normalized-password",
-      "operation": "NormalizedPassword::from_npss_nfkd_utf8",
-      "repeat_byte_hex": "61",
+      "id": "longest-ascii",
+      "repeat_utf8_hex": "61",
       "count": 1024,
-      "expected": "accepted"
+      "expected_nfkd_bytes": 1024
     },
     {
-      "id": "oversized-normalized-password",
-      "operation": "NormalizedPassword::from_npss_nfkd_utf8",
-      "repeat_byte_hex": "61",
+      "id": "nfkd-expansion-fits",
+      "repeat_utf8_hex": "efb7ba",
+      "count": 31,
+      "expected_nfkd_bytes": 1023,
+      "note": "U+FDFA expands to 18 characters, 33 bytes"
+    },
+    {
+      "id": "nfkd-expansion-crosses-limit",
+      "repeat_utf8_hex": "efb7ba",
+      "count": 32,
+      "expected_error": "PASSWORD_TOO_LONG",
+      "expected_nfkd_bytes": 1056
+    },
+    {
+      "id": "nfkd-shrinks-below-limit",
+      "repeat_utf8_hex": "efac81",
+      "count": 512,
+      "expected_nfkd_bytes": 1024,
+      "note": "1,536 input bytes, 1,024 after NFKD"
+    },
+    {
+      "id": "too-long-ascii",
+      "repeat_utf8_hex": "61",
       "count": 1025,
-      "expected_error_code": "PASSWORD_TOO_LONG"
+      "expected_error": "PASSWORD_TOO_LONG",
+      "expected_nfkd_bytes": 1025
     },
     {
-      "id": "pim-above-suite-maximum",
-      "operation": "MhfeEngine::new",
-      "pim": 32,
-      "expected_error_code": "INVALID_PIM"
+      "id": "empty",
+      "input_utf8_hex": "",
+      "expected_error": "EMPTY_PASSWORD"
     },
     {
-      "id": "unsupported-source-word-count",
-      "operation": "entropy_bytes_for_words",
-      "source_words": 13,
-      "expected_error_code": "INVALID_SOURCE_WORDS"
+      "id": "line-feed",
+      "input_utf8_hex": "610a62",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "a password is a single line; U+000A is refused"
+    },
+    {
+      "id": "carriage-return",
+      "input_utf8_hex": "610d62",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "U+000D is refused as well"
+    },
+    {
+      "id": "trailing-crlf",
+      "input_utf8_hex": "610d0a",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "a line ending left in the password is refused, not stripped"
+    },
+    {
+      "id": "tab",
+      "input_utf8_hex": "610962",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "U+0009 is a control character"
+    },
+    {
+      "id": "delete",
+      "input_utf8_hex": "617f62",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "U+007F is a control character"
+    },
+    {
+      "id": "next-line",
+      "input_utf8_hex": "61c28562",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "U+0085 is a C1 control character that some systems treat as a line break"
+    },
+    {
+      "id": "c1-control",
+      "input_utf8_hex": "61c29f62",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "U+009F, the last C1 control character"
+    },
+    {
+      "id": "line-separator",
+      "input_utf8_hex": "61e280a862",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "U+2028 LINE SEPARATOR is refused"
+    },
+    {
+      "id": "paragraph-separator",
+      "input_utf8_hex": "61e280a962",
+      "expected_error": "CONTROL_CHARACTER_IN_PASSWORD",
+      "note": "U+2029 PARAGRAPH SEPARATOR is refused"
+    },
+    {
+      "id": "unassigned-code-point",
+      "input_utf8_hex": "61cdb8",
+      "expected_error": "UNASSIGNED_CHARACTER",
+      "note": "U+0378 is unassigned in Unicode 17.0.0"
+    },
+    {
+      "id": "noncharacter",
+      "input_utf8_hex": "61efbfbe",
+      "expected_error": "UNASSIGNED_CHARACTER",
+      "note": "noncharacters are unassigned (General_Category Cn)"
+    },
+    {
+      "id": "unassigned-plane-5",
+      "input_utf8_hex": "61f1908080",
+      "expected_error": "UNASSIGNED_CHARACTER"
+    },
+    {
+      "id": "invalid-utf8-byte",
+      "input_utf8_hex": "61ff",
+      "expected_error": "INVALID_PASSWORD_UTF8"
+    },
+    {
+      "id": "invalid-utf8-overlong",
+      "input_utf8_hex": "c0af",
+      "expected_error": "INVALID_PASSWORD_UTF8"
+    },
+    {
+      "id": "invalid-utf8-encoded-surrogate",
+      "input_utf8_hex": "eda080",
+      "expected_error": "INVALID_PASSWORD_UTF8"
     }
   ],
-  "automatic_detection_classifier": [
+  "javascript_passwords": [
     {
-      "matching_short_source_words": [],
-      "expected_source_words": 24
-    },
-    {
-      "matching_short_source_words": [18],
-      "expected_source_words": 18
-    },
-    {
-      "matching_short_source_words": [12, 18],
-      "expected_error_code": "AMBIGUOUS_SOURCE_WORDS",
-      "expected_matching_source_words": [12, 18]
-    },
-    {
-      "matching_short_source_words": [12, 15, 18, 21],
-      "expected_error_code": "AMBIGUOUS_SOURCE_WORDS",
-      "expected_matching_source_words": [12, 15, 18, 21]
+      "id": "unpaired-surrogate",
+      "utf16_code_units_hex": [
+        "0061",
+        "d800"
+      ],
+      "expected_error": "INVALID_PASSWORD_TEXT",
+      "note": "a JavaScript string can hold a lone surrogate; TextEncoder would silently replace it with U+FFFD, so the browser client must reject it before encoding"
     }
-  ]
+  ],
+  "settings": [
+    {
+      "id": "defaults",
+      "pim": 0,
+      "memory_level": 0,
+      "expected_memory_kib": 2097152,
+      "expected_passes": 12
+    },
+    {
+      "id": "pim-and-memory-level",
+      "pim": 1,
+      "memory_level": 1,
+      "expected_memory_kib": 3145728,
+      "expected_passes": 24
+    },
+    {
+      "id": "highest-values",
+      "pim": 1023,
+      "memory_level": 21,
+      "expected_memory_kib": 3221225472,
+      "expected_passes": 12288
+    },
+    {
+      "id": "pim-above-range",
+      "pim": 1024,
+      "memory_level": 0,
+      "expected_error": "INVALID_PIM"
+    },
+    {
+      "id": "memory-level-above-range",
+      "pim": 0,
+      "memory_level": 22,
+      "expected_error": "INVALID_MEMORY_LEVEL"
+    }
+  ],
+  "phrases": [
+    {
+      "id": "original-bad-checksum",
+      "operation": "encrypt",
+      "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+      "expected_error": "INVALID_PHRASE"
+    },
+    {
+      "id": "original-unknown-word",
+      "operation": "encrypt",
+      "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon aboutx",
+      "expected_error": "INVALID_PHRASE"
+    },
+    {
+      "id": "original-13-words",
+      "operation": "encrypt",
+      "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about abandon",
+      "expected_error": "INVALID_PHRASE"
+    },
+    {
+      "id": "container-bad-checksum",
+      "operation": "decrypt",
+      "container": "legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth thank",
+      "expected_error": "INVALID_CONTAINER"
+    },
+    {
+      "id": "container-12-words",
+      "operation": "decrypt",
+      "container": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "expected_error": "INVALID_CONTAINER"
+    },
+    {
+      "id": "selected-length-13",
+      "operation": "decrypt",
+      "container": "legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth useful legal winner thank year wave sausage worth title",
+      "words": 13,
+      "expected_error": "INVALID_WORD_COUNT"
+    }
+  ],
+  "length_detection": [
+    {
+      "id": "packed-12",
+      "entropy_hex": "031425364758697a8b9cadbecfe0f102",
+      "state_hex": "031425364758697a8b9cadbecfe0f102a23d99f2cc2b11f42045500d5073b112",
+      "matching_short_lengths": [
+        12
+      ]
+    },
+    {
+      "id": "packed-15",
+      "entropy_hex": "031425364758697a8b9cadbecfe0f10213243546",
+      "state_hex": "031425364758697a8b9cadbecfe0f10213243546e55dc3415a7931fd53bcbf7f",
+      "matching_short_lengths": [
+        15
+      ]
+    },
+    {
+      "id": "packed-18",
+      "entropy_hex": "031425364758697a8b9cadbecfe0f102132435465768798a",
+      "state_hex": "031425364758697a8b9cadbecfe0f102132435465768798adc773623beb02c7b",
+      "matching_short_lengths": [
+        18
+      ]
+    },
+    {
+      "id": "packed-21",
+      "entropy_hex": "031425364758697a8b9cadbecfe0f102132435465768798a9bacbdce",
+      "state_hex": "031425364758697a8b9cadbecfe0f102132435465768798a9bacbdced9b351c5",
+      "matching_short_lengths": [
+        21
+      ]
+    },
+    {
+      "id": "packed-24",
+      "entropy_hex": "031425364758697a8b9cadbecfe0f102132435465768798a9bacbdcedff00112",
+      "state_hex": "031425364758697a8b9cadbecfe0f102132435465768798a9bacbdcedff00112",
+      "matching_short_lengths": []
+    },
+    {
+      "id": "ambiguous-12-21",
+      "state_hex": "4d48464520616d62000000004dda455a85b22f09e43e0ae5de9322dce19210ad",
+      "matching_short_lengths": [
+        12,
+        21
+      ],
+      "note": "found by searching counters after the ASCII text 'MHFE ambiguous'"
+    },
+    {
+      "id": "ambiguous-15-21",
+      "state_hex": "4d48464520616d626967756f00000000d7215b3cc350c32cc955fd4e3e272edf",
+      "matching_short_lengths": [
+        15,
+        21
+      ],
+      "note": "found by searching counters after the ASCII text 'MHFE ambiguous'"
+    },
+    {
+      "id": "ambiguous-18-21",
+      "state_hex": "4d48464520616d626967756f7573207400000000643a0b3e565fd3c1659f6749",
+      "matching_short_lengths": [
+        18,
+        21
+      ],
+      "note": "found by searching counters after the ASCII text 'MHFE ambiguous'"
+    }
+  ],
+  "verifier_serialization": {
+    "entropy_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b",
+    "sha256_hex": "dc27f8e8ee2d08a2bccbb2dbd6c8e07ffba194101fc3458c34ded55f72c0971a",
+    "verifier_hex": "dc27f8e8",
+    "state_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1bdc27f8e8"
+  }
 }
