@@ -28,7 +28,7 @@ let matches: bool = mhfe.check(&container, &password, &reference, &mut |_, _| Ok
 - `WorkFactor` holds the two settings and computes the Argon2 cost with integers only:
   `memory_kib()`, `passes()`, `estimated_seconds()`.
 - `Mhfe::new` refuses a memory level the build cannot address (`MhfeError::MemoryLevelNotSupportedHere`:
-  a 64-bit build supports every level, a 32-bit build level 0 only, see
+  a native build is always 64-bit and supports every level, the browser build level 0 only, see
   `engine::HIGHEST_MEMORY_LEVEL`) or the computer cannot provide (`MhfeError::NotEnoughMemory`), and
   reserves the work area once; every round of every operation reuses it. The engine is the
   vendored reference C code (`engine::NativeEngine`). `engine::check_can_run` makes the same checks
@@ -67,7 +67,10 @@ let matches: bool = mhfe.check(&container, &password, &reference, &mut |_, _| Ok
 - `vectors` writes test vectors from the fixed public inputs `PUBLIC_INPUTS` and `NEGATIVE_INPUTS`.
   Vectors contain the password and every round key by design.
 
-Every buffer that holds a password, phrase, state, key or mask is wiped when dropped.
+Every buffer this crate owns that holds a password, phrase, passphrase, state, key or mask is wiped
+when dropped. Short-lived working buffers inside dependencies, such as those of Unicode
+normalization and BIP39 word parsing, are outside its control, and so are immutable JavaScript
+strings in the browser.
 
 ### Errors
 
@@ -95,7 +98,7 @@ Every buffer that holds a password, phrase, state, key or mask is wiped when dro
 | `INVALID_FINGERPRINT`             | The fingerprint is not eight hexadecimal digits                |
 | `NOT_ENOUGH_MEMORY`               | Less free memory than the memory level needs                   |
 | `MEMORY_ALLOCATION_FAILED`        | The operating system refused the memory                        |
-| `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser, 32-bit: > 0) |
+| `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser: > 0)        |
 | `PROCESSOR_NOT_SUPPORTED`         | The SSSE3 build runs on a processor without SSSE3              |
 | `ARGON2_FAILED`                   | The Argon2 code reported an error                              |
 | `INTERNAL_ERROR`                  | Anything else                                                  |
@@ -115,7 +118,8 @@ await client.decrypt({ container, password, pim, memoryLevel, words, onProgress 
 // { kind: "phrase" | "ambiguous", candidates: [{ words, verified, phrase }] }
 await client.check({ container, password, reference, passphrase, onProgress }); // { matches }
 // reference: exactly one of { address, path? }, { fingerprint } or { words }
-await client.readPhrase(phrase); // { phrase, words }: every word written out, no Argon2
+await client.readPhrase(phrase); // { phrase, words, otherLengths }: every word written out, no Argon2
+// otherLengths: other lengths whose check the packed phrase also passes; almost always empty
 await client.readContainer(container); // { container }
 client.cancel(); // rejects the running operation with MhfeCancelledError
 ```
@@ -126,7 +130,10 @@ with an unpaired surrogate), `PASSWORDS_DIFFER` (`encrypt` got two different pas
 `rounds` 24 for an encryption and 12 otherwise.
 
 Inside the worker, the WebAssembly core exports `suiteParameters`, `checkPhrase`, `readPhrase`,
-`checkContainer`, `checkPassword`, `encrypt`, `decrypt` and `check` (`src/wasm_api.rs`).
+`otherDetectedLengths`, `checkContainer`, `checkPassword`, `encrypt`, `decrypt` and `check`
+(`src/wasm_api.rs`). `otherDetectedLengths`, like `otherLengths` of the client, lists the other
+source lengths whose check a phrase also passes; when it is not empty, automatic detection would
+not give the phrase back on its own, and the user must remember and select its word count.
 `readPhrase` and `checkContainer` return their input with every word written out. `encrypt`,
 `decrypt` and `check` take the Argon2 bridge from `web/argon2-engine.js` and a progress callback
 `(round, rounds)`; `encrypt` also takes a callback that receives the container before its check.

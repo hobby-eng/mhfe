@@ -89,10 +89,11 @@ The specification asks applications to do some things the client cannot do for t
 
 - ask for the password twice before `encrypt` (the client refuses two different entries) and advise
   a different password for each container;
-- show the suite identifier, the word count of the original, and any non-zero PIM or memory level
-  when a container is made, ask the user to keep them for recovery, and explain the choice: next to
-  the container they are hardest to lose, kept apart they do not show that the words are an MHFE
-  container;
+- show the suite identifier when a container is made; when the PIM or memory level is not the
+  default, tell the user to remember it and offer to record it, since recovery needs exactly that
+  value; with the defaults, say that the 24 words and the password are enough, unless
+  `otherLengths` of the phrase is not empty: then ask the user to remember the word count and to
+  select it when recovering;
 - if it shows the container from `onUnverified`, mark it clearly as not yet verified, and then say
   how the check ended: verified when the promise resolves, wrong and not to be used on
   `VERIFICATION_FAILED`, not verified on a cancel or any other error;

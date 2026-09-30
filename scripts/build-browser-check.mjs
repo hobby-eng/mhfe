@@ -129,4 +129,7 @@ const page = `<!doctype html>
 `;
 mkdirSync(new URL('target/browser-check/', root), { recursive: true });
 writeFileSync(new URL('target/browser-check/index.html', root), page);
-console.log(`Wrote target/browser-check/index.html (${page.length} bytes)`);
+// The fast-mode launchers serve only the page named in this file, with this exact digest.
+const digest = createHash('sha256').update(page).digest('hex');
+writeFileSync(new URL('target/browser-check/mhfe-fast-mode.sha256', root), `${digest}  index.html\n`);
+console.log(`Wrote target/browser-check/index.html (${page.length} bytes) and mhfe-fast-mode.sha256`);

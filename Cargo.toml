@@ -48,15 +48,19 @@ clap = { version = "=4.6.7", features = ["derive"] }
 ctrlc = "=3.5.2"
 # Randomness for `mhfe password`, straight from the operating system.
 getrandom = "=0.4.3"
-# Hidden terminal input for phrases and passwords.
-rpassword = "=7.5.4"
 
-# Free-memory queries before the Argon2 work area is reserved.
-[target.'cfg(target_os = "macos")'.dependencies]
+# Hidden terminal input (termios) and, on macOS, free-memory queries before the Argon2 work area
+# is reserved.
+[target.'cfg(unix)'.dependencies]
 libc = "=0.2.189"
 
+# Hidden console input and free-memory queries.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "=0.61.2", features = ["Win32_System_SystemInformation"] }
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_System_Console",
+  "Win32_System_SystemInformation",
+] }
 
 [build-dependencies]
 # Compiles the vendored reference Argon2 C code (build.rs).

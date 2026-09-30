@@ -11,11 +11,13 @@ use std::str::FromStr;
 use bip39::{Language, Mnemonic};
 use bitcoin_hashes::{hash160, Hash};
 use hmac::{Hmac, Mac};
+use k256::elliptic_curve::group::Group;
 use k256::elliptic_curve::point::AffineCoordinates;
 use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::elliptic_curve::PrimeField;
 use k256::{FieldBytes, ProjectivePoint, Scalar};
 use sha2::{Digest, Sha256, Sha512};
+use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::MhfeError;
@@ -100,7 +102,9 @@ fn invalid_address(reason: &str) -> MhfeError {
 fn parse_segwit(text: &str) -> Result<BitcoinAddress, MhfeError> {
     let (hrp, version, program) = bech32::segwit::decode(text)
         .map_err(|_| invalid_address("its checksum or format is wrong"))?;
-    let network = match hrp.as_str() {
+    // BIP173 allows an address written all in capitals, as in QR codes; the decoder has already
+    // refused mixed case, and keeps the prefix as written.
+    let network = match hrp.as_str().to_ascii_lowercase().as_str() {
         "bc" => Network::Bitcoin,
         "tb" => Network::Testnet,
         _ => {
@@ -240,7 +244,7 @@ pub fn parse_fingerprint(text: &str) -> Result<[u8; 4], MhfeError> {
 /// BIP39 `passphrase` (empty when the wallet uses none).
 pub fn master_fingerprint(phrase: &str, passphrase: &str) -> Result<[u8; 4], MhfeError> {
     let master = ExtendedKey::master(phrase, passphrase)?;
-    let digest = hash160::Hash::hash(&master.public_key()).to_byte_array();
+    let digest = hash160::Hash::hash(&master.public_key()?).to_byte_array();
     Ok([digest[0], digest[1], digest[2], digest[3]])
 }
 
@@ -324,7 +328,7 @@ fn base58check(version: u8, hash: &[u8]) -> String {
 /// What an address of `address_type` commits to for this key: HASH160 of the public key, of the
 /// P2WPKH script for nested SegWit, or the tweaked output key for Taproot.
 fn program_for(key: &ExtendedKey, address_type: AddressType) -> Result<Vec<u8>, MhfeError> {
-    let public_key = key.public_key();
+    let public_key = key.public_key()?;
     Ok(match address_type {
         AddressType::P2pkh | AddressType::P2wpkh => {
             hash160::Hash::hash(&public_key).to_byte_array().to_vec()
@@ -352,8 +356,14 @@ fn taproot_output_key(key: &ExtendedKey) -> Result<[u8; 32], MhfeError> {
     let tweak_bytes = tagged_hash("TapTweak", &x_only);
     let tweak = Option::<Scalar>::from(Scalar::from_repr(FieldBytes::from(tweak_bytes)))
         .ok_or_else(|| MhfeError::Internal("Taproot tweak out of range".to_owned()))?;
-    let output = (internal + ProjectivePoint::GENERATOR * tweak).to_affine();
-    Ok(output.x().into())
+    let output = internal + ProjectivePoint::GENERATOR * tweak;
+    // BIP341 fails when Q is the point at infinity, which needs t = -p: probability about 2^-256.
+    if bool::from(output.is_identity()) {
+        return Err(MhfeError::Internal(
+            "BIP341 gives no Taproot output key for this key".to_owned(),
+        ));
+    }
+    Ok(output.to_affine().x().into())
 }
 
 /// `SHA256(SHA256(tag) || SHA256(tag) || data)`, the tagged hash of BIP340.
@@ -367,6 +377,18 @@ fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
         .into()
 }
 
+/// The largest growth of UTF-8 text under NFKD: U+FDFA, 3 bytes, decomposes into 33 bytes.
+const NFKD_MAX_GROWTH: usize = 11;
+
+/// The passphrase in NFKD, as BIP39 requires, in a buffer that is wiped when dropped. It is
+/// reserved at the largest size NFKD can produce, so it never grows and leaves no unwiped copy;
+/// `Mnemonic::to_seed` would normalize into an ordinary string instead.
+fn normalized_passphrase(passphrase: &str) -> Zeroizing<String> {
+    let mut normalized = Zeroizing::new(String::with_capacity(passphrase.len() * NFKD_MAX_GROWTH));
+    normalized.extend(passphrase.nfkd());
+    normalized
+}
+
 /// A BIP32 extended private key. Both halves are wiped when dropped.
 struct ExtendedKey {
     key: Zeroizing<[u8; 32]>,
@@ -378,9 +400,19 @@ impl ExtendedKey {
     fn master(phrase: &str, passphrase: &str) -> Result<Self, MhfeError> {
         let mnemonic = Mnemonic::parse_in(Language::English, phrase)
             .map_err(|error| MhfeError::InvalidPhrase(error.to_string()))?;
-        // BIP39 normalizes the passphrase with NFKD; `to_seed` does that.
-        let seed = Zeroizing::new(mnemonic.to_seed(passphrase));
-        Self::from_hmac(b"Bitcoin seed", &[&seed[..]])
+        let normalized = normalized_passphrase(passphrase);
+        let seed = Zeroizing::new(mnemonic.to_seed_normalized(&normalized));
+        let master = Self::from_hmac(b"Bitcoin seed", &[&seed[..]])?;
+        // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
+        let mut scalar = master.scalar()?;
+        let invalid = bool::from(scalar.is_zero());
+        scalar.zeroize();
+        if invalid {
+            return Err(MhfeError::Internal(
+                "BIP32 gives no valid master key for this seed".to_owned(),
+            ));
+        }
+        Ok(master)
     }
 
     /// Splits `HMAC-SHA512(key, parts)` into a private key and a chain code (BIP32).
@@ -414,17 +446,19 @@ impl ExtendedKey {
         let mut child = if index >= HARDENED {
             Self::from_hmac(&self.chain_code[..], &[&[0u8], &self.key[..], &index_bytes])?
         } else {
-            Self::from_hmac(&self.chain_code[..], &[&self.public_key(), &index_bytes])?
+            Self::from_hmac(&self.chain_code[..], &[&self.public_key()?, &index_bytes])?
         };
-        // The child key is IL + parent key (mod n). BIP32 skips an index whose IL is not below n
-        // or whose sum is zero; either happens with probability below 2^-127.
+        // The child key is IL + parent key (mod n). BIP32 declares the key at this index invalid
+        // when IL is not below n or the sum is zero, which happens with probability below 2^-127,
+        // and wallets then use the next index. This tool reports it instead of silently checking a
+        // different index than the path says.
         let mut tweak = parse_scalar(&child.key)?;
         let mut sum = tweak + self.scalar()?;
         tweak.zeroize();
         if bool::from(sum.is_zero()) {
-            return Err(MhfeError::Internal(
-                "BIP32 produced an invalid key".to_owned(),
-            ));
+            return Err(MhfeError::Internal(format!(
+                "BIP32 has no valid key at index {index} of this path; wallets use the next index"
+            )));
         }
         child.key.copy_from_slice(&sum.to_repr());
         sum.zeroize();
@@ -436,17 +470,15 @@ impl ExtendedKey {
     }
 
     /// The compressed SEC1 public key, 33 bytes.
-    fn public_key(&self) -> [u8; 33] {
-        let mut scalar = self
-            .scalar()
-            .expect("a stored key is always a valid scalar");
+    fn public_key(&self) -> Result<[u8; 33], MhfeError> {
+        let mut scalar = self.scalar()?;
         let point = (ProjectivePoint::GENERATOR * scalar).to_affine();
         scalar.zeroize();
         let encoded = point.to_sec1_point(true);
         encoded
             .as_bytes()
             .try_into()
-            .expect("a compressed point has 33 bytes")
+            .map_err(|_| MhfeError::Internal("a public key is not 33 bytes".to_owned()))
     }
 
     fn clone_key(&self) -> Self {
@@ -619,6 +651,60 @@ mod tests {
         assert!(find_address(ABANDON, "", &target, Some(&explicit), small)
             .unwrap()
             .is_some());
+    }
+
+    /// The wiping normalization gives the seed that bip39 itself computes, also for a passphrase
+    /// that NFKD changes, including one that grows the most.
+    #[test]
+    fn the_passphrase_is_normalized_as_bip39_does() {
+        let mnemonic = Mnemonic::parse_in(Language::English, ABANDON).unwrap();
+        for passphrase in ["", "TREZOR", "Caf\u{E9} \u{FB01}", "\u{FDFA}\u{FDFA}"] {
+            let normalized = normalized_passphrase(passphrase);
+            assert_eq!(
+                mnemonic.to_seed_normalized(&normalized),
+                mnemonic.to_seed(passphrase),
+                "{passphrase:?}"
+            );
+        }
+    }
+
+    /// Keys that BIP32 calls invalid give an error, never a panic. They cannot come from a real
+    /// phrase in practice, so they are made up here: zero, and the group order n.
+    #[test]
+    fn invalid_bip32_keys_are_errors() {
+        let with_key = |key: [u8; 32]| ExtendedKey {
+            key: Zeroizing::new(key),
+            chain_code: Zeroizing::new([7u8; 32]),
+        };
+        // secp256k1 group order n (SEC 2).
+        let order: [u8; 32] =
+            hex::decode("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
+                .unwrap()
+                .try_into()
+                .unwrap();
+        assert!(with_key([0u8; 32]).public_key().is_err());
+        assert!(with_key(order).public_key().is_err());
+        assert!(with_key(order).child(0).is_err());
+        assert!(with_key(order).child(HARDENED).is_err());
+    }
+
+    /// BIP173: an address may be written all in lower or all in upper case, never mixed.
+    #[test]
+    fn segwit_addresses_are_accepted_in_either_case() {
+        for lower in [
+            "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
+            "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+            "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
+        ] {
+            let upper = lower.to_ascii_uppercase();
+            assert_eq!(
+                upper.parse::<BitcoinAddress>().unwrap(),
+                lower.parse::<BitcoinAddress>().unwrap(),
+                "{upper}"
+            );
+            let mixed = format!("{}{}", &upper[..4], &lower[4..]);
+            assert!(mixed.parse::<BitcoinAddress>().is_err(), "{mixed}");
+        }
     }
 
     #[test]

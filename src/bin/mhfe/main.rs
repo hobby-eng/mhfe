@@ -4,13 +4,15 @@
 //! back, rehearses a recovery without showing the phrase, and makes strong passwords from dice
 //! words. Secrets are only ever typed at a hidden prompt or read from standard input, never
 //! taken from command-line arguments.
-#![forbid(unsafe_code)]
+// No unsafe code, except the few terminal calls in hidden_input.rs that switch the echo off.
+#![deny(unsafe_code)]
 
 mod check;
 mod decrypt;
 mod diceware;
 mod encrypt;
 mod exit;
+mod hidden_input;
 mod serve;
 mod settings;
 mod style;

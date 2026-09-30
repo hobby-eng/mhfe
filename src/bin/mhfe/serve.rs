@@ -39,8 +39,9 @@ const MAX_REQUEST_HEAD: usize = 16 * 1024;
 /// Time a client has for its whole request head. A limit on each read alone would let a client
 /// that sends one byte at a time keep its connection open for ever.
 const REQUEST_DEADLINE: Duration = Duration::from_secs(10);
-/// Time for sending the answer to a client that does not read it.
-const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+/// Time for sending the whole answer. A limit on each write alone would let a client that reads
+/// slowly, or not at all, keep its connection and thread for ever.
+const RESPONSE_DEADLINE: Duration = Duration::from_secs(10);
 /// Connections answered at the same time; any further one is closed at once. A browser opens
 /// only a few, and the cap keeps a flood of connections from starting a thread each.
 const MAX_CONNECTIONS: usize = 16;
@@ -284,7 +285,6 @@ fn open_browser(address: &str) -> io::Result<()> {
 
 /// Reads one request and writes one response, then closes the connection.
 fn answer(stream: TcpStream, host: &str, page: &[u8], deadline: Duration) -> io::Result<()> {
-    stream.set_write_timeout(Some(WRITE_TIMEOUT))?;
     let mut reader = BufReader::new(UntilDeadline {
         stream: stream.try_clone()?,
         deadline: Instant::now() + deadline,
@@ -293,9 +293,30 @@ fn answer(stream: TcpStream, host: &str, page: &[u8], deadline: Duration) -> io:
         Ok(head) => respond(&head, host, page),
         Err(_) => Response::status(400, "Bad Request"),
     };
-    let mut stream = stream;
-    stream.write_all(&response.into_bytes())?;
-    stream.flush()
+    write_until(
+        &stream,
+        &response.into_bytes(),
+        Instant::now() + RESPONSE_DEADLINE,
+    )
+}
+
+/// Writes all of `bytes`, but gives up at `deadline`; the connection is then closed.
+fn write_until(mut stream: &TcpStream, mut bytes: &[u8], deadline: Instant) -> io::Result<()> {
+    while !bytes.is_empty() {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        // A zero timeout would mean "wait for ever" to the operating system; it is refused.
+        if remaining.is_zero() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        stream.set_write_timeout(Some(remaining))?;
+        match stream.write(bytes) {
+            Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
+            Ok(written) => bytes = &bytes[written..],
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }
 
 /// A connection that can be read until a fixed moment and then reports a timeout.
@@ -513,6 +534,26 @@ mod tests {
         let mut response = String::new();
         connection.read_to_string(&mut response).unwrap();
         response
+    }
+
+    /// A client that never reads a large answer loses its connection at the deadline, although
+    /// every single write makes some progress until the buffers are full.
+    #[test]
+    fn a_client_that_does_not_read_is_dropped_at_the_response_deadline() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let _idle = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server_side, _) = listener.accept().unwrap();
+        let answer = vec![b'x'; 64 * 1024 * 1024];
+        let started = Instant::now();
+        let result = write_until(&server_side, &answer, started + Duration::from_millis(500));
+        assert!(
+            result.is_err(),
+            "the answer cannot fit into the socket buffers"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "stopped near the deadline"
+        );
     }
 
     #[test]

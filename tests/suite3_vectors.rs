@@ -46,14 +46,15 @@ fn the_vector_files_are_complete_and_unchanged() {
         listed.insert(name.to_owned());
     }
     for input in &PUBLIC_INPUTS {
-        let name = format!("{}.json", input.name);
+        let name = format!("{}.json", input.name());
         assert!(listed.contains(&name), "{name} is missing");
         let vector = recorded(&name);
-        assert_eq!(vector["inputs"]["phrase"], input.phrase, "{name}");
-        assert_eq!(vector["inputs"]["password"], input.password, "{name}");
-        assert_eq!(vector["inputs"]["pim"], input.pim, "{name}");
+        assert_eq!(vector["inputs"]["phrase"], input.phrase(), "{name}");
+        assert_eq!(vector["inputs"]["password"], input.password(), "{name}");
+        assert_eq!(vector["inputs"]["pim"], input.pim(), "{name}");
         assert_eq!(
-            vector["inputs"]["memory_level"], input.memory_level,
+            vector["inputs"]["memory_level"],
+            input.memory_level(),
             "{name}"
         );
     }
@@ -94,7 +95,7 @@ fn every_round_records_its_salt_and_mask_inputs() {
     let salt_label = format!("{SUITE_ID}/ROUND-SALT");
     let mask_label = format!("{SUITE_ID}/ROUND-MASK");
     for input in &PUBLIC_INPUTS {
-        let name = format!("{}.json", input.name);
+        let name = format!("{}.json", input.name());
         let vector = recorded(&name);
         assert_eq!(vector["schema"], vectors::SCHEMA, "{name}");
         for direction in ["encryption", "decryption"] {
@@ -127,29 +128,29 @@ fn every_round_records_its_salt_and_mask_inputs() {
 fn every_vector_is_reproduced_exactly() {
     let mut containers = std::collections::HashMap::new();
     for input in &PUBLIC_INPUTS {
-        let work = WorkFactor::new(input.pim, input.memory_level).unwrap();
+        let work = WorkFactor::new(input.pim(), input.memory_level()).unwrap();
         let mut mhfe = Mhfe::new(work).unwrap();
         let vector = vectors::generate(&mut mhfe, input).unwrap();
-        let expected = recorded(&format!("{}.json", input.name));
+        let expected = recorded(&format!("{}.json", input.name()));
         assert_eq!(
             serde_json::to_value(&vector).unwrap(),
             expected,
             "{}",
-            input.name
+            input.name()
         );
-        containers.insert(input.name, vector.container.clone());
-        println!("{}: reproduced", input.name);
+        containers.insert(input.name(), vector.container.clone());
+        println!("{}: reproduced", input.name());
     }
 
     let expected = recorded("negative-cases.json");
     let mut cases = Vec::new();
     for input in &NEGATIVE_INPUTS {
-        let work = WorkFactor::new(input.pim, input.memory_level).unwrap();
+        let work = WorkFactor::new(input.pim(), input.memory_level()).unwrap();
         let mut mhfe = Mhfe::new(work).unwrap();
         cases.push(
-            vectors::negative_case(&mut mhfe, input, &containers[input.container_of]).unwrap(),
+            vectors::negative_case(&mut mhfe, input, &containers[input.container_of()]).unwrap(),
         );
-        println!("{}: reproduced", input.name);
+        println!("{}: reproduced", input.name());
     }
     assert_eq!(
         serde_json::to_value(&cases).unwrap(),

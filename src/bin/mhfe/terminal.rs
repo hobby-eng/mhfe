@@ -13,12 +13,13 @@ use mhfe::{ENCRYPTION_ROUNDS, ROUNDS};
 use zeroize::Zeroizing;
 
 use crate::exit::{self, Failure};
+use crate::hidden_input;
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
 
 /// Longest line accepted, line break included. The buffer is reserved at this size and reading
 /// stops there, so it is never reallocated, which would leave an unwiped copy of a secret
 /// behind. Every valid answer is far shorter: a password has at most 1024 bytes.
-const LINE_CAPACITY: usize = 8192;
+pub(crate) const LINE_CAPACITY: usize = 8192;
 
 /// Where answers come from.
 pub enum Input {
@@ -91,19 +92,12 @@ pub fn set_unverified_container_shown(shown: bool) {
     UNVERIFIED_CONTAINER_SHOWN.store(shown, Ordering::SeqCst);
 }
 
-/// Set while a hidden prompt owns the terminal.
-static HIDDEN_PROMPT_OPEN: AtomicBool = AtomicBool::new(false);
-
 /// Ctrl+C ends the tool at once, also in the middle of an Argon2 round that may take hours at
 /// a high PIM. The operating system then discards all of the tool's memory, including the
-/// Argon2 work area and every secret. While a hidden prompt is open, the prompt library first
-/// restores the terminal and reports the interruption, and `read_hidden` ends the tool.
+/// Argon2 work area and every secret. If a hidden prompt has switched the echo off, the terminal
+/// is restored first.
 pub fn stop_on_ctrl_c() {
-    let handler = || {
-        if !HIDDEN_PROMPT_OPEN.load(Ordering::SeqCst) {
-            exit_cancelled();
-        }
-    };
+    let handler = || hidden_input::restore_and_exit(exit_cancelled);
     if ctrlc::set_handler(handler).is_err() {
         // Without the handler the default Ctrl+C behaviour still ends the tool at once.
         style::hint("Note: Ctrl+C will end the tool without a message.");
@@ -133,21 +127,16 @@ fn read_hidden(prompt: &str) -> Result<Zeroizing<String>, Failure> {
              --stdin and give one answer per line on standard input.",
         ));
     }
-    style::prompt(prompt);
-    io::stderr().flush()?;
-    HIDDEN_PROMPT_OPEN.store(true, Ordering::SeqCst);
-    let answer = rpassword::read_password();
-    match answer {
-        Ok(text) => {
-            HIDDEN_PROMPT_OPEN.store(false, Ordering::SeqCst);
-            Ok(Zeroizing::new(text))
-        }
-        // The flag stays set, so the Ctrl+C handler leaves the exit to this call alone.
-        Err(error) if error.kind() == io::ErrorKind::Interrupted => exit_cancelled(),
-        Err(error) => {
-            HIDDEN_PROMPT_OPEN.store(false, Ordering::SeqCst);
-            Err(error.into())
-        }
+    // The line is read exactly as typed; Password::new refuses what a password may not contain.
+    let line = hidden_input::read_line(|| {
+        style::prompt(prompt);
+        io::stderr().flush()?;
+        Ok(())
+    })?;
+    match line {
+        Some(text) => Ok(text),
+        // Ctrl+D on an empty line: the person closed the input.
+        None => exit_cancelled(),
     }
 }
 
@@ -169,7 +158,9 @@ fn read_script_line(
 ///
 /// The standard library keeps its own buffer of what it read from standard input and does not
 /// wipe it; only the copies in this program's buffers are under its control.
-fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<Zeroizing<String>>, Failure> {
+pub(crate) fn read_bounded_line(
+    reader: &mut impl BufRead,
+) -> Result<Option<Zeroizing<String>>, Failure> {
     let mut line = Zeroizing::new(String::with_capacity(LINE_CAPACITY));
     let read = reader.take(LINE_CAPACITY as u64).read_line(&mut line)?;
     if read == 0 {

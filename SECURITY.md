@@ -13,8 +13,15 @@ Never include a real recovery phrase, password, private key or wallet file.
 - Secrets are typed at hidden prompts or read from standard input with `--stdin`. The tool never
   takes them from command-line arguments, never writes them to files and never logs them. Error
   messages never contain a phrase, a password or any part of them.
-- Every Rust buffer that holds a password, phrase, entropy, state, Argon2 key or mask is wiped when
-  it is dropped. The Argon2 work area is wiped by the C code at the end of every round
+- A hidden prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
+  on an empty line and Ctrl+C keep their meaning; every other character, including those a
+  terminal would usually act on (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+W, Ctrl+Z, Ctrl+\\), reaches the
+  password check, which refuses a control character instead of removing it. The terminal settings
+  are restored after the answer and on Ctrl+C. `scripts/verify-hidden-input.py` checks this in a
+  pseudo-terminal, in CI on Linux; the Windows console has no such test yet.
+- Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
+  key or mask is wiped when it is dropped; short-lived working buffers inside dependencies, such as
+  those of Unicode normalization and BIP39 word parsing, are not. The Argon2 work area is wiped by the C code at the end of every round
   (`FLAG_clear_internal_memory`, checked by a test); when a round fails, for example because a
   thread could not be started, the C code returns before that step and the Rust owner wipes the area
   instead. This is best effort: a compiler, the operating system, swap or a terminal's scrollback
@@ -76,8 +83,8 @@ talk to them.
   `Content-Security-Policy: frame-ancestors 'none'`, `X-Frame-Options: DENY`,
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
 - Each connection is answered in its own thread, at most 16 at a time, and has 10 seconds in
-  total for its request and 10 seconds for receiving the answer, so a slow or stalled client
-  cannot keep the page from loading.
+  total for its request and 10 seconds in total for receiving the answer, so a slow or stalled
+  client cannot keep the page from loading.
 - It reads no request body, keeps no log, serves no other file and lists no directory. It never
   receives a secret: the page does all the work in the browser.
 - It serves a page only when the checksum file `mhfe-fast-mode.sha256` next to it names that page

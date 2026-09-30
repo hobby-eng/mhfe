@@ -5,7 +5,9 @@ use std::io::{self, IsTerminal};
 use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::engine::NativeEngine;
-use mhfe::{other_detected_lengths, read_phrase, Mhfe, MhfeError, NewContainer, Password};
+use mhfe::{
+    other_detected_lengths, read_phrase, Mhfe, MhfeError, NewContainer, Password, WorkFactor,
+};
 use zeroize::Zeroizing;
 
 use crate::diceware::{dice_word_count, RECOMMENDED_WORDS};
@@ -13,6 +15,9 @@ use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, STRONG};
 use crate::terminal::{self, Input, Progress};
+
+/// A 24-word original fills the whole state and carries no verifier.
+const WORDS_WITHOUT_CHECK: usize = 24;
 
 #[derive(Args)]
 pub struct Options {
@@ -76,6 +81,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     let original = read_original(&mut input)?;
     let original_words = original.split(' ').count();
+    // The rare phrase that also passes the check of another length (warned about while reading).
+    let length_must_be_chosen = !other_detected_lengths(&original)?.is_empty();
     let password = read_new_password(&mut input)?;
     let mut mhfe = settings::reserve_memory(work)?;
 
@@ -125,17 +132,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         ));
     }
     eprintln!();
-    eprintln!(
-        "{} {}",
-        paint(STRONG, "Keep these values for recovery:"),
-        settings::record_note(work, original_words)
-    );
-    style::hint(
-        "Recovery needs exactly these values; with anything else the container turns into a \
-         different phrase that looks just as valid. They are not secret, and where to keep them \
-         is your choice: next to the container they are hardest to lose; kept apart, they do not \
-         show that the plate holds an MHFE container, so it still works as a decoy.",
-    );
+    print_what_to_remember(work, original_words, length_must_be_chosen);
     eprintln!();
     style::hint(
         "Use a different password for each container: a shared password is only as safe as the \
@@ -147,6 +144,46 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         paint(ACCENT, "mhfe check")
     ));
     Ok(SUCCESS)
+}
+
+/// Tells the user what recovery needs besides the container and the password: a setting that
+/// differs from its default, and, for the rare phrase that automatic length detection would
+/// misread, its word count. Otherwise nothing: the suite is fixed and the length is detected.
+fn print_what_to_remember(work: WorkFactor, original_words: usize, length_must_be_chosen: bool) {
+    let changed = settings::changed_settings(work);
+    if changed.is_none() && !length_must_be_chosen {
+        eprintln!(
+            "{} the 24 words and the password are enough.",
+            paint(STRONG, "Nothing else needs to be kept:")
+        );
+    }
+    if let Some(changed) = changed {
+        eprintln!(
+            "{} {changed}.",
+            paint(STRONG, "You changed the default settings; remember them:")
+        );
+        style::hint(
+            "Recovery needs exactly these values: with others the container turns into a \
+             different phrase that looks just as valid.",
+        );
+    }
+    if length_must_be_chosen {
+        eprintln!(
+            "{} your phrase has {original_words} words.",
+            paint(STRONG, "Remember the word count:")
+        );
+        style::hint(&format!(
+            "As warned above, automatic length detection would misread this phrase; recover it \
+             with {}.",
+            paint(ACCENT, format!("mhfe decrypt --words {original_words}"))
+        ));
+    }
+    if original_words == WORDS_WITHOUT_CHECK {
+        style::hint(
+            "A 24-word phrase has no built-in check, so recovery will show it as not verified; \
+             that is expected. mhfe check with a known address of the wallet confirms it.",
+        );
+    }
 }
 
 /// Rounds 13 to 24: recovers the new container from its words and compares the result with
