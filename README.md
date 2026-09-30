@@ -44,7 +44,21 @@ made since 2008 has; on one without it, it stops with a clear message. When unsu
 standard one. To build from source, install Rust and run `cargo build --release --locked`; the
 program is then `target/release/mhfe`.
 
-Use MHFE on a trusted computer without a network connection. It never connects to anything.
+### Where to run it
+
+Use MHFE on a trusted computer without a network connection. It never connects to anything, but
+the rest of the system might: an everyday installation has a browser, cloud synchronization,
+updates and background programs that you cannot all check.
+
+- Best: a Linux system started from a USB stick, with the network cable unplugged and Wi-Fi off,
+  used only for this and shut down afterwards.
+- On Windows, prefer Windows PE started from a USB stick in the same way over your everyday
+  Windows. The Windows build is a single `mhfe.exe` that needs no installation and uses only
+  libraries that are part of Windows itself, so it should run in Windows PE; this has not been
+  tested there yet.
+
+Whatever the system, what matters is that you trust where it came from and that it stays offline
+while the phrase and the password are on it.
 
 ## Encrypt a recovery phrase
 
@@ -84,7 +98,7 @@ Checking   ███████████████████████
 ✓ Verified: the container turns back into your original phrase.
 ```
 
-In a terminal the output is in colour; it is plain when it goes to a file or a script, or when the
+In a terminal the output is in color; it is plain when it goes to a file or a script, or when the
 environment variable `NO_COLOR` is set. The times come from a 2022 laptop with a check running
 alongside.
 
