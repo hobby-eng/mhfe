@@ -9,11 +9,12 @@
 //! - Enter ends the line, and Ctrl+D on an empty line ends the input;
 //! - Ctrl+C cancels the tool.
 //!
-//! On Unix the terminal's own line editing is switched off and this module edits the line
-//! itself. The terminal's line mode would otherwise act on further keys (Ctrl+S, Ctrl+Q, Ctrl+V,
-//! Ctrl+W, Ctrl+R, Ctrl+O, Ctrl+\, Ctrl+Z) and, on Linux, cut a line after 4095 bytes, although a
-//! valid password can take 4096 bytes before normalization (1024 characters that NFKD turns into
-//! one byte each). scripts/verify-hidden-input.py checks all of this in a pseudo-terminal.
+//! On Unix and on Windows the terminal's own line editing is switched off and this module edits
+//! the line itself, so both behave the same. A terminal's line mode would otherwise act on further
+//! keys (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+W, Ctrl+R, Ctrl+O, Ctrl+\, Ctrl+Z) and, on Linux, cut a line
+//! after 4095 bytes, although a valid password can take 4096 bytes before normalization (1024
+//! characters that NFKD turns into one byte each). scripts/verify-hidden-input.py checks this in a
+//! Unix pseudo-terminal and scripts/verify-hidden-input-windows.py in a Windows pseudo-console.
 
 // Changing the terminal settings needs the operating system's terminal calls, which Rust offers
 // only through unsafe foreign functions.
@@ -82,7 +83,6 @@ fn terminal_error(action: &str) -> Failure {
 }
 
 /// The keys that edit a hidden line; every other byte is kept.
-#[cfg(any(unix, test))]
 mod keys {
     pub const BACKSPACE: u8 = 0x08;
     pub const DELETE: u8 = 0x7f;
@@ -94,7 +94,6 @@ mod keys {
 /// the whole line, Enter (CR or LF) ends it, and Ctrl+D on an empty line or the end of the input
 /// gives `None`. Every other byte is kept. The buffer is reserved at its largest size and never
 /// grows, so it leaves no unwiped copy; a longer line is refused.
-#[cfg(any(unix, test))]
 fn edit_line(reader: &mut impl io::Read) -> Result<Option<Zeroizing<String>>, Failure> {
     use crate::terminal::LINE_CAPACITY;
     use keys::{BACKSPACE, CTRL_D, CTRL_U, DELETE};
@@ -136,7 +135,6 @@ fn edit_line(reader: &mut impl io::Read) -> Result<Option<Zeroizing<String>>, Fa
 }
 
 /// Removes the last UTF-8 character: its continuation bytes, then its first byte.
-#[cfg(any(unix, test))]
 fn remove_last_character(line: &mut Vec<u8>) {
     const CONTINUATION_MASK: u8 = 0b1100_0000;
     const CONTINUATION: u8 = 0b1000_0000;
@@ -202,9 +200,6 @@ mod platform {
     }
 }
 
-// The Windows console in line mode edits with Backspace, ends the line with Enter and turns Ctrl+C
-// into a cancel. Which other control characters it passes through unchanged, and how long a line
-// it accepts, has not been tested yet: unlike the Unix path, this one has no automated test.
 #[cfg(windows)]
 mod platform {
     use std::io;
@@ -215,7 +210,7 @@ mod platform {
     };
     use zeroize::Zeroizing;
 
-    use super::terminal_error;
+    use super::{edit_line, terminal_error};
     use crate::exit::Failure;
 
     pub type Settings = CONSOLE_MODE;
@@ -230,8 +225,9 @@ mod platform {
     }
 
     pub fn hide(original: &Settings) -> Result<(), Failure> {
-        // Line input keeps the console's own editing; processed input keeps Ctrl+C.
-        let hidden = (original & !ENABLE_ECHO_INPUT) | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT;
+        // No echo and no line mode: this module edits the line. Processed input keeps Ctrl+C as
+        // the cancel key; without line input the console acts on no other key.
+        let hidden = (original & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT)) | ENABLE_PROCESSED_INPUT;
         // SAFETY: a plain console call on the standard input handle.
         if unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), hidden) } == 0 {
             return Err(terminal_error("hide the input on"));
@@ -239,8 +235,9 @@ mod platform {
         Ok(())
     }
 
+    /// The standard library turns the console's UTF-16 characters into UTF-8 bytes.
     pub fn read_line() -> Result<Option<Zeroizing<String>>, Failure> {
-        crate::terminal::read_bounded_line(&mut io::stdin().lock())
+        edit_line(&mut io::stdin().lock())
     }
 
     pub fn restore(original: &Settings) {

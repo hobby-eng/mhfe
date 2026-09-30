@@ -308,7 +308,8 @@ fn parse_mem_available(meminfo: &str) -> Option<u64> {
 /// pages the kernel can hand to a new allocation, as `vm_stat` shows them.
 #[cfg(target_os = "macos")]
 pub(super) fn available_memory_bytes() -> Option<u64> {
-    let mut statistics = libc::vm_statistics64::default();
+    // SAFETY: vm_statistics64 holds only integers, for which all zero bytes are a valid value.
+    let mut statistics: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
     let mut count = libc::HOST_VM_INFO64_COUNT;
     // SAFETY: host_statistics64 writes at most `count` 32-bit words, and HOST_VM_INFO64_COUNT
     // is the size of `vm_statistics64`. The host port from mach_host_self is not released;

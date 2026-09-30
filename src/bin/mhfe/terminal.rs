@@ -158,9 +158,7 @@ fn read_script_line(
 ///
 /// The standard library keeps its own buffer of what it read from standard input and does not
 /// wipe it; only the copies in this program's buffers are under its control.
-pub(crate) fn read_bounded_line(
-    reader: &mut impl BufRead,
-) -> Result<Option<Zeroizing<String>>, Failure> {
+fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<Zeroizing<String>>, Failure> {
     let mut line = Zeroizing::new(String::with_capacity(LINE_CAPACITY));
     let read = reader.take(LINE_CAPACITY as u64).read_line(&mut line)?;
     if read == 0 {

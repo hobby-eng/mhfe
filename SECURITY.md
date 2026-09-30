@@ -17,8 +17,9 @@ Never include a real recovery phrase, password, private key or wallet file.
   on an empty line and Ctrl+C keep their meaning; every other character, including those a
   terminal would usually act on (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+W, Ctrl+Z, Ctrl+\\), reaches the
   password check, which refuses a control character instead of removing it. The terminal settings
-  are restored after the answer and on Ctrl+C. `scripts/verify-hidden-input.py` checks this in a
-  pseudo-terminal, in CI on Linux; the Windows console has no such test yet.
+  are restored after the answer and on Ctrl+C. `scripts/verify-hidden-input.py` checks this
+  in a pseudo-terminal on Linux and macOS, and `scripts/verify-hidden-input-windows.py` in a
+  Windows pseudo-console; CI runs them on all three systems.
 - Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
   key or mask is wiped when it is dropped; short-lived working buffers inside dependencies, such as
   those of Unicode normalization and BIP39 word parsing, are not. The Argon2 work area is wiped by the C code at the end of every round
