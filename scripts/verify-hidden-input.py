@@ -72,7 +72,10 @@ class Session:
     def __init__(self):
         self.master, self.slave = os.openpty()
         os.set_blocking(self.master, False)
-        self.original = termios.tcgetattr(self.slave)
+        # The settings are read through the master side: on macOS the slave side stops answering
+        # once the tool, the leader of its session, has ended, because the system revokes the
+        # terminal of an ended session. The master side reads the same terminal on every system.
+        self.original = termios.tcgetattr(self.master)
         environment = dict(os.environ, NO_COLOR="1")
         self.process = subprocess.Popen(
             [PROGRAM, "check", "--fingerprint"],
@@ -130,7 +133,7 @@ class Session:
         if not self.drain_until_exit(10):
             raise AssertionError("the tool did not end")
         code = self.process.returncode
-        settings = termios.tcgetattr(self.slave)
+        settings = termios.tcgetattr(self.master)
         os.close(self.master)
         os.close(self.slave)
         return code, settings
