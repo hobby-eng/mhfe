@@ -1,0 +1,118 @@
+{
+  "description": "Full MHFE suite 3 operations at the defaults (2 GiB, 12 passes, PIM 0) with the public zero-12 test vector: one encryption including its 12-round check (24 Argon2id calls) and one recovery (12 calls). One laptop; observations, not guarantees or attack-cost estimates.",
+  "date": "2026-09-30",
+  "machine": {
+    "computer": "Samsung Galaxy Book2 Pro 360 (NP950QED-KA2DE)",
+    "processor": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "memory": "about 15 GiB",
+    "system": "Ubuntu Linux, kernel 7.0.0-34-generic, x86-64"
+  },
+  "method": [
+    "Command line: `mhfe test-benchmark` of the release builds of commit 92d62e5, the default one and the one built with --features ssse3.",
+    "Browser: headless Chromium through Playwright, driving the MHFE panel of the Wallet Key Derivation Tool (MHFE 0.4.0 browser package) twice: served by its executable version with COOP/COEP (fast mode, four threads) and opened as a file (standard mode, one thread). A fresh browser for each run.",
+    "Each run was followed by a 90-second pause. The main series ran twice, with the two command-line builds in swapped order in the second round; the first series was stopped after one round to add the SSSE3 build and is kept as an extra sample."
+  ],
+  "page_sha256": "a06dbbce58a71523a714cf24ac6a1559c822528a23f59e4e8c1a3e2c2ecab649",
+  "runs": [
+    {
+      "series": "main, round 1",
+      "scenario": "native command line, SSE2, 4 threads",
+      "encryption_seconds": 131.4,
+      "recovery_seconds": 71.7,
+      "argon2_engine": "reference C, opt.c with SSE2, 4 threads",
+      "processor_temperature_at_start_c": 62
+    },
+    {
+      "series": "main, round 1",
+      "scenario": "native command line, SSSE3, 4 threads",
+      "encryption_seconds": 118.9,
+      "recovery_seconds": 66.5,
+      "argon2_engine": "reference C, opt.c with SSSE3, 4 threads",
+      "processor_temperature_at_start_c": 89
+    },
+    {
+      "series": "main, round 1",
+      "scenario": "chromium, served by the executable (fast mode)",
+      "encryption_seconds": 167.6,
+      "recovery_seconds": 89.6,
+      "browser": "chromium 153.0.8010.12",
+      "cross_origin_isolated": true,
+      "processor_temperature_at_start_c": 69
+    },
+    {
+      "series": "main, round 1",
+      "scenario": "chromium, HTML file (standard mode)",
+      "encryption_seconds": 462.3,
+      "recovery_seconds": 239.2,
+      "browser": "chromium 153.0.8010.12",
+      "cross_origin_isolated": false,
+      "processor_temperature_at_start_c": 58
+    },
+    {
+      "series": "main, round 2",
+      "scenario": "native command line, SSSE3, 4 threads",
+      "encryption_seconds": 122.0,
+      "recovery_seconds": 67.3,
+      "argon2_engine": "reference C, opt.c with SSSE3, 4 threads",
+      "processor_temperature_at_start_c": 55
+    },
+    {
+      "series": "main, round 2",
+      "scenario": "native command line, SSE2, 4 threads",
+      "encryption_seconds": 134.4,
+      "recovery_seconds": 71.4,
+      "argon2_engine": "reference C, opt.c with SSE2, 4 threads",
+      "processor_temperature_at_start_c": 56
+    },
+    {
+      "series": "main, round 2",
+      "scenario": "chromium, served by the executable (fast mode)",
+      "encryption_seconds": 166.6,
+      "recovery_seconds": 89.5,
+      "browser": "chromium 153.0.8010.12",
+      "cross_origin_isolated": true,
+      "processor_temperature_at_start_c": 52
+    },
+    {
+      "series": "main, round 2",
+      "scenario": "chromium, HTML file (standard mode)",
+      "encryption_seconds": 459.2,
+      "recovery_seconds": 236.7,
+      "browser": "chromium 153.0.8010.12",
+      "cross_origin_isolated": false,
+      "processor_temperature_at_start_c": 60
+    },
+    {
+      "series": "first, interrupted after one round",
+      "scenario": "native command line, 4 threads",
+      "encryption_seconds": 135.8,
+      "recovery_seconds": 84.1,
+      "argon2_engine": "reference C, opt.c with SSE2, 4 threads",
+      "processor_temperature_at_start_c": 77
+    },
+    {
+      "series": "first, interrupted after one round",
+      "scenario": "chromium, served by the executable (fast mode)",
+      "encryption_seconds": 159.6,
+      "recovery_seconds": 95.1,
+      "browser": "chromium 153.0.8010.12",
+      "cross_origin_isolated": true,
+      "processor_temperature_at_start_c": 53
+    },
+    {
+      "series": "first, interrupted after one round",
+      "scenario": "chromium, HTML file (standard mode)",
+      "encryption_seconds": 478.8,
+      "recovery_seconds": 233.7,
+      "browser": "chromium 153.0.8010.12",
+      "cross_origin_isolated": false,
+      "processor_temperature_at_start_c": 59
+    }
+  ],
+  "findings": [
+    "Command line: a recovery took 67 to 72 seconds, an encryption with its check 119 to 136 seconds. The SSSE3 build was 7 to 10 percent faster than the default build in both orders.",
+    "Browser fast mode: a recovery took 90 to 95 seconds, an encryption 160 to 168 seconds, about a quarter slower than the command line.",
+    "Browser standard mode: a recovery took 234 to 239 seconds, an encryption 459 to 479 seconds, 2.6 to 2.9 times the fast mode.",
+    "The one slower command-line recovery (84 seconds) started with the processor at 77 °C instead of 55 to 62 °C."
+  ]
+}
