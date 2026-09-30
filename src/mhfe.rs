@@ -417,6 +417,50 @@ mod tests {
             .starts_with("abandon abandon abandon abandon abandon abandon"));
     }
 
+    /// A decoy password opens a container as another valid 24-word phrase, and a container
+    /// created from that phrase with the decoy password is the same container. This is the
+    /// consistency lemma of the deniability analysis in the specification's supplement: an owner
+    /// can disclose the decoy password instead of the real one.
+    #[test]
+    fn a_decoy_password_gives_a_phrase_that_encrypts_back_to_the_same_container() {
+        let password = Password::new("public test password").unwrap();
+        let decoy = Password::new("another public test password").unwrap();
+        let mut mhfe = reduced();
+        for original in [ZERO_12, LEGAL_24] {
+            let container = mhfe
+                .encrypt(original, &password, &mut no_progress())
+                .unwrap();
+            let opened = only_phrase(
+                mhfe.decrypt(
+                    &container,
+                    &decoy,
+                    PhraseLength::Words(24),
+                    &mut no_progress(),
+                )
+                .unwrap(),
+            );
+            assert_eq!(opened.words, 24);
+            assert!(!opened.verified);
+            assert_ne!(*opened.phrase, original);
+            // An ordinary BIP39 phrase with a valid checksum, usable as a wallet of its own.
+            assert_eq!(phrase::check_phrase(&opened.phrase).unwrap(), 24);
+
+            // Automatic detection gives the same unverified 24-word reading, just as for an
+            // honest 24-word original.
+            let detected = only_phrase(
+                mhfe.decrypt(&container, &decoy, PhraseLength::Detect, &mut no_progress())
+                    .unwrap(),
+            );
+            assert_eq!((detected.words, detected.verified), (24, false));
+            assert_eq!(*detected.phrase, *opened.phrase);
+
+            let again = mhfe
+                .encrypt(&opened.phrase, &decoy, &mut no_progress())
+                .unwrap();
+            assert_eq!(*again, *container);
+        }
+    }
+
     #[test]
     fn ambiguity_lists_every_candidate_and_the_24_word_reading() {
         let password = Password::new("public test password").unwrap();
