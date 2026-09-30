@@ -10,7 +10,7 @@ use std::str::FromStr;
 
 use bip39::{Language, Mnemonic};
 use bitcoin_hashes::{hash160, Hash};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use k256::elliptic_curve::group::Group;
 use k256::elliptic_curve::point::AffineCoordinates;
 use k256::elliptic_curve::sec1::ToSec1Point;
@@ -417,7 +417,7 @@ impl ExtendedKey {
 
     /// Splits `HMAC-SHA512(key, parts)` into a private key and a chain code (BIP32).
     fn from_hmac(key: &[u8], parts: &[&[u8]]) -> Result<Self, MhfeError> {
-        let mut mac = <HmacSha512 as Mac>::new_from_slice(key).expect("HMAC takes any key");
+        let mut mac = <HmacSha512 as KeyInit>::new_from_slice(key).expect("HMAC takes any key");
         for part in parts {
             mac.update(part);
         }

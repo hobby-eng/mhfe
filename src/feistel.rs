@@ -8,7 +8,7 @@
 
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -164,7 +164,7 @@ fn round_salt(work: WorkFactor, round: u32, right: &Half) -> [u8; SALT_BYTES] {
 fn round_mask(key: &[u8; KEY_BYTES], work: WorkFactor, round: u32, right: &Half) -> Half {
     let mut message = round_message(work, round, right);
     let mut mac =
-        <HmacSha256 as Mac>::new_from_slice(key).expect("HMAC accepts a key of any length");
+        <HmacSha256 as KeyInit>::new_from_slice(key).expect("HMAC accepts a key of any length");
     mac.update(DS_MASK);
     mac.update(&message);
     let mut digest = mac.finalize().into_bytes();

@@ -577,7 +577,7 @@ mod tests {
     use crate::engine::{Argon2Cost, NativeEngine};
     use blake2::digest::consts::U32;
     use blake2::{Blake2b, Digest};
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
 
     #[test]
@@ -664,7 +664,7 @@ mod tests {
                 let key = hex::decode(&round.argon2_key_hex).unwrap();
                 let mask_input = hex::decode(&round.mask_input_hex).unwrap();
                 assert!(mask_input.starts_with(DS_MASK));
-                let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&key).unwrap();
+                let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&key).unwrap();
                 mac.update(&mask_input);
                 let tag = mac.finalize().into_bytes();
                 assert_eq!(hex::encode(&tag[..16]), round.mask_hex);
