@@ -232,14 +232,14 @@ The browser package in `dist/` (see [`web/README.md`](web/README.md)) runs the s
 page, for example in the offline wallet tools. It has two modes:
 
 - **Standard mode** works everywhere, also in a page opened as a file. Argon2 runs on one thread, so
-  a recovery takes about four to seven minutes, and an encryption twice that.
-- **Fast mode** runs the four Argon2 lanes in parallel, about as fast as the command-line tool. A
-  browser allows this only on a specially served page. `mhfe serve tool.html` serves one HTML file
-  from this computer (127.0.0.1) with the headers that enable it and opens it in the browser. It
-  sees none of your secrets: all the work happens in the page. Release archives include small
-  launchers that start it with a double-click. On a computer with Python 3.8 or later but without
-  the mhfe program, `python3 mhfe-fast-mode.py tool.html` from the browser package does the same.
-  Both serve a page only when its checksum file `mhfe-fast-mode.sha256` lies next to it and
+  a recovery takes about four to seven minutes, and an encryption about twice that.
+- **Fast mode** runs the four Argon2 lanes in parallel, about a quarter slower than the command-line
+  tool. A browser allows this only on a specially served page. `mhfe serve tool.html` serves one
+  HTML file from this computer (127.0.0.1) with the headers that enable it and opens it in the
+  browser. It sees none of your secrets: all the work happens in the page. Release archives include
+  small launchers that start it with a double-click. On a computer with Python 3.8 or later but
+  without the mhfe program, `python3 mhfe-fast-mode.py tool.html` from the browser package does the
+  same. Both serve a page only when its checksum file `mhfe-fast-mode.sha256` lies next to it and
   matches.
 
 A browser supports memory level 0 only. It never connects to anything either: the package loads no
