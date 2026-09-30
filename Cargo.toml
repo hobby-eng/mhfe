@@ -29,7 +29,7 @@ bitcoin_hashes = { version = "=0.14.101", default-features = false }
 blake2 = "=0.11.0"
 bs58 = { version = "=0.5.1", default-features = false, features = ["alloc", "check"] }
 hex = "=0.4.3"
-hmac = "=0.12.1"
+hmac = "=0.13.0"
 # secp256k1 arithmetic for BIP32 in the rehearsal check; audited by NCC Group.
 k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic"] }
 serde = { version = "=1.0.229", features = ["derive"] }
