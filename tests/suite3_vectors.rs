@@ -13,7 +13,7 @@ use std::fs;
 
 use blake2::digest::consts::U32;
 use blake2::Blake2b;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use mhfe::vectors::{self, NEGATIVE_INPUTS, PUBLIC_INPUTS};
 use mhfe::{Mhfe, WorkFactor, SUITE_ID};
 use serde_json::Value;
