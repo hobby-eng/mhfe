@@ -35,8 +35,9 @@ MAX_REQUEST_HEAD = 16 * 1024
 # Seconds a client has for its whole request head. A limit on each read alone would let a client
 # that sends one byte at a time keep its connection open for ever.
 REQUEST_DEADLINE = 10.0
-# Seconds for sending the answer to a client that does not read it.
-WRITE_TIMEOUT = 10.0
+# Seconds for sending the whole answer. Since Python 3.5 a socket timeout limits the total time
+# of sendall, not each piece it sends, so a client that reads slowly cannot stretch it.
+RESPONSE_DEADLINE = 10.0
 # Connections answered at the same time; any further one is closed at once. A browser opens only
 # a few, and the cap keeps a flood of connections from starting a thread each.
 MAX_CONNECTIONS = 16
@@ -147,7 +148,7 @@ def answer(connection, host, page, deadline_seconds):
             reply = respond(head, host, page)
         except (ValueError, UnicodeDecodeError):
             reply = error_response(400, "Bad Request")
-        connection.settimeout(WRITE_TIMEOUT)
+        connection.settimeout(RESPONSE_DEADLINE)
         connection.sendall(reply)
     except OSError:
         pass  # A failed or slow connection is dropped; the server goes on serving the page.

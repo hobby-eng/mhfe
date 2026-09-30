@@ -97,9 +97,9 @@ impl fmt::Display for MhfeError {
             Self::InvalidPasswordUtf8 => write!(f, "the password is not valid UTF-8 text"),
             Self::ControlCharacterInPassword => write!(
                 f,
-                "the password contains a control character or a line break; a password is \
-                 ordinary single-line text without invisible characters, so that every program \
-                 takes it as typed"
+                "the password contains a control character, such as a tab, NUL or line break, \
+                 or a line or paragraph separator (U+2028, U+2029); a password may not contain \
+                 them, so that every program takes it as typed"
             ),
             Self::UnassignedCharacter => write!(
                 f,

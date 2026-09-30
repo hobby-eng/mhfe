@@ -4,14 +4,15 @@ use super::ffi::{self, Argon2Inputs, WorkArea, ARGON2_VERSION_13};
 use super::{Argon2Cost, Argon2Engine, KEY_BYTES, LANES, SALT_BYTES};
 use crate::{MhfeError, WorkFactor};
 
-/// The highest memory level this build supports. The reference C code limits memory to
-/// `2^(pointer bits - 11)` KiB, which covers every level on 64-bit targets but only level 0
-/// (2 GiB) on 32-bit ones.
-pub const HIGHEST_MEMORY_LEVEL: u32 = if cfg!(target_pointer_width = "64") {
-    crate::MAX_MEMORY_LEVEL
-} else {
-    0
-};
+// A native 32-bit build cannot run even level 0: Rust refuses an allocation of 2 GiB or more
+// there (a layout may not exceed isize::MAX), and the reference C code would stop at 2 GiB anyway.
+// Such a build is refused here rather than failing at the first operation. The browser build is a
+// 32-bit WebAssembly one too, but it uses its own Emscripten allocator (see engine/browser.rs).
+#[cfg(not(target_pointer_width = "64"))]
+compile_error!("the native MHFE engine needs a 64-bit target: suite 3 needs at least 2 GiB");
+
+/// The highest memory level this build supports: every level, since native builds are 64-bit.
+pub const HIGHEST_MEMORY_LEVEL: u32 = crate::MAX_MEMORY_LEVEL;
 
 /// Free memory as the operating system reports it, or `None` where it gives no figure.
 pub fn available_memory_bytes() -> Option<u64> {

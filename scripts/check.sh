@@ -24,6 +24,8 @@ fi
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo build --locked --release
 cargo build --locked --release --features ssse3 --target-dir target/ssse3
+# Hidden terminal input in a pseudo-terminal: control characters refused, editing keys, Ctrl+C.
+python3 scripts/verify-hidden-input.py target/release/mhfe
 
 scripts/build-wasm.sh
 node scripts/verify-argon2-wasm.mjs

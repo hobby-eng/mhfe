@@ -12,7 +12,7 @@ use crate::feistel::RoundTrace;
 use crate::mhfe::{self, Recovery};
 use crate::packing::{self, State};
 use crate::suite::{DS_MASK, DS_SALT};
-use crate::{phrase, Mhfe, MhfeError, Password, PhraseLength, SUITE_ID};
+use crate::{phrase, Mhfe, MhfeError, Password, PhraseLength, WorkFactor, SUITE_ID};
 
 /// Identifies this file layout; a changed layout gets a new name.
 pub const SCHEMA: &str = "mhfe-suite-3-vector-v2";
@@ -125,8 +125,19 @@ pub fn generate<E: Argon2Engine>(
     mhfe: &mut Mhfe<E>,
     input: &PublicInput,
 ) -> Result<Vector, MhfeError> {
-    let (name, phrase_text, password_text) = (input.name, input.phrase, input.password);
+    ensure_public(
+        PUBLIC_INPUTS.contains(input),
+        input.pim,
+        input.memory_level,
+        mhfe.work_factor(),
+    )?;
+    record(mhfe, input)
+}
+
+/// Writes the transcript of one input; [`generate`] makes sure that it is a public one.
+fn record<E: Argon2Engine>(mhfe: &mut Mhfe<E>, input: &PublicInput) -> Result<Vector, MhfeError> {
     let work = mhfe.work_factor();
+    let (name, phrase_text, password_text) = (input.name, input.phrase, input.password);
     let cost = work.argon2_cost();
     let password = Password::new(password_text)?;
     let source = phrase::parse(phrase_text).map_err(MhfeError::InvalidPhrase)?;
@@ -219,19 +230,57 @@ fn pass(input: &State, rounds: &[RoundTrace], output: &State) -> Pass {
     }
 }
 
+/// Refuses to write a transcript for anything but a fixed public case at its own settings. The
+/// private fields already prevent it; this check keeps it so if the types ever change.
+fn ensure_public(
+    listed: bool,
+    pim: u32,
+    memory_level: u32,
+    work: WorkFactor,
+) -> Result<(), MhfeError> {
+    if listed && work.pim() == pim && work.memory_level() == memory_level {
+        Ok(())
+    } else {
+        Err(MhfeError::Internal(
+            "test vectors are made only from the fixed public inputs, at their own settings".into(),
+        ))
+    }
+}
+
 /// One public test case. The phrases are BIP39 test phrases and the passwords are public.
 ///
-/// The fields can be read anywhere, but `non_exhaustive` lets only this crate create a
-/// `PublicInput`, so the round traces of [`generate`] exist only for the fixed public inputs in
-/// [`PUBLIC_INPUTS`]. The specification forbids exporting intermediate states, salts, keys or
-/// masks of anything else.
-#[non_exhaustive]
+/// The fields are private and can only be read, so no code outside this crate can make or change
+/// a `PublicInput`, and [`generate`] also refuses anything that is not in [`PUBLIC_INPUTS`]: the
+/// specification forbids exporting intermediate states, salts, keys or masks of anything else.
+#[derive(PartialEq, Eq)]
 pub struct PublicInput {
-    pub name: &'static str,
-    pub phrase: &'static str,
-    pub password: &'static str,
-    pub pim: u32,
-    pub memory_level: u32,
+    name: &'static str,
+    phrase: &'static str,
+    password: &'static str,
+    pim: u32,
+    memory_level: u32,
+}
+
+impl PublicInput {
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+
+    pub const fn phrase(&self) -> &'static str {
+        self.phrase
+    }
+
+    pub const fn password(&self) -> &'static str {
+        self.password
+    }
+
+    pub const fn pim(&self) -> u32 {
+        self.pim
+    }
+
+    pub const fn memory_level(&self) -> u32 {
+        self.memory_level
+    }
 }
 
 const ZERO_12: &str =
@@ -260,7 +309,7 @@ const fn input(
 
 /// The suite 3 vector set: every phrase length with zero and non-zero entropy, a non-zero PIM, a
 /// non-zero memory level and both together, a password that NFKD changes, a password with
-/// spaces and an embedded NUL, and a phrase whose state passes two short checks.
+/// leading, repeated and trailing spaces, and a phrase whose state passes two short checks.
 pub const PUBLIC_INPUTS: [PublicInput; 17] = [
     input("zero-12", ZERO_12, TEST_PASSWORD, 0, 0),
     input(
@@ -361,14 +410,46 @@ pub const PUBLIC_INPUTS: [PublicInput; 17] = [
 
 /// A recovery that must not give the original: a wrong password or setting, or a wrongly chosen
 /// length. `container_of` names the positive vector whose container is used.
+///
+/// Like [`PublicInput`], it can only be read outside this crate, and [`negative_case`] refuses
+/// anything that is not in [`NEGATIVE_INPUTS`].
+#[derive(PartialEq, Eq)]
 pub struct NegativeInput {
-    pub name: &'static str,
-    pub container_of: &'static str,
-    pub password: &'static str,
-    pub pim: u32,
-    pub memory_level: u32,
+    name: &'static str,
+    container_of: &'static str,
+    password: &'static str,
+    pim: u32,
+    memory_level: u32,
     /// 0 for automatic detection, otherwise the chosen length.
-    pub words: usize,
+    words: usize,
+}
+
+impl NegativeInput {
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// The name of the positive vector whose container this case recovers.
+    pub const fn container_of(&self) -> &'static str {
+        self.container_of
+    }
+
+    pub const fn password(&self) -> &'static str {
+        self.password
+    }
+
+    pub const fn pim(&self) -> u32 {
+        self.pim
+    }
+
+    pub const fn memory_level(&self) -> u32 {
+        self.memory_level
+    }
+
+    /// 0 for automatic detection, otherwise the chosen length.
+    pub const fn words(&self) -> usize {
+        self.words
+    }
 }
 
 const fn negative(
@@ -447,6 +528,12 @@ pub fn negative_case<E: Argon2Engine>(
     container: &str,
 ) -> Result<NegativeCase, MhfeError> {
     let work = mhfe.work_factor();
+    ensure_public(
+        NEGATIVE_INPUTS.contains(input),
+        input.pim,
+        input.memory_level,
+        work,
+    )?;
     let password = Password::new(input.password)?;
     let length = match input.words {
         0 => PhraseLength::Detect,
@@ -488,7 +575,6 @@ pub fn negative_case<E: Argon2Engine>(
 mod tests {
     use super::*;
     use crate::engine::{Argon2Cost, NativeEngine};
-    use crate::WorkFactor;
     use blake2::digest::consts::U32;
     use blake2::{Blake2b, Digest};
     use hmac::{Hmac, Mac};
@@ -532,7 +618,9 @@ mod tests {
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
         let phrase = "legal winner thank year wave sausage worth useful legal winner thank yellow";
         let reduced = input("reduced", phrase, "Caf\u{E9} \u{1F510}", 0, 0);
-        let vector = generate(&mut mhfe, &reduced).unwrap();
+        // A private input at reduced cost, which the public entry point refuses.
+        assert!(generate(&mut mhfe, &reduced).is_err());
+        let vector = record(&mut mhfe, &reduced).unwrap();
 
         assert_eq!(
             vector.inputs.password_nfkd_utf8_hex,

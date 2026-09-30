@@ -50,17 +50,17 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
 
     let mut written = 0;
     let mut containers = HashMap::new();
-    for input in PUBLIC_INPUTS.iter().filter(|input| selected(input.name)) {
-        let work = WorkFactor::new(input.pim, input.memory_level)?;
+    for input in PUBLIC_INPUTS.iter().filter(|input| selected(input.name())) {
+        let work = WorkFactor::new(input.pim(), input.memory_level())?;
         let mut mhfe = settings::reserve_memory(work)?;
         let started = Instant::now();
         let vector = vectors::generate(&mut mhfe, input)?;
-        containers.insert(input.name, vector.container.clone());
-        write_json(&options.output, &format!("{}.json", input.name), &vector)?;
+        containers.insert(input.name(), vector.container.clone());
+        write_json(&options.output, &format!("{}.json", input.name()), &vector)?;
         written += 1;
         style::ok(format!(
             "{} {}",
-            input.name,
+            input.name(),
             paint(MUTED, duration(started.elapsed().as_secs()))
         ));
     }
@@ -70,17 +70,17 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
     if selected(NEGATIVE_CASES_STEM) {
         let mut negative_cases = Vec::new();
         for input in &NEGATIVE_INPUTS {
-            let container = match containers.get(input.container_of) {
+            let container = match containers.get(input.container_of()) {
                 Some(container) => container.clone(),
-                None => recorded_container(&options.output, input.container_of)?,
+                None => recorded_container(&options.output, input.container_of())?,
             };
-            let work = WorkFactor::new(input.pim, input.memory_level)?;
+            let work = WorkFactor::new(input.pim(), input.memory_level())?;
             let mut mhfe = settings::reserve_memory(work)?;
             let started = Instant::now();
             negative_cases.push(vectors::negative_case(&mut mhfe, input, &container)?);
             style::ok(format!(
                 "{} {}",
-                input.name,
+                input.name(),
                 paint(MUTED, duration(started.elapsed().as_secs()))
             ));
         }
@@ -119,10 +119,22 @@ fn recorded_container(folder: &Path, name: &str) -> Result<String, Failure> {
 
 /// Lists every file of the full set that is present in the folder, read back from disk, so that
 /// a run with --only, or several runs side by side, still leave a complete SHA256SUMS.
+///
+/// Runs side by side take turns: each holds a lock on SHA256SUMS while it reads the folder and
+/// writes the list, so a later list always includes what an earlier one saw. The file is rewritten
+/// in place rather than replaced, because a replaced file would carry a different lock. A crash
+/// in the middle leaves a short list, which the vector tests report; the next run writes it again.
 fn write_checksums(folder: &Path) -> Result<(), Failure> {
+    let mut list = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(folder.join("SHA256SUMS"))?;
+    list.lock()?;
     let names = PUBLIC_INPUTS
         .iter()
-        .map(|input| input.name)
+        .map(|input| input.name())
         .chain([NEGATIVE_CASES_STEM])
         .map(|stem| format!("{stem}.json"));
     let mut sums = String::new();
@@ -133,7 +145,11 @@ fn write_checksums(folder: &Path) -> Result<(), Failure> {
             Err(error) => return Err(error.into()),
         }
     }
-    write_atomically(&folder.join("SHA256SUMS"), sums.as_bytes())
+    list.set_len(0)?;
+    list.write_all(sums.as_bytes())?;
+    list.sync_all()?;
+    // Closing the file releases the lock.
+    Ok(())
 }
 
 /// Writes pretty JSON with a final newline.
@@ -185,14 +201,14 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     );
     let work = options.settings.work_factor()?;
     let input = &PUBLIC_INPUTS[0];
-    let password = Password::new(input.password)?;
+    let password = Password::new(input.password())?;
 
     let started = Instant::now();
     let mut mhfe = settings::reserve_memory(work)?;
     let work_area_seconds = started.elapsed().as_secs_f64();
 
     let started = Instant::now();
-    let container = mhfe.encrypt(input.phrase, &password, &mut |_, _| Ok(()))?;
+    let container = mhfe.encrypt(input.phrase(), &password, &mut |_, _| Ok(()))?;
     let encryption_seconds = started.elapsed().as_secs_f64();
 
     let started = Instant::now();

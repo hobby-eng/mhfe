@@ -11,8 +11,9 @@
 MHFE turns the recovery phrase of a Bitcoin or other BIP39 wallet (12, 15, 18, 21 or 24 English
 words) into a password-protected **container of 24 words**. The container is itself an ordinary,
 valid recovery phrase, so it fits the same metal plate or capsule. With the password it turns back
-into your exact original phrase; without it, it reveals nothing about it. Your wallet, its addresses
-and any BIP39 passphrase stay as they are.
+into your exact original phrase; without it, getting the phrase back means guessing the password,
+which MHFE makes deliberately slow. Your wallet, its addresses and any BIP39 passphrase stay as they
+are.
 
 Each recovery deliberately takes about one to two minutes and 2 GiB of memory. You wait once;
 someone guessing your password pays that for every guess. An encryption takes twice as long, because
@@ -100,12 +101,12 @@ container is printed only after the check has passed.
 The example uses the public test phrase `abandon abandon ... about` with the password
 `public test password`; never use either for real funds.
 
-Write the 24 words down. Keep the suite name too, and the PIM and memory level if you changed them:
-recovery needs exactly the same values, and with anything else the container turns into a
-different phrase that looks just as valid. They are not secret, and where you keep them is your
-choice. Next to the container they are hardest to lose. Kept apart, for example remembered or noted
-elsewhere, they do not show that the words are an MHFE container, so the container still works as a
-decoy wallet.
+Write the 24 words down. With the default settings nothing else needs to be kept: the 24 words
+and the password are enough, because the length of the original is found again automatically.
+About one phrase in four billion is the exception; MHFE then says so and asks you to remember the
+word count. If you changed the PIM or the memory level, remember the values you chose: recovery
+needs exactly these values, and with others the container turns into a different phrase that looks
+just as valid.
 Keep a copy of this program's release offline as well, so that a compatible version is at hand years
 from now.
 
@@ -207,10 +208,9 @@ included, slower or more memory-hungry:
 An encryption takes twice these times. The PIM (`--pim`, 0 to 1023) multiplies the time: PIM 1
 doubles it, and at PIM 1023 a recovery takes roughly 17 to 34 hours. The computer that recovers the
 container must have the memory of the chosen level; MHFE checks this before it asks for anything.
-The command-line tool supports every level on a 64-bit system; a browser, and the tool on a 32-bit
-system, support memory level 0 only. A higher setting adds a fixed factor, while
-each extra random password word multiplies an attacker's work by 7,776, so a better password is
-worth more.
+The command-line tool, which needs a 64-bit system, supports every level; a browser supports memory
+level 0 only. A higher setting adds a fixed factor, while each extra random password word
+multiplies an attacker's work by 7,776, so a better password is worth more.
 
 ## In the browser
 

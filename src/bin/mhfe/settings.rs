@@ -151,23 +151,18 @@ pub fn highest_available_level() -> Option<u32> {
         .map(WorkFactor::memory_level)
 }
 
-/// The values recovery needs exactly. They are not secret; the user chooses whether to keep them
-/// next to the container, where they are hardest to lose, or apart from it, where they do not
-/// show that it is an MHFE container.
-pub fn record_note(work: WorkFactor, words: usize) -> String {
-    // The word count lets recovery select the length instead of detecting it, which a 24-word
-    // original, or one of the rare phrases that pass two checks, needs.
-    let mut values = vec![
-        format!("suite {SUITE_ID}"),
-        format!("{words}-word original"),
-    ];
+/// The settings that differ from the defaults, such as "PIM 1, memory level 1", or `None` when
+/// both are 0. Only these need remembering: the suite is fixed and the original's length is
+/// detected, so with the defaults the 24 words and the password are all that recovery needs.
+pub fn changed_settings(work: WorkFactor) -> Option<String> {
+    let mut values = Vec::new();
     if work.pim() != 0 {
         values.push(format!("PIM {}", work.pim()));
     }
     if work.memory_level() != 0 {
         values.push(format!("memory level {}", work.memory_level()));
     }
-    values.join(", ")
+    (!values.is_empty()).then(|| values.join(", "))
 }
 
 /// "1 to 2 minutes", "17 to 34 hours", "25 to 51 days": both ends in the unit that suits the
