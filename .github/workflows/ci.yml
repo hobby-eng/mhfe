@@ -43,6 +43,35 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           scripts/check.sh
 
+  # The fast tests on Windows and macOS, and the hidden password input in each system's own
+  # pseudo-terminal, with public test data only. The release builds for these systems come from
+  # the canonical container (Windows) and release.yml (macOS); this runs their code natively.
+  portable:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Run the fast tests
+        run: cargo test --locked
+      - name: Build the command-line tool
+        run: cargo build --locked
+      - name: Check hidden input in a Unix pseudo-terminal
+        if: runner.os == 'macOS'
+        timeout-minutes: 10
+        run: python3 scripts/verify-hidden-input.py target/debug/mhfe
+      - name: Check hidden input in a Windows pseudo-console
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        run: |
+          python -m pip install pywinpty==3.0.5
+          python scripts/verify-hidden-input-windows.py target/debug/mhfe.exe
+
   canonical-build:
     runs-on: ubuntu-24.04
     timeout-minutes: 60

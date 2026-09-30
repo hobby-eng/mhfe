@@ -71,6 +71,7 @@ def attach_terminal():
 class Session:
     def __init__(self):
         self.master, self.slave = os.openpty()
+        os.set_blocking(self.master, False)
         self.original = termios.tcgetattr(self.slave)
         environment = dict(os.environ, NO_COLOR="1")
         self.process = subprocess.Popen(
@@ -95,9 +96,29 @@ class Session:
                     return needle
         raise AssertionError(f"none of {needles} in {self.output[start:]!r}")
 
-    def type(self, data):
-        # Pasted text arrives in one piece; the line only ends at the carriage return.
-        os.write(self.master, data)
+    def type(self, data, limit=10):
+        """Writes `data` as pasted text; the line only ends at the carriage return.
+
+        A pseudo-terminal holds little input (about 1 KiB on macOS), so a long paste is written
+        in parts as the tool reads them. The tool's output is read meanwhile, so that neither
+        side waits for the other, and a tool that stops reading fails the check instead of
+        blocking it for ever.
+        """
+        end = time.monotonic() + limit
+        while data:
+            if time.monotonic() > end:
+                raise AssertionError(f"the tool stopped reading; {len(data)} bytes left to type")
+            readable, writable, _ = select.select([self.master], [self.master], [], 0.1)
+            if readable:
+                try:
+                    self.output += os.read(self.master, 4096)
+                except OSError:
+                    pass
+            if writable:
+                try:
+                    data = data[os.write(self.master, data):]
+                except BlockingIOError:
+                    pass
 
     def close(self):
         """Ends the tool as a person would, with Ctrl+C, so that it can restore the terminal."""
@@ -108,7 +129,7 @@ class Session:
             except subprocess.TimeoutExpired:
                 # SIGKILL leaves the terminal as it is; the settings check below then fails.
                 self.process.send_signal(signal.SIGKILL)
-        code = self.process.wait()
+        code = self.process.wait(timeout=10)
         settings = termios.tcgetattr(self.slave)
         os.close(self.master)
         os.close(self.slave)
@@ -135,6 +156,8 @@ def check_password(label, password, expected):
 
 
 def main():
+    # Each result is shown at once, so that a CI log shows how far the checks came.
+    sys.stdout.reconfigure(line_buffering=True)
     for label, key in {**TERMINAL_KEYS, **OTHER_CONTROLS}.items():
         check_password(label, SECRET + key + b"x", REFUSED)
         print(f"refused: a password with {label}")
