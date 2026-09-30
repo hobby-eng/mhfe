@@ -124,16 +124,33 @@ class Session:
         """Ends the tool as a person would, with Ctrl+C, so that it can restore the terminal."""
         if self.process.poll() is None:
             self.type(CTRL_C)
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
+            if not self.drain_until_exit(5):
                 # SIGKILL leaves the terminal as it is; the settings check below then fails.
                 self.process.send_signal(signal.SIGKILL)
-        code = self.process.wait(timeout=10)
+        if not self.drain_until_exit(10):
+            raise AssertionError("the tool did not end")
+        code = self.process.returncode
         settings = termios.tcgetattr(self.slave)
         os.close(self.master)
         os.close(self.slave)
         return code, settings
+
+    def drain_until_exit(self, limit):
+        """Waits up to `limit` seconds for the tool to end, reading its output meanwhile.
+
+        On macOS a process that ends waits until the terminal has delivered its last output, which
+        happens only when this side reads it; without reading, the tool never finishes exiting.
+        """
+        end = time.monotonic() + limit
+        while self.process.poll() is None:
+            if time.monotonic() > end:
+                return False
+            if select.select([self.master], [], [], 0.1)[0]:
+                try:
+                    self.output += os.read(self.master, 4096)
+                except OSError:
+                    time.sleep(0.05)
+        return True
 
     def at_password_prompt(self):
         self.wait_for(b"words: ")
