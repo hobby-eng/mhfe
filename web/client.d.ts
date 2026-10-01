@@ -1,7 +1,7 @@
 /** Four Argon2 lanes in parallel; needs a cross-origin isolated page, such as `mhfe serve` gives. */
-export const FAST_MODE: 'fast';
+export const FAST_MODE: "fast";
 /** One lane after another; works everywhere, including a page opened as a file. */
-export const STANDARD_MODE: 'standard';
+export const STANDARD_MODE: "standard";
 
 export type MhfeMode = typeof FAST_MODE | typeof STANDARD_MODE;
 export type WordCount = 12 | 15 | 18 | 21 | 24;
@@ -47,7 +47,7 @@ export interface MhfeCandidate {
 
 export interface MhfeRecovery {
   /** "ambiguous" when several lengths passed their check: show every candidate. */
-  kind: 'phrase' | 'ambiguous';
+  kind: "phrase" | "ambiguous";
   candidates: MhfeCandidate[];
 }
 
@@ -93,9 +93,15 @@ export class MhfeClient {
       onUnverified?: (result: { container: string }) => void;
     },
   ): Promise<{ container: string }>;
-  decrypt(options: MhfeSettings & { container: string; words?: 0 | WordCount }): Promise<MhfeRecovery>;
+  decrypt(
+    options: MhfeSettings & { container: string; words?: 0 | WordCount },
+  ): Promise<MhfeRecovery>;
   check(
-    options: MhfeSettings & { container: string; reference: MhfeReference; passphrase?: string | Uint8Array },
+    options: MhfeSettings & {
+      container: string;
+      reference: MhfeReference;
+      passphrase?: string | Uint8Array;
+    },
   ): Promise<{ matches: boolean }>;
   /**
    * The phrase with every word written out, for showing back to the user.
@@ -103,7 +109,9 @@ export class MhfeClient {
    * `otherLengths` is almost always empty. When it is not, automatic detection would not give this
    * phrase on its own after recovery: tell the user to note the word count and choose it then.
    */
-  readPhrase(phrase: string): Promise<{ phrase: string; words: WordCount; otherLengths: WordCount[] }>;
+  readPhrase(
+    phrase: string,
+  ): Promise<{ phrase: string; words: WordCount; otherLengths: WordCount[] }>;
   /** The container with every word written out, for showing back to the user. */
   readContainer(container: string): Promise<{ container: string }>;
   /** Stops the running operation at once; its promise rejects with MhfeCancelledError. */

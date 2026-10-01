@@ -28,6 +28,12 @@ jobs:
           if foreign:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
+      # The workspace style for JavaScript, TypeScript, Markdown, JSON and YAML: double quotes,
+      # 100 columns. Prettier comes from package-lock.json, checked against its integrity hash.
+      - name: Check formatting
+        run: |
+          npm ci --ignore-scripts
+          npm run format:check
       - name: Install Emscripten 6.0.10
         run: |
           git clone --depth 1 --branch 6.0.10 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"

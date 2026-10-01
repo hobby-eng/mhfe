@@ -5,20 +5,20 @@
 // Open it as a file for the standard mode, or with `mhfe serve target/browser-check/index.html`
 // for the fast mode. By default it runs one full-size encryption (2 GiB); add "#all" to the
 // address to also decrypt and check. Public test data only.
-import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-const root = new URL('../', import.meta.url);
+const root = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root));
 /** JSON that is safe inside a script element: "</script" cannot appear in it. */
-const inline = (value) => JSON.stringify(value).replaceAll('<', '\\u003c');
+const inline = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
 
-const clientModule = read('dist/client.js').toString();
+const clientModule = read("dist/client.js").toString();
 const checks = `
-const WORKER_SOURCE = ${inline(read('dist/mhfe-worker.js').toString())};
-const ARGON2_THREADED = ${inline(read('dist/argon2-mt.js').toString())};
-const ARGON2_SINGLE_THREADED = ${inline(read('dist/argon2-st.js').toString())};
-const CORE_WASM_BASE64 = ${inline(read('dist/mhfe_core_bg.wasm').toString('base64'))};
+const WORKER_SOURCE = ${inline(read("dist/mhfe-worker.js").toString())};
+const ARGON2_THREADED = ${inline(read("dist/argon2-mt.js").toString())};
+const ARGON2_SINGLE_THREADED = ${inline(read("dist/argon2-st.js").toString())};
+const CORE_WASM_BASE64 = ${inline(read("dist/mhfe_core_bg.wasm").toString("base64"))};
 
 const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const PASSWORD = 'public test password';
@@ -89,8 +89,8 @@ main()
     document.title = failures.length === 0 ? 'PASS' : 'FAIL';
   });
 `;
-const script = clientModule + '\n' + checks;
-const scriptHash = createHash('sha256').update(script, 'utf8').digest('base64');
+const script = clientModule + "\n" + checks;
+const scriptHash = createHash("sha256").update(script, "utf8").digest("base64");
 const policy = [
   "default-src 'none'",
   `script-src 'sha256-${scriptHash}' 'wasm-unsafe-eval'`,
@@ -98,12 +98,12 @@ const policy = [
   "img-src 'none'",
   "font-src 'none'",
   "connect-src 'none'",
-  'worker-src blob:',
+  "worker-src blob:",
   "object-src 'none'",
   "frame-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
-].join('; ');
+].join("; ");
 
 const page = `<!doctype html>
 <html lang="en">
@@ -118,9 +118,14 @@ const page = `<!doctype html>
   </body>
 </html>
 `;
-mkdirSync(new URL('target/browser-check/', root), { recursive: true });
-writeFileSync(new URL('target/browser-check/index.html', root), page);
+mkdirSync(new URL("target/browser-check/", root), { recursive: true });
+writeFileSync(new URL("target/browser-check/index.html", root), page);
 // The fast-mode launchers serve only the page named in this file, with this exact digest.
-const digest = createHash('sha256').update(page).digest('hex');
-writeFileSync(new URL('target/browser-check/mhfe-fast-mode.sha256', root), `${digest}  index.html\n`);
-console.log(`Wrote target/browser-check/index.html (${page.length} bytes) and mhfe-fast-mode.sha256`);
+const digest = createHash("sha256").update(page).digest("hex");
+writeFileSync(
+  new URL("target/browser-check/mhfe-fast-mode.sha256", root),
+  `${digest}  index.html\n`,
+);
+console.log(
+  `Wrote target/browser-check/index.html (${page.length} bytes) and mhfe-fast-mode.sha256`,
+);

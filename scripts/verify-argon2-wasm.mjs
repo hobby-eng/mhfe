@@ -1,18 +1,18 @@
 // Checks both Emscripten builds of the reference Argon2 code in Node.js, where the
 // threaded build runs with real threads. Build them first with build-argon2-wasm.sh.
-import { createRequire } from 'node:module';
+import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const builds = {
-  threaded: require('../dist/argon2-mt.js'),
-  'single-threaded': require('../dist/argon2-st.js'),
+  threaded: require("../dist/argon2-mt.js"),
+  "single-threaded": require("../dist/argon2-st.js"),
 };
 
 const KEY_BYTES = 32;
 const LANES = 4;
 const encoder = new TextEncoder();
-const password = encoder.encode('public test password');
-const salt = encoder.encode('0123456789abcdef');
+const password = encoder.encode("public test password");
+const salt = encoder.encode("0123456789abcdef");
 
 // Argon2id tags for the public inputs above, 4 lanes and 32 bytes, computed with
 // OpenSSL through Python cryptography 46.0.5 (an independent implementation).
@@ -20,22 +20,22 @@ const expectedTags = [
   {
     memoryKib: 1024,
     passes: 1,
-    tag: 'e0e8eba33f1404a83c911a324d9b49db83dae755f2bdfb4b63043ca5b7125df2',
+    tag: "e0e8eba33f1404a83c911a324d9b49db83dae755f2bdfb4b63043ca5b7125df2",
   },
   {
     memoryKib: 65536,
     passes: 3,
-    tag: 'a3931f5728b235c605c02522f3302a8e90d0509a0c3db63ab4d2fcf75f345b5b',
+    tag: "a3931f5728b235c605c02522f3302a8e90d0509a0c3db63ab4d2fcf75f345b5b",
   },
   {
     memoryKib: 262144,
     passes: 2,
-    tag: '4a4a094750f2c17fc6507d38825ec9eac65e10fb2de9e9bf5e801d2af53f1efe',
+    tag: "4a4a094750f2c17fc6507d38825ec9eac65e10fb2de9e9bf5e801d2af53f1efe",
   },
 ];
 
 function hex(bytes) {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 // Minimal caller of argon2id_hash_raw: copy the inputs into the C heap, run, read the tag.
