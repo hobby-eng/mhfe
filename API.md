@@ -9,8 +9,8 @@ The command-line tool is described in the [README](README.md).
 use mhfe::{Mhfe, Password, PhraseLength, Recovery, Reference, WorkFactor};
 
 let work = WorkFactor::new(0, 0)?;            // PIM 0..=1023, memory level 0..=21
-let mut mhfe = Mhfe::new(work)?;              // checks free memory, reserves the Argon2 work area
 let password = Password::new("...")?;        // NFKD with Unicode 17.0.0, 1 to 1024 bytes
+let mut mhfe = Mhfe::new(work)?;              // checks free memory, reserves the Argon2 work area
 
 let container = mhfe.encrypt(original, &password, &mut |round, rounds| {
     println!("Round {round}/{rounds}");       // return Err(MhfeError::Cancelled) to stop
