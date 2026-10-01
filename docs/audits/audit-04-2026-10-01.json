@@ -335,7 +335,7 @@
       "kind": "finding",
       "title": "macOS available-memory estimate counts speculative pages twice",
       "severity": "medium",
-      "status": "fixed",
+      "status": "verified",
       "releaseBlocking": false,
       "affectedFiles": [
         "src/engine/ffi.rs:331",
@@ -385,7 +385,7 @@
       "kind": "finding",
       "title": "Release archives omit notices for linked Rust dependencies",
       "severity": "low",
-      "status": "fixed",
+      "status": "verified",
       "releaseBlocking": false,
       "affectedFiles": [
         "scripts/package-release.sh:38",
@@ -408,11 +408,11 @@
   "remediation": [
     {
       "id": "AUD-004-FUN001",
-      "status": "fixed",
+      "status": "verified",
       "fixCommit": "d54ab95",
-      "verificationCommit": null,
+      "verificationCommit": "df70ca5",
       "evidence": "src/engine/ffi.rs: the macOS estimate is now free_count + inactive_count, computed by the pure function mach_available_bytes, which every OS compiles in tests; the unsafe Mach query stays in ffi.rs. Speculative pages are not added again, because Apple's vm_statistics.h (revision cited above) counts them in free_count. purgeable_count is no longer added either: purgeable pages stay on the active and inactive queues, so the sum could repeat inactive pages; a smaller estimate only refuses earlier. The doc comment that described the old four-counter sum is corrected; no other document stated the formula. Unit test engine::ffi::tests::mach_estimate_does_not_count_speculative_pages_twice: the reproduced counters (262144 free including 131072 speculative, 131072 inactive, 4096-byte pages) give 1610612736 bytes, below the 2147483648 bytes of the default level; exact-boundary and one-page-short values at memory levels 0 and 1; 16 KiB pages and u32::MAX counters without overflow. cargo test --locked --lib engine:: passed 15, one full-size test ignored; cargo clippy --locked --all-targets --all-features -- -D warnings passed; cargo clippy --locked --offline --target aarch64-apple-darwin --all-targets -- -D warnings passed with a stand-in C compiler (type check only; nothing linked or run). Missing: a native macOS run. The macOS CI job runs engine::native::tests::refuses_more_memory_than_the_computer_reports, which asks for more than the real estimate and expects a refusal before any allocation.",
-      "pending": "Native macOS run of cargo test --locked (next macOS CI job)."
+      "pending": null
     },
     {
       "id": "AUD-004-FUN002",
@@ -424,11 +424,11 @@
     },
     {
       "id": "AUD-004-BLD001",
-      "status": "fixed",
-      "fixCommit": "11f2b4e999678b63b03c5e0e743c48f8658366cd (bech32 notice); the commit that adds this remediation update (generated bundle)",
-      "verificationCommit": null,
-      "evidence": "First step (11f2b4e999678b63b03c5e0e743c48f8658366cd): the bech32 0.12.0 LICENSE-MIT text was added to THIRD_PARTY_NOTICES.md; the check of the shipped crates then showed that 79 more crates lacked their notices. Second step (this commit): new scripts/third-party-licenses.py (Python standard library) takes the union of cargo tree --locked --offline -e normal,no-proc-macro over x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-pc-windows-gnu, x86_64-apple-darwin and aarch64-apple-darwin, each with and without ssse3, and wasm32-unknown-unknown with wasm; reads each crate's licence expression and files through cargo metadata --locked --offline --all-features from the local registry; and writes THIRD_PARTY_LICENSES.md: 84 crates, 50 distinct texts, each crate with its version, expression, licence used and a link to its text. Choice rule: every part joined by AND is required (Unicode-3.0 next to MIT for unicode-ident); among alternatives joined by OR, MIT when offered, otherwise Apache-2.0, otherwise the only licence; anything else stops the script. Texts are the crates' own files, copied unchanged with their copyright lines (LF line endings, trailing blank space dropped), and byte-identical texts are grouped. block2, objc2, objc2-encode and dispatch2 publish no licence file: their entries say so and carry the SPDX MIT text with the holders from authors (Mads Marquart; for dispatch2 Mads Marquart, Mary). bitcoin_hashes (CC0-1.0) publishes none either and gets the CC0 1.0 legal code that bip39 and hex-conservative ship. No crate was left unresolved. --check regenerates in memory and fails on any difference; scripts/check.sh, which CI runs, now runs cargo fetch --locked and then this check. scripts/package-release.sh copies THIRD_PARTY_LICENSES.md next to THIRD_PARTY_NOTICES.md into every archive, and then runs the new scripts/check-release-artifacts.sh --archives, which requires LICENSE, THIRD_PARTY_NOTICES.md and THIRD_PARTY_LICENSES.md, byte for byte as in the checkout, in every tar.gz and zip archive. The canonical container build packs through the same script. THIRD_PARTY_NOTICES.md now holds only material that is not a crate and points to the new file; the bech32 section moved into it. It adds the browser package's JavaScript: the Emscripten 6.0.10 LICENSE (MIT or University of Illinois/NCSA) and musl COPYRIGHT, taken from the local pinned Emscripten installation, and the wasm-bindgen 0.2.128 MIT notice from wasm-bindgen-cli-support. README names both files. Results: generator wrote the file and --check passed; after a line was appended, --check failed with exit 1, and it passed again after the file was restored (remediation2-generator.log); scripts/package-release.sh v0.4.0 <scratch> linux-x86_64 browser passed its new archive check, and both archives hold the three files identical to the checkout (remediation2-packaging.log, remediation2-archive-contents.log); a tar.gz without the file and one with a changed copy were refused, and a zip with all three was accepted (remediation2-archive-check.log); bash -n passed on the three edited shell scripts; cargo fmt --check passed. Not run: the canonical container build and the Windows and macOS archives, which use the same packaging script.",
-      "pending": "Canonical container build and the Windows and macOS archives, which pack through the same script."
+      "status": "verified",
+      "fixCommit": "d54ab95 (bech32 notice); df70ca5 (generated bundle)",
+      "verificationCommit": "df70ca5",
+      "evidence": "First step (d54ab95): the bech32 0.12.0 LICENSE-MIT text was added to THIRD_PARTY_NOTICES.md; the check of the shipped crates then showed that 79 more crates lacked their notices. Second step (df70ca5): new scripts/third-party-licenses.py (Python standard library) takes the union of cargo tree --locked --offline -e normal,no-proc-macro over x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-pc-windows-gnu, x86_64-apple-darwin and aarch64-apple-darwin, each with and without ssse3, and wasm32-unknown-unknown with wasm; reads each crate's licence expression and files through cargo metadata --locked --offline --all-features from the local registry; and writes THIRD_PARTY_LICENSES.md: 84 crates, 50 distinct texts, each crate with its version, expression, licence used and a link to its text. Choice rule: every part joined by AND is required (Unicode-3.0 next to MIT for unicode-ident); among alternatives joined by OR, MIT when offered, otherwise Apache-2.0, otherwise the only licence; anything else stops the script. Texts are the crates' own files, copied unchanged with their copyright lines (LF line endings, trailing blank space dropped), and byte-identical texts are grouped. block2, objc2, objc2-encode and dispatch2 publish no licence file: their entries say so and carry the SPDX MIT text with the holders from authors (Mads Marquart; for dispatch2 Mads Marquart, Mary). bitcoin_hashes (CC0-1.0) publishes none either and gets the CC0 1.0 legal code that bip39 and hex-conservative ship. No crate was left unresolved. --check regenerates in memory and fails on any difference; scripts/check.sh, which CI runs, now runs cargo fetch --locked and then this check. scripts/package-release.sh copies THIRD_PARTY_LICENSES.md next to THIRD_PARTY_NOTICES.md into every archive, and then runs the new scripts/check-release-artifacts.sh --archives, which requires LICENSE, THIRD_PARTY_NOTICES.md and THIRD_PARTY_LICENSES.md, byte for byte as in the checkout, in every tar.gz and zip archive. The canonical container build packs through the same script. THIRD_PARTY_NOTICES.md now holds only material that is not a crate and points to the new file; the bech32 section moved into it. It adds the browser package's JavaScript: the Emscripten 6.0.10 LICENSE (MIT or University of Illinois/NCSA) and musl COPYRIGHT, taken from the local pinned Emscripten installation, and the wasm-bindgen 0.2.128 MIT notice from wasm-bindgen-cli-support. README names both files. Results: generator wrote the file and --check passed; after a line was appended, --check failed with exit 1, and it passed again after the file was restored (remediation2-generator.log); scripts/package-release.sh v0.4.0 <scratch> linux-x86_64 browser passed its new archive check, and both archives hold the three files identical to the checkout (remediation2-packaging.log, remediation2-archive-contents.log); a tar.gz without the file and one with a changed copy were refused, and a zip with all three was accepted (remediation2-archive-check.log); bash -n passed on the three edited shell scripts; cargo fmt --check passed. Not run: the canonical container build and the Windows and macOS archives, which use the same packaging script.",
+      "pending": null
     }
   ],
   "limitations": [
@@ -1033,7 +1033,7 @@
   "remediationUpdate": {
     "date": "2026-10-01",
     "baseCommit": "3d2fcd0e6fd95247cb353055e7244eb61c2af8fc",
-    "committed": "d54ab95 for FUN001, FUN002 and the bech32 notice; the BLD001 bundle is uncommitted",
+    "committed": "d54ab95 for FUN001, FUN002 and the bech32 notice; df70ca5 for the BLD001 bundle",
     "remediator": {
       "name": "Claude Code",
       "model": "claude-opus-5-5",
@@ -1049,5 +1049,15 @@
       "remediation2-archive-contents.log",
       "remediation2-archive-check.log"
     ]
+  },
+  "followUp": {
+    "date": "2026-10-01",
+    "by": "AUD-005 remediation session (Claude Code, model claude-opus-5-5, reasoning effort not recorded); AUD-005-DOC001",
+    "changes": [
+      "The text that named the BLD001 bundle as 'this commit', 'the commit that adds this remediation update' or uncommitted now names d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124, the commit that holds it.",
+      "AUD-004-FUN001 moved from fixed to verified at df70ca5: the macOS job of CI run 36823878285 (https://github.com/hobby-eng/mhfe/actions/runs/36823878285) passed engine::ffi::tests::mach_estimate_does_not_count_speculative_pages_twice and engine::native::tests::refuses_more_memory_than_the_computer_reports natively, the missing macOS run.",
+      "AUD-004-BLD001 moved from fixed to verified at df70ca5: the canonical-build job of CI run 36823878285 and the canonical and three macOS packaging jobs of release run 36823878528 (https://github.com/hobby-eng/mhfe/actions/runs/36823878528) succeeded; each packs through scripts/package-release.sh, whose archive check requires LICENSE, THIRD_PARTY_NOTICES.md and THIRD_PARTY_LICENSES.md byte for byte. AUD-005 also packed three archives locally with the same check and ran scripts/third-party-licenses.py --check. These CI runs are external evidence, not local runs."
+    ],
+    "originalFindingsUnchanged": true
   }
 }
