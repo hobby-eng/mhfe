@@ -15,6 +15,7 @@ on:
       - tests/suite3_vectors.rs
       - tests/fixtures/**
       - scripts/independent-suite3.py
+      - scripts/independent-suite3-requirements.txt
       - .github/workflows/vectors.yml
   pull_request:
     paths:
@@ -26,6 +27,7 @@ on:
       - tests/suite3_vectors.rs
       - tests/fixtures/**
       - scripts/independent-suite3.py
+      - scripts/independent-suite3-requirements.txt
       - .github/workflows/vectors.yml
   workflow_dispatch:
   workflow_call:
@@ -39,13 +41,17 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Replay every vector in both directions
         run: cargo test --locked --release --test suite3_vectors -- --ignored --nocapture
       - name: Check every vector with an independent implementation
         run: |
-          python3 -m pip install --user cryptography==46.0.5
+          # Only the exact files listed with their SHA-256 in the requirements file are accepted.
+          python3 -m pip install --user --require-hashes -r scripts/independent-suite3-requirements.txt
+          python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json
           # Every file listed in SHA256SUMS: the vectors and the negative cases, not the
           # independent-verification.json record next to them.
           cd tests/fixtures/suite3-vectors
