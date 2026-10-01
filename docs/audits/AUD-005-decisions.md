@@ -52,9 +52,11 @@ reasonable, this file says what was chosen and why. The report is
 
 ## Left for you
 
-1. **Release.** The fixes are on `main` after `v0.4.0`, unpushed. They change the CLI and the
-   WebAssembly core (not any suite 3 output), so they need CI, the full vector replay and a
-   canonical build before a release. Push when you have looked at them.
+1. **Release — pushed, release pending (2026-10-01).** The fixes are on `main` after `v0.4.0` and
+   pushed; CI passes. The local full vector replay passed at 9588ec0; later commits change no
+   suite 3 output, and the vectors workflow replays them on GitHub. The canonical archives are
+   rebuilt from the pushed `main`. The `v0.4.0` tag and release still name df70ca5 until the owner
+   has checked the new archives.
 2. **Promise-returning client methods that throw — resolved (owner's decision, 2026-10-01).** Every
    `MhfeClient` operation is now `async`: every error rejects its promise, argument checks included,
    and nothing is thrown at the call. The wallet tools' Deriver clears its password fields at the
@@ -64,9 +66,9 @@ reasonable, this file says what was chosen and why. The report is
    `onUnverified` stops the operation, ends its worker and rejects with `CALLBACK_FAILED`, the
    page's error as the `cause`; later messages of that worker are ignored, and a late event of a
    stopped worker can no longer end a later operation.
-4. **Prettier in this repository.** There is no Prettier configuration in mhfe, and 12 Markdown and
-   JavaScript files differ from what the mhfe_spec configuration produces. Decide whether to add a
-   configuration (and which style for the JavaScript) and reformat once.
+4. **Prettier in this repository — resolved (owner's decision).** Prettier 3.9.9 with double quotes
+   and 100 columns, the style of every workspace repository; the repository was reformatted once in
+   ff8365c, which `.git-blame-ignore-revs` lists, and CI checks the formatting.
 5. **Independent verifier and Unicode 17 — resolved (owner's decision).** The verifier takes the
    Unicode 17.0.0 database from `unicodedata2` (hash-pinned in
    `scripts/independent-suite3-requirements.txt`), refuses to run on any other version, applies the
@@ -82,6 +84,8 @@ reasonable, this file says what was chosen and why. The report is
    `BUILD-INFO.txt` names the source commit and whether the working copy had changes
    (`source: <commit> (clean|modified)`), passed into the container by
    `scripts/build-reproducible.sh` and read from git in the macOS release jobs.
-8. **Still not run:** Docker and the reproducible build, full-size Argon2 and the full vector
-   replay, and anything on Windows, macOS or ARM64 apart from the CI results quoted in the report.
-   Release run 36823878528 of `v0.4.0` was still replaying the vectors when it was read.
+8. **Still not run** at the time of the report: Docker and the reproducible build, full-size Argon2
+   and the full vector replay, and anything on Windows, macOS or ARM64 apart from the CI results
+   quoted in the report. Since then (2026-10-01) the canonical build has run several times, the
+   full vector replay has passed locally, and CI runs the Windows and macOS checks; full-size
+   Argon2 in a browser and native runs on Windows, macOS or ARM64 remain CI-only.
