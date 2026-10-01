@@ -98,7 +98,7 @@ strings in the browser.
 | `INVALID_ADDRESS`                 | The check's address cannot be used                           |
 | `INVALID_DERIVATION_PATH`         | The check's path is malformed                                |
 | `INVALID_FINGERPRINT`             | The fingerprint is not eight hexadecimal digits              |
-| `NOT_ENOUGH_MEMORY`               | Less free memory than the memory level needs                 |
+| `NOT_ENOUGH_MEMORY`               | Less free memory than the level needs, also within a cgroup  |
 | `MEMORY_ALLOCATION_FAILED`        | The operating system refused the memory                      |
 | `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser: > 0)     |
 | `PROCESSOR_NOT_SUPPORTED`         | The SSSE3 build runs on a processor without SSSE3            |

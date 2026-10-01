@@ -14,7 +14,9 @@ compile_error!("the native MHFE engine needs a 64-bit target: suite 3 needs at l
 /// The highest memory level this build supports: every level, since native builds are 64-bit.
 pub const HIGHEST_MEMORY_LEVEL: u32 = crate::MAX_MEMORY_LEVEL;
 
-/// Free memory as the operating system reports it, or `None` where it gives no figure.
+/// Free memory as the operating system reports it, or `None` where it gives no figure. On Linux
+/// this is the lower of the computer's figure and the room left in the process's control group,
+/// such as a container's memory limit.
 pub fn available_memory_bytes() -> Option<u64> {
     ffi::available_memory_bytes()
 }
