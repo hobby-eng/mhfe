@@ -326,6 +326,8 @@ memory.
 ```bash
 cargo test --locked          # fast tests with reduced Argon2 cost
 scripts/check.sh             # everything, including the browser package
+npm ci --ignore-scripts && npm run format:check   # Prettier for Markdown and JavaScript
+npm run check:browsers       # the browser package in Chromium and Firefox, after check.sh
 scripts/build-reproducible.sh
 ```
 

@@ -50,6 +50,14 @@ jobs:
         run: |
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           scripts/check.sh
+      # The browser package that check.sh built, in real Chromium and Firefox at a reduced Argon2
+      # cost: Blob workers under the wallet tools' Content-Security-Policy, standard and fast mode,
+      # cancellation and failing callbacks. The browsers are the ones Playwright 1.63.0 pins.
+      - name: Check the browser package in Chromium and Firefox
+        timeout-minutes: 20
+        run: |
+          npx playwright install --with-deps chromium firefox
+          node scripts/verify-browsers.mjs
 
   # The fast tests on Windows and macOS, and the hidden password input in each system's own
   # pseudo-terminal, with public test data only. The release builds for these systems come from
@@ -79,7 +87,8 @@ jobs:
         if: runner.os == 'Windows'
         timeout-minutes: 10
         run: |
-          python -m pip install pywinpty==3.0.5
+          # Only the exact files listed with their SHA-256 in the requirements file are accepted.
+          python -m pip install --require-hashes -r scripts/verify-hidden-input-windows-requirements.txt
           python scripts/verify-hidden-input-windows.py target/debug/mhfe.exe
 
   canonical-build:

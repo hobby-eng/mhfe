@@ -3,10 +3,11 @@
     python scripts/verify-hidden-input-windows.py [path\\to\\mhfe.exe]
 
 The Windows counterpart of scripts/verify-hidden-input.py, for CI on a Windows machine; it needs
-the pywinpty package. The default program is target\\debug\\mhfe.exe. It drives
-`mhfe check --fingerprint`, which asks for the container and then for the password at a hidden
-prompt, and stops the tool before a fingerprint is given, so no memory is reserved and Argon2
-never runs. Only the public zero-12 test container is used.
+the pywinpty package, pinned in scripts/verify-hidden-input-windows-requirements.txt. The default
+program is target\\debug\\mhfe.exe. It drives `mhfe check --fingerprint`, which asks for the
+container and then for the password at a hidden prompt, and stops the tool before a fingerprint is
+given, so no memory is reserved and Argon2 never runs. Only the public zero-12 test container is
+used.
 
 It checks that
 - control characters in a password reach the password check and are refused, including those a
@@ -65,7 +66,9 @@ LONGEST = "\U0001d400" * 1024
 class Session:
     def __init__(self, arguments=("check", "--fingerprint")):
         environment = dict(os.environ, NO_COLOR="1")
-        self.process = PtyProcess.spawn([PROGRAM, *arguments], env=environment, dimensions=(40, 200))
+        self.process = PtyProcess.spawn(
+            [PROGRAM, *arguments], env=environment, dimensions=(40, 200)
+        )
         self.output = ""
 
     def wait_for(self, *needles, limit=20):
