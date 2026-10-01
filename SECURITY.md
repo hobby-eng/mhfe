@@ -22,13 +22,14 @@ Never include a real recovery phrase, password, private key or wallet file.
   Windows pseudo-console; CI runs them on all three systems.
 - Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
   key or mask is wiped when it is dropped; short-lived working buffers inside dependencies, such as
-  those of Unicode normalization and BIP39 word parsing, are not. The Argon2 work area is wiped by the C code at the end of every round
-  (`FLAG_clear_internal_memory`, checked by a test); when a round fails, for example because a
-  thread could not be started, the C code returns before that step and the Rust owner wipes the area
-  instead. This is best effort: a compiler, the operating system, swap or a terminal's scrollback
-  can keep copies beyond the program's reach, and so can the standard library's own buffer of
-  standard input. Answers read from standard input are limited to 8192 bytes and read into a buffer
-  of that size, so the program's copy never has to grow and leave an unwiped copy behind.
+  those of Unicode normalization and BIP39 word parsing, are not. The Argon2 work area is wiped by
+  the C code at the end of every round (`FLAG_clear_internal_memory`, checked by a test); when a
+  round fails, for example because a thread could not be started, the C code returns before that
+  step and the Rust owner wipes the area instead. This is best effort: a compiler, the operating
+  system, swap or a terminal's scrollback can keep copies beyond the program's reach, and so can the
+  standard library's own buffer of standard input. Answers read from standard input are limited to
+  8192 bytes and read into a buffer of that size, so the program's copy never has to grow and leave
+  an unwiped copy behind.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original phrase: a typing mistake or a
   hardware fault cannot silently produce a container that no password opens. At a terminal the
@@ -38,18 +39,20 @@ Never include a real recovery phrase, password, private key or wallet file.
   the check has passed.
 - Nothing connects to a network. The browser package loads no remote resources and contains no
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
-  (`scripts/remove-network-code.mjs`), and the only
-  network code in the tool is `mhfe serve`, which listens on 127.0.0.1 for the one page it serves
-  and never receives a secret (see below).
+  (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which
+  listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 
 ## The C engine and its boundary
 
 Argon2 is the reference C implementation, vendored unchanged (see
-[`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code is in one
-module, `src/engine/ffi.rs`; the rest of the crate forbids it (`#![deny(unsafe_code)]`), and the
-command-line tool forbids it entirely. The module keeps these invariants:
+[`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code of the library
+is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
+The command-line tool denies it too, except in `src/bin/mhfe/hidden_input.rs`, which switches the
+terminal's echo and line mode for a hidden prompt (`tcgetattr`/`tcsetattr` on Unix,
+`GetConsoleMode`/`SetConsoleMode` on Windows) and restores them. The engine module keeps these
+invariants:
 
 - `argon2_context` is copied field for field; compile-time assertions check its size, alignment and
   every field offset on 32- and 64-bit targets, and a test proves that every field reaches the C
@@ -65,7 +68,7 @@ command-line tool forbids it entirely. The module keeps these invariants:
   pointer outlives a call and calls on different threads do not interfere.
 - Every Argon2 error code is turned into an error with the reference implementation's message.
 
-The only other unsafe calls are the free-memory queries for macOS and Windows in the same module.
+The only other unsafe calls in that module are the free-memory queries for macOS and Windows.
 
 ## The fast-mode launcher
 

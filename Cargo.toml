@@ -77,9 +77,10 @@ js-sys = { version = "=0.3.105", optional = true }
 [features]
 default = []
 wasm = ["dep:wasm-bindgen", "dep:js-sys"]
-# x86-64 only: build the Argon2 code with SSSE3, about 5% faster, but the program then stops with
-# "Illegal instruction" on processors without SSSE3, such as some virtual machines. Releases
-# use the SSE2 baseline, which every x86-64 processor has.
+# x86-64 only: build the Argon2 code with SSSE3, 7 to 10% faster in measurements/README.md. Such a
+# program checks the processor first and refuses with a clear message where SSSE3 is missing, as on
+# some virtual machines. Releases ship this build next to the SSE2 baseline, which every x86-64
+# processor has.
 ssse3 = []
 
 [profile.release]

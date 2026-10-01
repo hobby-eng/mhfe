@@ -3,7 +3,7 @@
 #   mhfe-<version>-linux-x86_64.tar.gz    command-line tool for Linux on x86-64
 #   mhfe-<version>-linux-aarch64.tar.gz   command-line tool for Linux on ARM64
 #   mhfe-<version>-windows-x86_64.zip     command-line tool for Windows on x86-64
-#   ...-linux-x86_64-ssse3, ...-windows-x86_64-ssse3   the same, about 5% faster, needing SSSE3
+#   ...-linux-x86_64-ssse3, ...-windows-x86_64-ssse3   the same, 7 to 10% faster, needing SSSE3
 #   mhfe-<version>-browser.tar.gz         the browser package (dist/)
 #   SHA256SUMS
 #

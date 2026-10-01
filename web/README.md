@@ -61,13 +61,13 @@ runs at a time.
 ## Fast and standard mode
 
 `client.mode()` returns `"fast"` when the page is cross-origin isolated and `"standard"` otherwise.
-In fast mode the four Argon2 lanes run in parallel threads: a recovery takes about one and a half
-to two minutes. In standard mode they run one after another, about four to seven minutes. An
-encryption takes about twice as long in either mode. The measurements behind these figures are in
-[`measurements/`](../measurements/README.md). A page opened as a file is never isolated; `mhfe serve
-<page.html>` serves it from this computer with the headers that make it isolated. On a computer
-without the mhfe program, the package's `mhfe-fast-mode.py` does the same with Python 3.8 or later
-and nothing else.
+In fast mode the four Argon2 lanes run in parallel threads: a recovery takes about one and a half to
+two minutes. In standard mode they run one after another, about four to seven minutes. An encryption
+takes about twice as long in either mode. The measurements behind these figures are in
+[`measurements/`](../measurements/README.md). A page opened as a file is never isolated;
+`mhfe serve <page.html>` serves it from this computer with the headers that make it isolated. On a
+computer without the mhfe program, the package's `mhfe-fast-mode.py` does the same with Python 3.8
+or later and nothing else.
 
 Both launchers serve a page only when the checksum file `mhfe-fast-mode.sha256` lies next to it:
 one line in the format `sha256sum` writes, the page's SHA-256, two spaces and its file name. Ship
