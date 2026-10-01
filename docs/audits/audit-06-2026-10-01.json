@@ -1,0 +1,938 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-006",
+  "auditNumber": 6,
+  "date": "2026-10-01",
+  "title": "Final MHFE implementation and prepared 0.4.0 artifact review",
+  "reviewer": {
+    "name": "OpenAI Codex",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "capturedAt": "2026-10-01T13:03:21.026014+00:00",
+    "commit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+    "commitComplete": true,
+    "branch": "main",
+    "workingTree": "?? docs/audits/AUD-006-harnesses/",
+    "preExistingChanges": "Clean tracked source; only the new AUD-006 harness folder was added for this review.",
+    "sourceFingerprint": "cda0f11d6c5efa8108c5c9a9119ed6210b3c91871a278f49e5488d27288e17ab",
+    "fingerprintMethod": "SHA-256 of sorted git-tracked path + NUL + file SHA-256 + LF.",
+    "specificationCommit": "8a0ee89bce3cd08d9883ef5cd482386f3ffe012e",
+    "specificationWorkingTree": "M docs/audits/AUD-005-publication.json\n?? AGENTS.md\n?? docs/drafts/",
+    "specificationFiles": {
+      "README.md": "7a39f7c4e2106ae0dc7ccc8d7bd719d92c7eef7fb62ad3a9ad05f687a6c9e4a7",
+      "docs/DESIGN-NOTES.md": "3ba58f79e7fdb106f20e8bed6d099d6e9e360230c51e0bf6aadaabea22e12279",
+      "vectors/suite3/validation-cases.json": "92ced6ea44f3bcc912ff1aff50d1c5e1e249268678818a1e1f10a9178db0fecd"
+    }
+  },
+  "scope": "Full implementation/security/conformance/maintainability review and supplied canonical artifact verification; released suite 3 specification v0.4.0. Review only.",
+  "checks": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "category": "SEC",
+      "logicalGroup": "Secret ownership",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Review of password/phrase/entropy ownership, native C work-area cleanup, WASM transfers and documented dependency/JS limits; fixed-capacity phrase conversion allocator probe.",
+      "outcome": "passed",
+      "evidence": "full-check; old-regressions; canonical-browser",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "category": "SEC",
+      "logicalGroup": "CSP and worker transport",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Canonical browser archive executed with normal CSP/sandbox in Chromium and Firefox, file and isolated loopback modes.",
+      "outcome": "passed",
+      "evidence": "canonical-browser",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "category": "SEC",
+      "logicalGroup": "Offline boundary",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Bundled loader removal and offline graph inspected; no external requests in four browser runs; generated package network gate passes.",
+      "outcome": "passed",
+      "evidence": "full-check; canonical-browser",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "category": "SEC",
+      "logicalGroup": "Randomness and cryptography",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Suite constants, integer settings, salt/mask domains, packing and inverse reviewed; C/RustCrypto differential tests and three expected Argon2 tags per browser engine.",
+      "outcome": "passed",
+      "evidence": "full-check; conformance",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "category": "SEC",
+      "logicalGroup": "Exceptional cleanup and cancellation",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Exceptional FFI wipe, secret-copy cleanup, native cancellation and worker termination reviewed; active cancel and throwing page callbacks followed by restart tested. Async callback promises are explicitly outside the demonstrated throw-handling guarantee.",
+      "outcome": "passed",
+      "evidence": "full-check; old-regressions; canonical-browser; async-callback-scope",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "category": "SEC",
+      "logicalGroup": "Injection and persistence",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Worker request/result handling, generated-script escaping, absence of storage/telemetry, and launcher integrity/host routing inspected.",
+      "outcome": "passed",
+      "evidence": "full-check; canonical-browser",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "category": "SEC",
+      "logicalGroup": "Availability bounds",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Bounded CLI input, resource-error paths, corrected macOS counter sum, server deadlines/concurrency and early refusals tested. Host-memory estimates are not cgroup admission guarantees.",
+      "outcome": "passed",
+      "evidence": "full-check; old-regressions",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "category": "FUN",
+      "logicalGroup": "BIP39 and normalized input",
+      "scope": "MHFE reviewed snapshot",
+      "method": "All BIP39 lengths, checksums/prefixes, Unicode 17 stabilization, forbidden characters and byte bounds; independent Python replay of 33 password cases.",
+      "outcome": "passed",
+      "evidence": "full-check; conformance; unicode-version-guard",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "category": "FUN",
+      "logicalGroup": "Wallet derivation",
+      "scope": "MHFE reviewed snapshot",
+      "method": "BIP32/44/49/84/86 derivation, network/address parsing, BIP39 passphrase, rare invalid-key errors and address/fingerprint rehearsal reviewed and existing literal vectors run.",
+      "outcome": "passed",
+      "evidence": "full-check; canonical-browser",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "category": "FUN",
+      "logicalGroup": "BIP85/BIP38/signing/Silent Payments",
+      "scope": "MHFE reviewed snapshot",
+      "method": "None of these capabilities is implemented in MHFE.",
+      "outcome": "not-applicable",
+      "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "category": "FUN",
+      "logicalGroup": "Descriptors and multisig",
+      "scope": "MHFE reviewed snapshot",
+      "method": "No descriptor, Miniscript or multisig interface; single-key address encoding belongs to FUN-002.",
+      "outcome": "not-applicable",
+      "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "category": "FUN",
+      "logicalGroup": "Transactions and PSBT",
+      "scope": "MHFE reviewed snapshot",
+      "method": "MHFE neither reads nor signs transactions or PSBTs.",
+      "outcome": "not-applicable",
+      "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "category": "FUN",
+      "logicalGroup": "Recovery and container format",
+      "scope": "MHFE reviewed snapshot",
+      "method": "All recovery lengths, ambiguity/manual 24 words, fixed-point refusal, inverse creation check and decoy round-trip tested at reduced cost; 17 full transcripts replayed with recorded keys; corpus byte-equal to released specification.",
+      "outcome": "passed",
+      "evidence": "full-check; conformance",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "category": "FUN",
+      "logicalGroup": "Providers and discovery",
+      "scope": "MHFE reviewed snapshot",
+      "method": "No blockchain provider, balance aggregation or discovery scanner. Bounded local address search is covered by FUN-002.",
+      "outcome": "not-applicable",
+      "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "category": "API",
+      "logicalGroup": "Rust/C/JS contracts",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Validated work-factor/password types, public-vector input restrictions, FFI layout/lifetimes, WASM numeric/type validation and client Promise/error changes reviewed.",
+      "outcome": "passed",
+      "evidence": "full-check; canonical-browser",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "category": "API",
+      "logicalGroup": "Async lifecycle",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Busy state, late worker events, active cancellation, synchronous page-callback failures and subsequent restart tested. Async callbacks characterized as an integration caveat.",
+      "outcome": "passed",
+      "evidence": "full-check; canonical-browser; async-callback-scope",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "category": "API",
+      "logicalGroup": "Financial exports",
+      "scope": "MHFE reviewed snapshot",
+      "method": "No CSV/XLSX monetary exports. Public vector JSON and CLI result formats are reviewed under API-004.",
+      "outcome": "not-applicable",
+      "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "category": "API",
+      "logicalGroup": "Serialization/interoperability",
+      "scope": "MHFE reviewed snapshot",
+      "method": "GNU binary/text checksum formats both accepted, malformed/tampered input refused, public JSON corpus and four simultaneous checksum refreshes checked.",
+      "outcome": "passed",
+      "evidence": "full-check; old-regressions; conformance",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "category": "BLD",
+      "logicalGroup": "Feature composition",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Native SSE2/SSSE3, Rust WASM and both Argon2 browser builds pass; reduced-cost marker excluded from all six supplied archives.",
+      "outcome": "passed",
+      "evidence": "full-check; artifacts",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "category": "BLD",
+      "logicalGroup": "Platform matrix",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Local Linux variants and two real browsers; exact-head CI portable Windows/macOS jobs succeeded. ARM64/Windows archives inspected, not executed locally.",
+      "outcome": "passed",
+      "evidence": "remote-ci; artifacts; canonical-browser",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "category": "BLD",
+      "logicalGroup": "Dependencies/provenance/licenses",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Lockfile changes, vendored 22-file SHA manifest, generated dependency-license union and packaged notices checked; cached RustSec 106 dependencies/1278 advisories has no findings. Online database refresh failed; same-lockfile remote RustSec succeeded.",
+      "outcome": "passed",
+      "evidence": "full-check; conformance; artifacts; rustsec; rustsec-cached; remote-ci",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "category": "BLD",
+      "logicalGroup": "Uncached canonical reproducibility",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Six supplied canonical archives equal the checksums printed by independent exact-head GitHub canonical-build. No additional local uncached Docker rebuild was requested or run.",
+      "outcome": "passed",
+      "evidence": "independent-ci-artifacts; artifacts",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "category": "BLD",
+      "logicalGroup": "Packaging and release gates",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Builder-to-publisher checksum coverage, immutable action pins, checkout credentials, release vector dependency, archive source metadata and current tag mismatch reviewed. Publication acceptance remains incomplete pending current full replay.",
+      "outcome": "passed",
+      "evidence": "artifacts; independent-ci-artifacts; vector-ci-status",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "category": "UI",
+      "logicalGroup": "Responsive application layout",
+      "scope": "MHFE reviewed snapshot",
+      "method": "This repository ships a CLI and browser integration library, not an end-user wallet page. The generated browser-check page is a diagnostic artifact; deriver UI is outside this audit.",
+      "outcome": "not-applicable",
+      "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "category": "UI",
+      "logicalGroup": "Input and workflow state",
+      "scope": "MHFE reviewed snapshot",
+      "method": "CLI argument/input/output boundaries, explicit settings, ambiguous recovery and early-unverified versus checked output reviewed.",
+      "outcome": "passed",
+      "evidence": "full-check; old-regressions",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "category": "UI",
+      "logicalGroup": "Secret visibility and help",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Unix PTY editing/control refusal, long Unicode input, Ctrl+C restoration and color behavior tested. Native Windows/macOS PTY evidence is exact-head CI.",
+      "outcome": "passed",
+      "evidence": "full-check; old-regressions; remote-ci",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "category": "ARC",
+      "logicalGroup": "Module ownership",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Core/engine/FFI/CLI/worker responsibilities and private validated state reviewed. No class hierarchy or broad module rewrite is warranted.",
+      "outcome": "passed",
+      "evidence": "Source review: src/lib.rs, src/engine, src/mhfe.rs, src/bin/mhfe, web",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "category": "ARC",
+      "logicalGroup": "Duplication and dead paths",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Public API consumers, vector interfaces, shared checksum semantics and duplicated boundary constants reviewed. Eight changed JS/TS files in formatting commit normalize identically.",
+      "outcome": "passed",
+      "evidence": "formatting-identity-unrestricted; source review",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "category": "ARC",
+      "logicalGroup": "Tests and production fidelity",
+      "scope": "MHFE reviewed snapshot",
+      "method": "Production-path test seams, test-only engine fencing, callback stubs versus real archive execution, comments and naming reviewed. Small wording/encapsulation recommendations recorded separately.",
+      "outcome": "passed",
+      "evidence": "full-check; canonical-browser; architecture recommendations",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "category": "DOC",
+      "logicalGroup": "Capabilities and safety language",
+      "scope": "MHFE reviewed snapshot",
+      "method": "README/API/SECURITY claims compared with current source and released suite; experiment and best-effort erasure limits retained. No core protocol mismatch found.",
+      "outcome": "passed",
+      "evidence": "conformance; source/document review",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "category": "DOC",
+      "logicalGroup": "Commands, metadata and legal materials",
+      "scope": "MHFE reviewed snapshot",
+      "method": "One low documentation defect: blanket Promise-return claim includes three synchronous client methods. Archive legal files and build/source metadata pass.",
+      "outcome": "failed",
+      "evidence": "AUD-006-DOC001; api-contract; artifacts",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "category": "DOC",
+      "logicalGroup": "Audit record integrity",
+      "scope": "MHFE reviewed snapshot",
+      "method": "New paired record, 32-ID coverage, original failures and environmental limits, command/log/source hashes and ignored evidence validated. Prior findings retain their IDs.",
+      "outcome": "passed",
+      "evidence": "validate_report.py; local report-validation.json",
+      "snapshot": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-006-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Promise-return documentation includes synchronous client methods",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "API.md:137",
+        "web/README.md:65",
+        "web/client.js:68",
+        "web/client.js:73",
+        "web/client.js:175"
+      ],
+      "reproduction": "Run node docs/audits/AUD-006-harnesses/api-contract.mjs; it imports the actual client with synthetic package placeholders and calls only metadata methods and idle cancellation. No worker or KDF runs.",
+      "expected": "Document exactly which methods return a Promise: encrypt, decrypt, check, readPhrase and readContainer. Keep mode, maxSupportedMemLevel and cancel synchronous as their TypeScript signatures already declare.",
+      "observed": "Both API.md and web/README.md say Every method returns a promise. Actual mode() returns a string, maxSupportedMemLevel() returns 0, and cancel() returns undefined. A caller following the blanket .catch() advice for these methods gets a TypeError.",
+      "impact": "Low, documentation-only integration ambiguity. Actual operation methods correctly return rejected Promises; no cryptographic output or secret handling is affected.",
+      "evidence": [
+        "api-contract.log",
+        "web/client.d.ts already declares the synchronous return types"
+      ],
+      "recommendedFix": "Replace Every method with an explicit list of the five asynchronous operation methods and state that metadata queries/cancel are synchronous. Do not change the working public API to satisfy the sentence.",
+      "requiredVerification": "Review both prose pages against client.d.ts and rerun api-contract.mjs; no expensive vector calculation is needed."
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-004-FUN001",
+      "status": "verified",
+      "fixCommit": "d54ab95",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. Counter regression passed locally; exact-head macOS CI passed, no local native macOS execution."
+    },
+    {
+      "id": "AUD-004-FUN002",
+      "status": "verified",
+      "fixCommit": "d54ab95",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. "
+    },
+    {
+      "id": "AUD-004-BLD001",
+      "status": "verified",
+      "fixCommit": "d54ab95 (bech32 notice); df70ca5 (generated bundle)",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. All six canonical archives contain exact current license documents; generated union check passed."
+    },
+    {
+      "id": "AUD-005-SEC001",
+      "status": "verified",
+      "fixCommit": "19b8f25",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. Existing allocator probe reports zero unwiped public phrase copies."
+    },
+    {
+      "id": "AUD-005-FUN001",
+      "status": "verified",
+      "fixCommit": "cbd2a19",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. "
+    },
+    {
+      "id": "AUD-005-UI001",
+      "status": "verified",
+      "fixCommit": "6953856",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. "
+    },
+    {
+      "id": "AUD-005-DOC001",
+      "status": "verified",
+      "fixCommit": "94a7e7c",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. Corrected passages/types and dated prior-audit dispositions read directly; no old report modified."
+    },
+    {
+      "id": "AUD-005-DOC002",
+      "status": "verified",
+      "fixCommit": "59635bf",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. Corrected passages/types and dated prior-audit dispositions read directly; no old report modified."
+    },
+    {
+      "id": "AUD-005-DOC003",
+      "status": "verified",
+      "fixCommit": "59635bf",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. Corrected passages/types and dated prior-audit dispositions read directly; no old report modified."
+    },
+    {
+      "id": "AUD-005-ARC001",
+      "status": "verified",
+      "fixCommit": "59635bf",
+      "verificationCommit": "6b349ceb45fcbc9af93c9b6d732aef8625a5704f",
+      "evidence": "Current source/document review plus full-check and old-regressions. Corrected passages/types and dated prior-audit dispositions read directly; no old report modified."
+    },
+    {
+      "id": "AUD-006-DOC001",
+      "status": "verified",
+      "fixCommit": "a3b44c3",
+      "verificationCommit": "94b58d8ff4d8010a1be7c26d6d79ac1e263d2de1",
+      "evidence": "api-contract.mjs exits 0 at the verification commit: API.md, web/README.md, web/client.js and web/client.d.ts name the five operations that return a promise and call mode(), maxSupportedMemLevel() and cancel() synchronous."
+    }
+  ],
+  "limitations": [
+    "No full-cost Argon2 computation or local full-vector replay was executed. The user reported a completed local run; this report does not promote that statement into independently executed evidence.",
+    "At 2026-10-01 13:09 UTC, run 36863839542 on 65b56f3 was still executing native replay and its independent OpenSSL step was pending. 6b349ce differs only in AGENTS.md, but pending results are not passes.",
+    "No additional local uncached Docker build was run. Six supplied archives match an independent exact-commit CI build byte for byte; macOS archives were not supplied or locally verified.",
+    "Windows/macOS runtime evidence comes from exact-head CI; local runtime tests were Linux x86-64 and Chromium/Firefox. ARM64 and Windows archive bytes/metadata were checked without local execution.",
+    "RustSec database refresh failed due to network access; the cached database scan passed (106 dependencies, 1278 advisories) and same-lockfile remote RustSec passed. The cached database response omitted its revision/date.",
+    "Independent specialist cryptanalysis, formal proof checking, hostile-host/side-channel resistance and exhaustive transitive dependency source auditing were not performed.",
+    "Version remains 0.4.0 by user choice. Tag v0.4.0 still identifies df70ca5, while supplied replacement archives identify 6b349ce. Publication must reconcile tag/source/download identity and disclose changed bytes; no tag, release, asset, push or commit was changed here."
+  ],
+  "commands": [
+    {
+      "command": [
+        "bash",
+        "-c",
+        "rustc -Vv; cargo -V; node -v; python3 -V; free -m; git rev-parse HEAD v0.4.0^{}; git -C ../mhfe_spec rev-parse HEAD v0.4.0^{}; git -C ../mhfe_spec diff v0.4.0 -- README.md docs/DESIGN-NOTES.md; ls -lh canonical-output/release; cat package.json"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:03:21.091649+00:00",
+      "endedAt": "2026-10-01T13:03:21.183107+00:00",
+      "exitCode": 0,
+      "logSha256": "b2486cac83ea7ef14f1688c0e59501e34d346e031dbf748018280d8c009b42ea",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "baseline"
+    },
+    {
+      "command": [
+        "bash",
+        "-c",
+        "set -e; source ../workingspace/emsdk/emsdk_env.sh; export EMCC_CORES=1; scripts/check.sh; npm run format:check"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:03:34.013867+00:00",
+      "endedAt": "2026-10-01T13:03:56.634328+00:00",
+      "exitCode": 0,
+      "logSha256": "57e11e7749708f6614b84467bc09493299f266055f404d5cc658e98fe7e0e8a5",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "full-check"
+    },
+    {
+      "command": ["python3", "-"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:04:55.551885+00:00",
+      "endedAt": "2026-10-01T13:04:59.879558+00:00",
+      "exitCode": 0,
+      "logSha256": "6b280d40fa79752c22b17dac1899e978820c03dda76486b94391ba6c3c8ca980",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "stdin": "import json,subprocess\nfrom pathlib import Path\nroot=Path.cwd();out=root/'docs/audits/AUD-006-evidence'\nfor revision in ['6b349ce','65b56f3','df70ca5']:\n sha=subprocess.check_output(['git','rev-parse',revision],text=True).strip()\n d=json.loads(subprocess.check_output(['gh','api',f'repos/hobby-eng/mhfe/actions/runs?head_sha={sha}&per_page=30'],text=True))\n (out/f'ci-{revision}.json').write_text(json.dumps(d,indent=2)+'\\n')\n for r in d['workflow_runs']:\n  print(revision,r['id'],r['name'],r['status'],r['conclusion'],r['html_url'])\n  if revision=='6b349ce':\n   j=json.loads(subprocess.check_output(['gh','api',f\"repos/hobby-eng/mhfe/actions/runs/{r['id']}/jobs?per_page=100\"],text=True))\n   (out/f\"jobs-{r['id']}.json\").write_text(json.dumps(j,indent=2)+'\\n')\n   for v in j['jobs']: print('job',v['name'],v['status'],v['conclusion'])\n",
+      "label": "remote-ci"
+    },
+    {
+      "command": ["cargo", "audit", "--json"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:04:59.916153+00:00",
+      "endedAt": "2026-10-01T13:05:29.993615+00:00",
+      "exitCode": 1,
+      "logSha256": "eaa820150bb77cc4f6e5cb93c4d39bfae82520a37296bf7b04ecb0ce23b346ee",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "rustsec"
+    },
+    {
+      "command": ["python3", "docs/audits/AUD-006-harnesses/artifacts.py"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:05:25.139952+00:00",
+      "endedAt": "2026-10-01T13:05:25.256640+00:00",
+      "exitCode": 0,
+      "logSha256": "90b4c591e39e0387eaceb2deefc5973dfe013deebb089a27150a1bda33c7ba15",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "artifacts"
+    },
+    {
+      "command": ["node", "docs/audits/AUD-006-harnesses/formatting.mjs"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:05:25.299645+00:00",
+      "endedAt": "2026-10-01T13:05:25.361465+00:00",
+      "exitCode": 1,
+      "logSha256": "e929ddb51c04a7eeab625cb773065c8feafb25e99700dbe0f1d3bc035bc09d3d",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "formatting-identity"
+    },
+    {
+      "command": ["node", "docs/audits/AUD-006-harnesses/formatting.mjs"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:06:06.546401+00:00",
+      "endedAt": "2026-10-01T13:06:06.877024+00:00",
+      "exitCode": 0,
+      "logSha256": "c2fb19a9861a9ebed749a86b939ceef5d20f81a75f14ef863ad017b3408e550b",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "formatting-identity-unrestricted"
+    },
+    {
+      "command": ["node", "docs/audits/AUD-006-harnesses/browser.mjs"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:06:06.905813+00:00",
+      "endedAt": "2026-10-01T13:06:10.052046+00:00",
+      "exitCode": 0,
+      "logSha256": "c056f290f3caed1aafc7d4ffd1f7a4268aaa0b41f1c8a068aadd5388c1eb0c3c",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "canonical-browser"
+    },
+    {
+      "command": ["cargo", "audit", "--no-fetch", "--json"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:06:10.082908+00:00",
+      "endedAt": "2026-10-01T13:06:10.324784+00:00",
+      "exitCode": 0,
+      "logSha256": "1962b21b2690d8c7a2f715aec0451c49d7837c73d0370b1bf2338bf5135a9bfa",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "rustsec-cached"
+    },
+    {
+      "command": ["python3", "docs/audits/AUD-006-harnesses/ci-artifacts.py"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:07:00.785129+00:00",
+      "endedAt": "2026-10-01T13:07:04.499375+00:00",
+      "exitCode": 0,
+      "logSha256": "bf7b9782e1c9fad19e89d3e8993f01a8174b9c1225c39c325113b1b9d083d1c7",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "independent-ci-artifacts"
+    },
+    {
+      "command": [
+        "bash",
+        "-c",
+        "set -e; cargo run --offline --quiet --manifest-path docs/audits/AUD-005-harnesses/phrase-copies/Cargo.toml --target-dir target/aud005-phrase-copies; python3 docs/audits/AUD-005-harnesses/cli-probes.py; python3 docs/audits/AUD-005-harnesses/cli-regressions.py; python3 docs/audits/AUD-004-harnesses/checksum-format.py"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:07:05.238943+00:00",
+      "endedAt": "2026-10-01T13:07:06.603221+00:00",
+      "exitCode": 0,
+      "logSha256": "397489ea1d5a4cdf7479c12f39c06c0eab1554a262b55b829d027babcd0cb4a5",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "old-regressions"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/independent-suite3.py",
+        "passwords",
+        "tests/fixtures/validation-cases.json"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:07:39.898280+00:00",
+      "endedAt": "2026-10-01T13:07:39.925358+00:00",
+      "exitCode": 1,
+      "logSha256": "e32133ee76f7d4232ff40049145127d1627a24a65d97ba250e0856d1d7ebdb7a",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "unicode-version-guard"
+    },
+    {
+      "command": [
+        "python3",
+        "-m",
+        "pip",
+        "install",
+        "--no-deps",
+        "--no-cache-dir",
+        "--require-hashes",
+        "--target",
+        "/home/sergio/Documents/bip_tools/workingspace/aud006-python",
+        "-r",
+        "docs/audits/AUD-006-evidence/unicode-requirements.txt"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:07:39.964167+00:00",
+      "endedAt": "2026-10-01T13:07:42.166488+00:00",
+      "exitCode": 0,
+      "logSha256": "acdf9af221c8eba461c94f10f5acf1ce78f550bb01aa1bf1faeee9ed52b03ef7",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "unicode-dependency"
+    },
+    {
+      "command": ["python3", "docs/audits/AUD-006-harnesses/conformance.py"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:08:39.331856+00:00",
+      "endedAt": "2026-10-01T13:08:39.594617+00:00",
+      "exitCode": 0,
+      "logSha256": "74b59fa2b2f230716ccad2d6400de3d980471c128256c868378fffcdcf41757b",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "conformance"
+    },
+    {
+      "command": ["node", "docs/audits/AUD-006-harnesses/api-contract.mjs"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:09:31.330706+00:00",
+      "endedAt": "2026-10-01T13:09:31.391159+00:00",
+      "exitCode": 1,
+      "logSha256": "d425e41c32a106de04216f00073889a0cc3ec4aaa3b0dceea71c85fbea2482fb",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "api-contract"
+    },
+    {
+      "command": ["gh", "api", "repos/hobby-eng/mhfe/actions/runs/36863839542/jobs?per_page=100"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:09:34.794687+00:00",
+      "endedAt": "2026-10-01T13:09:36.201249+00:00",
+      "exitCode": 0,
+      "logSha256": "a10573e5ff6336b5ab8448397f3c632ffbf4f254c63647f3d51393acd16a57f4",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "vector-ci-status"
+    },
+    {
+      "command": ["node", "docs/audits/AUD-006-harnesses/async-callback.mjs"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:10:27.165025+00:00",
+      "endedAt": "2026-10-01T13:10:27.237527+00:00",
+      "exitCode": 0,
+      "logSha256": "6fdc07019089006bef408b18fb135e69a0b6eca59868a1a7fb25db2ff1526238",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "async-callback-scope"
+    },
+    {
+      "command": [
+        "python3",
+        "-c",
+        "import pathlib,json,hashlib,subprocess; r=pathlib.Path.cwd(); e=r/\"docs/audits/AUD-006-evidence\"; s=json.loads((e/\"snapshot.json\").read_text()); bad=[n for n,h in s[\"sourceFiles\"].items() if n!=\"docs/audits/README.md\" and hashlib.sha256((r/n).read_bytes()).hexdigest()!=h]; assert not bad,bad; print(\"All reviewed tracked source files are unchanged\"); print(subprocess.check_output([\"git\",\"diff\",\"--name-only\",\"65b56f3\",\"HEAD\"],text=True)); print(subprocess.check_output([\"git\",\"status\",\"--short\"],text=True))"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T13:10:27.304455+00:00",
+      "endedAt": "2026-10-01T13:10:27.413569+00:00",
+      "exitCode": 0,
+      "logSha256": "611aadd5f74d46869942b3dd53910161811f29068e15ca3b145dd140d51732e6",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.codex/tmp/arg0/codex-arg0QrI49D:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources"
+      },
+      "label": "final-integrity"
+    }
+  ],
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "d47df01252ad6fb11d8cad00b7d9e6dde62b3ee3331c3bfbef9a7b99adda30f7",
+    "AGENTS.md": "fb18bc8f1ee216a296e65490291947c3d1a8d6c86513192354b07315f5c8285e",
+    "mhfe/AGENTS.md": "994070712ffa6c5ea183093dcfa18fc52c48d5cf3e902b8a47d6738bc04abc9c",
+    ".github/skills/wallet-full-audit/SKILL.md": "82e15c8a818023e2a7a3ab88416f6e3a219d6a78c6b2c24aa53a6e17ab1ae2d0",
+    ".github/agents/wallet-tools-maintainer.agent.md": "bfdf8ec2c40cc9119495c4c26d093cd7a4c65e2ef1374d1b18d3b93ec4f24288"
+  },
+  "artifacts": [
+    {
+      "name": "mhfe-v0.4.0-browser.tar.gz",
+      "sha256": "b0ae63601825676086ec28cfb65e7dde5a4ef581dba0fb2e0839d63b4e7c04ea",
+      "buildInfo": "mhfe v0.4.0\nsource: 6b349ceb45fcbc9af93c9b6d732aef8625a5704f (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\nEmscripten 6.0.10\n",
+      "members": {
+        "BUILD-INFO.txt": "19a254efc9b0e987d46ed652ced9a56b79c78df0abae924a073fab82caad032c",
+        "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
+        "README-mhfe.md": "f7d32ea09fb053764186d8f1d7722ac4ad93b2370cf4ab2616ed259062bf5e9e",
+        "README.md": "983b04a678614aee8c70032e5411f99fdf9575766e10ffe5ec32bc35e5792360",
+        "THIRD_PARTY_LICENSES.md": "f5a1e87084d99d4c80064802a827b049c9d304692d4e5ed51d7b1b1b42bbcdac",
+        "THIRD_PARTY_NOTICES.md": "f0ea82bbb099c034eb148f78ad352b679f984a6e20fdcadca91f6c4a70817bfe",
+        "argon2-mt.js": "f98906c851a986df514d22536bb48a09724a0fa0b49079860b9a0ef00806f521",
+        "argon2-st.js": "63ece7b314daf8a06ebadb0ff7acdf8be886ddfc9660b5ad13577536c4a3f6da",
+        "client.d.ts": "55bf8b8728a1fcee10ea7fa5503c4f6a89d4d58272b5a7e9987c3e5fe7fa1c65",
+        "client.js": "4a48e98163409c553168d9a038fd76fc10a25bc6eb7cc8aaee39639d9ade02b9",
+        "licenses/argon2-LICENSE": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590",
+        "licenses/eff-large-wordlist.md": "095d3150c651044514441d6dd3f96275a0e5a3c6ffba3d591562d63248b68e7e",
+        "mhfe-fast-mode.py": "400db463129314dbc57e81ca742de51bfe011fe4f9df25e6f4974683cfdc1a28",
+        "mhfe-worker.js": "f6bbf93e71df765723493b4d94c27afb181ebd91fded2844e0df71252137f5db",
+        "mhfe_core_bg.wasm": "206b5f55c8c86b81261ebb212d9176b7d43dcb240f3b5ef671780b6241505aa6"
+      }
+    },
+    {
+      "name": "mhfe-v0.4.0-linux-aarch64.tar.gz",
+      "sha256": "dc72c2ad27ef2c61ee65264acdf8505b93771e3bee6aedc3f0c5321b8a2046fb",
+      "buildInfo": "mhfe v0.4.0\nsource: 6b349ceb45fcbc9af93c9b6d732aef8625a5704f (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "members": {
+        "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
+        "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
+        "README.md": "f7d32ea09fb053764186d8f1d7722ac4ad93b2370cf4ab2616ed259062bf5e9e",
+        "THIRD_PARTY_LICENSES.md": "f5a1e87084d99d4c80064802a827b049c9d304692d4e5ed51d7b1b1b42bbcdac",
+        "THIRD_PARTY_NOTICES.md": "f0ea82bbb099c034eb148f78ad352b679f984a6e20fdcadca91f6c4a70817bfe",
+        "licenses/argon2-LICENSE": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590",
+        "licenses/eff-large-wordlist.md": "095d3150c651044514441d6dd3f96275a0e5a3c6ffba3d591562d63248b68e7e",
+        "mhfe": "eb8ac930ad384d8a5690370bc0423ddae66aca0f062dca4301a85008b05b52aa",
+        "mhfe-fast-mode.sh": "77066bdcca1ab7e3ce789830b974959ccc857230958e6fe5a923e6511e023a9b"
+      }
+    },
+    {
+      "name": "mhfe-v0.4.0-linux-x86_64-ssse3.tar.gz",
+      "sha256": "05a595b757edfd0117da3daefb2c1d265fa7042c7556801273dc6633f9c0a719",
+      "buildInfo": "mhfe v0.4.0\nsource: 6b349ceb45fcbc9af93c9b6d732aef8625a5704f (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "members": {
+        "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
+        "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
+        "README.md": "f7d32ea09fb053764186d8f1d7722ac4ad93b2370cf4ab2616ed259062bf5e9e",
+        "THIRD_PARTY_LICENSES.md": "f5a1e87084d99d4c80064802a827b049c9d304692d4e5ed51d7b1b1b42bbcdac",
+        "THIRD_PARTY_NOTICES.md": "f0ea82bbb099c034eb148f78ad352b679f984a6e20fdcadca91f6c4a70817bfe",
+        "licenses/argon2-LICENSE": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590",
+        "licenses/eff-large-wordlist.md": "095d3150c651044514441d6dd3f96275a0e5a3c6ffba3d591562d63248b68e7e",
+        "mhfe": "fe291387168e679f50632ea7a1bf8ed11667697d4e73e70262ee409582d9e100",
+        "mhfe-fast-mode.sh": "77066bdcca1ab7e3ce789830b974959ccc857230958e6fe5a923e6511e023a9b"
+      }
+    },
+    {
+      "name": "mhfe-v0.4.0-linux-x86_64.tar.gz",
+      "sha256": "49654f62605a6832b6df628164241951a55d725cdfe8e2dec973dd6b36d1172f",
+      "buildInfo": "mhfe v0.4.0\nsource: 6b349ceb45fcbc9af93c9b6d732aef8625a5704f (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "members": {
+        "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
+        "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
+        "README.md": "f7d32ea09fb053764186d8f1d7722ac4ad93b2370cf4ab2616ed259062bf5e9e",
+        "THIRD_PARTY_LICENSES.md": "f5a1e87084d99d4c80064802a827b049c9d304692d4e5ed51d7b1b1b42bbcdac",
+        "THIRD_PARTY_NOTICES.md": "f0ea82bbb099c034eb148f78ad352b679f984a6e20fdcadca91f6c4a70817bfe",
+        "licenses/argon2-LICENSE": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590",
+        "licenses/eff-large-wordlist.md": "095d3150c651044514441d6dd3f96275a0e5a3c6ffba3d591562d63248b68e7e",
+        "mhfe": "0a9c99d7741c0f65b03e27eb28a5e3dacd36649cdc91e013812ce87da6db97e4",
+        "mhfe-fast-mode.sh": "77066bdcca1ab7e3ce789830b974959ccc857230958e6fe5a923e6511e023a9b"
+      }
+    },
+    {
+      "name": "mhfe-v0.4.0-windows-x86_64-ssse3.zip",
+      "sha256": "4f4dc45d35d121e5570d762a0db56811ec51ee298d78a971f0b2aa601b085846",
+      "buildInfo": "mhfe v0.4.0\nsource: 6b349ceb45fcbc9af93c9b6d732aef8625a5704f (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "members": {
+        "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
+        "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
+        "README.md": "f7d32ea09fb053764186d8f1d7722ac4ad93b2370cf4ab2616ed259062bf5e9e",
+        "THIRD_PARTY_LICENSES.md": "f5a1e87084d99d4c80064802a827b049c9d304692d4e5ed51d7b1b1b42bbcdac",
+        "THIRD_PARTY_NOTICES.md": "f0ea82bbb099c034eb148f78ad352b679f984a6e20fdcadca91f6c4a70817bfe",
+        "licenses/argon2-LICENSE": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590",
+        "licenses/eff-large-wordlist.md": "095d3150c651044514441d6dd3f96275a0e5a3c6ffba3d591562d63248b68e7e",
+        "mhfe-fast-mode.bat": "953ee2a39ade211e09f63676e64f677d82cda25ea3663a08a2f367a775271e33",
+        "mhfe.exe": "78379226793be8f2481ac35d40e485bd6b0e7d038a8ccec603bf33ede115955c"
+      }
+    },
+    {
+      "name": "mhfe-v0.4.0-windows-x86_64.zip",
+      "sha256": "5e5c2fb6fe900082ac6c909081851b98f814b92dd5d7a4808f67b7d511e3adfe",
+      "buildInfo": "mhfe v0.4.0\nsource: 6b349ceb45fcbc9af93c9b6d732aef8625a5704f (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "members": {
+        "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
+        "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
+        "README.md": "f7d32ea09fb053764186d8f1d7722ac4ad93b2370cf4ab2616ed259062bf5e9e",
+        "THIRD_PARTY_LICENSES.md": "f5a1e87084d99d4c80064802a827b049c9d304692d4e5ed51d7b1b1b42bbcdac",
+        "THIRD_PARTY_NOTICES.md": "f0ea82bbb099c034eb148f78ad352b679f984a6e20fdcadca91f6c4a70817bfe",
+        "licenses/argon2-LICENSE": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590",
+        "licenses/eff-large-wordlist.md": "095d3150c651044514441d6dd3f96275a0e5a3c6ffba3d591562d63248b68e7e",
+        "mhfe-fast-mode.bat": "953ee2a39ade211e09f63676e64f677d82cda25ea3663a08a2f367a775271e33",
+        "mhfe.exe": "d77bae6a0ea1615f1157855a58b8ee5d512b7147ad9b0e4e9967bdf7d4b3d0e1"
+      }
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": "normal",
+      "area": "Real-browser CI",
+      "files": [".github/workflows/ci.yml", "docs/audits/AUD-006-harnesses/browser.mjs"],
+      "text": "Promote a self-contained reduced-cost Chromium/Firefox smoke suite into routine CI. Current CI exercises Emscripten under Node and a stand-in client worker; this audit adds actual Blob workers, CSP, transfer, cancellation and callback handling from the canonical archive. Avoid depending on a sibling checkout in the permanent CI version.",
+      "disposition": "Done in 7375a03: scripts/verify-browsers.mjs runs dist/ in Chromium and Firefox with Playwright 1.63.0, as a file and from an isolated loopback server, at the reduced cost of REDUCED_COST_CONTAINER, without a sibling checkout; the CI check job runs it after check.sh."
+    },
+    {
+      "priority": "normal",
+      "area": "Callback contract",
+      "files": ["web/client.js:252", "web/client.d.ts:37"],
+      "text": "Explicitly say page callbacks must be synchronous, or deliberately implement and test Promise rejection handling. An async callback that rejects currently produces an unhandled rejection while the operation continues and can resolve. Existing wording promises handling when a callback throws, so this is recorded as a scope clarification, not a failure of the tested synchronous contract.",
+      "disposition": "Implemented in a3b44c3: an async onProgress or onUnverified whose promise rejects while the operation runs stops it with CALLBACK_FAILED; a later rejection stays the page's unhandled one. Tested with the stand-in worker and in both real browsers. The async-callback.mjs probe, which recorded the earlier behaviour, now fails by design."
+    },
+    {
+      "priority": "normal",
+      "area": "Memory admission",
+      "files": ["src/engine/ffi.rs:297", "src/engine/native.rs:77"],
+      "text": "Consider container-aware Linux limits (cgroup v2/v1) and configurable headroom; /proc/meminfo is a host estimate and a concurrent workload can invalidate it. Keep allocation failure explicit and never silently lower the work factor. Release the Mach host send right if memory estimation will be called repeatedly in long-lived integrations. No OOM or real macOS port-exhaustion experiment was performed.",
+      "disposition": "Done: 16d1f4f lowers the Linux figure to the room left in the process's cgroup v2 or v1 group and its parents (checked with systemd-run -p MemoryMax=1G and docker run -m 1g); the same commit releases the Mach host send right after each query. The work factor is never lowered."
+    },
+    {
+      "priority": "deferred",
+      "area": "Types and invariants",
+      "files": ["src/mhfe.rs:27", "src/wallet.rs:70", "src/wallet.rs:215"],
+      "text": "For a future API revision, consider a validated mnemonic-length enum and constructors/getters for address network/type and search limits. They would make invalid combinations harder to construct; current operational paths validate lengths before KDF and use small search defaults. Avoid a breaking refactor solely for OOP style.",
+      "disposition": "Done: a48dcb1 adds WordCount (12, 15, 18, 21 or 24) for PhraseLength::Words and Reference::BuiltInCheck; the same commit makes the network and address type of a BitcoinAddress read-only and SearchLimits::new refuse counts outside 1 to 2^31."
+    },
+    {
+      "priority": "deferred",
+      "area": "Comment precision",
+      "files": ["src/packing.rs:4", "src/bin/mhfe/terminal.rs:18", "src/engine/browser.rs:18"],
+      "text": "Describe the verifier as an internal consistency check, not password authentication; distinguish the 1024 normalized-byte password bound from longer valid pre-normalization input; update the argon2Engine cross-reference to web/argon2-engine.js. These are small clarity edits, not new algorithm findings.",
+      "disposition": "Done: a3b44c3 (verifier as a consistency check; argon2Engine in web/argon2-engine.js) and 4895169 (both password bounds at LINE_CAPACITY)."
+    },
+    {
+      "priority": "deferred",
+      "area": "Module size and layout",
+      "files": ["src/wallet.rs", "src/bin/mhfe/serve.rs", "src/bin/mhfe/check.rs"],
+      "text": "Keep the present functional core and trait-based engine boundary. Large files contain substantial tests/help, so line counts alone do not justify splitting them. If these features grow, separate address parsing from BIP32 derivation and HTTP parsing from launcher selection at their existing function seams. Retain explicit cleanup and straightforward control flow.",
+      "disposition": "No change: the advice applies if these features grow, and they have not."
+    }
+  ],
+  "verdict": {
+    "implementation": "No new medium/high/critical defects or core suite mismatch identified; one low documentation finding.",
+    "suppliedArtifacts": "PASS: six checksums, source metadata, notices and independent CI byte identity verified.",
+    "publicationReadiness": "INCOMPLETE: current full-cost CI remains pending and existing tag identifies older source."
+  }
+}
