@@ -8,14 +8,14 @@ use crate::engine::Argon2Engine;
 use crate::mhfe::phrase_from_entropy;
 use crate::packing::{self, State};
 use crate::wallet::{self, BitcoinAddress, DerivationPath, SearchLimits};
-use crate::{Mhfe, MhfeError, Password, ProgressCallback};
+use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
 
 /// What the recovered phrase is compared with.
 pub enum Reference<'a> {
     /// The built-in check value of a 12-, 15-, 18- or 21-word original. It confirms that the
     /// recovery is consistent, not that it gives the same wallet, and it says nothing about a
-    /// BIP39 passphrase.
-    BuiltInCheck { words: usize },
+    /// BIP39 passphrase. A 24-word original has no such check and is refused.
+    BuiltInCheck { words: WordCount },
     /// A receiving address of the wallet, the strong check. The address is searched on the
     /// standard paths of its type within `limits`, or only at `path` when given.
     Address {
@@ -41,13 +41,13 @@ impl<E: Argon2Engine> Mhfe<E> {
         on_progress: ProgressCallback<'_>,
     ) -> Result<bool, MhfeError> {
         if let Reference::BuiltInCheck { words } = reference {
-            if !packing::SHORT_WORD_COUNTS.contains(words) {
-                return Err(MhfeError::InvalidWordCount(*words));
+            if !packing::SHORT_WORD_COUNTS.contains(&words.get()) {
+                return Err(MhfeError::InvalidWordCount(words.get()));
             }
         }
         let x = self.recover_state(container, password, on_progress)?;
         match reference {
-            Reference::BuiltInCheck { words } => Ok(packing::unpack(&x, *words).is_ok()),
+            Reference::BuiltInCheck { words } => Ok(packing::unpack(&x, words.get()).is_ok()),
             Reference::Address { .. } | Reference::Fingerprint { .. } => {
                 // Every reading of X is compared: each short length that passes its check and
                 // the 24-word reading, so that no accidental match hides the real phrase.
@@ -117,7 +117,9 @@ mod tests {
             .parse()
             .unwrap();
         let references = [
-            Reference::BuiltInCheck { words: 12 },
+            Reference::BuiltInCheck {
+                words: WordCount::new(12).unwrap(),
+            },
             Reference::Address {
                 address: &address,
                 passphrase: "",
@@ -169,7 +171,9 @@ mod tests {
             mhfe.check(
                 &container,
                 &password,
-                &Reference::BuiltInCheck { words: 24 },
+                &Reference::BuiltInCheck {
+                    words: WordCount::new(24).unwrap()
+                },
                 &mut |_, _| Ok(())
             )
             .err(),

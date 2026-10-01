@@ -12,7 +12,7 @@ use crate::feistel::RoundTrace;
 use crate::mhfe::{self, Recovery};
 use crate::packing::{self, State};
 use crate::suite::{DS_MASK, DS_SALT};
-use crate::{phrase, Mhfe, MhfeError, Password, PhraseLength, WorkFactor, SUITE_ID};
+use crate::{phrase, Mhfe, MhfeError, Password, PhraseLength, WordCount, WorkFactor, SUITE_ID};
 
 /// Identifies this file layout; a changed layout gets a new name.
 pub const SCHEMA: &str = "mhfe-suite-3-vector-v2";
@@ -537,7 +537,7 @@ pub fn negative_case<E: Argon2Engine>(
     let password = Password::new(input.password)?;
     let length = match input.words {
         0 => PhraseLength::Detect,
-        words => PhraseLength::Words(words),
+        words => PhraseLength::Words(WordCount::new(words)?),
     };
     let (recovery, error_code) =
         match mhfe.decrypt(container, &password, length, &mut |_, _| Ok(())) {

@@ -2,7 +2,7 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::{check_container, Password, PhraseLength, RecoveredPhrase, Recovery};
+use mhfe::{check_container, Password, PhraseLength, RecoveredPhrase, Recovery, WordCount};
 use zeroize::Zeroizing;
 
 use crate::exit::{capitalize, Failure, SUCCESS};
@@ -104,12 +104,7 @@ pub fn long_help() -> String {
 pub fn run(options: Options) -> Result<i32, Failure> {
     let work = options.settings.work_factor()?;
     let length = match options.words {
-        Some(words) => {
-            if ![12, 15, 18, 21, 24].contains(&words) {
-                return Err(mhfe::MhfeError::InvalidWordCount(words).into());
-            }
-            PhraseLength::Words(words)
-        }
+        Some(words) => PhraseLength::Words(WordCount::new(words)?),
         None => PhraseLength::Detect,
     };
     let mut input = Input::new(options.stdin);

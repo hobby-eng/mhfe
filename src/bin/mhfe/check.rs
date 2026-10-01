@@ -8,7 +8,7 @@
 use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
-use mhfe::{check_container, Password, Reference};
+use mhfe::{check_container, Password, Reference, WordCount};
 use zeroize::Zeroizing;
 
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
@@ -213,7 +213,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
                 passphrase: &passphrase,
             }
         }
-        Choice::BuiltInCheck(words) => Reference::BuiltInCheck { words },
+        Choice::BuiltInCheck(words) => Reference::BuiltInCheck {
+            words: WordCount::new(words)?,
+        },
     };
 
     let mut mhfe = settings::reserve_memory(work)?;

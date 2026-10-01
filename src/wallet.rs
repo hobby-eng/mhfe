@@ -71,12 +71,23 @@ impl AddressType {
 }
 
 /// A receiving address the user knows, reduced to what identifies it: the network, the type
-/// and the 20-byte key or script hash (32-byte output key for Taproot).
+/// and the 20-byte key or script hash (32-byte output key for Taproot). It is made only by parsing
+/// an address, and its parts cannot be changed afterwards, so it always describes a real address.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BitcoinAddress {
-    pub network: Network,
-    pub address_type: AddressType,
+    network: Network,
+    address_type: AddressType,
     program: Vec<u8>,
+}
+
+impl BitcoinAddress {
+    pub fn network(&self) -> Network {
+        self.network
+    }
+
+    pub fn address_type(&self) -> AddressType {
+        self.address_type
+    }
 }
 
 impl FromStr for BitcoinAddress {
@@ -212,10 +223,36 @@ impl fmt::Display for DerivationPath {
 }
 
 /// How far the address search goes: accounts `0..accounts`, both chains, indexes `0..indexes`.
+/// Each count is at least 1 and at most 2^31: BIP32 has 2^31 hardened account numbers and 2^31
+/// ordinary address indexes, and a higher number would silently name a different path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SearchLimits {
-    pub accounts: u32,
-    pub indexes: u32,
+    accounts: u32,
+    indexes: u32,
+}
+
+impl SearchLimits {
+    /// Limits for the first `accounts` accounts and the first `indexes` addresses of each chain.
+    pub fn new(accounts: u32, indexes: u32) -> Result<Self, MhfeError> {
+        let possible = |count: u32| (1..=HARDENED).contains(&count);
+        if possible(accounts) && possible(indexes) {
+            Ok(Self { accounts, indexes })
+        } else {
+            // The limits stand for the paths the search derives, so a count out of range is
+            // reported as the invalid path it would lead to.
+            Err(MhfeError::InvalidDerivationPath(format!(
+                "a search covers 1 to {HARDENED} accounts and indexes, not {accounts} and {indexes}"
+            )))
+        }
+    }
+
+    pub fn accounts(self) -> u32 {
+        self.accounts
+    }
+
+    pub fn indexes(self) -> u32 {
+        self.indexes
+    }
 }
 
 impl Default for SearchLimits {
@@ -617,9 +654,24 @@ mod tests {
             assert_eq!(derived, expected, "{path_text}");
             let parsed: BitcoinAddress = expected.parse().unwrap();
             assert_eq!(
-                (parsed.network, parsed.address_type),
+                (parsed.network(), parsed.address_type()),
                 (network, address_type),
                 "{expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn search_limits_stay_within_the_bip32_index_range() {
+        assert!(SearchLimits::new(1, 1).is_ok());
+        assert!(SearchLimits::new(HARDENED, HARDENED).is_ok());
+        for (accounts, indexes) in [(0, 1), (1, 0), (HARDENED + 1, 1), (1, u32::MAX)] {
+            assert!(
+                matches!(
+                    SearchLimits::new(accounts, indexes),
+                    Err(MhfeError::InvalidDerivationPath(_))
+                ),
+                "{accounts} accounts, {indexes} indexes"
             );
         }
     }
@@ -633,10 +685,7 @@ mod tests {
         let found = find_address(ABANDON, "", &target, None, SearchLimits::default()).unwrap();
         assert_eq!(found, Some(path("m/84'/0'/2'/1/19")));
 
-        let small = SearchLimits {
-            accounts: 2,
-            indexes: 20,
-        };
+        let small = SearchLimits::new(2, 20).unwrap();
         assert_eq!(
             find_address(ABANDON, "", &target, None, small).unwrap(),
             None

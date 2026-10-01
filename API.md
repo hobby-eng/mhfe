@@ -55,17 +55,20 @@ let matches: bool = mhfe.check(&container, &password, &reference, &mut |_, _| Ok
 - `decrypt` with `PhraseLength::Detect` tests the 12-, 15-, 18- and 21-word layouts. One match gives
   a verified phrase; no match gives the 24-word reading, not verified; several matches give
   `Recovery::Ambiguous` with every matching candidate and the unverified 24-word reading.
-  `PhraseLength::Words(n)` selects the length: a short length must pass its check
-  (`MhfeError::VerifierMismatch` otherwise), 24 words are always accepted.
-- `check` compares the recovery with a `Reference`: `BuiltInCheck { words }` for a 12- to 21-word
-  original, `Address { address, passphrase, path, limits }` for a receiving address (the strong
-  check) or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. It
-  returns only whether the recovery matches.
+  `PhraseLength::Words(WordCount::new(n)?)` selects the length: `WordCount::new` accepts only 12,
+  15, 18, 21 and 24; a short length must pass its check (`MhfeError::VerifierMismatch` otherwise),
+  24 words are always accepted.
+- `check` compares the recovery with a `Reference`: `BuiltInCheck { words }`, with a `WordCount`
+  of 12 to 21, for a short original, `Address { address, passphrase, path, limits }` for a
+  receiving address (the strong check) or `Fingerprint { fingerprint, passphrase }` for the BIP32
+  master key fingerprint. It returns only whether the recovery matches.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
 - `wallet` has the address and fingerprint functions the check uses: `BitcoinAddress`,
-  `DerivationPath`, `SearchLimits`, `master_fingerprint`, `find_address`, `address_at`.
+  `DerivationPath`, `SearchLimits`, `master_fingerprint`, `find_address`, `address_at`. A
+  `BitcoinAddress` comes only from parsing an address; `SearchLimits::new` refuses counts outside
+  1 to 2^31, the BIP32 range of account numbers and address indexes.
 - `vectors` writes test vectors from the fixed public inputs `PUBLIC_INPUTS` and `NEGATIVE_INPUTS`.
   Vectors contain the password and every round key by design.
 

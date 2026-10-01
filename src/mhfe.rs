@@ -20,13 +20,30 @@ pub type ProgressCallback<'a> = &'a mut dyn FnMut(u32, u32) -> Result<(), MhfeEr
 /// Rounds of an encryption: twelve to encrypt and twelve to check the result.
 pub const ENCRYPTION_ROUNDS: u32 = 2 * ROUNDS;
 
+/// The length of an original phrase: 12, 15, 18, 21 or 24 words, the BIP39 lengths MHFE takes.
+/// It is made only by [`WordCount::new`], so it never holds any other number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WordCount(usize);
+
+impl WordCount {
+    /// Refuses every other number with [`MhfeError::InvalidWordCount`].
+    pub fn new(words: usize) -> Result<Self, MhfeError> {
+        packing::entropy_bytes(words)?;
+        Ok(Self(words))
+    }
+
+    pub fn get(self) -> usize {
+        self.0
+    }
+}
+
 /// How recovery learns the length of the original phrase.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhraseLength {
     /// Tests the 12-, 15-, 18- and 21-word layouts and falls back to 24 words.
     Detect,
     /// The user knows the length. A short length must pass its check; 24 words have none.
-    Words(usize),
+    Words(WordCount),
 }
 
 /// One phrase produced by recovery.
@@ -158,10 +175,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         length: PhraseLength,
         on_progress: ProgressCallback<'_>,
     ) -> Result<Recovery, MhfeError> {
-        // Every input is checked before the first Argon2 call.
-        if let PhraseLength::Words(words) = length {
-            packing::entropy_bytes(words)?;
-        }
+        // Every input is checked before the first Argon2 call; a WordCount is valid already.
         let x = self.recover_state(container, password, on_progress)?;
         recover(&x, length)
     }
@@ -191,7 +205,7 @@ impl<E: Argon2Engine> Mhfe<E> {
 /// Step 3 of recovery: reads `X` as the chosen length, or tests the short layouts.
 pub(crate) fn recover(x: &State, length: PhraseLength) -> Result<Recovery, MhfeError> {
     if let PhraseLength::Words(words) = length {
-        return Ok(Recovery::Phrase(read_as(x, words)?));
+        return Ok(Recovery::Phrase(read_as(x, words.get())?));
     }
     let matches = packing::matching_short_lengths(x);
     match matches.as_slice() {
@@ -342,7 +356,7 @@ mod tests {
                 mhfe.decrypt(
                     &container,
                     &password,
-                    PhraseLength::Words(words),
+                    PhraseLength::Words(WordCount::new(words).unwrap()),
                     &mut no_progress(),
                 )
                 .unwrap(),
@@ -386,7 +400,7 @@ mod tests {
             mhfe.decrypt(
                 &container,
                 &wrong,
-                PhraseLength::Words(12),
+                PhraseLength::Words(WordCount::new(12).unwrap()),
                 &mut no_progress()
             )
             .err(),
@@ -405,7 +419,7 @@ mod tests {
             mhfe.decrypt(
                 &container,
                 &password,
-                PhraseLength::Words(24),
+                PhraseLength::Words(WordCount::new(24).unwrap()),
                 &mut no_progress(),
             )
             .unwrap(),
@@ -434,7 +448,7 @@ mod tests {
                 mhfe.decrypt(
                     &container,
                     &decoy,
-                    PhraseLength::Words(24),
+                    PhraseLength::Words(WordCount::new(24).unwrap()),
                     &mut no_progress(),
                 )
                 .unwrap(),
@@ -502,7 +516,7 @@ mod tests {
                 mhfe.decrypt(
                     &container,
                     &password,
-                    PhraseLength::Words(lengths[0]),
+                    PhraseLength::Words(WordCount::new(lengths[0]).unwrap()),
                     &mut no_progress(),
                 )
                 .unwrap(),
@@ -545,15 +559,7 @@ mod tests {
             mhfe.decrypt(ZERO_12, &password, PhraseLength::Detect, &mut no_progress()),
             Err(MhfeError::InvalidContainer(_))
         ));
-        assert!(matches!(
-            mhfe.decrypt(
-                LEGAL_24,
-                &password,
-                PhraseLength::Words(13),
-                &mut no_progress()
-            ),
-            Err(MhfeError::InvalidWordCount(13))
-        ));
+        assert_eq!(WordCount::new(13), Err(MhfeError::InvalidWordCount(13)));
     }
 
     #[test]
