@@ -39,10 +39,10 @@ sha256sum --check --ignore-missing SHA256SUMS
 
 There are builds for Linux (x86-64 and ARM64), macOS (Intel and Apple silicon) and Windows (x86-64).
 For x86-64 there are two: the standard one runs on every 64-bit x86 processor, and the one with
-`ssse3` in its name is about 5% faster but needs a processor with SSSE3, which almost every computer
-made since 2008 has; on one without it, it stops with a clear message. When unsure, take the
-standard one. To build from source, install Rust and run `cargo build --release --locked`; the
-program is then `target/release/mhfe`.
+`ssse3` in its name is 7 to 10% faster ([measured](measurements/README.md)) but needs a processor
+with SSSE3, which almost every computer made since 2008 has; on one without it, it stops with a
+clear message. When unsure, take the standard one. To build from source, install Rust and run
+`cargo build --release --locked`; the program is then `target/release/mhfe`.
 
 ### Where to run it
 
@@ -74,8 +74,8 @@ MHFE · Encrypt a recovery phrase
 Original recovery phrase (hidden):
 ✓ Accepted a valid 12-word phrase.
 Show the words that were read? They will be visible on the screen. [y/N]:
-Letter case and spaces count: lowercase words with single spaces are the easiest to type again
-years later.
+Letter case and spaces count: lowercase words with single spaces are the
+easiest to type again years later.
 Password (hidden):
 Repeat the password (hidden):
 Press Ctrl+C to cancel at any time.
@@ -98,6 +98,14 @@ donate stove tower picnic iron rescue trick shrimp roof rib home cigar ...
 
 Checking   ████████████████████████  12/12  done in 1 min 46 s
 ✓ Verified: the container turns back into your original phrase.
+
+Nothing else needs to be kept: the 24 words and the password are enough.
+
+Use a different password for each phrase you encrypt, and nowhere else. To
+make another copy, copy these 24 words exactly.
+Before relying on the container, rehearse the recovery with mhfe check, typing
+the words from the plate or paper you wrote, not from the screen, and keep the
+original backup until it matches.
 ```
 
 In a terminal the output is in color; it is plain when it goes to a file or a script, or when the
@@ -313,9 +321,9 @@ Argon2 is the reference C implementation of its authors, vendored unchanged in
 browser package. Version 0.3.0 was the last release to implement suite 2.
 
 On x86-64 the Argon2 code uses only SSE2, which every 64-bit x86 processor has.
-`cargo build --release --features ssse3` builds it with SSSE3 instead, about 5% faster. Such a
-program checks the processor before it starts Argon2 and refuses with a clear message where SSSE3 is
-missing, as on some virtual machines. Both builds give byte for byte the same results; their tests
-check the same values.
+`cargo build --release --features ssse3` builds it with SSSE3 instead, 7 to 10% faster in the
+[measurements](measurements/README.md). Such a program checks the processor before it starts Argon2
+and refuses with a clear message where SSSE3 is missing, as on some virtual machines. Both builds
+give byte for byte the same results; their tests check the same values.
 
 The Rust source is licensed under MIT; see [`LICENSE`](LICENSE).
