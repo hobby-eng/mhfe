@@ -286,11 +286,19 @@ unsafe extern "C" fn hand_out_work_area(memory: *mut *mut u8, bytes: usize) -> c
 /// free_memory() in core.c calls clear_internal_memory() before this callback.
 unsafe extern "C" fn keep_work_area(_memory: *mut u8, _bytes: usize) {}
 
-/// Memory the operating system can give a new allocation without swapping, if it reports it.
+/// Memory the operating system can give a new allocation without swapping, if it reports it:
+/// the kernel's estimate for the whole computer, or less where the process's control group, such
+/// as a container's, has less room left (see cgroup.rs).
 #[cfg(target_os = "linux")]
 pub(super) fn available_memory_bytes() -> Option<u64> {
-    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
-    parse_mem_available(&meminfo)
+    let computer = std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|meminfo| parse_mem_available(&meminfo));
+    let group = super::cgroup::available_bytes();
+    match (computer, group) {
+        (Some(computer), Some(group)) => Some(computer.min(group)),
+        (computer, group) => computer.or(group),
+    }
 }
 
 /// `MemAvailable` in /proc/meminfo, the kernel's estimate of memory available for new
@@ -304,6 +312,16 @@ fn parse_mem_available(meminfo: &str) -> Option<u64> {
     kib.checked_mul(1024)
 }
 
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    /// Releases a send right; from <mach/mach_port.h> in the system library, which the libc
+    /// crate does not declare.
+    fn mach_port_deallocate(
+        task: libc::mach_port_t,
+        name: libc::mach_port_t,
+    ) -> libc::kern_return_t;
+}
+
 /// Free and inactive pages of the Mach virtual-memory statistics: the pages the kernel can hand
 /// to a new allocation without swapping. See [`mach_available_bytes`] for the counters left out.
 #[cfg(target_os = "macos")]
@@ -311,18 +329,26 @@ pub(super) fn available_memory_bytes() -> Option<u64> {
     // SAFETY: vm_statistics64 holds only integers, for which all zero bytes are a valid value.
     let mut statistics: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
     let mut count = libc::HOST_VM_INFO64_COUNT;
+    // libc points Mach calls to the mach2 crate; the Mach API itself is stable.
+    // SAFETY: mach_host_self only returns a send right to the host port.
+    #[allow(deprecated)]
+    let host = unsafe { libc::mach_host_self() };
     // SAFETY: host_statistics64 writes at most `count` 32-bit words, and HOST_VM_INFO64_COUNT
-    // is the size of `vm_statistics64`. The host port from mach_host_self is not released;
-    // it is one send right per call, which the kernel reclaims when the process ends.
-    #[allow(deprecated)] // libc points Mach calls to the mach2 crate; the Mach API is stable.
+    // is the size of `vm_statistics64`.
+    #[allow(deprecated)]
     let result = unsafe {
         libc::host_statistics64(
-            libc::mach_host_self(),
+            host,
             libc::HOST_VM_INFO64,
             (&mut statistics as *mut libc::vm_statistics64).cast(),
             &mut count,
         )
     };
+    // Each mach_host_self call adds a send right, which would otherwise pile up in a library
+    // that checks the memory again and again. A failure to release it changes no result.
+    // SAFETY: releases the one right this call obtained above; `host` is not used afterwards.
+    #[allow(deprecated)]
+    let _ = unsafe { mach_port_deallocate(libc::mach_task_self(), host) };
     if result != libc::KERN_SUCCESS {
         return None;
     }

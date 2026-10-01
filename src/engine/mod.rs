@@ -40,6 +40,9 @@ pub trait Argon2Engine {
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 pub(crate) mod browser;
+// Read by ffi.rs on Linux only, where containers and systemd units limit memory per group.
+#[cfg(target_os = "linux")]
+mod cgroup;
 #[cfg(not(target_arch = "wasm32"))]
 mod ffi;
 #[cfg(not(target_arch = "wasm32"))]

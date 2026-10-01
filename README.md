@@ -255,7 +255,8 @@ included, slower or more memory-hungry:
 
 An encryption takes twice these times. The PIM (`--pim`, 0 to 1023) multiplies the time: PIM 1
 doubles it, and at PIM 1023 a recovery takes roughly 17 to 34 hours. The computer that recovers the
-container must have the memory of the chosen level; MHFE checks this before it asks for anything.
+container must have the memory of the chosen level; MHFE checks this before it asks for anything,
+on Linux also against the memory limit of a container or a systemd unit it runs in.
 The command-line tool, which needs a 64-bit system, supports every level; a browser supports memory
 level 0 only. A higher setting adds a fixed factor, while each extra random password word multiplies
 an attacker's work by 7,776, so a better password is worth more.
