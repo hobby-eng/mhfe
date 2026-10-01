@@ -63,9 +63,9 @@ RUN curl --fail --silent --show-error --location \
          --target wasm32-unknown-unknown --target aarch64-unknown-linux-gnu \
          --target x86_64-pc-windows-gnu --component rustfmt --component clippy \
     && rm /tmp/rustup-init \
-    && cargo install wasm-bindgen-cli --version 0.2.128 --locked \
+    && cargo install wasm-bindgen-cli --version 0.2.129 --locked \
     && test "$(rustc --version | cut -d ' ' -f 1-2)" = "rustc 1.98.1" \
-    && test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.128"
+    && test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.129"
 
 # Cross builds: the linkers and the C compilers the cc crate uses for the Argon2 code. The MinGW
 # linker writes the build time into every Windows executable's header, and the header checksum

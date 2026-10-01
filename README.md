@@ -311,9 +311,10 @@ scripts/build-reproducible.sh
 ```
 
 The library API is in [`API.md`](API.md), the security notes in [`SECURITY.md`](SECURITY.md), the
-licences of the bundled Argon2 code and EFF word list in
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), and timing records in
-[`measurements/`](measurements/). Test vectors are written with `mhfe test-vectors` and checked
+licences of the bundled Argon2 code, EFF word list and browser JavaScript runtime in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), those of the Rust crates in
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) (written by `scripts/third-party-licenses.py`;
+every release archive carries both files), and timing records in [`measurements/`](measurements/). Test vectors are written with `mhfe test-vectors` and checked
 independently with `scripts/independent-suite3.py`, which uses OpenSSL's Argon2.
 
 Argon2 is the reference C implementation of its authors, vendored unchanged in
