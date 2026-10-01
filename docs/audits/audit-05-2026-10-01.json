@@ -1,0 +1,1052 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-005",
+  "auditNumber": 5,
+  "date": "2026-10-01",
+  "title": "Full audit of the v0.4.0 release commit against suite 3",
+  "reviewer": {
+    "name": "Claude Code, wallet-tools-maintainer subagent",
+    "model": "claude-opus-5-5",
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "df70ca5411b84858058bc016385cf4b0001bd570",
+    "commitComplete": true,
+    "branch": "main",
+    "tag": "v0.4.0",
+    "sourceFingerprint": "01b379da03cc34c3ab1124686c1b1ed1b494b8a08975d01bc43cd477873a398e",
+    "fingerprintMethod": "SHA-256 of sorted git-tracked path + NUL + file SHA-256 + LF.",
+    "workingTree": "?? AGENTS.md\n?? docs/audits/AUD-005-harnesses/",
+    "preExistingChanges": "Untracked AGENTS.md only (left alone); the AUD-005 harness folder was added by this audit.",
+    "capturedAt": "2026-10-01T06:23:26.776852+00:00",
+    "inventoryFile": "snapshot.json (local evidence)"
+  },
+  "scope": {
+    "repository": "https://github.com/hobby-eng/mhfe",
+    "areas": [
+      "Rust core against the suite 3 specification",
+      "C FFI, unsafe code and the Argon2 work area",
+      "secret handling",
+      "CLI including hidden input and colour rules",
+      "browser client, worker, Argon2 bridge and cancellation",
+      "fast-mode launchers (Rust and Python)",
+      "build, packaging, licences, dependencies (RustSec), CI and release workflows",
+      "documentation and audit records"
+    ],
+    "specification": {
+      "repository": "../mhfe_spec (read only)",
+      "workingCommit": "8a0ee89bce3cd08d9883ef5cd482386f3ffe012e",
+      "releaseTag": "v0.4.0",
+      "releaseCommit": "04400be7bbaa31d4f4955f548de3d2a2a2bb674e",
+      "workingTree": "M docs/audits/AUD-005-publication.json\n?? AGENTS.md\n?? docs/drafts/",
+      "files": {
+        "README.md": "7a39f7c4e2106ae0dc7ccc8d7bd719d92c7eef7fb62ad3a9ad05f687a6c9e4a7",
+        "docs/DESIGN-NOTES.md": "3ba58f79e7fdb106f20e8bed6d099d6e9e360230c51e0bf6aadaabea22e12279",
+        "vectors/suite3/validation-cases.json": "92ced6ea44f3bcc912ff1aff50d1c5e1e249268678818a1e1f10a9178db0fecd"
+      }
+    },
+    "excluded": [
+      "Docker and the reproducible build",
+      "full-size 2 GiB Argon2 runs and the full vector replay",
+      "remote changes, pushes, tags and releases"
+    ],
+    "environment": "Linux 7.0.0-34 x86-64, 16 threads, 15 GiB RAM; Rust/Cargo 1.98.1; wasm-bindgen 0.2.129; Emscripten 6.0.10; Node 26.10.0; Python 3.14.4; cargo-audit 0.22.2; Prettier 3.9.9; Playwright from multi-chain-wallet-tools with Chromium 153.0.8010.12 and Firefox 155.0. Cargo builds used one job."
+  },
+  "checks": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "category": "SEC",
+      "logicalGroup": "Secret ownership",
+      "scope": "mhfe at df70ca5",
+      "outcome": "failed",
+      "method": "Source trace of password, phrase, entropy, states, salts, keys, masks, passphrase and BIP32 keys through library, CLI, FFI, WASM and worker; allocator probe of the phrase text.",
+      "evidence": "AUD-005-SEC001; native-tests; phrase-copies"
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "category": "SEC",
+      "logicalGroup": "CSP and worker transport",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Real Blob workers under default-src 'none' CSP in Chromium and Firefox, file and isolated loopback modes; secrets transferred and wiped; no iframe vault is part of this library.",
+      "evidence": "real-browsers; browser-build"
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "category": "SEC",
+      "logicalGroup": "Offline boundary",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Network-code gate (fetch, XMLHttpRequest, WebSocket, EventSource, importScripts searched in dist); request captures show only the page and blob URLs; the only listener is the 127.0.0.1 launcher.",
+      "evidence": "browser-build; real-browsers"
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "category": "SEC",
+      "logicalGroup": "Randomness and cryptography",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "getrandom with unbiased 7776-word rejection sampling; suite 3 formulas re-derived from the specification and matched to src/feistel.rs, src/packing.rs, src/suite.rs; RFC 9106 vector and 160 C/RustCrypto differential cases; 17 transcripts by the independent script.",
+      "evidence": "native-tests; recorded-transcripts"
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "category": "SEC",
+      "logicalGroup": "Exceptional cleanup",
+      "scope": "mhfe at df70ca5",
+      "outcome": "failed",
+      "method": "C work area wiped on success and failure, cancellation at every round, worker termination, Ctrl+C with terminal restore; practical zeroization gap in phrase text.",
+      "evidence": "AUD-005-SEC001; native-tests; real-browsers; hidden-input"
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "category": "SEC",
+      "logicalGroup": "Injection and persistence",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "No storage or telemetry in client or worker; test pages escape script terminators; launcher routes, Host check and headers reviewed; error messages carry no secrets.",
+      "evidence": "browser-build; source review"
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "category": "SEC",
+      "logicalGroup": "Availability bounds",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "8192-byte input lines, 16-connection cap and total deadlines, memory pre-check before secrets, allocation failure under an address-space limit refused with exit 4 before Argon2. The hint defect is recorded under UI.",
+      "evidence": "cli-probes-2; native-tests"
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "category": "FUN",
+      "logicalGroup": "BIP39 and normalized input",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "All five lengths, exact match before four-letter prefix, checksum, word and count refusals, NFKD with Unicode 17, control/unassigned/private-use rules and byte limits; validation-cases.json equals the specification.",
+      "evidence": "native-tests; metadata"
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "category": "FUN",
+      "logicalGroup": "Wallet derivation",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "BIP32 master and child keys, BIP39 passphrase normalization, BIP44/49/84/86 mainnet and testnet vectors, uppercase SegWit, rare invalid keys.",
+      "evidence": "native-tests"
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "category": "FUN",
+      "logicalGroup": "BIP85, BIP38, signing, Silent Payments",
+      "scope": "mhfe at df70ca5",
+      "outcome": "not-applicable",
+      "method": "None of these exists in MHFE.",
+      "evidence": "source inventory"
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "category": "FUN",
+      "logicalGroup": "Descriptors and multisig",
+      "scope": "mhfe at df70ca5",
+      "outcome": "not-applicable",
+      "method": "No descriptor, Miniscript or multisig interface; single-key address encodings are covered by FUN-002.",
+      "evidence": "src/wallet.rs"
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "category": "FUN",
+      "logicalGroup": "Transactions and PSBT",
+      "scope": "mhfe at df70ca5",
+      "outcome": "not-applicable",
+      "method": "MHFE neither reads nor signs transactions.",
+      "evidence": "source inventory"
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "category": "FUN",
+      "logicalGroup": "Recovery and container format",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Both directions at reduced real Argon2 cost for all lengths, detection, ambiguity, manual 24 words, fixed point, fault check, decoy consistency; recorded-key transcript replay; the full-size replay is excluded by instruction.",
+      "evidence": "native-tests; recorded-transcripts"
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "category": "FUN",
+      "logicalGroup": "Providers and discovery",
+      "scope": "mhfe at df70ca5",
+      "outcome": "not-applicable",
+      "method": "No provider or discovery; the local address search is FUN-002.",
+      "evidence": "source inventory"
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "category": "API",
+      "logicalGroup": "Rust, C and JavaScript contracts",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "FFI layout assertions and field reach; WASM number validation; client argument checks. The synchronous-throw contract is recorded as an observation.",
+      "evidence": "native-tests; browser-build; native-32bit-guard"
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "category": "API",
+      "logicalGroup": "Async lifecycle",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Busy state, transfers, cancellation before start and inside round 2, restart; worker termination after each operation.",
+      "evidence": "real-browsers; browser-build"
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "category": "API",
+      "logicalGroup": "Financial exports",
+      "scope": "mhfe at df70ca5",
+      "outcome": "not-applicable",
+      "method": "No monetary exports; vector JSON and CLI output are API-004.",
+      "evidence": "API.md"
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "category": "API",
+      "logicalGroup": "Serialization and interoperability",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Corpus and fast cases equal the specification bytes; text and binary checksum lines in both launchers; concurrent checksum refresh; address encodings.",
+      "evidence": "metadata; cli-regressions; browser-build"
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "category": "BLD",
+      "logicalGroup": "Feature composition",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "SSE2 and SSSE3 native builds, wasm feature build, both Emscripten builds; test-only engine absent from release artifacts.",
+      "evidence": "static-checks; browser-build; native-ssse3"
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "category": "BLD",
+      "logicalGroup": "Platform matrix",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Local Linux x86-64 (SSE2, SSSE3), 32-bit guard, two browser engines in two modes; Windows and macOS from exact-commit CI (external evidence).",
+      "evidence": "native-tests; native-ssse3; native-32bit-guard; upstream-ci-jobs"
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "category": "BLD",
+      "logicalGroup": "Dependencies, provenance, licences",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "RustSec 0 of 106; 22 vendored files equal upstream blobs and recorded hashes; THIRD_PARTY_LICENSES.md matches Cargo.lock; local archives carry the licence files.",
+      "evidence": "dependency-audit; upstream; metadata; licenses-check; packaging"
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "category": "BLD",
+      "logicalGroup": "Canonical reproducibility",
+      "scope": "mhfe at df70ca5",
+      "outcome": "skipped",
+      "method": "Docker and the reproducible build were excluded by instruction (the host's Docker was in use). Exact-commit CI canonical-build and release canonical jobs succeeded (external evidence, not a local byte comparison).",
+      "evidence": "upstream-ci-jobs"
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "category": "BLD",
+      "logicalGroup": "Packaging, CI and release",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Three local archives packed with the archive licence gate; workflow pins, permissions, tag/version check and vector gate reviewed; hardening notes are observations.",
+      "evidence": "packaging; upstream-ci-jobs; workflow review"
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "category": "UI",
+      "logicalGroup": "Responsive layout",
+      "scope": "mhfe at df70ca5",
+      "outcome": "not-applicable",
+      "method": "The repository ships a CLI and an integration library, not an end-user page; the browser-check page is diagnostic.",
+      "evidence": "web/README.md"
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "category": "UI",
+      "logicalGroup": "Input and workflow state",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Hidden and visible prompts, retries, confirmation, explicit length, refusals before computation, unverified versus verified output in terminal and script modes.",
+      "evidence": "hidden-input; cli-regressions; cli-probes-2"
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "category": "UI",
+      "logicalGroup": "Visibility, help and messages",
+      "scope": "mhfe at df70ca5",
+      "outcome": "failed",
+      "method": "Colour rules (NO_COLOR, CLICOLOR, CLICOLOR_FORCE, TERM=dumb, pipes), help sections, password advice and resource messages.",
+      "evidence": "AUD-005-FUN001; AUD-005-UI001; cli-probes-2"
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "category": "ARC",
+      "logicalGroup": "Module ownership",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Unsafe code confined to src/engine/ffi.rs and src/bin/mhfe/hidden_input.rs; core/engine separation; test engine only under cfg(test).",
+      "evidence": "source review; static-checks"
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "category": "ARC",
+      "logicalGroup": "Duplication and dead paths",
+      "scope": "mhfe at df70ca5",
+      "outcome": "passed",
+      "method": "Rust and Python launchers duplicate the same rules by design and share one test suite; no dead production path found.",
+      "evidence": "browser-build; source review"
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "category": "ARC",
+      "logicalGroup": "Comments and test fidelity",
+      "scope": "mhfe at df70ca5",
+      "outcome": "failed",
+      "method": "Tests use the real C engine at reduced cost and literal expected values; one declaration carries two doc comments.",
+      "evidence": "AUD-005-ARC001; native-tests"
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "category": "DOC",
+      "logicalGroup": "Capabilities and safety language",
+      "scope": "mhfe at df70ca5",
+      "outcome": "failed",
+      "method": "README, API, SECURITY and web/README compared with the code and the specification; API.md omits a password refusal.",
+      "evidence": "AUD-005-DOC002; source comparison"
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "category": "DOC",
+      "logicalGroup": "Commands, metadata and legal",
+      "scope": "mhfe at df70ca5",
+      "outcome": "failed",
+      "method": "Commands and pins checked; private reporting enabled; licence files current; README omits the check --stdin requirement.",
+      "evidence": "AUD-005-DOC003; upstream; licenses-check"
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "category": "DOC",
+      "logicalGroup": "Audit record integrity",
+      "scope": "mhfe at df70ca5",
+      "outcome": "failed",
+      "method": "32-task ledger, paired records, procedure hashes and ignored evidence validated for AUD-005; AUD-004 names no commit for its BLD001 bundle.",
+      "evidence": "AUD-005-DOC001; validate_report.py"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-005-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Phrase text is built in growing strings that leave unwiped copies in freed memory",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Best-effort memory hygiene on the user's own offline computer; no disclosure path to another party is demonstrated.",
+      "affectedFiles": [
+        "src/phrase.rs:71 (read_phrase)",
+        "src/mhfe.rs:257 (phrase_from_entropy, used by decrypt, the rehearsal check and encrypt)",
+        "src/bin/mhfe/encrypt.rs (reads the original through read_phrase)"
+      ],
+      "reproduction": "cargo run --offline --manifest-path docs/audits/AUD-005-harnesses/phrase-copies/Cargo.toml --target-dir target/aud005-phrase-copies. The probe installs a global allocator that, whenever a block is freed or moved by a reallocation, looks for the text \"legal winner\" in the old bytes, then calls the public mhfe::read_phrase with the public BIP39 phrase \"legal winner thank year ...\" typed in short upper-case forms.",
+      "expected": "SECURITY.md and API.md: every buffer the crate owns that holds a phrase is wiped when dropped; only working buffers inside dependencies are excepted. The crate already reserves its other phrase and password buffers at full size for exactly this reason (phrase::parse, Password::new, the terminal readers).",
+      "observed": "4 freed heap blocks still held the phrase after read_phrase returned. Mnemonic::to_string writes word by word into an empty String, which grows 8, 16, 32, 64, 128 and 256 bytes; every growth frees the previous block unwiped. Only the final buffer is wiped by Zeroizing. phrase_from_entropy, which turns every recovered state into text, has the same pattern by source inspection.",
+      "impact": "Prefixes of an original or recovered phrase can remain in freed heap memory of the process until it is reused or the process ends, where a memory dump, swap or a later memory-disclosure bug could find them. The process is short-lived and runs offline, and the operating system discards the memory at exit, so the practical risk is small; the defect is the gap between the documented guarantee and the code.",
+      "recommendedFix": "Build phrase text in a Zeroizing<String> reserved at its final size (word count times nine bytes) from Mnemonic::words, as phrase::parse already does, and use it in read_phrase and phrase_from_entropy. Containers are not secret and may keep to_string.",
+      "requiredVerification": "The allocator probe reports 0 copies for read_phrase; a unit test shows that the buffer is never reallocated for every phrase length; the native suite and the reduced-cost container tests still pass, proving unchanged outputs.",
+      "evidence": "local AUD-005-evidence/phrase-copies.log; harness docs/audits/AUD-005-harnesses/phrase-copies/",
+      "logicalGroup": "Secret lifecycle",
+      "procedureChecks": ["CHECK-SEC-001", "CHECK-SEC-005"]
+    },
+    {
+      "id": "AUD-005-FUN001",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "The weak-password warning counts a repeated dice word as several words",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Advisory heuristic only; the password is still encoded and used exactly as typed.",
+      "affectedFiles": [
+        "src/bin/mhfe/diceware.rs:203 (dice_word_count)",
+        "src/bin/mhfe/encrypt.rs:359"
+      ],
+      "reproduction": "python3 docs/audits/AUD-005-harnesses/cli-probes.py. It runs mhfe encrypt --stdin with the public phrase \"abandon ... about\" and a password typed twice, under a 1 GiB address-space limit, so the tool stops with exit code 4 when it tries to reserve the 2 GiB work area, after it has judged the password and before any Argon2 work.",
+      "expected": "The specification asks applications to recommend at least four words chosen with dice and to warn about weak passwords; the warning text says the password is not four or more words from the EFF dice list. \"abacus abacus abacus abacus\" is one dice word, about 12.9 bits.",
+      "observed": "\"abacus\" gets the warning, but \"abacus abacus abacus abacus\" passes without it: dice_word_count counts every token that is an EFF word, including repeats.",
+      "impact": "A person who repeats one word, or a few words, is told nothing, although such a password is far weaker than four independent dice words. Containers and outputs are unaffected.",
+      "recommendedFix": "Count the different EFF words of a password made only of EFF words and warn below four, saying different words; compare case-insensitively without allocating copies of the password.",
+      "requiredVerification": "The probe expectation passes; unit tests cover repeats, case and non-list words; the documented warning wording matches.",
+      "evidence": "local AUD-005-evidence/cli-probes.log and cli-probes-2.log",
+      "logicalGroup": "Password advice",
+      "procedureChecks": ["CHECK-UI-003"]
+    },
+    {
+      "id": "AUD-005-UI001",
+      "category": "UI",
+      "kind": "finding",
+      "title": "A failed memory reservation or a processor refusal recommends a memory level",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "The refusal itself is correct and happens before any Argon2 work; only the added advice is wrong.",
+      "affectedFiles": ["src/bin/mhfe/settings.rs:144 (with_level_hint)"],
+      "reproduction": "python3 docs/audits/AUD-005-harnesses/cli-probes.py (allocation part): mhfe encrypt --stdin at memory level 0 under a 1 GiB address-space limit. A processor refusal of the SSSE3 build goes through the same function (source trace; no processor without SSSE3 was available).",
+      "expected": "Advice should follow from the failure: a lower level helps when the computer reports too little free memory, not when a reservation the report allowed has just failed, and never for a missing processor feature.",
+      "observed": "\"The computer could not reserve 2 GiB of memory for Argon2. The highest memory level this computer can use now is 3.\" Level 3 needs 6 GiB, three times what just failed. with_level_hint appends this sentence to every resource error, including ProcessorNotSupported.",
+      "impact": "Misleading advice in a rare failure: a user may retry, or worse, choose a higher memory level for a new container, and then need a computer with that memory for every recovery. No secret or output is affected.",
+      "recommendedFix": "Append the level hint only to NotEnoughMemory, the refusal that is based on the reported free memory.",
+      "requiredVerification": "The probe expectation passes; a unit test checks that allocation and processor refusals carry no level hint and that a memory refusal still can.",
+      "evidence": "local AUD-005-evidence/cli-probes-2.log",
+      "logicalGroup": "Resource messages",
+      "procedureChecks": ["CHECK-UI-003", "CHECK-SEC-007"]
+    },
+    {
+      "id": "AUD-005-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The AUD-004 record does not name the commit of its BLD001 licence bundle",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Audit-record accuracy; no product behaviour is affected.",
+      "affectedFiles": [
+        "docs/audits/audit-04-2026-10-01.md:338 and :344",
+        "docs/audits/audit-04-2026-10-01.json (remediation AUD-004-BLD001, remediationUpdate.committed)"
+      ],
+      "reproduction": "Read the AUD-004 remediation table at df70ca5 and compare with git log.",
+      "expected": "AUDIT_STANDARD: remediation tables give the fix commit and the verification commit of every finding.",
+      "observed": "The Markdown fix commit reads \"d54ab95 (bech32 notice); this commit (generated bundle)\", the JSON \"the commit that adds this remediation update (generated bundle)\", and the JSON remediationUpdate says \"the BLD001 bundle is uncommitted\". The bundle is in df70ca5, which also holds the record, so neither text resolves to a commit and the last statement is false at that commit.",
+      "impact": "A reader cannot tell from the record which commit holds the remediation it describes.",
+      "recommendedFix": "Name df70ca5 in both AUD-004 records, and record as a dated follow-up the verification evidence that now exists for AUD-004-FUN001 and AUD-004-BLD001.",
+      "requiredVerification": "Both AUD-004 records name df70ca5, agree with each other, still validate against the schema, and keep their original findings and evidence.",
+      "evidence": "git show df70ca5 --stat; docs/audits/audit-04-2026-10-01.md",
+      "logicalGroup": "Audit records",
+      "procedureChecks": ["CHECK-DOC-003"]
+    },
+    {
+      "id": "AUD-005-DOC002",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "API.md lists the password refusals without control characters and separators",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Documentation omission; the code refuses as the specification requires.",
+      "affectedFiles": ["API.md:37"],
+      "reproduction": "Compare the Password::new bullet of API.md with src/password.rs and the specification's Password encoding.",
+      "expected": "The specification requires a password with a control character, U+2028 or U+2029 to be rejected, never cleaned; Password::new refuses it with CONTROL_CHARACTER_IN_PASSWORD.",
+      "observed": "API.md says Password::new rejects an empty result, more than 1024 bytes after normalization and unassigned code points, and does not mention the control-character rule (only the error table names the code).",
+      "impact": "An integrator reading the API description may not expect, and may not explain, this refusal.",
+      "recommendedFix": "Add the rule to the Password::new bullet.",
+      "requiredVerification": "The bullet names every refusal of Password::new.",
+      "evidence": "API.md; src/password.rs",
+      "logicalGroup": "Capabilities",
+      "procedureChecks": ["CHECK-DOC-001"]
+    },
+    {
+      "id": "AUD-005-DOC003",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "README does not say that check --stdin needs a reference option",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "The tool refuses clearly before reading anything.",
+      "affectedFiles": ["README.md, section For scripts"],
+      "reproduction": "mhfe check --stdin (no reference option); covered by cli-probes.py.",
+      "expected": "The script section should let a script author write a working command line; check --stdin requires --address, --fingerprint or --words (clap group, src/bin/mhfe/check.rs), as its own --help says.",
+      "observed": "README lists the answers for \"decrypt and check\" and for \"check --address or check --fingerprint\" but not that check --stdin without one of the three options is refused with exit code 2, nor that --words N reads only the container and the password.",
+      "impact": "A script written from the README fails on its first run; no wrong result is possible.",
+      "recommendedFix": "State the requirement and the answers for each reference option.",
+      "requiredVerification": "README matches the clap definition and check --help.",
+      "evidence": "local AUD-005-evidence/cli-probes.log",
+      "logicalGroup": "Commands",
+      "procedureChecks": ["CHECK-DOC-002"]
+    },
+    {
+      "id": "AUD-005-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "client.d.ts gives readPhrase two doc comments, and tools show only the second",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Type-description defect only.",
+      "affectedFiles": ["web/client.d.ts:92"],
+      "reproduction": "Read the declaration of readPhrase in web/client.d.ts.",
+      "expected": "One JSDoc block per declaration; TypeScript attaches only the block that immediately precedes the declaration.",
+      "observed": "Two consecutive /** */ blocks precede readPhrase; editors show only the otherLengths paragraph, and the sentence that the phrase comes back with every word written out is lost.",
+      "impact": "Integrators see an incomplete description in their editor.",
+      "recommendedFix": "Merge the two blocks.",
+      "requiredVerification": "One block precedes readPhrase; node --check of the package and verify-browser-package.mjs still pass.",
+      "evidence": "web/client.d.ts",
+      "logicalGroup": "Browser API description",
+      "procedureChecks": ["CHECK-ARC-003"]
+    }
+  ],
+  "observations": [],
+  "informationalObservations": [
+    "The browser client throws synchronously for argument and state errors (TypeError, INVALID_PIM, BUSY, PASSWORDS_DIFFER, INVALID_PASSWORD_TEXT) from methods typed as returning a Promise, and rejects only for worker errors. await handles both, a bare .catch() does not. This is long-standing, tested behaviour that the wallet tools may rely on, so it is left as a decision for the owner rather than a finding.",
+    "Carried from AUD-004: exceptions thrown by the page's onProgress or onUnverified callbacks propagate to the page's event loop and do not stop the operation; documenting this or turning it into a rejection is still open.",
+    "No Prettier configuration exists in this repository; with the mhfe_spec configuration 12 Markdown and JavaScript files differ (mostly prose wrapping and quote style). Files touched by the remediation were formatted; the rest were left as they are.",
+    "scripts/independent-suite3.py takes NFKD from Python's unicodedata, Unicode 16.0.0 on Python 3.14, and does not apply the Unicode 17.0.0 unassigned-code-point rule. This does not affect the public corpus, whose passwords use long-assigned characters, but the script is not an independent check of that rule.",
+    "Workflow hardening, not defects: vectors.yml installs cryptography==46.0.5 without a hash; the release canonical job checks out with persisted credentials (.git is excluded from the Docker context); the publish job writes SHA256SUMS over the downloaded artifacts without comparing them with the canonical job's own SHA256SUMS.",
+    "Carried from AUD-004: Linux MemAvailable is not cgroup-aware, and the macOS memory query does not release its Mach host port.",
+    "scripts/build-reproducible.sh sends the whole working tree minus .dockerignore to Docker, including untracked and ignored local files such as audit evidence and __pycache__. They do not reach the archives, which are built from named files, and CI builds from a clean checkout; a local canonical build of a modified tree is still labelled with the package version only.",
+    "When standard error is redirected but standard output is a terminal, mhfe encrypt shows the container before its check while the not-verified notice goes to the redirected stream. Prompts go there too, so this needs a deliberately unusual invocation.",
+    "Release run 36823878528 for v0.4.0 had its canonical and macOS jobs finished successfully and the full-size vector replay still running when it was read; no published release asset was compared."
+  ],
+  "remediation": [
+    {
+      "id": "AUD-005-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Original reproduction only; not fixed."
+    },
+    {
+      "id": "AUD-005-FUN001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Original reproduction only; not fixed."
+    },
+    {
+      "id": "AUD-005-UI001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Original reproduction only; not fixed."
+    },
+    {
+      "id": "AUD-005-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Original reproduction only; not fixed."
+    },
+    {
+      "id": "AUD-005-DOC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Original reproduction only; not fixed."
+    },
+    {
+      "id": "AUD-005-DOC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Original reproduction only; not fixed."
+    },
+    {
+      "id": "AUD-005-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Original reproduction only; not fixed."
+    }
+  ],
+  "limitations": [
+    "No full-cost 2 GiB Argon2 execution, full positive or negative vector replay, or new vector generation (excluded by instruction). Recorded-key transcript checks do not recompute Argon2.",
+    "No Docker or reproducible build; canonical byte equality rests on exact-commit CI jobs, which are external evidence.",
+    "No local macOS, Windows, ARM64, Safari or mobile execution; Windows PE and the Windows binary's DLL imports were not inspected.",
+    "No independent cryptographic proof, side-channel measurement or review of dependency internals beyond their integration.",
+    "The phrase-copy probe observes the Rust heap of one process; it does not cover copies made by the operating system, the terminal or the standard library's input buffer, which SECURITY.md already names.",
+    "The processor-refusal half of AUD-005-UI001 is established by source trace, not by running on a processor without SSSE3.",
+    "No real wallet material was used; only the public phrases \"abandon ... about\" and \"legal winner ...\", the public test passwords and synthetic EFF words."
+  ],
+  "commands": [
+    {
+      "label": "environment",
+      "command": [
+        "bash",
+        "-c",
+        "uname -a; rustc -Vv; cargo -V; wasm-bindgen --version; node -v; python3 --version; free -m; nproc; git branch --show-current; git rev-parse HEAD; git describe --tags; git -C ../mhfe_spec rev-parse HEAD v0.4.0; git -C ../mhfe_spec status --short; cargo audit --version; ls ../workingspace/emsdk/upstream/emscripten/emcc 2>&1; source ../workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1; emcc --version | head -1"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:23:26.903887+00:00",
+      "endedAt": "2026-10-01T06:23:28.244412+00:00",
+      "exitCode": 0,
+      "logSha256": "6888a945237cf29ee35cd13feb49940e25b693e444fa8765fb1a2d52f8b55f19",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Toolchain, memory, branch, tag and specification identity."
+    },
+    {
+      "label": "native-tests",
+      "command": ["cargo", "test", "--locked", "--all-features", "--", "--test-threads=1"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:23:36.273723+00:00",
+      "endedAt": "2026-10-01T06:23:56.229960+00:00",
+      "exitCode": 0,
+      "logSha256": "fd6d8f9b72b0abdffc6ca24499f5fc0083dd0b50d12a5e290172d64e9ef9604e",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "79 library tests passed, 1 full-size test ignored; 36 CLI tests passed; 2 vector-file tests passed, 1 full-size replay ignored; 1 documentation example passed."
+    },
+    {
+      "label": "static-checks",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; cargo fmt --check; cargo clippy --locked --all-targets --all-features -- -D warnings; cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings; RUSTDOCFLAGS=\"-D warnings\" cargo doc --locked --no-deps; cargo build --locked --release; cargo build --locked --release --features ssse3 --target-dir target/ssse3"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:24:15.059356+00:00",
+      "endedAt": "2026-10-01T06:24:49.258428+00:00",
+      "exitCode": 0,
+      "logSha256": "9e0cc6be2d430d020c25854f19899427e53139f985978833fb976aca7be69ce7",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "cargo fmt --check, native and wasm32 clippy with -D warnings, rustdoc with -D warnings, SSE2 and SSSE3 release builds."
+    },
+    {
+      "label": "browser-build",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; source ../workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1; EMCC_CORES=1 scripts/build-wasm.sh; node scripts/verify-argon2-wasm.mjs; node scripts/verify-browser-package.mjs; python3 scripts/verify-fast-mode-script.py; scripts/check-release-artifacts.sh"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:26:30.241488+00:00",
+      "endedAt": "2026-10-01T06:26:34.552800+00:00",
+      "exitCode": 0,
+      "logSha256": "f0719b4ea42dc664931a88ad3bd1a928d6c5c81e0cac002e038f814a1b84ff77",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Browser package rebuilt with wasm-bindgen 0.2.129 and Emscripten 6.0.10; 3 Argon2 tags in each build, native container in both builds, no network code, client checks, 14 Python launcher tests, release-artifact marker check."
+    },
+    {
+      "label": "dependency-audit",
+      "command": ["cargo", "audit", "--json"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:27:36.396370+00:00",
+      "endedAt": "2026-10-01T06:27:39.643691+00:00",
+      "exitCode": 0,
+      "logSha256": "3f03c65ddd17e4528c2f7601caf8ed59ba990ed5e752ba7e65a093871167b1da",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "RustSec database 9b3a3b73 (upstream HEAD when run), 1,277 advisories, 106 locked crates: 0 vulnerabilities, 0 warnings."
+    },
+    {
+      "label": "metadata",
+      "command": ["python3", "docs/audits/AUD-005-harnesses/metadata.py"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:28:00.305910+00:00",
+      "endedAt": "2026-10-01T06:28:00.378889+00:00",
+      "exitCode": 0,
+      "logSha256": "745724e7d76e4e4575ac0d82355fcc8c40d0dbc9fb01f89b6b7381a635354272",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Reviewed source unchanged; 22 vendored Argon2 files match recorded hashes; 18 corpus files and the fast cases equal the specification bytes."
+    },
+    {
+      "label": "upstream",
+      "command": ["python3", "docs/audits/AUD-005-harnesses/upstream.py"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:28:00.414023+00:00",
+      "endedAt": "2026-10-01T06:28:02.750674+00:00",
+      "exitCode": 0,
+      "logSha256": "d87c3128e0bfbdd8ce1cd3764fcceec879eba67497d293db453943fbb648d760",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "22 vendored files equal the upstream Git blobs at f57e61e1; private vulnerability reporting enabled."
+    },
+    {
+      "label": "cli-regressions",
+      "command": ["python3", "docs/audits/AUD-005-harnesses/cli-regressions.py"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:28:02.782786+00:00",
+      "endedAt": "2026-10-01T06:28:02.827026+00:00",
+      "exitCode": 0,
+      "logSha256": "dacf6fb44cfebef31e27fe4b4d62c73549b6af80dfd841b8d2734dd588d4071d",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "5 refusals before computation and 4 concurrent checksum refreshes (18 exact entries); no Argon2."
+    },
+    {
+      "label": "recorded-transcripts",
+      "command": [
+        "python3",
+        "-c",
+        "import json,pathlib,subprocess\nfiles=[]\nfor p in sorted(pathlib.Path(\"tests/fixtures/suite3-vectors\").glob(\"*.json\")):\n    d=json.loads(p.read_text())\n    if isinstance(d,dict) and d.get(\"schema\")==\"mhfe-suite-3-vector-v2\": files.append(str(p))\nassert len(files)==17, len(files)\nsubprocess.run([\"python3\",\"scripts/independent-suite3.py\",\"vector\",\"--trust-argon2-keys\",*files],check=True)"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:28:20.291693+00:00",
+      "endedAt": "2026-10-01T06:28:20.367919+00:00",
+      "exitCode": 0,
+      "logSha256": "d2a83473c1b9dd38faab704703d2697a516af47a996cbdbc435a63c7014f6517",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "17 positive transcripts reproduced by the independent script with their recorded Argon2 keys (Argon2 not recomputed)."
+    },
+    {
+      "label": "real-browsers",
+      "command": ["node", "docs/audits/AUD-005-harnesses/browser.mjs"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:28:30.030354+00:00",
+      "endedAt": "2026-10-01T06:28:32.620247+00:00",
+      "exitCode": 0,
+      "logSha256": "a12bf90d2bb8312502197301b364a08f22eadbdecc328b4e7832e8077d908d56",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Chromium 153.0.8010.12 and Firefox 155.0, file and isolated loopback modes, real workers under strict CSP, 256 KiB audit wrapper: 9 assertions each, no page errors, no external request."
+    },
+    {
+      "label": "hidden-input",
+      "command": ["python3", "scripts/verify-hidden-input.py", "target/release/mhfe"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:28:38.867126+00:00",
+      "endedAt": "2026-10-01T06:28:40.727410+00:00",
+      "exitCode": 0,
+      "logSha256": "8538758c2df9ffd5bc1a9ad10495cdbd811651210068e5223893abe709dca521",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Unix pseudo-terminal: refusals, Unicode, 4096-byte input, Backspace, Ctrl+U, Ctrl+C with terminal restored."
+    },
+    {
+      "label": "native-32bit-guard",
+      "command": ["sh", "docs/audits/AUD-003-harnesses/refuse32.sh"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:28:40.758782+00:00",
+      "endedAt": "2026-10-01T06:28:41.375775+00:00",
+      "exitCode": 0,
+      "logSha256": "1aa7aa09cfb663577c25ee8e7ba97d5cd6673f0ce5a067043584bb6c52f51b67",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "A 32-bit native build stops at the compile-time guard."
+    },
+    {
+      "label": "licenses-check",
+      "command": [
+        "bash",
+        "-c",
+        "cargo fetch --locked && python3 scripts/third-party-licenses.py --check && sha256sum vendor/phc-winner-argon2/LICENSE THIRD_PARTY_LICENSES.md THIRD_PARTY_NOTICES.md"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:29:53.074625+00:00",
+      "endedAt": "2026-10-01T06:29:53.970391+00:00",
+      "exitCode": 0,
+      "logSha256": "08570265c1161aa557a95bcc7ab2f10e76c0bb6d33806fb4e80d5f34db1111e7",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "THIRD_PARTY_LICENSES.md matches the locked crates of every release target."
+    },
+    {
+      "label": "prettier-docs",
+      "command": [
+        "../mhfe_spec/node_modules/.bin/prettier",
+        "--config",
+        "../mhfe_spec/.prettierrc.json",
+        "--check",
+        "README.md",
+        "API.md",
+        "SECURITY.md",
+        "THIRD_PARTY_NOTICES.md",
+        "web/README.md",
+        "web/client.js",
+        "web/client.d.ts",
+        "web/mhfe-worker.js",
+        "web/argon2-engine.js",
+        "vendor/phc-winner-argon2.md",
+        "vendor/eff-large-wordlist.md",
+        "measurements/README.md",
+        "docs/audits/README.md",
+        "CITATION.cff"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:30:15.522843+00:00",
+      "endedAt": "2026-10-01T06:30:15.902381+00:00",
+      "exitCode": 1,
+      "logSha256": "45e8b53e76bcfff07471cf05f8169d1963f54e0a5a1d1c3615aa149fdab3db61",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Prettier 3.9.9 with the mhfe_spec configuration reports drift in 12 documentation and JavaScript files (observation, no finding)."
+    },
+    {
+      "label": "upstream-ci",
+      "command": [
+        "gh",
+        "run",
+        "list",
+        "--repo",
+        "hobby-eng/mhfe",
+        "--commit",
+        "df70ca5411b84858058bc016385cf4b0001bd570",
+        "--limit",
+        "20",
+        "--json",
+        "databaseId,workflowName,event,headSha,status,conclusion,url"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:32:00.158960+00:00",
+      "endedAt": "2026-10-01T06:32:01.637372+00:00",
+      "exitCode": 0,
+      "logSha256": "f190d1a38eb03f481f2bfbbb63531840347d5e2750273ffbc5d6f60ca712582f",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Runs for df70ca5: CI and RustSec successful; Release and Test vectors in progress when read."
+    },
+    {
+      "label": "upstream-ci-jobs",
+      "command": [
+        "bash",
+        "-c",
+        "gh run view 36823878285 --repo hobby-eng/mhfe --json headSha,conclusion,url,jobs --jq \"{headSha,conclusion,url,jobs:[.jobs[]|{name,conclusion,url}]}\"; gh run view 36823878528 --repo hobby-eng/mhfe --json headSha,status,conclusion,jobs --jq \"{headSha,status,jobs:[.jobs[]|{name,status,conclusion}]}\""
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:32:09.475372+00:00",
+      "endedAt": "2026-10-01T06:32:13.153059+00:00",
+      "exitCode": 0,
+      "logSha256": "58b699548c7b345d7012500fc51cd470e5903821df2e38ed35bb43e1eec05d95",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "CI run 36823878285: check, canonical-build, portable macOS and Windows successful. Release run 36823878528: canonical and three macOS jobs successful, vector replay in progress."
+    },
+    {
+      "label": "upstream-macos-log",
+      "command": [
+        "bash",
+        "-c",
+        "gh run view --job 110245122175 --repo hobby-eng/mhfe --log | grep -E \"refuses_more_memory|mach_estimate|test result|Running\" "
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:32:22.251310+00:00",
+      "endedAt": "2026-10-01T06:32:26.452168+00:00",
+      "exitCode": 0,
+      "logSha256": "d5ef82a6802cb0096074b757381ab307d25cc63c23aeb7c8438375a264b3f3ba",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "macOS CI job ran the macOS memory tests of AUD-004-FUN001; both passed."
+    },
+    {
+      "label": "phrase-copies",
+      "command": [
+        "cargo",
+        "run",
+        "--offline",
+        "--quiet",
+        "--manifest-path",
+        "docs/audits/AUD-005-harnesses/phrase-copies/Cargo.toml",
+        "--target-dir",
+        "target/aud005-phrase-copies"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:33:54.460388+00:00",
+      "endedAt": "2026-10-01T06:34:20.892049+00:00",
+      "exitCode": 1,
+      "logSha256": "dd12e328da7fcdd48d0456c2726f1ebb5da0d6c3b4cd7e59e1d21788c27c301d",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Allocator probe: mhfe::read_phrase left 4 freed heap blocks holding the phrase (AUD-005-SEC001)."
+    },
+    {
+      "label": "cli-probes",
+      "command": ["python3", "docs/audits/AUD-005-harnesses/cli-probes.py"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:34:44.213047+00:00",
+      "endedAt": "2026-10-01T06:34:44.351019+00:00",
+      "exitCode": 1,
+      "logSha256": "debd8d759cda080bda2977133ee3d188b33ca9ba15022361384092929ca71adf",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "First run of the CLI probe: 6 colour rules and 3 password checks; the repeated-word expectation fails (AUD-005-FUN001)."
+    },
+    {
+      "label": "cli-probes-2",
+      "command": ["python3", "docs/audits/AUD-005-harnesses/cli-probes.py"],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:35:05.623847+00:00",
+      "endedAt": "2026-10-01T06:35:05.757817+00:00",
+      "exitCode": 1,
+      "logSha256": "999d1744d5dd421c686d06f98616a7d5eb3e25b9e385e9caf9bd5c56a07526f7",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "Second run after adding the reservation probe: AUD-005-FUN001 and AUD-005-UI001 fail, 9 other expectations hold."
+    },
+    {
+      "label": "native-ssse3",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--features",
+        "ssse3",
+        "--target-dir",
+        "target/ssse3",
+        "--",
+        "--test-threads=1"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:36:32.856120+00:00",
+      "endedAt": "2026-10-01T06:36:43.027373+00:00",
+      "exitCode": 0,
+      "logSha256": "14ffc8ad79defa6a65b1ea59862c9ac24cf47e9e902735be3b5aa608c999e3bd",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "SSSE3 build: the same 79 + 36 + 2 + 1 tests pass (not added to the baseline totals)."
+    },
+    {
+      "label": "packaging",
+      "command": [
+        "scripts/package-release.sh",
+        "v0.4.0",
+        "docs/audits/AUD-005-evidence/packages",
+        "linux-x86_64",
+        "linux-x86_64-ssse3",
+        "browser"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:36:43.053771+00:00",
+      "endedAt": "2026-10-01T06:36:43.456304+00:00",
+      "exitCode": 0,
+      "logSha256": "512e0ce20be6c33f47c8e6a559428b3d90903616ae5985d0f2239518b2c7af0a",
+      "environment": {
+        "CARGO_HOME": "/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/home/sergio/Documents/bip_tools/workingspace/cargo/bin:/home/sergio/.local/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/sergio/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/home/sergio/.config/Claude/local-agent-mode-sessions/skills-plugin/cf5c3c3e-17ba-4886-9060-a4c317653a40/406b6999-5f45-478f-86a1-b98a187573b3/bin"
+      },
+      "summary": "linux-x86_64, linux-x86_64-ssse3 and browser archives packed locally; the archive licence check passed for all 3."
+    }
+  ],
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "d47df01252ad6fb11d8cad00b7d9e6dde62b3ee3331c3bfbef9a7b99adda30f7",
+    "AGENTS.md": "05e3168da8982eef4301b6e70f3c98a9fe2e13cc7aa9aa4cbf9a3e7978434baf",
+    "mhfe/AGENTS.md": "5b9619d1912576f6c9b97c8c323a74099c99a941e9491d29862455f7886b3f1e",
+    ".github/skills/wallet-full-audit/SKILL.md": "82e15c8a818023e2a7a3ab88416f6e3a219d6a78c6b2c24aa53a6e17ab1ae2d0",
+    ".github/agents/wallet-tools-maintainer.agent.md": "bfdf8ec2c40cc9119495c4c26d093cd7a4c65e2ef1374d1b18d3b93ec4f24288"
+  },
+  "artifacts": {
+    "dist/argon2-mt.js": "f98906c851a986df514d22536bb48a09724a0fa0b49079860b9a0ef00806f521",
+    "dist/argon2-st.js": "63ece7b314daf8a06ebadb0ff7acdf8be886ddfc9660b5ad13577536c4a3f6da",
+    "dist/client.d.ts": "ec8df6e43eff62987f2c893960175296165e85cf84636efb5df2cab6aaff4a6c",
+    "dist/client.js": "9586fb55165731c08fc92595e3e048c6fd8f4d1a0ecf51725062b68b549aec56",
+    "dist/mhfe_core_bg.wasm": "b0c87df0c28d0ab7fa2143771dbfdf8b124a223565d3481bd0a475fbccfb79e3",
+    "dist/mhfe-fast-mode.py": "400db463129314dbc57e81ca742de51bfe011fe4f9df25e6f4974683cfdc1a28",
+    "dist/mhfe-worker.js": "f2525c0533fe0f8594af4452b92e1e3e1fc54069a8c302bad931d369dcac2a9b",
+    "dist/README.md": "9a8ddb531411e5081386b514f539433469c1178c7af6e5086b8a2f0ddeabb9e2",
+    "target/release/mhfe": "bdcb7ea1d1a046a1a3b4e4d32448748e9ce7076c378a3f61fbf1dcb83586383b",
+    "target/ssse3/release/mhfe": "73d3c748a148f217283a672228b39a7d9f9ff3f07524673eed71d45e3bb50de5",
+    "docs/audits/AUD-005-evidence/packages/mhfe-v0.4.0-browser.tar.gz": "9dfce6e93d4840aacab4c1d2f13ad036820b2a201215f1004c361a82979c26ea",
+    "docs/audits/AUD-005-evidence/packages/mhfe-v0.4.0-linux-x86_64-ssse3.tar.gz": "60256dd0308c77d548b88c75c0b6a479f1ca4ff69348cbdc1253e6572ddc458e",
+    "docs/audits/AUD-005-evidence/packages/mhfe-v0.4.0-linux-x86_64.tar.gz": "20c3411eeee129e4c6cac085b35c87bf3b96c20457e48d08ba23b500ca7c3094"
+  },
+  "previousFindingReview": [
+    {
+      "id": "AUD-004-FUN001",
+      "result": "Fixed in d54ab95; the macOS CI job of df70ca5 (run 36823878285) passed engine::ffi::tests::mach_estimate_does_not_count_speculative_pages_twice and engine::native::tests::refuses_more_memory_than_the_computer_reports natively. That was the missing verification."
+    },
+    {
+      "id": "AUD-004-FUN002",
+      "result": "Verified in d54ab95; the 14 launcher tests and the native serve tests pass again here."
+    },
+    {
+      "id": "AUD-004-BLD001",
+      "result": "Bundle committed in df70ca5. Locally the generator --check passes and three archives carry the licence files; the exact-commit canonical build (CI and release) and the three macOS packaging jobs, which run the same archive gate, succeeded. The record naming is AUD-005-DOC001."
+    },
+    {
+      "id": "AUD-003 (all)",
+      "result": "Regression checklist only: hidden input, uppercase SegWit, private vector inputs, 32-bit guard, server deadlines, browser-check sidecar, length advice, passphrase buffer, rare BIP32 cases and checksum refresh behave as recorded."
+    }
+  ],
+  "remediationUpdate": null
+}

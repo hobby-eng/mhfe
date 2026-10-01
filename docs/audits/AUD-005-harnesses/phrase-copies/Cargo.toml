@@ -1,0 +1,12 @@
+# AUD-005 probe: counts freed heap blocks that still hold a public test phrase.
+# Its own workspace, so that it never becomes part of the MHFE package build.
+[package]
+name = "aud005-phrase-copies"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mhfe-experimental = { path = "../../../.." }
+
+[workspace]
