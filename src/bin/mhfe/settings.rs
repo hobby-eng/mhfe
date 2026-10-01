@@ -13,9 +13,14 @@ const GIB: u64 = 1 << 30;
 
 #[derive(Args, Clone, Copy)]
 pub struct Settings {
-    // One line each in --help; `settings_help` explains them in full.
     /// Pass multiplier, 0 to 1023 (default 0)
-    #[arg(long, value_name = "N", default_value_t = 0, hide_default_value = true)]
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = 0,
+        hide_default_value = true,
+        long_help = pim_help()
+    )]
     pub pim: u32,
 
     /// Memory level, 0 to 21 (default 0: 2 GiB)
@@ -23,36 +28,41 @@ pub struct Settings {
         long = "mem",
         value_name = "LEVEL",
         default_value_t = 0,
-        hide_default_value = true
+        hide_default_value = true,
+        long_help = memory_level_help()
     )]
     pub memory_level: u32,
+}
+
+fn pim_help() -> String {
+    style::option_help(&[
+        "Pass multiplier, 0 to 1023 (default 0).",
+        "Every step adds the default work again: PIM 1 doubles the time of the encryption and \
+         of every recovery, PIM 9 makes it ten times as long. Each guess of the password costs \
+         an attacker the same extra time.",
+        "Recovery must use the same PIM. At 0 there is nothing to keep; any other value must \
+         be remembered or recorded, like part of the password, because it cannot be found from \
+         the container. It may be kept secret.",
+    ])
+}
+
+fn memory_level_help() -> String {
+    style::option_help(&[
+        "Memory level, 0 to 21 (default 0: 2 GiB).",
+        "The memory of every Argon2 call, doubling every two levels; the time grows in \
+         proportion to it:",
+        "0 = 2 GiB, 1 = 3 GiB, 2 = 4 GiB, 3 = 6 GiB, 4 = 8 GiB, ... 21 = 3 TiB",
+        "Recovery must use the same level and needs that much free memory, so choose a level \
+         that the computer you will recover on can provide. The browser tools support level 0 \
+         only. At 0 there is nothing to keep; any other level must be remembered or recorded \
+         like the PIM, and it may be kept secret.",
+    ])
 }
 
 impl Settings {
     pub fn work_factor(self) -> Result<WorkFactor, Failure> {
         Ok(WorkFactor::new(self.pim, self.memory_level)?)
     }
-}
-
-/// The "Settings:" section of the help of every command that runs MHFE.
-pub fn settings_help() -> String {
-    style::help_section(
-        "Settings:",
-        &[
-            (
-                "--pim N",
-                "Each step adds the default time again: PIM 1 doubles it",
-            ),
-            (
-                "--mem LEVEL",
-                "0 = 2 GiB, 1 = 3 GiB, 2 = 4 GiB, 3 = 6 GiB, ... 21 = 3 TiB",
-            ),
-            (
-                "",
-                "Recovery needs the same values and that much free memory",
-            ),
-        ],
-    )
 }
 
 /// What a command computes, which sets its title and how many rounds it runs.
@@ -165,7 +175,7 @@ pub fn changed_settings(work: WorkFactor) -> Option<String> {
     (!values.is_empty()).then(|| values.join(", "))
 }
 
-/// "1 to 2 minutes", "17 to 34 hours", "25 to 51 days": both ends in the unit that suits the
+/// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the
 /// longer one, rounded to whole units.
 fn time_range(low_seconds: u64, high_seconds: u64) -> String {
     const MINUTE: u64 = 60;

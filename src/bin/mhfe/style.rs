@@ -210,11 +210,27 @@ pub fn bar(done: u32, total: u32) -> String {
 
 /// A section at the end of a help text: a heading and rows of a command or answer with its
 /// explanation, the first column in the accent colour, the second wrapped within the help width.
+/// When one first column is longer than [`HELP_COLUMN_LIMIT`], such as a full example command,
+/// every row is stacked instead: the command on its own line, its explanation indented below it,
+/// and a blank line between rows.
 pub fn help_section(heading: &str, rows: &[(&str, &str)]) -> String {
+    let mut text = format!("{}\n", paint(HEADING, heading));
+    if rows.iter().any(|(left, _)| left.len() > HELP_COLUMN_LIMIT) {
+        for (index, (left, right)) in rows.iter().enumerate() {
+            if index > 0 {
+                text.push('\n');
+            }
+            text.push_str(&format!("  {}\n", paint(ACCENT, left)));
+            let indent = " ".repeat(HELP_STACKED_INDENT);
+            for line in wrap(right, HELP_WIDTH - HELP_STACKED_INDENT) {
+                text.push_str(&format!("{indent}{line}\n"));
+            }
+        }
+        return text;
+    }
     let width = rows.iter().map(|(left, _)| left.len()).max().unwrap_or(0);
     // Two spaces of indent and two between the columns.
     let right_width = HELP_WIDTH.saturating_sub(width + 4).max(20);
-    let mut text = format!("{}\n", paint(HEADING, heading));
     for (left, right) in rows {
         for (index, line) in wrap(right, right_width).iter().enumerate() {
             let left = if index == 0 { *left } else { "" };
@@ -225,9 +241,36 @@ pub fn help_section(heading: &str, rows: &[(&str, &str)]) -> String {
     text
 }
 
+/// Widest first column of a help section that still leaves the explanation 44 columns.
+const HELP_COLUMN_LIMIT: usize = 32;
+/// Indent of the explanation below a command in a stacked section.
+const HELP_STACKED_INDENT: usize = 6;
+
 /// Width of the help texts: they read well in an 80-column terminal and stay the same in a
 /// wider one.
 pub const HELP_WIDTH: usize = 80;
+
+/// Indent at which clap prints the explanation of an option in `--help`.
+const OPTION_HELP_INDENT: usize = 10;
+
+/// The explanation of an option in `--help`: paragraphs broken into lines by hand, because clap
+/// is built without its optional wrapping feature. clap indents every line itself.
+pub fn option_help(paragraphs: &[&str]) -> String {
+    help_paragraphs(paragraphs, HELP_WIDTH - OPTION_HELP_INDENT)
+}
+
+/// What a command does, for the top of its `--help`: the one-line summary, then paragraphs.
+pub fn command_about(paragraphs: &[&str]) -> String {
+    help_paragraphs(paragraphs, HELP_WIDTH)
+}
+
+fn help_paragraphs(paragraphs: &[&str], width: usize) -> String {
+    paragraphs
+        .iter()
+        .map(|paragraph| wrap(paragraph, width).join("\n"))
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
 
 /// A closing paragraph of a help text, in grey, wrapped to the help width.
 pub fn help_note(text: &str) -> String {
@@ -310,6 +353,26 @@ mod tests {
         );
         assert_eq!(wrap("a\nb", 10), ["a", "b"]);
         assert!(wrap("", 10).is_empty());
+    }
+
+    #[test]
+    fn a_long_example_stacks_the_whole_section() {
+        let long = "mhfe check --address --path \"m/84'/0'/0'/0/5\"";
+        let text = help_section("Examples:", &[("mhfe check", "Short"), (long, "Long")]);
+        let lines: Vec<String> = text.lines().map(plain).collect();
+        assert_eq!(
+            lines,
+            [
+                "Examples:".to_string(),
+                "  mhfe check".to_string(),
+                "      Short".to_string(),
+                String::new(),
+                format!("  {long}"),
+                "      Long".to_string(),
+            ]
+        );
+        let short = help_section("Examples:", &[("mhfe check", "Short")]);
+        assert_eq!(plain(short.lines().nth(1).unwrap()), "  mhfe check  Short");
     }
 
     #[test]

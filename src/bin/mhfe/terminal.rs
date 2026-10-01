@@ -165,8 +165,10 @@ fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<Zeroizing<Strin
         return Ok(None);
     }
     if !line.ends_with('\n') && read == LINE_CAPACITY {
+        // The line break counts towards LINE_CAPACITY, so the answer itself may have one byte less.
         return Err(Failure::invalid_input(format!(
-            "An answer is longer than {LINE_CAPACITY} bytes; no valid answer is that long."
+            "An answer is longer than {} bytes; no valid answer is that long.",
+            LINE_CAPACITY - 1
         )));
     }
     strip_line_ending(&mut line);

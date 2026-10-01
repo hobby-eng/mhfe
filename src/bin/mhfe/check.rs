@@ -23,25 +23,85 @@ pub struct Options {
     settings: Settings,
 
     /// Compare with a receiving address (strong check)
-    #[arg(long)]
+    #[arg(long, long_help = address_help())]
     address: bool,
 
     /// Compare with the master key fingerprint (quick, weaker)
-    #[arg(long)]
+    #[arg(long, long_help = fingerprint_help())]
     fingerprint: bool,
 
     /// Only the built-in check of a 12- to 21-word original
-    #[arg(long, value_name = "N")]
+    #[arg(long, value_name = "N", long_help = words_help())]
     words: Option<usize>,
 
     /// With --address: look only at this derivation path
-    #[arg(long, value_name = "PATH", requires = "address")]
+    #[arg(long, value_name = "PATH", requires = "address", long_help = path_help())]
     path: Option<DerivationPath>,
 
     /// Read the answers from standard input (for scripts)
-    #[arg(long, requires = "reference")]
+    #[arg(long, requires = "reference", long_help = stdin_help())]
     stdin: bool,
 }
+
+fn address_help() -> String {
+    style::option_help(&[
+        "Compare with a receiving address (strong check).",
+        "Asks for a Bitcoin address of the wallet, mainnet or testnet: legacy (1..., BIP44), \
+         nested SegWit (3..., BIP49), native SegWit (bc1q..., BIP84) or Taproot (bc1p..., \
+         BIP86). It searches the first 100 receiving and change addresses of accounts 0 to 9 \
+         on the standard path of that address type.",
+        "A match confirms the phrase, the wallet and its BIP39 passphrase together.",
+    ])
+}
+
+fn fingerprint_help() -> String {
+    style::option_help(&[
+        "Compare with the master key fingerprint (quick, weaker).",
+        "Asks for the BIP32 master key fingerprint, eight hexadecimal digits such as 73c5da0a, \
+         which many wallets show. It has only 32 bits: a match is very likely right, but it is \
+         a weaker proof than an address.",
+    ])
+}
+
+fn words_help() -> String {
+    style::option_help(&[
+        "Only the built-in check of a 12- to 21-word original.",
+        "N is the length of the original: 12, 15, 18 or 21. Nothing more is asked for. A match \
+         confirms the password and the settings only, not the wallet or a BIP39 passphrase. A \
+         24-word original has no built-in check; compare it with an address or the \
+         fingerprint.",
+    ])
+}
+
+fn path_help() -> String {
+    style::option_help(&[
+        "With --address: look only at this derivation path.",
+        "A full path such as m/84'/0'/0'/0/5, for an address outside the standard search. \
+         Only this one address is compared.",
+    ])
+}
+
+fn stdin_help() -> String {
+    style::option_help(&[
+        "Read the answers from standard input (for scripts); needs a reference option.",
+        "Input: the container, the password, then with --address or --fingerprint the \
+         reference and the BIP39 passphrase (an empty line if none), one per line. Output: \
+         \"matches\" with exit code 0, or \"does not match\" with exit code 3.",
+    ])
+}
+
+/// The top of `mhfe check --help`.
+pub fn about() -> String {
+    style::command_about(&[
+        "Rehearse a recovery without ever showing the phrase",
+        "Runs the same 12 rounds as a recovery and compares the result with something you know \
+         about the wallet: a receiving address, the master key fingerprint, or, for a 12- to \
+         21-word original, its built-in check. Without a reference option it offers a list.",
+    ])
+}
+
+/// Lengths of an original that carries a built-in check; a 24-word original fills the state.
+const BUILT_IN_CHECK_LENGTHS: [usize; 4] = [12, 15, 18, 21];
 
 /// The reference as typed, before it is read into its type.
 #[derive(Clone, Copy)]
@@ -51,8 +111,39 @@ enum Choice {
     BuiltInCheck(usize),
 }
 
-/// The end of `mhfe check --help`.
+fn examples() -> String {
+    style::help_section(
+        "Examples:",
+        &[
+            ("mhfe check", "Choose the reference from a list"),
+            ("mhfe check --address", "Compare with a receiving address"),
+            (
+                "mhfe check --fingerprint",
+                "Compare with the master key fingerprint",
+            ),
+            (
+                "mhfe check --words 12",
+                "Built-in check of a 12-word original",
+            ),
+            (
+                "mhfe check --address --path \"m/84'/0'/0'/0/5\"",
+                "Compare with the address at this one path",
+            ),
+            (
+                "mhfe check --fingerprint --pim 1 --mem 1",
+                "The fingerprint, with the settings used for encryption",
+            ),
+        ],
+    )
+}
+
+/// The end of `mhfe check -h`.
 pub fn help() -> String {
+    examples()
+}
+
+/// The end of `mhfe check --help`.
+pub fn long_help() -> String {
     let asks = style::help_section(
         "What it asks for:",
         &[
@@ -68,65 +159,23 @@ pub fn help() -> String {
             ),
         ],
     );
-    let references = style::help_section(
-        "References:",
-        &[
-            (
-                "--address",
-                "confirms the wallet and its BIP39 passphrase; searches the first 100 receiving \
-                 and change addresses of accounts 0 to 9 on the standard path of the address type",
-            ),
-            (
-                "--path PATH",
-                "with --address, only this path, such as m/84'/0'/0'/0/5",
-            ),
-            (
-                "--fingerprint",
-                "the BIP32 master key fingerprint, eight hex digits",
-            ),
-            (
-                "--words N",
-                "confirms the password only, not the wallet or a passphrase",
-            ),
-        ],
-    );
-    let scripts = style::help_section(
-        "For scripts (--stdin):",
-        &[
-            (
-                "Input",
-                "the container, the password, then with --address or --fingerprint the \
-                 reference and the BIP39 passphrase (an empty line if none), one per line",
-            ),
-            ("Output", "matches, or does not match"),
-        ],
-    );
-    let examples = style::help_section(
-        "Examples:",
-        &[
-            ("mhfe check", "Choose the reference from a list"),
-            ("mhfe check --address", "Compare with a receiving address"),
-            (
-                "mhfe check --fingerprint",
-                "Compare with the master key fingerprint",
-            ),
-            (
-                "mhfe check --words 12",
-                "Built-in check of a 12-word original",
-            ),
-        ],
-    );
     let note = style::help_note(
         "The check shows only whether the recovery matches, never any part of the phrase.",
     );
-    format!(
-        "{asks}\n{references}\n{}\n{scripts}\n{examples}\n{note}",
-        settings::settings_help()
-    )
+    format!("{asks}\n{}\n{note}", examples())
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     let work = options.settings.work_factor()?;
+    // Refused before anything is asked: only a short original carries a built-in check.
+    if let Some(words) = options.words {
+        if !BUILT_IN_CHECK_LENGTHS.contains(&words) {
+            return Err(Failure::invalid_input(
+                "--words must be 12, 15, 18 or 21: a 24-word original has no built-in check; \
+                 compare it with --address or --fingerprint.",
+            ));
+        }
+    }
     let mut input = Input::new(options.stdin);
     settings::announce(work, Operation::Check);
     settings::check_resources(work)?;

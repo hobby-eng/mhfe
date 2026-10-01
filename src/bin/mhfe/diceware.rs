@@ -32,16 +32,42 @@ pub struct Options {
         long,
         value_name = "N",
         default_value_t = DEFAULT_WORDS,
-        hide_default_value = true
+        hide_default_value = true,
+        long_help = words_help()
     )]
     words: usize,
 
     /// Roll real dice instead of using the computer's randomness
-    #[arg(long)]
+    #[arg(long, long_help = dice_help())]
     dice: bool,
 }
 
-/// The end of `mhfe password --help`.
+fn words_help() -> String {
+    style::option_help(&[
+        "Number of words, 1 to 32 (default 5; fewer than 4 are weak).",
+        "Each word adds about 12.9 bits: four words give about 51.7 bits, five about 64.6, six \
+         about 77.5. Fewer than four get a warning.",
+    ])
+}
+
+fn dice_help() -> String {
+    style::option_help(&[
+        "Roll real dice instead of using the computer's randomness.",
+        "For each word, roll five dice and type the five numbers, 1 to 6, at a hidden prompt. \
+         The computer's random generator is then not used at all.",
+    ])
+}
+
+/// The top of `mhfe password --help`.
+pub fn about() -> String {
+    style::command_about(&[
+        "Make a strong password of random dice words",
+        "Each word is drawn from the EFF large word list of 7,776 words, the same list that \
+         five dice select from. Every word is equally likely.",
+    ])
+}
+
+/// The end of `mhfe password -h` and `--help`.
 pub fn help() -> String {
     let examples = style::help_section(
         "Examples:",
@@ -52,6 +78,7 @@ pub fn help() -> String {
                 "mhfe password --dice",
                 "Roll real dice instead of using the computer",
             ),
+            ("mhfe password --dice --words 6", "Six words from real dice"),
         ],
     );
     let note = style::help_note("The password is shown once and never stored.");
