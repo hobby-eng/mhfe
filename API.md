@@ -134,13 +134,17 @@ await client.readContainer(container); // { container }
 client.cancel(); // rejects the running operation with MhfeCancelledError
 ```
 
-Every method returns a promise and reports every error by rejecting it, the checks of its arguments
-included; none throws when it is called (only the constructor throws, for missing package parts).
-Errors are `MhfeError` objects with the codes above, plus `INVALID_PASSWORD_TEXT` (a password string
+The five operations `encrypt`, `decrypt`, `check`, `readPhrase` and `readContainer` return a promise
+and report every error by rejecting it, the checks of their arguments included; none throws when it
+is called. `mode()`, `maxSupportedMemLevel()` and `cancel()` are synchronous, and only the
+constructor throws, for missing package parts.
+Errors are `MhfeError` objects whose `message` is an English sentence a page can show as it is,
+with the codes above, plus `INVALID_PASSWORD_TEXT` (a password string
 with an unpaired surrogate), `PASSWORDS_DIFFER` (`encrypt` got two different passwords), `BUSY`
 (another operation runs), `WORKER_FAILED` and `CALLBACK_FAILED`: a callback of the page
-(`onProgress`, `onUnverified`) threw, so the operation was stopped and its worker ended; the page's
-error is the `cause`. A wrongly typed argument rejects with a `TypeError`. `onProgress` receives
+(`onProgress`, `onUnverified`) threw, or was async and its promise rejected while the operation
+ran, so the operation was stopped and its worker ended; the page's error is the `cause`. The client
+does not wait for a callback's promise. A wrongly typed argument rejects with a `TypeError`. `onProgress` receives
 `{ round, rounds }`, with `rounds` 24 for an encryption and 12 otherwise.
 
 Inside the worker, the WebAssembly core exports `suiteParameters`, `checkPhrase`, `readPhrase`,

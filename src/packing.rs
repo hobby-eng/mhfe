@@ -1,7 +1,9 @@
 //! The 256-bit state `X` (specification: "Packing" and step 3 of "Recovering a mnemonic").
 //!
 //! `X = E || Trunc_r(SHA-256(E))` with `r = 256 - ENT`. For a short phrase the free bits hold a
-//! verifier that confirms the password and reveals the length; a 24-word phrase fills `X` alone.
+//! verifier: an internal consistency check that screens out wrong passwords and most corruption
+//! and reveals the length, but does not authenticate the password (a wrong one passes with
+//! probability about 2^-r for each length). A 24-word phrase fills `X` alone and has no verifier.
 
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;

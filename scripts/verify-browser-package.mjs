@@ -266,7 +266,13 @@ for (const script of ["client.js", "mhfe-worker.js", "argon2-mt.js", "argon2-st.
 console.log("No script of the package contains network code.");
 
 // Part 2: the page-side client, with a stand-in worker.
-const { MhfeClient, MhfeCancelledError } = await import(new URL("dist/client.js", root));
+// dist/client.js is an ES module, but the nearest package.json, the repository's tooling, cannot
+// declare "type": "module": the Emscripten builds next to it are CommonJS. Imported from a file,
+// Node would parse it twice and warn; its text imported as a module is the same code.
+const clientSource = read("dist/client.js").toString("base64");
+const { MhfeClient, MhfeCancelledError } = await import(
+  `data:text/javascript;base64,${clientSource}`
+);
 const sources = {
   workerSource: "worker source",
   argon2Threaded: "threaded source",
@@ -331,8 +337,15 @@ const fast = client.decrypt({ container: "c", password: "public test password" }
 assert.equal(await StandInWorker.last.script.text(), "threaded source\n;\nworker source");
 assert.equal(await StandInWorker.last.messages[0].argon2Script.text(), "threaded source");
 await assert.rejects(client.decrypt({ container: "c", password: "x" }), { code: "BUSY" });
-StandInWorker.last.reply({ type: "error", error: { code: "VERIFIER_MISMATCH", message: "no" } });
-await assert.rejects(fast, { code: "VERIFIER_MISMATCH" });
+StandInWorker.last.reply({
+  type: "error",
+  error: { code: "VERIFIER_MISMATCH", message: "the password or the settings are wrong" },
+});
+// The core's message becomes a sentence that a page can show as it is.
+await assert.rejects(fast, {
+  code: "VERIFIER_MISMATCH",
+  message: "The password or the settings are wrong",
+});
 delete globalThis.crossOriginIsolated;
 
 // Reading words starts a worker with the Rust core only.
@@ -432,6 +445,53 @@ for (const [name, message] of [
     1,
     `nothing of the stopped operation reaches the page after ${name} threw`,
   );
+}
+
+// An async callback fails by rejecting its promise. While the operation runs, that stops it as a
+// throw does.
+for (const [name, message] of [
+  ["onProgress", { type: "progress", round: 1, rounds: 24 }],
+  ["onUnverified", { type: "unverified", container: "c" }],
+]) {
+  const pageError = new Error(`async page bug in ${name}`);
+  const broken = encrypt({
+    password: "p",
+    [name]: async () => {
+      throw pageError;
+    },
+  });
+  const brokenWorker = StandInWorker.last;
+  brokenWorker.reply(message);
+  await assert.rejects(
+    broken,
+    (error) => error.code === "CALLBACK_FAILED" && error.cause === pageError,
+  );
+  assert.equal(brokenWorker.terminated, true, `the worker stops when async ${name} rejects`);
+}
+
+// A callback's promise that rejects after its operation has ended stops nothing; the rejection
+// stays the page's own unhandled one instead of disappearing inside the client.
+{
+  const lateError = new Error("late async page bug");
+  let rejectLate;
+  const unhandled = [];
+  const recordUnhandled = (error) => unhandled.push(error);
+  process.on("unhandledRejection", recordUnhandled);
+  const finished = encrypt({
+    password: "p",
+    onProgress: () =>
+      new Promise((_, reject) => {
+        rejectLate = reject;
+      }),
+  });
+  StandInWorker.last.reply({ type: "progress", round: 1, rounds: 24 });
+  StandInWorker.last.reply({ type: "result", result: { container: "c" } });
+  assert.deepEqual(await finished, { container: "c" });
+  rejectLate(lateError);
+  // Node reports unhandled rejections after the microtasks of the current turn have run.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  process.off("unhandledRejection", recordUnhandled);
+  assert.deepEqual(unhandled, [lateError]);
 }
 
 // Exactly one reference: with several, the check would silently use only one of them.

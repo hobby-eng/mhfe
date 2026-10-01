@@ -12,10 +12,11 @@
 //     coreWasm,              // mhfe_core_bg.wasm as a Uint8Array or a WebAssembly.Module
 //   });
 //
-// Every operation returns a promise and reports every error by rejecting it, the checks of its
-// arguments included; none throws when it is called. An error in a callback of the page stops
-// the operation and rejects it with CALLBACK_FAILED. Only the constructor throws, for missing
-// package parts.
+// The five operations (encrypt, decrypt, check, readPhrase, readContainer) return a promise and
+// report every error by rejecting it, the checks of their arguments included; none throws when it
+// is called. A callback of the page that throws, or whose promise rejects, stops the operation and
+// rejects it with CALLBACK_FAILED. mode(), maxSupportedMemLevel() and cancel() are synchronous.
+// Only the constructor throws, for missing package parts.
 
 /** Four Argon2 lanes in parallel; needs a cross-origin isolated page, such as `mhfe serve` gives. */
 export const FAST_MODE = "fast";
@@ -247,16 +248,25 @@ export class MhfeClient {
         );
         return;
       }
-      // A callback of the page that throws ends the operation: the worker stops, which frees its
+      // A callback of the page that fails ends the operation: the worker stops, which frees its
       // secrets, and the promise rejects with the page's error as the cause, so the page learns of
-      // it where it learns of every other error.
+      // it where it learns of every other error. An async callback fails by rejecting the promise
+      // it returns; the operation does not wait for that promise.
       const callPage = (callback, value, name) => {
+        const callbackFailed = (cause) =>
+          new MhfeError("CALLBACK_FAILED", `The page's ${name} callback failed.`, { cause });
         try {
-          callback?.(value);
+          const returned = callback?.(value);
+          if (typeof returned?.then === "function") {
+            returned.then(undefined, (cause) => {
+              // Once the operation has ended there is nothing left to stop: the page's rejection
+              // stays unhandled, as it would be without this client, instead of being swallowed.
+              if (this.#running !== running) throw cause;
+              running.stop(callbackFailed(cause));
+            });
+          }
         } catch (cause) {
-          running.stop(
-            new MhfeError("CALLBACK_FAILED", `The page's ${name} callback failed.`, { cause }),
-          );
+          running.stop(callbackFailed(cause));
         }
       };
       worker.onmessage = (event) => {
@@ -271,7 +281,7 @@ export class MhfeClient {
           running.stop(null);
           resolve(reply.result);
         } else if (reply.type === "error") {
-          running.stop(new MhfeError(reply.error.code, reply.error.message));
+          running.stop(new MhfeError(reply.error.code, sentence(reply.error.message)));
         }
       };
       worker.onerror = (event) => {
@@ -290,6 +300,14 @@ export class MhfeClient {
       }
     });
   }
+}
+
+/**
+ * A page shows an error message as it is, so it starts with a capital letter, as the messages of
+ * the command-line tool do. The Rust core's messages start in lower case to fit inside a sentence.
+ */
+function sentence(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function requireText(value, name) {

@@ -34,8 +34,11 @@ export interface MhfeSettings {
   pim?: number;
   /** Memory level; a browser supports only 0 (2 GiB). Default 0. */
   memoryLevel?: number;
-  /** Called as each round starts. If it throws, the operation stops and rejects with CALLBACK_FAILED. */
-  onProgress?: (progress: MhfeProgress) => void;
+  /**
+   * Called as each round starts. If it throws, or is async and its promise rejects while the
+   * operation runs, the operation stops and rejects with CALLBACK_FAILED. It is not awaited.
+   */
+  onProgress?: (progress: MhfeProgress) => void | Promise<void>;
 }
 
 export interface MhfeCandidate {
@@ -62,8 +65,9 @@ export type MhfeReference =
 
 export class MhfeError extends Error {
   readonly code: string;
-  /** For CALLBACK_FAILED, the error that the page's callback threw. */
+  /** For CALLBACK_FAILED, the error that the page's callback threw or its promise rejected with. */
   readonly cause?: unknown;
+  /** `message` is an English sentence that a page can show as it is. */
   constructor(code: string, message: string, options?: { cause?: unknown });
 }
 
@@ -72,8 +76,10 @@ export class MhfeCancelledError extends MhfeError {
 }
 
 /**
- * Every operation returns a promise and reports every error by rejecting it, the checks of its
- * arguments included: none throws when it is called. Only the constructor throws, for missing parts.
+ * The five operations (encrypt, decrypt, check, readPhrase, readContainer) return a promise and
+ * report every error by rejecting it, the checks of their arguments included: none throws when it
+ * is called. mode(), maxSupportedMemLevel() and cancel() are synchronous. Only the constructor
+ * throws, for missing parts.
  */
 export class MhfeClient {
   constructor(sources: MhfeSources);
@@ -84,13 +90,13 @@ export class MhfeClient {
    * only after the container has been decrypted again and checked; a failed check rejects with
    * VERIFICATION_FAILED. `onUnverified` receives the container before the check, for showing it
    * marked as not yet verified; the page must then report how the check ended. If `onUnverified`
-   * throws, the operation stops and rejects with CALLBACK_FAILED.
+   * fails like `onProgress` can, the operation stops and rejects with CALLBACK_FAILED.
    */
   encrypt(
     options: MhfeSettings & {
       phrase: string;
       passwordRepeat: string | Uint8Array;
-      onUnverified?: (result: { container: string }) => void;
+      onUnverified?: (result: { container: string }) => void | Promise<void>;
     },
   ): Promise<{ container: string }>;
   decrypt(
