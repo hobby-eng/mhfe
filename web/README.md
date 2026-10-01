@@ -89,7 +89,11 @@ Containers made with level 0 in the browser and on the command line are identica
 The specification asks applications to do some things the client cannot do for them:
 
 - ask for the password twice before `encrypt` (the client refuses two different entries) and advise
-  a different password for each container;
+  a different password for each encrypted phrase, used nowhere else; say that another copy of a
+  backup is an exact copy of the same 24 words, with the same password and settings;
+- say that letter case and the spaces between words count in the password (after the NFKD
+  normalization the client applies), and that a fixed form, such as lowercase words with single
+  spaces, is the easiest to type again years later;
 - show the suite identifier when a container is made; when the PIM or memory level is not the
   default, tell the user to remember it and offer to record it, since recovery needs exactly that
   value; with the defaults, say that the 24 words and the password are enough, unless
@@ -105,6 +109,9 @@ The specification asks applications to do some things the client cannot do for t
   because automatic detection would not give the phrase on its own;
 - warn in standard mode that the operation takes longer, because the four Argon2 lanes then run one
   after another;
+- ask the user to rehearse the recovery with the container typed from the finished backup, not from
+  the screen: the check at creation covers the words the page produced, not the copy, and a wrongly
+  copied word still passes the BIP39 checksum in about one case in 256;
 - start an operation only on an explicit user action and offer a cancel button.
 
 ## What the browser cannot wipe

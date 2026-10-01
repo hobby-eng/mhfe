@@ -135,12 +135,14 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     print_what_to_remember(work, original_words, length_must_be_chosen);
     eprintln!();
     style::hint(
-        "Use a different password for each container: a shared password is only as safe as the \
-         weakest container that uses it.",
+        "Use a different password for each phrase you encrypt, and nowhere else. To make another \
+         copy, copy these 24 words exactly.",
     );
+    // The check above covered the words this program produced, not the copy the user wrote down.
     style::hint(&format!(
-        "Before relying on the container, rehearse the recovery with {} and keep the original \
-         backup until it matches.",
+        "Before relying on the container, rehearse the recovery with {}, typing the words from \
+         the plate or paper you wrote, not from the screen, and keep the original backup until \
+         it matches.",
         paint(ACCENT, "mhfe check")
     ));
     Ok(SUCCESS)
@@ -309,6 +311,10 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<(), Fai
 /// Asks for the password twice, so that a typing mistake cannot lock the phrase away, and warns
 /// when it is weaker than four dice words.
 fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
+    style::hint(
+        "Letter case and spaces count: lowercase words with single spaces are the easiest to \
+         type again years later.",
+    );
     loop {
         let text = input.secret("Password (hidden): ")?;
         let password = match Password::new(&text) {
