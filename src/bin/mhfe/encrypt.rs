@@ -10,7 +10,7 @@ use mhfe::{
 };
 use zeroize::Zeroizing;
 
-use crate::diceware::{dice_word_count, RECOMMENDED_WORDS};
+use crate::diceware::{different_dice_words, RECOMMENDED_WORDS};
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, STRONG};
@@ -327,7 +327,7 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<(), Fai
 }
 
 /// Asks for the password twice, so that a typing mistake cannot lock the phrase away, and warns
-/// when it is weaker than four dice words.
+/// when it is weaker than four different dice words.
 fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
     style::hint(
         "Letter case and spaces count: lowercase words with single spaces are the easiest to \
@@ -356,9 +356,9 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
                 "The two passwords differ. Nothing was encrypted.",
             ));
         }
-        if dice_word_count(&text) < RECOMMENDED_WORDS {
+        if different_dice_words(&text) < RECOMMENDED_WORDS {
             style::warn(
-                "This password is not four or more words from the EFF dice list.",
+                "This password is not four or more words from the EFF dice list, all different.",
                 &format!(
                     "Unless it was chosen at random, it is probably much weaker than it looks; \
                      {} makes a strong one.",

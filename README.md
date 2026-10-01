@@ -46,16 +46,15 @@ clear message. When unsure, take the standard one. To build from source, install
 
 ### Where to run it
 
-Use MHFE on a trusted computer without a network connection. It never connects to anything, but
-the rest of the system might: an everyday installation has a browser, cloud synchronization,
-updates and background programs that you cannot all check.
+Use MHFE on a trusted computer without a network connection. It never connects to anything, but the
+rest of the system might: an everyday installation has a browser, cloud synchronization, updates and
+background programs that you cannot all check.
 
 - Best: a Linux system started from a USB stick, with the network cable unplugged and Wi-Fi off,
   used only for this and shut down afterwards.
-- On Windows, prefer Windows PE started from a USB stick in the same way over your everyday
-  Windows. The Windows build is a single `mhfe.exe` that needs no installation and uses only
-  libraries that are part of Windows itself, so it should run in Windows PE; this has not been
-  tested there yet.
+- On Windows, prefer Windows PE started from a USB stick in the same way over your everyday Windows.
+  The Windows build is a single `mhfe.exe` that needs no installation and uses only libraries that
+  are part of Windows itself, so it should run in Windows PE; this has not been tested there yet.
 
 Whatever the system, what matters is that you trust where it came from and that it stays offline
 while the phrase and the password are on it.
@@ -116,21 +115,19 @@ The phrase and the password are typed without being shown, and the password is a
 a typing mistake in it would lock the phrase away for good. Words may be typed in any case and with
 any spacing, and the first four letters of each word are enough, as many metal backups store them.
 If you typed short forms, you can ask to see the words that were read, written out in full; they are
-not shown unless you ask, because the phrase is secret.
-The container appears after the first half of the work, so you can write it down while MHFE checks
-it by recovering your phrase from its words. Rely on it only once it says "Verified". If the check
-fails, which only a hardware or memory fault could cause, MHFE says so loudly: cross the container
-out and encrypt again. With `--stdin`, or when the output goes to a file or another program, the
-container is printed only after the check has passed.
-The example uses the public test phrase `abandon abandon ... about` with the password
+not shown unless you ask, because the phrase is secret. The container appears after the first half
+of the work, so you can write it down while MHFE checks it by recovering your phrase from its words.
+Rely on it only once it says "Verified". If the check fails, which only a hardware or memory fault
+could cause, MHFE says so loudly: cross the container out and encrypt again. With `--stdin`, or when
+the output goes to a file or another program, the container is printed only after the check has
+passed. The example uses the public test phrase `abandon abandon ... about` with the password
 `public test password`; never use either for real funds.
 
-Write the 24 words down. With the default settings nothing else needs to be kept: the 24 words
-and the password are enough, because the length of the original is found again automatically.
-About one phrase in four billion is the exception; MHFE then says so and asks you to remember the
-word count. If you changed the PIM or the memory level, remember the values you chose: recovery
-needs exactly these values, and with others the container turns into a different phrase that looks
-just as valid.
+Write the 24 words down. With the default settings nothing else needs to be kept: the 24 words and
+the password are enough, because the length of the original is found again automatically. About one
+phrase in four billion is the exception; MHFE then says so and asks you to remember the word count.
+If you changed the PIM or the memory level, remember the values you chose: recovery needs exactly
+these values, and with others the container turns into a different phrase that looks just as valid.
 Keep a copy of this program's release offline as well, so that a compatible version is at hand years
 from now.
 
@@ -158,11 +155,11 @@ The password is shown only this once and is not stored. ...
 
 The words come from the [EFF dice list](https://www.eff.org/dice) of 7,776 words. `--dice` lets you
 roll real dice instead of using the computer's randomness, and `--words N` changes the number of
-words. `mhfe encrypt` warns when a password is not four or more such words.
+words. `mhfe encrypt` warns when a password is not four or more different such words.
 
-A password is ordinary text on one line. Any letters, digits, spaces and symbols in any language
-are accepted, but invisible control characters such as a tab, and line breaks, are refused, so that
-a password cannot differ invisibly between programs. Every program applies the same Unicode
+A password is ordinary text on one line. Any letters, digits, spaces and symbols in any language are
+accepted, but invisible control characters such as a tab, and line breaks, are refused, so that a
+password cannot differ invisibly between programs. Every program applies the same Unicode
 normalization (NFKD, as BIP39 does), so a few characters that look alike count as the same; letter
 case and the spaces between words always count. A fixed form, such as lowercase words with single
 spaces as `mhfe password` makes them, is the easiest to type again years later.
@@ -241,8 +238,8 @@ An encryption takes twice these times. The PIM (`--pim`, 0 to 1023) multiplies t
 doubles it, and at PIM 1023 a recovery takes roughly 17 to 34 hours. The computer that recovers the
 container must have the memory of the chosen level; MHFE checks this before it asks for anything.
 The command-line tool, which needs a 64-bit system, supports every level; a browser supports memory
-level 0 only. A higher setting adds a fixed factor, while each extra random password word
-multiplies an attacker's work by 7,776, so a better password is worth more.
+level 0 only. A higher setting adds a fixed factor, while each extra random password word multiplies
+an attacker's work by 7,776, so a better password is worth more.
 
 ## In the browser
 
@@ -269,8 +266,8 @@ remote resources.
 
 - `encrypt`: the phrase, the password, and the password again;
 - `decrypt` and `check`: the container and the password;
-- `check --address` or `check --fingerprint`: then also the reference and the BIP39 passphrase
-  (an empty line if the wallet has none).
+- `check --address` or `check --fingerprint`: then also the reference and the BIP39 passphrase (an
+  empty line if the wallet has none).
 
 Secrets are never accepted as command-line arguments. `--stdin` also lets another program do the
 asking. On Linux with systemd 249 or later, for example, `systemd-ask-password` can ask for the
@@ -314,8 +311,9 @@ The library API is in [`API.md`](API.md), the security notes in [`SECURITY.md`](
 licences of the bundled Argon2 code, EFF word list and browser JavaScript runtime in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), those of the Rust crates in
 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) (written by `scripts/third-party-licenses.py`;
-every release archive carries both files), and timing records in [`measurements/`](measurements/). Test vectors are written with `mhfe test-vectors` and checked
-independently with `scripts/independent-suite3.py`, which uses OpenSSL's Argon2.
+every release archive carries both files), and timing records in [`measurements/`](measurements/).
+Test vectors are written with `mhfe test-vectors` and checked independently with
+`scripts/independent-suite3.py`, which uses OpenSSL's Argon2.
 
 Argon2 is the reference C implementation of its authors, vendored unchanged in
 [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) and used by both the native tool and the
