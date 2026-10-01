@@ -541,7 +541,7 @@
       "kind": "finding",
       "title": "Advertised native 32-bit level 0 cannot pass the Rust allocation layout check",
       "severity": "low",
-      "status": "fixed",
+      "status": "verified",
       "releaseBlocking": false,
       "affected": [
         "src/engine/native.rs:13",
@@ -611,7 +611,7 @@
       "kind": "finding",
       "title": "Late recovery guidance incorrectly says no context beyond words and password is needed",
       "severity": "medium",
-      "status": "fixed",
+      "status": "verified",
       "releaseBlocking": false,
       "affected": [
         "src/bin/mhfe/encrypt.rs:148",
@@ -1497,10 +1497,10 @@
     },
     {
       "id": "AUD-003-API002",
-      "status": "fixed",
+      "status": "verified",
       "fixCommit": "the commit that adds this record (parent 46112d2b4bec0b9eba34cbbb9d632df099e11672)",
-      "verificationCommit": null,
-      "evidence": "Native builds require a 64-bit target through compile_error!; API.md and README updated. No 32-bit native target was built to observe the error."
+      "verificationCommit": "ea263ec",
+      "evidence": "Native builds require a 64-bit target through compile_error!; API.md and README updated. No 32-bit native target was built to observe the error. Follow-up (ea263ec): docs/audits/AUD-003-harnesses/refuse32.sh checks a native i686-unknown-linux-gnu build with a stand-in C compiler; it stops with 'the native MHFE engine needs a 64-bit target' at src/engine/native.rs:12 and no other error. The browser build is unchanged and still checked by clippy for wasm32 in CI."
     },
     {
       "id": "AUD-003-SEC001",
@@ -1518,10 +1518,10 @@
     },
     {
       "id": "AUD-003-DOC002",
-      "status": "fixed",
+      "status": "verified",
       "fixCommit": "the commit that adds this record (parent 46112d2b4bec0b9eba34cbbb9d632df099e11672)",
-      "verificationCommit": null,
-      "evidence": "Advice depends on the settings and on other_detected_lengths: nothing else with the defaults, remember changed PIM/memory level, remember the word count for a phrase detection would misread. Matches mhfe-spec 61c928e (settings wording approved by the owner). The CLI output for the ambiguous case was not run at full cost."
+      "verificationCommit": "ea263ec",
+      "evidence": "Advice depends on the settings and on other_detected_lengths: nothing else with the defaults, remember changed PIM/memory level, remember the word count for a phrase detection would misread. Matches mhfe-spec 61c928e (settings wording approved by the owner). The CLI output for the ambiguous case was not run at full cost. Follow-up (ea263ec): what_to_remember returns the advice as data, and unit tests check it for a short phrase at the defaults ('Nothing else needs to be kept'), a phrase that length detection would misread (word count and mhfe decrypt --words), a 24-word phrase (why recovery shows it unverified) and changed settings (PIM and memory level to remember). No full Argon2 run was needed, as the finding states."
     },
     {
       "id": "AUD-003-SEC002",
