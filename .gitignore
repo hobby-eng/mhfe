@@ -10,3 +10,4 @@ __pycache__/
 
 # Audit evidence stays local (workspace rule); only harness scripts in docs/audits/AUD-NNN-harnesses/ are committed.
 docs/audits/*-evidence/
+/node_modules/

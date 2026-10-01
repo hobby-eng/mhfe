@@ -1,0 +1,20 @@
+# Build output and local evidence.
+/target/
+/dist/
+/canonical-output/
+/canonical-output-*/
+docs/audits/*-evidence/
+
+# Bytes that must not change: public vectors, measurement records, vendored upstream code and
+# generated licence texts copied verbatim from the crates.
+/tests/fixtures/
+/measurements/
+/vendor/
+/THIRD_PARTY_LICENSES.md
+/THIRD_PARTY_NOTICES.md
+
+# Audit reports and their harnesses are records of their date: they keep the form they were
+# written in.
+/docs/audits/
+/node_modules/
+/package-lock.json

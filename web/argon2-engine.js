@@ -1,6 +1,6 @@
 // The bridge from the Rust core to the Emscripten build of the reference Argon2 code. It is
 // joined into mhfe-worker.js by scripts/build-wasm.sh, and the Node.js tests load the same file.
-'use strict';
+"use strict";
 
 /** Argon2id output length and lane count of MHFE suite 3. */
 const ARGON2_KEY_BYTES = 32;
@@ -23,7 +23,7 @@ function argon2Engine(module) {
       const keyPointer = module._malloc(ARGON2_KEY_BYTES) >>> 0;
       try {
         if (passwordPointer === 0 || saltPointer === 0 || keyPointer === 0) {
-          throw new Error('MEMORY_ALLOCATION_FAILED: the browser could not provide memory');
+          throw new Error("MEMORY_ALLOCATION_FAILED: the browser could not provide memory");
         }
         module.HEAPU8.set(password, passwordPointer);
         module.HEAPU8.set(salt, saltPointer);
@@ -39,7 +39,9 @@ function argon2Engine(module) {
           ARGON2_KEY_BYTES,
         );
         if (code === ARGON2_MEMORY_ALLOCATION_ERROR) {
-          throw new Error('MEMORY_ALLOCATION_FAILED: the browser could not provide the Argon2 memory');
+          throw new Error(
+            "MEMORY_ALLOCATION_FAILED: the browser could not provide the Argon2 memory",
+          );
         }
         if (code !== 0) {
           throw new Error(`ARGON2_FAILED: the reference code returned error ${code}`);
