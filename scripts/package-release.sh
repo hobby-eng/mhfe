@@ -29,6 +29,17 @@ trap 'rm -rf "$staging"' EXIT
 # Documents and licence texts that every archive carries. An archive that brings its own
 # README.md, as the browser package does with its integration guide and the SHA-256 of its
 # files, keeps it and gets the project overview as README-mhfe.md.
+# The commit and the state of the working copy: given by scripts/build-reproducible.sh inside the
+# container, which has no .git, or read from git here (the macOS release jobs).
+source_commit="${SOURCE_COMMIT:-$(git rev-parse HEAD)}"
+source_state="${SOURCE_STATE:-}"
+if [[ -z "$source_state" ]]; then
+  source_state=clean
+  if [[ -n "$(git status --porcelain)" ]]; then
+    source_state=modified
+  fi
+fi
+
 add_common_files() {
   local folder="$1"
   if [[ -e "$folder/README.md" ]]; then
@@ -42,6 +53,7 @@ add_common_files() {
   cp vendor/eff-large-wordlist.md "$folder/licenses/eff-large-wordlist.md"
   {
     echo "mhfe $version"
+    echo "source: $source_commit ($source_state)"
     rustc --version --verbose
     wasm-bindgen --version 2>/dev/null || true
     echo "Argon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb"

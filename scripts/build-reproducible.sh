@@ -27,6 +27,14 @@ if [[ "${REPRODUCIBLE_NO_CACHE:-0}" == 1 ]]; then
   cache_flags=(--no-cache)
 fi
 
+# The commit the archives are built from, and whether the working copy differs from it: Docker
+# receives the working copy, so a build with uncommitted changes says so in BUILD-INFO.txt.
+source_commit="$(git rev-parse HEAD)"
+source_state=clean
+if [[ -n "$(git status --porcelain)" ]]; then
+  source_state=modified
+fi
+
 # Build into a fresh folder and replace the previous output only after a complete build, so a
 # failed or interrupted build keeps the last good assets.
 staging="$(mktemp -d "$repo_root/canonical-output-staging.XXXXXX")"
@@ -35,6 +43,8 @@ docker buildx build "${cache_flags[@]}" \
   --platform linux/amd64 \
   --target artifacts \
   --build-arg "RELEASE_VERSION=$version" \
+  --build-arg "SOURCE_COMMIT=$source_commit" \
+  --build-arg "SOURCE_STATE=$source_state" \
   --output "type=local,dest=$staging" \
   -f Dockerfile.reproducible \
   .

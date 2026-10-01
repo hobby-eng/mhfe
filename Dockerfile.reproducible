@@ -20,8 +20,8 @@ RUN scripts/build-argon2-wasm.sh
 
 FROM buildpack-deps:noble@sha256:c2881ab5b526bc3b377a9501a89fec7a82c84f57e89d6cfd2fb9b5cbff75ef7f AS toolchain
 
-ARG NODE_VERSION=24.20.0
-ARG NODE_ARCHIVE_SHA256=2f2c0da162318f0de47665410c7c8c2ed3d36c8f3105de4bbc61176c70a7cbf2
+ARG NODE_VERSION=24.21.0
+ARG NODE_ARCHIVE_SHA256=fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
 ARG RUSTUP_VERSION=1.29.1
 ARG RUSTUP_INIT_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
 # Ubuntu archive snapshot for the cross compilers, so that their versions never change.
@@ -103,6 +103,10 @@ RUN --network=none cargo fmt --all -- --check \
     && scripts/check-release-artifacts.sh
 
 ARG RELEASE_VERSION
+# The commit and whether the working copy had changes, from scripts/build-reproducible.sh: the
+# container has no .git of its own. They go into BUILD-INFO.txt of every archive.
+ARG SOURCE_COMMIT
+ARG SOURCE_STATE
 RUN test -n "${RELEASE_VERSION}" \
     && package_version="$(cargo metadata --locked --offline --no-deps --format-version 1 | \
          python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')" \

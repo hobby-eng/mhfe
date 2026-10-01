@@ -77,9 +77,11 @@ reasonable, this file says what was chosen and why. The report is
    `--require-hashes`; every checkout sets `persist-credentials: false`; each release job hands
    its own checksums to `publish`, which checks every archive against them and that none is
    missing or extra before writing `SHA256SUMS`.
-7. **Local canonical builds** send untracked and ignored files to Docker (they do not reach the
-   archives); consider extending `.dockerignore` (for example `docs/audits/*-evidence`,
-   `__pycache__`) and recording the source commit and a dirty flag in `BUILD-INFO.txt`.
+7. **Local canonical builds — resolved (owner's decision).** `.dockerignore` also leaves out
+   `node_modules`, Python caches, temporary files and audit evidence, and every archive's
+   `BUILD-INFO.txt` names the source commit and whether the working copy had changes
+   (`source: <commit> (clean|modified)`), passed into the container by
+   `scripts/build-reproducible.sh` and read from git in the macOS release jobs.
 8. **Still not run:** Docker and the reproducible build, full-size Argon2 and the full vector
    replay, and anything on Windows, macOS or ARM64 apart from the CI results quoted in the report.
    Release run 36823878528 of `v0.4.0` was still replaying the vectors when it was read.
