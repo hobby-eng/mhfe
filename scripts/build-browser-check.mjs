@@ -45,15 +45,6 @@ async function expectRejection(promise, code, description) {
   }
 }
 
-function expectThrow(action, code, description) {
-  try {
-    action();
-    expect(false, description + ' (no error)');
-  } catch (error) {
-    expect(error.code === code, description + ' -> ' + error.code);
-  }
-}
-
 async function main() {
   const coreWasm = Uint8Array.from(atob(CORE_WASM_BASE64), (character) => character.charCodeAt(0));
   const client = new MhfeClient({
@@ -65,8 +56,8 @@ async function main() {
   log('mode: ' + client.mode() + ', protocol: ' + location.protocol);
 
   // Refusals that need no Argon2 work.
-  expectThrow(() => client.encrypt({ phrase: PHRASE, password: 'a\\uD800', passwordRepeat: 'a\\uD800' }), 'INVALID_PASSWORD_TEXT', 'unpaired surrogate refused');
-  expectThrow(() => client.encrypt({ phrase: PHRASE, password: PASSWORD, passwordRepeat: PASSWORD, memoryLevel: 1 }), 'MEMORY_LEVEL_NOT_SUPPORTED_HERE', 'memory level 1 refused');
+  await expectRejection(client.encrypt({ phrase: PHRASE, password: 'a\\uD800', passwordRepeat: 'a\\uD800' }), 'INVALID_PASSWORD_TEXT', 'unpaired surrogate refused');
+  await expectRejection(client.encrypt({ phrase: PHRASE, password: PASSWORD, passwordRepeat: PASSWORD, memoryLevel: 1 }), 'MEMORY_LEVEL_NOT_SUPPORTED_HERE', 'memory level 1 refused');
   await expectRejection(client.encrypt({ phrase: 'abandon about', password: PASSWORD, passwordRepeat: PASSWORD }), 'INVALID_PHRASE', 'invalid phrase refused by the worker');
 
   // Cancelling inside the first round stops the worker at once.

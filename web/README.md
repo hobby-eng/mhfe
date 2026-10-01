@@ -62,6 +62,11 @@ Each operation runs in a new worker, which is terminated when the operation ends
 the 2 GiB of Argon2 memory. `client.cancel()` stops a running operation at once. Only one operation
 runs at a time.
 
+Every method returns a promise and reports every error by rejecting it, also a refused argument such
+as an empty password or a PIM out of range: `await` inside `try` and `.catch()` both see all of
+them. If `onProgress` or `onUnverified` throws, the operation stops, its worker ends and the promise
+rejects with `CALLBACK_FAILED`, the page's error as its `cause`.
+
 ## Fast and standard mode
 
 `client.mode()` returns `"fast"` when the page is cross-origin isolated and `"standard"` otherwise.
@@ -73,14 +78,14 @@ takes about twice as long in either mode. The measurements behind these figures 
 computer without the mhfe program, the package's `mhfe-fast-mode.py` does the same with Python 3.8
 or later and nothing else.
 
-Both launchers serve a page only when the checksum file `mhfe-fast-mode.sha256` lies next to it:
-one line in the format `sha256sum` writes, the page's SHA-256, two spaces and its file name, or
-one space and `*` before the name as `sha256sum --binary` writes it. Ship that file beside the
-tool's HTML file, always under this name. Without it, with another file name in it or with a
-different SHA-256, the launcher refuses with a message and serves nothing. Started
-without arguments, as by a double-click, a launcher serves the page named in the
-`mhfe-fast-mode.sha256` next to itself; `mhfe serve <page.html>` and
-`python3 mhfe-fast-mode.py <page.html>` serve a page elsewhere, next to its own checksum file.
+Both launchers serve a page only when the checksum file `mhfe-fast-mode.sha256` lies next to it: one
+line in the format `sha256sum` writes, the page's SHA-256, two spaces and its file name, or one
+space and `*` before the name as `sha256sum --binary` writes it. Ship that file beside the tool's
+HTML file, always under this name. Without it, with another file name in it or with a different
+SHA-256, the launcher refuses with a message and serves nothing. Started without arguments, as by a
+double-click, a launcher serves the page named in the `mhfe-fast-mode.sha256` next to itself;
+`mhfe serve <page.html>` and `python3 mhfe-fast-mode.py <page.html>` serve a page elsewhere, next to
+its own checksum file.
 
 ## Memory
 
@@ -101,9 +106,9 @@ The specification asks applications to do some things the client cannot do for t
   spaces, is the easiest to type again years later;
 - show the suite identifier when a container is made; when the PIM or memory level is not the
   default, tell the user to remember it and offer to record it, since recovery needs exactly that
-  value; with the defaults, say that the 24 words and the password are enough, unless
-  `otherLengths` of the phrase is not empty: then ask the user to remember the word count and to
-  select it when recovering;
+  value; with the defaults, say that the 24 words and the password are enough, unless `otherLengths`
+  of the phrase is not empty: then ask the user to remember the word count and to select it when
+  recovering;
 - if it shows the container from `onUnverified`, mark it clearly as not yet verified, and then say
   how the check ended: verified when the promise resolves, wrong and not to be used on
   `VERIFICATION_FAILED`, not verified on a cancel or any other error;
