@@ -149,40 +149,73 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 /// Tells the user what recovery needs besides the container and the password: a setting that
 /// differs from its default, and, for the rare phrase that automatic length detection would
 /// misread, its word count. Otherwise nothing: the suite is fixed and the length is detected.
-fn print_what_to_remember(work: WorkFactor, original_words: usize, length_must_be_chosen: bool) {
+/// One line of the advice printed after an encryption, before it is styled.
+#[derive(Debug, PartialEq)]
+enum Advice {
+    /// A sentence with a bold lead-in.
+    Statement(&'static str, String),
+    /// A quieter hint.
+    Hint(String),
+    /// A hint that ends with a command, which is shown in the accent colour.
+    HintWithCommand(&'static str, String),
+}
+
+/// What the owner must keep besides the container and the password: nothing at the default
+/// settings, otherwise the changed settings and, if detection would misread the phrase, its length.
+fn what_to_remember(
+    work: WorkFactor,
+    original_words: usize,
+    length_must_be_chosen: bool,
+) -> Vec<Advice> {
+    let mut advice = Vec::new();
     let changed = settings::changed_settings(work);
     if changed.is_none() && !length_must_be_chosen {
-        eprintln!(
-            "{} the 24 words and the password are enough.",
-            paint(STRONG, "Nothing else needs to be kept:")
-        );
+        advice.push(Advice::Statement(
+            "Nothing else needs to be kept:",
+            "the 24 words and the password are enough.".into(),
+        ));
     }
     if let Some(changed) = changed {
-        eprintln!(
-            "{} {changed}.",
-            paint(STRONG, "You changed the default settings; remember them:")
-        );
-        style::hint(
+        advice.push(Advice::Statement(
+            "You changed the default settings; remember them:",
+            format!("{changed}."),
+        ));
+        advice.push(Advice::Hint(
             "Recovery needs exactly these values: with others the container turns into a \
-             different phrase that looks just as valid.",
-        );
+             different phrase that looks just as valid."
+                .into(),
+        ));
     }
     if length_must_be_chosen {
-        eprintln!(
-            "{} your phrase has {original_words} words.",
-            paint(STRONG, "Remember the word count:")
-        );
-        style::hint(&format!(
+        advice.push(Advice::Statement(
+            "Remember the word count:",
+            format!("your phrase has {original_words} words."),
+        ));
+        advice.push(Advice::HintWithCommand(
             "As warned above, automatic length detection would misread this phrase; recover it \
-             with {}.",
-            paint(ACCENT, format!("mhfe decrypt --words {original_words}"))
+             with ",
+            format!("mhfe decrypt --words {original_words}"),
         ));
     }
     if original_words == WORDS_WITHOUT_CHECK {
-        style::hint(
+        advice.push(Advice::Hint(
             "A 24-word phrase has no built-in check, so recovery will show it as not verified; \
-             that is expected. mhfe check with a known address of the wallet confirms it.",
-        );
+             that is expected. mhfe check with a known address of the wallet confirms it."
+                .into(),
+        ));
+    }
+    advice
+}
+
+fn print_what_to_remember(work: WorkFactor, original_words: usize, length_must_be_chosen: bool) {
+    for line in what_to_remember(work, original_words, length_must_be_chosen) {
+        match line {
+            Advice::Statement(lead, rest) => eprintln!("{} {rest}", paint(STRONG, lead)),
+            Advice::Hint(text) => style::hint(&text),
+            Advice::HintWithCommand(text, command) => {
+                style::hint(&format!("{text}{}.", paint(ACCENT, command)))
+            }
+        }
     }
 }
 
@@ -310,5 +343,74 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
             );
         }
         return Ok(password);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The advice as plain text, one line per entry, without colours.
+    fn plain(work: WorkFactor, words: usize, length_must_be_chosen: bool) -> Vec<String> {
+        what_to_remember(work, words, length_must_be_chosen)
+            .into_iter()
+            .map(|advice| match advice {
+                Advice::Statement(lead, rest) => format!("{lead} {rest}"),
+                Advice::Hint(text) => text,
+                Advice::HintWithCommand(text, command) => format!("{text}{command}."),
+            })
+            .collect()
+    }
+
+    fn defaults() -> WorkFactor {
+        WorkFactor::new(0, 0).unwrap()
+    }
+
+    /// AUD-003-DOC002: the advice for the cases the audit names.
+    #[test]
+    fn a_short_phrase_at_the_defaults_needs_nothing_else() {
+        assert_eq!(
+            plain(defaults(), 12, false),
+            ["Nothing else needs to be kept: the 24 words and the password are enough."]
+        );
+    }
+
+    #[test]
+    fn a_phrase_that_detection_would_misread_needs_its_word_count() {
+        let advice = plain(defaults(), 15, true);
+        assert!(!advice.iter().any(|line| line.starts_with("Nothing else")));
+        assert_eq!(
+            advice[0],
+            "Remember the word count: your phrase has 15 words."
+        );
+        assert!(advice[1].ends_with("recover it with mhfe decrypt --words 15."));
+        assert_eq!(advice.len(), 2);
+    }
+
+    #[test]
+    fn a_24_word_phrase_is_told_why_recovery_shows_it_unverified() {
+        let advice = plain(defaults(), 24, false);
+        assert!(advice[0].starts_with("Nothing else needs to be kept"));
+        assert!(advice[1].starts_with("A 24-word phrase has no built-in check"));
+        assert_eq!(advice.len(), 2);
+    }
+
+    #[test]
+    fn changed_settings_must_be_remembered() {
+        let advice = plain(WorkFactor::new(3, 1).unwrap(), 12, false);
+        assert!(!advice.iter().any(|line| line.starts_with("Nothing else")));
+        assert_eq!(
+            advice[0],
+            "You changed the default settings; remember them: PIM 3, memory level 1."
+        );
+        assert!(advice[1].starts_with("Recovery needs exactly these values"));
+        let both = plain(WorkFactor::new(1, 0).unwrap(), 24, true);
+        assert_eq!(
+            both[0],
+            "You changed the default settings; remember them: PIM 1."
+        );
+        assert!(both
+            .iter()
+            .any(|line| line == "Remember the word count: your phrase has 24 words."));
     }
 }
