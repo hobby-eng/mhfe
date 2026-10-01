@@ -5,6 +5,12 @@ on:
     tags:
       - "v*"
 
+# One release run per tag at a time, never cancelled half-way: a second push of the same tag
+# waits. Cancel an outdated release run by hand before it publishes.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 

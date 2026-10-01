@@ -1,8 +1,16 @@
 name: CI
 
 on:
+  # Branches only: a release tag names a commit that CI has already checked on its branch, and
+  # the release workflow builds and replays the vectors itself.
   push:
+    branches: ["**"]
   pull_request:
+
+# A newer push to the same branch or pull request makes a running check pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

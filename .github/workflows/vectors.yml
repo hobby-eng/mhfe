@@ -5,7 +5,9 @@ name: Test vectors
 # when the implementation or the vectors change, on request, and for every release: release.yml
 # calls it for the tagged commit and publishes only after it has passed.
 on:
+  # Branches only: for a release tag, release.yml calls this workflow itself.
   push:
+    branches: ["**"]
     paths:
       - Cargo.toml
       - Cargo.lock
@@ -31,6 +33,13 @@ on:
       - .github/workflows/vectors.yml
   workflow_dispatch:
   workflow_call:
+
+# The replay takes about two hours; a newer push to the same branch makes a running one pointless.
+# The group is named here rather than after github.workflow, which in a call from release.yml is
+# "Release": a shared group would make the release and its own replay wait for each other.
+concurrency:
+  group: vectors-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
