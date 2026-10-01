@@ -94,3 +94,21 @@ IDs in both reports, command-log hashes, source identity against the late snapsh
 document links, and ignored/unstaged evidence. It writes the local `report-validation.json` and
 `SHA256SUMS` and exits zero only when every check passes. Do not run it through `run.py`: its
 manifest must be generated after other command logs have closed.
+
+## Follow-up verification
+
+Added after the remediation, for the findings whose verification was still incomplete.
+
+```sh
+python3 docs/audits/AUD-003-harnesses/run.py refuse32-probe -- sh docs/audits/AUD-003-harnesses/refuse32.sh
+```
+
+`refuse32.sh` (AUD-003-API002) checks a native build for `i686-unknown-linux-gnu` with
+`cargo check`. It installs that Rust target in the workspace toolchain if it is missing. A stand-in
+C compiler writes empty objects for the vendored Argon2 C code, so no 32-bit C headers are needed;
+`cargo check` links nothing. Exit 0 means the build stopped with the 64-bit guard of
+`src/engine/native.rs` and no other error.
+
+AUD-003-DOC002 is verified by the unit tests in `src/bin/mhfe/encrypt.rs`
+(`cargo test --locked --bin mhfe encrypt::`): the advice after an encryption for a short phrase at
+the defaults, a phrase that length detection would misread, a 24-word phrase, and changed settings.
