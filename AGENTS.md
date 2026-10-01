@@ -12,6 +12,7 @@ The specification and vectors for this implementation live in `../mhfe_spec`; an
 - Full-size runs (announce first; the user runs full suites): `cargo test --release --lib full_size -- --ignored`; `node scripts/verify-browser-package.mjs --full`; the vector replay `cargo test --locked --release --test suite3_vectors -- --ignored`; `python3 scripts/independent-suite3.py vector tests/fixtures/suite3-vectors/*.json`, with the packages of `scripts/independent-suite3-requirements.txt` installed by `pip --require-hashes`. Each runs once per change of the core, the vectors or the checker; CI (`vectors.yml`) repeats them.
 - Release-level (explicit request only): `scripts/check.sh`; `scripts/check-release-artifacts.sh`; `scripts/build-reproducible.sh` (`packaging/Dockerfile.reproducible`) and `canonical-output/release/SHA256SUMS`.
 - Workflows: `.github/workflows/ci.yml`, `audit.yml`, `vectors.yml`, `release.yml`.
+- Release notes: `docs/releases/v<version>.md`, written before tagging from the draft `docs/releases/unreleased.md`; `release.yml` publishes that file and refuses a tag without it.
 
 ## Documents
 
