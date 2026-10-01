@@ -304,8 +304,8 @@ fn parse_mem_available(meminfo: &str) -> Option<u64> {
     kib.checked_mul(1024)
 }
 
-/// Free, inactive, purgeable and speculative pages of the Mach virtual-memory statistics: the
-/// pages the kernel can hand to a new allocation, as `vm_stat` shows them.
+/// Free and inactive pages of the Mach virtual-memory statistics: the pages the kernel can hand
+/// to a new allocation without swapping. See [`mach_available_bytes`] for the counters left out.
 #[cfg(target_os = "macos")]
 pub(super) fn available_memory_bytes() -> Option<u64> {
     // SAFETY: vm_statistics64 holds only integers, for which all zero bytes are a valid value.
@@ -328,10 +328,19 @@ pub(super) fn available_memory_bytes() -> Option<u64> {
     }
     // SAFETY: sysconf only reads a system constant.
     let page_size = u64::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok()?;
-    let pages = u64::from(statistics.free_count)
-        + u64::from(statistics.inactive_count)
-        + u64::from(statistics.purgeable_count)
-        + u64::from(statistics.speculative_count);
+    mach_available_bytes(statistics.free_count, statistics.inactive_count, page_size)
+}
+
+/// Bytes in the free and inactive pages of the Mach statistics.
+///
+/// Two counters are deliberately not added, because they overlap these two and adding them
+/// would overstate the memory. Apple's `osfmk/mach/vm_statistics.h` states that speculative
+/// pages "are already accounted for in free_count". Purgeable pages stay on the ordinary active
+/// and inactive page queues, so `purgeable_count` may repeat inactive pages. A smaller estimate
+/// only refuses earlier.
+#[cfg(any(target_os = "macos", test))]
+fn mach_available_bytes(free_count: u32, inactive_count: u32, page_size: u64) -> Option<u64> {
+    let pages = u64::from(free_count) + u64::from(inactive_count);
     pages.checked_mul(page_size)
 }
 
@@ -644,5 +653,35 @@ mod tests {
         let meminfo = "MemTotal:       15448300 kB\nMemFree:  1 kB\nMemAvailable:    5242880 kB\n";
         assert_eq!(parse_mem_available(meminfo), Some(5_242_880 * 1024));
         assert_eq!(parse_mem_available("MemTotal: 1 kB\n"), None);
+    }
+
+    /// AUD-004-FUN001: 262144 free pages, of which 131072 are speculative, and 131072 inactive
+    /// pages of 4096 bytes are 1.5 GiB. The old sum, which added the speculative pages again,
+    /// reported 2 GiB and so admitted the default memory level.
+    #[test]
+    fn mach_estimate_does_not_count_speculative_pages_twice() {
+        const PAGE_BYTES: u64 = 4096;
+        let default_level = crate::WorkFactor::default().memory_bytes();
+        assert_eq!(default_level, 2 << 30);
+        let available = mach_available_bytes(262_144, 131_072, PAGE_BYTES).unwrap();
+        assert_eq!(available, 1_610_612_736);
+        assert!(available < default_level);
+
+        // Exactly the memory of a level, and one page fewer, at level 0 (2 GiB) and 1 (3 GiB).
+        for level in [0, 1] {
+            let needed = crate::WorkFactor::new(0, level).unwrap().memory_bytes();
+            let pages = u32::try_from(needed / PAGE_BYTES).unwrap();
+            assert_eq!(mach_available_bytes(pages - 1, 1, PAGE_BYTES), Some(needed));
+            assert_eq!(
+                mach_available_bytes(pages - 1, 0, PAGE_BYTES),
+                Some(needed - PAGE_BYTES)
+            );
+        }
+        // 16 KiB pages, as on Apple silicon, and the largest counters do not overflow.
+        assert_eq!(mach_available_bytes(1, 1, 16_384), Some(32_768));
+        assert_eq!(
+            mach_available_bytes(u32::MAX, u32::MAX, 16_384),
+            Some(2 * u64::from(u32::MAX) * 16_384)
+        );
     }
 }

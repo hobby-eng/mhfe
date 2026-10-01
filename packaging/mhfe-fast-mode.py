@@ -59,8 +59,11 @@ SECURITY_HEADERS = (
 
 # The checksum file that must lie next to the page, as for `mhfe serve`. Its name never changes,
 # so a tool can ship it beside its HTML file. It holds one line in the format sha256sum writes:
-# the SHA-256 of the page, two spaces and the page's file name.
+# the SHA-256 of the page, a space, a mode marker (a second space in text mode, "*" in binary
+# mode) and the page's file name.
 CHECKSUM_FILE = "mhfe-fast-mode.sha256"
+# Hexadecimal digits of a SHA-256 digest.
+SHA256_HEX_DIGITS = 64
 
 # Exit codes, as the mhfe program uses them.
 SUCCESS = 0
@@ -203,20 +206,35 @@ def read_checksum_file(directory):
             )
         )
     malformed = Refused(
-        '{} must hold exactly one line, "<SHA-256>  <page>.html"; nothing was served.'.format(path)
+        '{} must hold exactly one line, "<SHA-256>  <page>.html" or "<SHA-256> *<page>.html"; '
+        "nothing was served.".format(path)
     )
     lines = [line for line in text.splitlines() if line.strip()]
     if len(lines) != 1:
         raise malformed
-    # The format sha256sum writes: 64 hex digits, two spaces, the file name ("*" marks binary
-    # mode). The name is a plain file name next to the checksum file, never a path.
-    digest, separator, name = lines[0].partition("  ")
-    name = name.rstrip().lstrip("*")
+    parts = split_checksum_line(lines[0])
+    if parts is None:
+        raise malformed
+    digest, name = parts
+    name = name.rstrip()
+    # The name is a plain file name next to the checksum file, never a path.
     plain_name = "/" not in name and "\\" not in name and name not in (".", "..")
-    hexadecimal = len(digest) == 64 and all(c in "0123456789abcdefABCDEF" for c in digest)
-    if not (separator and hexadecimal and name.endswith(".html") and plain_name):
+    hexadecimal = all(c in "0123456789abcdefABCDEF" for c in digest)
+    if not (hexadecimal and name.endswith(".html") and plain_name):
         raise malformed
     return digest.lower(), name
+
+
+def split_checksum_line(line):
+    """The digest and the file name of a line in the format sha256sum writes: 64 digits, a space,
+    then a second space in text mode (--text) or "*" in binary mode (--binary), then the name.
+    None for any other line. Only that one marker is removed; a name that itself starts with "*"
+    stays as it is and so does not match the page."""
+    digest = line[:SHA256_HEX_DIGITS]
+    separator = line[SHA256_HEX_DIGITS:SHA256_HEX_DIGITS + 2]
+    if len(digest) != SHA256_HEX_DIGITS or separator not in ("  ", " *"):
+        return None
+    return digest, line[SHA256_HEX_DIGITS + 2:]
 
 
 def load_checked_page(path):
