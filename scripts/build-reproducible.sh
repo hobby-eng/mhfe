@@ -46,7 +46,7 @@ docker buildx build "${cache_flags[@]}" \
   --build-arg "SOURCE_COMMIT=$source_commit" \
   --build-arg "SOURCE_STATE=$source_state" \
   --output "type=local,dest=$staging" \
-  -f Dockerfile.reproducible \
+  -f packaging/Dockerfile.reproducible \
   .
 if [[ ! -s "$staging/release/SHA256SUMS" ]]; then
   echo "The build finished without release/SHA256SUMS; the previous output is kept." >&2

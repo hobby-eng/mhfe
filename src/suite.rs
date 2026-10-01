@@ -20,7 +20,7 @@ pub const MAX_MEMORY_LEVEL: u32 = 21;
 /// Argon2 passes at PIM 0.
 const BASE_PASSES: u32 = 12;
 /// One operation at the defaults takes about one to two minutes natively: twelve Argon2id calls
-/// of 5 to 10 seconds each on current laptops (see measurements/).
+/// of 5 to 10 seconds each on current laptops (see docs/measurements/).
 const DEFAULT_SECONDS_LOW: u64 = 60;
 const DEFAULT_SECONDS_HIGH: u64 = 120;
 

@@ -6,7 +6,7 @@
 #
 # Packages: linux-x86_64, linux-aarch64, windows-x86_64, macos-x86_64, macos-aarch64, browser,
 # and linux-x86_64-ssse3, windows-x86_64-ssse3, macos-x86_64-ssse3, built with `--features ssse3
-# --target-dir target/ssse3`. Without a list it packs the six that Dockerfile.reproducible builds. Build first: the
+# --target-dir target/ssse3`. Without a list it packs the six that packaging/Dockerfile.reproducible builds. Build first: the
 # command-line tools with `cargo build --release [--target ...]`, the browser package with
 # scripts/build-wasm.sh. Needs GNU tar, gzip, zip and sha256sum.
 set -euo pipefail
@@ -47,7 +47,7 @@ add_common_files() {
   else
     cp README.md "$folder/"
   fi
-  cp LICENSE THIRD_PARTY_NOTICES.md THIRD_PARTY_LICENSES.md "$folder/"
+  cp LICENSE THIRD_PARTY_NOTICES.md "$folder/"
   mkdir -p "$folder/licenses"
   cp vendor/phc-winner-argon2/LICENSE "$folder/licenses/argon2-LICENSE"
   cp vendor/eff-large-wordlist.md "$folder/licenses/eff-large-wordlist.md"
@@ -137,7 +137,7 @@ for package in "${packages[@]}"; do
   esac
 done
 
-# Every archive must carry the licence files, among them the generated THIRD_PARTY_LICENSES.md.
+# Every archive must carry the licence files: LICENSE and THIRD_PARTY_NOTICES.md with its crate list.
 scripts/check-release-artifacts.sh --archives "${archives[@]}"
 
 (cd "$output" && sha256sum -- *.tar.gz *.zip 2>/dev/null > SHA256SUMS || true)
