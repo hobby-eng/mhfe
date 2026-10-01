@@ -86,7 +86,8 @@ line in the format `sha256sum` writes, the page's SHA-256, two spaces and its fi
 space and `*` before the name as `sha256sum --binary` writes it. Ship that file beside the tool's
 HTML file, always under this name. Without it, with another file name in it or with a different
 SHA-256, the launcher refuses with a message and serves nothing. Started without arguments, as by a
-double-click, a launcher serves the page named in the `mhfe-fast-mode.sha256` next to itself;
+double-click, `mhfe` shows its menu, whose first entry serves the page named in the
+`mhfe-fast-mode.sha256` next to the program, and `mhfe-fast-mode.py` serves that page at once.
 `mhfe serve <page.html>` and `python3 mhfe-fast-mode.py <page.html>` serve a page elsewhere, next to
 its own checksum file.
 

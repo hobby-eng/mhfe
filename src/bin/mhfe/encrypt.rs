@@ -13,7 +13,7 @@ use zeroize::Zeroizing;
 use crate::diceware::{different_dice_words, RECOMMENDED_WORDS};
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::settings::{self, Operation, Settings};
-use crate::style::{self, paint, ACCENT, HEADING, STRONG};
+use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
 use crate::terminal::{self, Input, Progress};
 
 /// A 24-word original fills the whole state and carries no verifier.
@@ -284,11 +284,17 @@ fn read_original(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
                         false,
                     )?
                 {
-                    terminal::show_words("Read the phrase as:", &phrase);
-                    if !input.yes_or_no("Is this your phrase?", true)? {
+                    // The words appear on a screen of their own and are gone once answered.
+                    let confirmed = {
+                        let _screen = terminal::PrivateScreen::enter(input);
+                        terminal::show_words("Read the phrase as:", &phrase);
+                        input.yes_or_no("Is this your phrase?", true)?
+                    };
+                    if !confirmed {
                         style::retry("Please type it again.");
                         continue;
                     }
+                    style::ok("The words are no longer on the screen.");
                 }
                 warn_if_detection_would_mislead(&phrase, words)?;
                 return Ok(phrase);
@@ -366,8 +372,44 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
                 ),
             );
         }
+        if input.can_ask_again()
+            && input.yes_or_no(
+                "Show the password that was typed? It will be visible on the screen.",
+                false,
+            )?
+            && !confirm_password(&text, input)?
+        {
+            style::retry("Please type it again.");
+            continue;
+        }
         return Ok(password);
     }
+}
+
+/// Shows the typed password on a screen of its own and asks whether it is the intended one. Both
+/// entries can carry the same slip, such as a wrong keyboard layout, which only seeing it reveals.
+fn confirm_password(text: &str, input: &mut Input) -> Result<bool, Failure> {
+    let screen = terminal::PrivateScreen::enter(input);
+    eprintln!("{}", paint(HEADING, "Read the password as:"));
+    eprintln!();
+    eprintln!("  {}", paint(STRONG, text));
+    eprintln!();
+    // Spaces at either end are easy to miss but are part of the password.
+    let characters = text.chars().count();
+    let words = text.split_whitespace().count();
+    eprintln!(
+        "{}",
+        paint(
+            MUTED,
+            format!("{characters} characters, {words} words; letter case and spaces count.")
+        )
+    );
+    let confirmed = input.yes_or_no("Is this your password?", true)?;
+    if confirmed {
+        drop(screen);
+        style::ok("The password is no longer on the screen.");
+    }
+    Ok(confirmed)
 }
 
 #[cfg(test)]

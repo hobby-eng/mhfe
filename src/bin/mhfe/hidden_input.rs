@@ -15,6 +15,9 @@
 //! after 4095 bytes, although a valid password can take 4096 bytes before normalization (1024
 //! characters that NFKD turns into one byte each). scripts/verify-hidden-input.py checks this in a
 //! Unix pseudo-terminal and scripts/verify-hidden-input-windows.py in a Windows pseudo-console.
+//!
+//! The menu that `mhfe` shows when it starts without arguments reads single keys in the same
+//! terminal mode: [`with_keys`].
 
 // Changing the terminal settings needs the operating system's terminal calls, which Rust offers
 // only through unsafe foreign functions.
@@ -38,22 +41,60 @@ static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);
 pub fn read_line(
     prompt: impl FnOnce() -> Result<(), Failure>,
 ) -> Result<Option<Zeroizing<String>>, Failure> {
+    let result = with_terminal_switched(platform::hide, || {
+        prompt()?;
+        platform::read_line()
+    });
+    // The terminal did not show the Enter key either.
+    anstream::eprintln!();
+    result
+}
+
+/// A key that the menu acts on.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Key {
+    Up,
+    Down,
+    Enter,
+    /// A digit key from 1 to 9.
+    Digit(u8),
+    /// q, Ctrl+D or the end of the input.
+    Quit,
+    /// Any other key, which the menu ignores.
+    Other,
+}
+
+/// Switches the terminal to single keys without echo, as for a hidden line, runs `choose` with a
+/// function that reads the next key, and restores the terminal, also when `choose` fails.
+pub fn with_keys<T>(
+    choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
+) -> Result<T, Failure> {
+    with_terminal_switched(platform::single_keys, || {
+        let mut input = io::stdin().lock();
+        choose(&mut || read_key(&mut input))
+    })
+}
+
+/// Switches the terminal with `switch`, runs `body` and restores the terminal, also when `body`
+/// fails. The original settings are saved before the switch, so that Ctrl+C can restore them.
+fn with_terminal_switched<T>(
+    switch: fn(&platform::Settings) -> Result<(), Failure>,
+    body: impl FnOnce() -> Result<T, Failure>,
+) -> Result<T, Failure> {
     let original = platform::current()?;
     {
         let mut saved = lock_saved();
         *saved = Some(original);
-        if let Err(error) = platform::hide(&original) {
+        if let Err(error) = switch(&original) {
             saved.take();
             platform::restore(&original);
             return Err(error);
         }
     }
-    let result = prompt().and_then(|()| platform::read_line());
+    let result = body();
     if let Some(original) = lock_saved().take() {
         platform::restore(&original);
     }
-    // The terminal did not show the Enter key either.
-    anstream::eprintln!();
     result
 }
 
@@ -88,6 +129,74 @@ mod keys {
     pub const DELETE: u8 = 0x7f;
     pub const CTRL_U: u8 = 0x15;
     pub const CTRL_D: u8 = 0x04;
+    /// Normally the terminal turns Ctrl+C into a signal; should the byte arrive, it quits too.
+    pub const CTRL_C: u8 = 0x03;
+    pub const ESCAPE: u8 = 0x1b;
+}
+
+/// Reads one key from raw terminal bytes. The arrow keys send the VT escape sequences ESC [ A and
+/// ESC [ B, or ESC O A and ESC O B in a terminal's application mode. Every other escape sequence is
+/// read to its end and ignored, so that no byte of it, such as the 5 of Ctrl+Up (ESC [ 1 ; 5 A),
+/// is taken for a key of its own.
+fn read_key(reader: &mut impl io::Read) -> Result<Key, Failure> {
+    use keys::{CTRL_C, CTRL_D, ESCAPE};
+
+    let Some(byte) = read_byte(reader)? else {
+        return Ok(Key::Quit);
+    };
+    let key = match byte {
+        b'\r' | b'\n' => Key::Enter,
+        b'1'..=b'9' => Key::Digit(byte - b'0'),
+        b'q' | b'Q' | CTRL_D | CTRL_C => Key::Quit,
+        ESCAPE => match read_byte(reader)? {
+            Some(b'[') => read_control_sequence(reader)?,
+            Some(b'O') => arrow(read_byte(reader)?),
+            _ => Key::Other,
+        },
+        _ => Key::Other,
+    };
+    Ok(key)
+}
+
+/// The rest of a control sequence after ESC [: parameter and intermediate bytes, then one final
+/// byte from @ to ~ (ECMA-48). Only an arrow key without parameters counts.
+fn read_control_sequence(reader: &mut impl io::Read) -> Result<Key, Failure> {
+    const FINAL_BYTES: std::ops::RangeInclusive<u8> = 0x40..=0x7e;
+    let mut has_parameters = false;
+    loop {
+        match read_byte(reader)? {
+            None => return Ok(Key::Quit),
+            Some(byte) if FINAL_BYTES.contains(&byte) => {
+                return Ok(if has_parameters {
+                    Key::Other
+                } else {
+                    arrow(Some(byte))
+                })
+            }
+            Some(_) => has_parameters = true,
+        }
+    }
+}
+
+fn arrow(final_byte: Option<u8>) -> Key {
+    match final_byte {
+        Some(b'A') => Key::Up,
+        Some(b'B') => Key::Down,
+        _ => Key::Other,
+    }
+}
+
+/// One byte, or `None` at the end of the input.
+fn read_byte(reader: &mut impl io::Read) -> Result<Option<u8>, Failure> {
+    let mut byte = [0u8; 1];
+    loop {
+        match reader.read(&mut byte) {
+            Ok(0) => return Ok(None),
+            Ok(_) => return Ok(Some(byte[0])),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
 }
 
 /// Edits a line from raw terminal bytes: Backspace or Delete removes the last character, Ctrl+U
@@ -193,6 +302,11 @@ mod platform {
         edit_line(&mut io::stdin().lock())
     }
 
+    /// The menu's keys need the same settings as a hidden line: every byte at once, no echo.
+    pub fn single_keys(original: &Settings) -> Result<(), Failure> {
+        hide(original)
+    }
+
     pub fn restore(original: &Settings) {
         // SAFETY: the settings read from this terminal before. A failure cannot be reported
         // usefully here; the shell restores the terminal when the tool ends in any case.
@@ -206,7 +320,8 @@ mod platform {
 
     use windows_sys::Win32::System::Console::{
         GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_ECHO_INPUT,
-        ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, STD_INPUT_HANDLE,
+        ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING, STD_ERROR_HANDLE, STD_INPUT_HANDLE,
     };
     use zeroize::Zeroizing;
 
@@ -238,6 +353,30 @@ mod platform {
     /// The standard library turns the console's UTF-16 characters into UTF-8 bytes.
     pub fn read_line() -> Result<Option<Zeroizing<String>>, Failure> {
         edit_line(&mut io::stdin().lock())
+    }
+
+    /// As for a hidden line, and the console sends the arrow keys as VT escape sequences, as a
+    /// Unix terminal does (Windows 10 and later). The menu redraws itself with VT cursor
+    /// sequences on standard error, so the console is also asked to carry those out there; that
+    /// output mode stays on, as for any program that writes colours.
+    pub fn single_keys(original: &Settings) -> Result<(), Failure> {
+        let keys = (original & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT))
+            | ENABLE_PROCESSED_INPUT
+            | ENABLE_VIRTUAL_TERMINAL_INPUT;
+        // SAFETY: plain console calls on the standard handles.
+        unsafe {
+            if SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), keys) == 0 {
+                return Err(terminal_error("read single keys from"));
+            }
+            let output = GetStdHandle(STD_ERROR_HANDLE);
+            let mut mode: CONSOLE_MODE = 0;
+            if GetConsoleMode(output, &mut mode) == 0
+                || SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0
+            {
+                return Err(terminal_error("draw the menu on"));
+            }
+        }
+        Ok(())
     }
 
     pub fn restore(original: &Settings) {
@@ -290,6 +429,50 @@ mod tests {
         let text = "\u{1D400}".repeat(1024);
         assert_eq!(edited(format!("{text}\r").as_bytes()).unwrap(), text);
         assert!(mhfe::Password::new(&text).is_ok());
+    }
+
+    /// The keys in `bytes` up to the first Quit, which the end of the input gives too.
+    fn keys_in(bytes: &[u8]) -> Vec<Key> {
+        let mut reader = io::Cursor::new(bytes.to_vec());
+        let mut keys = Vec::new();
+        loop {
+            let key = read_key(&mut reader).unwrap();
+            let quit = key == Key::Quit;
+            keys.push(key);
+            if quit {
+                return keys;
+            }
+        }
+    }
+
+    #[test]
+    fn arrow_keys_digits_and_enter_are_read() {
+        use Key::*;
+        assert_eq!(
+            keys_in(b"\x1b[A\x1b[B\x1bOA\x1bOB\r\n"),
+            [Up, Down, Up, Down, Enter, Enter, Quit]
+        );
+        assert_eq!(keys_in(b"19q"), [Digit(1), Digit(9), Quit]);
+        assert_eq!(keys_in(b"0x\x04"), [Other, Other, Quit]);
+        assert_eq!(keys_in(b"\x03"), [Quit]);
+    }
+
+    #[test]
+    fn other_escape_sequences_are_read_to_their_end() {
+        use Key::*;
+        // Ctrl+Up, Delete and F5: none of their digits may count as a digit key.
+        assert_eq!(
+            keys_in(b"\x1b[1;5A\x1b[3~\x1b[15~\r"),
+            [Other, Other, Other, Enter, Quit]
+        );
+        // Right and left arrows are ignored.
+        assert_eq!(keys_in(b"\x1b[C\x1b[D2"), [Other, Other, Digit(2), Quit]);
+    }
+
+    #[test]
+    fn the_end_of_the_input_quits() {
+        assert_eq!(keys_in(b""), [Key::Quit]);
+        assert_eq!(keys_in(b"\x1b["), [Key::Quit]);
     }
 
     #[test]

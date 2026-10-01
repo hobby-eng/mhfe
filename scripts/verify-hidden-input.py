@@ -17,6 +17,11 @@ It checks that
 - Ctrl+C at a hidden prompt ends the tool with exit code 130;
 - the terminal settings are exactly the original ones afterwards, after a normal answer and after
   Ctrl+C.
+
+It also drives the menu that `mhfe` shows when it starts without arguments: the arrow keys and Enter
+choose an entry, its number chooses it at once, other escape sequences (Ctrl+Up) and keys do
+nothing and are not shown, q quits with exit code 0 and Ctrl+C with 130, and the terminal settings
+are restored either way. The entry it runs is `mhfe password`, which needs no secret.
 """
 
 import fcntl
@@ -40,6 +45,13 @@ CANCELLED = 130
 REFUSED = b"again"
 ACCEPTED = b"ingerprint"
 BACKSPACE, CTRL_U, CTRL_C = b"\x7f", b"\x15", b"\x03"
+# The keys of the menu, as a terminal sends them. Ctrl+Up carries a 5, which must not choose entry 5.
+UP, DOWN, ENTER, CTRL_UP = b"\x1b[A", b"\x1b[B", b"\r", b"\x1b[1;5A"
+# The menu entry of `mhfe password` when no browser tool lies next to the program.
+PASSWORD_ENTRY = 4
+MENU_SHOWN, BACK_TO_MENU, PASSWORD_MADE = b"q quits", b"return to the menu", b"bits"
+# A key the menu ignores; it appears nowhere in what the menu or `mhfe password` print.
+IGNORED_KEY = b"Z"
 # The control characters a terminal in its usual mode acts on instead of passing them on.
 TERMINAL_KEYS = {
     "Ctrl+S": b"\x13",
@@ -69,7 +81,7 @@ def attach_terminal():
 
 
 class Session:
-    def __init__(self):
+    def __init__(self, arguments=("check", "--fingerprint")):
         self.master, self.slave = os.openpty()
         os.set_blocking(self.master, False)
         # The settings are read through the master side: on macOS the slave side stops answering
@@ -78,7 +90,7 @@ class Session:
         self.original = termios.tcgetattr(self.master)
         environment = dict(os.environ, NO_COLOR="1")
         self.process = subprocess.Popen(
-            [PROGRAM, "check", "--fingerprint"],
+            [PROGRAM, *arguments],
             stdin=self.slave, stdout=self.slave, stderr=self.slave,
             start_new_session=True, preexec_fn=attach_terminal, env=environment,
         )
@@ -175,6 +187,38 @@ def check_password(label, password, expected):
     return code
 
 
+def check_menu():
+    session = Session(arguments=())
+    session.wait_for(MENU_SHOWN)
+    moves = DOWN * PASSWORD_ENTRY + UP
+    session.type(IGNORED_KEY + CTRL_UP + moves + ENTER)
+    # wait_for looks only at new output, and the password and the prompt arrive together; the
+    # count of passwords is checked at the end.
+    session.wait_for(BACK_TO_MENU)
+    session.type(ENTER)
+    session.wait_for(MENU_SHOWN)
+    session.type(str(PASSWORD_ENTRY).encode())
+    session.wait_for(BACK_TO_MENU)
+    session.type(b"q")
+    # The tool needs a moment to end; close() would send Ctrl+C to a tool that is still running.
+    assert session.drain_until_exit(10), "menu: q did not end the tool"
+    code, settings = session.close()
+    assert code == 0, f"menu: q gave exit code {code}"
+    assert settings == session.original, "menu: the terminal settings were not restored"
+    assert session.output.count(PASSWORD_MADE) == 2, "menu: the entries did not run twice"
+    assert IGNORED_KEY not in session.output, "menu: a key was shown"
+    print("menu: arrows, Enter, a number and q; ignored keys not shown, terminal restored")
+
+    session = Session(arguments=())
+    session.wait_for(MENU_SHOWN)
+    session.type(CTRL_C)
+    session.wait_for(b"Cancelled")
+    code, settings = session.close()
+    assert code == CANCELLED, f"menu: Ctrl+C gave exit code {code}"
+    assert settings == session.original, "menu: Ctrl+C did not restore the terminal settings"
+    print("menu: Ctrl+C, exit code 130, terminal restored")
+
+
 def main():
     # Each result is shown at once, so that a CI log shows how far the checks came.
     sys.stdout.reconfigure(line_buffering=True)
@@ -198,6 +242,8 @@ def main():
     assert code == CANCELLED, f"Ctrl+C: exit code {code}"
     assert settings == session.original, "Ctrl+C: the terminal settings were not restored"
     print("cancelled: Ctrl+C at a hidden prompt, exit code 130, terminal restored")
+
+    check_menu()
 
 
 if __name__ == "__main__":

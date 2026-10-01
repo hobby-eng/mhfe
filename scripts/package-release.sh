@@ -96,27 +96,27 @@ cli_package() {
 
 for package in "${packages[@]}"; do
   case "$package" in
-    linux-x86_64) cli_package "$package" target/release/mhfe packaging/mhfe-fast-mode.sh ;;
+    linux-x86_64) cli_package "$package" target/release/mhfe packaging/mhfe-launch.sh ;;
     linux-aarch64)
-      cli_package "$package" target/aarch64-unknown-linux-gnu/release/mhfe packaging/mhfe-fast-mode.sh
+      cli_package "$package" target/aarch64-unknown-linux-gnu/release/mhfe packaging/mhfe-launch.sh
       ;;
     windows-x86_64)
-      cli_package "$package" target/x86_64-pc-windows-gnu/release/mhfe.exe packaging/mhfe-fast-mode.bat
+      cli_package "$package" target/x86_64-pc-windows-gnu/release/mhfe.exe packaging/mhfe-launch.bat
       ;;
     macos-x86_64)
-      cli_package "$package" target/x86_64-apple-darwin/release/mhfe packaging/mhfe-fast-mode.command
+      cli_package "$package" target/x86_64-apple-darwin/release/mhfe packaging/mhfe-launch.command
       ;;
-    linux-x86_64-ssse3) cli_package "$package" target/ssse3/release/mhfe packaging/mhfe-fast-mode.sh ;;
+    linux-x86_64-ssse3) cli_package "$package" target/ssse3/release/mhfe packaging/mhfe-launch.sh ;;
     windows-x86_64-ssse3)
       cli_package "$package" target/ssse3/x86_64-pc-windows-gnu/release/mhfe.exe \
-        packaging/mhfe-fast-mode.bat
+        packaging/mhfe-launch.bat
       ;;
     macos-x86_64-ssse3)
       cli_package "$package" target/ssse3/x86_64-apple-darwin/release/mhfe \
-        packaging/mhfe-fast-mode.command
+        packaging/mhfe-launch.command
       ;;
     macos-aarch64)
-      cli_package "$package" target/aarch64-apple-darwin/release/mhfe packaging/mhfe-fast-mode.command
+      cli_package "$package" target/aarch64-apple-darwin/release/mhfe packaging/mhfe-launch.command
       ;;
     browser)
       folder="$staging/browser"

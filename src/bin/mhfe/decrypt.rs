@@ -132,11 +132,20 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     })?;
     progress.finish();
 
-    match recovery {
-        Recovery::Phrase(phrase) => show_single(&phrase, length, &input),
-        Recovery::Ambiguous(candidates) => show_ambiguous(&candidates, &input),
+    // The result appears on a screen of its own, which is cleared once the person is done.
+    let screen = terminal::PrivateScreen::enter(&input);
+    match &recovery {
+        Recovery::Phrase(phrase) => show_single(phrase, length, &input),
+        Recovery::Ambiguous(candidates) => show_ambiguous(candidates, &input),
     }
-    style::hint("When you are done, clear the screen and close this terminal.");
+    if screen.is_active() {
+        input.visible("Press Enter when you have written it down; it then leaves the screen.")?;
+        drop(screen);
+        style::ok("Recovered. The phrase is no longer on the screen.");
+        style::hint("When you are done, close this terminal.");
+    } else {
+        style::hint("When you are done, clear the screen and close this terminal.");
+    }
     Ok(SUCCESS)
 }
 

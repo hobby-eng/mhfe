@@ -44,6 +44,15 @@ with SSSE3, which almost every computer made since 2008 has; on one without it, 
 clear message. When unsure, take the standard one. To build from source, install Rust and run
 `cargo build --release --locked`; the program is then `target/release/mhfe`.
 
+### Starting it
+
+In a terminal, type a command such as `mhfe encrypt`; `mhfe --help` lists them all. Started without
+a command, by a double-click or with the launcher in the archive (`mhfe-launch.sh` on Linux,
+`mhfe-launch.command` on macOS, `mhfe-launch.bat` on Windows), mhfe shows a menu instead: choose with
+the arrow keys and Enter, or press the number of an entry. Each entry runs a command with its
+default settings and shows that command in grey next to it. Settings such as a PIM are given by
+typing the command, for example `mhfe encrypt --pim 1`.
+
 ### Where to run it
 
 Use MHFE on a trusted computer without a network connection. It never connects to anything, but the
@@ -77,6 +86,7 @@ Letter case and spaces count: lowercase words with single spaces are the
 easiest to type again years later.
 Password (hidden):
 Repeat the password (hidden):
+Show the password that was typed? It will be visible on the screen. [y/N]:
 Press Ctrl+C to cancel at any time.
 
 Encrypting ████████████████████████  12/12  done in 1 min 59 s
@@ -115,7 +125,10 @@ The phrase and the password are typed without being shown, and the password is a
 a typing mistake in it would lock the phrase away for good. Words may be typed in any case and with
 any spacing, and the first four letters of each word are enough, as many metal backups store them.
 If you typed short forms, you can ask to see the words that were read, written out in full; they are
-not shown unless you ask, because the phrase is secret. The container appears after the first half
+not shown unless you ask, because the phrase is secret. They appear on a screen of their own, as
+`less` shows a file, and are cleared once you have answered, so they do not stay in the terminal or
+its scrollback. The typed password can be shown the same way, which catches a slip that both
+entries share, such as the wrong keyboard layout. The container appears after the first half
 of the work, so you can write it down while MHFE checks it by recovering your phrase from its words.
 Rely on it only once it says "Verified". If the check fails, which only a hardware or memory fault
 could cause, MHFE says so loudly: cross the container out and encrypt again. With `--stdin`, or when
@@ -183,9 +196,15 @@ Recovered phrase, 12 words
 └───────────────────────────────────────────────────────────────┘
 On one line, for copying:
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+
+Press Enter when you have written it down; it then leaves the screen.
+✓ Recovered. The phrase is no longer on the screen.
 ```
 
 MHFE shows the container as it read it, every word in full, so you can compare it with your backup.
+The recovered phrase appears on a screen of its own and is cleared when you press Enter, so it does
+not stay in the terminal or its scrollback; with `--stdin`, or when the output goes to a file or
+another program, it is printed as before.
 For an original of 12 to 21 words, MHFE confirms the password and finds the length by itself. A
 wrong password then usually shows as "Not verified": the result is read as 24 words, which is wrong
 for a shorter original. An original of 24 words has no built-in check, so a wrong password gives a
@@ -251,8 +270,9 @@ page, for example in the offline wallet tools. It has two modes:
 - **Fast mode** runs the four Argon2 lanes in parallel, about a quarter slower than the command-line
   tool. A browser allows this only on a specially served page. `mhfe serve tool.html` serves one
   HTML file from this computer (127.0.0.1) with the headers that enable it and opens it in the
-  browser. It sees none of your secrets: all the work happens in the page. Release archives include
-  small launchers that start it with a double-click. On a computer with Python 3.8 or later but
+  browser. It sees none of your secrets: all the work happens in the page. When a tool and its
+  checksum file lie next to the program, the first entry of its menu serves that tool, so a
+  double-click is enough. On a computer with Python 3.8 or later but
   without the mhfe program, `python3 mhfe-fast-mode.py tool.html` from the browser package does the
   same. Both serve a page only when its checksum file `mhfe-fast-mode.sha256` lies next to it and
   matches.

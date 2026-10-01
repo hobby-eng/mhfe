@@ -27,7 +27,7 @@ use clap::Args;
 use sha2::{Digest, Sha256};
 
 use crate::exit::{Failure, SUCCESS};
-use crate::style::{self, paint, ACCENT, MUTED, STRONG};
+use crate::style::{self, paint, ACCENT, MUTED};
 
 /// The checksum file that must lie next to the page. Its name never changes, so a tool can ship
 /// it beside its HTML file and the launcher finds it without being told. It holds one line in the
@@ -102,60 +102,9 @@ pub fn about() -> String {
     ])
 }
 
-/// What a double-click on the program does: explains itself and, when mhfe-fast-mode.sha256 lies
-/// next to the program, serves the page it names in fast mode after checking it.
-pub fn run_without_arguments() -> Result<i32, Failure> {
-    style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
-    eprintln!();
-    eprintln!(
-        "mhfe encrypts a BIP39 recovery phrase into a password-protected 24-word container and \
-         recovers it."
-    );
-    eprintln!(
-        "It runs in a terminal: type {} there to see the commands.",
-        paint(ACCENT, "mhfe --help")
-    );
-    eprintln!();
-    let started = page_next_to_program().and_then(|page| match page {
-        Some(file) => {
-            eprintln!(
-                "Starting the fast mode for {}.",
-                paint(STRONG, file_name(&file))
-            );
-            run(Options {
-                file,
-                no_browser: false,
-            })
-        }
-        None => {
-            style::hint(&format!(
-                "To run a browser tool in fast mode, put its HTML file and its checksum file \
-                 {CHECKSUM_FILE} next to this program, or run {}.",
-                paint(ACCENT, "mhfe serve <file.html>")
-            ));
-            Ok(SUCCESS)
-        }
-    });
-    // A double-click opens a window that closes when the program ends; it stays open until the
-    // message has been read.
-    if let Err(failure) = &started {
-        eprintln!();
-        style::error(&failure.to_string());
-    }
-    eprintln!();
-    style::prompt("Press Enter to close.");
-    let mut line = String::new();
-    io::stdin().read_line(&mut line)?;
-    started.map_err(|failure| Failure {
-        // Already shown above; main prints nothing more.
-        message: String::new(),
-        ..failure
-    })
-}
-
 /// The page named in the checksum file next to the program, if that file is there. `run` then
 /// checks the page against it.
-fn page_next_to_program() -> Result<Option<PathBuf>, Failure> {
+pub fn page_next_to_program() -> Result<Option<PathBuf>, Failure> {
     let program = std::env::current_exe()?;
     let Some(directory) = program.parent() else {
         return Ok(None);
@@ -313,7 +262,7 @@ fn serve(listener: TcpListener, host: String, page: Vec<u8>, deadline: Duration)
     }
 }
 
-fn file_name(path: &Path) -> String {
+pub fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.display().to_string())
