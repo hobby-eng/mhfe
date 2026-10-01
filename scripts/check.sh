@@ -12,8 +12,9 @@ cd "$repo_root"
 sed -n '/^```text$/,/^```$/p' vendor/phc-winner-argon2.md | grep -v '^```' |
   (cd vendor/phc-winner-argon2 && sha256sum --check --quiet)
 
-# THIRD_PARTY_LICENSES.md must match the crates every release target ships. The generator reads
-# their sources offline, so fetch the sources of every target first (a no-op when they are there).
+# The Rust crates part of THIRD_PARTY_NOTICES.md must match the crates every release target ships.
+# The generator reads their sources offline, so fetch the sources of every target first (a no-op
+# when they are there).
 cargo fetch --locked
 python3 scripts/third-party-licenses.py --check
 

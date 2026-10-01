@@ -1,7 +1,7 @@
 # MHFE implementation API
 
 This describes the Rust library and the browser package of suite `MHFE-BIP39-256-EXPERIMENTAL-3`.
-The command-line tool is described in the [README](README.md).
+The command-line tool is described in the [README](../README.md).
 
 ## Rust library
 
@@ -110,8 +110,8 @@ strings in the browser.
 
 ## Browser package
 
-`scripts/build-wasm.sh` writes the package to `dist/`; [`web/README.md`](web/README.md) explains how
-to embed it. The page-side API (`client.js`, typed in `client.d.ts`):
+`scripts/build-wasm.sh` writes the package to `dist/`; [`BROWSER-PACKAGE.md`](BROWSER-PACKAGE.md)
+explains how to embed it. The page-side API (`client.js`, typed in `client.d.ts`):
 
 ```js
 const client = new MhfeClient({ workerSource, argon2Threaded, argon2SingleThreaded, coreWasm });

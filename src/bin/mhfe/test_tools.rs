@@ -231,7 +231,7 @@ pub fn benchmark_help() -> String {
             ),
             (
                 "mhfe test-benchmark > timing.json",
-                "Save the JSON record for measurements/",
+                "Save the JSON record for docs/measurements/",
             ),
         ],
     );
@@ -258,7 +258,7 @@ struct Measurement {
 }
 
 /// Times one encryption and one recovery of the public test phrase and prints a JSON record for
-/// measurements/.
+/// docs/measurements/.
 pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     style::warn(
         "TEST ONLY: timing one encryption and one recovery with public test data.",

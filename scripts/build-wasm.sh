@@ -61,7 +61,7 @@ python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read(
 package_files=(mhfe_core_bg.wasm mhfe-worker.js argon2-mt.js argon2-st.js client.js client.d.ts
   mhfe-fast-mode.py)
 {
-  cat web/README.md
+  cat docs/BROWSER-PACKAGE.md
   printf '\n## SHA-256 of this build\n\n```text\n'
   (cd dist && sha256sum "${package_files[@]}")
   printf '```\n'
