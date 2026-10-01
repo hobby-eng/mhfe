@@ -34,6 +34,7 @@ export interface MhfeSettings {
   pim?: number;
   /** Memory level; a browser supports only 0 (2 GiB). Default 0. */
   memoryLevel?: number;
+  /** Called as each round starts. If it throws, the operation stops and rejects with CALLBACK_FAILED. */
   onProgress?: (progress: MhfeProgress) => void;
 }
 
@@ -61,13 +62,19 @@ export type MhfeReference =
 
 export class MhfeError extends Error {
   readonly code: string;
-  constructor(code: string, message: string);
+  /** For CALLBACK_FAILED, the error that the page's callback threw. */
+  readonly cause?: unknown;
+  constructor(code: string, message: string, options?: { cause?: unknown });
 }
 
 export class MhfeCancelledError extends MhfeError {
   constructor();
 }
 
+/**
+ * Every operation returns a promise and reports every error by rejecting it, the checks of its
+ * arguments included: none throws when it is called. Only the constructor throws, for missing parts.
+ */
 export class MhfeClient {
   constructor(sources: MhfeSources);
   mode(): MhfeMode;
@@ -76,7 +83,8 @@ export class MhfeClient {
    * Needs the password twice; a difference is refused with the code PASSWORDS_DIFFER. Resolves
    * only after the container has been decrypted again and checked; a failed check rejects with
    * VERIFICATION_FAILED. `onUnverified` receives the container before the check, for showing it
-   * marked as not yet verified; the page must then report how the check ended.
+   * marked as not yet verified; the page must then report how the check ended. If `onUnverified`
+   * throws, the operation stops and rejects with CALLBACK_FAILED.
    */
   encrypt(
     options: MhfeSettings & {

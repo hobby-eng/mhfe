@@ -55,11 +55,15 @@ reasonable, this file says what was chosen and why. The report is
 1. **Release.** The fixes are on `main` after `v0.4.0`, unpushed. They change the CLI and the
    WebAssembly core (not any suite 3 output), so they need CI, the full vector replay and a
    canonical build before a release. Push when you have looked at them.
-2. **Promise-returning client methods that throw.** `MhfeClient` throws synchronously for argument
-   and state errors (TypeError, INVALID_PIM, BUSY, PASSWORDS_DIFFER, ...) but rejects for worker
-   errors. `await` handles both; `.catch()` alone does not. Changing it would alter behaviour the
-   wallet tools may rely on, so it is recorded as an observation only.
-3. **Page callbacks that throw** (carried from AUD-004): document it or turn it into a rejection.
+2. **Promise-returning client methods that throw — resolved (owner's decision, 2026-10-01).** Every
+   `MhfeClient` operation is now `async`: every error rejects its promise, argument checks included,
+   and nothing is thrown at the call. The wallet tools' Deriver clears its password fields at the
+   first progress report instead of right after the call, so a refused argument leaves the password
+   in place. The version stays 0.4.0: its release is to be rebuilt with this change.
+3. **Page callbacks that throw — resolved (owner's decision).** A throwing `onProgress` or
+   `onUnverified` stops the operation, ends its worker and rejects with `CALLBACK_FAILED`, the
+   page's error as the `cause`; later messages of that worker are ignored, and a late event of a
+   stopped worker can no longer end a later operation.
 4. **Prettier in this repository.** There is no Prettier configuration in mhfe, and 12 Markdown and
    JavaScript files differ from what the mhfe_spec configuration produces. Decide whether to add a
    configuration (and which style for the JavaScript) and reformat once.

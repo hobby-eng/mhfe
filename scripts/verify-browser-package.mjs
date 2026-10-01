@@ -207,7 +207,7 @@ assert.equal(client.mode(), 'fast');
 const fast = client.decrypt({ container: 'c', password: 'public test password' });
 assert.equal(await StandInWorker.last.script.text(), 'threaded source\n;\nworker source');
 assert.equal(await StandInWorker.last.messages[0].argon2Script.text(), 'threaded source');
-assert.throws(() => client.decrypt({ container: 'c', password: 'x' }), { code: 'BUSY' });
+await assert.rejects(client.decrypt({ container: 'c', password: 'x' }), { code: 'BUSY' });
 StandInWorker.last.reply({ type: 'error', error: { code: 'VERIFIER_MISMATCH', message: 'no' } });
 await assert.rejects(fast, { code: 'VERIFIER_MISMATCH' });
 delete globalThis.crossOriginIsolated;
@@ -226,16 +226,29 @@ await assert.rejects(cancelled, (error) => error instanceof MhfeCancelledError);
 assert.equal(StandInWorker.last.terminated, true);
 
 const encrypt = (options) => client.encrypt({ phrase: PHRASE, passwordRepeat: options.password, ...options });
-assert.throws(() => client.encrypt({ phrase: PHRASE, password: 'p' }), { code: 'PASSWORDS_DIFFER' });
-assert.throws(() => client.encrypt({ phrase: PHRASE, password: 'p', passwordRepeat: 'P' }), { code: 'PASSWORDS_DIFFER' });
-assert.throws(() => client.encrypt({ phrase: PHRASE, password: password, passwordRepeat: new Uint8Array(20) }), {
-  code: 'PASSWORDS_DIFFER',
-});
-assert.throws(() => encrypt({ password: 'a\uD800' }), { code: 'INVALID_PASSWORD_TEXT' });
-assert.throws(() => encrypt({ password: 'p', memoryLevel: 1 }), { code: 'MEMORY_LEVEL_NOT_SUPPORTED_HERE' });
-assert.throws(() => encrypt({ password: 'p', pim: 1024 }), { code: 'INVALID_PIM' });
-assert.throws(() => encrypt({ password: '' }), { code: 'EMPTY_PASSWORD' });
-assert.throws(() => encrypt({ password: 'p', onUnverified: 'show' }), TypeError);
+// Every error rejects the promise, the checks of the arguments included: none is thrown.
+const refusals = [
+  [() => client.encrypt({ phrase: PHRASE, password: 'p' }), { code: 'PASSWORDS_DIFFER' }],
+  [() => client.encrypt({ phrase: PHRASE, password: 'p', passwordRepeat: 'P' }), { code: 'PASSWORDS_DIFFER' }],
+  [() => client.encrypt({ phrase: PHRASE, password: password, passwordRepeat: new Uint8Array(20) }), { code: 'PASSWORDS_DIFFER' }],
+  [() => encrypt({ password: 'a\uD800' }), { code: 'INVALID_PASSWORD_TEXT' }],
+  [() => encrypt({ password: 'p', memoryLevel: 1 }), { code: 'MEMORY_LEVEL_NOT_SUPPORTED_HERE' }],
+  [() => encrypt({ password: 'p', pim: 1024 }), { code: 'INVALID_PIM' }],
+  [() => encrypt({ password: '' }), { code: 'EMPTY_PASSWORD' }],
+  [() => encrypt({ password: 'p', onUnverified: 'show' }), TypeError],
+  [() => client.encrypt(), TypeError],
+  [() => client.decrypt({ container: 'c', password: 'p', words: 13 }), { code: 'INVALID_WORD_COUNT' }],
+  [() => client.readPhrase(42), TypeError],
+  [() => client.readContainer(), TypeError],
+];
+for (const [call, expected] of refusals) {
+  let result;
+  assert.doesNotThrow(() => {
+    result = call();
+  }, 'a refusal is a rejected promise, not an exception');
+  assert.ok(result instanceof Promise);
+  await assert.rejects(result, expected);
+}
 
 // A check that fails after the container was shown rejects, so the page can mark it as wrong.
 const shown = [];
@@ -244,9 +257,38 @@ StandInWorker.last.reply({ type: 'unverified', container: 'c' });
 StandInWorker.last.reply({ type: 'error', error: { code: 'VERIFICATION_FAILED', message: 'wrong' } });
 await assert.rejects(failing, { code: 'VERIFICATION_FAILED' });
 assert.deepEqual(shown, ['c']);
-assert.throws(() => client.check({ container: 'c', password: 'p', reference: { words: 24 } }), {
+await assert.rejects(client.check({ container: 'c', password: 'p', reference: { words: 24 } }), {
   code: 'INVALID_WORD_COUNT',
 });
+
+// A callback of the page that throws stops the operation: the worker ends, the promise rejects
+// with CALLBACK_FAILED and the page's error as the cause, and later messages of that worker are
+// ignored.
+for (const [name, message] of [
+  ['onProgress', { type: 'progress', round: 1, rounds: 24 }],
+  ['onUnverified', { type: 'unverified', container: 'c' }],
+]) {
+  const pageError = new Error(`page bug in ${name}`);
+  const calls = [];
+  const broken = encrypt({
+    password: 'p',
+    onProgress: () => {
+      calls.push('progress');
+      if (name === 'onProgress') throw pageError;
+    },
+    onUnverified: () => {
+      calls.push('unverified');
+      if (name === 'onUnverified') throw pageError;
+    },
+  });
+  const brokenWorker = StandInWorker.last;
+  brokenWorker.reply(message);
+  brokenWorker.reply({ type: 'progress', round: 2, rounds: 24 });
+  brokenWorker.reply({ type: 'result', result: { container: 'c' } });
+  await assert.rejects(broken, (error) => error.code === 'CALLBACK_FAILED' && error.cause === pageError);
+  assert.equal(brokenWorker.terminated, true, `the worker stops when ${name} throws`);
+  assert.equal(calls.length, 1, `nothing of the stopped operation reaches the page after ${name} threw`);
+}
 
 // Exactly one reference: with several, the check would silently use only one of them.
 const conflicting = [
@@ -258,7 +300,7 @@ const conflicting = [
   null,
 ];
 for (const reference of conflicting) {
-  assert.throws(() => client.check({ container: 'c', password: 'p', reference }), TypeError, JSON.stringify(reference));
+  await assert.rejects(client.check({ container: 'c', password: 'p', reference }), TypeError, JSON.stringify(reference));
 }
 
 // The client's byte copies of secrets are wiped when an operation cannot start. The stand-in
@@ -276,7 +318,7 @@ globalThis.TextEncoder = class extends RealTextEncoder {
 };
 const fingerprintCheck = (options) =>
   client.check({ container: 'c', password: TEST_PASSWORD, reference: { fingerprint: '00000000' }, passphrase: TEST_PASSPHRASE, ...options });
-assert.throws(() => fingerprintCheck({ pim: -1 }), { code: 'INVALID_PIM' });
+await assert.rejects(fingerprintCheck({ pim: -1 }), { code: 'INVALID_PIM' });
 assert.equal(copies.length, 0, 'settings are checked before any secret is copied');
 globalThis.Worker = class {
   constructor() {

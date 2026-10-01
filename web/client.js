@@ -11,6 +11,11 @@
 //     argon2SingleThreaded,  // text of argon2-st.js
 //     coreWasm,              // mhfe_core_bg.wasm as a Uint8Array or a WebAssembly.Module
 //   });
+//
+// Every operation returns a promise and reports every error by rejecting it, the checks of its
+// arguments included; none throws when it is called. An error in a callback of the page stops
+// the operation and rejects it with CALLBACK_FAILED. Only the constructor throws, for missing
+// package parts.
 
 /** Four Argon2 lanes in parallel; needs a cross-origin isolated page, such as `mhfe serve` gives. */
 export const FAST_MODE = 'fast';
@@ -25,8 +30,9 @@ const WORD_COUNTS = [12, 15, 18, 21, 24];
 const REFERENCE_KINDS = ['address', 'fingerprint', 'words'];
 
 export class MhfeError extends Error {
-  constructor(code, message) {
-    super(message);
+  /** `options.cause` keeps the original error, as for CALLBACK_FAILED. */
+  constructor(code, message, options) {
+    super(message, options);
     this.name = 'MhfeError';
     this.code = code;
   }
@@ -75,7 +81,7 @@ export class MhfeClient {
    * say how the check ended: verified, wrong (VERIFICATION_FAILED), or not verified (cancelled or
    * any other error).
    */
-  encrypt({ phrase, password, passwordRepeat, pim = 0, memoryLevel = 0, onProgress, onUnverified } = {}) {
+  async encrypt({ phrase, password, passwordRepeat, pim = 0, memoryLevel = 0, onProgress, onUnverified } = {}) {
     requireText(phrase, 'phrase');
     requireSamePassword(password, passwordRepeat);
     requireCallback(onUnverified, 'onUnverified');
@@ -87,7 +93,7 @@ export class MhfeClient {
    * Recovers the original phrase. `words` is 0 for automatic detection or the known length.
    * Resolves to `{ kind: 'phrase' | 'ambiguous', candidates: [{ words, verified, phrase }] }`.
    */
-  decrypt({ container, password, pim = 0, memoryLevel = 0, words = 0, onProgress } = {}) {
+  async decrypt({ container, password, pim = 0, memoryLevel = 0, words = 0, onProgress } = {}) {
     requireText(container, 'container');
     if (words !== 0 && !WORD_COUNTS.includes(words)) {
       throw new MhfeError('INVALID_WORD_COUNT', 'words must be 0 (detect) or 12, 15, 18, 21 or 24.');
@@ -100,7 +106,7 @@ export class MhfeClient {
    * weaker) or `{ words }` (built-in check of a 12- to 21-word original). Resolves to
    * `{ matches }` and never to any part of the phrase.
    */
-  check({ container, password, pim = 0, memoryLevel = 0, reference, passphrase = '', onProgress } = {}) {
+  async check({ container, password, pim = 0, memoryLevel = 0, reference, passphrase = '', onProgress } = {}) {
     requireText(container, 'container');
     const [referenceKind, referenceValue, path] = describeReference(reference);
     // Everything that is not secret is checked before the passphrase is copied into bytes.
@@ -119,13 +125,13 @@ export class MhfeClient {
    * detection would not give this phrase on its own after recovery, so the page should tell the
    * user to note the word count and choose it then. Rejects an invalid phrase.
    */
-  readPhrase(phrase) {
+  async readPhrase(phrase) {
     requireText(phrase, 'phrase');
     return this.#read({ operation: 'readPhrase', phrase });
   }
 
   /** Like readPhrase for a container: resolves to `{ container }` with every word written out. */
-  readContainer(container) {
+  async readContainer(container) {
     requireText(container, 'container');
     return this.#read({ operation: 'readContainer', container });
   }
@@ -176,7 +182,9 @@ export class MhfeClient {
     return new Promise((resolve, reject) => {
       let worker;
       const running = {
+        // Stops this operation once; a late event of its worker cannot end a later operation.
         stop: (error) => {
+          if (this.#running !== running) return;
           worker?.terminate();
           URL.revokeObjectURL(url);
           this.#running = null;
@@ -191,12 +199,24 @@ export class MhfeClient {
         running.stop(new MhfeError('WORKER_FAILED', `The browser refused to start the worker: ${error.message}`));
         return;
       }
+      // A callback of the page that throws ends the operation: the worker stops, which frees its
+      // secrets, and the promise rejects with the page's error as the cause, so the page learns of
+      // it where it learns of every other error.
+      const callPage = (callback, value, name) => {
+        try {
+          callback?.(value);
+        } catch (cause) {
+          running.stop(new MhfeError('CALLBACK_FAILED', `The page's ${name} callback failed.`, { cause }));
+        }
+      };
       worker.onmessage = (event) => {
+        // Messages that were already on their way when the operation ended are ignored.
+        if (this.#running !== running) return;
         const reply = event.data;
         if (reply.type === 'progress') {
-          onProgress?.({ round: reply.round, rounds: reply.rounds });
+          callPage(onProgress, { round: reply.round, rounds: reply.rounds }, 'onProgress');
         } else if (reply.type === 'unverified') {
-          onUnverified?.({ container: reply.container });
+          callPage(onUnverified, { container: reply.container }, 'onUnverified');
         } else if (reply.type === 'result') {
           running.stop(null);
           resolve(reply.result);
