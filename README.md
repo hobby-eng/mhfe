@@ -314,7 +314,11 @@ licences of the bundled Argon2 code, EFF word list and browser JavaScript runtim
 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) (written by `scripts/third-party-licenses.py`;
 every release archive carries both files), and timing records in [`measurements/`](measurements/).
 Test vectors are written with `mhfe test-vectors` and checked independently with
-`scripts/independent-suite3.py`, which uses OpenSSL's Argon2.
+`scripts/independent-suite3.py`, which uses OpenSSL's Argon2 and the Unicode 17.0.0 database of
+`unicodedata2`; its packages install with
+`python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`, and
+`python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json` checks the
+password rule on every case of the specification.
 
 Argon2 is the reference C implementation of its authors, vendored unchanged in
 [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) and used by both the native tool and the

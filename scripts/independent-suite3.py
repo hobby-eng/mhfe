@@ -1,12 +1,16 @@
 """Independent implementation of MHFE suite 3 for checking the Rust implementation.
 
 Written from the specification alone. It shares no code with the Rust crate: Argon2id comes from
-OpenSSL through Python `cryptography`, BLAKE2b, HMAC and SHA-256 from Python's standard library.
+OpenSSL through Python `cryptography`, BLAKE2b, HMAC and SHA-256 from Python's standard library,
+and the Unicode 17.0.0 character database of the password rule from `unicodedata2`, because
+Python's own `unicodedata` is an older Unicode version. Install the packages with
+`python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`.
 Only public test inputs belong here.
 
 Usage:
     python3 scripts/independent-suite3.py encrypt "<phrase>" "<password>" [PIM] [MEM]
     python3 scripts/independent-suite3.py vector [--trust-argon2-keys] [--record <file>] <file.json> ...
+    python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json
 
 `vector` checks vector files and negative-cases.json: it recomputes every value in both
 directions, including every Argon2id call, about ten seconds each at the defaults. With
@@ -14,9 +18,13 @@ directions, including every Argon2id call, about ten seconds each at the default
 checks everything else within a second: packing, salts, masks, rounds, container and recovery.
 Negative cases have no recorded keys and need the full check.
 
+`passwords` checks every password-encoding case of the validation fixture: the NFKD result or the
+error that the password rule of the specification gives, including the Unicode 17 rule for
+unassigned code points.
+
 --record adds the checked files to a JSON record, normally
 tests/fixtures/suite3-vectors/independent-verification.json: the SHA-256 of this script, the
-Python, `cryptography` and OpenSSL versions, and for each file its SHA-256 and how it was checked
+Python, `cryptography`, `unicodedata2` and OpenSSL versions, and for each file its SHA-256 and how it was checked
 ("full" or "recorded-argon2-keys"). Runs with the same script add to the record; a file whose
 bytes changed, or a changed script, starts its entry again.
 
@@ -32,7 +40,18 @@ import os
 import platform
 import re
 import sys
-import unicodedata
+
+try:
+    import unicodedata2 as unicode17
+except ImportError:
+    sys.exit("Needs unicodedata2: python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt")
+
+# The password rule uses this exact Unicode version (the specification, "Password encoding").
+UNICODE_VERSION = "17.0.0"
+if unicode17.unidata_version != UNICODE_VERSION:
+    sys.exit(f"unicodedata2 has Unicode {unicode17.unidata_version}, the password rule needs {UNICODE_VERSION}")
+# Longest password after NFKD, in bytes.
+MAX_PASSWORD_BYTES = 1024
 
 SUITE_ID = b"MHFE-BIP39-256-EXPERIMENTAL-3"
 DS_SALT = SUITE_ID + b"/ROUND-SALT"
@@ -164,8 +183,66 @@ def read_as(x, words):
     return entropy_to_phrase(x[: SHORT_LENGTHS.get(words, 32)])
 
 
+class PasswordRefused(Exception):
+    """A password the rule refuses; `code` is the error the specification names."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def encode_password(raw):
+    """P_enc = UTF8(NFKD(P)) under the password rule of the specification, from UTF-8 bytes."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise PasswordRefused("INVALID_PASSWORD_UTF8") from None
+    if any(map(is_refused_in_password, text)):
+        raise PasswordRefused("CONTROL_CHARACTER_IN_PASSWORD")
+    # Stabilized normalization fails on a code point that Unicode 17.0.0 leaves unassigned (Cn),
+    # the noncharacters included; Private Use (Co) is assigned.
+    if any(unicode17.category(character) == "Cn" for character in text):
+        raise PasswordRefused("UNASSIGNED_CHARACTER")
+    encoded = unicode17.normalize("NFKD", text).encode("utf-8")
+    if not encoded:
+        raise PasswordRefused("EMPTY_PASSWORD")
+    if len(encoded) > MAX_PASSWORD_BYTES:
+        raise PasswordRefused("PASSWORD_TOO_LONG")
+    return encoded
+
+
+def check_password_cases(path):
+    """Every password case of the validation fixture: its NFKD bytes, or their count, or its error.
+
+    A case gives its input either as UTF-8 hex or as a piece repeated `count` times; a long result
+    is given by its length in bytes.
+    """
+    cases = json.load(open(path, encoding="utf-8"))["passwords"]
+    for case in cases:
+        if "input_utf8_hex" in case:
+            raw = bytes.fromhex(case["input_utf8_hex"])
+        else:
+            raw = bytes.fromhex(case["repeat_utf8_hex"]) * case["count"]
+        try:
+            encoded = encode_password(raw)
+        except PasswordRefused as refusal:
+            assert refusal.code == case.get("expected_error"), (
+                f"password case {case['id']}: refused with {refusal.code}, expected {case.get('expected_error')}"
+            )
+            if "expected_nfkd_bytes" in case:
+                length = len(unicode17.normalize("NFKD", raw.decode("utf-8")).encode("utf-8"))
+                assert length == case["expected_nfkd_bytes"], f"password case {case['id']}: {length} bytes"
+            continue
+        assert "expected_error" not in case, f"password case {case['id']}: accepted, expected {case['expected_error']}"
+        if "expected_nfkd_utf8_hex" in case:
+            assert encoded.hex() == case["expected_nfkd_utf8_hex"], f"password case {case['id']}: {encoded.hex()}"
+        else:
+            assert len(encoded) == case["expected_nfkd_bytes"], f"password case {case['id']}: {len(encoded)} bytes"
+    print(f"{path}: all {len(cases)} password cases reproduced with Unicode {UNICODE_VERSION}")
+
+
 def encrypt(phrase, password_text, pim=0, level=0):
-    password = unicodedata.normalize("NFKD", password_text).encode()
+    password = encode_password(password_text.encode("utf-8"))
     y, _ = forward(pack(phrase_to_entropy(phrase)), openssl_argon2id, password, pim, level)
     return entropy_to_phrase(y)
 
@@ -186,16 +263,13 @@ def recorded_keys_by_salt(vector):
 
 def is_refused_in_password(character):
     """Control characters (General_Category Cc) and the line and paragraph separators."""
-    return unicodedata.category(character) == "Cc" or character in "\u2028\u2029"
+    return unicode17.category(character) == "Cc" or character in "\u2028\u2029"
 
 
 def check_password(record):
-    assert not any(map(is_refused_in_password, record["password"])), (
-        "the password contains a control character or a line break"
-    )
     password = bytes.fromhex(record["password_nfkd_utf8_hex"])
-    assert unicodedata.normalize("NFKD", record["password"]).encode() == password, (
-        "NFKD of the password differs from password_nfkd_utf8_hex"
+    assert encode_password(record["password"].encode("utf-8")) == password, (
+        "the password rule does not give password_nfkd_utf8_hex"
     )
     return password
 
@@ -321,6 +395,7 @@ def verifier_description():
         "sha256": sha256_file(__file__),
         "python": platform.python_version(),
         "cryptography": cryptography.__version__,
+        "unicodedata2": f"{unicode17.__version__} (Unicode {unicode17.unidata_version})",
         "openssl": backend.openssl_version_text(),
     }
 
@@ -364,6 +439,10 @@ def main(arguments):
     if command == "encrypt":
         extra = [int(value) for value in arguments[2:4]]
         print(encrypt(arguments[0], arguments[1], *extra))
+        return
+    if command == "passwords":
+        for path in arguments:
+            check_password_cases(path)
         return
     if command != "vector":
         sys.exit(__doc__)
