@@ -8,6 +8,10 @@
   <img src="assets/mhfe-mascot.png" alt="MHFE penguin mascot carrying a cold-storage plate" width="240">
 </p>
 
+<p align="center"><sub>The penguin lives in the cold, like the backups MHFE is made for. It holds a
+steel plate with 24 words and waddles from side to side, much as a Feistel network swaps its two
+halves in every round.</sub></p>
+
 MHFE turns the recovery phrase of a Bitcoin or other BIP39 wallet (12, 15, 18, 21 or 24 English
 words) into a password-protected **container of 24 words**. The container is itself an ordinary,
 valid recovery phrase, so it fits the same metal plate or capsule. With the password it turns back

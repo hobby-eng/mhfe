@@ -29,6 +29,12 @@ jobs:
         run: |
           package_version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           test "$GITHUB_REF_NAME" = "v$package_version"
+          # The release text comes from curated notes; a tag without them stops here, before the
+          # long build and the vector replay.
+          test -s "docs/releases/$GITHUB_REF_NAME.md" || {
+            echo "Missing release notes: docs/releases/$GITHUB_REF_NAME.md" >&2
+            exit 1
+          }
       - name: Audit Cargo.lock against RustSec
         uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1
         with:
@@ -126,5 +132,5 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release/* \
             --title "MHFE $GITHUB_REF_NAME" \
-            --generate-notes \
+            --notes-file "docs/releases/$GITHUB_REF_NAME.md" \
             --verify-tag
