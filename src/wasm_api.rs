@@ -13,8 +13,8 @@ use zeroize::Zeroizing;
 use crate::engine::browser::{BrowserEngine, JsArgon2, HIGHEST_BROWSER_MEMORY_LEVEL};
 use crate::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
 use crate::{
-    Mhfe, MhfeError, Password, PhraseLength, Recovery, Reference, MAX_MEMORY_LEVEL, MAX_PIM,
-    ROUNDS, SUITE_ID,
+    Mhfe, MhfeError, Password, PhraseLength, Recovery, Reference, WordCount, MAX_MEMORY_LEVEL,
+    MAX_PIM, ROUNDS, SUITE_ID,
 };
 
 /// Changes when this API changes incompatibly.
@@ -150,7 +150,7 @@ pub fn decrypt(
     let password = password_from(password_utf8)?;
     let length = match whole_number(words, "INVALID_WORD_COUNT", "the word count")? {
         0 => PhraseLength::Detect,
-        words => PhraseLength::Words(words as usize),
+        words => PhraseLength::Words(WordCount::new(words as usize).map_err(js_error)?),
     };
     let mut mhfe = mhfe_for(pim, memory_level, argon2)?;
     let recovery = mhfe
@@ -223,7 +223,9 @@ pub fn check(
         "words" => Reference::BuiltInCheck {
             words: reference
                 .parse()
-                .map_err(|_| js_error(MhfeError::InvalidWordCount(0)))?,
+                .map_err(|_| MhfeError::InvalidWordCount(0))
+                .and_then(WordCount::new)
+                .map_err(js_error)?,
         },
         other => {
             return Err(JsError::new(&format!(

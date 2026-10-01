@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::engine::Argon2Engine;
 use crate::packing;
-use crate::{Mhfe, MhfeError, Password, PhraseLength, WorkFactor};
+use crate::{Mhfe, MhfeError, Password, PhraseLength, WordCount, WorkFactor};
 
 fn fixture() -> Value {
     serde_json::from_str(include_str!("../tests/fixtures/validation-cases.json")).unwrap()
@@ -110,14 +110,20 @@ fn bad_phrases_and_containers_fail_before_argon2() {
                 .encrypt(text(case, "phrase"), &password, &mut |_, _| Ok(()))
                 .err(),
             "decrypt" => {
+                // A wrong word count is refused when the length is made, before decrypt runs.
                 let length = match case.get("words") {
-                    Some(words) => PhraseLength::Words(words.as_u64().unwrap() as usize),
-                    None => PhraseLength::Detect,
+                    Some(words) => {
+                        WordCount::new(words.as_u64().unwrap() as usize).map(PhraseLength::Words)
+                    }
+                    None => Ok(PhraseLength::Detect),
                 };
-                mhfe.decrypt(text(case, "container"), &password, length, &mut |_, _| {
-                    Ok(())
-                })
-                .err()
+                length
+                    .and_then(|length| {
+                        mhfe.decrypt(text(case, "container"), &password, length, &mut |_, _| {
+                            Ok(())
+                        })
+                    })
+                    .err()
             }
             other => panic!("{id}: unknown operation {other}"),
         };

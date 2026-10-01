@@ -49,7 +49,7 @@ mod wasm_api;
 pub use error::MhfeError;
 pub use mhfe::{
     other_detected_lengths, Mhfe, NewContainer, PhraseLength, ProgressCallback, RecoveredPhrase,
-    Recovery, ENCRYPTION_ROUNDS,
+    Recovery, WordCount, ENCRYPTION_ROUNDS,
 };
 pub use password::{Password, MAX_PASSWORD_BYTES};
 pub use phrase::{check_container, check_phrase, read_phrase};
