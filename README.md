@@ -265,9 +265,10 @@ remote resources.
 `--stdin` reads the answers from standard input, one per line, instead of asking:
 
 - `encrypt`: the phrase, the password, and the password again;
-- `decrypt` and `check`: the container and the password;
-- `check --address` or `check --fingerprint`: then also the reference and the BIP39 passphrase (an
-  empty line if the wallet has none).
+- `decrypt`: the container and the password;
+- `check`: the container and the password, then with `--address` or `--fingerprint` the reference
+  and the BIP39 passphrase (an empty line if the wallet has none); with `--words N` nothing more.
+  `check --stdin` needs one of these three options, because it cannot ask which reference to use.
 
 Secrets are never accepted as command-line arguments. `--stdin` also lets another program do the
 asking. On Linux with systemd 249 or later, for example, `systemd-ask-password` can ask for the

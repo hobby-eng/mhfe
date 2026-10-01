@@ -89,8 +89,9 @@ export class MhfeClient {
   check(
     options: MhfeSettings & { container: string; reference: MhfeReference; passphrase?: string | Uint8Array },
   ): Promise<{ matches: boolean }>;
-  /** The phrase with every word written out, for showing back to the user. */
   /**
+   * The phrase with every word written out, for showing back to the user.
+   *
    * `otherLengths` is almost always empty. When it is not, automatic detection would not give this
    * phrase on its own after recovery: tell the user to note the word count and choose it then.
    */
