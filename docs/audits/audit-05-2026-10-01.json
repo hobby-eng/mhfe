@@ -349,7 +349,7 @@
       "kind": "finding",
       "title": "Phrase text is built in growing strings that leave unwiped copies in freed memory",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "releaseBlockingReason": "Best-effort memory hygiene on the user's own offline computer; no disclosure path to another party is demonstrated.",
       "affectedFiles": [
@@ -376,7 +376,7 @@
       "kind": "finding",
       "title": "The weak-password warning counts a repeated dice word as several words",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "releaseBlockingReason": "Advisory heuristic only; the password is still encoded and used exactly as typed.",
       "affectedFiles": [
@@ -401,7 +401,7 @@
       "kind": "finding",
       "title": "A failed memory reservation or a processor refusal recommends a memory level",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "releaseBlockingReason": "The refusal itself is correct and happens before any Argon2 work; only the added advice is wrong.",
       "affectedFiles": [
@@ -426,7 +426,7 @@
       "kind": "finding",
       "title": "The AUD-004 record does not name the commit of its BLD001 licence bundle",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "releaseBlockingReason": "Audit-record accuracy; no product behaviour is affected.",
       "affectedFiles": [
@@ -451,7 +451,7 @@
       "kind": "finding",
       "title": "API.md lists the password refusals without control characters and separators",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "releaseBlockingReason": "Documentation omission; the code refuses as the specification requires.",
       "affectedFiles": [
@@ -475,7 +475,7 @@
       "kind": "finding",
       "title": "README does not say that check --stdin needs a reference option",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "releaseBlockingReason": "The tool refuses clearly before reading anything.",
       "affectedFiles": [
@@ -499,7 +499,7 @@
       "kind": "finding",
       "title": "client.d.ts gives readPhrase two doc comments, and tools show only the second",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "releaseBlockingReason": "Type-description defect only.",
       "affectedFiles": [
@@ -533,52 +533,52 @@
   "remediation": [
     {
       "id": "AUD-005-SEC001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Original reproduction only; not fixed."
+      "status": "verified",
+      "fixCommit": "19b8f25",
+      "verificationCommit": "19b8f25",
+      "evidence": "New `phrase::phrase_text` writes the words into a `Zeroizing<String>` reserved at nine bytes per word; `read_phrase` and `phrase_from_entropy` use it, so recovery, the rehearsal check and encryption no longer leave growth copies. Unit test `phrase::tests::phrase_text_never_outgrows_its_buffer` (5 lengths x 64 public phrases: same text as `to_string`, capacity never grown). The probe now reports 0 copies (`remediation-sec001-probe`, log `36649a27e1b4d948ef672f2502d7749747dce53ca93da149dd61966a009f19ca`); fmt, both clippy runs and all tests with all features passed (`remediation-sec001-tests`, `ac897948acfc6ade1d7f4cb6780115fb56b69a7488e76585ffa3dc8072ac8974`); the rebuilt WebAssembly core gives the native container in both Emscripten builds (`remediation-sec001-browser`, `2ad5f6ee7a19a96fb8a3bf896398661dcd86634d577bf096f96198c13e1d1eb0`). Rechecked at 94a7e7c."
     },
     {
       "id": "AUD-005-FUN001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Original reproduction only; not fixed."
+      "status": "verified",
+      "fixCommit": "cbd2a19",
+      "verificationCommit": "cbd2a19",
+      "evidence": "`different_dice_words` counts the different EFF words of a password made only of such words, compares tokens in place with ASCII case folding and keeps the list positions in a wiped buffer reserved at full size; the warning reads \"not four or more words from the EFF dice list, all different\", and README says \"different\". Unit test `diceware::tests::a_repeated_dice_word_counts_once`. CLI tests and clippy passed (`remediation-fun001-tests`, `de73c531abf7269ba690a177a12578f13dc028a71feebd34c9e6dbefd10da4a1`); the probe's three password expectations pass, while its UI001 expectation still failed at that commit, so the run exits 1 (`remediation-fun001-probe`, `da780d284174ece808ad60a721faea1f5072c65b708c2df2a1351f013c3549dc`). Every expectation passes at 4ace03e21ba10f17fd34196dc1368cdbd87e9e33."
     },
     {
       "id": "AUD-005-UI001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Original reproduction only; not fixed."
+      "status": "verified",
+      "fixCommit": "6953856",
+      "verificationCommit": "6953856",
+      "evidence": "`with_level_hint` adds the level sentence only to `NotEnoughMemory`. Unit test `settings::tests::only_a_free_memory_refusal_suggests_a_level` covers allocation, processor and free-memory refusals. CLI tests and clippy passed (`remediation-ui001-tests`, `1060f8bd14283e1b859576968ae45c2186aef4dba58249412ce77de7739550b9`); every probe expectation holds (`remediation-ui001-probe`, `6e674a5f5fcba348baee66580d3853529538b149b6bd461cd8ebaeb495309cc6`). The processor case is verified by the unit test, not on a processor without SSSE3."
     },
     {
       "id": "AUD-005-DOC001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Original reproduction only; not fixed."
+      "status": "verified",
+      "fixCommit": "94a7e7c",
+      "verificationCommit": "94a7e7c",
+      "evidence": "Both AUD-004 records and the index name `df70ca5` for the BLD001 bundle. A dated follow-up in both records moves AUD-004-FUN001 and AUD-004-BLD001 to verified at `df70ca5` with the CI evidence listed under previous findings; original findings and evidence are unchanged, and the AUD-004 JSON validates against the shared schema. The historical Markdown was edited in place, not reformatted."
     },
     {
       "id": "AUD-005-DOC002",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Original reproduction only; not fixed."
+      "status": "verified",
+      "fixCommit": "59635bf",
+      "verificationCommit": "59635bf",
+      "evidence": "The `Password::new` bullet of API.md now names the control-character, U+2028/U+2029, unassigned, empty and length refusals, matching `src/password.rs`."
     },
     {
       "id": "AUD-005-DOC003",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Original reproduction only; not fixed."
+      "status": "verified",
+      "fixCommit": "59635bf",
+      "verificationCommit": "59635bf",
+      "evidence": "README's script section gives the answers of encrypt, decrypt and check separately and says that `check --stdin` needs `--address`, `--fingerprint` or `--words N`, matching the clap group and `check --help` (`remediation-docs-browser`, `af8f53075c0a4d393bbb52dd4f0c92d218a2e7705e9232300d970fd01994fc41`, prints the help line)."
     },
     {
       "id": "AUD-005-ARC001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Original reproduction only; not fixed."
+      "status": "verified",
+      "fixCommit": "59635bf",
+      "verificationCommit": "59635bf",
+      "evidence": "One doc comment precedes `readPhrase` in `web/client.d.ts`; the rebuilt package copies it unchanged and `verify-browser-package.mjs` passes (`remediation-docs-browser`)."
     }
   ],
   "limitations": [
@@ -1063,6 +1063,229 @@
         "PATH": "<elided>"
       },
       "summary": "linux-x86_64, linux-x86_64-ssse3 and browser archives packed locally; the archive licence check passed for all 3."
+    },
+    {
+      "label": "remediation-sec001-probe",
+      "command": [
+        "cargo",
+        "run",
+        "--offline",
+        "--quiet",
+        "--manifest-path",
+        "docs/audits/AUD-005-harnesses/phrase-copies/Cargo.toml",
+        "--target-dir",
+        "target/aud005-phrase-copies"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:42:16.778455Z",
+      "endedAt": "2026-10-01T06:42:17.151976Z",
+      "exitCode": 0,
+      "logSha256": "36649a27e1b4d948ef672f2502d7749747dce53ca93da149dd61966a009f19ca",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Remediation (19b8f25): the phrase-copy probe reports 0 copies."
+    },
+    {
+      "label": "remediation-sec001-tests",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; cargo fmt --check; cargo clippy --locked --all-targets --all-features -- -D warnings; cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings; cargo test --locked --all-features -- --test-threads=1"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:42:17.180556Z",
+      "endedAt": "2026-10-01T06:42:28.363936Z",
+      "exitCode": 0,
+      "logSha256": "ac897948acfc6ade1d7f4cb6780115fb56b69a7488e76585ffa3dc8072ac8974",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Remediation (19b8f25): fmt, native and wasm32 clippy, all tests with all features (80 + 36 + 2 + 1)."
+    },
+    {
+      "label": "remediation-sec001-browser",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; source ../workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1; EMCC_CORES=1 scripts/build-wasm.sh; node scripts/verify-argon2-wasm.mjs; node scripts/verify-browser-package.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:42:35.460773Z",
+      "endedAt": "2026-10-01T06:42:43.765163Z",
+      "exitCode": 0,
+      "logSha256": "2ad5f6ee7a19a96fb8a3bf896398661dcd86634d577bf096f96198c13e1d1eb0",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Remediation (19b8f25): rebuilt browser package; native container in both builds."
+    },
+    {
+      "label": "remediation-fun001-tests",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; cargo fmt --check; cargo clippy --locked --all-targets --all-features -- -D warnings; cargo test --locked --bin mhfe -- --test-threads=1; cargo build --locked --release"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:43:44.118001Z",
+      "endedAt": "2026-10-01T06:43:58.191708Z",
+      "exitCode": 0,
+      "logSha256": "de73c531abf7269ba690a177a12578f13dc028a71feebd34c9e6dbefd10da4a1",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Remediation (cbd2a19): fmt, clippy, 37 CLI tests, release build."
+    },
+    {
+      "label": "remediation-fun001-probe",
+      "command": [
+        "python3",
+        "docs/audits/AUD-005-harnesses/cli-probes.py"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:43:58.226074Z",
+      "endedAt": "2026-10-01T06:43:58.381607Z",
+      "exitCode": 1,
+      "logSha256": "da780d284174ece808ad60a721faea1f5072c65b708c2df2a1351f013c3549dc",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Remediation (ba8c3a1949e9cb2e1264799e2164b391b46288d9): the three password expectations pass; the UI001 expectation still fails at this commit."
+    },
+    {
+      "label": "remediation-ui001-tests",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; cargo fmt --check; cargo clippy --locked --all-targets --all-features -- -D warnings; cargo test --locked --bin mhfe -- --test-threads=1; cargo build --locked --release"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:44:26.260528Z",
+      "endedAt": "2026-10-01T06:44:39.104450Z",
+      "exitCode": 0,
+      "logSha256": "1060f8bd14283e1b859576968ae45c2186aef4dba58249412ce77de7739550b9",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Remediation (6953856): fmt, clippy, 38 CLI tests, release build."
+    },
+    {
+      "label": "remediation-ui001-probe",
+      "command": [
+        "python3",
+        "docs/audits/AUD-005-harnesses/cli-probes.py"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:44:39.134700Z",
+      "endedAt": "2026-10-01T06:44:39.269633Z",
+      "exitCode": 0,
+      "logSha256": "6e674a5f5fcba348baee66580d3853529538b149b6bd461cd8ebaeb495309cc6",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Remediation (6953856): every CLI probe expectation holds."
+    },
+    {
+      "label": "remediation-docs-browser",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; source ../workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1; EMCC_CORES=1 scripts/build-wasm.sh; node scripts/verify-browser-package.mjs; cmp web/client.d.ts dist/client.d.ts && echo \"dist/client.d.ts equals web/client.d.ts\"; ./target/release/mhfe check --help | grep -A3 -- \"--stdin\""
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:45:11.231009Z",
+      "endedAt": "2026-10-01T06:45:13.826420Z",
+      "exitCode": 0,
+      "logSha256": "af8f53075c0a4d393bbb52dd4f0c92d218a2e7705e9232300d970fd01994fc41",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Remediation (59635bf): rebuilt package, client.d.ts copied unchanged, check --help line."
+    },
+    {
+      "label": "final-source-checks",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; git rev-parse HEAD; cargo fmt --check; cargo clippy --locked --all-targets --all-features -- -D warnings; cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings; RUSTDOCFLAGS=\"-D warnings\" cargo doc --locked --no-deps; cargo test --locked --all-features -- --test-threads=1; cargo test --locked --features ssse3 --target-dir target/ssse3 -- --test-threads=1; cargo build --locked --release; cargo build --locked --release --features ssse3 --target-dir target/ssse3; python3 scripts/verify-hidden-input.py target/release/mhfe; python3 scripts/verify-fast-mode-script.py; scripts/check-release-artifacts.sh; python3 scripts/third-party-licenses.py --check"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:46:48.383041Z",
+      "endedAt": "2026-10-01T06:47:25.363805Z",
+      "exitCode": 0,
+      "logSha256": "3b2de1ccd1a19a4b43b47f805d04bab886bd751d98bd5aa8c0e8a70c2835ac56",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Final (94a7e7c): fmt, both clippy runs, rustdoc, all tests with all features and with SSSE3 (80 + 38 + 2 + 1 each), release builds, PTY check, 14 launcher tests, marker and licence checks."
+    },
+    {
+      "label": "final-browser",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; source ../workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1; EMCC_CORES=1 scripts/build-wasm.sh; node scripts/verify-argon2-wasm.mjs; node scripts/verify-browser-package.mjs; node docs/audits/AUD-005-harnesses/browser.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:47:34.470606Z",
+      "endedAt": "2026-10-01T06:47:40.433289Z",
+      "exitCode": 0,
+      "logSha256": "0ce3432667d1e8a2de535d866adc7239378cf249ebbdd571dac6339d9fa8d967",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Final (94a7e7c): rebuilt package, Argon2 tags, native container, Chromium and Firefox in both modes (4 of 4 passed)."
+    },
+    {
+      "label": "final-probes",
+      "command": [
+        "bash",
+        "-c",
+        "set -e; cargo run --offline --quiet --manifest-path docs/audits/AUD-005-harnesses/phrase-copies/Cargo.toml --target-dir target/aud005-phrase-copies; python3 docs/audits/AUD-005-harnesses/cli-probes.py; python3 docs/audits/AUD-005-harnesses/cli-regressions.py"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-01T06:47:40.459111Z",
+      "endedAt": "2026-10-01T06:47:40.762819Z",
+      "exitCode": 0,
+      "logSha256": "a3df1cec91e0fd775b74e02225b9b97f43bac822d83d87b5a57013167ca83df5",
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "PATH": "<elided>"
+      },
+      "summary": "Final (94a7e7c): 0 phrase copies, every CLI probe expectation, CLI regressions."
     }
   ],
   "procedureHashes": {
@@ -1108,5 +1331,22 @@
       "result": "Regression checklist only: hidden input, uppercase SegWit, private vector inputs, 32-bit guard, server deadlines, browser-check sidecar, length advice, passphrase buffer, rare BIP32 cases and checksum refresh behave as recorded."
     }
   ],
-  "remediationUpdate": null
+  "remediationUpdate": {
+    "date": "2026-10-01",
+    "baseCommit": "d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124",
+    "fixCommits": [
+      "19b8f25",
+      "cbd2a19",
+      "6953856",
+      "59635bf",
+      "94a7e7c"
+    ],
+    "finalVerificationCommit": "94a7e7c",
+    "remediator": {
+      "name": "Claude Code, wallet-tools-maintainer subagent",
+      "model": "claude-opus-5-5",
+      "reasoningEffort": null
+    },
+    "pushed": false
+  }
 }
