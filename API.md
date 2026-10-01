@@ -27,15 +27,17 @@ let matches: bool = mhfe.check(&container, &password, &reference, &mut |_, _| Ok
 
 - `WorkFactor` holds the two settings and computes the Argon2 cost with integers only:
   `memory_kib()`, `passes()`, `estimated_seconds()`.
-- `Mhfe::new` refuses a memory level the build cannot address (`MhfeError::MemoryLevelNotSupportedHere`:
-  a native build is always 64-bit and supports every level, the browser build level 0 only, see
-  `engine::HIGHEST_MEMORY_LEVEL`) or the computer cannot provide (`MhfeError::NotEnoughMemory`), and
-  reserves the work area once; every round of every operation reuses it. The engine is the
-  vendored reference C code (`engine::NativeEngine`). `engine::check_can_run` makes the same checks
-  without allocating, so a program can refuse at once and reserve the memory only after the
-  password has been encoded, the order the specification gives for creating a container.
-- `Password::new` rejects, never truncates: an empty result, more than 1024 bytes after
-  normalization, and any code point that Unicode 17.0.0 does not assign. Private Use characters are
+- `Mhfe::new` refuses a memory level the build cannot address
+  (`MhfeError::MemoryLevelNotSupportedHere`: a native build is always 64-bit and supports every
+  level, the browser build level 0 only, see `engine::HIGHEST_MEMORY_LEVEL`) or the computer cannot
+  provide (`MhfeError::NotEnoughMemory`), and reserves the work area once; every round of every
+  operation reuses it. The engine is the vendored reference C code (`engine::NativeEngine`).
+  `engine::check_can_run` makes the same checks without allocating, so a program can refuse at once
+  and reserve the memory only after the password has been encoded, the order the specification gives
+  for creating a container.
+- `Password::new` rejects, never cleans or truncates: a control character (General_Category Cc, such
+  as NUL, TAB or a line break), U+2028 or U+2029, any code point that Unicode 17.0.0 does not
+  assign, an empty result and more than 1024 bytes after normalization. Private Use characters are
   allowed. `Password::from_utf8` does the same for bytes.
 - `encrypt` accepts an English phrase of 12 to 24 words in any letter case and spacing, and four or
   more leading letters per word. It refuses the practically impossible case that the container
@@ -45,8 +47,8 @@ let matches: bool = mhfe.check(&container, &password, &reference, &mut |_, _| Ok
   with `MhfeError::VerificationFailed`.
 - `encrypt` is `encrypt_unchecked` (rounds 1 to 12, returns a `NewContainer`) followed by
   `check_new_container` (rounds 13 to 24). A program that shows the container to a person between
-  the two must mark it as not yet verified and report the outcome of the check, as the
-  specification requires; a result for another program should come from `encrypt`.
+  the two must mark it as not yet verified and report the outcome of the check, as the specification
+  requires; a result for another program should come from `encrypt`.
 - The progress callback receives the round that starts and the number of rounds: 1 to 24 for
   `encrypt`, 1 to 12 for `decrypt` and `check`. An error it returns stops the operation before the
   next round.
@@ -60,8 +62,8 @@ let matches: bool = mhfe.check(&container, &password, &reference, &mut |_, _| Ok
   check) or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. It
   returns only whether the recovery matches.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
-  can ask again at once. `read_phrase` and `check_container` return the input as it was read,
-  every word in full and in lower case, for showing back to the user.
+  can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
+  word in full and in lower case, for showing back to the user.
 - `wallet` has the address and fingerprint functions the check uses: `BitcoinAddress`,
   `DerivationPath`, `SearchLimits`, `master_fingerprint`, `find_address`, `address_at`.
 - `vectors` writes test vectors from the fixed public inputs `PUBLIC_INPUTS` and `NEGATIVE_INPUTS`.
@@ -77,31 +79,31 @@ strings in the browser.
 `MhfeError` has a readable message (`Display`) that never contains a secret, and a stable code
 (`code()`):
 
-| Code                              | Meaning                                                        |
-| --------------------------------- | -------------------------------------------------------------- |
-| `INVALID_PHRASE`                  | The original phrase is not a valid English BIP39 phrase        |
-| `INVALID_CONTAINER`               | The container is not a valid 24-word English BIP39 phrase      |
-| `INVALID_WORD_COUNT`              | A length other than 12, 15, 18, 21 or 24 was chosen            |
-| `INVALID_PIM`                     | PIM outside 0 to 1023                                          |
-| `INVALID_MEMORY_LEVEL`            | Memory level outside 0 to 21                                   |
-| `EMPTY_PASSWORD`                  | The password is empty                                          |
-| `PASSWORD_TOO_LONG`               | More than 1024 bytes after normalization                       |
-| `INVALID_PASSWORD_UTF8`           | The password bytes are not UTF-8                               |
-| `CONTROL_CHARACTER_IN_PASSWORD`   | The password has a control character, U+2028 or U+2029          |
-| `UNASSIGNED_CHARACTER`            | The password has a code point unassigned in Unicode 17.0.0     |
-| `VERIFIER_MISMATCH`               | A chosen short length does not pass its check                  |
-| `FIXED_POINT`                     | The container would equal the original                         |
-| `VERIFICATION_FAILED`             | The new container did not decrypt to the original; discarded   |
-| `CANCELLED`                       | The progress callback stopped the operation                    |
-| `INVALID_ADDRESS`                 | The check's address cannot be used                             |
-| `INVALID_DERIVATION_PATH`         | The check's path is malformed                                  |
-| `INVALID_FINGERPRINT`             | The fingerprint is not eight hexadecimal digits                |
-| `NOT_ENOUGH_MEMORY`               | Less free memory than the memory level needs                   |
-| `MEMORY_ALLOCATION_FAILED`        | The operating system refused the memory                        |
-| `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser: > 0)        |
-| `PROCESSOR_NOT_SUPPORTED`         | The SSSE3 build runs on a processor without SSSE3              |
-| `ARGON2_FAILED`                   | The Argon2 code reported an error                              |
-| `INTERNAL_ERROR`                  | Anything else                                                  |
+| Code                              | Meaning                                                      |
+| --------------------------------- | ------------------------------------------------------------ |
+| `INVALID_PHRASE`                  | The original phrase is not a valid English BIP39 phrase      |
+| `INVALID_CONTAINER`               | The container is not a valid 24-word English BIP39 phrase    |
+| `INVALID_WORD_COUNT`              | A length other than 12, 15, 18, 21 or 24 was chosen          |
+| `INVALID_PIM`                     | PIM outside 0 to 1023                                        |
+| `INVALID_MEMORY_LEVEL`            | Memory level outside 0 to 21                                 |
+| `EMPTY_PASSWORD`                  | The password is empty                                        |
+| `PASSWORD_TOO_LONG`               | More than 1024 bytes after normalization                     |
+| `INVALID_PASSWORD_UTF8`           | The password bytes are not UTF-8                             |
+| `CONTROL_CHARACTER_IN_PASSWORD`   | The password has a control character, U+2028 or U+2029       |
+| `UNASSIGNED_CHARACTER`            | The password has a code point unassigned in Unicode 17.0.0   |
+| `VERIFIER_MISMATCH`               | A chosen short length does not pass its check                |
+| `FIXED_POINT`                     | The container would equal the original                       |
+| `VERIFICATION_FAILED`             | The new container did not decrypt to the original; discarded |
+| `CANCELLED`                       | The progress callback stopped the operation                  |
+| `INVALID_ADDRESS`                 | The check's address cannot be used                           |
+| `INVALID_DERIVATION_PATH`         | The check's path is malformed                                |
+| `INVALID_FINGERPRINT`             | The fingerprint is not eight hexadecimal digits              |
+| `NOT_ENOUGH_MEMORY`               | Less free memory than the memory level needs                 |
+| `MEMORY_ALLOCATION_FAILED`        | The operating system refused the memory                      |
+| `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser: > 0)     |
+| `PROCESSOR_NOT_SUPPORTED`         | The SSSE3 build runs on a processor without SSSE3            |
+| `ARGON2_FAILED`                   | The Argon2 code reported an error                            |
+| `INTERNAL_ERROR`                  | Anything else                                                |
 
 ## Browser package
 
@@ -112,7 +114,15 @@ to embed it. The page-side API (`client.js`, typed in `client.d.ts`):
 const client = new MhfeClient({ workerSource, argon2Threaded, argon2SingleThreaded, coreWasm });
 client.mode(); // "fast" on a cross-origin isolated page, otherwise "standard"
 client.maxSupportedMemLevel(); // 0
-await client.encrypt({ phrase, password, passwordRepeat, pim, memoryLevel, onProgress, onUnverified });
+await client.encrypt({
+  phrase,
+  password,
+  passwordRepeat,
+  pim,
+  memoryLevel,
+  onProgress,
+  onUnverified,
+});
 // { container } after the check; onUnverified({ container }) comes after round 12
 await client.decrypt({ container, password, pim, memoryLevel, words, onProgress });
 // { kind: "phrase" | "ambiguous", candidates: [{ words, verified, phrase }] }
@@ -132,10 +142,10 @@ with an unpaired surrogate), `PASSWORDS_DIFFER` (`encrypt` got two different pas
 Inside the worker, the WebAssembly core exports `suiteParameters`, `checkPhrase`, `readPhrase`,
 `otherDetectedLengths`, `checkContainer`, `checkPassword`, `encrypt`, `decrypt` and `check`
 (`src/wasm_api.rs`). `otherDetectedLengths`, like `otherLengths` of the client, lists the other
-source lengths whose check a phrase also passes; when it is not empty, automatic detection would
-not give the phrase back on its own, and the user must remember and select its word count.
-`readPhrase` and `checkContainer` return their input with every word written out. `encrypt`,
-`decrypt` and `check` take the Argon2 bridge from `web/argon2-engine.js` and a progress callback
+source lengths whose check a phrase also passes; when it is not empty, automatic detection would not
+give the phrase back on its own, and the user must remember and select its word count. `readPhrase`
+and `checkContainer` return their input with every word written out. `encrypt`, `decrypt` and
+`check` take the Argon2 bridge from `web/argon2-engine.js` and a progress callback
 `(round, rounds)`; `encrypt` also takes a callback that receives the container before its check.
 Passwords are UTF-8 bytes. The PIM, memory level and word count are taken as JavaScript numbers and
 refused with their error code unless they are whole numbers in range, so that no value wraps around.
