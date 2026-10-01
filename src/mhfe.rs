@@ -257,7 +257,7 @@ fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
 pub(crate) fn phrase_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>, MhfeError> {
     let mnemonic = Mnemonic::from_entropy_in(Language::English, entropy)
         .map_err(|error| MhfeError::Internal(error.to_string()))?;
-    Ok(Zeroizing::new(mnemonic.to_string()))
+    Ok(phrase::phrase_text(&mnemonic))
 }
 
 #[cfg(test)]

@@ -70,8 +70,24 @@ pub fn check_phrase(input: &str) -> Result<usize, MhfeError> {
 /// case, one space apart, so that an application can show the user what it understood.
 pub fn read_phrase(input: &str) -> Result<Zeroizing<String>, MhfeError> {
     parse(input)
-        .map(|phrase| Zeroizing::new(phrase.to_string()))
+        .map(|phrase| phrase_text(&phrase))
         .map_err(MhfeError::InvalidPhrase)
+}
+
+/// The words of a phrase, one space apart, in a buffer that is wiped when dropped. It is reserved
+/// at its final size and never grows: `Mnemonic::to_string` writes into a growing string instead,
+/// and every growth would leave an unwiped copy of the first words in freed memory.
+pub(crate) fn phrase_text(phrase: &Mnemonic) -> Zeroizing<String> {
+    let mut text = Zeroizing::new(String::with_capacity(
+        phrase.word_count() * (LONGEST_WORD + 1),
+    ));
+    for (position, word) in phrase.words().enumerate() {
+        if position > 0 {
+            text.push(' ');
+        }
+        text.push_str(word);
+    }
+    text
 }
 
 /// Checks a container before anything is computed and returns it as read: every word written
@@ -111,6 +127,31 @@ mod tests {
         let typed = "  ABANDON aban\tAband abandon abandon abandon abandon abandon abandon abandon abandon abou ";
         assert_eq!(parse(typed).unwrap().to_string(), ZERO_12);
         assert_eq!(*read_phrase(typed).unwrap(), ZERO_12);
+    }
+
+    /// AUD-005-SEC001: the text of a phrase is written into its reserved buffer without a
+    /// reallocation, which would leave an unwiped copy of the first words in freed memory.
+    #[test]
+    fn phrase_text_never_outgrows_its_buffer() {
+        for words in WORD_COUNTS {
+            let bytes = words / 3 * 4;
+            // Varied public entropy, so that the phrases include words of every length.
+            for seed in 0u8..64 {
+                let entropy: Vec<u8> = (0..bytes)
+                    .map(|index| {
+                        (index as u8)
+                            .wrapping_mul(97)
+                            .wrapping_add(seed.wrapping_mul(53))
+                    })
+                    .collect();
+                let phrase = Mnemonic::from_entropy_in(Language::English, &entropy).unwrap();
+                let text = phrase_text(&phrase);
+                assert_eq!(*text, phrase.to_string());
+                assert_eq!(text.capacity(), words * (LONGEST_WORD + 1), "{words} words");
+            }
+        }
+        let read = read_phrase(ZERO_12).unwrap();
+        assert_eq!(read.capacity(), 12 * (LONGEST_WORD + 1));
     }
 
     #[test]
