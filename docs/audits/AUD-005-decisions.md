@@ -67,12 +67,16 @@ reasonable, this file says what was chosen and why. The report is
 4. **Prettier in this repository.** There is no Prettier configuration in mhfe, and 12 Markdown and
    JavaScript files differ from what the mhfe_spec configuration produces. Decide whether to add a
    configuration (and which style for the JavaScript) and reformat once.
-5. **Independent verifier and Unicode 17.** `scripts/independent-suite3.py` uses Python's Unicode
-   database (16.0.0 on Python 3.14), so it does not check the Unicode 17 unassigned-character rule.
-   The public corpus is unaffected.
-6. **Workflow hardening** (observations): hash-pin `cryptography` in `vectors.yml`, set
-   `persist-credentials: false` in the release `canonical` job, and compare the downloaded artifacts
-   with the canonical job's own `SHA256SUMS` before publishing.
+5. **Independent verifier and Unicode 17 — resolved (owner's decision).** The verifier takes the
+   Unicode 17.0.0 database from `unicodedata2` (hash-pinned in
+   `scripts/independent-suite3-requirements.txt`), refuses to run on any other version, applies the
+   whole password rule of the specification itself (UTF-8, controls, unassigned code points with
+   the noncharacters, NFKD, length), and its new `passwords` command reproduces all 33 password
+   cases of `validation-cases.json`; `vectors.yml` runs it.
+6. **Workflow hardening — resolved (owner's decision).** Python packages install only with
+   `--require-hashes`; every checkout sets `persist-credentials: false`; each release job hands
+   its own checksums to `publish`, which checks every archive against them and that none is
+   missing or extra before writing `SHA256SUMS`.
 7. **Local canonical builds** send untracked and ignored files to Docker (they do not reach the
    archives); consider extending `.dockerignore` (for example `docs/audits/*-evidence`,
    `__pycache__`) and recording the source commit and a dirty flag in `BUILD-INFO.txt`.

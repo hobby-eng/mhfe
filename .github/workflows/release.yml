@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Verify tag and repository
@@ -25,8 +27,12 @@ jobs:
         uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1
         with:
           createIssues: false
+      # The container's own SHA256SUMS travels with the archives as canonical.sha256, so that the
+      # publishing job can prove it received exactly the bytes this job built.
       - name: Build release assets in the canonical container
-        run: scripts/build-reproducible.sh canonical-output
+        run: |
+          scripts/build-reproducible.sh canonical-output
+          cp canonical-output/release/SHA256SUMS canonical-output/release/canonical.sha256
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: canonical
@@ -49,6 +55,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned Rust toolchain and target
         run: |
           rustup show
@@ -61,10 +69,13 @@ jobs:
         run: |
           cargo build --locked --release --target ${{ matrix.target }} ${{ matrix.features }}
           scripts/package-release.sh "$GITHUB_REF_NAME" macos-output ${{ matrix.package }}
+          cp macos-output/SHA256SUMS "macos-output/${{ matrix.package }}.sha256"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.package }}
-          path: macos-output/*.tar.gz
+          path: |
+            macos-output/*.tar.gz
+            macos-output/${{ matrix.package }}.sha256
           if-no-files-found: error
 
   # The full-size vectors, replayed natively and checked with the independent script, for the
@@ -82,13 +93,21 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: release
           merge-multiple: true
-      - name: Write SHA256SUMS for every asset
+      # Every archive must match the checksum written by the job that built it, and every archive
+      # must be covered: a file changed or added between the jobs stops the release here.
+      - name: Check every asset against its building job, then write SHA256SUMS
         run: |
           cd release
+          cat -- *.sha256 > built.sha256sums
+          sha256sum --check --strict built.sha256sums
+          diff <(cut -d' ' -f3 built.sha256sums | sort) <(ls -- *.tar.gz *.zip | sort)
+          rm -- *.sha256 built.sha256sums
           sha256sum -- *.tar.gz *.zip > SHA256SUMS
           cat SHA256SUMS
       - name: Generate build-provenance attestations
