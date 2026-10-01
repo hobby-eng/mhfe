@@ -62,10 +62,13 @@ Each operation runs in a new worker, which is terminated when the operation ends
 the 2 GiB of Argon2 memory. `client.cancel()` stops a running operation at once. Only one operation
 runs at a time.
 
-Every method returns a promise and reports every error by rejecting it, also a refused argument such
-as an empty password or a PIM out of range: `await` inside `try` and `.catch()` both see all of
-them. If `onProgress` or `onUnverified` throws, the operation stops, its worker ends and the promise
-rejects with `CALLBACK_FAILED`, the page's error as its `cause`.
+The five operations `encrypt`, `decrypt`, `check`, `readPhrase` and `readContainer` return a promise
+and report every error by rejecting it, also a refused argument such as an empty password or a PIM
+out of range: `await` inside `try` and `.catch()` both see all of them. `mode()`,
+`maxSupportedMemLevel()` and `cancel()` are synchronous and return at once. If `onProgress` or
+`onUnverified` throws, or is async and its promise rejects while the operation runs, the operation
+stops, its worker ends and the promise rejects with `CALLBACK_FAILED`, the page's error as its
+`cause`. The client does not wait for a callback's promise.
 
 ## Fast and standard mode
 

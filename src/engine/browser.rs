@@ -12,7 +12,7 @@ pub const HIGHEST_BROWSER_MEMORY_LEVEL: u32 = 0;
 
 #[wasm_bindgen]
 extern "C" {
-    /// The worker's Argon2 object; see `argon2Engine` in web/mhfe-worker.js.
+    /// The worker's Argon2 object; see `argon2Engine` in web/argon2-engine.js.
     pub type JsArgon2;
 
     /// Fills `key` with Argon2id(password, salt) at the given cost, four lanes, version 1.3.
