@@ -29,7 +29,10 @@ Never include a real recovery phrase, password, private key or wallet file.
   system, swap or a terminal's scrollback can keep copies beyond the program's reach, and so can the
   standard library's own buffer of standard input. Answers read from standard input are limited to
   8192 bytes and read into a buffer of that size, so the program's copy never has to grow and leave
-  an unwiped copy behind.
+  an unwiped copy behind. At a terminal, the phrase or password that a person asks to see and a
+  recovered phrase appear on the terminal's alternate screen, which is cleared before the tool
+  returns to the main screen, so they do not enter its scrollback; a terminal that logs its output
+  or a screen recording keeps them all the same.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original phrase: a typing mistake or a
   hardware fault cannot silently produce a container that no password opens. At a terminal the

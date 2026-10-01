@@ -18,7 +18,9 @@ use crate::style::{self, paint, ACCENT, HEADING, MUTED};
 
 /// Longest line accepted, line break included. The buffer is reserved at this size and reading
 /// stops there, so it is never reallocated, which would leave an unwiped copy of a secret
-/// behind. Every valid answer is far shorter: a password has at most 1024 bytes.
+/// behind. Every valid answer is far shorter: a password has at most 1024 bytes after NFKD
+/// normalization and at most 4096 as typed, since NFKD never shortens a character count and a
+/// character takes at most four bytes.
 pub(crate) const LINE_CAPACITY: usize = 8192;
 
 /// Where answers come from.
@@ -105,6 +107,7 @@ pub fn stop_on_ctrl_c() {
 }
 
 pub fn exit_cancelled() -> ! {
+    leave_private_screen();
     eprintln!();
     if UNVERIFIED_CONTAINER_SHOWN.load(Ordering::SeqCst) {
         style::alarm(
@@ -199,6 +202,65 @@ pub fn print_phrase(phrase: &str, input: &Input) {
     eprintln!("{}", paint(MUTED, "On one line, for copying:"));
     println!("{phrase}");
     eprintln!();
+}
+
+/// Switches to the terminal's alternate screen, clears it and moves to its top left (xterm
+/// control sequences, also understood by tmux and most terminals).
+const ENTER_ALTERNATE_SCREEN: &str = "\x1b[?1049h\x1b[2J\x1b[H";
+/// Clears the alternate screen, then returns to the main screen with its earlier content. The
+/// clear comes first so that the words also vanish where the alternate screen is not supported,
+/// such as GNU screen without `altscreen on`.
+const LEAVE_ALTERNATE_SCREEN: &str = "\x1b[2J\x1b[H\x1b[?1049l";
+
+/// Set while secret words are on the alternate screen, so that Ctrl+C can leave it first.
+static PRIVATE_SCREEN_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Secret words shown on the terminal's alternate screen, as `less` shows a file: they never reach
+/// the main screen or its scrollback, and dropping this clears them and returns to where the tool
+/// was. A script, a pipe or a file gets the words as before, without any of this.
+pub struct PrivateScreen {
+    active: bool,
+}
+
+impl PrivateScreen {
+    pub fn enter(input: &Input) -> Self {
+        let active = !input.is_script()
+            && io::stdout().is_terminal()
+            && io::stderr().is_terminal()
+            && std::env::var("TERM").map_or(true, |term| term != "dumb");
+        if active {
+            // Written raw: anstream would drop control sequences when NO_COLOR is set.
+            write_control(ENTER_ALTERNATE_SCREEN);
+            PRIVATE_SCREEN_ACTIVE.store(true, Ordering::SeqCst);
+        }
+        Self { active }
+    }
+
+    /// Whether the words are on the alternate screen, which then waits for the person.
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
+}
+
+impl Drop for PrivateScreen {
+    fn drop(&mut self) {
+        if self.active {
+            leave_private_screen();
+        }
+    }
+}
+
+fn leave_private_screen() {
+    if PRIVATE_SCREEN_ACTIVE.swap(false, Ordering::SeqCst) {
+        let _ = io::stdout().flush();
+        write_control(LEAVE_ALTERNATE_SCREEN);
+    }
+}
+
+fn write_control(sequence: &str) {
+    let mut terminal = io::stderr();
+    let _ = terminal.write_all(sequence.as_bytes());
+    let _ = terminal.flush();
 }
 
 /// Shows a container as it was read, every word in full, so that a person who typed short

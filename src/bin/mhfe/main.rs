@@ -13,6 +13,7 @@ mod diceware;
 mod encrypt;
 mod exit;
 mod hidden_input;
+mod menu;
 mod serve;
 mod settings;
 mod style;
@@ -36,6 +37,8 @@ use crate::exit::Failure;
              protected 24-word container that is itself a valid BIP39 phrase, and recovers\n\
              the original from it. Suite MHFE-BIP39-256-EXPERIMENTAL-3.",
     after_help = main_help(),
+    // Without a terminal for the menu, `mhfe` alone prints this help.
+    arg_required_else_help = true,
 )]
 struct Cli {
     #[command(subcommand)]
@@ -84,6 +87,7 @@ fn main_help() -> String {
     let examples = style::help_section(
         "Examples:",
         &[
+            ("mhfe", "Choose a command from a menu"),
             ("mhfe encrypt", "Encrypt a phrase with the default settings"),
             (
                 "mhfe encrypt --pim 1 --mem 1",
@@ -129,24 +133,29 @@ fn main_help() -> String {
 
 fn main() {
     terminal::stop_on_ctrl_c();
-    // Started without arguments, as by a double-click: explain, and offer the fast mode.
-    let result = if std::env::args_os().len() == 1 {
-        serve::run_without_arguments()
+    // Started without arguments in a terminal, as by a double-click or a launcher script: the
+    // menu, which runs the same commands.
+    let result = if std::env::args_os().len() == 1 && menu::can_run() {
+        menu::run()
     } else {
         run(Cli::parse().command)
     };
     let exit_code = match result {
         Ok(code) => code,
         Err(failure) => {
-            // An empty message means that the command has already shown it.
-            if !failure.message.is_empty() {
-                anstream::eprintln!();
-                style::error(&failure.to_string());
-            }
+            show_failure(&failure);
             failure.exit_code
         }
     };
     std::process::exit(exit_code);
+}
+
+/// Shows why a command stopped. An empty message means that the command has already shown it.
+fn show_failure(failure: &Failure) {
+    if !failure.message.is_empty() {
+        anstream::eprintln!();
+        style::error(&failure.to_string());
+    }
 }
 
 fn run(command: Command) -> Result<i32, Failure> {
