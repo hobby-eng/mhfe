@@ -74,6 +74,8 @@ MHFE · Encrypt a recovery phrase
 Original recovery phrase (hidden):
 ✓ Accepted a valid 12-word phrase.
 Show the words that were read? They will be visible on the screen. [y/N]:
+Letter case and spaces count: lowercase words with single spaces are the easiest to type again
+years later.
 Password (hidden):
 Repeat the password (hidden):
 Press Ctrl+C to cancel at any time.
@@ -126,8 +128,9 @@ from now.
 
 MHFE is deterministic: the same phrase, password and settings always give the same container. A lost
 plate can therefore be made again exactly, but two identical containers made with the same password
-and settings show that they hold the same phrase. Use a different password for each container; a
-shared password is only as safe as the weakest container that uses it.
+and settings show that they hold the same phrase. Use a different password for each phrase you
+encrypt, and nowhere else: a shared password is only as safe as the weakest place that uses it. A
+second copy of a backup is an exact copy of the same 24 words, with the same password and settings.
 
 ### Choosing a password
 
@@ -151,7 +154,10 @@ words. `mhfe encrypt` warns when a password is not four or more such words.
 
 A password is ordinary text on one line. Any letters, digits, spaces and symbols in any language
 are accepted, but invisible control characters such as a tab, and line breaks, are refused, so that
-every program reads the password exactly as it was typed.
+a password cannot differ invisibly between programs. Every program applies the same Unicode
+normalization (NFKD, as BIP39 does), so a few characters that look alike count as the same; letter
+case and the spaces between words always count. A fixed form, such as lowercase words with single
+spaces as `mhfe password` makes them, is the easiest to type again years later.
 
 ## Recover the original phrase
 
@@ -185,7 +191,11 @@ every candidate and lets you choose; `--words 12` (or 15, 18, 21, 24) selects th
 
 ## Rehearse a recovery
 
-Before you rely on a container, check that it recovers your wallet:
+Before you rely on a container, check that it recovers your wallet. Type the container from the
+plate or paper you wrote it on, not from the screen: the check when the container was made covers
+the words the program produced, not your copy. If one word were copied wrongly, the BIP39 checksum
+would still pass in about one case in 256; a container of a 24-word phrase would then recover a
+different wallet without any error, and only the comparison with a known address shows it.
 
 ```text
 $ mhfe check
