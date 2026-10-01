@@ -140,10 +140,14 @@ pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeEngine>, Failure> {
     Mhfe::new(work).map_err(with_level_hint)
 }
 
-/// Adds the highest memory level this computer can use now to a refusal.
+/// Adds the highest memory level this computer can use now to a refusal for lack of free memory.
+/// Only that refusal rests on the reported free memory. After a failed reservation that figure has
+/// just proved too high, and a processor refusal has nothing to do with memory, so neither gets a
+/// level to try (AUD-005-UI001).
 fn with_level_hint(error: mhfe::MhfeError) -> Failure {
+    let lower_level_helps = matches!(error, mhfe::MhfeError::NotEnoughMemory { .. });
     let mut failure = Failure::from(error);
-    if let Some(highest) = highest_available_level() {
+    if let Some(highest) = highest_available_level().filter(|_| lower_level_helps) {
         failure.message.push_str(&format!(
             ". The highest memory level this computer can use now is {highest}."
         ));
@@ -194,6 +198,29 @@ fn time_range(low_seconds: u64, high_seconds: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mhfe::MhfeError;
+
+    const LEVEL_HINT: &str = "The highest memory level this computer can use now";
+
+    /// AUD-005-UI001: only a refusal for lack of reported free memory suggests a level.
+    #[test]
+    fn only_a_free_memory_refusal_suggests_a_level() {
+        let no_reservation = with_level_hint(MhfeError::MemoryAllocation { bytes: 2 * GIB });
+        assert!(!no_reservation.message.contains(LEVEL_HINT));
+        let no_ssse3 = with_level_hint(MhfeError::ProcessorNotSupported("no SSSE3".to_owned()));
+        assert!(!no_ssse3.message.contains(LEVEL_HINT));
+        assert_eq!(no_ssse3.message, "No SSSE3");
+
+        let not_enough = with_level_hint(MhfeError::NotEnoughMemory {
+            needed_bytes: 2 * GIB,
+            available_bytes: GIB,
+        });
+        // The hint depends on what this computer reports now; it appears exactly when a level fits.
+        assert_eq!(
+            not_enough.message.contains(LEVEL_HINT),
+            highest_available_level().is_some()
+        );
+    }
 
     #[test]
     fn time_ranges_use_one_readable_unit() {
