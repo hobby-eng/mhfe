@@ -1,5 +1,5 @@
 //! `mhfe password`: a password of random words from the EFF large wordlist, and the check that
-//! warns when a chosen password is weaker than four such words.
+//! warns when a chosen password is weaker than four different such words.
 
 use std::io::IsTerminal;
 
@@ -198,19 +198,27 @@ fn index_of_rolls(rolls: &str) -> Option<usize> {
     )
 }
 
-/// How many words a password has if it consists only of EFF list words, else 0. Used to warn
-/// about passwords weaker than four such words.
-pub fn dice_word_count(password: &str) -> usize {
+/// How many different EFF list words a password has if it consists only of such words, in any
+/// ASCII letter case, else 0. A repeated word counts once: "abacus abacus abacus abacus" is one
+/// dice word, about 12.9 bits, not four (AUD-005-FUN001). Used to warn about passwords weaker than
+/// four different dice words. The words are compared in place, so no copy of the password is made;
+/// the list positions found, which reveal the password, are wiped.
+pub fn different_dice_words(password: &str) -> usize {
     let words = eff_words();
-    let mut count = 0;
+    // Reserved for every token up front, so the list never grows and leaves no unwiped copy.
+    let mut found = Zeroizing::new(Vec::with_capacity(password.split_whitespace().count()));
     for token in password.split_whitespace() {
-        let lowercase = Zeroizing::new(token.to_lowercase());
-        if !words.contains(&lowercase.as_str()) {
-            return 0;
+        match words
+            .iter()
+            .position(|word| word.eq_ignore_ascii_case(token))
+        {
+            Some(index) => found.push(index),
+            None => return 0,
         }
-        count += 1;
     }
-    count
+    found.sort_unstable();
+    found.dedup();
+    found.len()
 }
 
 /// "64.6" for five words: the strength in bits with one decimal.
@@ -259,10 +267,24 @@ mod tests {
 
     #[test]
     fn recognises_passwords_made_of_dice_words() {
-        assert_eq!(dice_word_count("abacus zoom yearbook zipfile"), 4);
-        assert_eq!(dice_word_count("Abacus  ZOOM"), 2);
-        assert_eq!(dice_word_count("abacus zoom Tr0ub4dor"), 0);
-        assert_eq!(dice_word_count(""), 0);
+        assert_eq!(different_dice_words("abacus zoom yearbook zipfile"), 4);
+        assert_eq!(different_dice_words("Abacus  ZOOM"), 2);
+        assert_eq!(different_dice_words("abacus zoom Tr0ub4dor"), 0);
+        assert_eq!(different_dice_words(""), 0);
+    }
+
+    /// AUD-005-FUN001: a repeated word adds nothing, in any letter case.
+    #[test]
+    fn a_repeated_dice_word_counts_once() {
+        assert_eq!(different_dice_words("abacus abacus abacus abacus"), 1);
+        assert_eq!(different_dice_words("abacus ABACUS Abacus zoom"), 2);
+        assert_eq!(different_dice_words("abacus zoom abacus zoom yearbook"), 3);
+        assert_eq!(
+            different_dice_words("abacus zoom yearbook zipfile abacus"),
+            4
+        );
+        // Only ASCII letters change case; any other letter makes it a word outside the list.
+        assert_eq!(different_dice_words("abacus zo\u{d3}m"), 0);
     }
 
     #[test]
