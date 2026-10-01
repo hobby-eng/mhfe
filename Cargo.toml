@@ -71,8 +71,8 @@ cc = "=1.5.1"
 argon2 = { version = "=0.6.0", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = { version = "=0.2.128", optional = true }
-js-sys = { version = "=0.3.105", optional = true }
+wasm-bindgen = { version = "=0.2.129", optional = true }
+js-sys = { version = "=0.3.106", optional = true }
 
 [features]
 default = []

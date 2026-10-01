@@ -22,6 +22,7 @@ if [[ ${#packages[@]} -eq 0 ]]; then
   packages=(linux-x86_64 linux-x86_64-ssse3 linux-aarch64 windows-x86_64 windows-x86_64-ssse3 browser)
 fi
 tar_command="$(command -v gtar || command -v tar)"
+archives=()
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
 
@@ -35,7 +36,7 @@ add_common_files() {
   else
     cp README.md "$folder/"
   fi
-  cp LICENSE THIRD_PARTY_NOTICES.md "$folder/"
+  cp LICENSE THIRD_PARTY_NOTICES.md THIRD_PARTY_LICENSES.md "$folder/"
   mkdir -p "$folder/licenses"
   cp vendor/phc-winner-argon2/LICENSE "$folder/licenses/argon2-LICENSE"
   cp vendor/eff-large-wordlist.md "$folder/licenses/eff-large-wordlist.md"
@@ -52,6 +53,7 @@ pack_tar() {
   "$tar_command" --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
     --mode='u+rwX,go+rX,go-w' \
     -C "$folder" -cf - . | gzip -n > "$output/$archive"
+  archives+=("$output/$archive")
 }
 
 pack_zip() {
@@ -63,6 +65,7 @@ pack_zip() {
     find . -exec touch -d '1980-01-01 00:00:00' {} +
     find . -type f | LC_ALL=C sort | zip -X -q "$output/$archive" -@
   )
+  archives+=("$output/$archive")
 }
 
 cli_package() {
@@ -121,6 +124,9 @@ for package in "${packages[@]}"; do
       ;;
   esac
 done
+
+# Every archive must carry the licence files, among them the generated THIRD_PARTY_LICENSES.md.
+scripts/check-release-artifacts.sh --archives "${archives[@]}"
 
 (cd "$output" && sha256sum -- *.tar.gz *.zip 2>/dev/null > SHA256SUMS || true)
 echo "Release archives in $output:"

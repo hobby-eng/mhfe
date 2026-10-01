@@ -5,10 +5,59 @@
 # (REDUCED_COST_MARKER in src/engine/native.rs). The marker must be present in the library's test
 # binary, which shows that the search works, and absent from the release binary and the
 # WebAssembly core. Build them first with `cargo build --release` and scripts/build-wasm.sh.
+#
+#   scripts/check-release-artifacts.sh --archives <archive> ...
+#
+# checks packed release archives instead: each must carry LICENSE, THIRD_PARTY_NOTICES.md and
+# THIRD_PARTY_LICENSES.md, byte for byte as in this checkout. scripts/package-release.sh runs it on
+# every archive it packs.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+
+if [[ "${1:-}" == "--archives" ]]; then
+  shift
+  if [[ $# -eq 0 ]]; then
+    echo "--archives needs at least one archive." >&2
+    exit 1
+  fi
+  # Python's tarfile and zipfile read both archive kinds the same way on every build machine.
+  python3 - "$@" <<'PY'
+import pathlib
+import sys
+import tarfile
+import zipfile
+
+REQUIRED = ("LICENSE", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_LICENSES.md")
+
+
+def members(archive):
+    """The archive's files, by path without a leading "./"."""
+    if archive.endswith(".zip"):
+        with zipfile.ZipFile(archive) as packed:
+            return {name.removeprefix("./"): packed.read(name) for name in packed.namelist()}
+    with tarfile.open(archive) as packed:
+        return {
+            member.name.removeprefix("./"): packed.extractfile(member).read()
+            for member in packed.getmembers()
+            if member.isfile()
+        }
+
+
+failed = False
+for archive in sys.argv[1:]:
+    files = members(archive)
+    for name in REQUIRED:
+        if files.get(name) != pathlib.Path(name).read_bytes():
+            print(f"{archive} lacks {name} or holds another version of it.", file=sys.stderr)
+            failed = True
+if failed:
+    sys.exit(1)
+print(f"Every archive carries the licence files: {len(sys.argv) - 1} checked.")
+PY
+  exit 0
+fi
 
 marker="MHFE-TEST-ONLY-REDUCED-ARGON2-COST"
 release_artifacts=(target/release/mhfe target/ssse3/release/mhfe dist/mhfe_core_bg.wasm)

@@ -34,7 +34,7 @@ jobs:
           "$RUNNER_TEMP/emsdk/emsdk" install 6.0.10
           "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.10
       - name: Install pinned wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.128 --locked
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
       # Formatting, clippy for native and WebAssembly, the fast tests (including the C/Rust
       # Argon2 cross-check), both Emscripten builds under Node.js, the browser package and the
       # release-artifact check. The full-size vector replay runs in vectors.yml.

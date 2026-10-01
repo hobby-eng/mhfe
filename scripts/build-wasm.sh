@@ -7,17 +7,16 @@
 #   argon2-st.js             single-threaded Argon2 build, for every other page
 #   client.js, client.d.ts   the page-side client
 #   mhfe-fast-mode.py        the fast-mode launcher for computers with Python but without mhfe
-#   mhfe-fast-mode.py        the fast-mode launcher for computers with Python but without mhfe
 #   README.md                how to use the package, with the SHA-256 of every file
 #
-# Needs wasm-bindgen 0.2.128 and Emscripten 6.0.10 (see scripts/build-argon2-wasm.sh), unless
+# Needs wasm-bindgen 0.2.129 and Emscripten 6.0.10 (see scripts/build-argon2-wasm.sh), unless
 # PREBUILT_ARGON2_DIR names a folder with argon2-mt.js and argon2-st.js built by that script.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-expected_bindgen="wasm-bindgen 0.2.128"
+expected_bindgen="wasm-bindgen 0.2.129"
 actual_bindgen="$(wasm-bindgen --version)"
 if [[ "$actual_bindgen" != "$expected_bindgen" ]]; then
   echo "Expected $expected_bindgen, found $actual_bindgen" >&2

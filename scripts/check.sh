@@ -2,7 +2,7 @@
 # The full check of the repository, for release-level verification on request. It does not
 # replay the full-size test vectors (tests/suite3_vectors.rs), which take about an hour.
 #
-# Needs the pinned Rust toolchain, wasm-bindgen 0.2.128, Emscripten 6.0.10, Node.js and Python 3.
+# Needs the pinned Rust toolchain, wasm-bindgen 0.2.129, Emscripten 6.0.10, Node.js and Python 3.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,6 +11,11 @@ cd "$repo_root"
 # The vendored Argon2 code must be byte for byte the recorded upstream files.
 sed -n '/^```text$/,/^```$/p' vendor/phc-winner-argon2.md | grep -v '^```' |
   (cd vendor/phc-winner-argon2 && sha256sum --check --quiet)
+
+# THIRD_PARTY_LICENSES.md must match the crates every release target ships. The generator reads
+# their sources offline, so fetch the sources of every target first (a no-op when they are there).
+cargo fetch --locked
+python3 scripts/third-party-licenses.py --check
 
 cargo fmt --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
