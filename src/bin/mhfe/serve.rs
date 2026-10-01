@@ -61,11 +61,41 @@ const SECURITY_HEADERS: [(&str, &str); 7] = [
 #[derive(Args)]
 pub struct Options {
     /// The HTML file of the browser tool; mhfe-fast-mode.sha256 must lie next to it
+    #[arg(long_help = file_help())]
     file: PathBuf,
 
     /// Print the address instead of opening the browser
-    #[arg(long)]
+    #[arg(long, long_help = no_browser_help())]
     no_browser: bool,
+}
+
+fn file_help() -> String {
+    style::option_help(&[
+        "The HTML file of the browser tool; mhfe-fast-mode.sha256 must lie next to it.",
+        &format!(
+            "{CHECKSUM_FILE} holds the SHA-256 of the page in the form sha256sum writes. The \
+             page is served only when it matches, which catches a damaged, swapped or partly \
+             updated page."
+        ),
+    ])
+}
+
+fn no_browser_help() -> String {
+    style::option_help(&[
+        "Print the address instead of opening the browser.",
+        "Open the printed address yourself, in a browser on this computer. The server stops \
+         when you press Ctrl+C.",
+    ])
+}
+
+/// The top of `mhfe serve --help`.
+pub fn about() -> String {
+    style::command_about(&[
+        "Serve a browser tool on this computer in fast mode",
+        "A browser runs the faster, multi-threaded Argon2 only on a page served with special \
+         headers. mhfe serve serves one page from this computer (127.0.0.1) with those \
+         headers and opens it in the browser.",
+    ])
 }
 
 /// What a double-click on the program does: explains itself and, when mhfe-fast-mode.sha256 lies
@@ -198,14 +228,20 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
     Ok((page, digest))
 }
 
-/// The end of `mhfe serve --help`.
+/// The end of `mhfe serve -h` and `--help`.
 pub fn help() -> String {
     let examples = style::help_section(
         "Examples:",
-        &[(
-            "mhfe serve tool.html",
-            "Serve the page and open it in the browser",
-        )],
+        &[
+            (
+                "mhfe serve tool.html",
+                "Serve the page and open it in the browser",
+            ),
+            (
+                "mhfe serve --no-browser tool.html",
+                "Serve the page and print its address to open by hand",
+            ),
+        ],
     );
     let note = style::help_note(&format!(
         "The page is served only when {CHECKSUM_FILE} lies next to it and holds its SHA-256, and \

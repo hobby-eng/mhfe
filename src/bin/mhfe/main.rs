@@ -45,23 +45,37 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Encrypt a recovery phrase into a 24-word container
-    #[command(after_help = encrypt::help())]
+    #[command(
+        long_about = encrypt::about(),
+        after_help = encrypt::help(),
+        after_long_help = encrypt::long_help()
+    )]
     Encrypt(encrypt::Options),
     /// Recover the original phrase from a container
-    #[command(after_help = decrypt::help())]
+    #[command(
+        long_about = decrypt::about(),
+        after_help = decrypt::help(),
+        after_long_help = decrypt::long_help()
+    )]
     Decrypt(decrypt::Options),
     /// Rehearse a recovery without ever showing the phrase
-    #[command(after_help = check::help())]
+    #[command(
+        long_about = check::about(),
+        after_help = check::help(),
+        after_long_help = check::long_help()
+    )]
     Check(check::Options),
     /// Make a strong password of random dice words
-    #[command(after_help = diceware::help())]
+    #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
     /// Serve a browser tool on this computer in fast mode
-    #[command(after_help = serve::help())]
+    #[command(long_about = serve::about(), after_help = serve::help())]
     Serve(serve::Options),
     /// [test only] Write the public suite 3 test vectors
+    #[command(after_help = test_tools::vectors_help())]
     TestVectors(test_tools::VectorOptions),
     /// [test only] Time one encryption and one recovery
+    #[command(after_help = test_tools::benchmark_help())]
     TestBenchmark(test_tools::BenchmarkOptions),
 }
 
@@ -70,28 +84,39 @@ fn main_help() -> String {
     let examples = style::help_section(
         "Examples:",
         &[
+            ("mhfe encrypt", "Encrypt a phrase with the default settings"),
             (
-                "mhfe encrypt",
-                "Encrypt a recovery phrase with the default settings",
+                "mhfe encrypt --pim 1 --mem 1",
+                "Encrypt with twice the passes and 3 GiB",
             ),
             ("mhfe decrypt", "Recover the phrase from a container"),
+            (
+                "mhfe decrypt --pim 1 --mem 1",
+                "Recover a container made with those settings",
+            ),
             (
                 "mhfe check",
                 "Rehearse a recovery without showing the phrase",
             ),
+            (
+                "mhfe check --address",
+                "Rehearse it against a wallet address",
+            ),
             ("mhfe password", "Make a strong password of five dice words"),
             (
-                "mhfe encrypt --pim 1",
-                "Encrypt with twice the default work",
+                "mhfe password --dice --words 6",
+                "Make a password of six words from real dice",
             ),
+            ("mhfe serve tool.html", "Open a browser tool in fast mode"),
             (
-                "mhfe <COMMAND> --help",
-                "Show what a command asks for and its options",
+                "mhfe encrypt --help",
+                "Every option of a command, more examples",
             ),
         ],
     );
     let note = "Secrets are typed at hidden prompts, never passed as arguments. Use MHFE on a \
-                trusted computer without a network connection.";
+                trusted computer without a network connection. -h gives a short summary of a \
+                command, --help the full explanation.";
     format!(
         "{examples}\n{}\n{}",
         style::help_note(note),

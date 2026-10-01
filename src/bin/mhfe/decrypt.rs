@@ -16,16 +16,74 @@ pub struct Options {
     settings: Settings,
 
     /// Length of the original if known: 12, 15, 18, 21 or 24
-    #[arg(long, value_name = "N")]
+    #[arg(long, value_name = "N", long_help = words_help())]
     words: Option<usize>,
 
     /// Read the answers from standard input (for scripts)
-    #[arg(long)]
+    #[arg(long, long_help = stdin_help())]
     stdin: bool,
 }
 
-/// The end of `mhfe decrypt --help`.
+fn words_help() -> String {
+    style::option_help(&[
+        "Length of the original if known: 12, 15, 18, 21 or 24.",
+        "Without it the length is detected: a 12- to 21-word original carries a built-in \
+         check, and the length whose check passes is shown as verified. When no check passes, \
+         the 24-word reading is shown, not verified. When several pass, every candidate is \
+         shown.",
+        "A chosen short length must pass its check. Choose 24 for a 24-word original that \
+         detection reads as shorter, about once in four billion; encryption says so when it \
+         happens.",
+    ])
+}
+
+fn stdin_help() -> String {
+    style::option_help(&[
+        "Read the answers from standard input (for scripts).",
+        "Input: the container, then the password, one per line. Output: one line per result, \
+         \"<words> <verified|unverified> <phrase>\". Messages go to standard error.",
+    ])
+}
+
+/// The top of `mhfe decrypt --help`.
+pub fn about() -> String {
+    style::command_about(&[
+        "Recover the original phrase from a container",
+        "Runs 12 rounds, one to two minutes at the default settings, and shows the \
+         recovered phrase. Use the PIM and memory level of the encryption; at the defaults no option is \
+         needed.",
+    ])
+}
+
+fn examples() -> String {
+    style::help_section(
+        "Examples:",
+        &[
+            ("mhfe decrypt", "Detect the length of the original"),
+            ("mhfe decrypt --words 24", "The original has 24 words"),
+            (
+                "mhfe decrypt --pim 1 --mem 1",
+                "The settings used for encryption",
+            ),
+            (
+                "mhfe decrypt --pim 1 --mem 1 --words 24",
+                "Those settings and a 24-word original",
+            ),
+            (
+                "your-program | mhfe decrypt --stdin",
+                "A script: the container and the password from another program",
+            ),
+        ],
+    )
+}
+
+/// The end of `mhfe decrypt -h`.
 pub fn help() -> String {
+    examples()
+}
+
+/// The end of `mhfe decrypt --help`.
+pub fn long_help() -> String {
     let asks = style::help_section(
         "What it asks for:",
         &[
@@ -36,39 +94,11 @@ pub fn help() -> String {
             ("Password", "hidden"),
         ],
     );
-    let examples = style::help_section(
-        "Examples:",
-        &[
-            ("mhfe decrypt", "Detect the length of the original"),
-            ("mhfe decrypt --words 24", "The original has 24 words"),
-            (
-                "mhfe decrypt --pim 1 --mem 1",
-                "The settings used for encryption",
-            ),
-        ],
-    );
     let note = style::help_note(
         "The recovered phrase is shown on the screen: recover only on a trusted computer \
          without a network connection.",
     );
-    let scripts = style::help_section(
-        "For scripts (--stdin):",
-        &[
-            ("Input", "the container, then the password, one per line"),
-            (
-                "Output",
-                "one line per result: <words> <verified|unverified> <phrase>",
-            ),
-        ],
-    );
-    let length = style::help_note(
-        "Without --words the length is detected. Choose --words 24 for a 24-word original \
-         that detection reads as shorter, about once in four billion.",
-    );
-    format!(
-        "{asks}\n{}\n{scripts}\n{examples}\n{length}\n{note}",
-        settings::settings_help()
-    )
+    format!("{asks}\n{}\n{note}", examples())
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {

@@ -27,12 +27,54 @@ const NEGATIVE_CASES_STEM: &str = "negative-cases";
 #[derive(Args)]
 pub struct VectorOptions {
     /// Folder for the JSON files and SHA256SUMS
-    #[arg(long, value_name = "DIR")]
+    #[arg(long, value_name = "DIR", long_help = output_help())]
     output: PathBuf,
 
     /// Only names that contain TEXT, or "negative-cases"
-    #[arg(long, value_name = "TEXT")]
+    #[arg(long, value_name = "TEXT", long_help = only_help())]
     only: Option<String>,
+}
+
+fn output_help() -> String {
+    style::option_help(&[
+        "Folder for the JSON files and SHA256SUMS.",
+        "Created when missing. A file of the same name in it is replaced.",
+    ])
+}
+
+fn only_help() -> String {
+    style::option_help(&[
+        "Only names that contain TEXT, or \"negative-cases\".",
+        "The names are those of the files in tests/fixtures/suite3-vectors without .json, \
+         such as zero-12 or unicode-password; zero-12 also selects zero-12-pim-1 and the \
+         other names that contain it.",
+    ])
+}
+
+/// The end of `mhfe test-vectors -h` and `--help`.
+pub fn vectors_help() -> String {
+    let examples = style::help_section(
+        "Examples:",
+        &[
+            (
+                "mhfe test-vectors --output vectors",
+                "Write every public vector and SHA256SUMS into ./vectors",
+            ),
+            (
+                "mhfe test-vectors --output vectors --only zero-12",
+                "Only the vectors whose names contain zero-12",
+            ),
+            (
+                "mhfe test-vectors --output vectors --only negative-cases",
+                "Only the cases that must be refused",
+            ),
+        ],
+    );
+    let note = style::help_note(
+        "Vector files hold the public test password and every round key by design. They use \
+         only fixed public inputs; nothing typed is ever used.",
+    );
+    format!("{examples}\n{note}")
 }
 
 pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
@@ -175,6 +217,29 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), Failure> {
 pub struct BenchmarkOptions {
     #[command(flatten)]
     settings: settings::Settings,
+}
+
+/// The end of `mhfe test-benchmark -h` and `--help`.
+pub fn benchmark_help() -> String {
+    let examples = style::help_section(
+        "Examples:",
+        &[
+            ("mhfe test-benchmark", "Time the default settings"),
+            (
+                "mhfe test-benchmark --pim 1 --mem 1",
+                "Time twice the passes with 3 GiB of memory",
+            ),
+            (
+                "mhfe test-benchmark > timing.json",
+                "Save the JSON record for measurements/",
+            ),
+        ],
+    );
+    let note = style::help_note(
+        "It encrypts and recovers the public test phrase once and prints a JSON record of the \
+         times on standard output.",
+    );
+    format!("{examples}\n{note}")
 }
 
 #[derive(Serialize)]

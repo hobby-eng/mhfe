@@ -25,12 +25,57 @@ pub struct Options {
     settings: Settings,
 
     /// Read the answers from standard input (for scripts)
-    #[arg(long)]
+    #[arg(long, long_help = stdin_help())]
     stdin: bool,
 }
 
-/// The end of `mhfe encrypt --help`.
+fn stdin_help() -> String {
+    style::option_help(&[
+        "Read the answers from standard input (for scripts).",
+        "Input: the phrase, the password and the password again, one per line. Output: the \
+         container on one line, printed only after its check has passed. Messages go to \
+         standard error, so standard output holds the container alone.",
+    ])
+}
+
+/// The top of `mhfe encrypt --help`.
+pub fn about() -> String {
+    style::command_about(&[
+        "Encrypt a recovery phrase into a 24-word container",
+        "The container is itself a valid 24-word BIP39 phrase. With the default settings the \
+         container and the password are all that recovery needs. Encryption runs 24 rounds: \
+         12 to encrypt, then 12 that decrypt the new container again and compare the result \
+         with the original. At the default settings this takes about two to four minutes.",
+    ])
+}
+
+/// The examples at the end of `mhfe encrypt -h`.
+fn examples() -> String {
+    style::help_section(
+        "Examples:",
+        &[
+            ("mhfe encrypt", "Encrypt with the default settings"),
+            ("mhfe encrypt --pim 1", "Twice the work of the default"),
+            ("mhfe encrypt --mem 1", "3 GiB of memory instead of 2 GiB"),
+            (
+                "mhfe encrypt --pim 1 --mem 1",
+                "Both: twice the passes, 3 GiB of memory",
+            ),
+            (
+                "your-program | mhfe encrypt --stdin > container.txt",
+                "A script: the three answers from another program, the container into a file",
+            ),
+        ],
+    )
+}
+
+/// The end of `mhfe encrypt -h`.
 pub fn help() -> String {
+    examples()
+}
+
+/// The end of `mhfe encrypt --help`.
+pub fn long_help() -> String {
     let asks = style::help_section(
         "What it asks for:",
         &[
@@ -41,36 +86,12 @@ pub fn help() -> String {
             ("Password", "hidden, typed twice"),
         ],
     );
-    let examples = style::help_section(
-        "Examples:",
-        &[
-            ("mhfe encrypt", "Encrypt with the default settings"),
-            ("mhfe encrypt --pim 1", "Twice the work of the default"),
-            ("mhfe encrypt --mem 1", "3 GiB of memory instead of 2 GiB"),
-        ],
-    );
     let note = style::help_note(
         "The container appears after the first 12 rounds, marked as not yet verified, while \
          MHFE decrypts it again to check it. Rely on it only after \"Verified\". Output \
          redirected to a file or a program gets the container only after the check.",
     );
-    let scripts = style::help_section(
-        "For scripts (--stdin):",
-        &[
-            (
-                "Input",
-                "the phrase, the password, the password again, one per line",
-            ),
-            (
-                "Output",
-                "the container on one line, only after its check has passed",
-            ),
-        ],
-    );
-    format!(
-        "{asks}\n{}\n{scripts}\n{examples}\n{note}",
-        settings::settings_help()
-    )
+    format!("{asks}\n{}\n{note}", examples())
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
@@ -148,9 +169,6 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     Ok(SUCCESS)
 }
 
-/// Tells the user what recovery needs besides the container and the password: a setting that
-/// differs from its default, and, for the rare phrase that automatic length detection would
-/// misread, its word count. Otherwise nothing: the suite is fixed and the length is detected.
 /// One line of the advice printed after an encryption, before it is styled.
 #[derive(Debug, PartialEq)]
 enum Advice {
