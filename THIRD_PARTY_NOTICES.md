@@ -1,7 +1,7 @@
 # Third-party notices
 
-The `mhfe` command-line tool and browser package include the following third-party material in
-addition to the Rust crates listed in `Cargo.lock`, each under its own licence.
+The `mhfe` command-line tool and browser package include the following third-party material,
+each under its own licence. The other Rust crates compiled into them are listed in `Cargo.lock`.
 
 ## Argon2 reference implementation
 
@@ -20,3 +20,38 @@ addition to the Rust crates listed in `Cargo.lock`, each under its own licence.
 - "EFF large wordlist" by the Electronic Frontier Foundation (Joseph Bonneau), licensed under the
   Creative Commons Attribution 4.0 International licence (CC BY 4.0):
   https://creativecommons.org/licenses/by/4.0/. See `vendor/eff-large-wordlist.md`.
+
+## bech32
+
+- Source: the `bech32` crate, version 0.12.0 (https://github.com/rust-bitcoin/rust-bech32),
+  compiled into the command-line tool and the browser package for SegWit and Taproot addresses.
+- Licensed under the MIT licence only. Its notice, unchanged from the `LICENSE-MIT` file of the
+  published crate:
+
+```text
+Copyright (c) 2017 Clark Moody
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+```

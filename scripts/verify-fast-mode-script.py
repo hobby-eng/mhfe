@@ -203,9 +203,25 @@ class ChecksumFile(unittest.TestCase):
     def test_serves_a_page_named_with_its_sha256(self):
         self.write_checksum_file("{}  tool.html\n".format(self.digest))
         self.assertEqual(fast_mode.load_checked_page(self.page), (PAGE, self.digest))
-        # Upper-case digits and the binary-mode marker of sha256sum are accepted too.
-        self.write_checksum_file("{}  *tool.html\n".format(self.digest.upper()))
+        # Upper-case digits are accepted too.
+        self.write_checksum_file("{}  tool.html\n".format(self.digest.upper()))
         self.assertEqual(fast_mode.load_checked_page(self.page), (PAGE, self.digest))
+
+    def test_accepts_the_text_and_binary_output_of_sha256sum(self):
+        # AUD-004-FUN002: the literal output of `sha256sum --text tool.html` and
+        # `sha256sum --binary tool.html` (GNU coreutils) for PAGE, as in serve.rs.
+        digest = "a760013b4e475f909edfdcb6e7f228ecd5536cca669741ce43972ecffd5b6f6c"
+        self.assertEqual(self.digest, digest)
+        for line in [
+            "a760013b4e475f909edfdcb6e7f228ecd5536cca669741ce43972ecffd5b6f6c  tool.html\n",
+            "a760013b4e475f909edfdcb6e7f228ecd5536cca669741ce43972ecffd5b6f6c *tool.html\n",
+        ]:
+            self.write_checksum_file(line)
+            self.assertEqual(fast_mode.load_checked_page(self.page), (PAGE, digest), repr(line))
+        # Only one marker is removed: a further "*" belongs to the name, which then differs.
+        for line in ["{}  *tool.html\n".format(digest), "{} **tool.html\n".format(digest)]:
+            self.write_checksum_file(line)
+            self.assertIn("names *tool.html, not tool.html", self.refusal(), repr(line))
 
     def test_refuses_without_a_matching_checksum_file(self):
         self.assertIn("There is no readable mhfe-fast-mode.sha256", self.refusal())
@@ -216,10 +232,15 @@ class ChecksumFile(unittest.TestCase):
         for malformed in [
             "",
             "{} tool.html\n".format(self.digest),
+            "{}*tool.html\n".format(self.digest),
+            "{}\ttool.html\n".format(self.digest),
             "{0}  tool.html\n{0}  tool.html\n".format(self.digest),
+            "{0}  tool.html\n{0} *tool.html\n".format(self.digest),
             "{}  tool.txt\n".format(self.digest),
             "{}  ../tool.html\n".format(self.digest),
+            "{} *../tool.html\n".format(self.digest),
             "{}  tool.html\n".format(self.digest[:63]),
+            "{}g *tool.html\n".format(self.digest[:63]),
         ]:
             self.write_checksum_file(malformed)
             self.assertIn("must hold exactly one line", self.refusal(), repr(malformed))

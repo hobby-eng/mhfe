@@ -31,8 +31,12 @@ use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
 /// The checksum file that must lie next to the page. Its name never changes, so a tool can ship
 /// it beside its HTML file and the launcher finds it without being told. It holds one line in the
-/// format `sha256sum` writes: the SHA-256 of the page, two spaces and the page's file name.
+/// format `sha256sum` writes: the SHA-256 of the page, a space, a mode marker (a second space in
+/// text mode, `*` in binary mode) and the page's file name.
 pub const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
+
+/// Hexadecimal digits of a SHA-256 digest.
+const SHA256_HEX_DIGITS: usize = 64;
 
 /// Longest request head accepted; real browsers send far less.
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
@@ -175,7 +179,8 @@ fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
     })?;
     let malformed = || {
         Failure::invalid_input(format!(
-            "{} must hold exactly one line, \"<SHA-256>  <page>.html\"; nothing was served.",
+            "{} must hold exactly one line, \"<SHA-256>  <page>.html\" or \"<SHA-256> \
+             *<page>.html\"; nothing was served.",
             path.display()
         ))
     };
@@ -183,19 +188,28 @@ fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
     let (Some(line), None) = (lines.next(), lines.next()) else {
         return Err(malformed());
     };
-    // The format sha256sum writes: 64 hex digits, two spaces, the file name ("*" marks binary
-    // mode). The name is a plain file name next to the checksum file, never a path.
-    let (digest, name) = line.split_once("  ").ok_or_else(malformed)?;
-    let name = name.trim_end().trim_start_matches('*');
+    let (digest, name) = split_checksum_line(line).ok_or_else(malformed)?;
+    let name = name.trim_end();
+    // The name is a plain file name next to the checksum file, never a path.
     let is_plain_name = !name.contains(['/', '\\']) && name != ".." && name != ".";
-    if digest.len() != 64
-        || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+    if !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
         || !name.ends_with(".html")
         || !is_plain_name
     {
         return Err(malformed());
     }
     Ok((digest.to_ascii_lowercase(), name.to_owned()))
+}
+
+/// The digest and the file name of a line in the format sha256sum writes: 64 digits, a space,
+/// then a second space in text mode (`--text`) or `*` in binary mode (`--binary`), then the name.
+/// Only that one marker is removed; a name that itself starts with `*` stays as it is and so
+/// does not match the page.
+fn split_checksum_line(line: &str) -> Option<(&str, &str)> {
+    let digest = line.get(..SHA256_HEX_DIGITS)?;
+    let rest = line.get(SHA256_HEX_DIGITS..)?.strip_prefix(' ')?;
+    let name = rest.strip_prefix(' ').or_else(|| rest.strip_prefix('*'))?;
+    Some((digest, name))
 }
 
 /// The page, read once, after its checksum file next to it has named it with a matching SHA-256.
@@ -663,9 +677,37 @@ mod tests {
         folder.write_checksum_file(&format!("{digest}  tool.html\n"));
         let (page, checked) = load_checked_page(&folder.page()).unwrap();
         assert_eq!((page.as_slice(), checked.as_str()), (PAGE, digest.as_str()));
-        // Upper-case digits and the binary-mode marker of sha256sum are accepted too.
-        folder.write_checksum_file(&format!("{}  *tool.html\n", digest.to_uppercase()));
+        // Upper-case digits are accepted too.
+        folder.write_checksum_file(&format!("{}  tool.html\n", digest.to_uppercase()));
         assert!(load_checked_page(&folder.page()).is_ok());
+    }
+
+    /// AUD-004-FUN002: the literal output of `sha256sum --text tool.html` and
+    /// `sha256sum --binary tool.html` (GNU coreutils) for PAGE. Both are accepted.
+    #[test]
+    fn accepts_the_text_and_binary_output_of_sha256sum() {
+        const DIGEST: &str = "a760013b4e475f909edfdcb6e7f228ecd5536cca669741ce43972ecffd5b6f6c";
+        assert_eq!(hex::encode(Sha256::digest(PAGE)), DIGEST);
+        let folder = TestFolder::new("modes");
+        for line in [
+            "a760013b4e475f909edfdcb6e7f228ecd5536cca669741ce43972ecffd5b6f6c  tool.html\n",
+            "a760013b4e475f909edfdcb6e7f228ecd5536cca669741ce43972ecffd5b6f6c *tool.html\n",
+        ] {
+            folder.write_checksum_file(line);
+            let (_, checked) = load_checked_page(&folder.page()).unwrap();
+            assert_eq!(checked, DIGEST, "{line:?}");
+        }
+        // Only one marker is removed: a further "*" belongs to the name, which then differs.
+        for line in [
+            format!("{DIGEST}  *tool.html\n"),
+            format!("{DIGEST} **tool.html\n"),
+        ] {
+            folder.write_checksum_file(&line);
+            assert!(
+                refusal(&folder).contains("names *tool.html, not tool.html"),
+                "{line:?}"
+            );
+        }
     }
 
     #[test]
@@ -683,10 +725,15 @@ mod tests {
         for malformed in [
             String::new(),
             format!("{digest} tool.html\n"),
+            format!("{digest}*tool.html\n"),
+            format!("{digest}\ttool.html\n"),
             format!("{digest}  tool.html\n{digest}  tool.html\n"),
+            format!("{digest}  tool.html\n{digest} *tool.html\n"),
             format!("{digest}  tool.txt\n"),
             format!("{digest}  ../tool.html\n"),
+            format!("{digest} *../tool.html\n"),
             format!("{}  tool.html\n", &digest[..63]),
+            format!("{}g *tool.html\n", &digest[..63]),
         ] {
             folder.write_checksum_file(&malformed);
             assert!(
