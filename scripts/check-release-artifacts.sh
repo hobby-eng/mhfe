@@ -59,7 +59,7 @@ PY
 fi
 
 marker="MHFE-TEST-ONLY-REDUCED-ARGON2-COST"
-release_artifacts=(target/release/mhfe target/ssse3/release/mhfe dist/mhfe_core_bg.wasm)
+release_artifacts=(target/release/mhfe dist/mhfe_core_bg.wasm)
 
 test_binary="$(
   cargo test --locked --lib --no-run --message-format=json 2>/dev/null |

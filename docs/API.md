@@ -104,7 +104,6 @@ strings in the browser.
 | `NOT_ENOUGH_MEMORY`               | Less free memory than the level needs, also within a cgroup  |
 | `MEMORY_ALLOCATION_FAILED`        | The operating system refused the memory                      |
 | `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser: > 0)     |
-| `PROCESSOR_NOT_SUPPORTED`         | The SSSE3 build runs on a processor without SSSE3            |
 | `ARGON2_FAILED`                   | The Argon2 code reported an error                            |
 | `INTERNAL_ERROR`                  | Anything else                                                |
 

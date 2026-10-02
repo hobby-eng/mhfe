@@ -25,10 +25,21 @@ pub fn available_memory_bytes() -> Option<u64> {
 pub struct NativeEngine {
     cost: Argon2Cost,
     work_area: WorkArea,
+    /// Whether the Argon2 core runs its SSSE3 copy; see src/engine/argon2_simd.c.
+    ssse3: bool,
+}
+
+/// Whether this processor can run the SSSE3 copy of the Argon2 core, which only x86-64 builds
+/// have. Without SSSE3 the SSE2 copy runs, which every 64-bit x86 processor can.
+pub(super) fn processor_has_ssse3() -> bool {
+    #[cfg(target_arch = "x86_64")]
+    return std::arch::is_x86_feature_detected!("ssse3");
+    #[cfg(not(target_arch = "x86_64"))]
+    false
 }
 
 /// Checks, without allocating anything, that this build and computer can run `work`: the memory
-/// level is supported, the processor has the instructions of this build, and the memory is free.
+/// level is supported and the memory is free.
 /// A program calls it before asking for secrets and reserves the memory after the password is
 /// encoded, the order the specification gives for creating a container.
 pub fn check_can_run(work: WorkFactor) -> Result<(), MhfeError> {
@@ -38,7 +49,6 @@ pub fn check_can_run(work: WorkFactor) -> Result<(), MhfeError> {
             highest_supported: HIGHEST_MEMORY_LEVEL,
         });
     }
-    check_processor()?;
     check_free_memory(work.memory_bytes())
 }
 
@@ -55,14 +65,17 @@ impl NativeEngine {
     #[cfg(test)]
     pub(crate) fn reduced_for_tests(cost: Argon2Cost) -> Result<Self, MhfeError> {
         assert!(!REDUCED_COST_MARKER.is_empty());
-        check_processor()?;
         check_free_memory(cost.memory_bytes())?;
         Self::allocate(cost)
     }
 
     fn allocate(cost: Argon2Cost) -> Result<Self, MhfeError> {
         let work_area = WorkArea::allocate(cost.memory_bytes())?;
-        Ok(Self { cost, work_area })
+        Ok(Self {
+            cost,
+            work_area,
+            ssse3: processor_has_ssse3(),
+        })
     }
 }
 
@@ -95,30 +108,9 @@ impl Argon2Engine for NativeEngine {
             lanes: LANES,
             threads: LANES,
             version: ARGON2_VERSION_13,
+            ssse3: self.ssse3,
         };
         ffi::argon2id(&inputs, &mut self.work_area, key)
-    }
-}
-
-/// A build with the `ssse3` feature runs SSSE3 instructions in the Argon2 code. On a processor
-/// without them it would stop with "Illegal instruction", so it refuses before any of them runs.
-fn check_processor() -> Result<(), MhfeError> {
-    #[cfg(all(target_arch = "x86_64", feature = "ssse3"))]
-    return require_ssse3(std::arch::is_x86_feature_detected!("ssse3"));
-    #[cfg(not(all(target_arch = "x86_64", feature = "ssse3")))]
-    Ok(())
-}
-
-#[cfg(any(test, all(target_arch = "x86_64", feature = "ssse3")))]
-fn require_ssse3(processor_has_ssse3: bool) -> Result<(), MhfeError> {
-    if processor_has_ssse3 {
-        Ok(())
-    } else {
-        Err(MhfeError::ProcessorNotSupported(
-            "this build of mhfe needs a processor with SSSE3, which this computer lacks; use the \
-             standard build, the one without \"ssse3\" in its name"
-                .to_owned(),
-        ))
     }
 }
 
@@ -148,14 +140,6 @@ mod tests {
             hex::encode(key),
             "e0e8eba33f1404a83c911a324d9b49db83dae755f2bdfb4b63043ca5b7125df2"
         );
-    }
-
-    #[test]
-    fn an_ssse3_build_refuses_a_processor_without_ssse3() {
-        assert_eq!(require_ssse3(true), Ok(()));
-        let error = require_ssse3(false).unwrap_err();
-        assert_eq!(error.code(), "PROCESSOR_NOT_SUPPORTED");
-        assert!(error.to_string().contains("SSSE3"));
     }
 
     #[test]

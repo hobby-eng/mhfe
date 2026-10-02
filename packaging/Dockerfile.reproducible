@@ -3,7 +3,6 @@
 #   mhfe-<version>-linux-x86_64.tar.gz    command-line tool for Linux on x86-64
 #   mhfe-<version>-linux-aarch64.tar.gz   command-line tool for Linux on ARM64
 #   mhfe-<version>-windows-x86_64.zip     command-line tool for Windows on x86-64
-#   ...-linux-x86_64-ssse3, ...-windows-x86_64-ssse3   the same, 7 to 10% faster, needing SSSE3
 #   mhfe-<version>-browser.tar.gz         the browser package (dist/)
 #   SHA256SUMS
 #
@@ -89,13 +88,9 @@ COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
 RUN --network=none cargo fmt --all -- --check \
     && cargo clippy --locked --offline --all-targets --all-features -- -D warnings \
     && cargo test --locked --offline \
-    && cargo test --locked --offline --features ssse3 --target-dir target/ssse3 \
     && cargo build --locked --offline --release \
     && cargo build --locked --offline --release --target aarch64-unknown-linux-gnu \
     && cargo build --locked --offline --release --target x86_64-pc-windows-gnu \
-    && cargo build --locked --offline --release --features ssse3 --target-dir target/ssse3 \
-    && cargo build --locked --offline --release --features ssse3 --target-dir target/ssse3 \
-         --target x86_64-pc-windows-gnu \
     && PREBUILT_ARGON2_DIR=/prebuilt-argon2 scripts/build-wasm.sh \
     && node scripts/verify-argon2-wasm.mjs \
     && node scripts/verify-browser-package.mjs \

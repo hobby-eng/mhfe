@@ -48,8 +48,6 @@ pub enum MhfeError {
     MemoryAllocation {
         bytes: u64,
     },
-    /// The program was built for processor features this computer lacks (the SSSE3 build).
-    ProcessorNotSupported(String),
     /// The memory level needs more memory than this environment can address, for example a
     /// browser, where WebAssembly is limited to 4 GiB.
     MemoryLevelNotSupportedHere {
@@ -157,7 +155,6 @@ impl fmt::Display for MhfeError {
                  highest supported level here is {highest_supported}. Use the command-line \
                  tool on a 64-bit system for higher levels"
             ),
-            Self::ProcessorNotSupported(message) => f.write_str(message),
             Self::Argon2(message) => write!(f, "Argon2 failed: {message}"),
             Self::Internal(message) => write!(f, "internal error: {message}"),
         }
@@ -190,7 +187,6 @@ impl MhfeError {
             Self::NotEnoughMemory { .. } => "NOT_ENOUGH_MEMORY",
             Self::MemoryAllocation { .. } => "MEMORY_ALLOCATION_FAILED",
             Self::MemoryLevelNotSupportedHere { .. } => "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
-            Self::ProcessorNotSupported(_) => "PROCESSOR_NOT_SUPPORTED",
             Self::Argon2(_) => "ARGON2_FAILED",
             Self::Internal(_) => "INTERNAL_ERROR",
         }

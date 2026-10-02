@@ -16,8 +16,11 @@ const ARGON2_OK: c_int = 0;
 /// `Argon2_id` in `enum Argon2_type`.
 const ARGON2_ID: c_int = 2;
 pub(super) const ARGON2_VERSION_13: u32 = 0x13;
-/// MHFE sets no flag: it wipes its own copies of the password.
+/// MHFE sets none of argon2.h's flags: it wipes its own copies of the password.
 const ARGON2_DEFAULT_FLAGS: u32 = 0;
+/// Our own flag, read only by src/engine/argon2_simd.c, which must use the same value: run the
+/// copy of opt.c compiled with SSSE3. The vendored code reads only the two lowest bits.
+const MHFE_FLAG_SSSE3: u32 = 1 << 31;
 
 /// Alignment of the work area; `malloc` in C guarantees the same on 64-bit systems.
 const WORK_AREA_ALIGNMENT: usize = 16;
@@ -122,6 +125,9 @@ pub(super) struct Argon2Inputs<'a> {
     pub lanes: u32,
     pub threads: u32,
     pub version: u32,
+    /// Run the SSSE3 copy of the Argon2 core instead of the SSE2 one; only x86-64 has both, and
+    /// only a processor with SSSE3 may get `true`.
+    pub ssse3: bool,
 }
 
 /// Runs Argon2id in `work_area` and writes the tag into `output`.
@@ -150,7 +156,11 @@ pub(super) fn argon2id(
         version: inputs.version,
         allocate_cbk: Some(hand_out_work_area),
         free_cbk: Some(keep_work_area),
-        flags: ARGON2_DEFAULT_FLAGS,
+        flags: if inputs.ssse3 {
+            ARGON2_DEFAULT_FLAGS | MHFE_FLAG_SSSE3
+        } else {
+            ARGON2_DEFAULT_FLAGS
+        },
     };
     run(&mut context, work_area)
 }
@@ -393,6 +403,7 @@ pub(super) fn available_memory_bytes() -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::native::processor_has_ssse3;
 
     const RFC_TAG: &str = "0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659";
     /// Smallest Argon2 memory for `lanes` lanes: two blocks per slice and four slices per lane.
@@ -411,6 +422,7 @@ mod tests {
             lanes: 4,
             threads: 4,
             version: ARGON2_VERSION_13,
+            ssse3: false,
         }
     }
 
@@ -468,9 +480,37 @@ mod tests {
             lanes: 4,
             threads: 4,
             version: ARGON2_VERSION_13,
+            ssse3: false,
         };
         assert_eq!(hex::encode(c_tag(&rfc, 32).unwrap()), RFC_TAG);
         assert_eq!(hex::encode(rustcrypto_tag(&rfc, 32)), RFC_TAG);
+    }
+
+    #[test]
+    fn both_copies_of_the_argon2_core_give_the_rfc_9106_tag() {
+        let password = [0x01; 32];
+        let salt = [0x02; 16];
+        let secret = [0x03; 8];
+        let associated_data = [0x04; 12];
+        let mut rfc = Argon2Inputs {
+            password: &password,
+            salt: &salt,
+            secret: &secret,
+            associated_data: &associated_data,
+            passes: 3,
+            memory_kib: 32,
+            lanes: 4,
+            threads: 4,
+            version: ARGON2_VERSION_13,
+            ssse3: false,
+        };
+        assert_eq!(hex::encode(c_tag(&rfc, 32).unwrap()), RFC_TAG);
+        // Only x86-64 has the SSSE3 copy, and only a processor with SSSE3 may run it; every
+        // GitHub runner and the development laptops have it.
+        if processor_has_ssse3() {
+            rfc.ssse3 = true;
+            assert_eq!(hex::encode(c_tag(&rfc, 32).unwrap()), RFC_TAG);
+        }
     }
 
     #[test]
@@ -512,6 +552,8 @@ mod tests {
                 } else {
                     ARGON2_VERSION_13
                 },
+                // Half of the cases on each copy of the Argon2 core where both exist.
+                ssse3: processor_has_ssse3() && case % 2 == 0,
             };
             let output_len = [4, 16, 32, 64, 100][case as usize % 5];
             assert_eq!(

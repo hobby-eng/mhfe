@@ -21,15 +21,10 @@ python3 scripts/third-party-licenses.py --check
 cargo fmt --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings
+# On x86-64 the tests run both the SSE2 and the SSSE3 copy of the Argon2 core.
 cargo test --locked
-# The opt-in SSSE3 build must give byte for byte the same Argon2 results: its tests check the
-# same expected tags and containers.
-if [[ "$(uname -m)" == "x86_64" ]]; then
-  cargo test --locked --features ssse3 --target-dir target/ssse3
-fi
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo build --locked --release
-cargo build --locked --release --features ssse3 --target-dir target/ssse3
 # Hidden terminal input in a pseudo-terminal: control characters refused, editing keys, Ctrl+C.
 python3 scripts/verify-hidden-input.py target/release/mhfe
 

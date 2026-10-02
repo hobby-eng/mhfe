@@ -280,14 +280,14 @@ MHFE's own prompts or the `systemd-ask-password` example above.
 
 The exit code tells what happened:
 
-| Code | Meaning                                                                             |
-| ---- | ----------------------------------------------------------------------------------- |
-| 0    | Done; for `check`, the recovery matches                                             |
-| 1    | Internal error, including an encryption whose check failed (nothing is shown then)  |
-| 2    | Invalid input: phrase, container, password, setting, address or option              |
-| 3    | Does not match: wrong password, PIM, memory level, container or selected length     |
-| 4    | Not enough memory for the memory level, or a processor without SSSE3 for that build |
-| 130  | Cancelled with Ctrl+C                                                               |
+| Code | Meaning                                                                            |
+| ---- | ---------------------------------------------------------------------------------- |
+| 0    | Done; for `check`, the recovery matches                                            |
+| 1    | Internal error, including an encryption whose check failed (nothing is shown then) |
+| 2    | Invalid input: phrase, container, password, setting, address or option             |
+| 3    | Does not match: wrong password, PIM, memory level, container or selected length    |
+| 4    | Not enough memory for the memory level                                             |
+| 130  | Cancelled with Ctrl+C                                                              |
 
 Ctrl+C stops the tool at once, also in the middle of a round; the operating system then discards its
 memory.
@@ -295,11 +295,9 @@ memory.
 ## Release files
 
 A release has archives for Linux (x86-64 and ARM64), macOS (Intel and Apple silicon) and Windows
-(x86-64), each with the `mhfe` program, its launcher and the licences, and the browser package. For
-x86-64 there are two builds: the standard one runs on every 64-bit x86 processor, and the one with
-`ssse3` in its name is 7 to 10% faster ([measured](docs/measurements/README.md)) but needs SSSE3,
-which almost every computer made since 2008 has; without it, it stops with a clear message. When
-unsure, take the standard one.
+(x86-64), each with the `mhfe` program, its launcher and the licences, and the browser package. One
+x86-64 program fits every 64-bit x86 processor: it uses SSSE3 where the processor has it, 7 to 10%
+faster ([measured](docs/measurements/README.md)), and SSE2 otherwise.
 
 Check a download against the release's `SHA256SUMS` before you use it:
 
@@ -336,11 +334,11 @@ Argon2 is the reference C implementation of its authors, vendored unchanged in
 [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) and used by both the native tool and the
 browser package. Version 0.3.0 was the last release to implement suite 2.
 
-On x86-64 the Argon2 code uses only SSE2, which every 64-bit x86 processor has.
-`cargo build --release --features ssse3` builds it with SSSE3 instead, 7 to 10% faster in the
-[measurements](docs/measurements/README.md). Such a program checks the processor before it starts
-Argon2 and refuses with a clear message where SSSE3 is missing, as on some virtual machines. Both
-builds give byte for byte the same results; their tests check the same values.
+On x86-64 the Argon2 code is compiled twice, with SSE2, which every 64-bit x86 processor has, and
+with SSSE3, 7 to 10% faster in the [measurements](docs/measurements/README.md). The program checks
+the processor and runs the SSSE3 copy only where SSSE3 is present, so it also runs on older AMD
+processors and on virtual machines that hide SSSE3. Both copies give byte for byte the same
+results, and the tests run both.
 
 The Rust source is licensed under MIT; see [`LICENSE`](LICENSE).
 

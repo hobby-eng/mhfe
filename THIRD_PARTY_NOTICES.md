@@ -391,9 +391,9 @@ is described above.
 ### How the licence is chosen
 
 - The crates are those compiled into the program for every release target: Linux,
-  Windows and macOS on x86-64, Linux and macOS on ARM64, with and without the `ssse3`
-  feature, and WebAssembly with the `wasm` feature. Build scripts and procedural macros,
-  which run only while building, are left out. Not every crate is in every archive.
+  Windows and macOS on x86-64, Linux and macOS on ARM64, and WebAssembly with the `wasm`
+  feature. Build scripts and procedural macros, which run only while building, are left
+  out. Not every crate is in every archive.
 - Every licence joined by AND is required and listed. Among licences joined by OR, MIT is
   used when it is offered, otherwise Apache-2.0, otherwise the only licence.
 - The text is the crate's own licence file, unchanged, with its copyright lines. Where a
