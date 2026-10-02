@@ -207,9 +207,6 @@ mod tests {
     fn only_a_free_memory_refusal_suggests_a_level() {
         let no_reservation = with_level_hint(MhfeError::MemoryAllocation { bytes: 2 * GIB });
         assert!(!no_reservation.message.contains(LEVEL_HINT));
-        let no_ssse3 = with_level_hint(MhfeError::ProcessorNotSupported("no SSSE3".to_owned()));
-        assert!(!no_ssse3.message.contains(LEVEL_HINT));
-        assert_eq!(no_ssse3.message, "No SSSE3");
 
         let not_enough = with_level_hint(MhfeError::NotEnoughMemory {
             needed_bytes: 2 * GIB,

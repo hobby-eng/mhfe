@@ -66,8 +66,7 @@ impl From<MhfeError> for Failure {
             MhfeError::VerifierMismatch => NO_MATCH,
             MhfeError::NotEnoughMemory { .. }
             | MhfeError::MemoryAllocation { .. }
-            | MhfeError::MemoryLevelNotSupportedHere { .. }
-            | MhfeError::ProcessorNotSupported(_) => NOT_ENOUGH_RESOURCES,
+            | MhfeError::MemoryLevelNotSupportedHere { .. } => NOT_ENOUGH_RESOURCES,
             MhfeError::Cancelled => CANCELLED,
             MhfeError::FixedPoint
             | MhfeError::VerificationFailed

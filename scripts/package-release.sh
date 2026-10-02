@@ -4,9 +4,8 @@
 #
 #   scripts/package-release.sh <version> <output folder> [package ...]
 #
-# Packages: linux-x86_64, linux-aarch64, windows-x86_64, macos-x86_64, macos-aarch64, browser,
-# and linux-x86_64-ssse3, windows-x86_64-ssse3, macos-x86_64-ssse3, built with `--features ssse3
-# --target-dir target/ssse3`. Without a list it packs the six that packaging/Dockerfile.reproducible builds. Build first: the
+# Packages: linux-x86_64, linux-aarch64, windows-x86_64, macos-x86_64, macos-aarch64, browser.
+# Without a list it packs the four that packaging/Dockerfile.reproducible builds. Build first: the
 # command-line tools with `cargo build --release [--target ...]`, the browser package with
 # scripts/build-wasm.sh. Needs GNU tar, gzip, zip and sha256sum.
 set -euo pipefail
@@ -19,7 +18,7 @@ output="$(mkdir -p "$2" && cd "$2" && pwd)"
 shift 2
 packages=("$@")
 if [[ ${#packages[@]} -eq 0 ]]; then
-  packages=(linux-x86_64 linux-x86_64-ssse3 linux-aarch64 windows-x86_64 windows-x86_64-ssse3 browser)
+  packages=(linux-x86_64 linux-aarch64 windows-x86_64 browser)
 fi
 tar_command="$(command -v gtar || command -v tar)"
 archives=()
@@ -105,15 +104,6 @@ for package in "${packages[@]}"; do
       ;;
     macos-x86_64)
       cli_package "$package" target/x86_64-apple-darwin/release/mhfe packaging/mhfe-launch.command
-      ;;
-    linux-x86_64-ssse3) cli_package "$package" target/ssse3/release/mhfe packaging/mhfe-launch.sh ;;
-    windows-x86_64-ssse3)
-      cli_package "$package" target/ssse3/x86_64-pc-windows-gnu/release/mhfe.exe \
-        packaging/mhfe-launch.bat
-      ;;
-    macos-x86_64-ssse3)
-      cli_package "$package" target/ssse3/x86_64-apple-darwin/release/mhfe \
-        packaging/mhfe-launch.command
       ;;
     macos-aarch64)
       cli_package "$package" target/aarch64-apple-darwin/release/mhfe packaging/mhfe-launch.command

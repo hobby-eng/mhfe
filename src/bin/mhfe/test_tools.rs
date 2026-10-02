@@ -285,13 +285,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     let record = Measurement {
         suite_id: mhfe::SUITE_ID,
         implementation: format!("mhfe {}", env!("CARGO_PKG_VERSION")),
-        argon2_engine: if cfg!(all(target_arch = "x86_64", feature = "ssse3")) {
-            "reference C, opt.c with SSSE3, 4 threads"
-        } else if cfg!(target_arch = "x86_64") {
-            "reference C, opt.c with SSE2, 4 threads"
-        } else {
-            "reference C, ref.c, 4 threads"
-        },
+        argon2_engine: argon2_engine(),
         target: std::env::consts::ARCH,
         pim: work.pim(),
         memory_level: work.memory_level(),
@@ -305,4 +299,17 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
         .map_err(|error| Failure::internal(error.to_string()))?;
     println!("{text}");
     Ok(SUCCESS)
+}
+
+/// The Argon2 code that ran, chosen as the engine chooses it (`processor_has_ssse3` in
+/// src/engine/native.rs): x86-64 runs the SSSE3 copy of opt.c where the processor has SSSE3.
+fn argon2_engine() -> &'static str {
+    #[cfg(target_arch = "x86_64")]
+    return if std::arch::is_x86_feature_detected!("ssse3") {
+        "reference C, opt.c with SSSE3, 4 threads"
+    } else {
+        "reference C, opt.c with SSE2, 4 threads"
+    };
+    #[cfg(not(target_arch = "x86_64"))]
+    "reference C, ref.c, 4 threads"
 }
