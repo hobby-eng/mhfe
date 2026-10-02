@@ -51,11 +51,14 @@ pub fn ok(text: impl Display) {
     eprintln!("{} {text}", paint(GOOD, "✓"));
 }
 
-/// Advice that can be read and passed over, in grey, wrapped to the text width.
-pub fn hint(text: &str) {
-    for line in wrap(text, TEXT_WIDTH) {
+/// Advice that can be read and passed over, in grey, wrapped to the text width. Returns the lines
+/// it took, for a step that erases itself once answered (terminal::Step).
+pub fn hint(text: &str) -> usize {
+    let lines = wrap(text, TEXT_WIDTH);
+    for line in &lines {
         eprintln!("{}", paint(MUTED, line));
     }
+    lines.len()
 }
 
 /// A warning: a yellow headline after "!", then `body` wrapped, every line marked with "!".
@@ -63,9 +66,15 @@ pub fn warn(headline: &str, body: &str) {
     marked(WARNING, "!", headline, body);
 }
 
-/// A mistake in an answer that can be typed again: a yellow "!" and the message.
-pub fn retry(text: impl Display) {
-    eprintln!("{} {text}", paint(WARNING, "!"));
+/// A mistake in an answer that can be typed again: the message wrapped, every line after a yellow
+/// "!". Returns the lines it took, as `hint` does.
+pub fn retry(text: impl Display) -> usize {
+    // Two columns go to the mark and its space.
+    let lines = wrap(&text.to_string(), TEXT_WIDTH - 2);
+    for line in &lines {
+        eprintln!("{} {line}", paint(WARNING, "!"));
+    }
+    lines.len()
 }
 
 /// An error message after a red "✗ Error:".
@@ -136,7 +145,7 @@ fn visible_width(text: &str) -> usize {
     width
 }
 
-/// Writes a question: its words in bold, a closing note such as "(hidden):" or "[y/N]:" in grey.
+/// Writes a question: its words in bold, a closing note such as "(hidden):" or "[1]:" in grey.
 pub fn prompt(text: &str) {
     let (question, note) = text.split_at(note_start(text));
     eprint!("{}{}", paint(STRONG, question), paint(MUTED, note));
@@ -378,7 +387,7 @@ mod tests {
     #[test]
     fn a_prompt_note_is_split_off() {
         assert_eq!(note_start("Password (hidden): "), 8);
-        assert_eq!(note_start("Is this your phrase? [Y/n]: "), 20);
+        assert_eq!(note_start("Choice [1]: "), 6);
         assert_eq!(note_start("Choice: "), 8);
     }
 }

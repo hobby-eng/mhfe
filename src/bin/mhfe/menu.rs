@@ -1,32 +1,24 @@
 //! The menu that `mhfe` shows when it starts without arguments in a terminal, as from a
 //! double-click or a launcher script next to it.
 //!
-//! Each entry runs a command exactly as if it had been typed after `mhfe`, with its default
-//! settings, and shows that command in grey, so that the person can type it later; a command
-//! with other settings, such as `mhfe encrypt --pim 1`, is typed. An entry is chosen with the
-//! arrow keys and Enter or at once with its number; q quits. After a command the menu waits for
-//! Enter, so that a window opened by a double-click stays until its result has been read.
+//! Each entry runs a command exactly as if it had been typed after `mhfe` and shows that command
+//! in grey, so that the person can type it later; the command asks for its settings itself. An
+//! entry is chosen with the arrow keys and Enter or at once with its number; Escape, or q, quits.
+//! After a command the menu waits for Enter, so that a window opened by a double-click stays until
+//! its result has been read. Password generation instead repeats on Enter and returns to the menu
+//! on Escape, with each password shown on the private screen.
 
 use std::ffi::OsString;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, Write};
 
 use anstream::eprintln;
 use clap::{CommandFactory, Parser};
 
+use crate::choice::{draw_entries, redraw_from, write_control};
 use crate::exit::{Failure, SUCCESS};
 use crate::hidden_input::{self, Key};
-use crate::style::{self, paint, ACCENT, MUTED, STRONG};
-use crate::{serve, show_failure, Cli};
-
-/// The width that a menu line must not exceed; the menu redraws itself by moving the cursor up
-/// line by line, which a line wrapped by the terminal would upset. As style.rs: 78 columns.
-const LINE_WIDTH: usize = 78;
-
-/// Moves the cursor up `lines_above` lines to the start of the line, then clears to the end of
-/// the screen (VT100 "cursor up" and "erase in display").
-pub(crate) fn redraw_from(lines_above: usize) -> String {
-    format!("\x1b[{lines_above}A\r\x1b[J")
-}
+use crate::style;
+use crate::{serve, show_failure, terminal, Cli};
 
 /// What an entry does when it is chosen.
 enum Action {
@@ -34,6 +26,8 @@ enum Action {
     Run(Vec<OsString>),
     /// Shows `mhfe --help`.
     Help,
+    /// Makes passwords until the person returns to the menu.
+    Password,
     Quit,
 }
 
@@ -61,19 +55,11 @@ impl Entry {
     }
 }
 
-/// Whether the menu can run: it reads single keys from a terminal and draws on one. Anything
-/// else, such as a script or a pipe, gets the help instead, as before.
-pub fn can_run() -> bool {
-    io::stdin().is_terminal()
-        && io::stderr().is_terminal()
-        && std::env::var_os("TERM").is_none_or(|term| term != "dumb")
-}
-
 pub fn run() -> Result<i32, Failure> {
     style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
     eprintln!();
     style::hint(
-        "Encrypts a BIP39 recovery phrase into a password-protected container, 24 words or as \
+        "Encrypts a BIP39 seed phrase into a password-protected container, 24 words or as \
          long as the phrase, and recovers it. Choose what to do; the grey command does the same \
          when typed.",
     );
@@ -87,6 +73,10 @@ pub fn run() -> Result<i32, Failure> {
         match &entries[chosen].action {
             Action::Quit => return Ok(SUCCESS),
             Action::Help => Cli::command().print_long_help()?,
+            Action::Password => match make_passwords() {
+                Ok(()) => continue,
+                Err(failure) => show_failure(&failure),
+            },
             Action::Run(arguments) => {
                 if let Err(failure) = run_command(arguments) {
                     show_failure(&failure);
@@ -94,7 +84,7 @@ pub fn run() -> Result<i32, Failure> {
             }
         }
         eprintln!();
-        if !wait_for_enter()? {
+        if !wait_for_enter("Press Enter to return to the menu (Esc quits).")? {
             return Ok(SUCCESS);
         }
     }
@@ -117,9 +107,14 @@ fn entries() -> Vec<Entry> {
             style::warn("The fast mode is not offered.", &failure.message);
         }
     }
-    for name in ["encrypt", "decrypt", "check", "password"] {
+    for name in ["encrypt", "decrypt", "check"] {
         entries.push(Entry::command(name));
     }
+    // Passwords are made again on Enter until one suits (make_passwords).
+    entries.push(Entry {
+        action: Action::Password,
+        ..Entry::command("password")
+    });
     entries.push(Entry {
         label: "Show every command and option".to_owned(),
         command: "mhfe --help".to_owned(),
@@ -158,51 +153,20 @@ fn choose(entries: &[Entry], selected: &mut usize) -> Result<Option<usize>, Fail
     })
 }
 
-/// Draws the menu and returns how many lines it took. The highlighted entry has a cyan marker
-/// and a bold label, so that it stands out also without colours.
+/// Draws the menu and returns how many lines it took: the entries with their commands in grey,
+/// then the hint line.
 fn draw(entries: &[Entry], selected: usize) -> usize {
-    let label_width = entries
+    let lines: Vec<(&str, &str)> = entries
         .iter()
-        .map(|entry| entry.label.chars().count())
-        .max()
-        .unwrap_or(0);
-    for (index, entry) in entries.iter().enumerate() {
-        let number = paint(MUTED, index + 1);
-        let (marker, label) = if index == selected {
-            (paint(ACCENT, "›"), paint(STRONG, &entry.label))
-        } else {
-            (" ".to_owned(), entry.label.clone())
-        };
-        // Marker, number and the gaps: "› 1  " and two spaces before the command.
-        let command_room = LINE_WIDTH.saturating_sub(5 + label_width + 2);
-        let command = shortened(&entry.command, command_room);
-        if command.is_empty() {
-            eprintln!("{marker} {number}  {label}");
-        } else {
-            // Padded by hand: the width of a painted label would count its colour codes.
-            let padding = " ".repeat(label_width - entry.label.chars().count());
-            eprintln!(
-                "{marker} {number}  {label}{padding}  {}",
-                paint(MUTED, command)
-            );
-        }
-    }
+        .map(|entry| (entry.label.as_str(), entry.command.as_str()))
+        .collect();
+    let entry_lines = draw_entries(&lines, selected);
     eprintln!();
     let last = entries.len();
     style::hint(&format!(
-        "↑ ↓ choose · Enter runs · 1 to {last} run at once · q quits"
+        "↑ ↓ choose · Enter runs · 1 to {last} run at once · Esc quits"
     ));
-    entries.len() + 2
-}
-
-/// `text` cut to `room` characters with "…" at the end, so that a long page name cannot wrap
-/// the line.
-fn shortened(text: &str, room: usize) -> String {
-    if text.chars().count() <= room {
-        return text.to_owned();
-    }
-    let kept: String = text.chars().take(room.saturating_sub(1)).collect();
-    format!("{kept}…")
+    entry_lines + 2
 }
 
 fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
@@ -212,11 +176,28 @@ fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
     crate::run(cli.command)
 }
 
-/// Waits for Enter; false when the person quits instead.
-fn wait_for_enter() -> Result<bool, Failure> {
+/// Runs `mhfe password` on the private screen, again on every Enter, until Escape returns to the
+/// menu. Each password replaces the one before on the screen, which is cleared when the person
+/// leaves; the generator wipes its own copy as soon as it has shown it, before a key is read.
+fn make_passwords() -> Result<(), Failure> {
+    let input = terminal::Input::new(false);
+    let arguments = [OsString::from("password")];
+    let screen = terminal::PrivateScreen::enter_to_show(&input);
+    loop {
+        run_command(&arguments)?;
+        eprintln!();
+        if !wait_for_enter("Press Enter to generate other words (Esc returns to the menu).")? {
+            return Ok(());
+        }
+        screen.clear();
+    }
+}
+
+/// Waits for Enter; false on Escape or its aliases. The caller decides where those keys lead.
+fn wait_for_enter(prompt: &str) -> Result<bool, Failure> {
     // Switched before the question appears, as in choose().
     let back = hidden_input::with_keys(|next_key| {
-        style::prompt("Press Enter to return to the menu (q quits).");
+        style::prompt(prompt);
         io::stderr().flush()?;
         loop {
             match next_key()? {
@@ -231,24 +212,23 @@ fn wait_for_enter() -> Result<bool, Failure> {
     back
 }
 
-/// Writes a cursor-control sequence as it is: anstream would remove it when NO_COLOR is set.
-pub(crate) fn write_control(sequence: &str) -> Result<(), Failure> {
-    let mut terminal = io::stderr();
-    terminal.write_all(sequence.as_bytes())?;
-    terminal.flush()?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::choice::LINE_WIDTH;
 
     #[test]
     fn every_entry_is_a_valid_command() {
         for entry in entries() {
-            if let Action::Run(arguments) = entry.action {
-                let typed = std::iter::once(OsString::from("mhfe")).chain(arguments);
-                assert!(Cli::try_parse_from(typed).is_ok(), "{}", entry.command);
+            match entry.action {
+                Action::Run(arguments) => {
+                    let typed = std::iter::once(OsString::from("mhfe")).chain(arguments);
+                    assert!(Cli::try_parse_from(typed).is_ok(), "{}", entry.command);
+                }
+                Action::Password => {
+                    assert!(Cli::try_parse_from(["mhfe", "password"]).is_ok());
+                }
+                Action::Help | Action::Quit => {}
             }
         }
     }
@@ -256,7 +236,7 @@ mod tests {
     #[test]
     fn entries_are_labelled_with_the_command_summaries() {
         let labels: Vec<String> = entries().into_iter().map(|entry| entry.label).collect();
-        assert!(labels.contains(&"Encrypt a recovery phrase into a container".to_owned()));
+        assert!(labels.contains(&"Encrypt a seed phrase into a container".to_owned()));
         assert_eq!(labels.last().map(String::as_str), Some("Quit"));
     }
 
@@ -270,17 +250,5 @@ mod tests {
             .max()
             .unwrap();
         assert!(5 + label_width + 2 + longest_command <= LINE_WIDTH);
-    }
-
-    #[test]
-    fn a_long_command_is_shortened() {
-        assert_eq!(
-            shortened("mhfe serve tool.html", 40),
-            "mhfe serve tool.html"
-        );
-        assert_eq!(
-            shortened("mhfe serve a-very-long-name.html", 15),
-            "mhfe serve a-v…"
-        );
     }
 }

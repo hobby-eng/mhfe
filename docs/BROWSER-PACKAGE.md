@@ -1,6 +1,6 @@
 # MHFE browser package
 
-This package runs MHFE in a web page: it encrypts an English BIP39 recovery phrase into a 24-word
+This package runs MHFE in a web page: it encrypts an English BIP39 seed phrase into a 24-word
 container (suite 3, `MHFE-BIP39-256-EXPERIMENTAL-3`) or, on the user's choice, a 12- to 21-word
 phrase into a container of the same length (suite 4, `MHFE-BIP39-LP-EXPERIMENTAL-4`), recovers the
 phrase from either, and rehearses a recovery without showing the phrase. All the MHFE logic is the same Rust code as in the `mhfe`

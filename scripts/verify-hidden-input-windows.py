@@ -4,24 +4,26 @@
 
 The Windows counterpart of scripts/verify-hidden-input.py, for CI on a Windows machine; it needs
 the pywinpty package, pinned in scripts/verify-hidden-input-windows-requirements.txt. The default
-program is target\\debug\\mhfe.exe. It drives `mhfe check --fingerprint`, which asks for the
-container and then for the password at a hidden prompt, and stops the tool before a fingerprint is
-given, so no memory is reserved and Argon2 never runs. Only the public zero-12 test container is
-used.
+program is target\\debug\\mhfe.exe. It drives `mhfe check --fingerprint --pim 0`, which reads the
+container on a private screen, taken at once, and then the password on another, and stops
+the tool before a fingerprint is given, so no memory is reserved and Argon2 never runs; the PIM
+given skips the question of the settings. Only the public zero-12 test container is used. The pseudo-console redraws
+the screen in its own way, so where the password is shown is checked in the Unix pseudo-terminal
+only.
 
 It checks that
 - control characters in a password reach the password check and are refused, including those a
   console in line mode would act on;
 - a Unicode password and the longest valid password (1024 characters U+1D400) are accepted;
-- Backspace and Ctrl+U edit the hidden line: a TAB typed and then deleted leaves an accepted
+- Backspace and Ctrl+U edit the line: a TAB typed and then deleted leaves an accepted
   password;
-- nothing typed at the hidden prompt is shown;
-- Ctrl+C at the hidden prompt ends the tool with exit code 130.
+- Ctrl+C at the password ends the tool with exit code 130.
 
 It also drives the menu that `mhfe` shows when it starts without arguments, which asks the console
 for VT input so that the arrow keys arrive as on Unix: Down, Up and Enter choose `mhfe password`,
-its number chooses it at once, Ctrl+Up's 5 chooses nothing, q quits with exit code 0 and Ctrl+C
-with 130.
+its number chooses it at once, Ctrl+Up's 5 chooses nothing, q and a lone Escape quit with exit
+code 0 and Ctrl+C with 130. The password entry regenerates on Enter and returns on Escape/q;
+help still returns to the menu on Enter.
 """
 
 import json
@@ -46,7 +48,11 @@ BACKSPACE, CTRL_U, CTRL_C = "\x08", "\x15", "\x03"
 UP, DOWN, ENTER, CTRL_UP = "\x1b[A", "\x1b[B", "\r", "\x1b[1;5A"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
 PASSWORD_ENTRY = 4
-MENU_SHOWN, BACK_TO_MENU = "q quits", "return to the menu"
+# The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
+MENU_SHOWN = "Esc quits"
+BACK_TO_MENU = "Press Enter to return to the menu (Esc quits)."
+PASSWORD_AGAIN = "Press Enter to generate other words (Esc returns to the menu)."
+ESCAPE = "\x1b"
 CONTROLS = {
     "TAB": "\t",
     "Ctrl+S": "\x13",
@@ -64,7 +70,7 @@ LONGEST = "\U0001d400" * 1024
 
 
 class Session:
-    def __init__(self, arguments=("check", "--fingerprint")):
+    def __init__(self, arguments=("check", "--fingerprint", "--pim", "0")):
         environment = dict(os.environ, NO_COLOR="1")
         self.process = PtyProcess.spawn(
             [PROGRAM, *arguments], env=environment, dimensions=(40, 200)
@@ -101,8 +107,9 @@ class Session:
 
     def at_password_prompt(self):
         self.wait_for("original: ")
+        # The container is read on its own private screen and taken at once.
         self.type(CONTAINER + "\r")
-        self.wait_for("Password")
+        self.wait_for("Password: ")
 
 
 def check_password(label, password, expected):
@@ -112,7 +119,6 @@ def check_password(label, password, expected):
         session.type(password + "\r")
         seen = session.wait_for(REFUSED, ACCEPTED)
         assert seen == expected, f"{label}: expected {expected!r}, the tool answered {seen!r}"
-        assert SECRET not in session.output, f"{label}: the password was shown"
     finally:
         session.close()
 
@@ -123,12 +129,21 @@ def check_menu():
         session.wait_for(MENU_SHOWN)
         session.type(CTRL_UP + DOWN * PASSWORD_ENTRY + UP + ENTER)
         # The password and this prompt may arrive together, and wait_for looks only at new text.
-        session.wait_for(BACK_TO_MENU)
+        session.wait_for(PASSWORD_AGAIN)
         assert "bits" in session.output, "menu: the arrow keys did not choose mhfe password"
-        session.type(ENTER)
+        for _ in range(2):
+            session.type(ENTER)
+            session.wait_for(PASSWORD_AGAIN)
+        session.type(ESCAPE)
         session.wait_for(MENU_SHOWN)
         session.type(str(PASSWORD_ENTRY))
+        session.wait_for(PASSWORD_AGAIN)
+        session.type("q")
+        session.wait_for(MENU_SHOWN)
+        session.type(str(PASSWORD_ENTRY + 1))
         session.wait_for(BACK_TO_MENU)
+        session.type(ENTER)
+        session.wait_for(MENU_SHOWN)
         session.type("q")
         end = time.monotonic() + 10
         while session.process.isalive() and time.monotonic() < end:
@@ -136,7 +151,20 @@ def check_menu():
     finally:
         code = session.close()
     assert code == 0, f"menu: q gave exit code {code}"
-    print("menu: arrows, Enter, a number and q, exit code 0")
+    print("menu: password regeneration, Escape/q return, exit code 0")
+
+    # Escape alone: the tool waits a moment for the rest of an arrow key's sequence, then quits.
+    session = Session(arguments=())
+    try:
+        session.wait_for(MENU_SHOWN)
+        session.type(ESCAPE)
+        end = time.monotonic() + 10
+        while session.process.isalive() and time.monotonic() < end:
+            time.sleep(0.1)
+    finally:
+        code = session.close()
+    assert code == 0, f"menu: Escape gave exit code {code}"
+    print("menu: a lone Escape quits, exit code 0")
 
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
@@ -156,7 +184,7 @@ def main():
     print("accepted: a Unicode password and the longest valid password")
     check_password("Backspace", SECRET + "\t" + BACKSPACE, ACCEPTED)
     check_password("Ctrl+U", "\t" + CTRL_U + SECRET, ACCEPTED)
-    print("edited: Backspace and Ctrl+U at a hidden prompt")
+    print("edited: Backspace and Ctrl+U at the password")
 
     session = Session()
     session.at_password_prompt()
@@ -164,7 +192,7 @@ def main():
     session.wait_for("Cancelled")
     code = session.close()
     assert code == CANCELLED, f"Ctrl+C: exit code {code}"
-    print("cancelled: Ctrl+C at a hidden prompt, exit code 130")
+    print("cancelled: Ctrl+C at the password, exit code 130")
 
     check_menu()
 

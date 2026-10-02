@@ -6,18 +6,25 @@ construction is secure. The protocol and its limits are described in the
 [specification](https://github.com/hobby-eng/mhfe-spec).
 
 Report a suspected vulnerability privately through GitHub's security advisories for this repository.
-Never include a real recovery phrase, password, private key or wallet file.
+Never include a real seed phrase, password, private key or wallet file.
 
 ## Secrets
 
-- Secrets are typed at hidden prompts or read from standard input with `--stdin`. The tool never
-  takes them from command-line arguments, never writes them to files and never logs them. Error
-  messages never contain a phrase, a password or any part of them.
-- A hidden prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
+- Secrets are typed at a terminal or read from standard input with `--stdin`. At a terminal they
+  are typed on a private screen, the terminal's alternate screen, which shows them as they are
+  typed so that a slip can be seen, and which is cleared and left as soon as they are accepted, or
+  on Ctrl+C; neither the secret nor the result reaches the main screen or its scrollback. A new
+  container and a recovered seed phrase are shown the same way, until the person presses Enter or
+  Escape after writing them down, and a container typed for a recovery or a check is read on a
+  private screen as well. Anyone who can see the screen meanwhile can read them. Where no private
+  screen is possible, they are typed without echo. The tool never takes them from command-line arguments, never writes them to files
+  and never logs them. Error messages never contain a phrase, a password or any part of them.
+- A secret's prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
   on an empty line and Ctrl+C keep their meaning; every other character, including those a
   terminal would usually act on (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+W, Ctrl+Z, Ctrl+\\), reaches the
-  password check, which refuses a control character instead of removing it. The terminal settings
-  are restored after the answer and on Ctrl+C. `scripts/verify-hidden-input.py` checks this
+  password check, which refuses a control character instead of removing it; a control character
+  is never written back to the terminal, which would act on it. The terminal settings are restored
+  after the answer and on Ctrl+C. `scripts/verify-hidden-input.py` checks this
   in a pseudo-terminal on Linux and macOS, and `scripts/verify-hidden-input-windows.py` in a
   Windows pseudo-console; CI runs them on all three systems.
 - Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
@@ -53,8 +60,10 @@ Argon2 is the reference C implementation, vendored unchanged (see
 [`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code of the library
 is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
 The command-line tool denies it too, except in `src/bin/mhfe/hidden_input.rs`, which switches the
-terminal's echo and line mode for a hidden prompt (`tcgetattr`/`tcsetattr` on Unix,
-`GetConsoleMode`/`SetConsoleMode` on Windows) and restores them. The engine module keeps these
+terminal's echo and line mode for a secret's prompt and a list (`tcgetattr`/`tcsetattr` on Unix,
+`GetConsoleMode`/`SetConsoleMode` on Windows) and restores them, and reads the terminal's width and
+whether a key follows Escape (`ioctl`/`select` on Unix, `GetConsoleScreenBufferInfo`/
+`PeekConsoleInputW` on Windows). The engine module keeps these
 invariants:
 
 - `argon2_context` is copied field for field; compile-time assertions check its size, alignment and

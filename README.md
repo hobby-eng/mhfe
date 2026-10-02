@@ -12,10 +12,10 @@
 steel plate with 24 words and waddles from side to side, much as a Feistel network swaps its two
 halves in every round.</sub></p>
 
-MHFE turns the recovery phrase of a Bitcoin or other BIP39 wallet (12, 15, 18, 21 or 24 English
+MHFE turns the seed phrase of a Bitcoin or other BIP39 wallet (12, 15, 18, 21 or 24 English
 words) into a password-protected **container of 24 words**, or, if you choose so for a phrase of 12
 to 21 words, a container **of the same length** as your phrase. The container is itself an
-ordinary, valid recovery phrase, so it fits the same metal plate or capsule. With the password it turns back
+ordinary, valid seed phrase, so it fits the same metal plate or capsule. With the password it turns back
 into your exact original phrase; without it, getting the phrase back means guessing the password,
 which MHFE makes deliberately slow. Your wallet, its addresses and any BIP39 passphrase stay as they
 are.
@@ -35,7 +35,7 @@ The algorithm is specified in the companion
 
 ## How it works
 
-MHFE is made for **cold storage**: a backup of a recovery phrase that is written once on paper or a
+MHFE is made for **cold storage**: a backup of a seed phrase that is written once on paper or a
 metal plate, put away, and read again perhaps years later on an offline computer. It is not meant
 for a wallet in daily use.
 
@@ -44,7 +44,7 @@ gives a container of 24 words. Inside, the original becomes a 256-bit number tha
 Feistel cipher scramble. Each round takes its key from the password through Argon2id, with 2 GiB of
 memory, and needs the result of the round before, so every guess of the password costs the full
 work. The result is written out as 24 words with an ordinary BIP39 checksum: the container is itself
-a valid recovery phrase, fits the same plates, and nothing in it shows that MHFE made it. No salt,
+a valid seed phrase, fits the same plates, and nothing in it shows that MHFE made it. No salt,
 version or length is stored; with the default settings, the 24 words and the password are all you
 need.
 
@@ -63,15 +63,17 @@ wallet for cold storage, choose it with this in mind:
 | 12 to 21 words | The built-in check confirms the password and finds the length        | Most backups: MHFE tells you when the password or a setting is wrong        |
 | 24 words       | No built-in check: a wrong password gives another, equally valid one | Use with an independent BIP39 passphrase, and plausible deniability (below) |
 
-**Or a container of the same length.** For a phrase of 12, 15, 18 or 21 words, MHFE can instead
-give a container with as many words as the phrase, if you choose it; 24 words stays the default.
-The backup then keeps its length and looks like any other phrase of that length. The price is
-real, so MHFE asks first and explains it (press `?` at the question):
+### 24 words or the same length
 
-| Container             | A wrong password                             | Shows the length of your phrase | A miscopied word slips through                |
-| --------------------- | -------------------------------------------- | ------------------------------- | --------------------------------------------- |
-| 24 words (default)    | is detected: MHFE tells you (12 to 21 words) | no, every container has 24      | about once in 256                             |
-| Same length as phrase | gives another valid phrase, with no error    | yes                             | about once in 16 (12 words) to 128 (21 words) |
+For a phrase of 12, 15, 18 or 21 words, MHFE can instead give a container with as many words as the
+phrase, if you choose it; 24 words stays the default. The backup then keeps its length and looks
+like any other phrase of that length. The price is real, so MHFE asks first; the question links
+here, and `?` at it compares both:
+
+| Container             | A wrong password                             | Shows the length of your phrase | A miscopied word slips through                | Tells a guesser the right password       |
+| --------------------- | -------------------------------------------- | ------------------------------- | --------------------------------------------- | ---------------------------------------- |
+| 24 words (default)    | is detected: MHFE tells you (12 to 21 words) | no, every container has 24      | about once in 256                             | yes, through the built-in check          |
+| Same length as phrase | gives another valid phrase, with no error    | yes                             | about once in 16 (12 words) to 128 (21 words) | no, only a wallet's history on the chain |
 
 The same-length container has no room for a built-in check, so only a comparison with your wallet,
 with `mhfe check`, confirms a recovery. Like a 24-word original, it turns into a valid phrase with
@@ -79,14 +81,17 @@ any password. The [specification](https://github.com/hobby-eng/mhfe-spec) define
 suite 4; its analysis of plausible deniability covers this format too, while its estimates of what
 an attack costs are stated for the 24-word format only.
 
-The built-in check helps you, but it also lets someone who has the container recognise a right
-guess; each guess still costs a full recovery. With 24 words, every password gives a valid phrase,
-and the container alone cannot tell a right password from a wrong one. A guesser can recognise the
-right one only through a wallet with a public history. If the wallet of the phrase itself, used
-without a BIP39 passphrase, has ever received funds, its history on the blockchain confirms a right
-password. If you use the phrase only with a BIP39 passphrase and the wallet without it has never
-been used, the blockchain gives no hint, and the password and the passphrase have to be guessed
-together.
+**Convenience or secrecy.** The choice is between a recovery that checks itself and a container
+that gives nothing away. The built-in check tells you at once that a password is wrong, but it
+tells someone who has the container the same: a guesser recognises the right password when it
+comes, although each guess still costs a full recovery. A same-length container, like a 24-word
+original, gives a valid phrase for every password, so the container alone cannot tell a right
+password from a wrong one; this is what makes plausible deniability (below) possible. A guesser can
+then recognise the right one only through a wallet with a public history: if the wallet of the
+phrase itself, used without a BIP39 passphrase, has ever received funds, the blockchain shows it,
+and that confirms a right password just as the built-in check would. Only funds kept under a BIP39
+passphrase, with the wallet without it never used, leave no such trace; the password and the
+passphrase then have to be guessed together.
 
 **Checking against your wallet.** The built-in check confirms the password, not which wallet the
 phrase belongs to, and a 24-word result or a same-length container cannot check itself at all. `mhfe check` therefore
@@ -110,7 +115,7 @@ not been independently reviewed.
 
 > [!WARNING]
 > **The MHFE password is not your BIP39 passphrase!** A BIP39 passphrase, sometimes called the 25th
-> word, belongs to the wallet: a wallet asks for it together with the recovery phrase, and it stays
+> word, belongs to the wallet: a wallet asks for it together with the seed phrase, and it stays
 > the same after MHFE. The MHFE password only opens the container.
 >
 > **Every password and passphrase in this tree must be different!** The MHFE password, a decoy MHFE
@@ -131,12 +136,12 @@ branch but the last is optional; the last one leads to your real wallet.
 │   └── another valid phrase ................. decoy wallet behind an "MHFE password"
 │
 └── recovered by MHFE with your password
-    └── your original recovery phrase
+    └── your original seed phrase
         ├── without a BIP39 passphrase ....... your wallet
         └── with its own BIP39 passphrase .... your wallet: the strongest arrangement
 ```
 
-**The container as a wallet.** Every wallet accepts the 24 words as an ordinary recovery phrase.
+**The container as a wallet.** Every wallet accepts the 24 words as an ordinary seed phrase.
 Leave that wallet empty, or keep a small amount on it so that the plate looks like an ordinary
 backup. Anyone who reads the plate can spend that amount, and the decoy convinces only someone who
 does not know that MHFE was used. Type the container only into a wallet you trust, such as a
@@ -167,7 +172,9 @@ Nothing is installed. Download the archive for your system from the
 [releases page](https://github.com/hobby-eng/mhfe/releases) ([which one](#release-files)), unpack it
 and run `mhfe` in a terminal: `mhfe encrypt`, `mhfe decrypt` and the other commands that
 `mhfe --help` lists. Started without a command, by a double-click or with the `mhfe-launch` script
-in the archive, it shows a menu of the same commands with their default settings.
+in the archive, it shows a menu of the same commands. Its questions
+offer their answers as a list: choose with the arrow keys and Enter, or press an answer's number;
+Escape cancels.
 
 Use it on a trusted computer that stays offline while the phrase and the password are on it, best a
 Linux system started from a USB stick with the network off. On Windows, Windows PE from a USB stick
@@ -182,15 +189,20 @@ dice, `--words N` sets the count. Any text on one line can be a password, but co
 such as a tab are refused, and letter case and spaces count. The password is not your wallet's
 BIP39 passphrase.
 
-**`mhfe encrypt`** asks for the phrase and twice for the password, all hidden; a mistyped password
-would lock the phrase away for good. For a phrase of 12 to 21 words it first asks how long the
+From the start menu, Enter generates other words and Escape returns to the menu. Each password
+replaces the previous one on the private screen; leaving it clears the screen.
+
+**`mhfe encrypt`** asks for the phrase and twice for the password, as a mistyped password would
+lock the phrase away for good. Both are typed on a private screen that shows what you type and is
+cleared as soon as you are done; a mistyped word is refused by the word list or the checksum. For a phrase of 12 to 21 words it first asks how long the
 container should be: 24 words, the recommended default, or the same length as your phrase; `?`
 explains both, and `--same-length` chooses the same length without asking. After the encryption it
-shows the format of the container, the suite identifier. The words of the recovery phrase may be typed in any case or as
+shows the format of the container, the suite identifier. The words of the seed phrase may be typed in any case or as
 their first four letters; the password, by contrast, must be typed exactly, letter case and spaces
-included. On request MHFE shows the phrase it read, or the password, on a separate screen that is
-cleared afterwards. The container appears after one to two minutes: write it down while MHFE checks
-it by recovering your phrase from it, and rely on it only once it says "Verified". With the default
+included. The container appears after one to two minutes, on a private screen like the phrase:
+write it down while MHFE checks it by recovering your phrase from it, and rely on it only once it
+says "Verified". Enter or Escape then clears that screen, so that the container leaves no copy in
+the terminal's history; press it only once you have written the words down and checked them. With the default
 settings the container's words and the password are all you need; in the rare case that MHFE asks
 you to note the word count, do so. The same phrase, password and settings always give the same container, so a
 lost plate can be made again, and two identical containers reveal the same phrase: use a different
@@ -206,9 +218,10 @@ covers a BIP39 passphrase (it searches the first 100 receiving and change addres
 9, or one path with `--path`), or with the master key fingerprint, quick but only 32 bits. Do not
 keep the address or fingerprint next to the container.
 
-**`mhfe decrypt`** gives back the original phrase. It shows the container as it read it, to compare
-with your backup, its format, and the phrase on a separate screen that is cleared when you press
-Enter. The number of words tells it the format: 24 words is the default format, 12 to 21 words a
+**`mhfe decrypt`** gives back the original phrase. The container is typed on a private screen,
+which shows it as you type it; the phrase then appears on a
+private screen as well, which Enter or Escape clears once you have written it down. Neither stays
+in the terminal's history; the summary shows the container's format. The number of words tells it the format: 24 words is the default format, 12 to 21 words a
 container of the same length. For a 12- to 21-word original in a 24-word container it confirms the
 password and finds the length itself; a wrong password then shows as "Not verified". A 24-word
 original and a same-length container have no such check: a wrong password gives another valid
@@ -220,8 +233,9 @@ a compatible version is at hand years from now.
 
 ## Settings: PIM and memory level
 
-Both default to 0, and most people should leave them there. Raising them makes every recovery, yours
-included, slower or more memory-hungry:
+Both default to 0, and most people should leave them there. At a terminal, each command offers the
+defaults first and lets you choose your own instead; `--pim` and `--mem` give them on the command
+line. Raising them makes every recovery, yours included, slower or more memory-hungry:
 
 | Memory level (`--mem`) | 0     | 1     | 2     | 3     | 4     | 5      | 6      | ... 21 |
 | ---------------------- | ----- | ----- | ----- | ----- | ----- | ------ | ------ | ------ |
@@ -285,7 +299,7 @@ secrets:
 
 ```bash
 {
-  systemd-ask-password --echo=no "Original recovery phrase:"
+  systemd-ask-password --echo=no "Original seed phrase:"
   systemd-ask-password --echo=no "Password:"
   systemd-ask-password --echo=no "Repeat the password:"
 } | mhfe encrypt --stdin

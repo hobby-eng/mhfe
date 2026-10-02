@@ -1,4 +1,4 @@
-//! `mhfe encrypt`: turns an original recovery phrase into a container: 24 words, or for a 12- to
+//! `mhfe encrypt`: turns an original seed phrase into a container: 24 words, or for a 12- to
 //! 21-word phrase, on the person's own choice, as many words as the phrase.
 
 use std::io::{self, IsTerminal};
@@ -11,6 +11,7 @@ use mhfe::{
 };
 use zeroize::Zeroizing;
 
+use crate::choice;
 use crate::diceware::{different_dice_words, RECOMMENDED_WORDS};
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::length_choice;
@@ -59,7 +60,7 @@ fn stdin_help() -> String {
 /// The top of `mhfe encrypt --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Encrypt a recovery phrase into a container",
+        "Encrypt a seed phrase into a container",
         "The container is itself a valid BIP39 phrase: 24 words by default, or for a 12- to \
          21-word phrase, if you choose so, as many words as the phrase. With the default \
          settings the container and the password are all that recovery needs. Encryption runs \
@@ -103,7 +104,7 @@ pub fn long_help() -> String {
         "What it asks for:",
         &[
             (
-                "Original recovery phrase",
+                "Original seed phrase",
                 "hidden; 12 to 24 words; four letters per word are enough",
             ),
             (
@@ -122,10 +123,8 @@ pub fn long_help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    let work = options.settings.work_factor()?;
     let mut input = Input::new(options.stdin);
-    settings::announce(work, Operation::Encrypt);
-    settings::check_resources(work)?;
+    let work = settings::choose(options.settings, &mut input, Operation::Encrypt)?;
 
     let original = read_original(&mut input)?;
     let original_words = original.split(' ').count();
@@ -150,38 +149,32 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let person_reads_output = !input.is_script() && io::stdout().is_terminal();
     if !person_reads_output {
         check(&mut mhfe, &new, &password, &mut progress)?;
-        println!("{}", *new.words);
-    } else {
-        // A person can write the container down while the check runs.
         progress.finish();
+        println!("{}", *new.words);
+        if !input.is_script() {
+            report_check(&Ok(()));
+        }
+    } else {
+        // A person can write the container down while the check runs. It is shown on the private
+        // screen, as a recovered phrase is: it is a valid seed phrase too, and should leave no
+        // copy in the terminal's history.
+        progress.finish();
+        let screen = terminal::PrivateScreen::enter_to_show(&input);
+        if screen.is_active() {
+            style::title(Operation::Encrypt.title());
+        }
         show_before_the_check(&new.words, &input);
         let checked = check(&mut mhfe, &new, &password, &mut progress);
         terminal::set_unverified_container_shown(false);
-        match &checked {
-            Ok(()) => {}
-            Err(MhfeError::VerificationFailed) => {
-                eprintln!("\n");
-                style::alarm(
-                    "The container above is WRONG: it did not turn back into your phrase.",
-                    "Do not use it; cross it out if you wrote it down, and encrypt again.",
-                );
-            }
-            Err(_) => {
-                eprintln!("\n");
-                style::alarm(
-                    "The check stopped with an error: the container above is NOT verified.",
-                    "Do not rely on it; encrypt again.",
-                );
-            }
+        progress.finish();
+        report_check(&checked);
+        if screen.is_active() {
+            terminal::wait_to_leave()?;
+            drop(screen);
+            // The main screen gets the outcome too: the private screen and its copy are gone.
+            report_check(&checked);
         }
         checked?;
-    }
-    progress.finish();
-    if !input.is_script() {
-        style::ok(format!(
-            "{} the container turns back into your original phrase.",
-            paint(style::GOOD, "Verified:")
-        ));
     }
     // The format of the container, which the specification asks to show after creating it.
     style::fact("Format", paint(MUTED, new.suite.id()));
@@ -190,7 +183,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     eprintln!();
     style::hint(&format!(
         "Use a different password for each phrase you encrypt, and nowhere else. To make another \
-         copy, copy these {container_words} words exactly."
+         copy, copy the container's {container_words} words exactly."
     ));
     // The check above covered the words this program produced, not the copy the user wrote down.
     style::hint(&format!(
@@ -225,13 +218,14 @@ fn choose_suite(words: usize, same_length: bool, input: &Input) -> Result<Suite,
         };
     }
     if same_length {
-        style::ok(format!(
-            "Container: {words} words, the same length as yours, as --same-length asks."
-        ));
+        choice::record(
+            "Container",
+            &format!("{words} words, the same length as yours (--same-length)"),
+        );
         length_choice::show_consequences(words);
         return Ok(Suite::SameLength);
     }
-    if input.is_script() || !crate::menu::can_run() {
+    if input.is_script() || !choice::can_run() {
         return Ok(Suite::TwentyFourWords);
     }
     length_choice::choose(words)
@@ -315,9 +309,11 @@ fn print_what_to_remember(
     for line in what_to_remember(work, original_words, length_must_be_chosen, suite) {
         match line {
             Advice::Statement(lead, rest) => eprintln!("{} {rest}", paint(STRONG, lead)),
-            Advice::Hint(text) => style::hint(&text),
+            Advice::Hint(text) => {
+                style::hint(&text);
+            }
             Advice::HintWithCommand(text, command) => {
-                style::hint(&format!("{text}{}.", paint(ACCENT, command)))
+                style::hint(&format!("{text}{}.", paint(ACCENT, command)));
             }
         }
     }
@@ -337,6 +333,31 @@ fn check(
     })
 }
 
+/// Says whether the container shown turned back into the phrase. A container written down before
+/// a failed check must be crossed out.
+fn report_check(checked: &Result<(), MhfeError>) {
+    match checked {
+        Ok(()) => style::ok(format!(
+            "{} the container turns back into your original phrase.",
+            paint(style::GOOD, "Verified:")
+        )),
+        Err(MhfeError::VerificationFailed) => {
+            eprintln!();
+            style::alarm(
+                "The container shown is WRONG: it did not turn back into your phrase.",
+                "Do not use it; cross it out if you wrote it down, and encrypt again.",
+            );
+        }
+        Err(_) => {
+            eprintln!();
+            style::alarm(
+                "The check stopped with an error: the container shown is NOT verified.",
+                "Do not rely on it; encrypt again.",
+            );
+        }
+    }
+}
+
 /// Shows the container after the first twelve rounds, clearly marked as not yet verified.
 fn show_before_the_check(container: &str, input: &Input) {
     eprintln!();
@@ -348,6 +369,7 @@ fn show_before_the_check(container: &str, input: &Input) {
         )
     );
     terminal::print_phrase(container, input);
+    eprintln!();
     style::warn(
         "Not verified yet.",
         "MHFE now decrypts the container again to make sure that no memory error or other \
@@ -358,36 +380,19 @@ fn show_before_the_check(container: &str, input: &Input) {
     terminal::set_unverified_container_shown(true);
 }
 
-/// Reads the original phrase. At a terminal the words read can be shown on request, so that a
-/// person who typed short forms can compare them with the backup; they are secret, so the default
-/// is not to show them.
+/// Reads the original phrase on the private screen, where it is shown as it is typed. A valid
+/// phrase is taken at once, with no question to confirm it: a mistyped word is refused by the
+/// word list or the checksum. The screen is then cleared and the summary records the phrase's
+/// length.
 fn read_original(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
-    loop {
-        let typed = input.secret("Original recovery phrase (hidden): ")?;
+    let screen = terminal::PrivateScreen::enter(input, Operation::Encrypt.title());
+    let phrase = loop {
+        if screen.is_active() {
+            eprintln!();
+        }
+        let typed = input.secret("Original seed phrase")?;
         match read_phrase(&typed) {
-            Ok(phrase) => {
-                let words = phrase.split(' ').count();
-                style::ok(format!("Accepted a valid {words}-word phrase."));
-                if input.can_ask_again()
-                    && input.yes_or_no(
-                        "Show the words that were read? They will be visible on the screen.",
-                        false,
-                    )?
-                {
-                    // The words appear on a screen of their own and are gone once answered.
-                    let confirmed = {
-                        let _screen = terminal::PrivateScreen::enter(input);
-                        terminal::show_words("Read the phrase as:", &phrase);
-                        input.yes_or_no("Is this your phrase?", true)?
-                    };
-                    if !confirmed {
-                        style::retry("Please type it again.");
-                        continue;
-                    }
-                    style::ok("The words are no longer on the screen.");
-                }
-                return Ok(phrase);
-            }
+            Ok(phrase) => break phrase,
             Err(error) if input.can_ask_again() => {
                 style::retry(format!(
                     "{}. Please type it again.",
@@ -396,7 +401,11 @@ fn read_original(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
             }
             Err(error) => return Err(error.into()),
         }
-    }
+    };
+    drop(screen);
+    let words = phrase.split(' ').count();
+    choice::record("Phrase", &format!("{words} words, valid"));
+    Ok(phrase)
 }
 
 /// About once in four billion phrases, the packed phrase also passes the built-in check of
@@ -408,6 +417,8 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, F
         return Ok(false);
     }
     let others: Vec<String> = others.iter().map(ToString::to_string).collect();
+    // Set apart from the summary above and below it.
+    eprintln!();
     style::warn(
         &format!("Write down that your phrase has {words} words."),
         &format!(
@@ -418,18 +429,21 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, F
             others.join(" and ")
         ),
     );
+    eprintln!();
     Ok(true)
 }
 
-/// Asks for the password twice, so that a typing mistake cannot lock the phrase away, and warns
-/// when it is weaker than four different dice words.
+/// Asks for the password twice on the private screen, so that a typing mistake cannot lock the
+/// phrase away, and warns when it is weaker than four different dice words.
 fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
-    style::hint(
-        "Letter case and spaces count: lowercase words with single spaces are the easiest to \
-         type again years later.",
-    );
-    loop {
-        let text = input.secret("Password (hidden): ")?;
+    let screen = terminal::PrivateScreen::enter(input, Operation::Encrypt.title());
+    let (password, weak) = loop {
+        eprintln!();
+        style::hint(
+            "Letter case and spaces count: lowercase words with single spaces are the easiest \
+             to type again years later.",
+        );
+        let text = input.secret("Password")?;
         let password = match Password::new(&text) {
             Ok(password) => password,
             Err(error) if input.can_ask_again() => {
@@ -441,7 +455,7 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
             }
             Err(error) => return Err(error.into()),
         };
-        let repeated = input.secret("Repeat the password (hidden): ")?;
+        let repeated = input.secret("Repeat the password")?;
         if *repeated != *text {
             if input.can_ask_again() {
                 style::retry("The two passwords differ. Please type them again.");
@@ -451,54 +465,22 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
                 "The two passwords differ. Nothing was encrypted.",
             ));
         }
-        if different_dice_words(&text) < RECOMMENDED_WORDS {
-            style::warn(
-                "This password is not four or more words from the EFF dice list, all different.",
-                &format!(
-                    "Unless it was chosen at random, it is probably much weaker than it looks; \
-                     {} makes a strong one.",
-                    paint(ACCENT, "mhfe password")
-                ),
-            );
-        }
-        if input.can_ask_again()
-            && input.yes_or_no(
-                "Show the password that was typed? It will be visible on the screen.",
-                false,
-            )?
-            && !confirm_password(&text, input)?
-        {
-            style::retry("Please type it again.");
-            continue;
-        }
-        return Ok(password);
+        break (password, different_dice_words(&text) < RECOMMENDED_WORDS);
+    };
+    drop(screen);
+    choice::record("Password", "typed twice");
+    if weak {
+        eprintln!();
+        style::warn(
+            "This password is not four or more words from the EFF dice list, all different.",
+            &format!(
+                "Unless it was chosen at random, it is probably much weaker than it looks; {} \
+                 makes a strong one.",
+                paint(ACCENT, "mhfe password")
+            ),
+        );
     }
-}
-
-/// Shows the typed password on a screen of its own and asks whether it is the intended one. Both
-/// entries can carry the same slip, such as a wrong keyboard layout, which only seeing it reveals.
-fn confirm_password(text: &str, input: &mut Input) -> Result<bool, Failure> {
-    let screen = terminal::PrivateScreen::enter(input);
-    eprintln!("{}", paint(HEADING, "Read the password as:"));
-    eprintln!();
-    eprintln!("  {}", paint(STRONG, text));
-    eprintln!();
-    // Spaces at either end are easy to miss but are part of the password.
-    let characters = text.chars().count();
-    let words = text.split_whitespace().count();
-    eprintln!(
-        "{}",
-        paint(
-            MUTED,
-            format!("{characters} characters, {words} words; letter case and spaces count.")
-        )
-    );
-    let confirmed = input.yes_or_no("Is this your password?", true)?;
-    if confirmed {
-        drop(screen);
-        style::ok("The password is no longer on the screen.");
-    }
-    Ok(confirmed)
+    Ok(password)
 }
 
 #[cfg(test)]

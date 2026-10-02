@@ -5,10 +5,13 @@
 use anstream::eprintln;
 use mhfe::Suite;
 
+use crate::choice::{self, Answer, Help, Question};
 use crate::exit::Failure;
-use crate::hidden_input::{self, Key};
-use crate::menu::{redraw_from, write_control};
-use crate::style::{self, paint, ACCENT, GOOD, MUTED, STRONG, WARNING};
+use crate::style::{self, paint, GOOD, MUTED, STRONG, WARNING};
+
+/// Where the README explains the choice. The question shows only this link; ? compares both
+/// answers on request ([`explain`]).
+const README_LENGTH: &str = "https://github.com/hobby-eng/mhfe#24-words-or-the-same-length";
 
 /// A 24-word container has an 8-bit BIP39 checksum.
 const TWENTY_FOUR_WORD_CHECKSUM_BITS: u32 = 8;
@@ -25,86 +28,33 @@ fn passes_wrongly(bits: u32) -> u32 {
 
 /// Asks a person at a terminal which container to make. Enter alone keeps 24 words.
 pub fn choose(words: usize) -> Result<Suite, Failure> {
-    let options = [
-        (
-            Suite::TwentyFourWords,
-            "24 words (recommended)".to_owned(),
-            "a wrong password is reported",
-        ),
-        (
-            Suite::SameLength,
-            format!("{words} words, the same length as yours"),
-            "a wrong password opens another wallet",
-        ),
+    let suites = [Suite::TwentyFourWords, Suite::SameLength];
+    let answers = [
+        Answer::new("24 words (recommended)", ""),
+        Answer::new(format!("{words} words, the same length as yours"), ""),
     ];
-    eprintln!();
-    eprintln!(
-        "{}",
-        paint(
-            STRONG,
-            format!("Your phrase has {words} words. How long should the encrypted phrase be?")
-        )
-    );
-    let mut selected = 0;
-    let chosen = hidden_input::with_keys(|next_key| {
-        eprintln!();
-        let mut drawn_lines = draw(&options, selected);
-        loop {
-            match next_key()? {
-                Key::Up | Key::Down => selected = 1 - selected,
-                Key::Enter => return Ok(Some(selected)),
-                Key::Digit(number @ 1..=2) => return Ok(Some(usize::from(number) - 1)),
-                Key::Help => {
-                    // The explanation stays on the screen, and the menu is drawn again below it.
-                    eprintln!();
-                    explain(words);
-                    eprintln!();
-                    drawn_lines = draw(&options, selected);
-                    continue;
-                }
-                Key::Quit => return Ok(None),
-                Key::Digit(_) | Key::Other => continue,
-            }
-            write_control(&redraw_from(drawn_lines))?;
-            drawn_lines = draw(&options, selected);
-        }
-    })?;
+    let text = format!("Your phrase has {words} words. How long should the encrypted phrase be?");
+    let question = Question {
+        text: &text,
+        explanation: &[],
+        more: &[README_LENGTH],
+        record: Some("Container"),
+    };
+    let chosen = choice::choose(
+        &question,
+        &answers,
+        Some(Help {
+            hint: "? explains both",
+            show: &|| explain(words),
+        }),
+    )?;
     let Some(index) = chosen else {
         return Err(mhfe::MhfeError::Cancelled.into());
     };
-    let suite = options[index].0;
-    eprintln!();
-    style::ok(format!("Container: {}.", options[index].1));
-    if suite == Suite::SameLength {
+    if suites[index] == Suite::SameLength {
         show_consequences(words);
     }
-    Ok(suite)
-}
-
-/// Draws the two options and returns how many lines they took. The highlighted one has a cyan
-/// marker and a bold label, so that it stands out also without colours.
-fn draw(options: &[(Suite, String, &str); 2], selected: usize) -> usize {
-    let label_width = options
-        .iter()
-        .map(|(_, label, _)| label.chars().count())
-        .max()
-        .unwrap_or(0);
-    for (index, (_, label, note)) in options.iter().enumerate() {
-        let number = paint(MUTED, index + 1);
-        let padding = " ".repeat(label_width - label.chars().count());
-        let (marker, label) = if index == selected {
-            (paint(ACCENT, "›"), paint(STRONG, label))
-        } else {
-            (" ".to_owned(), label.clone())
-        };
-        eprintln!(
-            "{marker} {number}  {label}{padding}  {}",
-            paint(MUTED, note)
-        );
-    }
-    eprintln!();
-    style::hint("↑ ↓ choose · Enter confirms · ? explains both · q quits");
-    options.len() + 2
+    Ok(suites[index])
 }
 
 /// What each choice gives and costs, shown when the person presses ?.
@@ -157,6 +107,8 @@ pub fn explain(words: usize) {
 /// The consequences of a same-length container, which the person must see once it is chosen.
 pub fn show_consequences(words: usize) {
     let bits = checksum_bits(words);
+    // Set apart from the summary above and below it.
+    eprintln!();
     style::warn(
         "A wrong password will not be detected.",
         &format!(
@@ -166,6 +118,7 @@ pub fn show_consequences(words: usize) {
             passes_wrongly(bits)
         ),
     );
+    eprintln!();
 }
 
 #[cfg(test)]

@@ -8,8 +8,9 @@ Planned as version 0.5.0.
 
 - **Containers of the same length (suite 4, `MHFE-BIP39-LP-EXPERIMENTAL-4`).** For a phrase of 12,
   15, 18 or 21 words, `mhfe encrypt` now asks how long the container should be: 24 words, the
-  recommended default, or the same length as the phrase. `?` explains both; `--same-length`
-  chooses the same length without asking. Such a container keeps the backup's length but has no
+  recommended default, or the same length as the phrase. The question links to the README's
+  section on the choice, `?` compares both, and `--same-length` chooses the same length without
+  asking. Such a container keeps the backup's length but has no
   built-in check: a wrong password gives another valid phrase, the container shows the phrase's
   length, and a miscopied word passes its shorter checksum more often. `mhfe decrypt` and
   `mhfe check` recognise it by its word count; a recovered phrase from it is always shown as not
@@ -21,6 +22,28 @@ Planned as version 0.5.0.
   `SAME_LENGTH_NEEDS_SHORT_PHRASE`, `LENGTH_CHOICE_NOT_APPLICABLE` and `NO_BUILT_IN_CHECK`.
 - The format of a container (its suite identifier) is shown after an encryption and when a container
   is read, instead of at the start.
+- Questions are answered from lists, as in the menu: the arrow keys and Enter, or an answer's
+  number at once; Escape cancels (q too, where the keyboard has it). This replaces the typed
+  `y`/`n` answers of `mhfe encrypt` and the typed choice of `mhfe check`. Laid out as in MnemoCode,
+  each question stands apart with a short explanation, and once answered it gives way to one line
+  of a summary. Scripts (`--stdin`) answer as before.
+- The start menu's password generator repeats on Enter and returns to the menu on Escape. Each
+  password replaces the previous one on the private screen, which is cleared when leaving.
+- Secrets are typed on a private screen, the terminal's alternate screen, which shows them as they
+  are typed and is cleared as soon as they are accepted, with no question to confirm them: a
+  mistyped word is refused by the word list or the checksum. This replaces the hidden prompts and
+  the questions whether to show the words or the password. A container typed for a recovery or a
+  check is read the same way. The new container and a recovered seed phrase are shown on a private
+  screen too, which Enter or Escape clears once they are written down. Each answered step gives
+  way to one line of a summary on the main screen, and warnings stand apart, so that the next
+  question is always at the bottom.
+- The program and its documents say "seed phrase" where they said "recovery phrase", so that it
+  is not confused with recovering one: `mhfe decrypt` is now "Recover a seed phrase".
+- Without `--pim` or `--mem`, `mhfe encrypt`, `decrypt` and `check` ask at a terminal whether to
+  keep the defaults, PIM 0 and memory level 0, which come first, or to type their own. The question
+  links to the README's section on both settings instead of explaining them; the memory level is
+  asked with the highest one this computer can use. The start menu's commands thereby reach every
+  setting.
 - Suite 4 test vectors in `tests/fixtures/suite4-vectors/` with fast refusal cases, an independent
   check with `scripts/independent-suite4.py`, and the replay `tests/suite4_vectors.rs`. The full
   replay of both vector sets runs for a release or on request, no longer on every push.

@@ -8,13 +8,14 @@
 use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
-use mhfe::{check_container, MhfeError, Password, Reference, Suite, WordCount};
+use mhfe::{MhfeError, Reference, Suite, WordCount};
 use zeroize::Zeroizing;
 
+use crate::choice::{self, Answer, Question};
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
 use crate::settings::{self, Operation, Settings};
-use crate::style::{self, paint, ACCENT, MUTED, STRONG};
-use crate::terminal::{show_container_read, Input, Progress, CONTAINER_PROMPT};
+use crate::style::{self, paint};
+use crate::terminal::{self, Input, PrivateScreen, Progress, Step};
 
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("reference").args(["address", "fingerprint", "words"]))]
@@ -166,7 +167,6 @@ pub fn long_help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    let work = options.settings.work_factor()?;
     // Refused before anything is asked: only a short original carries a built-in check.
     if let Some(words) = options.words {
         if !BUILT_IN_CHECK_LENGTHS.contains(&words) {
@@ -177,10 +177,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         }
     }
     let mut input = Input::new(options.stdin);
-    settings::announce(work, Operation::Check);
-    settings::check_resources(work)?;
+    let work = settings::choose(options.settings, &mut input, Operation::Check)?;
 
-    let (container, suite) = read_container(&mut input)?;
+    let (container, suite) = terminal::read_container(&mut input, Operation::Check.title())?;
     let same_length = suite == Suite::SameLength;
     if same_length && options.words.is_some() {
         // Refused before the password is asked: there is nothing to check without a reference.
@@ -189,7 +188,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         }
         .into());
     }
-    let password = read_password(&mut input)?;
+    let password = terminal::read_password(&mut input, Operation::Check.title())?;
     let choice = match (options.address, options.fingerprint, options.words) {
         (true, _, _) => Choice::Address,
         (_, true, _) => Choice::Fingerprint,
@@ -204,7 +203,12 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let limits = SearchLimits::default();
     let reference = match choice {
         Choice::Address => {
-            address = read_parsed(&mut input, "Receiving address of the wallet: ")?;
+            address = read_public(
+                &mut input,
+                "Receiving address of the wallet: ",
+                ("Address", ""),
+                str::parse,
+            )?;
             passphrase = read_passphrase(&mut input)?;
             Reference::Address {
                 address: &address,
@@ -214,7 +218,12 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             }
         }
         Choice::Fingerprint => {
-            let fingerprint = read_fingerprint(&mut input)?;
+            let fingerprint = read_public(
+                &mut input,
+                "Master key fingerprint, eight hex digits: ",
+                ("Master key", "fingerprint "),
+                parse_fingerprint,
+            )?;
             passphrase = read_passphrase(&mut input)?;
             Reference::Fingerprint {
                 fingerprint,
@@ -294,126 +303,84 @@ fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
 /// Asks what to compare with. A same-length container has no built-in check, so it is offered
 /// only the address and the fingerprint.
 fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failure> {
-    eprintln!(
-        "{}",
-        paint(STRONG, "What should the recovered phrase be compared with?")
-    );
-    let choices = [
-        (
-            "A receiving address of the wallet",
-            "recommended: confirms the wallet and its passphrase",
+    let mut answers = vec![
+        Answer::new(
+            "A receiving address (recommended)",
+            "checks the wallet and its passphrase",
         ),
-        (
-            "The wallet's master key fingerprint, eight hex digits",
-            "quick, weaker",
-        ),
-        (
-            "Only the built-in check of a 12- to 21-word original",
-            "confirms the password, not the wallet",
+        Answer::new(
+            "The master key fingerprint",
+            "eight hex digits; quick, weaker",
         ),
     ];
-    let offered = if same_length { 2 } else { choices.len() };
-    for (number, (choice, note)) in choices.iter().take(offered).enumerate() {
-        eprintln!(
-            "  {} {choice} {}",
-            paint(ACCENT, format!("{}.", number + 1)),
-            paint(MUTED, format!("({note})"))
-        );
+    if !same_length {
+        answers.push(Answer::new(
+            "Only the built-in check",
+            "checks the password, not the wallet",
+        ));
     }
-    loop {
-        let answer = input.visible("Choice [1]: ")?;
-        match answer.trim() {
-            "" | "1" => return Ok(Choice::Address),
-            "2" => return Ok(Choice::Fingerprint),
-            "3" if !same_length => {
-                let words =
-                    input.visible("How many words does the original have (12, 15, 18 or 21)? ")?;
-                match words.trim().parse() {
-                    Ok(words @ (12 | 15 | 18 | 21)) => return Ok(Choice::BuiltInCheck(words)),
-                    _ => style::retry(
-                        "Type 12, 15, 18 or 21. A 24-word original has no built-in check.",
-                    ),
-                }
-            }
-            _ if same_length => style::retry("Type 1 or 2."),
-            _ => style::retry("Type 1, 2 or 3."),
-        }
+    let question = Question::new(
+        "What should the recovered seed phrase be compared with?",
+        "Compare",
+    );
+    match input.choose(&question, &answers)? {
+        0 => Ok(Choice::Address),
+        1 => Ok(Choice::Fingerprint),
+        _ => ask_for_original_length(input).map(Choice::BuiltInCheck),
     }
 }
 
-fn read_container(input: &mut Input) -> Result<(Zeroizing<String>, Suite), Failure> {
+/// The length of the original, for its built-in check.
+fn ask_for_original_length(input: &mut Input) -> Result<usize, Failure> {
+    let answers = BUILT_IN_CHECK_LENGTHS.map(|words| Answer::new(format!("{words} words"), ""));
+    let question = Question::new("How many words does the original have?", "Original");
+    let chosen = input.choose(&question, &answers)?;
+    Ok(BUILT_IN_CHECK_LENGTHS[chosen])
+}
+
+/// Reads a public answer, such as an address, as one step, again until `parse` accepts it; the
+/// summary then records it as `record`: a label, and words to put before the answer.
+fn read_public<T>(
+    input: &mut Input,
+    prompt: &str,
+    record: (&str, &str),
+    parse: impl Fn(&str) -> Result<T, MhfeError>,
+) -> Result<T, Failure> {
+    let mut step = Step::start(input);
     loop {
-        let typed = input.visible(CONTAINER_PROMPT)?;
-        match check_container(&typed) {
-            Ok(container) => {
-                let suite = show_container_read(&container, input);
-                return Ok((Zeroizing::new(container), suite));
+        let text = step.visible(input, prompt)?;
+        match parse(&text) {
+            Ok(value) => {
+                step.finish()?;
+                let (label, before) = record;
+                choice::record(label, &format!("{before}{}", text.trim()));
+                return Ok(value);
             }
-            Err(error) if input.can_ask_again() => {
-                style::retry(format!(
-                    "{}. Please type it again.",
-                    capitalize(&error.to_string())
-                ));
-            }
+            Err(error) if input.can_ask_again() => step.retry(format!(
+                "{}. Please type it again.",
+                capitalize(&error.to_string())
+            )),
             Err(error) => return Err(error.into()),
         }
     }
 }
 
-fn read_password(input: &mut Input) -> Result<Password, Failure> {
-    loop {
-        let text = input.secret("Password (hidden): ")?;
-        match Password::new(&text) {
-            Ok(password) => return Ok(password),
-            Err(error) if input.can_ask_again() => {
-                style::retry(format!(
-                    "{}. Please type it again.",
-                    capitalize(&error.to_string())
-                ));
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
-}
-
-fn read_parsed<T>(input: &mut Input, prompt: &str) -> Result<T, Failure>
-where
-    T: std::str::FromStr<Err = mhfe::MhfeError>,
-{
-    loop {
-        let text = input.visible(prompt)?;
-        match text.parse() {
-            Ok(value) => return Ok(value),
-            Err(error) if input.can_ask_again() => {
-                style::retry(format!(
-                    "{}. Please type it again.",
-                    capitalize(&error.to_string())
-                ));
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
-}
-
-fn read_fingerprint(input: &mut Input) -> Result<[u8; 4], Failure> {
-    loop {
-        let text = input.visible("Master key fingerprint, eight hex digits: ")?;
-        match parse_fingerprint(&text) {
-            Ok(fingerprint) => return Ok(fingerprint),
-            Err(error) if input.can_ask_again() => {
-                style::retry(format!(
-                    "{}. Please type it again.",
-                    capitalize(&error.to_string())
-                ));
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
-}
-
-/// The BIP39 passphrase is a separate secret from the MHFE password; most wallets have none.
+/// The BIP39 passphrase is a separate secret from the MHFE password; most wallets have none. It is
+/// typed on the private screen, and the summary records only whether there is one.
 fn read_passphrase(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
-    input.secret("BIP39 passphrase of the wallet (hidden; press Enter if it has none): ")
+    let screen = PrivateScreen::enter(input, Operation::Check.title());
+    if screen.is_active() {
+        eprintln!();
+    }
+    let passphrase = input.secret("BIP39 passphrase of the wallet, or Enter if it has none")?;
+    drop(screen);
+    let what = if passphrase.is_empty() {
+        "none"
+    } else {
+        "typed"
+    };
+    choice::record("Passphrase", what);
+    Ok(passphrase)
 }
 
 #[cfg(test)]

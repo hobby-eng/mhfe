@@ -1,4 +1,4 @@
-//! Reading recovery phrases the way people write them down.
+//! Reading seed phrases the way people write them down.
 
 use bip39::{Language, Mnemonic};
 use zeroize::Zeroizing;

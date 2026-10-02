@@ -2,13 +2,12 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::{check_container, Password, PhraseLength, RecoveredPhrase, Recovery, Suite, WordCount};
-use zeroize::Zeroizing;
+use mhfe::{PhraseLength, RecoveredPhrase, Recovery, Suite, WordCount};
 
-use crate::exit::{capitalize, Failure, SUCCESS};
+use crate::exit::{Failure, SUCCESS};
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, HEADING, STRONG};
-use crate::terminal::{self, show_container_read, Input, Progress, CONTAINER_PROMPT};
+use crate::terminal::{self, Input, Progress};
 
 #[derive(Args)]
 pub struct Options {
@@ -52,7 +51,7 @@ pub fn about() -> String {
     style::command_about(&[
         "Recover the original phrase from a container",
         "Runs 12 rounds, one to two minutes at the default settings, and shows the \
-         recovered phrase. Use the PIM and memory level of the encryption; at the defaults no option is \
+         recovered seed phrase. Use the PIM and memory level of the encryption; at the defaults no option is \
          needed.",
     ])
 }
@@ -98,30 +97,28 @@ pub fn long_help() -> String {
         ],
     );
     let note = style::help_note(
-        "The recovered phrase is shown on the screen: recover only on a trusted computer \
+        "The recovered seed phrase is shown on the screen: recover only on a trusted computer \
          without a network connection.",
     );
     format!("{asks}\n{}\n{note}", examples())
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    let work = options.settings.work_factor()?;
     let length = match options.words {
         Some(words) => PhraseLength::Words(WordCount::new(words)?),
         None => PhraseLength::Detect,
     };
     let mut input = Input::new(options.stdin);
-    settings::announce(work, Operation::Decrypt);
-    settings::check_resources(work)?;
+    let work = settings::choose(options.settings, &mut input, Operation::Decrypt)?;
 
-    let container = read_container(&mut input)?;
-    let password = read_password(&mut input)?;
+    let (container, _) = terminal::read_container(&mut input, Operation::Decrypt.title())?;
+    let password = terminal::read_password(&mut input, Operation::Decrypt.title())?;
     let mut mhfe = settings::reserve_memory(work)?;
+    eprintln!();
     style::warn(
-        "The recovered phrase will be shown on the screen.",
+        "The recovered seed phrase will be shown on the screen.",
         "Recover only on a trusted computer without a network connection.",
     );
-    eprintln!();
 
     let mut progress = Progress::start();
     let recovery = mhfe.decrypt(&container, &password, length, &mut |round, rounds| {
@@ -131,55 +128,23 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     progress.finish();
 
     // The result appears on a screen of its own, which is cleared once the person is done.
-    let screen = terminal::PrivateScreen::enter(&input);
+    let screen = terminal::PrivateScreen::enter_to_show(&input);
+    if screen.is_active() {
+        style::title(Operation::Decrypt.title());
+    }
     match &recovery {
         Recovery::Phrase(phrase) => show_single(phrase, length, &input),
         Recovery::Ambiguous(candidates) => show_ambiguous(candidates, &input),
     }
     if screen.is_active() {
-        input.visible("Press Enter when you have written it down; it then leaves the screen.")?;
+        terminal::wait_to_leave()?;
         drop(screen);
-        style::ok("Recovered. The phrase is no longer on the screen.");
+        style::ok("Recovered. The seed phrase is no longer on the screen.");
         style::hint("When you are done, close this terminal.");
     } else {
         style::hint("When you are done, clear the screen and close this terminal.");
     }
     Ok(SUCCESS)
-}
-
-fn read_container(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
-    loop {
-        let typed = input.visible(CONTAINER_PROMPT)?;
-        match check_container(&typed) {
-            Ok(container) => {
-                show_container_read(&container, input);
-                return Ok(Zeroizing::new(container));
-            }
-            Err(error) if input.can_ask_again() => {
-                style::retry(format!(
-                    "{}. Please type it again.",
-                    capitalize(&error.to_string())
-                ));
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
-}
-
-fn read_password(input: &mut Input) -> Result<Password, Failure> {
-    loop {
-        let text = input.secret("Password (hidden): ")?;
-        match Password::new(&text) {
-            Ok(password) => return Ok(password),
-            Err(error) if input.can_ask_again() => {
-                style::retry(format!(
-                    "{}. Please type it again.",
-                    capitalize(&error.to_string())
-                ));
-            }
-            Err(error) => return Err(error.into()),
-        }
-    }
 }
 
 fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
@@ -218,7 +183,10 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
     eprintln!();
     eprintln!(
         "{}",
-        paint(HEADING, format!("Recovered phrase, {} words", phrase.words))
+        paint(
+            HEADING,
+            format!("Recovered seed phrase, {} words", phrase.words)
+        )
     );
     print_result(phrase, input);
 }

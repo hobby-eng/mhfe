@@ -176,11 +176,13 @@ fn random_index() -> Result<usize, Failure> {
 fn index_from_dice(input: &mut Input, number: usize) -> Result<usize, Failure> {
     loop {
         let typed = input.secret(&format!(
-            "Word {number}: roll five dice and type the five digits (hidden): "
+            "Word {number}: roll five dice and type the five digits"
         ))?;
         match index_of_rolls(&typed) {
             Some(index) => return Ok(index),
-            None => style::retry("Type exactly five digits, each from 1 to 6, for example 35142."),
+            None => {
+                style::retry("Type exactly five digits, each from 1 to 6, for example 35142.");
+            }
         }
     }
 }

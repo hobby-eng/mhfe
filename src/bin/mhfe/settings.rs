@@ -1,4 +1,5 @@
-//! The PIM and memory-level options shared by every command that runs MHFE.
+//! The PIM and memory-level options shared by every command that runs MHFE. A person at a
+//! terminal who gives neither is asked: the defaults are chosen unless they pick their own.
 
 use anstream::eprintln;
 use clap::Args;
@@ -6,32 +7,23 @@ use mhfe::engine::HIGHEST_MEMORY_LEVEL;
 use mhfe::engine::{available_memory_bytes, check_can_run, NativeEngine};
 use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
 
+use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
-use crate::style::{self, paint, MUTED};
+use crate::style::{self, paint, ACCENT, MUTED};
+use crate::terminal::Input;
 
 const GIB: u64 = 1 << 30;
 
 #[derive(Args, Clone, Copy)]
 pub struct Settings {
+    // Options rather than defaults, so that a command can tell whether the person gave them.
     /// Pass multiplier, 0 to 1023 (default 0)
-    #[arg(
-        long,
-        value_name = "N",
-        default_value_t = 0,
-        hide_default_value = true,
-        long_help = pim_help()
-    )]
-    pub pim: u32,
+    #[arg(long, value_name = "N", long_help = pim_help())]
+    pub pim: Option<u32>,
 
     /// Memory level, 0 to 21 (default 0: 2 GiB)
-    #[arg(
-        long = "mem",
-        value_name = "LEVEL",
-        default_value_t = 0,
-        hide_default_value = true,
-        long_help = memory_level_help()
-    )]
-    pub memory_level: u32,
+    #[arg(long = "mem", value_name = "LEVEL", long_help = memory_level_help())]
+    pub memory_level: Option<u32>,
 }
 
 fn pim_help() -> String {
@@ -61,7 +53,15 @@ fn memory_level_help() -> String {
 
 impl Settings {
     pub fn work_factor(self) -> Result<WorkFactor, Failure> {
-        Ok(WorkFactor::new(self.pim, self.memory_level)?)
+        Ok(WorkFactor::new(
+            self.pim.unwrap_or(0),
+            self.memory_level.unwrap_or(0),
+        )?)
+    }
+
+    /// Whether the command line gives the PIM or the memory level; then nothing is asked.
+    fn given(self) -> bool {
+        self.pim.is_some() || self.memory_level.is_some()
     }
 }
 
@@ -76,35 +76,193 @@ pub enum Operation {
     Check,
 }
 
-/// States the settings, the memory and the expected time before anything starts. The format of
-/// the container is shown once it is known: after the choice of an encryption, or from the
-/// container's word count.
-pub fn announce(work: WorkFactor, operation: Operation) {
-    let (title, rounds, how) = match operation {
+impl Operation {
+    /// The title of the command, at the top of its screen and of its private screen.
+    pub fn title(self) -> &'static str {
+        match self {
+            Operation::Encrypt => "Encrypt a seed phrase",
+            Operation::Decrypt => "Recover a seed phrase",
+            Operation::Check => "Rehearse a recovery",
+        }
+    }
+}
+
+/// Where the README explains both settings. The question shows only this link: what the settings
+/// mean is documentation, not text to read during the work.
+const README_SETTINGS: &str = "https://github.com/hobby-eng/mhfe#settings-pim-and-memory-level";
+
+/// Announces the command, settles its settings and states them with the memory and the expected
+/// time, and refuses at once settings that this computer cannot run. A person at a terminal who
+/// gave neither setting is asked first: the defaults, or their own. Nothing secret has been asked
+/// yet. The format of the container is shown once it is known: after the choice of an encryption,
+/// or from the container's word count.
+pub fn choose(
+    settings: Settings,
+    input: &mut Input,
+    operation: Operation,
+) -> Result<WorkFactor, Failure> {
+    style::title(operation.title());
+    let defaults = settings.work_factor()?;
+    let asked = !settings.given() && input.can_ask_again();
+    let work = if asked && ask_for_own(input, operation, defaults)? {
+        ask_own(input)?
+    } else {
+        defaults
+    };
+    show(work, operation, asked);
+    check_resources(work)?;
+    Ok(work)
+}
+
+/// Asks whether to keep the defaults; true when the person wants to give their own settings. The
+/// question is erased once answered: the settings shown next record the answer.
+fn ask_for_own(
+    input: &mut Input,
+    operation: Operation,
+    defaults: WorkFactor,
+) -> Result<bool, Failure> {
+    let (low, high) = defaults.estimated_seconds();
+    let scale = u64::from(rounds_of(operation) / ROUNDS);
+    let time = format!("about {}", time_range(low * scale, high * scale));
+    let (text, answers) = match operation {
         Operation::Encrypt => (
-            "Encrypt a recovery phrase",
-            ENCRYPTION_ROUNDS,
-            "24 rounds (12 to encrypt, 12 to check)",
+            "Which settings should protect the phrase?",
+            [
+                Answer::new("PIM 0 and memory level 0 (recommended)", time),
+                Answer::new("My own PIM and memory level", "typed next"),
+            ],
         ),
-        Operation::Decrypt => ("Recover a recovery phrase", ROUNDS, "12 rounds"),
-        Operation::Check => ("Rehearse a recovery", ROUNDS, "12 rounds"),
+        Operation::Decrypt | Operation::Check => (
+            "Which settings was the container made with?",
+            [
+                Answer::new("PIM 0 and memory level 0, the defaults", time),
+                Answer::new("Other settings", "typed next"),
+            ],
+        ),
+    };
+    let question = Question {
+        text,
+        explanation: &[],
+        more: &[README_SETTINGS],
+        record: None,
+    };
+    Ok(input.choose(&question, &answers)? == 1)
+}
+
+/// Asks for a PIM and a memory level until this computer can run them. At a terminal that redraws
+/// lines, the questions are erased afterwards: the settings shown next record the answers.
+fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
+    let mut drawn_lines = 0;
+    let work = loop {
+        let pim = ask_number(
+            input,
+            &Question {
+                text: "PIM, 0 to 1023",
+                explanation: &["Each step adds the default work again: 1 doubles the time."],
+                more: &[],
+                record: None,
+            },
+            "PIM: ",
+            &mut drawn_lines,
+        )?;
+        let sizes = "0 = 2 GiB, 1 = 3 GiB, 2 = 4 GiB, 3 = 6 GiB, 4 = 8 GiB, ... 21 = 3 TiB.";
+        let available = highest_available_level().map(|highest| {
+            format!("This computer has the memory for level {highest} at most now.")
+        });
+        let mut explanation = vec![sizes];
+        explanation.extend(available.as_deref());
+        let level = ask_number(
+            input,
+            &Question {
+                text: "Memory level, 0 to 21",
+                explanation: &explanation,
+                more: &[],
+                record: None,
+            },
+            "Memory level: ",
+            &mut drawn_lines,
+        )?;
+        let checked = WorkFactor::new(pim, level)
+            .map_err(Failure::from)
+            .and_then(|work| check_resources(work).map(|()| work));
+        match checked {
+            Ok(work) => break work,
+            Err(failure) => {
+                eprintln!();
+                drawn_lines += 1 + style::retry(format!(
+                    "{}. Please choose again.",
+                    failure.message.trim_end_matches('.')
+                ));
+            }
+        }
+    };
+    if choice::can_run() {
+        choice::write_control(&choice::redraw_from(drawn_lines))?;
+    }
+    Ok(work)
+}
+
+/// Asks `question` for a whole number, again until one is typed, and adds the lines it drew to
+/// `drawn_lines`: the question block, and a line for every prompt and every retry.
+fn ask_number(
+    input: &mut Input,
+    question: &Question,
+    prompt: &str,
+    drawn_lines: &mut usize,
+) -> Result<u32, Failure> {
+    *drawn_lines += choice::draw_question(question);
+    loop {
+        let typed = input.visible(prompt)?;
+        *drawn_lines += 1;
+        match typed.trim().parse() {
+            Ok(number) => return Ok(number),
+            Err(_) => *drawn_lines += style::retry("Type a whole number."),
+        }
+    }
+}
+
+/// The rounds of an operation: twelve, or for an encryption twelve more to check it.
+fn rounds_of(operation: Operation) -> u32 {
+    match operation {
+        Operation::Encrypt => ENCRYPTION_ROUNDS,
+        Operation::Decrypt | Operation::Check => ROUNDS,
+    }
+}
+
+/// States the settings, the work and the expected time, and for an encryption with more memory
+/// than the default, that recovery will need it too. Settings the person was asked for are an
+/// answer of the summary, in cyan like the others; the erased question leaves no other trace.
+fn show(work: WorkFactor, operation: Operation, asked: bool) {
+    let rounds = rounds_of(operation);
+    let how = match operation {
+        Operation::Encrypt => "24 rounds (12 to encrypt, 12 to check)",
+        Operation::Decrypt | Operation::Check => "12 rounds",
     };
     // The estimate is for the twelve rounds of one pass through the cipher.
     let (low, high) = work.estimated_seconds();
     let scale = u64::from(rounds / ROUNDS);
     let gray = |text: String| paint(MUTED, text);
 
-    style::title(title);
-    style::fact(
-        "Settings",
+    let memory = format!("({} GiB)", work.memory_bytes() / GIB);
+    let settings = if asked {
+        paint(
+            ACCENT,
+            format!(
+                "PIM {} · memory level {} {memory}",
+                work.pim(),
+                work.memory_level()
+            ),
+        )
+    } else {
         format!(
             "PIM {} {} memory level {} {}",
             work.pim(),
             gray("·".into()),
             work.memory_level(),
-            gray(format!("({} GiB)", work.memory_bytes() / GIB))
-        ),
-    );
+            gray(memory)
+        )
+    };
+    style::fact("Settings", settings);
     style::fact(
         "Work",
         format!("{how} {} {} Argon2 passes", gray("×".into()), work.passes()),
@@ -132,7 +290,7 @@ pub fn announce(work: WorkFactor, operation: Operation) {
 
 /// Refuses at once, before any secret is asked for, a memory level that this build or computer
 /// cannot run. Nothing is allocated yet.
-pub fn check_resources(work: WorkFactor) -> Result<(), Failure> {
+fn check_resources(work: WorkFactor) -> Result<(), Failure> {
     check_can_run(work).map_err(with_level_hint)
 }
 
