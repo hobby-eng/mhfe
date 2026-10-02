@@ -420,7 +420,7 @@ is described above.
 - `block2` 0.6.2: `MIT`, used under MIT; [text 10](#text-10).
   The crate publishes no licence file. This is the standard SPDX MIT text with the copyright holders taken from the crate's `authors`.
 - `bs58` 0.5.1: `MIT/Apache-2.0`, used under MIT; [text 11](#text-11).
-- `cfg-if` 1.0.4: `MIT OR Apache-2.0`, used under MIT; [text 12](#text-12).
+- `cfg-if` 1.0.5: `MIT OR Apache-2.0`, used under MIT; [text 12](#text-12).
 - `clap` 4.6.7: `MIT OR Apache-2.0`, used under MIT; [text 1](#text-1).
 - `clap_builder` 4.6.7: `MIT OR Apache-2.0`, used under MIT; [text 1](#text-1).
 - `clap_lex` 1.1.1: `MIT OR Apache-2.0`, used under MIT; [text 1](#text-1).
@@ -481,7 +481,7 @@ is described above.
 - `subtle` 2.6.1: `BSD-3-Clause`, used under BSD-3-Clause; [text 42](#text-42).
 - `tinyvec` 1.13.3: `Zlib OR Apache-2.0 OR MIT`, used under MIT; [text 43](#text-43).
 - `typenum` 1.20.1: `MIT OR Apache-2.0`, used under MIT; [text 44](#text-44).
-- `unicode-ident` 1.0.24: `(MIT OR Apache-2.0) AND Unicode-3.0`, used under MIT and Unicode-3.0; [text 20](#text-20), [text 45](#text-45).
+- `unicode-ident` 1.0.26: `(MIT OR Apache-2.0) AND Unicode-3.0`, used under MIT and Unicode-3.0; [text 20](#text-20), [text 45](#text-45).
 - `unicode-normalization` 0.1.25: `MIT OR Apache-2.0`, used under MIT; [text 46](#text-46).
 - `utf8parse` 0.2.2: `Apache-2.0 OR MIT`, used under MIT; [text 47](#text-47).
 - `wasm-bindgen` 0.2.129: `MIT OR Apache-2.0`, used under MIT; [text 12](#text-12).
@@ -932,7 +932,7 @@ SOFTWARE.
 
 #### Text 12
 
-MIT, for cfg-if 1.0.4, js-sys 0.3.106, wasm-bindgen 0.2.129, wasm-bindgen-shared 0.2.129.
+MIT, for cfg-if 1.0.5, js-sys 0.3.106, wasm-bindgen 0.2.129, wasm-bindgen-shared 0.2.129.
 
 ```
 Copyright (c) 2014 Alex Crichton
@@ -1188,7 +1188,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 20
 
-MIT, for ctrlc 3.5.2, group 0.14.0, itoa 1.0.18, once_cell 1.21.4, pin-project-lite 0.2.17, serde 1.0.229, serde_core 1.0.229, serde_json 1.0.151, unicode-ident 1.0.24, zmij 1.0.23.
+MIT, for ctrlc 3.5.2, group 0.14.0, itoa 1.0.18, once_cell 1.21.4, pin-project-lite 0.2.17, serde 1.0.229, serde_core 1.0.229, serde_json 1.0.151, unicode-ident 1.0.26, zmij 1.0.23.
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -1947,7 +1947,7 @@ SOFTWARE.
 
 #### Text 45
 
-Unicode-3.0, for unicode-ident 1.0.24.
+Unicode-3.0, for unicode-ident 1.0.26.
 
 ```
 UNICODE LICENSE V3
