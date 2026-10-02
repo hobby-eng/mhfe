@@ -21,6 +21,16 @@ Planned as version 0.5.0.
   `SAME_LENGTH_NEEDS_SHORT_PHRASE`, `LENGTH_CHOICE_NOT_APPLICABLE` and `NO_BUILT_IN_CHECK`.
 - The format of a container (its suite identifier) is shown after an encryption and when a container
   is read, instead of at the start.
+- Questions are answered from lists, as in the menu: the arrow keys and Enter, or an answer's
+  number at once; Escape cancels (q too, where the keyboard has it). This replaces the typed
+  `y`/`n` answers of `mhfe encrypt` and the typed choice of `mhfe check`. Laid out as in MnemoCode,
+  each question stands apart with a short explanation, and once answered it gives way to one line
+  of a summary. Scripts (`--stdin`) answer as before.
+- Without `--pim` or `--mem`, `mhfe encrypt`, `decrypt` and `check` ask at a terminal whether to
+  keep the defaults, PIM 0 and memory level 0, which come first, or to type their own. The question
+  explains what the two settings change and that recovery needs them again; the memory level is
+  asked with the highest one this computer can use. The start menu's commands thereby reach every
+  setting.
 - Suite 4 test vectors in `tests/fixtures/suite4-vectors/` with fast refusal cases, an independent
   check with `scripts/independent-suite4.py`, and the replay `tests/suite4_vectors.rs`. The full
   replay of both vector sets runs for a release or on request, no longer on every push.

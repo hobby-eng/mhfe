@@ -23,8 +23,9 @@
 // only through unsafe foreign functions.
 #![allow(unsafe_code)]
 
-use std::io;
+use std::io::{self, BufRead};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use zeroize::Zeroizing;
 
@@ -60,7 +61,8 @@ pub enum Key {
     Digit(u8),
     /// ?, which asks for an explanation.
     Help,
-    /// q, Ctrl+D or the end of the input.
+    /// Escape alone, q, Ctrl+D or the end of the input. q is an alias: a keyboard layout may have
+    /// no q, such as the Russian one, where that key types й.
     Quit,
     /// Any other key, which the menu ignores.
     Other,
@@ -72,8 +74,8 @@ pub fn with_keys<T>(
     choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
 ) -> Result<T, Failure> {
     with_terminal_switched(platform::single_keys, || {
-        let mut input = io::stdin().lock();
-        choose(&mut || read_key(&mut input))
+        let mut keys = TerminalKeys::new(io::stdin().lock());
+        choose(&mut || read_key(&mut keys))
     })
 }
 
@@ -136,14 +138,77 @@ mod keys {
     pub const ESCAPE: u8 = 0x1b;
 }
 
+/// How long a lone Escape waits for the rest of an escape sequence. A terminal sends an arrow
+/// key's sequence at once, so an Escape that nothing follows within this time is the Escape key;
+/// MnemoCode waits as long (ESCAPE_DELAY_MS in its src/cli/terminal-input.ts).
+const ESCAPE_DELAY: Duration = Duration::from_millis(100);
+
+/// Where keys come from: their bytes, and whether more bytes follow at once, which tells the
+/// Escape key from the start of an escape sequence.
+trait KeySource {
+    /// One byte, or `None` at the end of the input.
+    fn next_byte(&mut self) -> Result<Option<u8>, Failure>;
+    /// Whether another byte is there or arrives within `delay`.
+    fn more_within(&mut self, delay: Duration) -> Result<bool, Failure>;
+}
+
+/// The keys typed at the terminal. Whatever the standard library has read from the terminal is
+/// taken over at once, so that its buffer stays empty and only the operating system needs to be
+/// asked whether more is coming. Bytes still here when a choice ends are dropped with this
+/// reader: a key pressed once too often must not end up in the next answer, such as a password.
+struct TerminalKeys<'a> {
+    input: io::StdinLock<'a>,
+    /// Bytes taken over and not yet read; wiped when dropped, as they could be typed-ahead text.
+    pending: Zeroizing<Vec<u8>>,
+    next: usize,
+}
+
+impl<'a> TerminalKeys<'a> {
+    fn new(input: io::StdinLock<'a>) -> Self {
+        Self {
+            input,
+            // Reserved at the size of the standard library's buffer, whose contents it takes
+            // whole, so that it is never reallocated and leaves no unwiped copy.
+            pending: Zeroizing::new(Vec::with_capacity(crate::terminal::LINE_CAPACITY)),
+            next: 0,
+        }
+    }
+}
+
+impl KeySource for TerminalKeys<'_> {
+    fn next_byte(&mut self) -> Result<Option<u8>, Failure> {
+        if self.next == self.pending.len() {
+            self.pending.clear();
+            self.next = 0;
+            let available = loop {
+                match self.input.fill_buf() {
+                    Ok(bytes) => break bytes,
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => return Err(error.into()),
+                }
+            };
+            let taken = available.len();
+            self.pending.extend_from_slice(available);
+            self.input.consume(taken);
+        }
+        let byte = self.pending.get(self.next).copied();
+        self.next += usize::from(byte.is_some());
+        Ok(byte)
+    }
+
+    fn more_within(&mut self, delay: Duration) -> Result<bool, Failure> {
+        Ok(self.next < self.pending.len() || platform::input_within(delay)?)
+    }
+}
+
 /// Reads one key from raw terminal bytes. The arrow keys send the VT escape sequences ESC [ A and
 /// ESC [ B, or ESC O A and ESC O B in a terminal's application mode. Every other escape sequence is
 /// read to its end and ignored, so that no byte of it, such as the 5 of Ctrl+Up (ESC [ 1 ; 5 A),
-/// is taken for a key of its own.
-fn read_key(reader: &mut impl io::Read) -> Result<Key, Failure> {
+/// is taken for a key of its own. An ESC that nothing follows at once is the Escape key.
+fn read_key(keys: &mut impl KeySource) -> Result<Key, Failure> {
     use keys::{CTRL_C, CTRL_D, ESCAPE};
 
-    let Some(byte) = read_byte(reader)? else {
+    let Some(byte) = keys.next_byte()? else {
         return Ok(Key::Quit);
     };
     let key = match byte {
@@ -151,9 +216,10 @@ fn read_key(reader: &mut impl io::Read) -> Result<Key, Failure> {
         b'1'..=b'9' => Key::Digit(byte - b'0'),
         b'?' => Key::Help,
         b'q' | b'Q' | CTRL_D | CTRL_C => Key::Quit,
-        ESCAPE => match read_byte(reader)? {
-            Some(b'[') => read_control_sequence(reader)?,
-            Some(b'O') => arrow(read_byte(reader)?),
+        ESCAPE if !keys.more_within(ESCAPE_DELAY)? => Key::Quit,
+        ESCAPE => match keys.next_byte()? {
+            Some(b'[') => read_control_sequence(keys)?,
+            Some(b'O') => arrow(keys.next_byte()?),
             _ => Key::Other,
         },
         _ => Key::Other,
@@ -163,11 +229,11 @@ fn read_key(reader: &mut impl io::Read) -> Result<Key, Failure> {
 
 /// The rest of a control sequence after ESC [: parameter and intermediate bytes, then one final
 /// byte from @ to ~ (ECMA-48). Only an arrow key without parameters counts.
-fn read_control_sequence(reader: &mut impl io::Read) -> Result<Key, Failure> {
+fn read_control_sequence(keys: &mut impl KeySource) -> Result<Key, Failure> {
     const FINAL_BYTES: std::ops::RangeInclusive<u8> = 0x40..=0x7e;
     let mut has_parameters = false;
     loop {
-        match read_byte(reader)? {
+        match keys.next_byte()? {
             None => return Ok(Key::Quit),
             Some(byte) if FINAL_BYTES.contains(&byte) => {
                 return Ok(if has_parameters {
@@ -186,19 +252,6 @@ fn arrow(final_byte: Option<u8>) -> Key {
         Some(b'A') => Key::Up,
         Some(b'B') => Key::Down,
         _ => Key::Other,
-    }
-}
-
-/// One byte, or `None` at the end of the input.
-fn read_byte(reader: &mut impl io::Read) -> Result<Option<u8>, Failure> {
-    let mut byte = [0u8; 1];
-    loop {
-        match reader.read(&mut byte) {
-            Ok(0) => return Ok(None),
-            Ok(_) => return Ok(Some(byte[0])),
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(error.into()),
-        }
     }
 }
 
@@ -263,6 +316,8 @@ fn remove_last_character(line: &mut Vec<u8>) {
 mod platform {
     use std::io;
     use std::mem::MaybeUninit;
+    use std::ptr;
+    use std::time::Duration;
 
     use zeroize::Zeroizing;
 
@@ -310,6 +365,36 @@ mod platform {
         hide(original)
     }
 
+    /// Whether a byte arrives on standard input within `delay`. select, not poll: macOS's poll
+    /// does not support terminals.
+    pub fn input_within(delay: Duration) -> Result<bool, Failure> {
+        loop {
+            // SAFETY: an fd_set and a timeval on the stack that select may change, for standard
+            // input only; all zero bytes are a valid fd_set.
+            let ready = unsafe {
+                let mut readable = MaybeUninit::<libc::fd_set>::zeroed().assume_init();
+                libc::FD_ZERO(&mut readable);
+                libc::FD_SET(libc::STDIN_FILENO, &mut readable);
+                let mut timeout = libc::timeval {
+                    tv_sec: delay.as_secs() as libc::time_t,
+                    tv_usec: delay.subsec_micros() as libc::suseconds_t,
+                };
+                libc::select(
+                    libc::STDIN_FILENO + 1,
+                    &mut readable,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    &mut timeout,
+                )
+            };
+            match ready {
+                -1 if io::Error::last_os_error().kind() == io::ErrorKind::Interrupted => continue,
+                -1 => return Err(terminal_error("wait for a key from")),
+                count => return Ok(count > 0),
+            }
+        }
+    }
+
     pub fn restore(original: &Settings) {
         // SAFETY: the settings read from this terminal before. A failure cannot be reported
         // usefully here; the shell restores the terminal when the tool ends in any case.
@@ -320,11 +405,13 @@ mod platform {
 #[cfg(windows)]
 mod platform {
     use std::io;
+    use std::time::{Duration, Instant};
 
     use windows_sys::Win32::System::Console::{
-        GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_ECHO_INPUT,
-        ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
-        ENABLE_VIRTUAL_TERMINAL_PROCESSING, STD_ERROR_HANDLE, STD_INPUT_HANDLE,
+        GetConsoleMode, GetStdHandle, PeekConsoleInputW, SetConsoleMode, CONSOLE_MODE,
+        ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT,
+        ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING, INPUT_RECORD, KEY_EVENT,
+        STD_ERROR_HANDLE, STD_INPUT_HANDLE,
     };
     use zeroize::Zeroizing;
 
@@ -382,6 +469,54 @@ mod platform {
         Ok(())
     }
 
+    /// Whether a typed character arrives within `delay`. The console has no wait for that alone:
+    /// its queue also holds events that give no character, such as the release of the Escape key
+    /// itself, so the queue is looked at every few milliseconds until the time is up.
+    pub fn input_within(delay: Duration) -> Result<bool, Failure> {
+        const LOOK_EVERY: Duration = Duration::from_millis(5);
+        let end = Instant::now() + delay;
+        loop {
+            if character_waiting()? {
+                return Ok(true);
+            }
+            if Instant::now() >= end {
+                return Ok(false);
+            }
+            std::thread::sleep(LOOK_EVERY);
+        }
+    }
+
+    /// Whether the console's queue holds a key press with a character. With VT input, the rest of
+    /// an arrow key's sequence arrives as such presses.
+    fn character_waiting() -> Result<bool, Failure> {
+        // More than the events of one key's sequence, with their releases.
+        const EVENTS: usize = 32;
+        let mut events = [INPUT_RECORD::default(); EVENTS];
+        let mut count = 0u32;
+        // SAFETY: room for EVENTS records; peeking leaves the events in the queue.
+        let peeked = unsafe {
+            PeekConsoleInputW(
+                GetStdHandle(STD_INPUT_HANDLE),
+                events.as_mut_ptr(),
+                EVENTS as u32,
+                &mut count,
+            )
+        };
+        if peeked == 0 {
+            return Err(terminal_error("look at the keys of"));
+        }
+        let typed = events[..count as usize].iter().any(|event| {
+            // SAFETY: the union holds a key event when EventType says so, and its character is
+            // read as the UTF-16 unit that the W function fills in.
+            event.EventType == KEY_EVENT as u16
+                && unsafe {
+                    event.Event.KeyEvent.bKeyDown != 0
+                        && event.Event.KeyEvent.uChar.UnicodeChar != 0
+                }
+        });
+        Ok(typed)
+    }
+
     pub fn restore(original: &Settings) {
         // SAFETY: the mode read from this console before.
         unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), *original) };
@@ -435,6 +570,18 @@ mod tests {
     }
 
     /// The keys in `bytes` up to the first Quit, which the end of the input gives too.
+    /// Test input that arrives all at once: more follows exactly while bytes are left.
+    impl KeySource for io::Cursor<Vec<u8>> {
+        fn next_byte(&mut self) -> Result<Option<u8>, Failure> {
+            let mut byte = [0u8; 1];
+            Ok((io::Read::read(self, &mut byte)? == 1).then_some(byte[0]))
+        }
+
+        fn more_within(&mut self, _delay: Duration) -> Result<bool, Failure> {
+            Ok((self.position() as usize) < self.get_ref().len())
+        }
+    }
+
     fn keys_in(bytes: &[u8]) -> Vec<Key> {
         let mut reader = io::Cursor::new(bytes.to_vec());
         let mut keys = Vec::new();
@@ -477,6 +624,14 @@ mod tests {
     fn the_end_of_the_input_quits() {
         assert_eq!(keys_in(b""), [Key::Quit]);
         assert_eq!(keys_in(b"\x1b["), [Key::Quit]);
+    }
+
+    #[test]
+    fn escape_alone_quits() {
+        use Key::*;
+        assert_eq!(keys_in(b"\x1b[B2\x1b"), [Down, Digit(2), Quit]);
+        // Escape followed at once by another key, as Alt+x sends it, is no Escape.
+        assert_eq!(keys_in(b"\x1bx\r\x1b"), [Other, Enter, Quit]);
     }
 
     #[test]

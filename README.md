@@ -167,7 +167,9 @@ Nothing is installed. Download the archive for your system from the
 [releases page](https://github.com/hobby-eng/mhfe/releases) ([which one](#release-files)), unpack it
 and run `mhfe` in a terminal: `mhfe encrypt`, `mhfe decrypt` and the other commands that
 `mhfe --help` lists. Started without a command, by a double-click or with the `mhfe-launch` script
-in the archive, it shows a menu of the same commands with their default settings.
+in the archive, it shows a menu of the same commands. Its questions
+offer their answers as a list: choose with the arrow keys and Enter, or press an answer's number;
+Escape cancels.
 
 Use it on a trusted computer that stays offline while the phrase and the password are on it, best a
 Linux system started from a USB stick with the network off. On Windows, Windows PE from a USB stick
@@ -220,8 +222,9 @@ a compatible version is at hand years from now.
 
 ## Settings: PIM and memory level
 
-Both default to 0, and most people should leave them there. Raising them makes every recovery, yours
-included, slower or more memory-hungry:
+Both default to 0, and most people should leave them there. At a terminal, each command offers the
+defaults first and lets you choose your own instead; `--pim` and `--mem` give them on the command
+line. Raising them makes every recovery, yours included, slower or more memory-hungry:
 
 | Memory level (`--mem`) | 0     | 1     | 2     | 3     | 4     | 5      | 6      | ... 21 |
 | ---------------------- | ----- | ----- | ----- | ----- | ----- | ------ | ------ | ------ |

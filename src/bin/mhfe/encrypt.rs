@@ -11,6 +11,7 @@ use mhfe::{
 };
 use zeroize::Zeroizing;
 
+use crate::choice::{self, Answer, Question};
 use crate::diceware::{different_dice_words, RECOMMENDED_WORDS};
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::length_choice;
@@ -122,10 +123,8 @@ pub fn long_help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    let work = options.settings.work_factor()?;
     let mut input = Input::new(options.stdin);
-    settings::announce(work, Operation::Encrypt);
-    settings::check_resources(work)?;
+    let work = settings::choose(options.settings, &mut input, Operation::Encrypt)?;
 
     let original = read_original(&mut input)?;
     let original_words = original.split(' ').count();
@@ -231,7 +230,7 @@ fn choose_suite(words: usize, same_length: bool, input: &Input) -> Result<Suite,
         length_choice::show_consequences(words);
         return Ok(Suite::SameLength);
     }
-    if input.is_script() || !crate::menu::can_run() {
+    if input.is_script() || !choice::can_run() {
         return Ok(Suite::TwentyFourWords);
     }
     length_choice::choose(words)
@@ -370,7 +369,9 @@ fn read_original(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
                 style::ok(format!("Accepted a valid {words}-word phrase."));
                 if input.can_ask_again()
                     && input.yes_or_no(
-                        "Show the words that were read? They will be visible on the screen.",
+                        &Question::new("Show the words that were read?", "Words"),
+                        Answer::new("Show them", "on a screen of their own, until you answer"),
+                        Answer::new("Keep them hidden", ""),
                         false,
                     )?
                 {
@@ -378,7 +379,12 @@ fn read_original(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
                     let confirmed = {
                         let _screen = terminal::PrivateScreen::enter(input);
                         terminal::show_words("Read the phrase as:", &phrase);
-                        input.yes_or_no("Is this your phrase?", true)?
+                        input.yes_or_no(
+                            &Question::new("Is this your phrase?", "Phrase"),
+                            Answer::new("Yes, it is", ""),
+                            Answer::new("No, type it again", ""),
+                            true,
+                        )?
                     };
                     if !confirmed {
                         style::retry("Please type it again.");
@@ -424,6 +430,7 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, F
 /// Asks for the password twice, so that a typing mistake cannot lock the phrase away, and warns
 /// when it is weaker than four different dice words.
 fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
+    eprintln!();
     style::hint(
         "Letter case and spaces count: lowercase words with single spaces are the easiest to \
          type again years later.",
@@ -463,7 +470,9 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
         }
         if input.can_ask_again()
             && input.yes_or_no(
-                "Show the password that was typed? It will be visible on the screen.",
+                &Question::new("Show the password that was typed?", "Password"),
+                Answer::new("Show it", "on a screen of its own, until you answer"),
+                Answer::new("Keep it hidden", ""),
                 false,
             )?
             && !confirm_password(&text, input)?
@@ -493,7 +502,12 @@ fn confirm_password(text: &str, input: &mut Input) -> Result<bool, Failure> {
             format!("{characters} characters, {words} words; letter case and spaces count.")
         )
     );
-    let confirmed = input.yes_or_no("Is this your password?", true)?;
+    let confirmed = input.yes_or_no(
+        &Question::new("Is this your password?", "Password"),
+        Answer::new("Yes, it is", ""),
+        Answer::new("No, type it again", ""),
+        true,
+    )?;
     if confirmed {
         drop(screen);
         style::ok("The password is no longer on the screen.");

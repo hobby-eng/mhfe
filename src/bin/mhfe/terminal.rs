@@ -9,9 +9,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use anstream::{eprint, eprintln, println};
-use mhfe::{Suite, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe::{MhfeError, Suite, ENCRYPTION_ROUNDS, ROUNDS};
 use zeroize::Zeroizing;
 
+use crate::choice::{self, Answer, Question};
 use crate::exit::{self, Failure};
 use crate::hidden_input;
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
@@ -72,18 +73,57 @@ impl Input {
         }
     }
 
-    /// Asks a yes-or-no question at a terminal; Enter alone gives `default`.
-    pub fn yes_or_no(&mut self, question: &str, default: bool) -> Result<bool, Failure> {
-        let choices = if default { "[Y/n]" } else { "[y/N]" };
-        loop {
-            let answer = self.visible(&format!("{question} {choices}: "))?;
-            match answer.trim().to_ascii_lowercase().as_str() {
-                "" => return Ok(default),
-                "y" | "yes" => return Ok(true),
-                "n" | "no" => return Ok(false),
-                _ => eprintln!("Type y or n."),
-            }
+    /// Asks a question with a few fixed answers and returns the index of the chosen one; the first
+    /// is the default. A person at a terminal chooses from a list with the arrow keys. A script,
+    /// or a terminal that cannot redraw lines, gets the answers numbered and types the number on a
+    /// line of its own, or nothing for the first.
+    pub fn choose(&mut self, question: &Question, answers: &[Answer]) -> Result<usize, Failure> {
+        if !self.is_script() && choice::can_run() {
+            return choice::choose(question, answers, None)?
+                .ok_or_else(|| MhfeError::Cancelled.into());
         }
+        choice::draw_question(question);
+        for (number, answer) in answers.iter().enumerate() {
+            let note = if answer.note.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", paint(MUTED, format!("({})", answer.note)))
+            };
+            eprintln!(
+                "  {} {}{note}",
+                paint(ACCENT, format!("{}.", number + 1)),
+                answer.label
+            );
+        }
+        loop {
+            let typed = self.visible("Choice [1]: ")?;
+            let number = match typed.trim() {
+                "" => Some(1),
+                text => text.parse().ok(),
+            };
+            if let Some(number @ 1..) = number.filter(|number| *number <= answers.len()) {
+                return Ok(number - 1);
+            }
+            let message = format!("Type a number from 1 to {}.", answers.len());
+            if !self.can_ask_again() {
+                return Err(Failure::invalid_input(message));
+            }
+            style::retry(message);
+        }
+    }
+
+    /// Asks a question that has a yes and a no answer. The default comes first, so that Enter
+    /// alone chooses it.
+    pub fn yes_or_no(
+        &mut self,
+        question: &Question,
+        yes: Answer,
+        no: Answer,
+        default: bool,
+    ) -> Result<bool, Failure> {
+        let answers = if default { [yes, no] } else { [no, yes] };
+        let chose_default = self.choose(question, &answers)? == 0;
+        Ok(chose_default == default)
     }
 }
 
@@ -115,12 +155,17 @@ pub fn exit_cancelled() -> ! {
             "Do not rely on it; encrypt again.",
         );
     } else {
-        style::warn(
-            "Cancelled.",
-            "Nothing was saved; the memory the tool used is released.",
-        );
+        show_cancelled();
     }
     std::process::exit(exit::CANCELLED);
+}
+
+/// What a cancelled command says, after Ctrl+C or q in a list.
+pub fn show_cancelled() {
+    style::warn(
+        "Cancelled.",
+        "Nothing was saved; the memory the tool used is released.",
+    );
 }
 
 fn read_hidden(prompt: &str) -> Result<Zeroizing<String>, Failure> {

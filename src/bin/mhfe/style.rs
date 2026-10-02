@@ -136,7 +136,7 @@ fn visible_width(text: &str) -> usize {
     width
 }
 
-/// Writes a question: its words in bold, a closing note such as "(hidden):" or "[y/N]:" in grey.
+/// Writes a question: its words in bold, a closing note such as "(hidden):" or "[1]:" in grey.
 pub fn prompt(text: &str) {
     let (question, note) = text.split_at(note_start(text));
     eprint!("{}{}", paint(STRONG, question), paint(MUTED, note));
@@ -378,7 +378,7 @@ mod tests {
     #[test]
     fn a_prompt_note_is_split_off() {
         assert_eq!(note_start("Password (hidden): "), 8);
-        assert_eq!(note_start("Is this your phrase? [Y/n]: "), 20);
+        assert_eq!(note_start("Choice [1]: "), 6);
         assert_eq!(note_start("Choice: "), 8);
     }
 }

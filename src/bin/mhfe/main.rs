@@ -8,6 +8,7 @@
 #![deny(unsafe_code)]
 
 mod check;
+mod choice;
 mod decrypt;
 mod diceware;
 mod encrypt;
@@ -137,7 +138,7 @@ fn main() {
     terminal::stop_on_ctrl_c();
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
     // menu, which runs the same commands.
-    let result = if std::env::args_os().len() == 1 && menu::can_run() {
+    let result = if std::env::args_os().len() == 1 && choice::can_run() {
         menu::run()
     } else {
         run(Cli::parse().command)
@@ -154,7 +155,11 @@ fn main() {
 
 /// Shows why a command stopped. An empty message means that the command has already shown it.
 fn show_failure(failure: &Failure) {
-    if !failure.message.is_empty() {
+    if failure.exit_code == exit::CANCELLED {
+        // q in a list: the person stopped on purpose, as with Ctrl+C, which is not an error.
+        anstream::eprintln!();
+        terminal::show_cancelled();
+    } else if !failure.message.is_empty() {
         anstream::eprintln!();
         style::error(&failure.to_string());
     }

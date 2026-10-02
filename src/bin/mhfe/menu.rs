@@ -1,32 +1,23 @@
 //! The menu that `mhfe` shows when it starts without arguments in a terminal, as from a
 //! double-click or a launcher script next to it.
 //!
-//! Each entry runs a command exactly as if it had been typed after `mhfe`, with its default
-//! settings, and shows that command in grey, so that the person can type it later; a command
-//! with other settings, such as `mhfe encrypt --pim 1`, is typed. An entry is chosen with the
-//! arrow keys and Enter or at once with its number; q quits. After a command the menu waits for
-//! Enter, so that a window opened by a double-click stays until its result has been read.
+//! Each entry runs a command exactly as if it had been typed after `mhfe` and shows that command
+//! in grey, so that the person can type it later; the command asks for its settings itself. An
+//! entry is chosen with the arrow keys and Enter or at once with its number; Escape, or q, quits.
+//! After a command the menu waits for Enter, so that a window opened by a double-click stays until
+//! its result has been read.
 
 use std::ffi::OsString;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, Write};
 
 use anstream::eprintln;
 use clap::{CommandFactory, Parser};
 
+use crate::choice::{draw_entries, redraw_from, write_control};
 use crate::exit::{Failure, SUCCESS};
 use crate::hidden_input::{self, Key};
-use crate::style::{self, paint, ACCENT, MUTED, STRONG};
+use crate::style;
 use crate::{serve, show_failure, Cli};
-
-/// The width that a menu line must not exceed; the menu redraws itself by moving the cursor up
-/// line by line, which a line wrapped by the terminal would upset. As style.rs: 78 columns.
-const LINE_WIDTH: usize = 78;
-
-/// Moves the cursor up `lines_above` lines to the start of the line, then clears to the end of
-/// the screen (VT100 "cursor up" and "erase in display").
-pub(crate) fn redraw_from(lines_above: usize) -> String {
-    format!("\x1b[{lines_above}A\r\x1b[J")
-}
 
 /// What an entry does when it is chosen.
 enum Action {
@@ -59,14 +50,6 @@ impl Entry {
             action: Action::Run(vec![name.into()]),
         }
     }
-}
-
-/// Whether the menu can run: it reads single keys from a terminal and draws on one. Anything
-/// else, such as a script or a pipe, gets the help instead, as before.
-pub fn can_run() -> bool {
-    io::stdin().is_terminal()
-        && io::stderr().is_terminal()
-        && std::env::var_os("TERM").is_none_or(|term| term != "dumb")
 }
 
 pub fn run() -> Result<i32, Failure> {
@@ -158,51 +141,20 @@ fn choose(entries: &[Entry], selected: &mut usize) -> Result<Option<usize>, Fail
     })
 }
 
-/// Draws the menu and returns how many lines it took. The highlighted entry has a cyan marker
-/// and a bold label, so that it stands out also without colours.
+/// Draws the menu and returns how many lines it took: the entries with their commands in grey,
+/// then the hint line.
 fn draw(entries: &[Entry], selected: usize) -> usize {
-    let label_width = entries
+    let lines: Vec<(&str, &str)> = entries
         .iter()
-        .map(|entry| entry.label.chars().count())
-        .max()
-        .unwrap_or(0);
-    for (index, entry) in entries.iter().enumerate() {
-        let number = paint(MUTED, index + 1);
-        let (marker, label) = if index == selected {
-            (paint(ACCENT, "›"), paint(STRONG, &entry.label))
-        } else {
-            (" ".to_owned(), entry.label.clone())
-        };
-        // Marker, number and the gaps: "› 1  " and two spaces before the command.
-        let command_room = LINE_WIDTH.saturating_sub(5 + label_width + 2);
-        let command = shortened(&entry.command, command_room);
-        if command.is_empty() {
-            eprintln!("{marker} {number}  {label}");
-        } else {
-            // Padded by hand: the width of a painted label would count its colour codes.
-            let padding = " ".repeat(label_width - entry.label.chars().count());
-            eprintln!(
-                "{marker} {number}  {label}{padding}  {}",
-                paint(MUTED, command)
-            );
-        }
-    }
+        .map(|entry| (entry.label.as_str(), entry.command.as_str()))
+        .collect();
+    let entry_lines = draw_entries(&lines, selected);
     eprintln!();
     let last = entries.len();
     style::hint(&format!(
-        "↑ ↓ choose · Enter runs · 1 to {last} run at once · q quits"
+        "↑ ↓ choose · Enter runs · 1 to {last} run at once · Esc quits"
     ));
-    entries.len() + 2
-}
-
-/// `text` cut to `room` characters with "…" at the end, so that a long page name cannot wrap
-/// the line.
-fn shortened(text: &str, room: usize) -> String {
-    if text.chars().count() <= room {
-        return text.to_owned();
-    }
-    let kept: String = text.chars().take(room.saturating_sub(1)).collect();
-    format!("{kept}…")
+    entry_lines + 2
 }
 
 fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
@@ -216,7 +168,7 @@ fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
 fn wait_for_enter() -> Result<bool, Failure> {
     // Switched before the question appears, as in choose().
     let back = hidden_input::with_keys(|next_key| {
-        style::prompt("Press Enter to return to the menu (q quits).");
+        style::prompt("Press Enter to return to the menu (Esc quits).");
         io::stderr().flush()?;
         loop {
             match next_key()? {
@@ -231,17 +183,10 @@ fn wait_for_enter() -> Result<bool, Failure> {
     back
 }
 
-/// Writes a cursor-control sequence as it is: anstream would remove it when NO_COLOR is set.
-pub(crate) fn write_control(sequence: &str) -> Result<(), Failure> {
-    let mut terminal = io::stderr();
-    terminal.write_all(sequence.as_bytes())?;
-    terminal.flush()?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::choice::LINE_WIDTH;
 
     #[test]
     fn every_entry_is_a_valid_command() {
@@ -270,17 +215,5 @@ mod tests {
             .max()
             .unwrap();
         assert!(5 + label_width + 2 + longest_command <= LINE_WIDTH);
-    }
-
-    #[test]
-    fn a_long_command_is_shortened() {
-        assert_eq!(
-            shortened("mhfe serve tool.html", 40),
-            "mhfe serve tool.html"
-        );
-        assert_eq!(
-            shortened("mhfe serve a-very-long-name.html", 15),
-            "mhfe serve a-v…"
-        );
     }
 }

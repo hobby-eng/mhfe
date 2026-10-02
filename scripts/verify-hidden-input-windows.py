@@ -4,10 +4,10 @@
 
 The Windows counterpart of scripts/verify-hidden-input.py, for CI on a Windows machine; it needs
 the pywinpty package, pinned in scripts/verify-hidden-input-windows-requirements.txt. The default
-program is target\\debug\\mhfe.exe. It drives `mhfe check --fingerprint`, which asks for the
-container and then for the password at a hidden prompt, and stops the tool before a fingerprint is
-given, so no memory is reserved and Argon2 never runs. Only the public zero-12 test container is
-used.
+program is target\\debug\\mhfe.exe. It drives `mhfe check --fingerprint --pim 0`, which asks for
+the container and then for the password at a hidden prompt, and stops the tool before a fingerprint
+is given, so no memory is reserved and Argon2 never runs; the PIM given skips the question of the
+settings. Only the public zero-12 test container is used.
 
 It checks that
 - control characters in a password reach the password check and are refused, including those a
@@ -20,8 +20,8 @@ It checks that
 
 It also drives the menu that `mhfe` shows when it starts without arguments, which asks the console
 for VT input so that the arrow keys arrive as on Unix: Down, Up and Enter choose `mhfe password`,
-its number chooses it at once, Ctrl+Up's 5 chooses nothing, q quits with exit code 0 and Ctrl+C
-with 130.
+its number chooses it at once, Ctrl+Up's 5 chooses nothing, q and a lone Escape quit with exit
+code 0 and Ctrl+C with 130.
 """
 
 import json
@@ -46,7 +46,8 @@ BACKSPACE, CTRL_U, CTRL_C = "\x08", "\x15", "\x03"
 UP, DOWN, ENTER, CTRL_UP = "\x1b[A", "\x1b[B", "\r", "\x1b[1;5A"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
 PASSWORD_ENTRY = 4
-MENU_SHOWN, BACK_TO_MENU = "q quits", "return to the menu"
+MENU_SHOWN, BACK_TO_MENU = "Esc quits", "return to the menu"
+ESCAPE = "\x1b"
 CONTROLS = {
     "TAB": "\t",
     "Ctrl+S": "\x13",
@@ -64,7 +65,7 @@ LONGEST = "\U0001d400" * 1024
 
 
 class Session:
-    def __init__(self, arguments=("check", "--fingerprint")):
+    def __init__(self, arguments=("check", "--fingerprint", "--pim", "0")):
         environment = dict(os.environ, NO_COLOR="1")
         self.process = PtyProcess.spawn(
             [PROGRAM, *arguments], env=environment, dimensions=(40, 200)
@@ -137,6 +138,19 @@ def check_menu():
         code = session.close()
     assert code == 0, f"menu: q gave exit code {code}"
     print("menu: arrows, Enter, a number and q, exit code 0")
+
+    # Escape alone: the tool waits a moment for the rest of an arrow key's sequence, then quits.
+    session = Session(arguments=())
+    try:
+        session.wait_for(MENU_SHOWN)
+        session.type(ESCAPE)
+        end = time.monotonic() + 10
+        while session.process.isalive() and time.monotonic() < end:
+            time.sleep(0.1)
+    finally:
+        code = session.close()
+    assert code == 0, f"menu: Escape gave exit code {code}"
+    print("menu: a lone Escape quits, exit code 0")
 
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)

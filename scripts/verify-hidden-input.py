@@ -2,9 +2,10 @@
 
     python3 scripts/verify-hidden-input.py [path/to/mhfe]
 
-The default is target/debug/mhfe. It drives `mhfe check --fingerprint`, which asks for the
-container and then for the password at a hidden prompt, and stops the tool before a fingerprint is given,
-so no memory is reserved and Argon2 never runs. Only the public zero-12 test container is used.
+The default is target/debug/mhfe. It drives `mhfe check --fingerprint --pim 0`, which asks for
+the container and then for the password at a hidden prompt, and stops the tool before a fingerprint
+is given, so no memory is reserved and Argon2 never runs; the PIM given skips the question of the
+settings. Only the public zero-12 test container is used.
 
 It checks that
 - every control character in a password reaches the password check and is refused, including
@@ -20,8 +21,16 @@ It checks that
 
 It also drives the menu that `mhfe` shows when it starts without arguments: the arrow keys and Enter
 choose an entry, its number chooses it at once, other escape sequences (Ctrl+Up) and keys do
-nothing and are not shown, q quits with exit code 0 and Ctrl+C with 130, and the terminal settings
-are restored either way. The entry it runs is `mhfe password`, which needs no secret.
+nothing and are not shown, q and a lone Escape quit with exit code 0 and Ctrl+C with 130, and the
+terminal settings are restored either way. The entry it runs is `mhfe password`, which needs no
+secret.
+
+Last, it answers the questions of `mhfe encrypt` from their lists, up to the password check, so
+again without Argon2: its own settings, PIM 1 after a mistyped one, which the settings shown next
+record; a number shows the words that were read, Enter confirms them, ? explains the container
+lengths and the arrows and Enter keep 24 words, which a line of the summary then records; Escape
+at the next list cancels with exit code 130 and restores the terminal. The phrase is the public
+zero-12 test phrase and the password a synthetic one, which is never shown.
 """
 
 import fcntl
@@ -37,7 +46,8 @@ import time
 
 ROOT = Path(__file__).resolve().parent.parent
 PROGRAM = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "target/debug/mhfe")
-CONTAINER = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-12.json").read_text())["container"]
+ZERO_12 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-12.json").read_text())
+CONTAINER, PHRASE = ZERO_12["container"], ZERO_12["inputs"]["phrase"]
 # Exit code of the tool when the person cancels (src/bin/mhfe/exit.rs).
 CANCELLED = 130
 # What the tool prints next after each kind of answer. An accepted one leads to the fingerprint.
@@ -46,10 +56,15 @@ REFUSED = b"again"
 ACCEPTED = b"ingerprint"
 BACKSPACE, CTRL_U, CTRL_C = b"\x7f", b"\x15", b"\x03"
 # The keys of the menu, as a terminal sends them. Ctrl+Up carries a 5, which must not choose entry 5.
-UP, DOWN, ENTER, CTRL_UP = b"\x1b[A", b"\x1b[B", b"\r", b"\x1b[1;5A"
+UP, DOWN, ENTER, CTRL_UP, ESCAPE = b"\x1b[A", b"\x1b[B", b"\r", b"\x1b[1;5A", b"\x1b"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
 PASSWORD_ENTRY = 4
-MENU_SHOWN, BACK_TO_MENU, PASSWORD_MADE = b"q quits", b"return to the menu", b"bits"
+MENU_SHOWN, BACK_TO_MENU, PASSWORD_MADE = b"Esc quits", b"return to the menu", b"bits"
+# What the lists of `mhfe encrypt` show: a list's hint line, the explanation behind ?, and the line
+# that records the chosen container length.
+LIST_SHOWN, EXPLAINED = b"Esc cancels", b"8-character code"
+LENGTH_RECORDED = b"Container  24 words (recommended)"
+SETTINGS_EXPLAINED, OWN_SETTINGS = b"repeats the work", b"PIM 1 \xc2\xb7 memory level 0"
 # A key the menu ignores; it appears nowhere in what the menu or `mhfe password` print.
 IGNORED_KEY = b"Z"
 # The control characters a terminal in its usual mode acts on instead of passing them on.
@@ -81,7 +96,7 @@ def attach_terminal():
 
 
 class Session:
-    def __init__(self, arguments=("check", "--fingerprint")):
+    def __init__(self, arguments=("check", "--fingerprint", "--pim", "0")):
         self.master, self.slave = os.openpty()
         os.set_blocking(self.master, False)
         # The settings are read through the master side: on macOS the slave side stops answering
@@ -110,6 +125,21 @@ class Session:
                 if needle in self.output[start:]:
                     return needle
         raise AssertionError(f"none of {needles} in {self.output[start:]!r}")
+
+    def answer(self, keys, *expected, limit=10):
+        """Types `keys` and reads until every one of `expected` has appeared after them. A list
+        and its question arrive together, so each is looked for in all that followed the keys."""
+        start = len(self.output)
+        self.type(keys)
+        end = time.monotonic() + limit
+        while not all(needle in self.output[start:] for needle in expected):
+            if time.monotonic() > end:
+                raise AssertionError(f"not all of {expected} in {self.output[start:]!r}")
+            if select.select([self.master], [], [], 0.1)[0]:
+                try:
+                    self.output += os.read(self.master, 4096)
+                except OSError:
+                    time.sleep(0.05)
 
     def type(self, data, limit=10):
         """Writes `data` as pasted text; the line only ends at the carriage return.
@@ -209,6 +239,16 @@ def check_menu():
     assert IGNORED_KEY not in session.output, "menu: a key was shown"
     print("menu: arrows, Enter, a number and q; ignored keys not shown, terminal restored")
 
+    # Escape alone: the tool waits a moment for the rest of an arrow key's sequence, then quits.
+    session = Session(arguments=())
+    session.wait_for(MENU_SHOWN)
+    session.type(ESCAPE)
+    assert session.drain_until_exit(10), "menu: Escape did not end the tool"
+    code, settings = session.close()
+    assert code == 0, f"menu: Escape gave exit code {code}"
+    assert settings == session.original, "menu: Escape did not restore the terminal settings"
+    print("menu: a lone Escape quits, exit code 0, terminal restored")
+
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
     session.type(CTRL_C)
@@ -217,6 +257,33 @@ def check_menu():
     assert code == CANCELLED, f"menu: Ctrl+C gave exit code {code}"
     assert settings == session.original, "menu: Ctrl+C did not restore the terminal settings"
     print("menu: Ctrl+C, exit code 130, terminal restored")
+
+
+def check_encrypt_lists():
+    session = Session(arguments=("encrypt",))
+    # Nothing typed yet: this waits for the whole first question, its explanation and its list.
+    session.answer(b"", SETTINGS_EXPLAINED, LIST_SHOWN)
+    session.answer(b"2", b"PIM: ")
+    session.answer(b"x\r", b"whole number", b"PIM: ")
+    session.answer(b"1\r", b"Memory level: ")
+    session.answer(b"0\r", OWN_SETTINGS, b"phrase (hidden)")
+    session.answer(PHRASE.encode() + b"\r", b"Show the words", LIST_SHOWN)
+    # The second answer, "Yes, show them", by its number; the words then wait for a confirmation.
+    session.answer(b"2", b"Is this your phrase?", LIST_SHOWN)
+    session.answer(ENTER, b"no longer on the screen", b"How long should", LIST_SHOWN)
+    session.answer(b"?", EXPLAINED, LIST_SHOWN)
+    session.answer(IGNORED_KEY + DOWN + UP + ENTER, LENGTH_RECORDED, b"Password (hidden)")
+    session.answer(SECRET + b"\r", b"Repeat")
+    session.answer(SECRET + b"\r", b"Show the password", LIST_SHOWN)
+    session.answer(ESCAPE, b"Cancelled")
+    assert session.drain_until_exit(10), "encrypt: Escape did not end the tool"
+    code, settings = session.close()
+    assert code == CANCELLED, f"encrypt: Escape gave exit code {code}"
+    assert settings == session.original, "encrypt: the terminal settings were not restored"
+    assert SECRET not in session.output, "encrypt: the password was shown"
+    assert IGNORED_KEY not in session.output, "encrypt: a key was shown"
+    print("encrypt: own settings typed; lists answered with a number, Enter, ? and the arrows")
+    print("encrypt: Escape cancels, exit code 130, terminal restored")
 
 
 def main():
@@ -244,6 +311,7 @@ def main():
     print("cancelled: Ctrl+C at a hidden prompt, exit code 130, terminal restored")
 
     check_menu()
+    check_encrypt_lists()
 
 
 if __name__ == "__main__":

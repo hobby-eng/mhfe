@@ -11,9 +11,10 @@ use mhfe::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimi
 use mhfe::{check_container, MhfeError, Password, Reference, Suite, WordCount};
 use zeroize::Zeroizing;
 
+use crate::choice::{Answer, Question};
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
 use crate::settings::{self, Operation, Settings};
-use crate::style::{self, paint, ACCENT, MUTED, STRONG};
+use crate::style::{self, paint};
 use crate::terminal::{show_container_read, Input, Progress, CONTAINER_PROMPT};
 
 #[derive(Args)]
@@ -166,7 +167,6 @@ pub fn long_help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    let work = options.settings.work_factor()?;
     // Refused before anything is asked: only a short original carries a built-in check.
     if let Some(words) = options.words {
         if !BUILT_IN_CHECK_LENGTHS.contains(&words) {
@@ -177,8 +177,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         }
     }
     let mut input = Input::new(options.stdin);
-    settings::announce(work, Operation::Check);
-    settings::check_resources(work)?;
+    let work = settings::choose(options.settings, &mut input, Operation::Check)?;
 
     let (container, suite) = read_container(&mut input)?;
     let same_length = suite == Suite::SameLength;
@@ -294,51 +293,39 @@ fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
 /// Asks what to compare with. A same-length container has no built-in check, so it is offered
 /// only the address and the fingerprint.
 fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failure> {
-    eprintln!(
-        "{}",
-        paint(STRONG, "What should the recovered phrase be compared with?")
-    );
-    let choices = [
-        (
-            "A receiving address of the wallet",
-            "recommended: confirms the wallet and its passphrase",
+    let mut answers = vec![
+        Answer::new(
+            "A receiving address (recommended)",
+            "checks the wallet and its passphrase",
         ),
-        (
-            "The wallet's master key fingerprint, eight hex digits",
-            "quick, weaker",
-        ),
-        (
-            "Only the built-in check of a 12- to 21-word original",
-            "confirms the password, not the wallet",
+        Answer::new(
+            "The master key fingerprint",
+            "eight hex digits; quick, weaker",
         ),
     ];
-    let offered = if same_length { 2 } else { choices.len() };
-    for (number, (choice, note)) in choices.iter().take(offered).enumerate() {
-        eprintln!(
-            "  {} {choice} {}",
-            paint(ACCENT, format!("{}.", number + 1)),
-            paint(MUTED, format!("({note})"))
-        );
+    if !same_length {
+        answers.push(Answer::new(
+            "Only the built-in check",
+            "checks the password, not the wallet",
+        ));
     }
-    loop {
-        let answer = input.visible("Choice [1]: ")?;
-        match answer.trim() {
-            "" | "1" => return Ok(Choice::Address),
-            "2" => return Ok(Choice::Fingerprint),
-            "3" if !same_length => {
-                let words =
-                    input.visible("How many words does the original have (12, 15, 18 or 21)? ")?;
-                match words.trim().parse() {
-                    Ok(words @ (12 | 15 | 18 | 21)) => return Ok(Choice::BuiltInCheck(words)),
-                    _ => style::retry(
-                        "Type 12, 15, 18 or 21. A 24-word original has no built-in check.",
-                    ),
-                }
-            }
-            _ if same_length => style::retry("Type 1 or 2."),
-            _ => style::retry("Type 1, 2 or 3."),
-        }
+    let question = Question::new(
+        "What should the recovered phrase be compared with?",
+        "Compare",
+    );
+    match input.choose(&question, &answers)? {
+        0 => Ok(Choice::Address),
+        1 => Ok(Choice::Fingerprint),
+        _ => ask_for_original_length(input).map(Choice::BuiltInCheck),
     }
+}
+
+/// The length of the original, for its built-in check.
+fn ask_for_original_length(input: &mut Input) -> Result<usize, Failure> {
+    let answers = BUILT_IN_CHECK_LENGTHS.map(|words| Answer::new(format!("{words} words"), ""));
+    let question = Question::new("How many words does the original have?", "Original");
+    let chosen = input.choose(&question, &answers)?;
+    Ok(BUILT_IN_CHECK_LENGTHS[chosen])
 }
 
 fn read_container(input: &mut Input) -> Result<(Zeroizing<String>, Suite), Failure> {

@@ -105,14 +105,12 @@ pub fn long_help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    let work = options.settings.work_factor()?;
     let length = match options.words {
         Some(words) => PhraseLength::Words(WordCount::new(words)?),
         None => PhraseLength::Detect,
     };
     let mut input = Input::new(options.stdin);
-    settings::announce(work, Operation::Decrypt);
-    settings::check_resources(work)?;
+    let work = settings::choose(options.settings, &mut input, Operation::Decrypt)?;
 
     let container = read_container(&mut input)?;
     let password = read_password(&mut input)?;
