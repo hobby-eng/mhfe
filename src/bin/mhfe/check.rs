@@ -8,13 +8,13 @@
 use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
-use mhfe::{check_container, Password, Reference, WordCount};
+use mhfe::{check_container, MhfeError, Password, Reference, Suite, WordCount};
 use zeroize::Zeroizing;
 
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
-use crate::terminal::{show_container_read, Input, Progress};
+use crate::terminal::{show_container_read, Input, Progress, CONTAINER_PROMPT};
 
 #[derive(Args)]
 #[command(group = clap::ArgGroup::new("reference").args(["address", "fingerprint", "words"]))]
@@ -68,8 +68,8 @@ fn words_help() -> String {
         "Only the built-in check of a 12- to 21-word original.",
         "N is the length of the original: 12, 15, 18 or 21. Nothing more is asked for. A match \
          confirms the password and the settings only, not the wallet or a BIP39 passphrase. A \
-         24-word original has no built-in check; compare it with an address or the \
-         fingerprint.",
+         24-word original and a container as long as its original have no built-in check; \
+         compare them with an address or the fingerprint.",
     ])
 }
 
@@ -180,13 +180,21 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     settings::announce(work, Operation::Check);
     settings::check_resources(work)?;
 
-    let container = read_container(&mut input)?;
+    let (container, suite) = read_container(&mut input)?;
+    let same_length = suite == Suite::SameLength;
+    if same_length && options.words.is_some() {
+        // Refused before the password is asked: there is nothing to check without a reference.
+        return Err(MhfeError::NoBuiltInCheck {
+            container_words: container.split(' ').count(),
+        }
+        .into());
+    }
     let password = read_password(&mut input)?;
     let choice = match (options.address, options.fingerprint, options.words) {
         (true, _, _) => Choice::Address,
         (_, true, _) => Choice::Fingerprint,
         (_, _, Some(words)) => Choice::BuiltInCheck(words),
-        _ => ask_for_choice(&mut input)?,
+        _ => ask_for_choice(&mut input, same_length)?,
     };
 
     // The reference and passphrase are read before the long computation starts, so the user
@@ -283,7 +291,9 @@ fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
     }
 }
 
-fn ask_for_choice(input: &mut Input) -> Result<Choice, Failure> {
+/// Asks what to compare with. A same-length container has no built-in check, so it is offered
+/// only the address and the fingerprint.
+fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failure> {
     eprintln!(
         "{}",
         paint(STRONG, "What should the recovered phrase be compared with?")
@@ -302,7 +312,8 @@ fn ask_for_choice(input: &mut Input) -> Result<Choice, Failure> {
             "confirms the password, not the wallet",
         ),
     ];
-    for (number, (choice, note)) in choices.iter().enumerate() {
+    let offered = if same_length { 2 } else { choices.len() };
+    for (number, (choice, note)) in choices.iter().take(offered).enumerate() {
         eprintln!(
             "  {} {choice} {}",
             paint(ACCENT, format!("{}.", number + 1)),
@@ -314,7 +325,7 @@ fn ask_for_choice(input: &mut Input) -> Result<Choice, Failure> {
         match answer.trim() {
             "" | "1" => return Ok(Choice::Address),
             "2" => return Ok(Choice::Fingerprint),
-            "3" => {
+            "3" if !same_length => {
                 let words =
                     input.visible("How many words does the original have (12, 15, 18 or 21)? ")?;
                 match words.trim().parse() {
@@ -324,18 +335,19 @@ fn ask_for_choice(input: &mut Input) -> Result<Choice, Failure> {
                     ),
                 }
             }
+            _ if same_length => style::retry("Type 1 or 2."),
             _ => style::retry("Type 1, 2 or 3."),
         }
     }
 }
 
-fn read_container(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
+fn read_container(input: &mut Input) -> Result<(Zeroizing<String>, Suite), Failure> {
     loop {
-        let typed = input.visible("Container, 24 words: ")?;
+        let typed = input.visible(CONTAINER_PROMPT)?;
         match check_container(&typed) {
             Ok(container) => {
-                show_container_read(&container, input);
-                return Ok(Zeroizing::new(container));
+                let suite = show_container_read(&container, input);
+                return Ok((Zeroizing::new(container), suite));
             }
             Err(error) if input.can_ask_again() => {
                 style::retry(format!(

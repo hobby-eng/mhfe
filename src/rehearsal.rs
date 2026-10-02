@@ -5,16 +5,18 @@
 use zeroize::Zeroizing;
 
 use crate::engine::Argon2Engine;
-use crate::mhfe::phrase_from_entropy;
+use crate::mhfe::{phrase_from_entropy, suite_3_state};
 use crate::packing::{self, State};
+use crate::suite::Suite;
 use crate::wallet::{self, BitcoinAddress, DerivationPath, SearchLimits};
 use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
 
 /// What the recovered phrase is compared with.
 pub enum Reference<'a> {
-    /// The built-in check value of a 12-, 15-, 18- or 21-word original. It confirms that the
-    /// recovery is consistent, not that it gives the same wallet, and it says nothing about a
-    /// BIP39 passphrase. A 24-word original has no such check and is refused.
+    /// The built-in check value of a 12-, 15-, 18- or 21-word original in a 24-word container.
+    /// It confirms that the recovery is consistent, not that it gives the same wallet, and it says
+    /// nothing about a BIP39 passphrase. A 24-word original and a same-length container have no
+    /// such check and are refused.
     BuiltInCheck { words: WordCount },
     /// A receiving address of the wallet, the strong check. The address is searched on the
     /// standard paths of its type within `limits`, or only at `path` when given.
@@ -41,11 +43,21 @@ impl<E: Argon2Engine> Mhfe<E> {
         on_progress: ProgressCallback<'_>,
     ) -> Result<bool, MhfeError> {
         if let Reference::BuiltInCheck { words } = reference {
+            // Refused before any Argon2 work, from the word count alone.
+            let container_words = container.split_whitespace().count();
+            if Suite::of_container(container_words) == Ok(Suite::SameLength) {
+                return Err(MhfeError::NoBuiltInCheck { container_words });
+            }
             if !packing::SHORT_WORD_COUNTS.contains(&words.get()) {
                 return Err(MhfeError::InvalidWordCount(words.get()));
             }
         }
-        let x = self.recover_state(container, password, on_progress)?;
+        let (suite, x) = self.recover_state(container, password, None, on_progress)?;
+        if suite == Suite::SameLength {
+            // The container's own length is the only reading.
+            return phrase_matches(&phrase_from_entropy(&x)?, reference);
+        }
+        let x = suite_3_state(&x)?;
         match reference {
             Reference::BuiltInCheck { words } => Ok(packing::unpack(&x, words.get()).is_ok()),
             Reference::Address { .. } | Reference::Fingerprint { .. } => {
@@ -110,7 +122,9 @@ mod tests {
         let wrong = Password::new("public test passwore").unwrap();
         let mut mhfe = reduced();
         let container = mhfe
-            .encrypt(ABANDON, &password, &mut |_, _| Ok(()))
+            .encrypt(ABANDON, &password, Suite::TwentyFourWords, &mut |_, _| {
+                Ok(())
+            })
             .unwrap();
 
         let address: BitcoinAddress = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
@@ -157,7 +171,9 @@ mod tests {
         let original = "legal winner thank year wave sausage worth useful legal winner thank year \
                         wave sausage worth useful legal winner thank year wave sausage worth title";
         let container = mhfe
-            .encrypt(original, &password, &mut |_, _| Ok(()))
+            .encrypt(original, &password, Suite::TwentyFourWords, &mut |_, _| {
+                Ok(())
+            })
             .unwrap();
         let fingerprint = wallet::master_fingerprint(original, "").unwrap();
         let reference = Reference::Fingerprint {
@@ -178,6 +194,41 @@ mod tests {
             )
             .err(),
             Some(MhfeError::InvalidWordCount(24))
+        );
+    }
+
+    #[test]
+    fn a_same_length_container_is_checked_against_the_wallet_only() {
+        let password = Password::new("public test password").unwrap();
+        let wrong = Password::new("public test passwore").unwrap();
+        let mut mhfe = reduced();
+        let container = mhfe
+            .encrypt(ABANDON, &password, Suite::SameLength, &mut |_, _| Ok(()))
+            .unwrap();
+        assert_eq!(container.split(' ').count(), 12);
+        let reference = Reference::Fingerprint {
+            fingerprint: [0x73, 0xc5, 0xda, 0x0a],
+            passphrase: "",
+        };
+        assert!(mhfe
+            .check(&container, &password, &reference, &mut |_, _| Ok(()))
+            .unwrap());
+        assert!(!mhfe
+            .check(&container, &wrong, &reference, &mut |_, _| Ok(()))
+            .unwrap());
+        assert_eq!(
+            mhfe.check(
+                &container,
+                &password,
+                &Reference::BuiltInCheck {
+                    words: WordCount::new(12).unwrap()
+                },
+                &mut |_, _| Ok(())
+            )
+            .err(),
+            Some(MhfeError::NoBuiltInCheck {
+                container_words: 12
+            })
         );
     }
 }

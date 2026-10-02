@@ -35,6 +35,7 @@ the file named by the environment variable BIP39_ENGLISH_WORDLIST (one word per 
 import glob
 import hashlib
 import hmac
+import importlib.metadata
 import json
 import os
 import platform
@@ -395,7 +396,10 @@ def verifier_description():
         "sha256": sha256_file(__file__),
         "python": platform.python_version(),
         "cryptography": cryptography.__version__,
-        "unicodedata2": f"{unicode17.__version__} (Unicode {unicode17.unidata_version})",
+        # The compiled module carries no __version__; the installed package names its version.
+        "unicodedata2": (
+            f"{importlib.metadata.version('unicodedata2')} (Unicode {unicode17.unidata_version})"
+        ),
         "openssl": backend.openssl_version_text(),
     }
 

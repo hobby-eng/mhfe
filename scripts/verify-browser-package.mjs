@@ -28,6 +28,11 @@ const REDUCED_MEMORY_KIB = 256;
 const REDUCED_PASSES = 1;
 const REDUCED_COST_CONTAINER =
   "slush crime nose carry menu cabbage already cart lock intact focus siren filter crouch buyer toward topple cup holiday avoid mango envelope dream sweet";
+/** The same at the same cost as a container of the phrase's own length (suite 4). */
+const REDUCED_COST_SAME_LENGTH_CONTAINER =
+  "program adjust rain raven flip eternal spider bulb under soup enrich ensure";
+const ZERO_24 =
+  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 /** The same phrase and password at full size, as the native tool and an OpenSSL script give it. */
 const FULL_SIZE_CONTAINER =
   "donate stove tower picnic iron rescue trick shrimp roof rib home cigar bag pledge also nerve cycle famous provide heart ahead chunk caution peace";
@@ -43,8 +48,9 @@ const coreMemory = core.initSync({ module: read("dist/mhfe_core_bg.wasm") }).mem
 
 const parameters = JSON.parse(core.suiteParameters());
 assert.equal(parameters.suiteId, "MHFE-BIP39-256-EXPERIMENTAL-3");
+assert.equal(parameters.sameLengthSuiteId, "MHFE-BIP39-LP-EXPERIMENTAL-4");
 assert.equal(parameters.highestBrowserMemoryLevel, 0);
-assert.equal(parameters.apiVersion, 6, "otherDetectedLengths for the check before creation");
+assert.equal(parameters.apiVersion, 7, "the same-length choice of encrypt");
 
 function expectCode(code, action) {
   assert.throws(action, (error) => error.message.startsWith(`${code}: `), code);
@@ -69,8 +75,12 @@ for (const [name, createModule] of Object.entries(builds)) {
   const steps = [];
   const onStep = (round, rounds) => steps.push(`${round}/${rounds}`);
   const onUnverified = (container) => steps.push(`unverified ${container}`);
-  const container = core.encrypt(PHRASE, PASSWORD, 0, 0, reduced, onStep, onUnverified);
+  const created = JSON.parse(
+    core.encrypt(PHRASE, PASSWORD, 0, 0, false, reduced, onStep, onUnverified),
+  );
+  const container = created.container;
   assert.equal(container, REDUCED_COST_CONTAINER, `${name}: same container as the native engine`);
+  assert.equal(created.suiteId, "MHFE-BIP39-256-EXPERIMENTAL-3");
   // An encryption runs its 12 rounds, hands over the unchecked container, then runs 12 more to
   // decrypt its words and compare the result.
   const encryptionSteps = Array.from({ length: 24 }, (_, index) => `${index + 1}/24`);
@@ -85,7 +95,9 @@ for (const [name, createModule] of Object.entries(builds)) {
   );
   assert.deepEqual(recovery, {
     kind: "phrase",
-    candidates: [{ words: 12, verified: true, phrase: PHRASE }],
+    candidates: [
+      { words: 12, verified: true, phrase: PHRASE, suiteId: "MHFE-BIP39-256-EXPERIMENTAL-3" },
+    ],
   });
   const wrong = JSON.parse(
     core.decrypt(container, new TextEncoder().encode("wrong"), 0, 0, 0, reduced, () => {}),
@@ -130,6 +142,7 @@ for (const [name, createModule] of Object.entries(builds)) {
       PASSWORD,
       0,
       1,
+      false,
       reduced,
       () => {},
       () => {},
@@ -141,6 +154,7 @@ for (const [name, createModule] of Object.entries(builds)) {
       PASSWORD,
       1024,
       0,
+      false,
       reduced,
       () => {},
       () => {},
@@ -152,6 +166,7 @@ for (const [name, createModule] of Object.entries(builds)) {
       PASSWORD,
       0,
       0,
+      false,
       reduced,
       () => {},
       () => {},
@@ -166,6 +181,7 @@ for (const [name, createModule] of Object.entries(builds)) {
         PASSWORD,
         value,
         0,
+        false,
         reduced,
         () => {},
         () => {},
@@ -225,12 +241,89 @@ for (const [name, createModule] of Object.entries(builds)) {
       PASSWORD,
       0,
       0,
+      false,
       reduced,
       () => {
         throw new Error("stop");
       },
       () => {},
     ),
+  );
+  // A container of the phrase's own length, only when asked for.
+  const sameLength = JSON.parse(
+    core.encrypt(
+      PHRASE,
+      PASSWORD,
+      0,
+      0,
+      true,
+      reduced,
+      () => {},
+      () => {},
+    ),
+  );
+  assert.deepEqual(sameLength, {
+    container: REDUCED_COST_SAME_LENGTH_CONTAINER,
+    suiteId: "MHFE-BIP39-LP-EXPERIMENTAL-4",
+  });
+  assert.deepEqual(
+    JSON.parse(
+      core.decrypt(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, 0, 0, 0, reduced, () => {}),
+    ),
+    {
+      kind: "phrase",
+      candidates: [
+        { words: 12, verified: false, phrase: PHRASE, suiteId: "MHFE-BIP39-LP-EXPERIMENTAL-4" },
+      ],
+    },
+  );
+  assert.equal(
+    core.check(
+      REDUCED_COST_SAME_LENGTH_CONTAINER,
+      PASSWORD,
+      0,
+      0,
+      "fingerprint",
+      "73c5da0a",
+      "",
+      noPassphrase,
+      reduced,
+      () => {},
+    ),
+    true,
+  );
+  expectCode("NO_BUILT_IN_CHECK", () =>
+    core.check(
+      REDUCED_COST_SAME_LENGTH_CONTAINER,
+      PASSWORD,
+      0,
+      0,
+      "words",
+      "12",
+      "",
+      noPassphrase,
+      reduced,
+      () => {},
+    ),
+  );
+  expectCode("SAME_LENGTH_NEEDS_SHORT_PHRASE", () =>
+    core.encrypt(
+      ZERO_24,
+      PASSWORD,
+      0,
+      0,
+      true,
+      reduced,
+      () => {},
+      () => {},
+    ),
+  );
+  expectCode("LENGTH_CHOICE_NOT_APPLICABLE", () =>
+    core.decrypt(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, 0, 0, 15, reduced, () => {}),
+  );
+  assert.equal(
+    core.checkContainer(REDUCED_COST_SAME_LENGTH_CONTAINER.toUpperCase()),
+    REDUCED_COST_SAME_LENGTH_CONTAINER,
   );
   console.log(`The ${name} build gives the native container and passes the API checks.`);
 }
@@ -242,11 +335,12 @@ if (process.argv.includes("--full")) {
     PASSWORD,
     0,
     0,
+    false,
     engine,
     () => {},
     () => {},
   );
-  assert.equal(container, FULL_SIZE_CONTAINER);
+  assert.equal(JSON.parse(container).container, FULL_SIZE_CONTAINER);
   console.log("A full-size encryption with the threaded build gives the native container.");
 }
 
@@ -317,6 +411,7 @@ const pending = client.encrypt({
 const worker = StandInWorker.last;
 assert.equal(await worker.script.text(), "single-threaded source\n;\nworker source");
 assert.equal(worker.messages[0].argon2Script, null);
+assert.equal(worker.messages[0].sameLength, false, "24 words unless the page asks otherwise");
 assert.deepEqual(
   [...worker.messages[0].password],
   [...password],
@@ -366,6 +461,10 @@ const encrypt = (options) =>
 // Every error rejects the promise, the checks of the arguments included: none is thrown.
 const refusals = [
   [() => client.encrypt({ phrase: PHRASE, password: "p" }), { code: "PASSWORDS_DIFFER" }],
+  [
+    () => client.encrypt({ phrase: PHRASE, password: "p", passwordRepeat: "p", sameLength: "yes" }),
+    TypeError,
+  ],
   [
     () => client.encrypt({ phrase: PHRASE, password: "p", passwordRepeat: "P" }),
     { code: "PASSWORDS_DIFFER" },

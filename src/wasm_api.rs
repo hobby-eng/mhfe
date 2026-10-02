@@ -13,12 +13,12 @@ use zeroize::Zeroizing;
 use crate::engine::browser::{BrowserEngine, JsArgon2, HIGHEST_BROWSER_MEMORY_LEVEL};
 use crate::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
 use crate::{
-    Mhfe, MhfeError, Password, PhraseLength, Recovery, Reference, WordCount, MAX_MEMORY_LEVEL,
-    MAX_PIM, ROUNDS, SUITE_ID,
+    Mhfe, MhfeError, Password, PhraseLength, Recovery, Reference, Suite, WordCount,
+    MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
 
 /// Changes when this API changes incompatibly.
-const API_VERSION: u32 = 6;
+const API_VERSION: u32 = 7;
 
 /// "CODE: message", the form the worker and the client parse.
 fn js_error(error: MhfeError) -> JsError {
@@ -34,6 +34,7 @@ fn serialization_error(error: serde_json::Error) -> JsError {
 struct SuiteParameters {
     api_version: u32,
     suite_id: &'static str,
+    same_length_suite_id: &'static str,
     rounds: u32,
     max_pim: u32,
     max_memory_level: u32,
@@ -46,6 +47,7 @@ pub fn suite_parameters() -> Result<String, JsError> {
     serde_json::to_string(&SuiteParameters {
         api_version: API_VERSION,
         suite_id: SUITE_ID,
+        same_length_suite_id: SAME_LENGTH_SUITE_ID,
         rounds: ROUNDS,
         max_pim: MAX_PIM,
         max_memory_level: MAX_MEMORY_LEVEL,
@@ -91,32 +93,52 @@ pub fn check_password(password_utf8: Vec<u8>) -> Result<(), JsError> {
     password_from(password_utf8).map(|_| ())
 }
 
-/// Encrypts `phrase` and returns the 24-word container once its check has passed.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ContainerJson<'a> {
+    container: &'a str,
+    suite_id: &'static str,
+}
+
+/// Encrypts `phrase` and returns JSON `{ container, suiteId }` once its check has passed: a
+/// 24-word container, or with `same_length`, which only the user's own choice may set, a
+/// container as long as the 12- to 21-word phrase.
 ///
 /// After the first twelve rounds `on_unverified` receives the container, so that a page can
 /// show it, marked as not yet verified, while the check runs.
+#[allow(clippy::too_many_arguments)]
 #[wasm_bindgen]
 pub fn encrypt(
     phrase: &str,
     password_utf8: Vec<u8>,
     pim: f64,
     memory_level: f64,
+    same_length: bool,
     argon2: JsArgon2,
     on_round: &js_sys::Function,
     on_unverified: &js_sys::Function,
 ) -> Result<String, JsError> {
     let password = password_from(password_utf8)?;
+    let suite = if same_length {
+        Suite::SameLength
+    } else {
+        Suite::TwentyFourWords
+    };
     let mut mhfe = mhfe_for(pim, memory_level, argon2)?;
     let mut on_progress = |round, rounds| report(on_round, round, rounds);
     let new = mhfe
-        .encrypt_unchecked(phrase, &password, &mut on_progress)
+        .encrypt_unchecked(phrase, &password, suite, &mut on_progress)
         .map_err(js_error)?;
     on_unverified
         .call1(&JsValue::UNDEFINED, &JsValue::from_str(&new.words))
         .map_err(|_| js_error(MhfeError::Cancelled))?;
     mhfe.check_new_container(&new, &password, &mut on_progress)
         .map_err(js_error)?;
-    Ok(new.words.to_string())
+    serde_json::to_string(&ContainerJson {
+        container: &new.words,
+        suite_id: new.suite.id(),
+    })
+    .map_err(serialization_error)
 }
 
 #[derive(Serialize)]
@@ -125,6 +147,8 @@ struct CandidateJson<'a> {
     words: usize,
     verified: bool,
     phrase: &'a str,
+    /// The suite of the container, which its word count selected.
+    suite_id: &'static str,
 }
 
 #[derive(Serialize)]
@@ -135,8 +159,9 @@ struct RecoveryJson<'a> {
     candidates: Vec<CandidateJson<'a>>,
 }
 
-/// Recovers the phrase. `words` is 0 for automatic detection, otherwise the chosen length.
-/// Returns JSON: `{ kind, candidates: [{ words, verified, phrase }] }`.
+/// Recovers the phrase; the container's word count selects the suite. `words` is 0 for automatic
+/// detection, otherwise the chosen length, which a same-length container takes only as its own.
+/// Returns JSON: `{ kind, candidates: [{ words, verified, phrase, suiteId }] }`.
 #[wasm_bindgen]
 pub fn decrypt(
     container: &str,
@@ -170,6 +195,7 @@ pub fn decrypt(
                 words: candidate.words,
                 verified: candidate.verified,
                 phrase: &candidate.phrase,
+                suite_id: candidate.suite.id(),
             })
             .collect(),
     };

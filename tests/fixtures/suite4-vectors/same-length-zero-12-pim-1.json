@@ -1,0 +1,339 @@
+{
+  "schema": "mhfe-suite-4-vector-v1",
+  "suite_id": "MHFE-BIP39-LP-EXPERIMENTAL-4",
+  "name": "same-length-zero-12-pim-1",
+  "warning": "Public test data only. This file contains the password and every round key by design; never use its phrase or password for real funds.",
+  "generator": {
+    "program": "mhfe test-vectors",
+    "version": "0.5.0",
+    "argon2": "reference C implementation, P-H-C/phc-winner-argon2 commit f57e61e19229e23c4445b85494dbf7c07de721cb"
+  },
+  "inputs": {
+    "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    "password": "public test password",
+    "password_utf8_hex": "7075626c696320746573742070617373776f7264",
+    "password_nfkd_utf8_hex": "7075626c696320746573742070617373776f7264",
+    "pim": 1,
+    "memory_level": 0
+  },
+  "argon2": {
+    "variant": "Argon2id",
+    "version": 19,
+    "memory_kib": 2097152,
+    "passes": 24,
+    "lanes": 4,
+    "output_bytes": 32
+  },
+  "state": {
+    "words": 12,
+    "entropy_bits": 128,
+    "half_bytes": 8,
+    "state_hex": "00000000000000000000000000000000"
+  },
+  "encryption": {
+    "input_state_hex": "00000000000000000000000000000000",
+    "rounds": [
+      {
+        "round": 0,
+        "left_before_hex": "0000000000000000",
+        "right_before_hex": "0000000000000000",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c54000000000000000100000080000000000000000000000000",
+        "salt_hex": "0b2ba321eec3aeea02aa35b3a426c5e6",
+        "argon2_key_hex": "33761573a5d4f1c0daf27a477c5a99bf4df8cd76115d2adb1d490189318b5af5",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b000000000000000100000080000000000000000000000000",
+        "mask_hex": "35923e4209dfbf01",
+        "left_after_hex": "0000000000000000",
+        "right_after_hex": "35923e4209dfbf01"
+      },
+      {
+        "round": 1,
+        "left_before_hex": "0000000000000000",
+        "right_before_hex": "35923e4209dfbf01",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000001000000800000000135923e4209dfbf01",
+        "salt_hex": "e960215e1c9590705b7d9650aab67dd4",
+        "argon2_key_hex": "c8838eb4667d56f935e08edd2d06b2e93436af6a40e01325c7280121d456b535",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000001000000800000000135923e4209dfbf01",
+        "mask_hex": "a456742a5910e27b",
+        "left_after_hex": "35923e4209dfbf01",
+        "right_after_hex": "a456742a5910e27b"
+      },
+      {
+        "round": 2,
+        "left_before_hex": "35923e4209dfbf01",
+        "right_before_hex": "a456742a5910e27b",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000002a456742a5910e27b",
+        "salt_hex": "5ad0e88d10a3e12271830b30cec575f3",
+        "argon2_key_hex": "463b208ac79cc6401ffeaf0094beec10b24bffe18a9f9c663c70cdfb058ef255",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000002a456742a5910e27b",
+        "mask_hex": "97ded3975359286a",
+        "left_after_hex": "a456742a5910e27b",
+        "right_after_hex": "a24cedd55a86976b"
+      },
+      {
+        "round": 3,
+        "left_before_hex": "a456742a5910e27b",
+        "right_before_hex": "a24cedd55a86976b",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000003a24cedd55a86976b",
+        "salt_hex": "4bcb29051993af7144b89dbd144d2ad3",
+        "argon2_key_hex": "4ea627692c08a3153ff68eb78e2cee9d08fa15145cacf3eb99c40592d66712a2",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000003a24cedd55a86976b",
+        "mask_hex": "6c6357263bf88325",
+        "left_after_hex": "a24cedd55a86976b",
+        "right_after_hex": "c835230c62e8615e"
+      },
+      {
+        "round": 4,
+        "left_before_hex": "a24cedd55a86976b",
+        "right_before_hex": "c835230c62e8615e",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000004c835230c62e8615e",
+        "salt_hex": "7e0753d67ca3f95dcbe0578e7f9ae75d",
+        "argon2_key_hex": "2052f63940582d4cfc3eabd0667de1c1ea821af7b1bb3d05c9ee56078aa05d02",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000004c835230c62e8615e",
+        "mask_hex": "95d0805c19e25c58",
+        "left_after_hex": "c835230c62e8615e",
+        "right_after_hex": "379c6d894364cb33"
+      },
+      {
+        "round": 5,
+        "left_before_hex": "c835230c62e8615e",
+        "right_before_hex": "379c6d894364cb33",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000005379c6d894364cb33",
+        "salt_hex": "7bef02b894c5d391946ca802ea1cd988",
+        "argon2_key_hex": "98cc0d8bf7784237d8502fd95abdc1b8675db16aed6d4a9015e1a00035df6d0a",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000005379c6d894364cb33",
+        "mask_hex": "adb290092074fb0e",
+        "left_after_hex": "379c6d894364cb33",
+        "right_after_hex": "6587b305429c9a50"
+      },
+      {
+        "round": 6,
+        "left_before_hex": "379c6d894364cb33",
+        "right_before_hex": "6587b305429c9a50",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c54000000000000000100000080000000066587b305429c9a50",
+        "salt_hex": "beae8a7d279859ab387081e939ab7427",
+        "argon2_key_hex": "477ee798a323a8e6f9b2292ef8795d9180406d38366061ee9ee94d399a22158e",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b000000000000000100000080000000066587b305429c9a50",
+        "mask_hex": "1473198cf4ac90ba",
+        "left_after_hex": "6587b305429c9a50",
+        "right_after_hex": "23ef7405b7c85b89"
+      },
+      {
+        "round": 7,
+        "left_before_hex": "6587b305429c9a50",
+        "right_before_hex": "23ef7405b7c85b89",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000001000000800000000723ef7405b7c85b89",
+        "salt_hex": "6a4bc966871ce619acd233353a9c854a",
+        "argon2_key_hex": "e0903ea5a5b52a5c123dd9964412086b5ab4ac0a62ef0bb52d2a5b60a00637e3",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000001000000800000000723ef7405b7c85b89",
+        "mask_hex": "448afb08050a7d8e",
+        "left_after_hex": "23ef7405b7c85b89",
+        "right_after_hex": "210d480d4796e7de"
+      },
+      {
+        "round": 8,
+        "left_before_hex": "23ef7405b7c85b89",
+        "right_before_hex": "210d480d4796e7de",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000008210d480d4796e7de",
+        "salt_hex": "6382cacc60a22abc2615b8dc0a573b1a",
+        "argon2_key_hex": "8da92738922cefc537efa2c7d4ff6980a5f6e5ef4f4525c609c9f8e7765aa16d",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000008210d480d4796e7de",
+        "mask_hex": "b4f236f89c5b89a1",
+        "left_after_hex": "210d480d4796e7de",
+        "right_after_hex": "971d42fd2b93d228"
+      },
+      {
+        "round": 9,
+        "left_before_hex": "210d480d4796e7de",
+        "right_before_hex": "971d42fd2b93d228",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000009971d42fd2b93d228",
+        "salt_hex": "ee079019326160388fd33ad86cd86b11",
+        "argon2_key_hex": "8127614f76b6df46ca5149eed255bb615b799a5f88e1a013784a0428720d5efd",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000009971d42fd2b93d228",
+        "mask_hex": "76a9e4582dce12c6",
+        "left_after_hex": "971d42fd2b93d228",
+        "right_after_hex": "57a4ac556a58f518"
+      },
+      {
+        "round": 10,
+        "left_before_hex": "971d42fd2b93d228",
+        "right_before_hex": "57a4ac556a58f518",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000001000000800000000a57a4ac556a58f518",
+        "salt_hex": "97717644e7043fbd8bb043f994a88f59",
+        "argon2_key_hex": "76d4479286012e3589bc00ab8d4f52a5eb93a614502912f73e6ca17082dbb97e",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000001000000800000000a57a4ac556a58f518",
+        "mask_hex": "c3ac66300bce3e2a",
+        "left_after_hex": "57a4ac556a58f518",
+        "right_after_hex": "54b124cd205dec02"
+      },
+      {
+        "round": 11,
+        "left_before_hex": "57a4ac556a58f518",
+        "right_before_hex": "54b124cd205dec02",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000001000000800000000b54b124cd205dec02",
+        "salt_hex": "5a9bda974759984f20ac902dbd8a4ec8",
+        "argon2_key_hex": "214d1401f35b6b08b75f7d81c602fdabebdc2b4ceb61512bd427fc0764d0d5a2",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000001000000800000000b54b124cd205dec02",
+        "mask_hex": "966789e226acc1b1",
+        "left_after_hex": "54b124cd205dec02",
+        "right_after_hex": "c1c325b74cf434a9"
+      }
+    ],
+    "output_state_hex": "54b124cd205dec02c1c325b74cf434a9"
+  },
+  "container": "feed matrix crew doll tell accident alpha gorilla resemble guilt artwork farm",
+  "decryption": {
+    "input_state_hex": "54b124cd205dec02c1c325b74cf434a9",
+    "rounds": [
+      {
+        "round": 11,
+        "left_before_hex": "54b124cd205dec02",
+        "right_before_hex": "c1c325b74cf434a9",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000001000000800000000b54b124cd205dec02",
+        "salt_hex": "5a9bda974759984f20ac902dbd8a4ec8",
+        "argon2_key_hex": "214d1401f35b6b08b75f7d81c602fdabebdc2b4ceb61512bd427fc0764d0d5a2",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000001000000800000000b54b124cd205dec02",
+        "mask_hex": "966789e226acc1b1",
+        "left_after_hex": "57a4ac556a58f518",
+        "right_after_hex": "54b124cd205dec02"
+      },
+      {
+        "round": 10,
+        "left_before_hex": "57a4ac556a58f518",
+        "right_before_hex": "54b124cd205dec02",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000001000000800000000a57a4ac556a58f518",
+        "salt_hex": "97717644e7043fbd8bb043f994a88f59",
+        "argon2_key_hex": "76d4479286012e3589bc00ab8d4f52a5eb93a614502912f73e6ca17082dbb97e",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000001000000800000000a57a4ac556a58f518",
+        "mask_hex": "c3ac66300bce3e2a",
+        "left_after_hex": "971d42fd2b93d228",
+        "right_after_hex": "57a4ac556a58f518"
+      },
+      {
+        "round": 9,
+        "left_before_hex": "971d42fd2b93d228",
+        "right_before_hex": "57a4ac556a58f518",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000009971d42fd2b93d228",
+        "salt_hex": "ee079019326160388fd33ad86cd86b11",
+        "argon2_key_hex": "8127614f76b6df46ca5149eed255bb615b799a5f88e1a013784a0428720d5efd",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000009971d42fd2b93d228",
+        "mask_hex": "76a9e4582dce12c6",
+        "left_after_hex": "210d480d4796e7de",
+        "right_after_hex": "971d42fd2b93d228"
+      },
+      {
+        "round": 8,
+        "left_before_hex": "210d480d4796e7de",
+        "right_before_hex": "971d42fd2b93d228",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000008210d480d4796e7de",
+        "salt_hex": "6382cacc60a22abc2615b8dc0a573b1a",
+        "argon2_key_hex": "8da92738922cefc537efa2c7d4ff6980a5f6e5ef4f4525c609c9f8e7765aa16d",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000008210d480d4796e7de",
+        "mask_hex": "b4f236f89c5b89a1",
+        "left_after_hex": "23ef7405b7c85b89",
+        "right_after_hex": "210d480d4796e7de"
+      },
+      {
+        "round": 7,
+        "left_before_hex": "23ef7405b7c85b89",
+        "right_before_hex": "210d480d4796e7de",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000001000000800000000723ef7405b7c85b89",
+        "salt_hex": "6a4bc966871ce619acd233353a9c854a",
+        "argon2_key_hex": "e0903ea5a5b52a5c123dd9964412086b5ab4ac0a62ef0bb52d2a5b60a00637e3",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000001000000800000000723ef7405b7c85b89",
+        "mask_hex": "448afb08050a7d8e",
+        "left_after_hex": "6587b305429c9a50",
+        "right_after_hex": "23ef7405b7c85b89"
+      },
+      {
+        "round": 6,
+        "left_before_hex": "6587b305429c9a50",
+        "right_before_hex": "23ef7405b7c85b89",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c54000000000000000100000080000000066587b305429c9a50",
+        "salt_hex": "beae8a7d279859ab387081e939ab7427",
+        "argon2_key_hex": "477ee798a323a8e6f9b2292ef8795d9180406d38366061ee9ee94d399a22158e",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b000000000000000100000080000000066587b305429c9a50",
+        "mask_hex": "1473198cf4ac90ba",
+        "left_after_hex": "379c6d894364cb33",
+        "right_after_hex": "6587b305429c9a50"
+      },
+      {
+        "round": 5,
+        "left_before_hex": "379c6d894364cb33",
+        "right_before_hex": "6587b305429c9a50",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000005379c6d894364cb33",
+        "salt_hex": "7bef02b894c5d391946ca802ea1cd988",
+        "argon2_key_hex": "98cc0d8bf7784237d8502fd95abdc1b8675db16aed6d4a9015e1a00035df6d0a",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000005379c6d894364cb33",
+        "mask_hex": "adb290092074fb0e",
+        "left_after_hex": "c835230c62e8615e",
+        "right_after_hex": "379c6d894364cb33"
+      },
+      {
+        "round": 4,
+        "left_before_hex": "c835230c62e8615e",
+        "right_before_hex": "379c6d894364cb33",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000004c835230c62e8615e",
+        "salt_hex": "7e0753d67ca3f95dcbe0578e7f9ae75d",
+        "argon2_key_hex": "2052f63940582d4cfc3eabd0667de1c1ea821af7b1bb3d05c9ee56078aa05d02",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000004c835230c62e8615e",
+        "mask_hex": "95d0805c19e25c58",
+        "left_after_hex": "a24cedd55a86976b",
+        "right_after_hex": "c835230c62e8615e"
+      },
+      {
+        "round": 3,
+        "left_before_hex": "a24cedd55a86976b",
+        "right_before_hex": "c835230c62e8615e",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000003a24cedd55a86976b",
+        "salt_hex": "4bcb29051993af7144b89dbd144d2ad3",
+        "argon2_key_hex": "4ea627692c08a3153ff68eb78e2cee9d08fa15145cacf3eb99c40592d66712a2",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000003a24cedd55a86976b",
+        "mask_hex": "6c6357263bf88325",
+        "left_after_hex": "a456742a5910e27b",
+        "right_after_hex": "a24cedd55a86976b"
+      },
+      {
+        "round": 2,
+        "left_before_hex": "a456742a5910e27b",
+        "right_before_hex": "a24cedd55a86976b",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c5400000000000000010000008000000002a456742a5910e27b",
+        "salt_hex": "5ad0e88d10a3e12271830b30cec575f3",
+        "argon2_key_hex": "463b208ac79cc6401ffeaf0094beec10b24bffe18a9f9c663c70cdfb058ef255",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b00000000000000010000008000000002a456742a5910e27b",
+        "mask_hex": "97ded3975359286a",
+        "left_after_hex": "35923e4209dfbf01",
+        "right_after_hex": "a456742a5910e27b"
+      },
+      {
+        "round": 1,
+        "left_before_hex": "35923e4209dfbf01",
+        "right_before_hex": "a456742a5910e27b",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000001000000800000000135923e4209dfbf01",
+        "salt_hex": "e960215e1c9590705b7d9650aab67dd4",
+        "argon2_key_hex": "c8838eb4667d56f935e08edd2d06b2e93436af6a40e01325c7280121d456b535",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000001000000800000000135923e4209dfbf01",
+        "mask_hex": "a456742a5910e27b",
+        "left_after_hex": "0000000000000000",
+        "right_after_hex": "35923e4209dfbf01"
+      },
+      {
+        "round": 0,
+        "left_before_hex": "0000000000000000",
+        "right_before_hex": "35923e4209dfbf01",
+        "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c54000000000000000100000080000000000000000000000000",
+        "salt_hex": "0b2ba321eec3aeea02aa35b3a426c5e6",
+        "argon2_key_hex": "33761573a5d4f1c0daf27a477c5a99bf4df8cd76115d2adb1d490189318b5af5",
+        "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b000000000000000100000080000000000000000000000000",
+        "mask_hex": "35923e4209dfbf01",
+        "left_after_hex": "0000000000000000",
+        "right_after_hex": "0000000000000000"
+      }
+    ],
+    "output_state_hex": "00000000000000000000000000000000"
+  },
+  "recovery": {
+    "words": 12,
+    "verified": false,
+    "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+  }
+}

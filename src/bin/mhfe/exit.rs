@@ -53,6 +53,9 @@ impl From<MhfeError> for Failure {
             MhfeError::InvalidPhrase(_)
             | MhfeError::InvalidContainer(_)
             | MhfeError::InvalidWordCount(_)
+            | MhfeError::SameLengthNeedsShortPhrase
+            | MhfeError::LengthChoiceNotApplicable { .. }
+            | MhfeError::NoBuiltInCheck { .. }
             | MhfeError::InvalidPim(_)
             | MhfeError::InvalidMemoryLevel(_)
             | MhfeError::EmptyPassword

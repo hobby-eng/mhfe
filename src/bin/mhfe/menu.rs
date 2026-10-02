@@ -24,7 +24,7 @@ const LINE_WIDTH: usize = 78;
 
 /// Moves the cursor up `lines_above` lines to the start of the line, then clears to the end of
 /// the screen (VT100 "cursor up" and "erase in display").
-fn redraw_from(lines_above: usize) -> String {
+pub(crate) fn redraw_from(lines_above: usize) -> String {
     format!("\x1b[{lines_above}A\r\x1b[J")
 }
 
@@ -73,8 +73,9 @@ pub fn run() -> Result<i32, Failure> {
     style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
     eprintln!();
     style::hint(
-        "Encrypts a BIP39 recovery phrase into a password-protected 24-word container and \
-         recovers it. Choose what to do; the grey command does the same when typed.",
+        "Encrypts a BIP39 recovery phrase into a password-protected container, 24 words or as \
+         long as the phrase, and recovers it. Choose what to do; the grey command does the same \
+         when typed.",
     );
     let entries = entries();
     let mut selected = 0;
@@ -149,7 +150,7 @@ fn choose(entries: &[Entry], selected: &mut usize) -> Result<Option<usize>, Fail
                     return Ok(Some(*selected));
                 }
                 Key::Quit => return Ok(None),
-                Key::Digit(_) | Key::Other => continue,
+                Key::Digit(_) | Key::Help | Key::Other => continue,
             }
             write_control(&redraw_from(drawn_lines))?;
             draw(entries, *selected);
@@ -231,7 +232,7 @@ fn wait_for_enter() -> Result<bool, Failure> {
 }
 
 /// Writes a cursor-control sequence as it is: anstream would remove it when NO_COLOR is set.
-fn write_control(sequence: &str) -> Result<(), Failure> {
+pub(crate) fn write_control(sequence: &str) -> Result<(), Failure> {
     let mut terminal = io::stderr();
     terminal.write_all(sequence.as_bytes())?;
     terminal.flush()?;
@@ -255,7 +256,7 @@ mod tests {
     #[test]
     fn entries_are_labelled_with_the_command_summaries() {
         let labels: Vec<String> = entries().into_iter().map(|entry| entry.label).collect();
-        assert!(labels.contains(&"Encrypt a recovery phrase into a 24-word container".to_owned()));
+        assert!(labels.contains(&"Encrypt a recovery phrase into a container".to_owned()));
         assert_eq!(labels.last().map(String::as_str), Some("Quit"));
     }
 

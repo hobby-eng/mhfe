@@ -100,7 +100,7 @@ class Session:
         return self.process.exitstatus
 
     def at_password_prompt(self):
-        self.wait_for("words: ")
+        self.wait_for("original: ")
         self.type(CONTAINER + "\r")
         self.wait_for("Password")
 

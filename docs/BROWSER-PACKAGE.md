@@ -1,8 +1,9 @@
 # MHFE browser package
 
-This package runs MHFE suite 3 (`MHFE-BIP39-256-EXPERIMENTAL-3`) in a web page: it encrypts an
-English BIP39 recovery phrase into a 24-word container, recovers the phrase, and rehearses a
-recovery without showing the phrase. All the MHFE logic is the same Rust code as in the `mhfe`
+This package runs MHFE in a web page: it encrypts an English BIP39 recovery phrase into a 24-word
+container (suite 3, `MHFE-BIP39-256-EXPERIMENTAL-3`) or, on the user's choice, a 12- to 21-word
+phrase into a container of the same length (suite 4, `MHFE-BIP39-LP-EXPERIMENTAL-4`), recovers the
+phrase from either, and rehearses a recovery without showing the phrase. All the MHFE logic is the same Rust code as in the `mhfe`
 command-line tool; Argon2 is the same reference C code, compiled to WebAssembly.
 
 It is experimental and has not been independently reviewed. Do not use it to protect real funds.
@@ -33,10 +34,11 @@ const client = new MhfeClient({
   coreWasm, // mhfe_core_bg.wasm as a Uint8Array or a WebAssembly.Module
 });
 
-const { container } = await client.encrypt({
+const { container, suiteId } = await client.encrypt({
   phrase,
   password,
   passwordRepeat, // the password typed a second time; a difference is refused
+  sameLength: false, // true only when the user has chosen a container of the phrase's length
   onProgress: ({ round, rounds }) => showProgress(round, rounds),
   // After 12 of the 24 rounds: show it, marked as not yet verified, while the check runs.
   onUnverified: ({ container }) => showUnverified(container),
@@ -44,7 +46,8 @@ const { container } = await client.encrypt({
 // Resolved only after the check has passed; a failed check rejects with VERIFICATION_FAILED.
 
 const recovery = await client.decrypt({ container, password });
-// recovery.kind is "phrase" or, very rarely, "ambiguous"; show every candidate then.
+// recovery.kind is "phrase" or, very rarely, "ambiguous"; show every candidate then. The container's
+// word count selects the suite; a same-length container gives one phrase, never verified.
 
 const { matches } = await client.check({
   container,
@@ -108,9 +111,17 @@ The specification asks applications to do some things the client cannot do for t
 - say that letter case and the spaces between words count in the password (after the NFKD
   normalization the client applies), and that a fixed form, such as lowercase words with single
   spaces, is the easiest to type again years later;
-- show the suite identifier when a container is made; when the PIM or memory level is not the
+- offer the container length for a 12- to 21-word phrase as a choice the user makes, with 24 words
+  selected by default, and show what each gives before the choice: 24 words report a wrong
+  password and hide the phrase's length; the same length keeps the backup's length but reports no
+  wrong password (any password gives another valid phrase), shows the length, and lets a miscopied
+  word through about once in 16 (12 words) to 128 (21 words). Set `sameLength` only on that choice;
+- for a same-length container, label every recovered phrase as not verified and offer the check
+  against an address or the fingerprint, the only confirmation it has; `{ words }` is refused
+  with `NO_BUILT_IN_CHECK`;
+- show the suite identifier (`suiteId`) when a container is made; when the PIM or memory level is not the
   default, tell the user to remember it and offer to record it, since recovery needs exactly that
-  value; with the defaults, say that the 24 words and the password are enough, unless `otherLengths`
+  value; with the defaults, say that the container's words and the password are enough, unless `otherLengths`
   of the phrase is not empty: then ask the user to remember the word count and to select it when
   recovering;
 - if it shows the container from `onUnverified`, mark it clearly as not yet verified, and then say
@@ -125,7 +136,8 @@ The specification asks applications to do some things the client cannot do for t
   after another;
 - ask the user to rehearse the recovery with the container typed from the finished backup, not from
   the screen: the check at creation covers the words the page produced, not the copy, and a wrongly
-  copied word still passes the BIP39 checksum in about one case in 256;
+  copied word still passes the BIP39 checksum in about one case in 256, and in a same-length
+  container as often as one case in 16;
 - start an operation only on an explicit user action and offer a cancel button.
 
 ## What the browser cannot wipe

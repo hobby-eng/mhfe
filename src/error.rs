@@ -10,10 +10,21 @@ const GIB: u64 = 1 << 30;
 pub enum MhfeError {
     /// The original recovery phrase is not a valid English BIP39 phrase.
     InvalidPhrase(String),
-    /// The container is not a valid 24-word English BIP39 phrase.
+    /// The container is not a valid English BIP39 phrase of 12, 15, 18, 21 or 24 words.
     InvalidContainer(String),
     /// A phrase length other than 12, 15, 18, 21 or 24 words was selected.
     InvalidWordCount(usize),
+    /// A same-length container was asked for a 24-word original, which has none: its container
+    /// always has 24 words.
+    SameLengthNeedsShortPhrase,
+    /// A length was chosen for a same-length container, which keeps the length of its original.
+    LengthChoiceNotApplicable {
+        container_words: usize,
+    },
+    /// The built-in check was asked for a same-length container, which has none.
+    NoBuiltInCheck {
+        container_words: usize,
+    },
     InvalidPim(u32),
     InvalidMemoryLevel(u32),
     EmptyPassword,
@@ -70,11 +81,26 @@ impl fmt::Display for MhfeError {
             }
             Self::InvalidContainer(reason) => write!(
                 f,
-                "the container is not a valid 24-word English BIP39 phrase: {reason}"
+                "the container is not a valid English BIP39 phrase: {reason}"
             ),
             Self::InvalidWordCount(words) => write!(
                 f,
                 "the original phrase length must be 12, 15, 18, 21 or 24 words, not {words}"
+            ),
+            Self::SameLengthNeedsShortPhrase => write!(
+                f,
+                "a 24-word phrase has no same-length container: its container always has 24 \
+                 words. Encrypt it without choosing the same length"
+            ),
+            Self::LengthChoiceNotApplicable { container_words } => write!(
+                f,
+                "a container of {container_words} words keeps the length of its original, so no \
+                 length is chosen for it; choosing a length applies only to 24-word containers"
+            ),
+            Self::NoBuiltInCheck { container_words } => write!(
+                f,
+                "a container of {container_words} words has no built-in check; compare it with a \
+                 receiving address or the master key fingerprint of the wallet instead"
             ),
             Self::InvalidPim(pim) => {
                 write!(
@@ -170,6 +196,9 @@ impl MhfeError {
             Self::InvalidPhrase(_) => "INVALID_PHRASE",
             Self::InvalidContainer(_) => "INVALID_CONTAINER",
             Self::InvalidWordCount(_) => "INVALID_WORD_COUNT",
+            Self::SameLengthNeedsShortPhrase => "SAME_LENGTH_NEEDS_SHORT_PHRASE",
+            Self::LengthChoiceNotApplicable { .. } => "LENGTH_CHOICE_NOT_APPLICABLE",
+            Self::NoBuiltInCheck { .. } => "NO_BUILT_IN_CHECK",
             Self::InvalidPim(_) => "INVALID_PIM",
             Self::InvalidMemoryLevel(_) => "INVALID_MEMORY_LEVEL",
             Self::EmptyPassword => "EMPTY_PASSWORD",

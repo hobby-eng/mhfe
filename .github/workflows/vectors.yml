@@ -1,11 +1,11 @@
 name: Test vectors
 
-# Replays the full-size suite 3 test vectors with the Rust implementation and checks them again
-# with an independent script that uses OpenSSL's Argon2. It takes about two hours, so it never runs
-# on a push: only on request (workflow_dispatch) and for every release, which calls it for the
-# tagged commit and publishes only after it has passed. Every push runs the fast tests in ci.yml,
-# which check the Argon2 engine against RFC 9106 and RustCrypto and the container format at a
-# reduced cost.
+# Replays the full-size suite 3 and suite 4 test vectors with the Rust implementation and checks
+# them again with independent scripts that use OpenSSL's Argon2. It takes about three hours, so it
+# never runs on a push: only on request (workflow_dispatch) and for every release, which calls it
+# for the tagged commit and publishes only after it has passed. Every push runs the fast tests in
+# ci.yml, which check the Argon2 engine against RFC 9106 and RustCrypto and both container formats
+# at a reduced cost.
 on:
   workflow_dispatch:
   workflow_call:
@@ -23,7 +23,7 @@ permissions:
 jobs:
   replay:
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,7 +31,9 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Replay every vector in both directions
-        run: cargo test --locked --release --test suite3_vectors -- --ignored --nocapture
+        run: |
+          cargo test --locked --release --test suite3_vectors -- --ignored --nocapture
+          cargo test --locked --release --test suite4_vectors -- --ignored --nocapture
       - name: Check every vector with an independent implementation
         run: |
           # Only the exact files listed with their SHA-256 in the requirements file are accepted.
@@ -39,5 +41,10 @@ jobs:
           python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json
           # Every file listed in SHA256SUMS: the vectors and the negative cases, not the
           # independent-verification.json record next to them.
-          cd tests/fixtures/suite3-vectors
-          python3 ../../../scripts/independent-suite3.py vector $(cut -d' ' -f3 SHA256SUMS)
+          (cd tests/fixtures/suite3-vectors &&
+            python3 ../../../scripts/independent-suite3.py vector $(cut -d' ' -f3 SHA256SUMS))
+          # Suite 4, the same-length containers: its fast cases, then every listed file.
+          python3 scripts/independent-suite4.py validation \
+            tests/fixtures/suite4-vectors/validation-cases.json
+          (cd tests/fixtures/suite4-vectors &&
+            python3 ../../../scripts/independent-suite4.py vector $(cut -d' ' -f3 SHA256SUMS))

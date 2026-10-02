@@ -11,8 +11,11 @@ use std::time::Instant;
 
 use anstream::println;
 use clap::Args;
-use mhfe::vectors::{self, NEGATIVE_INPUTS, PUBLIC_INPUTS};
-use mhfe::{Password, PhraseLength, WorkFactor};
+use mhfe::vectors::{
+    self, NegativeInput, PublicInput, NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS,
+    SAME_LENGTH_NEGATIVE_INPUTS,
+};
+use mhfe::{Password, PhraseLength, Suite, WorkFactor};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -33,7 +36,30 @@ pub struct VectorOptions {
     /// Only names that contain TEXT, or "negative-cases"
     #[arg(long, value_name = "TEXT", long_help = only_help())]
     only: Option<String>,
+
+    /// The suite 4 vectors of same-length containers instead of suite 3
+    #[arg(long)]
+    same_length: bool,
 }
+
+/// The inputs and negative cases of one suite's vector set.
+struct VectorSet {
+    suite: &'static str,
+    inputs: &'static [PublicInput],
+    negative: &'static [NegativeInput],
+}
+
+const SUITE_3_SET: VectorSet = VectorSet {
+    suite: "suite 3",
+    inputs: &PUBLIC_INPUTS,
+    negative: &NEGATIVE_INPUTS,
+};
+
+const SUITE_4_SET: VectorSet = VectorSet {
+    suite: "suite 4",
+    inputs: &SAME_LENGTH_INPUTS,
+    negative: &SAME_LENGTH_NEGATIVE_INPUTS,
+};
 
 fn output_help() -> String {
     style::option_help(&[
@@ -45,9 +71,9 @@ fn output_help() -> String {
 fn only_help() -> String {
     style::option_help(&[
         "Only names that contain TEXT, or \"negative-cases\".",
-        "The names are those of the files in tests/fixtures/suite3-vectors without .json, \
-         such as zero-12 or unicode-password; zero-12 also selects zero-12-pim-1 and the \
-         other names that contain it.",
+        "The names are those of the files in tests/fixtures/suite3-vectors and \
+         tests/fixtures/suite4-vectors without .json, such as zero-12 or unicode-password; \
+         zero-12 also selects zero-12-pim-1 and the other names that contain it.",
     ])
 }
 
@@ -68,6 +94,10 @@ pub fn vectors_help() -> String {
                 "mhfe test-vectors --output vectors --only negative-cases",
                 "Only the cases that must be refused",
             ),
+            (
+                "mhfe test-vectors --same-length --output vectors4",
+                "The suite 4 vectors of same-length containers",
+            ),
         ],
     );
     let note = style::help_note(
@@ -78,8 +108,13 @@ pub fn vectors_help() -> String {
 }
 
 pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
+    let set = if options.same_length {
+        &SUITE_4_SET
+    } else {
+        &SUITE_3_SET
+    };
     style::warn(
-        "TEST ONLY: writing the public suite 3 test vectors.",
+        &format!("TEST ONLY: writing the public {} test vectors.", set.suite),
         "Each takes about two minutes or more at full size.",
     );
     fs::create_dir_all(&options.output)?;
@@ -92,13 +127,20 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
 
     let mut written = 0;
     let mut containers = HashMap::new();
-    for input in PUBLIC_INPUTS.iter().filter(|input| selected(input.name())) {
+    for input in set.inputs.iter().filter(|input| selected(input.name())) {
         let work = WorkFactor::new(input.pim(), input.memory_level())?;
         let mut mhfe = settings::reserve_memory(work)?;
         let started = Instant::now();
-        let vector = vectors::generate(&mut mhfe, input)?;
-        containers.insert(input.name(), vector.container.clone());
-        write_json(&options.output, &format!("{}.json", input.name()), &vector)?;
+        let file = format!("{}.json", input.name());
+        if options.same_length {
+            let vector = vectors::generate_same_length(&mut mhfe, input)?;
+            containers.insert(input.name(), vector.container.clone());
+            write_json(&options.output, &file, &vector)?;
+        } else {
+            let vector = vectors::generate(&mut mhfe, input)?;
+            containers.insert(input.name(), vector.container.clone());
+            write_json(&options.output, &file, &vector)?;
+        }
         written += 1;
         style::ok(format!(
             "{} {}",
@@ -111,7 +153,7 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
     // an --only that matches "negative-cases".
     if selected(NEGATIVE_CASES_STEM) {
         let mut negative_cases = Vec::new();
-        for input in &NEGATIVE_INPUTS {
+        for input in set.negative {
             let container = match containers.get(input.container_of()) {
                 Some(container) => container.clone(),
                 None => recorded_container(&options.output, input.container_of())?,
@@ -119,7 +161,11 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
             let work = WorkFactor::new(input.pim(), input.memory_level())?;
             let mut mhfe = settings::reserve_memory(work)?;
             let started = Instant::now();
-            negative_cases.push(vectors::negative_case(&mut mhfe, input, &container)?);
+            negative_cases.push(if options.same_length {
+                vectors::same_length_negative_case(&mut mhfe, input, &container)?
+            } else {
+                vectors::negative_case(&mut mhfe, input, &container)?
+            });
             style::ok(format!(
                 "{} {}",
                 input.name(),
@@ -134,7 +180,7 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
         written += 1;
     }
 
-    write_checksums(&options.output)?;
+    write_checksums(&options.output, set)?;
     style::ok(format!(
         "Wrote {written} files and SHA256SUMS to {}",
         options.output.display()
@@ -166,7 +212,7 @@ fn recorded_container(folder: &Path, name: &str) -> Result<String, Failure> {
 /// writes the list, so a later list always includes what an earlier one saw. The file is rewritten
 /// in place rather than replaced, because a replaced file would carry a different lock. A crash
 /// in the middle leaves a short list, which the vector tests report; the next run writes it again.
-fn write_checksums(folder: &Path) -> Result<(), Failure> {
+fn write_checksums(folder: &Path, set: &VectorSet) -> Result<(), Failure> {
     let mut list = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -174,7 +220,8 @@ fn write_checksums(folder: &Path) -> Result<(), Failure> {
         .truncate(false)
         .open(folder.join("SHA256SUMS"))?;
     list.lock()?;
-    let names = PUBLIC_INPUTS
+    let names = set
+        .inputs
         .iter()
         .map(|input| input.name())
         .chain([NEGATIVE_CASES_STEM])
@@ -273,7 +320,12 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     let work_area_seconds = started.elapsed().as_secs_f64();
 
     let started = Instant::now();
-    let container = mhfe.encrypt(input.phrase(), &password, &mut |_, _| Ok(()))?;
+    let container = mhfe.encrypt(
+        input.phrase(),
+        &password,
+        Suite::TwentyFourWords,
+        &mut |_, _| Ok(()),
+    )?;
     let encryption_seconds = started.elapsed().as_secs_f64();
 
     let started = Instant::now();

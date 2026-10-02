@@ -1,5 +1,6 @@
-//! Runs the shared fast fixture `tests/fixtures/validation-cases.json` against the library.
-//! Its expected values were computed independently (Python `hashlib` and `unicodedata`).
+//! Runs the shared fast fixtures `tests/fixtures/validation-cases.json` (suite 3) and
+//! `tests/fixtures/suite4-vectors/validation-cases.json` (suite 4) against the library. Their
+//! expected values were computed independently (Python `hashlib`, `hmac` and `unicodedata`).
 
 use serde_json::Value;
 
@@ -107,7 +108,12 @@ fn bad_phrases_and_containers_fail_before_argon2() {
         let id = text(case, "id");
         let error = match text(case, "operation") {
             "encrypt" => mhfe
-                .encrypt(text(case, "phrase"), &password, &mut |_, _| Ok(()))
+                .encrypt(
+                    text(case, "phrase"),
+                    &password,
+                    crate::suite::Suite::TwentyFourWords,
+                    &mut |_, _| Ok(()),
+                )
                 .err(),
             "decrypt" => {
                 // A wrong word count is refused when the length is made, before decrypt runs.
@@ -119,9 +125,15 @@ fn bad_phrases_and_containers_fail_before_argon2() {
                 };
                 length
                     .and_then(|length| {
-                        mhfe.decrypt(text(case, "container"), &password, length, &mut |_, _| {
-                            Ok(())
-                        })
+                        // These are suite 3 cases: the suite is selected, not taken from the
+                        // word count.
+                        mhfe.decrypt_as(
+                            text(case, "container"),
+                            &password,
+                            Some(crate::suite::Suite::TwentyFourWords),
+                            length,
+                            &mut |_, _| Ok(()),
+                        )
                     })
                     .err()
             }
@@ -163,4 +175,114 @@ fn the_verifier_keeps_digest_byte_order() {
     let state = packing::pack(&entropy).unwrap();
     assert_eq!(hex::encode(&state[..]), text(case, "state_hex"));
     assert_eq!(hex::encode(&state[28..]), text(case, "verifier_hex"));
+}
+
+fn suite_4_fixture() -> Value {
+    serde_json::from_str(include_str!(
+        "../tests/fixtures/suite4-vectors/validation-cases.json"
+    ))
+    .unwrap()
+}
+
+/// `BE32(ENT)` follows the settings in every suite 4 round message, so the same settings, round
+/// and leading half bytes give a different salt and mask for each entropy size.
+#[test]
+fn suite_4_round_messages_carry_the_entropy_size() {
+    use crate::feistel::{round_mask, round_message, round_salt, Geometry};
+    let fixture = suite_4_fixture();
+    assert_eq!(fixture["suite_id"], crate::SAME_LENGTH_SUITE_ID);
+    for case in cases(&fixture, "ent_separation") {
+        let id = text(case, "id");
+        let bytes = case["entropy_bits"].as_u64().unwrap() as usize / 8;
+        let geometry = Geometry::same_length(bytes).unwrap();
+        let work = WorkFactor::new(
+            case["pim"].as_u64().unwrap() as u32,
+            case["memory_level"].as_u64().unwrap() as u32,
+        )
+        .unwrap();
+        let half = hex::decode(text(case, "half_hex")).unwrap();
+        let message = round_message(
+            geometry,
+            work,
+            case["round"].as_u64().unwrap() as u32,
+            &half,
+        );
+        let salt_input = [geometry.ds_salt(), &message].concat();
+        assert_eq!(
+            hex::encode(salt_input),
+            text(case, "salt_input_hex"),
+            "{id}"
+        );
+        assert_eq!(
+            hex::encode(round_salt(geometry, &message)),
+            text(case, "salt_hex"),
+            "{id}"
+        );
+        let key: [u8; 32] = hex::decode(text(case, "key_hex"))
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let mask_input = [geometry.ds_mask(), &message].concat();
+        assert_eq!(
+            hex::encode(mask_input),
+            text(case, "mask_input_hex"),
+            "{id}"
+        );
+        assert_eq!(
+            hex::encode(round_mask(geometry, &key, &message)),
+            text(case, "mask_hex"),
+            "{id}"
+        );
+    }
+}
+
+#[test]
+fn suite_4_refusals_come_before_argon2() {
+    use crate::suite::Suite;
+    let fixture = suite_4_fixture();
+    let password = Password::new("public test password").unwrap();
+    let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoArgon2Calls);
+    for case in cases(&fixture, "refusals") {
+        let id = text(case, "id");
+        assert_eq!(text(case, "expected"), "rejected", "{id}");
+        let result = match text(case, "operation") {
+            "encrypt-same-length" => mhfe
+                .encrypt(
+                    text(case, "text"),
+                    &password,
+                    Suite::SameLength,
+                    &mut |_, _| Ok(()),
+                )
+                .map(|_| ()),
+            "decrypt" => {
+                let length = match case.get("words") {
+                    Some(words) => PhraseLength::Words(
+                        WordCount::new(words.as_u64().unwrap() as usize).unwrap(),
+                    ),
+                    None => PhraseLength::Detect,
+                };
+                let suite = case.get("suite").map(|suite| match suite.as_u64() {
+                    Some(3) => Suite::TwentyFourWords,
+                    Some(4) => Suite::SameLength,
+                    other => panic!("{id}: unknown suite {other:?}"),
+                });
+                mhfe.decrypt_as(text(case, "text"), &password, suite, length, &mut |_, _| {
+                    Ok(())
+                })
+                .map(|_| ())
+            }
+            other => panic!("{id}: unknown operation {other}"),
+        };
+        // NoArgon2Calls panics if Argon2 is reached, so an error here came before it.
+        let error = result.err().unwrap_or_else(|| panic!("{id}: accepted"));
+        assert!(
+            matches!(
+                error,
+                MhfeError::SameLengthNeedsShortPhrase
+                    | MhfeError::LengthChoiceNotApplicable { .. }
+                    | MhfeError::InvalidContainer(_)
+            ),
+            "{id}: {error}"
+        );
+    }
 }

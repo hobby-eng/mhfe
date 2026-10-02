@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use anstream::{eprint, eprintln, println};
-use mhfe::{ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe::{Suite, ENCRYPTION_ROUNDS, ROUNDS};
 use zeroize::Zeroizing;
 
 use crate::exit::{self, Failure};
@@ -263,13 +263,25 @@ fn write_control(sequence: &str) {
     let _ = terminal.flush();
 }
 
+/// The question for a container: 24 words, or 12 to 21 for a same-length container.
+pub const CONTAINER_PROMPT: &str = "Container, 24 words or as long as the original: ";
+
 /// Shows a container as it was read, every word in full, so that a person who typed short
-/// forms or odd spacing can compare it with the backup. A script gets only its results.
-pub fn show_container_read(container: &str, input: &Input) {
-    if input.is_script() {
-        return;
+/// forms or odd spacing can compare it with the backup, and the format its word count selects.
+/// A script gets only its results.
+pub fn show_container_read(container: &str, input: &Input) -> Suite {
+    let suite = Suite::of_container(container.split(' ').count()).unwrap_or_default();
+    if !input.is_script() {
+        show_words("Read the container as:", container);
+        style::fact("Format", paint(MUTED, suite.id()));
+        if suite == Suite::SameLength {
+            style::hint(
+                "A container as long as its original: it has no built-in check, so a wrong \
+                 password gives another valid phrase instead of an error.",
+            );
+        }
     }
-    show_words("Read the container as:", container);
+    suite
 }
 
 /// Shows a phrase in a frame on standard error, where prompts go.
