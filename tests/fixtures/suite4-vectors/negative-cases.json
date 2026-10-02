@@ -1,0 +1,92 @@
+[
+  {
+    "schema": "mhfe-suite-4-negative-case-v1",
+    "suite_id": "MHFE-BIP39-LP-EXPERIMENTAL-4",
+    "name": "same-length-wrong-password",
+    "generator": {
+      "program": "mhfe test-vectors",
+      "version": "0.5.0",
+      "argon2": "reference C implementation, P-H-C/phc-winner-argon2 commit f57e61e19229e23c4445b85494dbf7c07de721cb"
+    },
+    "container": "renew alert there knife dose allow fashion casino kiwi lens sister bless",
+    "password": "public test passworD",
+    "password_nfkd_utf8_hex": "7075626c696320746573742070617373776f7244",
+    "pim": 0,
+    "memory_level": 0,
+    "words": 0,
+    "recovery": [
+      {
+        "words": 12,
+        "verified": false,
+        "phrase": "round web input permit extend wrestle express loan truly tail reform dentist"
+      }
+    ],
+    "error_code": null
+  },
+  {
+    "schema": "mhfe-suite-4-negative-case-v1",
+    "suite_id": "MHFE-BIP39-LP-EXPERIMENTAL-4",
+    "name": "same-length-wrong-pim",
+    "generator": {
+      "program": "mhfe test-vectors",
+      "version": "0.5.0",
+      "argon2": "reference C implementation, P-H-C/phc-winner-argon2 commit f57e61e19229e23c4445b85494dbf7c07de721cb"
+    },
+    "container": "renew alert there knife dose allow fashion casino kiwi lens sister bless",
+    "password": "public test password",
+    "password_nfkd_utf8_hex": "7075626c696320746573742070617373776f7264",
+    "pim": 1,
+    "memory_level": 0,
+    "words": 0,
+    "recovery": [
+      {
+        "words": 12,
+        "verified": false,
+        "phrase": "stage admit giant kiwi extend divide face age mansion actual wing sing"
+      }
+    ],
+    "error_code": null
+  },
+  {
+    "schema": "mhfe-suite-4-negative-case-v1",
+    "suite_id": "MHFE-BIP39-LP-EXPERIMENTAL-4",
+    "name": "same-length-wrong-memory-level",
+    "generator": {
+      "program": "mhfe test-vectors",
+      "version": "0.5.0",
+      "argon2": "reference C implementation, P-H-C/phc-winner-argon2 commit f57e61e19229e23c4445b85494dbf7c07de721cb"
+    },
+    "container": "renew alert there knife dose allow fashion casino kiwi lens sister bless",
+    "password": "public test password",
+    "password_nfkd_utf8_hex": "7075626c696320746573742070617373776f7264",
+    "pim": 0,
+    "memory_level": 1,
+    "words": 0,
+    "recovery": [
+      {
+        "words": 12,
+        "verified": false,
+        "phrase": "crazy estate canal eternal social prefer tissue lab saddle nice appear price"
+      }
+    ],
+    "error_code": null
+  },
+  {
+    "schema": "mhfe-suite-4-negative-case-v1",
+    "suite_id": "MHFE-BIP39-LP-EXPERIMENTAL-4",
+    "name": "same-length-other-length-chosen",
+    "generator": {
+      "program": "mhfe test-vectors",
+      "version": "0.5.0",
+      "argon2": "reference C implementation, P-H-C/phc-winner-argon2 commit f57e61e19229e23c4445b85494dbf7c07de721cb"
+    },
+    "container": "renew alert there knife dose allow fashion casino kiwi lens sister bless",
+    "password": "public test password",
+    "password_nfkd_utf8_hex": "7075626c696320746573742070617373776f7264",
+    "pim": 0,
+    "memory_level": 0,
+    "words": 15,
+    "recovery": [],
+    "error_code": "LENGTH_CHOICE_NOT_APPLICABLE"
+  }
+]

@@ -13,8 +13,9 @@ steel plate with 24 words and waddles from side to side, much as a Feistel netwo
 halves in every round.</sub></p>
 
 MHFE turns the recovery phrase of a Bitcoin or other BIP39 wallet (12, 15, 18, 21 or 24 English
-words) into a password-protected **container of 24 words**. The container is itself an ordinary,
-valid recovery phrase, so it fits the same metal plate or capsule. With the password it turns back
+words) into a password-protected **container of 24 words**, or, if you choose so for a phrase of 12
+to 21 words, a container **of the same length** as your phrase. The container is itself an
+ordinary, valid recovery phrase, so it fits the same metal plate or capsule. With the password it turns back
 into your exact original phrase; without it, getting the phrase back means guessing the password,
 which MHFE makes deliberately slow. Your wallet, its addresses and any BIP39 passphrase stay as they
 are.
@@ -26,7 +27,8 @@ it then recovers your phrase from the new container once, to be sure the contain
 This repository is the implementation: a command-line tool, a Rust library and a browser package.
 The algorithm is specified in the companion
 [MHFE specification](https://github.com/hobby-eng/mhfe-spec); this version implements suite
-`MHFE-BIP39-256-EXPERIMENTAL-3`.
+`MHFE-BIP39-256-EXPERIMENTAL-3` for 24-word containers and, since version 0.5.0, suite
+`MHFE-BIP39-LP-EXPERIMENTAL-4` for containers of the same length.
 
 > **Experimental.** MHFE has not been reviewed by independent cryptographers. Do not use it to
 > protect real funds. Keep your original backup until you have rehearsed a recovery.
@@ -61,6 +63,22 @@ wallet for cold storage, choose it with this in mind:
 | 12 to 21 words | The built-in check confirms the password and finds the length        | Most backups: MHFE tells you when the password or a setting is wrong        |
 | 24 words       | No built-in check: a wrong password gives another, equally valid one | Use with an independent BIP39 passphrase, and plausible deniability (below) |
 
+**Or a container of the same length.** For a phrase of 12, 15, 18 or 21 words, MHFE can instead
+give a container with as many words as the phrase, if you choose it; 24 words stays the default.
+The backup then keeps its length and looks like any other phrase of that length. The price is
+real, so MHFE asks first and explains it (press `?` at the question):
+
+| Container             | A wrong password                          | Shows the length of your phrase | A miscopied word slips through                |
+| --------------------- | ----------------------------------------- | ------------------------------- | --------------------------------------------- |
+| 24 words (default)    | is reported as wrong (12 to 21 words)     | no, every container has 24      | about once in 256                             |
+| Same length as phrase | gives another valid phrase, with no error | yes                             | about once in 16 (12 words) to 128 (21 words) |
+
+The same-length container has no room for a built-in check, so only a comparison with your wallet,
+with `mhfe check`, confirms a recovery. Like a 24-word original, it turns into a valid phrase with
+any password. The [specification](https://github.com/hobby-eng/mhfe-spec) defines this format as
+suite 4; its analysis of security and deniability covers the 24-word format and does not yet extend
+to this one.
+
 The built-in check helps you, but it also lets someone who has the container recognise a right
 guess; each guess still costs a full recovery. With 24 words, every password gives a valid phrase,
 and the container alone cannot tell a right password from a wrong one. A guesser can recognise the
@@ -71,7 +89,7 @@ been used, the blockchain gives no hint, and the password and the passphrase hav
 together.
 
 **Checking against your wallet.** The built-in check confirms the password, not which wallet the
-phrase belongs to, and a 24-word result cannot check itself at all. `mhfe check` therefore
+phrase belongs to, and a 24-word result or a same-length container cannot check itself at all. `mhfe check` therefore
 compares a recovery with a receiving address of the wallet or its master key fingerprint, without
 showing the phrase (see [Commands](#commands)).
 
@@ -165,29 +183,37 @@ such as a tab are refused, and letter case and spaces count. The password is not
 BIP39 passphrase.
 
 **`mhfe encrypt`** asks for the phrase and twice for the password, all hidden; a mistyped password
-would lock the phrase away for good. The words of the recovery phrase may be typed in any case or as
+would lock the phrase away for good. For a phrase of 12 to 21 words it first asks how long the
+container should be: 24 words, the recommended default, or the same length as your phrase; `?`
+explains both, and `--same-length` chooses the same length without asking. After the encryption it
+shows the format of the container, the suite identifier. The words of the recovery phrase may be typed in any case or as
 their first four letters; the password, by contrast, must be typed exactly, letter case and spaces
 included. On request MHFE shows the phrase it read, or the password, on a separate screen that is
 cleared afterwards. The container appears after one to two minutes: write it down while MHFE checks
 it by recovering your phrase from it, and rely on it only once it says "Verified". With the default
-settings the 24 words and the password are all you need; in the rare case that MHFE asks you to note
-the word count, do so. The same phrase, password and settings always give the same container, so a
+settings the container's words and the password are all you need; in the rare case that MHFE asks
+you to note the word count, do so. The same phrase, password and settings always give the same container, so a
 lost plate can be made again, and two identical containers reveal the same phrase: use a different
 password for each phrase.
 
 **`mhfe check`** rehearses a recovery before you rely on a container and shows only "matches" or
 "does not match", never the phrase. Type the container from the plate, not from the screen: one
-miscopied word passes the BIP39 checksum in one case in 256 and, for a 24-word original, silently
-gives another wallet. Compare with a receiving address of the wallet, the strong check that also
+miscopied word passes the BIP39 checksum in one case in 256, or as often as one in 16 for a
+12-word container of the same length, and for a 24-word original or a same-length container
+silently gives another wallet. A same-length container has no built-in check, so compare it with
+your wallet. Compare with a receiving address of the wallet, the strong check that also
 covers a BIP39 passphrase (it searches the first 100 receiving and change addresses of accounts 0 to
 9, or one path with `--path`), or with the master key fingerprint, quick but only 32 bits. Do not
 keep the address or fingerprint next to the container.
 
 **`mhfe decrypt`** gives back the original phrase. It shows the container as it read it, to compare
-with your backup, and the phrase on a separate screen that is cleared when you press Enter. For a
-12- to 21-word original it confirms the password and finds the length itself; a wrong password then
-shows as "Not verified". A 24-word original has no such check: a wrong password gives another valid
-phrase, so compare the result with your wallet. `--words N` sets the length yourself.
+with your backup, its format, and the phrase on a separate screen that is cleared when you press
+Enter. The number of words tells it the format: 24 words is the default format, 12 to 21 words a
+container of the same length. For a 12- to 21-word original in a 24-word container it confirms the
+password and finds the length itself; a wrong password then shows as "Not verified". A 24-word
+original and a same-length container have no such check: a wrong password gives another valid
+phrase, so compare the result with your wallet. `--words N` sets the length of the original
+yourself; it then accepts only a 24-word container or a same-length container of exactly N words.
 
 `mhfe <command> --help` explains every option. Keep a copy of this program offline as well, so that
 a compatible version is at hand years from now.
@@ -239,11 +265,15 @@ same code in a web page, for example in the offline wallet tools. It has two mod
 A browser supports memory level 0 only. It never connects to anything either: the package loads no
 remote resources.
 
+Both kinds of container work there too: a page asks for the same length with `sameLength: true`
+in its `encrypt` call, and recovery takes either kind.
+
 ## For scripts
 
 `--stdin` reads the answers from standard input, one per line, instead of asking:
 
-- `encrypt`: the phrase, the password, and the password again;
+- `encrypt`: the phrase, the password, and the password again; the container has 24 words unless
+  `--same-length` is given;
 - `decrypt`: the container and the password;
 - `check`: the container and the password, then with `--address` or `--fingerprint` the reference
   and the BIP39 passphrase (an empty line if the wallet has none); with `--words N` nothing more.
@@ -323,9 +353,10 @@ The library API is in [`docs/API.md`](docs/API.md), the security notes in
 JavaScript runtime and Rust crates in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) (its crate
 list is written by `scripts/third-party-licenses.py`; every release archive carries the file), and
 timing records in [`docs/measurements/`](docs/measurements/).
-Test vectors are written with `mhfe test-vectors` and checked independently with
-`scripts/independent-suite3.py`, which uses OpenSSL's Argon2 and the Unicode 17.0.0 database of
-`unicodedata2`; its packages install with
+Test vectors are written with `mhfe test-vectors` (`--same-length` for the suite 4 set in
+`tests/fixtures/suite4-vectors`) and checked independently with `scripts/independent-suite3.py`
+and `scripts/independent-suite4.py`, which use OpenSSL's Argon2 and the Unicode 17.0.0 database of
+`unicodedata2`; their packages install with
 `python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`, and
 `python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json` checks the
 password rule on every case of the specification.

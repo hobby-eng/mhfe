@@ -47,15 +47,10 @@ pub fn parse(input: &str) -> Result<Mnemonic, String> {
     })
 }
 
-/// Parses a container: a valid phrase of exactly 24 words.
+/// Parses a container: a valid phrase of 24 words (suite 3) or of 12, 15, 18 or 21 words
+/// (suite 4, the same-length containers), which [`crate::Suite::of_container`] tells apart.
 pub fn parse_container(input: &str) -> Result<Mnemonic, String> {
-    let container = parse(input)?;
-    match container.word_count() {
-        24 => Ok(container),
-        other => Err(format!(
-            "it has {other} words, but a container always has 24"
-        )),
-    }
+    parse(input)
 }
 
 /// Checks an original phrase before anything is computed and returns its word count, so that
@@ -217,9 +212,7 @@ mod tests {
             parse(&bad_checksum).unwrap_err(),
             "its checksum does not match, so a word is wrong or words are out of order"
         );
-        assert_eq!(
-            parse_container(ZERO_12).unwrap_err(),
-            "it has 12 words, but a container always has 24"
-        );
+        // A 12-word phrase is a same-length container; which suite applies is decided later.
+        assert_eq!(parse_container(ZERO_12).unwrap().word_count(), 12);
     }
 }

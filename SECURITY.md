@@ -64,6 +64,11 @@ invariants:
   call, or is NULL with length 0. Inputs are shared borrows that C only reads: MHFE never sets the
   flags that would make C write to the password or secret. The output and the work area are
   exclusive borrows.
+- On x86-64, `opt.c` is compiled twice, with SSE2 and with SSSE3. MHFE's own
+  `src/engine/argon2_simd.c` runs the SSSE3 copy only for a call whose context carries MHFE's flag
+  in bit 31 of `flags`, which the engine sets only where the processor reports SSSE3; the vendored
+  code reads only the two lowest bits. The choice travels with each call, so no global state is
+  shared.
 - The work area is allocated once per operation and handed to C by the allocation callback. The C
   API passes no user data to the callback, so the area travels in a thread-local slot that is set
   just before and cleared just after each call; C calls the callback on the calling thread.
@@ -72,6 +77,25 @@ invariants:
 - Every Argon2 error code is turned into an error with the reference implementation's message.
 
 The only other unsafe calls in that module are the free-memory queries for macOS and Windows.
+
+## Containers of the same length
+
+A container of the same length as its 12- to 21-word original (suite 4, `--same-length`, or
+`sameLength` in the browser) is made only when the user chooses it; 24 words are the default, and
+the tool and the documented page behaviour show the consequences before the choice. Compared with a
+24-word container:
+
+- It has no built-in check. A wrong password, PIM or memory level gives another valid phrase of the
+  same length with no error, so only a comparison with the wallet (`mhfe check --address` or
+  `--fingerprint`) confirms a recovery, and every recovered phrase is labelled as not verified.
+- It shows the original's word count, and its BIP39 checksum of 4 to 7 bits lets a miscopied word
+  through about once in 16 to 128, against once in 256 for 24 words.
+- Its state is the entropy itself, 128 to 224 bits in two halves of 64 to 112 bits, so each round's
+  salt is drawn from at most 2^64 to 2^112 values. The specification does not assert its suite 3
+  security bounds or deniability analysis for this narrower state; treat the format as newer and
+  less analysed than the 24-word one.
+- A container is told apart from its original only by the user's own records: both are valid phrases
+  of the same length, and a wallet accepts either.
 
 ## The fast-mode launcher
 

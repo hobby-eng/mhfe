@@ -1,4 +1,5 @@
-//! `mhfe encrypt`: turns an original recovery phrase into a 24-word container.
+//! `mhfe encrypt`: turns an original recovery phrase into a container: 24 words, or for a 12- to
+//! 21-word phrase, on the person's own choice, as many words as the phrase.
 
 use std::io::{self, IsTerminal};
 
@@ -6,12 +7,13 @@ use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::engine::NativeEngine;
 use mhfe::{
-    other_detected_lengths, read_phrase, Mhfe, MhfeError, NewContainer, Password, WorkFactor,
+    other_detected_lengths, read_phrase, Mhfe, MhfeError, NewContainer, Password, Suite, WorkFactor,
 };
 use zeroize::Zeroizing;
 
 use crate::diceware::{different_dice_words, RECOMMENDED_WORDS};
 use crate::exit::{capitalize, Failure, SUCCESS};
+use crate::length_choice;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
 use crate::terminal::{self, Input, Progress};
@@ -24,9 +26,24 @@ pub struct Options {
     #[command(flatten)]
     settings: Settings,
 
+    /// Keep the length of a 12- to 21-word phrase instead of making 24 words
+    #[arg(long, long_help = same_length_help())]
+    same_length: bool,
+
     /// Read the answers from standard input (for scripts)
     #[arg(long, long_help = stdin_help())]
     stdin: bool,
+}
+
+fn same_length_help() -> String {
+    style::option_help(&[
+        "Keep the length of a 12- to 21-word phrase instead of making 24 words.",
+        "Without it, a person at a terminal is asked, and 24 words is the default. A container \
+         of the phrase's own length looks like any other phrase, but nothing detects a wrong \
+         password: it opens another, empty wallet. The container also shows the phrase's \
+         length, and a word copied wrongly passes its shorter checksum more often. A 24-word \
+         phrase always gives 24 words.",
+    ])
 }
 
 fn stdin_help() -> String {
@@ -34,18 +51,20 @@ fn stdin_help() -> String {
         "Read the answers from standard input (for scripts).",
         "Input: the phrase, the password and the password again, one per line. Output: the \
          container on one line, printed only after its check has passed. Messages go to \
-         standard error, so standard output holds the container alone.",
+         standard error, so standard output holds the container alone. The container has 24 \
+         words unless --same-length is given.",
     ])
 }
 
 /// The top of `mhfe encrypt --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Encrypt a recovery phrase into a 24-word container",
-        "The container is itself a valid 24-word BIP39 phrase. With the default settings the \
-         container and the password are all that recovery needs. Encryption runs 24 rounds: \
-         12 to encrypt, then 12 that decrypt the new container again and compare the result \
-         with the original. At the default settings this takes about two to four minutes.",
+        "Encrypt a recovery phrase into a container",
+        "The container is itself a valid BIP39 phrase: 24 words by default, or for a 12- to \
+         21-word phrase, if you choose so, as many words as the phrase. With the default \
+         settings the container and the password are all that recovery needs. Encryption runs \
+         24 rounds: 12 to encrypt, then 12 that decrypt the new container again and compare the \
+         result with the original. At the default settings this takes about two to four minutes.",
     ])
 }
 
@@ -55,6 +74,10 @@ fn examples() -> String {
         "Examples:",
         &[
             ("mhfe encrypt", "Encrypt with the default settings"),
+            (
+                "mhfe encrypt --same-length",
+                "A container as long as the 12- to 21-word phrase",
+            ),
             ("mhfe encrypt --pim 1", "Twice the work of the default"),
             ("mhfe encrypt --mem 1", "3 GiB of memory instead of 2 GiB"),
             (
@@ -83,6 +106,10 @@ pub fn long_help() -> String {
                 "Original recovery phrase",
                 "hidden; 12 to 24 words; four letters per word are enough",
             ),
+            (
+                "Container length",
+                "for 12 to 21 words: 24 words (default) or the same length; ? explains both",
+            ),
             ("Password", "hidden, typed twice"),
         ],
     );
@@ -102,17 +129,21 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     let original = read_original(&mut input)?;
     let original_words = original.split(' ').count();
-    // The rare phrase that also passes the check of another length (warned about while reading).
-    let length_must_be_chosen = !other_detected_lengths(&original)?.is_empty();
+    let suite = choose_suite(original_words, options.same_length, &input)?;
+    // The rare phrase that also passes the check of another length; only a 24-word container
+    // carries such checks.
+    let length_must_be_chosen = suite == Suite::TwentyFourWords
+        && warn_if_detection_would_mislead(&original, original_words)?;
     let password = read_new_password(&mut input)?;
     let mut mhfe = settings::reserve_memory(work)?;
 
     let mut progress = Progress::start();
-    let new = mhfe.encrypt_unchecked(&original, &password, &mut |round, rounds| {
+    let new = mhfe.encrypt_unchecked(&original, &password, suite, &mut |round, rounds| {
         progress.round_starts(round, rounds);
         Ok(())
     })?;
     drop(original);
+    let container_words = new.words.split(' ').count();
     // Only a person reading a terminal sees the container before its check, with the warning
     // that it is not verified yet. A script, or output redirected to a file or another program,
     // gets it only after the check: a program would take the first container it reads as final.
@@ -152,13 +183,15 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             paint(style::GOOD, "Verified:")
         ));
     }
+    // The format of the container, which the specification asks to show after creating it.
+    style::fact("Format", paint(MUTED, new.suite.id()));
     eprintln!();
-    print_what_to_remember(work, original_words, length_must_be_chosen);
+    print_what_to_remember(work, original_words, length_must_be_chosen, suite);
     eprintln!();
-    style::hint(
+    style::hint(&format!(
         "Use a different password for each phrase you encrypt, and nowhere else. To make another \
-         copy, copy these 24 words exactly.",
-    );
+         copy, copy these {container_words} words exactly."
+    ));
     // The check above covered the words this program produced, not the copy the user wrote down.
     style::hint(&format!(
         "Before relying on the container, rehearse the recovery with {}, typing the words from \
@@ -166,7 +199,42 @@ pub fn run(options: Options) -> Result<i32, Failure> {
          it matches.",
         paint(ACCENT, "mhfe check")
     ));
+    if suite == Suite::SameLength {
+        style::warn(
+            "Rehearse from the finished backup, not from the screen.",
+            &format!(
+                "A word copied wrongly still passes the checksum of {container_words} words \
+                 about once in {}, and the container then opens a different wallet without any \
+                 error. Only mhfe check against your wallet's fingerprint or a known address \
+                 shows it.",
+                1u32 << (container_words / 3)
+            ),
+        );
+    }
     Ok(SUCCESS)
+}
+
+/// The container for a phrase of `words` words: 24 words unless the person chooses the same
+/// length, at a terminal or with --same-length. A 24-word phrase has no other form.
+fn choose_suite(words: usize, same_length: bool, input: &Input) -> Result<Suite, Failure> {
+    if words == 24 {
+        return if same_length {
+            Err(MhfeError::SameLengthNeedsShortPhrase.into())
+        } else {
+            Ok(Suite::TwentyFourWords)
+        };
+    }
+    if same_length {
+        style::ok(format!(
+            "Container: {words} words, the same length as yours, as --same-length asks."
+        ));
+        length_choice::show_consequences(words);
+        return Ok(Suite::SameLength);
+    }
+    if input.is_script() || !crate::menu::can_run() {
+        return Ok(Suite::TwentyFourWords);
+    }
+    length_choice::choose(words)
 }
 
 /// One line of the advice printed after an encryption, before it is styled.
@@ -186,13 +254,18 @@ fn what_to_remember(
     work: WorkFactor,
     original_words: usize,
     length_must_be_chosen: bool,
+    suite: Suite,
 ) -> Vec<Advice> {
     let mut advice = Vec::new();
     let changed = settings::changed_settings(work);
+    let container_words = match suite {
+        Suite::TwentyFourWords => 24,
+        Suite::SameLength => original_words,
+    };
     if changed.is_none() && !length_must_be_chosen {
         advice.push(Advice::Statement(
             "Nothing else needs to be kept:",
-            "the 24 words and the password are enough.".into(),
+            format!("the {container_words} words and the password are enough."),
         ));
     }
     if let Some(changed) = changed {
@@ -217,7 +290,13 @@ fn what_to_remember(
             format!("mhfe decrypt --words {original_words}"),
         ));
     }
-    if original_words == WORDS_WITHOUT_CHECK {
+    if suite == Suite::SameLength {
+        advice.push(Advice::HintWithCommand(
+            "This container has no built-in check, so recovery will show the phrase as not \
+             verified, also with a wrong password. Confirm it against your wallet with ",
+            "mhfe check --fingerprint or --address".into(),
+        ));
+    } else if original_words == WORDS_WITHOUT_CHECK {
         advice.push(Advice::Hint(
             "A 24-word phrase has no built-in check, so recovery will show it as not verified; \
              that is expected. mhfe check with a known address of the wallet confirms it."
@@ -227,8 +306,13 @@ fn what_to_remember(
     advice
 }
 
-fn print_what_to_remember(work: WorkFactor, original_words: usize, length_must_be_chosen: bool) {
-    for line in what_to_remember(work, original_words, length_must_be_chosen) {
+fn print_what_to_remember(
+    work: WorkFactor,
+    original_words: usize,
+    length_must_be_chosen: bool,
+    suite: Suite,
+) {
+    for line in what_to_remember(work, original_words, length_must_be_chosen, suite) {
         match line {
             Advice::Statement(lead, rest) => eprintln!("{} {rest}", paint(STRONG, lead)),
             Advice::Hint(text) => style::hint(&text),
@@ -256,7 +340,13 @@ fn check(
 /// Shows the container after the first twelve rounds, clearly marked as not yet verified.
 fn show_before_the_check(container: &str, input: &Input) {
     eprintln!();
-    eprintln!("{}", paint(HEADING, "Container, 24 words"));
+    eprintln!(
+        "{}",
+        paint(
+            HEADING,
+            format!("Container, {} words", container.split(' ').count())
+        )
+    );
     terminal::print_phrase(container, input);
     style::warn(
         "Not verified yet.",
@@ -296,7 +386,6 @@ fn read_original(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
                     }
                     style::ok("The words are no longer on the screen.");
                 }
-                warn_if_detection_would_mislead(&phrase, words)?;
                 return Ok(phrase);
             }
             Err(error) if input.can_ask_again() => {
@@ -313,10 +402,10 @@ fn read_original(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
 /// About once in four billion phrases, the packed phrase also passes the built-in check of
 /// another length. Recovery with automatic detection would then not give this phrase on its own,
 /// so the owner is told, before the long computation, to note the length and choose it later.
-fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<(), Failure> {
+fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, Failure> {
     let others = other_detected_lengths(phrase)?;
     if others.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
     let others: Vec<String> = others.iter().map(ToString::to_string).collect();
     style::warn(
@@ -329,7 +418,7 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<(), Fai
             others.join(" and ")
         ),
     );
-    Ok(())
+    Ok(true)
 }
 
 /// Asks for the password twice, so that a typing mistake cannot lock the phrase away, and warns
@@ -418,7 +507,16 @@ mod tests {
 
     /// The advice as plain text, one line per entry, without colours.
     fn plain(work: WorkFactor, words: usize, length_must_be_chosen: bool) -> Vec<String> {
-        what_to_remember(work, words, length_must_be_chosen)
+        plain_for(work, words, length_must_be_chosen, Suite::TwentyFourWords)
+    }
+
+    fn plain_for(
+        work: WorkFactor,
+        words: usize,
+        length_must_be_chosen: bool,
+        suite: Suite,
+    ) -> Vec<String> {
+        what_to_remember(work, words, length_must_be_chosen, suite)
             .into_iter()
             .map(|advice| match advice {
                 Advice::Statement(lead, rest) => format!("{lead} {rest}"),
@@ -478,5 +576,17 @@ mod tests {
         assert!(both
             .iter()
             .any(|line| line == "Remember the word count: your phrase has 24 words."));
+    }
+
+    #[test]
+    fn a_same_length_container_is_confirmed_against_the_wallet() {
+        let advice = plain_for(defaults(), 15, false, Suite::SameLength);
+        assert_eq!(
+            advice[0],
+            "Nothing else needs to be kept: the 15 words and the password are enough."
+        );
+        assert!(advice[1].contains("also with a wrong password"));
+        assert!(advice[1].ends_with("mhfe check --fingerprint or --address."));
+        assert_eq!(advice.len(), 2);
     }
 }

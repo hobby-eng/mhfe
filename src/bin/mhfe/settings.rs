@@ -4,7 +4,7 @@ use anstream::eprintln;
 use clap::Args;
 use mhfe::engine::HIGHEST_MEMORY_LEVEL;
 use mhfe::engine::{available_memory_bytes, check_can_run, NativeEngine};
-use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS, SUITE_ID};
+use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
 
 use crate::exit::Failure;
 use crate::style::{self, paint, MUTED};
@@ -76,7 +76,9 @@ pub enum Operation {
     Check,
 }
 
-/// States the suite, the settings, the memory and the expected time before anything starts.
+/// States the settings, the memory and the expected time before anything starts. The format of
+/// the container is shown once it is known: after the choice of an encryption, or from the
+/// container's word count.
 pub fn announce(work: WorkFactor, operation: Operation) {
     let (title, rounds, how) = match operation {
         Operation::Encrypt => (
@@ -93,7 +95,6 @@ pub fn announce(work: WorkFactor, operation: Operation) {
     let gray = |text: String| paint(MUTED, text);
 
     style::title(title);
-    style::fact("Suite", SUITE_ID);
     style::fact(
         "Settings",
         format!(
@@ -166,8 +167,9 @@ pub fn highest_available_level() -> Option<u32> {
 }
 
 /// The settings that differ from the defaults, such as "PIM 1, memory level 1", or `None` when
-/// both are 0. Only these need remembering: the suite is fixed and the original's length is
-/// detected, so with the defaults the 24 words and the password are all that recovery needs.
+/// both are 0. Only these need remembering: the container's word count selects the suite and the
+/// original's length is detected, so with the defaults the container and the password are all that
+/// recovery needs.
 pub fn changed_settings(work: WorkFactor) -> Option<String> {
     let mut values = Vec::new();
     if work.pim() != 0 {
