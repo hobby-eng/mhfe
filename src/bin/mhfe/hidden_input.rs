@@ -1,4 +1,5 @@
-//! Reads one line from the terminal without showing it and without changing it.
+//! Reads one line from the terminal without changing it: hidden, or, on the private screen,
+//! shown as it is typed.
 //!
 //! The specification requires a password with a control character, such as TAB, NUL or U+0085,
 //! to be refused, never cleaned. A reader that swallowed such characters would encrypt with a
@@ -8,6 +9,10 @@
 //! - Backspace deletes the last character and Ctrl+U the whole line;
 //! - Enter ends the line, and Ctrl+D on an empty line ends the input;
 //! - Ctrl+C cancels the tool.
+//!
+//! A line that is shown is shown as the person types it, except its control characters: they are
+//! kept for the password check to refuse, but never written to the terminal, which would act on
+//! them.
 //!
 //! On Unix and on Windows the terminal's own line editing is switched off and this module edits
 //! the line itself, so both behave the same. A terminal's line mode would otherwise act on further
@@ -23,8 +28,9 @@
 // only through unsafe foreign functions.
 #![allow(unsafe_code)]
 
-use std::io;
+use std::io::{self, BufRead};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use zeroize::Zeroizing;
 
@@ -34,16 +40,21 @@ use crate::exit::Failure;
 /// restores the terminal holds this lock, so the Ctrl+C handler and a prompt never interleave.
 static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);
 
-/// Switches the terminal to hidden input, runs `prompt`, reads one line as described above and
-/// restores the terminal, also when reading fails. `None` means that the input was closed. The
-/// terminal is switched before the prompt appears, so that a key typed or text pasted as soon as
-/// the prompt shows is already read as data.
+/// Switches the terminal to reading single bytes without its own echo, runs `prompt`, reads one
+/// line as described above, shown as it is typed when `shown` is true, and restores the terminal,
+/// also when reading fails. `None` means that the input was closed. The terminal is switched
+/// before the prompt appears, so that a key typed or text pasted as soon as the prompt shows is
+/// already read as data. On Windows the standard library turns the console's UTF-16 characters
+/// into UTF-8 bytes.
 pub fn read_line(
     prompt: impl FnOnce() -> Result<(), Failure>,
+    shown: bool,
 ) -> Result<Option<Zeroizing<String>>, Failure> {
     let result = with_terminal_switched(platform::hide, || {
         prompt()?;
-        platform::read_line()
+        let mut screen = io::stderr();
+        let echo = shown.then_some(&mut screen as &mut dyn io::Write);
+        edit_line(&mut io::stdin().lock(), echo)
     });
     // The terminal did not show the Enter key either.
     anstream::eprintln!();
@@ -60,7 +71,8 @@ pub enum Key {
     Digit(u8),
     /// ?, which asks for an explanation.
     Help,
-    /// q, Ctrl+D or the end of the input.
+    /// Escape alone, q, Ctrl+D or the end of the input. q is an alias: a keyboard layout may have
+    /// no q key, where that key types another letter.
     Quit,
     /// Any other key, which the menu ignores.
     Other,
@@ -72,8 +84,8 @@ pub fn with_keys<T>(
     choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
 ) -> Result<T, Failure> {
     with_terminal_switched(platform::single_keys, || {
-        let mut input = io::stdin().lock();
-        choose(&mut || read_key(&mut input))
+        let mut keys = TerminalKeys::new(io::stdin().lock());
+        choose(&mut || read_key(&mut keys))
     })
 }
 
@@ -136,14 +148,82 @@ mod keys {
     pub const ESCAPE: u8 = 0x1b;
 }
 
+/// The width of the terminal on standard error, in columns, or `None` when it cannot be read.
+pub fn columns() -> Option<usize> {
+    platform::columns()
+}
+
+/// How long a lone Escape waits for the rest of an escape sequence. A terminal sends an arrow
+/// key's sequence at once, so an Escape that nothing follows within this time is the Escape key;
+/// MnemoCode waits as long (ESCAPE_DELAY_MS in its src/cli/terminal-input.ts).
+const ESCAPE_DELAY: Duration = Duration::from_millis(100);
+
+/// Where keys come from: their bytes, and whether more bytes follow at once, which tells the
+/// Escape key from the start of an escape sequence.
+trait KeySource {
+    /// One byte, or `None` at the end of the input.
+    fn next_byte(&mut self) -> Result<Option<u8>, Failure>;
+    /// Whether another byte is there or arrives within `delay`.
+    fn more_within(&mut self, delay: Duration) -> Result<bool, Failure>;
+}
+
+/// The keys typed at the terminal. Whatever the standard library has read from the terminal is
+/// taken over at once, so that its buffer stays empty and only the operating system needs to be
+/// asked whether more is coming. Bytes still here when a choice ends are dropped with this
+/// reader: a key pressed once too often must not end up in the next answer, such as a password.
+struct TerminalKeys<'a> {
+    input: io::StdinLock<'a>,
+    /// Bytes taken over and not yet read; wiped when dropped, as they could be typed-ahead text.
+    pending: Zeroizing<Vec<u8>>,
+    next: usize,
+}
+
+impl<'a> TerminalKeys<'a> {
+    fn new(input: io::StdinLock<'a>) -> Self {
+        Self {
+            input,
+            // Reserved at the size of the standard library's buffer, whose contents it takes
+            // whole, so that it is never reallocated and leaves no unwiped copy.
+            pending: Zeroizing::new(Vec::with_capacity(crate::terminal::LINE_CAPACITY)),
+            next: 0,
+        }
+    }
+}
+
+impl KeySource for TerminalKeys<'_> {
+    fn next_byte(&mut self) -> Result<Option<u8>, Failure> {
+        if self.next == self.pending.len() {
+            self.pending.clear();
+            self.next = 0;
+            let available = loop {
+                match self.input.fill_buf() {
+                    Ok(bytes) => break bytes,
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(error) => return Err(error.into()),
+                }
+            };
+            let taken = available.len();
+            self.pending.extend_from_slice(available);
+            self.input.consume(taken);
+        }
+        let byte = self.pending.get(self.next).copied();
+        self.next += usize::from(byte.is_some());
+        Ok(byte)
+    }
+
+    fn more_within(&mut self, delay: Duration) -> Result<bool, Failure> {
+        Ok(self.next < self.pending.len() || platform::input_within(delay)?)
+    }
+}
+
 /// Reads one key from raw terminal bytes. The arrow keys send the VT escape sequences ESC [ A and
 /// ESC [ B, or ESC O A and ESC O B in a terminal's application mode. Every other escape sequence is
 /// read to its end and ignored, so that no byte of it, such as the 5 of Ctrl+Up (ESC [ 1 ; 5 A),
-/// is taken for a key of its own.
-fn read_key(reader: &mut impl io::Read) -> Result<Key, Failure> {
+/// is taken for a key of its own. An ESC that nothing follows at once is the Escape key.
+fn read_key(keys: &mut impl KeySource) -> Result<Key, Failure> {
     use keys::{CTRL_C, CTRL_D, ESCAPE};
 
-    let Some(byte) = read_byte(reader)? else {
+    let Some(byte) = keys.next_byte()? else {
         return Ok(Key::Quit);
     };
     let key = match byte {
@@ -151,9 +231,10 @@ fn read_key(reader: &mut impl io::Read) -> Result<Key, Failure> {
         b'1'..=b'9' => Key::Digit(byte - b'0'),
         b'?' => Key::Help,
         b'q' | b'Q' | CTRL_D | CTRL_C => Key::Quit,
-        ESCAPE => match read_byte(reader)? {
-            Some(b'[') => read_control_sequence(reader)?,
-            Some(b'O') => arrow(read_byte(reader)?),
+        ESCAPE if !keys.more_within(ESCAPE_DELAY)? => Key::Quit,
+        ESCAPE => match keys.next_byte()? {
+            Some(b'[') => read_control_sequence(keys)?,
+            Some(b'O') => arrow(keys.next_byte()?),
             _ => Key::Other,
         },
         _ => Key::Other,
@@ -163,11 +244,11 @@ fn read_key(reader: &mut impl io::Read) -> Result<Key, Failure> {
 
 /// The rest of a control sequence after ESC [: parameter and intermediate bytes, then one final
 /// byte from @ to ~ (ECMA-48). Only an arrow key without parameters counts.
-fn read_control_sequence(reader: &mut impl io::Read) -> Result<Key, Failure> {
+fn read_control_sequence(keys: &mut impl KeySource) -> Result<Key, Failure> {
     const FINAL_BYTES: std::ops::RangeInclusive<u8> = 0x40..=0x7e;
     let mut has_parameters = false;
     loop {
-        match read_byte(reader)? {
+        match keys.next_byte()? {
             None => return Ok(Key::Quit),
             Some(byte) if FINAL_BYTES.contains(&byte) => {
                 return Ok(if has_parameters {
@@ -189,28 +270,24 @@ fn arrow(final_byte: Option<u8>) -> Key {
     }
 }
 
-/// One byte, or `None` at the end of the input.
-fn read_byte(reader: &mut impl io::Read) -> Result<Option<u8>, Failure> {
-    let mut byte = [0u8; 1];
-    loop {
-        match reader.read(&mut byte) {
-            Ok(0) => return Ok(None),
-            Ok(_) => return Ok(Some(byte[0])),
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(error.into()),
-        }
-    }
-}
-
 /// Edits a line from raw terminal bytes: Backspace or Delete removes the last character, Ctrl+U
 /// the whole line, Enter (CR or LF) ends it, and Ctrl+D on an empty line or the end of the input
 /// gives `None`. Every other byte is kept. The buffer is reserved at its largest size and never
-/// grows, so it leaves no unwiped copy; a longer line is refused.
-fn edit_line(reader: &mut impl io::Read) -> Result<Option<Zeroizing<String>>, Failure> {
+/// grows, so it leaves no unwiped copy; a longer line is refused. With `echo`, every complete
+/// character that is not a control character is written to it as it arrives, and the editing keys
+/// erase what they remove from it.
+fn edit_line(
+    reader: &mut impl io::Read,
+    mut echo: Option<&mut dyn io::Write>,
+) -> Result<Option<Zeroizing<String>>, Failure> {
     use crate::terminal::LINE_CAPACITY;
     use keys::{BACKSPACE, CTRL_D, CTRL_U, DELETE};
 
     let mut line = Zeroizing::new(Vec::with_capacity(LINE_CAPACITY));
+    // For every character of the line, whether it was written to `echo`; only those are erased.
+    let mut written: Vec<bool> = Vec::with_capacity(LINE_CAPACITY);
+    // Where the character still arriving begins: a UTF-8 character comes one byte at a time.
+    let mut complete = 0;
     let mut byte = Zeroizing::new([0u8; 1]);
     loop {
         match reader.read(&mut byte[..]) {
@@ -222,15 +299,48 @@ fn edit_line(reader: &mut impl io::Read) -> Result<Option<Zeroizing<String>>, Fa
         }
         match byte[0] {
             b'\r' | b'\n' => break,
-            BACKSPACE | DELETE => remove_last_character(&mut line),
-            CTRL_U => line.clear(),
+            // The first bytes of a character that has not arrived whole go without a trace.
+            BACKSPACE | DELETE if complete < line.len() => line.truncate(complete),
+            BACKSPACE | DELETE => {
+                remove_last_character(&mut line);
+                complete = line.len();
+                let erased = usize::from(written.pop() == Some(true));
+                erase(&mut echo, erased)?;
+            }
+            CTRL_U => {
+                line.clear();
+                complete = 0;
+                let erased = written.iter().filter(|shown| **shown).count();
+                written.clear();
+                erase(&mut echo, erased)?;
+            }
             CTRL_D if line.is_empty() => return Ok(None),
             _ if line.len() == LINE_CAPACITY => {
                 return Err(Failure::invalid_input(format!(
                     "An answer is longer than {LINE_CAPACITY} bytes; no valid answer is that long."
                 )))
             }
-            other => line.push(other),
+            other => {
+                line.push(other);
+                match std::str::from_utf8(&line[complete..]) {
+                    Ok(character) => {
+                        let shown = !character.chars().any(char::is_control);
+                        if let (true, Some(screen)) = (shown, echo.as_mut()) {
+                            screen.write_all(character.as_bytes())?;
+                            screen.flush()?;
+                        }
+                        written.push(shown);
+                        complete = line.len();
+                    }
+                    // The rest of the character is still to come.
+                    Err(error) if error.error_len().is_none() => {}
+                    // Not UTF-8: kept, so that the whole answer is refused below, and not shown.
+                    Err(_) => {
+                        written.push(false);
+                        complete = line.len();
+                    }
+                }
+            }
         }
     }
     let bytes = std::mem::take(&mut *line);
@@ -244,6 +354,17 @@ fn edit_line(reader: &mut impl io::Read) -> Result<Option<Zeroizing<String>>, Fa
             ))
         }
     }
+}
+
+/// Erases the last `characters` characters written to `echo`: back, a space over each, back again.
+fn erase(echo: &mut Option<&mut dyn io::Write>, characters: usize) -> Result<(), Failure> {
+    if let Some(screen) = echo.as_mut() {
+        if characters > 0 {
+            screen.write_all("\x08 \x08".repeat(characters).as_bytes())?;
+            screen.flush()?;
+        }
+    }
+    Ok(())
 }
 
 /// Removes the last UTF-8 character: its continuation bytes, then its first byte.
@@ -263,10 +384,10 @@ fn remove_last_character(line: &mut Vec<u8>) {
 mod platform {
     use std::io;
     use std::mem::MaybeUninit;
+    use std::ptr;
+    use std::time::Duration;
 
-    use zeroize::Zeroizing;
-
-    use super::{edit_line, terminal_error};
+    use super::terminal_error;
     use crate::exit::Failure;
 
     pub type Settings = libc::termios;
@@ -301,13 +422,48 @@ mod platform {
         Ok(())
     }
 
-    pub fn read_line() -> Result<Option<Zeroizing<String>>, Failure> {
-        edit_line(&mut io::stdin().lock())
-    }
-
     /// The menu's keys need the same settings as a hidden line: every byte at once, no echo.
     pub fn single_keys(original: &Settings) -> Result<(), Failure> {
         hide(original)
+    }
+
+    pub fn columns() -> Option<usize> {
+        let mut size = MaybeUninit::<libc::winsize>::zeroed();
+        // SAFETY: TIOCGWINSZ fills the winsize when it returns 0; it was zeroed before.
+        let read = unsafe { libc::ioctl(libc::STDERR_FILENO, libc::TIOCGWINSZ, size.as_mut_ptr()) };
+        // SAFETY: all zero bytes are a valid winsize, and a successful call filled it.
+        let columns = unsafe { size.assume_init() }.ws_col;
+        (read == 0 && columns > 0).then_some(usize::from(columns))
+    }
+
+    /// Whether a byte arrives on standard input within `delay`. select, not poll: macOS's poll
+    /// does not support terminals.
+    pub fn input_within(delay: Duration) -> Result<bool, Failure> {
+        loop {
+            // SAFETY: an fd_set and a timeval on the stack that select may change, for standard
+            // input only; all zero bytes are a valid fd_set.
+            let ready = unsafe {
+                let mut readable = MaybeUninit::<libc::fd_set>::zeroed().assume_init();
+                libc::FD_ZERO(&mut readable);
+                libc::FD_SET(libc::STDIN_FILENO, &mut readable);
+                let mut timeout = libc::timeval {
+                    tv_sec: delay.as_secs() as libc::time_t,
+                    tv_usec: delay.subsec_micros() as libc::suseconds_t,
+                };
+                libc::select(
+                    libc::STDIN_FILENO + 1,
+                    &mut readable,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    &mut timeout,
+                )
+            };
+            match ready {
+                -1 if io::Error::last_os_error().kind() == io::ErrorKind::Interrupted => continue,
+                -1 => return Err(terminal_error("wait for a key from")),
+                count => return Ok(count > 0),
+            }
+        }
     }
 
     pub fn restore(original: &Settings) {
@@ -320,15 +476,17 @@ mod platform {
 #[cfg(windows)]
 mod platform {
     use std::io;
+    use std::time::{Duration, Instant};
 
     use windows_sys::Win32::System::Console::{
-        GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_ECHO_INPUT,
+        GetConsoleMode, GetConsoleScreenBufferInfo, GetStdHandle, PeekConsoleInputW,
+        SetConsoleMode, CONSOLE_MODE, CONSOLE_SCREEN_BUFFER_INFO, ENABLE_ECHO_INPUT,
         ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
-        ENABLE_VIRTUAL_TERMINAL_PROCESSING, STD_ERROR_HANDLE, STD_INPUT_HANDLE,
+        ENABLE_VIRTUAL_TERMINAL_PROCESSING, INPUT_RECORD, KEY_EVENT, STD_ERROR_HANDLE,
+        STD_INPUT_HANDLE,
     };
-    use zeroize::Zeroizing;
 
-    use super::{edit_line, terminal_error};
+    use super::terminal_error;
     use crate::exit::Failure;
 
     pub type Settings = CONSOLE_MODE;
@@ -351,11 +509,6 @@ mod platform {
             return Err(terminal_error("hide the input on"));
         }
         Ok(())
-    }
-
-    /// The standard library turns the console's UTF-16 characters into UTF-8 bytes.
-    pub fn read_line() -> Result<Option<Zeroizing<String>>, Failure> {
-        edit_line(&mut io::stdin().lock())
     }
 
     /// As for a hidden line, and the console sends the arrow keys as VT escape sequences, as a
@@ -382,6 +535,63 @@ mod platform {
         Ok(())
     }
 
+    /// The width of the console window that standard error writes to.
+    pub fn columns() -> Option<usize> {
+        let mut info = CONSOLE_SCREEN_BUFFER_INFO::default();
+        // SAFETY: a plain console call that fills `info`.
+        let read = unsafe { GetConsoleScreenBufferInfo(GetStdHandle(STD_ERROR_HANDLE), &mut info) };
+        let width = i32::from(info.srWindow.Right) - i32::from(info.srWindow.Left) + 1;
+        (read != 0 && width > 0).then_some(width as usize)
+    }
+
+    /// Whether a typed character arrives within `delay`. The console has no wait for that alone:
+    /// its queue also holds events that give no character, such as the release of the Escape key
+    /// itself, so the queue is looked at every few milliseconds until the time is up.
+    pub fn input_within(delay: Duration) -> Result<bool, Failure> {
+        const LOOK_EVERY: Duration = Duration::from_millis(5);
+        let end = Instant::now() + delay;
+        loop {
+            if character_waiting()? {
+                return Ok(true);
+            }
+            if Instant::now() >= end {
+                return Ok(false);
+            }
+            std::thread::sleep(LOOK_EVERY);
+        }
+    }
+
+    /// Whether the console's queue holds a key press with a character. With VT input, the rest of
+    /// an arrow key's sequence arrives as such presses.
+    fn character_waiting() -> Result<bool, Failure> {
+        // More than the events of one key's sequence, with their releases.
+        const EVENTS: usize = 32;
+        let mut events = [INPUT_RECORD::default(); EVENTS];
+        let mut count = 0u32;
+        // SAFETY: room for EVENTS records; peeking leaves the events in the queue.
+        let peeked = unsafe {
+            PeekConsoleInputW(
+                GetStdHandle(STD_INPUT_HANDLE),
+                events.as_mut_ptr(),
+                EVENTS as u32,
+                &mut count,
+            )
+        };
+        if peeked == 0 {
+            return Err(terminal_error("look at the keys of"));
+        }
+        let typed = events[..count as usize].iter().any(|event| {
+            // SAFETY: the union holds a key event when EventType says so, and its character is
+            // read as the UTF-16 unit that the W function fills in.
+            event.EventType == KEY_EVENT as u16
+                && unsafe {
+                    event.Event.KeyEvent.bKeyDown != 0
+                        && event.Event.KeyEvent.uChar.UnicodeChar != 0
+                }
+        });
+        Ok(typed)
+    }
+
     pub fn restore(original: &Settings) {
         // SAFETY: the mode read from this console before.
         unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), *original) };
@@ -393,7 +603,7 @@ mod tests {
     use super::*;
 
     fn edited(bytes: &[u8]) -> Option<String> {
-        edit_line(&mut io::Cursor::new(bytes.to_vec()))
+        edit_line(&mut io::Cursor::new(bytes.to_vec()), None)
             .unwrap()
             .map(|line| line.to_string())
     }
@@ -408,6 +618,36 @@ mod tests {
         }
         // Ctrl+D inside a line is kept too; the password check refuses it.
         assert_eq!(edited(b"a\x04b\n").unwrap(), "a\u{4}b");
+    }
+
+    /// The line read and what the screen showed of it.
+    fn echoed(bytes: &[u8]) -> (String, Vec<u8>) {
+        let mut screen = Vec::new();
+        let line = edit_line(
+            &mut io::Cursor::new(bytes.to_vec()),
+            Some(&mut screen as &mut dyn io::Write),
+        )
+        .unwrap()
+        .unwrap();
+        (line.to_string(), screen)
+    }
+
+    #[test]
+    fn a_shown_line_shows_what_is_typed_but_no_control_character() {
+        assert_eq!(echoed(b"ab\r"), ("ab".into(), b"ab".to_vec()));
+        // Backspace erases on the screen too, a whole character at a time.
+        let (line, screen) = echoed("a\u{448}\x7fb\r".as_bytes());
+        assert_eq!(line, "ab");
+        assert_eq!(screen, "a\u{448}\x08 \x08b".as_bytes());
+        // A TAB and U+0085 stay in the line, for the password check to refuse, but are not shown,
+        // and Backspace over one of them erases nothing on the screen.
+        let (line, screen) = echoed("a\tb\u{85}\x7f\r".as_bytes());
+        assert_eq!(line, "a\tb");
+        assert_eq!(screen, b"ab");
+        // Ctrl+U erases every character that was shown.
+        let (line, screen) = echoed(b"ab\tc\x15d\r");
+        assert_eq!(line, "d");
+        assert_eq!(screen, b"abc\x08 \x08\x08 \x08\x08 \x08d");
     }
 
     #[test]
@@ -435,6 +675,18 @@ mod tests {
     }
 
     /// The keys in `bytes` up to the first Quit, which the end of the input gives too.
+    /// Test input that arrives all at once: more follows exactly while bytes are left.
+    impl KeySource for io::Cursor<Vec<u8>> {
+        fn next_byte(&mut self) -> Result<Option<u8>, Failure> {
+            let mut byte = [0u8; 1];
+            Ok((io::Read::read(self, &mut byte)? == 1).then_some(byte[0]))
+        }
+
+        fn more_within(&mut self, _delay: Duration) -> Result<bool, Failure> {
+            Ok((self.position() as usize) < self.get_ref().len())
+        }
+    }
+
     fn keys_in(bytes: &[u8]) -> Vec<Key> {
         let mut reader = io::Cursor::new(bytes.to_vec());
         let mut keys = Vec::new();
@@ -480,12 +732,20 @@ mod tests {
     }
 
     #[test]
+    fn escape_alone_quits() {
+        use Key::*;
+        assert_eq!(keys_in(b"\x1b[B2\x1b"), [Down, Digit(2), Quit]);
+        // Escape followed at once by another key, as Alt+x sends it, is no Escape.
+        assert_eq!(keys_in(b"\x1bx\r\x1b"), [Other, Enter, Quit]);
+    }
+
+    #[test]
     fn a_line_over_the_capacity_or_invalid_utf8_is_refused() {
         use crate::terminal::LINE_CAPACITY;
         let longest = "a".repeat(LINE_CAPACITY);
         assert_eq!(edited(format!("{longest}\r").as_bytes()).unwrap(), longest);
         let too_long = format!("{longest}a\r");
-        assert!(edit_line(&mut io::Cursor::new(too_long)).is_err());
-        assert!(edit_line(&mut io::Cursor::new(b"\xff\r".to_vec())).is_err());
+        assert!(edit_line(&mut io::Cursor::new(too_long), None).is_err());
+        assert!(edit_line(&mut io::Cursor::new(b"\xff\r".to_vec()), None).is_err());
     }
 }

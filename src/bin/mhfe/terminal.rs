@@ -1,20 +1,22 @@
 //! Everything the tool reads from and shows to the person at the terminal.
 //!
-//! Secrets are read without echo into buffers that are wiped when dropped. Results go to
-//! standard output; prompts, progress and advice go to standard error, so a result can be piped
-//! on without the messages.
+//! Secrets are typed on a private screen of their own, where they are shown as they are typed and
+//! which is cleared once the person is done; anywhere else they are read without echo. Either way
+//! they go into buffers that are wiped when dropped. Results go to standard output; prompts,
+//! progress and advice go to standard error, so a result can be piped on without the messages.
 
 use std::io::{self, BufRead, IsTerminal, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use anstream::{eprint, eprintln, println};
-use mhfe::{Suite, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe::{MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
 use zeroize::Zeroizing;
 
+use crate::choice::{self, Answer, Question};
 use crate::exit::{self, Failure};
 use crate::hidden_input;
-use crate::style::{self, paint, ACCENT, HEADING, MUTED};
+use crate::style::{self, paint, ACCENT, MUTED};
 
 /// Longest line accepted, line break included. The buffer is reserved at this size and reading
 /// stops there, so it is never reallocated, which would leave an unwiped copy of a secret
@@ -49,11 +51,13 @@ impl Input {
         matches!(self, Self::Script(_))
     }
 
-    /// Reads a secret: typed without echo at a terminal, or the next line of a script.
-    pub fn secret(&mut self, prompt: &str) -> Result<Zeroizing<String>, Failure> {
+    /// Reads a secret: at a terminal, shown as it is typed on the private screen and hidden
+    /// anywhere else; from a script, the next line. `question` has no colon: "Password" is asked
+    /// as "Password: ", or as "Password (hidden): ".
+    pub fn secret(&mut self, question: &str) -> Result<Zeroizing<String>, Failure> {
         match self {
-            Self::Terminal => read_hidden(prompt),
-            Self::Script(lines) => read_script_line(lines, prompt),
+            Self::Terminal => read_secret(question),
+            Self::Script(lines) => read_script_line(lines, question),
         }
     }
 
@@ -72,19 +76,104 @@ impl Input {
         }
     }
 
-    /// Asks a yes-or-no question at a terminal; Enter alone gives `default`.
-    pub fn yes_or_no(&mut self, question: &str, default: bool) -> Result<bool, Failure> {
-        let choices = if default { "[Y/n]" } else { "[y/N]" };
+    /// Asks a question with a few fixed answers and returns the index of the chosen one; the first
+    /// is the default. A person at a terminal chooses from a list with the arrow keys. A script,
+    /// or a terminal that cannot redraw lines, gets the answers numbered and types the number on a
+    /// line of its own, or nothing for the first.
+    pub fn choose(&mut self, question: &Question, answers: &[Answer]) -> Result<usize, Failure> {
+        if !self.is_script() && choice::can_run() {
+            return choice::choose(question, answers, None)?
+                .ok_or_else(|| MhfeError::Cancelled.into());
+        }
+        choice::draw_question(question);
+        for (number, answer) in answers.iter().enumerate() {
+            let note = if answer.note.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", paint(MUTED, format!("({})", answer.note)))
+            };
+            eprintln!(
+                "  {} {}{note}",
+                paint(ACCENT, format!("{}.", number + 1)),
+                answer.label
+            );
+        }
         loop {
-            let answer = self.visible(&format!("{question} {choices}: "))?;
-            match answer.trim().to_ascii_lowercase().as_str() {
-                "" => return Ok(default),
-                "y" | "yes" => return Ok(true),
-                "n" | "no" => return Ok(false),
-                _ => eprintln!("Type y or n."),
+            let typed = self.visible("Choice [1]: ")?;
+            let number = match typed.trim() {
+                "" => Some(1),
+                text => text.parse().ok(),
+            };
+            if let Some(number @ 1..) = number.filter(|number| *number <= answers.len()) {
+                return Ok(number - 1);
             }
+            let message = format!("Type a number from 1 to {}.", answers.len());
+            if !self.can_ask_again() {
+                return Err(Failure::invalid_input(message));
+            }
+            style::retry(message);
         }
     }
+}
+
+/// One step of a command at a terminal: a blank line, then its hint, prompts and the messages
+/// about mistyped answers. Once the step is answered, `finish` erases all of it, so that the line
+/// of the summary written next takes its place (as choice.rs does for a question with a list):
+/// the answers then read as a short summary, and the next question always appears at the bottom,
+/// after its blank line. A script gets neither the blank line nor the erasing.
+pub struct Step {
+    /// Lines drawn since the step began, its blank line included.
+    lines: usize,
+    erasable: bool,
+}
+
+impl Step {
+    pub fn start(input: &Input) -> Self {
+        if input.is_script() {
+            return Self {
+                lines: 0,
+                erasable: false,
+            };
+        }
+        eprintln!();
+        Self {
+            lines: 1,
+            erasable: choice::can_run(),
+        }
+    }
+
+    pub fn retry(&mut self, text: impl std::fmt::Display) {
+        self.lines += style::retry(text);
+    }
+
+    /// Reads a public answer, which the terminal shows after the prompt and may wrap.
+    pub fn visible(
+        &mut self,
+        input: &mut Input,
+        prompt: &str,
+    ) -> Result<Zeroizing<String>, Failure> {
+        let answer = input.visible(prompt)?;
+        if !input.is_script() {
+            self.lines += rows(prompt.chars().count() + answer.chars().count());
+        }
+        Ok(answer)
+    }
+
+    /// Erases the step; the caller then writes its line of the summary.
+    pub fn finish(self) -> Result<(), Failure> {
+        if self.erasable {
+            choice::write_control(&choice::redraw_from(self.lines))?;
+        }
+        Ok(())
+    }
+}
+
+/// The lines that `characters` take on the terminal, the Enter after them included: a full line
+/// moves on only with the next character, so text that fills its last line exactly takes no more.
+fn rows(characters: usize) -> usize {
+    // When the width cannot be read, the usual 80 columns.
+    let columns = hidden_input::columns().unwrap_or(80);
+    characters.div_ceil(columns).max(1)
 }
 
 /// Set while a container is on the screen whose check has not finished, so that Ctrl+C can say so.
@@ -111,31 +200,46 @@ pub fn exit_cancelled() -> ! {
     eprintln!();
     if UNVERIFIED_CONTAINER_SHOWN.load(Ordering::SeqCst) {
         style::alarm(
-            "Cancelled before the check finished: the container above is NOT verified.",
+            "Cancelled before the check finished: the container shown is NOT verified.",
             "Do not rely on it; encrypt again.",
         );
     } else {
-        style::warn(
-            "Cancelled.",
-            "Nothing was saved; the memory the tool used is released.",
-        );
+        show_cancelled();
     }
     std::process::exit(exit::CANCELLED);
 }
 
-fn read_hidden(prompt: &str) -> Result<Zeroizing<String>, Failure> {
+/// What a cancelled command says, after Ctrl+C or q in a list.
+pub fn show_cancelled() {
+    style::warn(
+        "Cancelled.",
+        "Nothing was saved; the memory the tool used is released.",
+    );
+}
+
+fn read_secret(question: &str) -> Result<Zeroizing<String>, Failure> {
     if !io::stdin().is_terminal() {
         return Err(Failure::invalid_input(
             "There is no terminal to type secrets into. Run the command in a terminal, or pass \
              --stdin and give one answer per line on standard input.",
         ));
     }
+    // Shown only where the screen is cleared once the person is done; hidden anywhere else.
+    let shown = PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst);
+    let prompt = if shown {
+        format!("{question}: ")
+    } else {
+        format!("{question} (hidden): ")
+    };
     // The line is read exactly as typed; Password::new refuses what a password may not contain.
-    let line = hidden_input::read_line(|| {
-        style::prompt(prompt);
-        io::stderr().flush()?;
-        Ok(())
-    })?;
+    let line = hidden_input::read_line(
+        || {
+            style::prompt(&prompt);
+            io::stderr().flush()?;
+            Ok(())
+        },
+        shown,
+    )?;
     match line {
         Some(text) => Ok(text),
         // Ctrl+D on an empty line: the person closed the input.
@@ -201,12 +305,13 @@ pub fn print_phrase(phrase: &str, input: &Input) {
     }
     eprintln!("{}", paint(MUTED, "On one line, for copying:"));
     println!("{phrase}");
-    eprintln!();
 }
 
 /// Switches to the terminal's alternate screen, clears it and moves to its top left (xterm
 /// control sequences, also understood by tmux and most terminals).
 const ENTER_ALTERNATE_SCREEN: &str = "\x1b[?1049h\x1b[2J\x1b[H";
+/// Clears the screen and puts the cursor at its top left (VT100 "erase in display" and "home").
+const CLEAR_SCREEN: &str = "\x1b[2J\x1b[H";
 /// Clears the alternate screen, then returns to the main screen with its earlier content. The
 /// clear comes first so that the words also vanish where the alternate screen is not supported,
 /// such as GNU screen without `altscreen on`.
@@ -215,17 +320,38 @@ const LEAVE_ALTERNATE_SCREEN: &str = "\x1b[2J\x1b[H\x1b[?1049l";
 /// Set while secret words are on the alternate screen, so that Ctrl+C can leave it first.
 static PRIVATE_SCREEN_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-/// Secret words shown on the terminal's alternate screen, as `less` shows a file: they never reach
-/// the main screen or its scrollback, and dropping this clears them and returns to where the tool
-/// was. A script, a pipe or a file gets the words as before, without any of this.
+/// Secrets on the terminal's alternate screen, as `less` shows a file: they never reach the main
+/// screen or its scrollback, and dropping this clears them and returns to where the tool was. A
+/// script, a pipe or a file gets none of this.
 pub struct PrivateScreen {
     active: bool,
 }
 
 impl PrivateScreen {
-    pub fn enter(input: &Input) -> Self {
-        let active = !input.is_script()
-            && io::stdout().is_terminal()
+    /// A screen for typing secrets, which are shown there as they are typed. It needs the
+    /// terminal on standard input and standard error only: the result may go to a file.
+    pub fn enter(input: &Input, title: &str) -> Self {
+        let screen = Self::enter_if(input, true);
+        if screen.active {
+            style::title(title);
+            style::hint(
+                "This screen shows what you type and is cleared as soon as you are done. Anyone \
+                 who can see it meanwhile can read it.",
+            );
+        }
+        screen
+    }
+
+    /// A screen for showing a secret result, such as a recovered phrase, which goes to standard
+    /// output: it is used only when standard output is the terminal too.
+    pub fn enter_to_show(input: &Input) -> Self {
+        Self::enter_if(input, io::stdout().is_terminal())
+    }
+
+    fn enter_if(input: &Input, output_allows: bool) -> Self {
+        let active = output_allows
+            && !input.is_script()
+            && io::stdin().is_terminal()
             && io::stderr().is_terminal()
             && std::env::var("TERM").map_or(true, |term| term != "dumb");
         if active {
@@ -236,10 +362,60 @@ impl PrivateScreen {
         Self { active }
     }
 
-    /// Whether the words are on the alternate screen, which then waits for the person.
+    /// Whether the secrets are on the alternate screen, which then waits for the person.
     pub fn is_active(&self) -> bool {
         self.active
     }
+
+    /// Clears the screen for what comes next, such as another password in its place.
+    pub fn clear(&self) {
+        if self.active {
+            write_control(CLEAR_SCREEN);
+        }
+    }
+}
+
+/// Asks the person to write down what the private screen shows, and waits for Enter or Escape,
+/// after which the screen is cleared: what it showed then leaves the terminal and its scrollback.
+/// Every other key is ignored, so that a stray one cannot clear the screen too early.
+pub fn wait_to_leave() -> Result<(), Failure> {
+    eprintln!();
+    style::warn(
+        "Write it down now: Enter or Escape clears this screen.",
+        "What it shows then leaves the terminal and its history, for your protection. Press only \
+         once you have written down and checked every word.",
+    );
+    hidden_input::with_keys(|next_key| loop {
+        match next_key()? {
+            hidden_input::Key::Enter | hidden_input::Key::Quit => return Ok(()),
+            _ => continue,
+        }
+    })
+}
+
+/// Reads a password on a private screen headed `title`, again until it is one that the
+/// specification allows, and records it in the summary.
+pub fn read_password(input: &mut Input, title: &str) -> Result<Password, Failure> {
+    let screen = PrivateScreen::enter(input, title);
+    let password = loop {
+        if screen.is_active() {
+            eprintln!();
+        }
+        let text = input.secret("Password")?;
+        match Password::new(&text) {
+            Ok(password) => break password,
+            Err(error) if input.can_ask_again() => {
+                style::retry(format!(
+                    "{}. Please type it again.",
+                    exit::capitalize(&error.to_string())
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    };
+    drop(screen);
+    choice::record("Password", "typed");
+    Ok(password)
 }
 
 impl Drop for PrivateScreen {
@@ -266,30 +442,43 @@ fn write_control(sequence: &str) {
 /// The question for a container: 24 words, or 12 to 21 for a same-length container.
 pub const CONTAINER_PROMPT: &str = "Container, 24 words or as long as the original: ";
 
-/// Shows a container as it was read, every word in full, so that a person who typed short
-/// forms or odd spacing can compare it with the backup, and the format its word count selects.
-/// A script gets only its results.
-pub fn show_container_read(container: &str, input: &Input) -> Suite {
-    let suite = Suite::of_container(container.split(' ').count()).unwrap_or_default();
-    if !input.is_script() {
-        show_words("Read the container as:", container);
-        style::fact("Format", paint(MUTED, suite.id()));
-        if suite == Suite::SameLength {
-            style::hint(
-                "A container as long as its original: it has no built-in check, so a wrong \
-                 password gives another valid phrase instead of an error.",
-            );
+/// Reads a container on a private screen headed `title`, as the phrase is read for an encryption:
+/// it is a valid seed phrase too, so it is shown as it is typed, taken at once when it is valid,
+/// and leaves no copy in the terminal's history. The summary records its length and its format,
+/// the suite identifier, which the specification asks to show.
+pub fn read_container(
+    input: &mut Input,
+    title: &str,
+) -> Result<(Zeroizing<String>, Suite), Failure> {
+    let screen = PrivateScreen::enter(input, title);
+    let container = loop {
+        if screen.is_active() {
+            eprintln!();
         }
-    }
-    suite
-}
-
-/// Shows a phrase in a frame on standard error, where prompts go.
-pub fn show_words(heading: &str, phrase: &str) {
-    eprintln!("{}", paint(HEADING, heading));
-    for line in style::boxed_words(phrase) {
-        eprintln!("{}", *line);
-    }
+        let typed = input.visible(CONTAINER_PROMPT)?;
+        match mhfe::check_container(&typed) {
+            Ok(container) => break container,
+            Err(error) if input.can_ask_again() => {
+                style::retry(format!(
+                    "{}. Please type it again.",
+                    exit::capitalize(&error.to_string())
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    };
+    drop(screen);
+    let words = container.split(' ').count();
+    let suite = Suite::of_container(words).unwrap_or_default();
+    choice::record("Container", &format!("{words} words, valid"));
+    // A same-length container gives another valid phrase for a wrong password instead of an
+    // error; the result says so again where it matters.
+    let note = match suite {
+        Suite::SameLength => " (no built-in check)",
+        Suite::TwentyFourWords => "",
+    };
+    style::fact("Format", paint(MUTED, format!("{}{note}", suite.id())));
+    Ok((Zeroizing::new(container), suite))
 }
 
 /// Shows a progress bar for each stage of an operation: "Encrypting" and "Checking" for an
@@ -308,6 +497,7 @@ pub struct Progress {
 
 impl Progress {
     pub fn start() -> Self {
+        eprintln!();
         style::hint("Press Ctrl+C to cancel at any time.");
         eprintln!();
         Self {

@@ -1,6 +1,6 @@
 //! Everything that can stop an MHFE operation, with messages written for the person using it.
 //!
-//! No message ever contains a recovery phrase, a password or any part of them.
+//! No message ever contains a seed phrase, a password or any part of them.
 
 use std::fmt;
 
@@ -8,7 +8,7 @@ const GIB: u64 = 1 << 30;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MhfeError {
-    /// The original recovery phrase is not a valid English BIP39 phrase.
+    /// The original seed phrase is not a valid English BIP39 phrase.
     InvalidPhrase(String),
     /// The container is not a valid English BIP39 phrase of 12, 15, 18, 21 or 24 words.
     InvalidContainer(String),
@@ -76,7 +76,7 @@ impl fmt::Display for MhfeError {
             Self::InvalidPhrase(reason) => {
                 write!(
                     f,
-                    "the recovery phrase is not a valid English BIP39 phrase: {reason}"
+                    "the seed phrase is not a valid English BIP39 phrase: {reason}"
                 )
             }
             Self::InvalidContainer(reason) => write!(

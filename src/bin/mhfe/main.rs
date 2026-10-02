@@ -1,6 +1,6 @@
 //! The `mhfe` command-line tool.
 //!
-//! It turns an English BIP39 recovery phrase into a password-protected 24-word container and
+//! It turns an English BIP39 seed phrase into a password-protected 24-word container and
 //! back, rehearses a recovery without showing the phrase, and makes strong passwords from dice
 //! words. Secrets are only ever typed at a hidden prompt or read from standard input, never
 //! taken from command-line arguments.
@@ -8,6 +8,7 @@
 #![deny(unsafe_code)]
 
 mod check;
+mod choice;
 mod decrypt;
 mod diceware;
 mod encrypt;
@@ -34,7 +35,7 @@ use crate::exit::Failure;
     // Broken by hand at 80 columns: without its optional wrapping feature, clap prints text as
     // given, and that feature would add a dependency.
     about = "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics\n\n\
-             Encrypts an English BIP39 recovery phrase of 12 to 24 words into a password-\n\
+             Encrypts an English BIP39 seed phrase of 12 to 24 words into a password-\n\
              protected container that is itself a valid BIP39 phrase: 24 words, or as many\n\
              as a 12- to 21-word original if you choose so. Recovers the original from it.\n\
              Suites MHFE-BIP39-256-EXPERIMENTAL-3 and MHFE-BIP39-LP-EXPERIMENTAL-4.",
@@ -49,7 +50,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Encrypt a recovery phrase into a container
+    /// Encrypt a seed phrase into a container
     #[command(
         long_about = encrypt::about(),
         after_help = encrypt::help(),
@@ -137,7 +138,7 @@ fn main() {
     terminal::stop_on_ctrl_c();
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
     // menu, which runs the same commands.
-    let result = if std::env::args_os().len() == 1 && menu::can_run() {
+    let result = if std::env::args_os().len() == 1 && choice::can_run() {
         menu::run()
     } else {
         run(Cli::parse().command)
@@ -154,7 +155,11 @@ fn main() {
 
 /// Shows why a command stopped. An empty message means that the command has already shown it.
 fn show_failure(failure: &Failure) {
-    if !failure.message.is_empty() {
+    if failure.exit_code == exit::CANCELLED {
+        // q in a list: the person stopped on purpose, as with Ctrl+C, which is not an error.
+        anstream::eprintln!();
+        terminal::show_cancelled();
+    } else if !failure.message.is_empty() {
         anstream::eprintln!();
         style::error(&failure.to_string());
     }
