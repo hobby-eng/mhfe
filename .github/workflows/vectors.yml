@@ -1,40 +1,16 @@
 name: Test vectors
 
 # Replays the full-size suite 3 test vectors with the Rust implementation and checks them again
-# with an independent script that uses OpenSSL's Argon2. It takes about two hours, so it runs only
-# when the implementation or the vectors change, on request, and for every release: release.yml
-# calls it for the tagged commit and publishes only after it has passed.
+# with an independent script that uses OpenSSL's Argon2. It takes about two hours, so it never runs
+# on a push: only on request (workflow_dispatch) and for every release, which calls it for the
+# tagged commit and publishes only after it has passed. Every push runs the fast tests in ci.yml,
+# which check the Argon2 engine against RFC 9106 and RustCrypto and the container format at a
+# reduced cost.
 on:
-  # Branches only: for a release tag, release.yml calls this workflow itself.
-  push:
-    branches: ["**"]
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - build.rs
-      - src/**
-      - vendor/phc-winner-argon2/**
-      - tests/suite3_vectors.rs
-      - tests/fixtures/**
-      - scripts/independent-suite3.py
-      - scripts/independent-suite3-requirements.txt
-      - .github/workflows/vectors.yml
-  pull_request:
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - build.rs
-      - src/**
-      - vendor/phc-winner-argon2/**
-      - tests/suite3_vectors.rs
-      - tests/fixtures/**
-      - scripts/independent-suite3.py
-      - scripts/independent-suite3-requirements.txt
-      - .github/workflows/vectors.yml
   workflow_dispatch:
   workflow_call:
 
-# The replay takes about two hours; a newer push to the same branch makes a running one pointless.
+# The replay takes about two hours; a newer request for the same branch makes a running one pointless.
 # The group is named here rather than after github.workflow, which in a call from release.yml is
 # "Release": a shared group would make the release and its own replay wait for each other.
 concurrency:
