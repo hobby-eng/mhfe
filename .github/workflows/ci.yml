@@ -38,6 +38,10 @@ jobs:
           if foreign:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
+      # The Node.js of the workspace for Prettier, the browser package checks and Playwright.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
       # The workspace style for JavaScript, TypeScript, Markdown, JSON and YAML: double quotes,
       # 100 columns. Prettier comes from package-lock.json, checked against its integrity hash.
       - name: Check formatting
