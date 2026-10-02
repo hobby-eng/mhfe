@@ -1,10 +1,10 @@
 cff-version: 1.2.0
 message: "If you use or discuss this experimental implementation, please cite it using the metadata below."
-title: "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics — Experimental Implementation of Suite 3"
+title: "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics — Experimental Implementation of Suites 3 and 4"
 authors:
   - family-names: "Semenov"
     given-names: "Sergei"
-version: 0.4.0
+version: 0.5.0
 license: MIT
 repository-code: "https://github.com/hobby-eng/mhfe"
 url: "https://github.com/hobby-eng/mhfe"

@@ -58,6 +58,8 @@ pub enum Key {
     Enter,
     /// A digit key from 1 to 9.
     Digit(u8),
+    /// ?, which asks for an explanation.
+    Help,
     /// q, Ctrl+D or the end of the input.
     Quit,
     /// Any other key, which the menu ignores.
@@ -147,6 +149,7 @@ fn read_key(reader: &mut impl io::Read) -> Result<Key, Failure> {
     let key = match byte {
         b'\r' | b'\n' => Key::Enter,
         b'1'..=b'9' => Key::Digit(byte - b'0'),
+        b'?' => Key::Help,
         b'q' | b'Q' | CTRL_D | CTRL_C => Key::Quit,
         ESCAPE => match read_byte(reader)? {
             Some(b'[') => read_control_sequence(reader)?,
@@ -453,6 +456,7 @@ mod tests {
             [Up, Down, Up, Down, Enter, Enter, Quit]
         );
         assert_eq!(keys_in(b"19q"), [Digit(1), Digit(9), Quit]);
+        assert_eq!(keys_in(b"?q"), [Help, Quit]);
         assert_eq!(keys_in(b"0x\x04"), [Other, Other, Quit]);
         assert_eq!(keys_in(b"\x03"), [Quit]);
     }

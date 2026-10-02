@@ -168,7 +168,7 @@ class Session:
         return True
 
     def at_password_prompt(self):
-        self.wait_for(b"words: ")
+        self.wait_for(b"original: ")
         self.type(CONTAINER.encode() + b"\r")
         self.wait_for(b"Password")
 

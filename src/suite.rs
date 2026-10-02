@@ -1,4 +1,5 @@
-//! Suite 3 constants and its two settings (specification: "Suite parameters", "Work factor").
+//! The two suites and their two settings (specification: "Suite parameters", "Suite 4" and
+//! "Work factor").
 
 use crate::engine::Argon2Cost;
 use crate::MhfeError;
@@ -9,6 +10,47 @@ pub const SUITE_ID: &str = "MHFE-BIP39-256-EXPERIMENTAL-3";
 pub const DS_SALT: &[u8] = b"MHFE-BIP39-256-EXPERIMENTAL-3/ROUND-SALT";
 /// Domain string for the round mask: `SUITE_ID || "/ROUND-MASK"`, no terminating NUL.
 pub const DS_MASK: &[u8] = b"MHFE-BIP39-256-EXPERIMENTAL-3/ROUND-MASK";
+
+/// Suite 4, which keeps the length of a 12- to 21-word original.
+pub const SAME_LENGTH_SUITE_ID: &str = "MHFE-BIP39-LP-EXPERIMENTAL-4";
+/// Suite 4's salt domain: `SAME_LENGTH_SUITE_ID || "/ROUND-SALT"`.
+pub const SAME_LENGTH_DS_SALT: &[u8] = b"MHFE-BIP39-LP-EXPERIMENTAL-4/ROUND-SALT";
+/// Suite 4's mask domain: `SAME_LENGTH_SUITE_ID || "/ROUND-MASK"`.
+pub const SAME_LENGTH_DS_MASK: &[u8] = b"MHFE-BIP39-LP-EXPERIMENTAL-4/ROUND-MASK";
+
+/// The suite of a container. Suite 3 is the default for every original; suite 4 is used only
+/// when the user chooses it ("Choosing the suite").
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Suite {
+    /// Suite 3: every original becomes a 24-word container. A 12- to 21-word original carries
+    /// a check value, so a wrong password is detected, and every container looks the same.
+    #[default]
+    TwentyFourWords,
+    /// Suite 4: a 12-, 15-, 18- or 21-word original becomes a container of the same length.
+    /// Nothing detects a wrong password, the container shows the original's length, and a word
+    /// copied wrongly passes the shorter checksum more often.
+    SameLength,
+}
+
+impl Suite {
+    /// The identifier an application shows after creating a container.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::TwentyFourWords => SUITE_ID,
+            Self::SameLength => SAME_LENGTH_SUITE_ID,
+        }
+    }
+
+    /// The suite of a container with `words` words, as recovery selects it: 24 words are suite 3
+    /// and 12 to 21 words suite 4. The word count does not show that a phrase is a container.
+    pub fn of_container(words: usize) -> Result<Self, MhfeError> {
+        match words {
+            24 => Ok(Self::TwentyFourWords),
+            12 | 15 | 18 | 21 => Ok(Self::SameLength),
+            other => Err(MhfeError::InvalidWordCount(other)),
+        }
+    }
+}
 
 /// Number of Feistel rounds, each with one Argon2id call.
 pub const ROUNDS: u32 = 12;
@@ -99,6 +141,29 @@ mod tests {
     fn domain_strings_are_built_from_the_suite_identifier() {
         assert_eq!(DS_SALT, format!("{SUITE_ID}/ROUND-SALT").as_bytes());
         assert_eq!(DS_MASK, format!("{SUITE_ID}/ROUND-MASK").as_bytes());
+        let same_length = SAME_LENGTH_SUITE_ID;
+        assert_eq!(
+            SAME_LENGTH_DS_SALT,
+            format!("{same_length}/ROUND-SALT").as_bytes()
+        );
+        assert_eq!(
+            SAME_LENGTH_DS_MASK,
+            format!("{same_length}/ROUND-MASK").as_bytes()
+        );
+    }
+
+    #[test]
+    fn recovery_selects_the_suite_by_word_count() {
+        assert_eq!(Suite::of_container(24), Ok(Suite::TwentyFourWords));
+        for words in [12, 15, 18, 21] {
+            assert_eq!(Suite::of_container(words), Ok(Suite::SameLength));
+        }
+        assert_eq!(
+            Suite::of_container(13),
+            Err(MhfeError::InvalidWordCount(13))
+        );
+        assert_eq!(Suite::default(), Suite::TwentyFourWords);
+        assert_eq!(Suite::SameLength.id(), "MHFE-BIP39-LP-EXPERIMENTAL-4");
     }
 
     #[test]

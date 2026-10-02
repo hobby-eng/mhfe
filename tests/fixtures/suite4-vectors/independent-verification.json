@@ -1,0 +1,91 @@
+{
+  "schema": "mhfe-independent-verification-v1",
+  "verifier": {
+    "program": "scripts/independent-suite4.py",
+    "sha256": "72a9b15b92d06da82e185417c8d23bc443f401110e543b1a972d777ccebc1cbd",
+    "python": "3.14.4",
+    "cryptography": "46.0.5",
+    "unicodedata2": "17.0.1 (Unicode 17.0.0)",
+    "openssl": "OpenSSL 3.5.5 27 Jan 2026",
+    "suite3_helpers_sha256": "bcc12b46f4cf91e94542627eb79c748f562814b64ed6cda5cf978eb6acb20c07"
+  },
+  "files": [
+    {
+      "name": "negative-cases.json",
+      "sha256": "b291ef696ac588aab677872738b863701af8322ce32c2a92e58d08863d825544",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-nonzero-12.json",
+      "sha256": "21d28c22dcc0e1e1707826ec97a11e45232cc077447c231dd8f72ea8429ae423",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-nonzero-21.json",
+      "sha256": "1e110c1f1f09cddb9ad63bbc050158a96dcff7e8d2f658ba777a95d1b233b8ec",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-unicode-password.json",
+      "sha256": "1d8f560773b21d4a6259913e7eace65baa02141acfd27ed7cc39b34e9354bb98",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-zero-12-memory-level-1.json",
+      "sha256": "30fa7aa8328bd994dbbd90ec5477a3c5cc0c840da5a82b3cd4e278cc73ed1fbd",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-zero-12-pim-1-memory-level-1.json",
+      "sha256": "8cb1a1c706069b89fb169b262a3f2e747d3d94cc2a5b48e6dfbeb3bb56dcf6c6",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-zero-12-pim-1.json",
+      "sha256": "40f0f50756a008fbb6f5eb7e322c683ec1ef75c27e44b834e3682a8aa0be4124",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-zero-12.json",
+      "sha256": "84f8666cad189ea5c60981e623fad1c1b24405f85520c8245169009db0bc1d7e",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-zero-15.json",
+      "sha256": "b5f380c90846ab2cf9d8ca076e075e87b038595d70e84ffd1587c3392f2d26e7",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-zero-18.json",
+      "sha256": "40696a57cb3cdc2ed3fce129d2448fe3e29512370f1a0f9974f22ea029926371",
+      "checks": [
+        "full"
+      ]
+    },
+    {
+      "name": "same-length-zero-21.json",
+      "sha256": "edb93d774b6b906d04b2884c89114a525e2621d36d243747028c7f62440c2d9f",
+      "checks": [
+        "full"
+      ]
+    }
+  ]
+}

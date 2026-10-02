@@ -1,22 +1,24 @@
-//! MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics, suite
-//! `MHFE-BIP39-256-EXPERIMENTAL-3`.
+//! MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics, suites
+//! `MHFE-BIP39-256-EXPERIMENTAL-3` and `MHFE-BIP39-LP-EXPERIMENTAL-4`.
 //!
 //! [`Mhfe::encrypt`] turns an English BIP39 phrase of 12 to 24 words into a password-protected
-//! 24-word container that is itself a valid BIP39 phrase; [`Mhfe::decrypt`] turns the container
-//! back into the original. Every one of the twelve Feistel rounds runs Argon2id with 2 GiB of
-//! memory by default, using the reference C implementation of Argon2.
+//! 24-word container that is itself a valid BIP39 phrase, or, with [`Suite::SameLength`], a 12- to
+//! 21-word phrase into a container of its own length; [`Mhfe::decrypt`] turns the container back
+//! into the original, the container's word count selecting the suite. Every one of the twelve
+//! Feistel rounds runs Argon2id with 2 GiB of memory by default, using the reference C
+//! implementation of Argon2.
 //!
 //! The construction is experimental and has not been independently reviewed. Do not use it to
 //! protect real funds.
 //!
 //! ```no_run
-//! use mhfe::{Mhfe, Password, PhraseLength, Recovery, WorkFactor};
+//! use mhfe::{Mhfe, Password, PhraseLength, Recovery, Suite, WorkFactor};
 //!
 //! let password = Password::new("correct horse battery staple")?;
 //! let mut mhfe = Mhfe::new(WorkFactor::default())?; // reserves 2 GiB
 //! let original = "abandon abandon abandon abandon abandon abandon \
 //!                 abandon abandon abandon abandon abandon about";
-//! let container = mhfe.encrypt(original, &password, &mut |round, rounds| {
+//! let container = mhfe.encrypt(original, &password, Suite::TwentyFourWords, &mut |round, rounds| {
 //!     println!("Round {round}/{rounds}");
 //!     Ok(())
 //! })?;
@@ -54,4 +56,6 @@ pub use mhfe::{
 pub use password::{Password, MAX_PASSWORD_BYTES};
 pub use phrase::{check_container, check_phrase, read_phrase};
 pub use rehearsal::Reference;
-pub use suite::{WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SUITE_ID};
+pub use suite::{
+    Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
+};

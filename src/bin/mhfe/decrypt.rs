@@ -2,13 +2,13 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::{check_container, Password, PhraseLength, RecoveredPhrase, Recovery, WordCount};
+use mhfe::{check_container, Password, PhraseLength, RecoveredPhrase, Recovery, Suite, WordCount};
 use zeroize::Zeroizing;
 
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, HEADING, STRONG};
-use crate::terminal::{self, show_container_read, Input, Progress};
+use crate::terminal::{self, show_container_read, Input, Progress, CONTAINER_PROMPT};
 
 #[derive(Args)]
 pub struct Options {
@@ -34,6 +34,8 @@ fn words_help() -> String {
         "A chosen short length must pass its check. Choose 24 for a 24-word original that \
          detection reads as shorter, about once in four billion; encryption says so when it \
          happens.",
+        "A container of 12 to 21 words keeps the length of its original: it accepts only its \
+         own length here, and any other length is refused before anything is computed.",
     ])
 }
 
@@ -89,7 +91,8 @@ pub fn long_help() -> String {
         &[
             (
                 "Container",
-                "shown while typed; 24 words, four letters per word are enough",
+                "shown while typed; 24 words, or as many as the original for a container of \
+                 the same length; four letters per word are enough",
             ),
             ("Password", "hidden"),
         ],
@@ -146,7 +149,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
 fn read_container(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
     loop {
-        let typed = input.visible("Container, 24 words: ")?;
+        let typed = input.visible(CONTAINER_PROMPT)?;
         match check_container(&typed) {
             Ok(container) => {
                 show_container_read(&container, input);
@@ -181,7 +184,17 @@ fn read_password(input: &mut Input) -> Result<Password, Failure> {
 
 fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
     eprintln!();
-    if phrase.verified {
+    if phrase.suite == Suite::SameLength {
+        style::warn(
+            &format!(
+                "Not verified: a {}-word container has no built-in check.",
+                phrase.words
+            ),
+            "Any password gives a valid phrase of the same length, so a wrong one is not \
+             detected. Before you rely on it, confirm it against your wallet with mhfe check \
+             --fingerprint or --address.",
+        );
+    } else if phrase.verified {
         style::ok(format!(
             "{} a {}-word phrase that passed its built-in check.",
             paint(style::GOOD, "Verified:"),

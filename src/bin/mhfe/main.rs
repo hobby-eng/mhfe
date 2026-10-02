@@ -13,6 +13,7 @@ mod diceware;
 mod encrypt;
 mod exit;
 mod hidden_input;
+mod length_choice;
 mod menu;
 mod serve;
 mod settings;
@@ -34,8 +35,9 @@ use crate::exit::Failure;
     // given, and that feature would add a dependency.
     about = "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics\n\n\
              Encrypts an English BIP39 recovery phrase of 12 to 24 words into a password-\n\
-             protected 24-word container that is itself a valid BIP39 phrase, and recovers\n\
-             the original from it. Suite MHFE-BIP39-256-EXPERIMENTAL-3.",
+             protected container that is itself a valid BIP39 phrase: 24 words, or as many\n\
+             as a 12- to 21-word original if you choose so. Recovers the original from it.\n\
+             Suites MHFE-BIP39-256-EXPERIMENTAL-3 and MHFE-BIP39-LP-EXPERIMENTAL-4.",
     after_help = main_help(),
     // Without a terminal for the menu, `mhfe` alone prints this help.
     arg_required_else_help = true,
@@ -47,7 +49,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Encrypt a recovery phrase into a 24-word container
+    /// Encrypt a recovery phrase into a container
     #[command(
         long_about = encrypt::about(),
         after_help = encrypt::help(),
@@ -74,7 +76,7 @@ enum Command {
     /// Serve a browser tool on this computer in fast mode
     #[command(long_about = serve::about(), after_help = serve::help())]
     Serve(serve::Options),
-    /// [test only] Write the public suite 3 test vectors
+    /// [test only] Write the public suite 3 or suite 4 test vectors
     #[command(after_help = test_tools::vectors_help())]
     TestVectors(test_tools::VectorOptions),
     /// [test only] Time one encryption and one recovery

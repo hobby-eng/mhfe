@@ -1,0 +1,547 @@
+{
+  "schema": "mhfe-suite-4-validation-cases-v1",
+  "suite_id": "MHFE-BIP39-LP-EXPERIMENTAL-4",
+  "description": "Fast suite 4 cases that need no Argon2id. ent_separation: the round message carries BE32(ENT) after the settings, so equal settings, round and leading half bytes give different salt and mask inputs for each entropy size; the mask uses a fixed public key in place of an Argon2id output. refusals: a 24-word source for suite 4, and every combination of a chosen original length, a selected suite or both with a container word count that the recovery table of the specification rejects; each must be rejected before any Argon2id work. Values computed independently with Python's hashlib and hmac; the refusals follow the table.",
+  "license": "CC0-1.0",
+  "ent_separation": [
+    {
+      "id": "ent-128",
+      "words": 12,
+      "entropy_bits": 128,
+      "memory_level": 0,
+      "pim": 0,
+      "round": 0,
+      "half_hex": "0102030405060708",
+      "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c54000000000000000000000080000000000102030405060708",
+      "salt_hex": "bbfd9ca2a2e84022e9140e0b1ce671e5",
+      "key_hex": "0505050505050505050505050505050505050505050505050505050505050505",
+      "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b000000000000000000000080000000000102030405060708",
+      "mask_hex": "70c9cd54a33f8dc1"
+    },
+    {
+      "id": "ent-160",
+      "words": 15,
+      "entropy_bits": 160,
+      "memory_level": 0,
+      "pim": 0,
+      "round": 0,
+      "half_hex": "0102030405060708090a",
+      "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000000000000a0000000000102030405060708090a",
+      "salt_hex": "00ec2e62f3ccc8bf60017f08d86f5221",
+      "key_hex": "0505050505050505050505050505050505050505050505050505050505050505",
+      "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000000000000a0000000000102030405060708090a",
+      "mask_hex": "48fc3606fbdf1a658ea8"
+    },
+    {
+      "id": "ent-192",
+      "words": 18,
+      "entropy_bits": 192,
+      "memory_level": 0,
+      "pim": 0,
+      "round": 0,
+      "half_hex": "0102030405060708090a0b0c",
+      "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000000000000c0000000000102030405060708090a0b0c",
+      "salt_hex": "685dd107bde9e308cfb0fa51a93e0eb9",
+      "key_hex": "0505050505050505050505050505050505050505050505050505050505050505",
+      "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000000000000c0000000000102030405060708090a0b0c",
+      "mask_hex": "bbdd47e40af75c3e327ba882"
+    },
+    {
+      "id": "ent-224",
+      "words": 21,
+      "entropy_bits": 224,
+      "memory_level": 0,
+      "pim": 0,
+      "round": 0,
+      "half_hex": "0102030405060708090a0b0c0d0e",
+      "salt_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d53414c540000000000000000000000e0000000000102030405060708090a0b0c0d0e",
+      "salt_hex": "14a4b0a1a2ca83fa815b5b51ff50ea3c",
+      "key_hex": "0505050505050505050505050505050505050505050505050505050505050505",
+      "mask_input_hex": "4d4846452d42495033392d4c502d4558504552494d454e54414c2d342f524f554e442d4d41534b0000000000000000000000e0000000000102030405060708090a0b0c0d0e",
+      "mask_hex": "d48ff044e6b4aad34d9e746c2ac3"
+    }
+  ],
+  "refusals": [
+    {
+      "id": "same-length-24-word-source",
+      "operation": "encrypt-same-length",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-12-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 12,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-12-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 12,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-12-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 12,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-15-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 15,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-15-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 15,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-15-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 15,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-18-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 18,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-18-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 18,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-18-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 18,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-21-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 21,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-21-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 21,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-21-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 21,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-24-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 24,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-24-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 24,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-24-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 24,
+      "expected": "rejected"
+    },
+    {
+      "id": "chosen-24-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 24,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-container-24",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-12-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 12,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-12-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 12,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-12-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 12,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-12-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 12,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-15-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 15,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-15-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 15,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-15-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 15,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-15-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 15,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-18-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 18,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-18-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 18,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-18-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 18,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-18-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 18,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-21-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 21,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-21-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 21,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-21-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 21,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-21-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 21,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-24-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 24,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-24-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 24,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-24-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 24,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-3-chosen-24-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 24,
+      "suite": 3,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-12-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 12,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-12-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 12,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-12-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 12,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-12-container-24",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      "words": 12,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-15-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 15,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-15-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 15,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-15-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 15,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-15-container-24",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      "words": 15,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-18-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 18,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-18-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 18,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-18-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 18,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-18-container-24",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      "words": 18,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-21-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 21,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-21-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 21,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-21-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 21,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-21-container-24",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      "words": 21,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-24-container-12",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "words": 24,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-24-container-15",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+      "words": 24,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-24-container-18",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      "words": 24,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-24-container-21",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+      "words": 24,
+      "suite": 4,
+      "expected": "rejected"
+    },
+    {
+      "id": "suite-4-chosen-24-container-24",
+      "operation": "decrypt",
+      "text": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      "words": 24,
+      "suite": 4,
+      "expected": "rejected"
+    }
+  ]
+}

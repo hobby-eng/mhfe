@@ -16,7 +16,8 @@
 // 256 KiB and one pass instead of the 2 GiB and twelve passes of suite 3, after checking that
 // the core asked for those. The container must then be REDUCED_COST_CONTAINER, which the native
 // tests (src/mhfe.rs) and scripts/verify-browser-package.mjs check at the same cost. Only public
-// test data is used, and no request may leave the page.
+// test data is used, and no request may leave the page. The same-length container must be
+// REDUCED_COST_SAME_LENGTH_CONTAINER of src/mhfe.rs at that cost.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -55,6 +56,8 @@ const PHRASE =
 const PASSWORD = "public test password";
 const REDUCED_COST_CONTAINER =
   "slush crime nose carry menu cabbage already cart lock intact focus siren filter crouch buyer toward topple cup holiday avoid mango envelope dream sweet";
+const REDUCED_COST_SAME_LENGTH_CONTAINER =
+  "program adjust rain raven flip eternal spider bulb under soup enrich ensure";
 // The BIP32 master key fingerprint of the wallet of PHRASE without a passphrase.
 const FINGERPRINT = "73c5da0a";
 
@@ -105,6 +108,16 @@ async function main() {
     "decrypt recovers the verified 12-word phrase");
   const { matches } = await client.check({ container, password: PASSWORD, reference: { fingerprint: FINGERPRINT } });
   expect(matches === true, "check matches the master key fingerprint");
+
+  const same = await client.encrypt({
+    phrase: PHRASE, password: PASSWORD, passwordRepeat: PASSWORD, sameLength: true,
+  });
+  expect(same.container === REDUCED_COST_SAME_LENGTH_CONTAINER
+    && same.suiteId === "MHFE-BIP39-LP-EXPERIMENTAL-4",
+    "encrypt with sameLength gives the native 12-word container");
+  const sameRecovery = await client.decrypt({ container: same.container, password: PASSWORD });
+  expect(sameRecovery.candidates[0].phrase === PHRASE && !sameRecovery.candidates[0].verified,
+    "a same-length container recovers the phrase, not verified");
 
   const cancelledAtOnce = client.decrypt({ container, password: PASSWORD });
   client.cancel();

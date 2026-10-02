@@ -44,7 +44,8 @@ function readWords(request) {
     const otherLengths = Array.from(wasm_bindgen.otherDetectedLengths(phrase));
     return { phrase, words: phrase.split(" ").length, otherLengths };
   }
-  return { container: wasm_bindgen.checkContainer(request.container) };
+  const container = wasm_bindgen.checkContainer(request.container);
+  return { container, words: container.split(" ").length };
 }
 
 /** Starts the Argon2 build that was placed in front of this file. */
@@ -67,17 +68,18 @@ function runOperation(request, argon2, onRound) {
   const { pim, memoryLevel } = request;
   switch (request.operation) {
     case "encrypt":
-      return {
-        container: wasm_bindgen.encrypt(
+      return JSON.parse(
+        wasm_bindgen.encrypt(
           request.phrase,
           request.password,
           pim,
           memoryLevel,
+          request.sameLength,
           argon2,
           onRound,
           onUnverified,
         ),
-      };
+      );
     case "decrypt":
       return JSON.parse(
         wasm_bindgen.decrypt(
