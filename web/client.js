@@ -133,7 +133,8 @@ export class MhfeClient {
   /**
    * The rehearsal check. `reference` is `{ address, path? }` (strong), `{ fingerprint }` (quick,
    * weaker) or `{ words }` (built-in check of a 12- to 21-word original). Resolves to
-   * `{ matches }` and never to any part of the phrase.
+   * `{ matches, path }`, `path` being where a matched address was found and null otherwise, and
+   * never to any part of the phrase.
    */
   async check({
     container,

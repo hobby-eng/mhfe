@@ -1,6 +1,7 @@
 //! The rehearsal check (specification: "Application requirements"): a full recovery that answers
-//! only "matches" or "does not match". No part of the recovered phrase leaves this module, and a
-//! wrong password gives no hint of how close it was.
+//! "matches" or "does not match", and on a match with an address the path where it was found.
+//! No part of the recovered phrase leaves this module, and a wrong password gives no hint of how
+//! close it was.
 
 use zeroize::Zeroizing;
 
@@ -10,6 +11,37 @@ use crate::packing::{self, State};
 use crate::suite::Suite;
 use crate::wallet::{self, BitcoinAddress, DerivationPath, SearchLimits};
 use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
+
+/// What a rehearsal found. A match on a receiving address names the path where the address was
+/// found, which tells the person which account and address of the wallet it is; it is not part of
+/// the phrase and is given only on a match.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckOutcome {
+    Matches { path: Option<DerivationPath> },
+    DoesNotMatch,
+}
+
+impl CheckOutcome {
+    pub fn matches(&self) -> bool {
+        matches!(self, Self::Matches { .. })
+    }
+
+    /// The path of a matched address; `None` for any other outcome.
+    pub fn path(&self) -> Option<&DerivationPath> {
+        match self {
+            Self::Matches { path } => path.as_ref(),
+            Self::DoesNotMatch => None,
+        }
+    }
+
+    fn of(matches: bool) -> Self {
+        if matches {
+            Self::Matches { path: None }
+        } else {
+            Self::DoesNotMatch
+        }
+    }
+}
 
 /// What the recovered phrase is compared with.
 pub enum Reference<'a> {
@@ -34,14 +66,15 @@ pub enum Reference<'a> {
 }
 
 impl<E: Argon2Engine> Mhfe<E> {
-    /// Runs a full recovery and compares it with `reference`. Returns only whether it matches.
+    /// Runs a full recovery and compares it with `reference`. Returns whether it matches, and for
+    /// an address the path where it was found.
     pub fn check(
         &mut self,
         container: &str,
         password: &Password,
         reference: &Reference<'_>,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<bool, MhfeError> {
+    ) -> Result<CheckOutcome, MhfeError> {
         if let Reference::BuiltInCheck { words } = reference {
             // Refused before any Argon2 work, from the word count alone.
             let container_words = container.split_whitespace().count();
@@ -55,21 +88,24 @@ impl<E: Argon2Engine> Mhfe<E> {
         let (suite, x) = self.recover_state(container, password, None, on_progress)?;
         if suite == Suite::SameLength {
             // The container's own length is the only reading.
-            return phrase_matches(&phrase_from_entropy(&x)?, reference);
+            return compare(&phrase_from_entropy(&x)?, reference);
         }
         let x = suite_3_state(&x)?;
         match reference {
-            Reference::BuiltInCheck { words } => Ok(packing::unpack(&x, words.get()).is_ok()),
+            Reference::BuiltInCheck { words } => {
+                Ok(CheckOutcome::of(packing::unpack(&x, words.get()).is_ok()))
+            }
             Reference::Address { .. } | Reference::Fingerprint { .. } => {
                 // Every reading of X is compared: each short length that passes its check and
                 // the 24-word reading, so that no accidental match hides the real phrase.
                 for words in packing::matching_short_lengths(&x).into_iter().chain([24]) {
                     let phrase = read_phrase(&x, words)?;
-                    if phrase_matches(&phrase, reference)? {
-                        return Ok(true);
+                    let outcome = compare(&phrase, reference)?;
+                    if outcome.matches() {
+                        return Ok(outcome);
                     }
                 }
-                Ok(false)
+                Ok(CheckOutcome::DoesNotMatch)
             }
         }
     }
@@ -80,19 +116,26 @@ fn read_phrase(x: &State, words: usize) -> Result<Zeroizing<String>, MhfeError> 
     phrase_from_entropy(&entropy)
 }
 
-fn phrase_matches(phrase: &str, reference: &Reference<'_>) -> Result<bool, MhfeError> {
+fn compare(phrase: &str, reference: &Reference<'_>) -> Result<CheckOutcome, MhfeError> {
     match reference {
-        Reference::BuiltInCheck { .. } => Ok(false),
+        Reference::BuiltInCheck { .. } => Ok(CheckOutcome::DoesNotMatch),
         Reference::Address {
             address,
             passphrase,
             path,
             limits,
-        } => Ok(wallet::find_address(phrase, passphrase, address, *path, *limits)?.is_some()),
+        } => Ok(
+            match wallet::find_address(phrase, passphrase, address, *path, *limits)? {
+                Some(found) => CheckOutcome::Matches { path: Some(found) },
+                None => CheckOutcome::DoesNotMatch,
+            },
+        ),
         Reference::Fingerprint {
             fingerprint,
             passphrase,
-        } => Ok(wallet::master_fingerprint(phrase, passphrase)? == *fingerprint),
+        } => Ok(CheckOutcome::of(
+            wallet::master_fingerprint(phrase, passphrase)? == *fingerprint,
+        )),
     }
 }
 
@@ -148,11 +191,22 @@ mod tests {
         for reference in &references {
             assert!(mhfe
                 .check(&container, &password, reference, &mut |_, _| Ok(()))
-                .unwrap());
+                .unwrap()
+                .matches());
             assert!(!mhfe
                 .check(&container, &wrong, reference, &mut |_, _| Ok(()))
-                .unwrap());
+                .unwrap()
+                .matches());
         }
+
+        // A matched address names its path: the first native SegWit receiving address.
+        let found = mhfe
+            .check(&container, &password, &references[1], &mut |_, _| Ok(()))
+            .unwrap();
+        assert_eq!(
+            found.path().map(ToString::to_string).as_deref(),
+            Some("m/84'/0'/0'/0/0")
+        );
 
         // The right password with a wrong BIP39 passphrase is a different wallet.
         let with_passphrase = Reference::Fingerprint {
@@ -161,7 +215,8 @@ mod tests {
         };
         assert!(!mhfe
             .check(&container, &password, &with_passphrase, &mut |_, _| Ok(()))
-            .unwrap());
+            .unwrap()
+            .matches());
     }
 
     #[test]
@@ -182,7 +237,8 @@ mod tests {
         };
         assert!(mhfe
             .check(&container, &password, &reference, &mut |_, _| Ok(()))
-            .unwrap());
+            .unwrap()
+            .matches());
         assert_eq!(
             mhfe.check(
                 &container,
@@ -212,10 +268,12 @@ mod tests {
         };
         assert!(mhfe
             .check(&container, &password, &reference, &mut |_, _| Ok(()))
-            .unwrap());
+            .unwrap()
+            .matches());
         assert!(!mhfe
             .check(&container, &wrong, &reference, &mut |_, _| Ok(()))
-            .unwrap());
+            .unwrap()
+            .matches());
         assert_eq!(
             mhfe.check(
                 &container,

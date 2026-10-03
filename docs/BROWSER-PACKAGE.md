@@ -49,7 +49,8 @@ const recovery = await client.decrypt({ container, password });
 // recovery.kind is "phrase" or, very rarely, "ambiguous"; show every candidate then. The container's
 // word count selects the suite; a same-length container gives one phrase, never verified.
 
-const { matches } = await client.check({
+// `path` is where the address was found, such as "m/84'/0'/0'/0/5", or null.
+const { matches, path } = await client.check({
   container,
   password,
   reference: { address },

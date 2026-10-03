@@ -14,7 +14,7 @@ use zeroize::Zeroizing;
 use crate::choice::{self, Answer, Question};
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
 use crate::settings::{self, Operation, Settings};
-use crate::style::{self, paint};
+use crate::style::{self, paint, ACCENT};
 use crate::terminal::{self, Input, PrivateScreen, Progress, Step};
 
 #[derive(Args)]
@@ -209,6 +209,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
                 ("Address", ""),
                 str::parse,
             )?;
+            show_search(&address, options.path.as_ref(), limits);
             passphrase = read_passphrase(&mut input)?;
             Reference::Address {
                 address: &address,
@@ -237,11 +238,12 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     let mut mhfe = settings::reserve_memory(work)?;
     let mut progress = Progress::start();
-    let matches = mhfe.check(&container, &password, &reference, &mut |round, rounds| {
+    let outcome = mhfe.check(&container, &password, &reference, &mut |round, rounds| {
         progress.round_starts(round, rounds);
         Ok(())
     })?;
     progress.finish();
+    let matches = outcome.matches();
 
     eprintln!();
     if input.is_script() {
@@ -250,6 +252,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     } else if matches {
         let (meaning, limit) = match_meaning(choice);
         println!("{} {meaning}", paint(style::GOOD, "✓ matches:"));
+        // Which account and address of the wallet it is; a path given with --path is shown too.
+        if let Some(path) = outcome.path() {
+            style::fact("Found at", paint(ACCENT, path));
+        }
         if let Some(limit) = limit {
             style::hint(limit);
         }
@@ -271,6 +277,49 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         });
         Ok(NO_MATCH)
     }
+}
+
+/// States before the check what an address is and which addresses are searched for it, as the
+/// specification asks of a search: a "does not match" covers only these.
+fn show_search(address: &BitcoinAddress, path: Option<&DerivationPath>, limits: SearchLimits) {
+    let kind = address.address_type();
+    style::fact(
+        "Type",
+        format!(
+            "{}, {} (BIP{})",
+            address.network().name(),
+            kind.name(),
+            kind.purpose()
+        ),
+    );
+    let search = match path {
+        Some(path) => format!("only {path}"),
+        None => {
+            let last = |count: u32| count - 1;
+            format!(
+                "m/{}'/{}'/0'-{}'/0-1/0-{}, {} addresses",
+                kind.purpose(),
+                address.network().coin_type(),
+                last(limits.accounts()),
+                last(limits.indexes()),
+                grouped(2 * u64::from(limits.accounts()) * u64::from(limits.indexes()))
+            )
+        }
+    };
+    style::fact("Search", search);
+}
+
+/// A count with thousands separated by commas, such as "2,000".
+fn grouped(count: u64) -> String {
+    let digits = count.to_string();
+    let mut text = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            text.push(',');
+        }
+        text.push(digit);
+    }
+    text
 }
 
 /// What a match shows, and its limit. Only an address or a fingerprint identifies the wallet;
@@ -386,6 +435,13 @@ fn read_passphrase(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn counts_are_grouped_by_thousands() {
+        assert_eq!(grouped(999), "999");
+        assert_eq!(grouped(2_000), "2,000");
+        assert_eq!(grouped(1_234_567), "1,234,567");
+    }
 
     #[test]
     fn only_a_wallet_reference_claims_the_wallet() {

@@ -209,13 +209,15 @@ lost plate can be made again, and two identical containers reveal the same phras
 password for each phrase.
 
 **`mhfe check`** rehearses a recovery before you rely on a container and shows only "matches" or
-"does not match", never the phrase. Type the container from the plate, not from the screen: one
+"does not match", never the phrase; for a matched address it also shows where it was found, such as
+`m/84'/0'/0'/0/5`. Type the container from the plate, not from the screen: one
 miscopied word passes the BIP39 checksum in one case in 256, or as often as one in 16 for a
 12-word container of the same length, and for a 24-word original or a same-length container
 silently gives another wallet. A same-length container has no built-in check, so compare it with
 your wallet. Compare with a receiving address of the wallet, the strong check that also
-covers a BIP39 passphrase (it searches the first 100 receiving and change addresses of accounts 0 to
-9, or one path with `--path`), or with the master key fingerprint, quick but only 32 bits. Do not
+covers a BIP39 passphrase (MHFE names the coin and address type it reads from the address and
+searches the first 100 receiving and change addresses of accounts 0 to 9 on that type's standard
+paths, or one path with `--path`), or with the master key fingerprint, quick but only 32 bits. Do not
 keep the address or fingerprint next to the container.
 
 **`mhfe decrypt`** gives back the original phrase. The container is typed on a private screen,
