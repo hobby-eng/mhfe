@@ -106,8 +106,8 @@ async function main() {
   const [candidate] = recovery.candidates;
   expect(recovery.kind === "phrase" && candidate.phrase === PHRASE && candidate.verified,
     "decrypt recovers the verified 12-word phrase");
-  const { matches } = await client.check({ container, password: PASSWORD, reference: { fingerprint: FINGERPRINT } });
-  expect(matches === true, "check matches the master key fingerprint");
+  const { matches, path } = await client.check({ container, password: PASSWORD, reference: { fingerprint: FINGERPRINT } });
+  expect(matches === true && path === null, "check matches the master key fingerprint");
 
   const same = await client.encrypt({
     phrase: PHRASE, password: PASSWORD, passwordRepeat: PASSWORD, sameLength: true,

@@ -202,7 +202,15 @@ pub fn decrypt(
     serde_json::to_string(&json).map_err(serialization_error)
 }
 
-/// The rehearsal check; returns only whether the recovery matches the reference.
+#[derive(Serialize)]
+struct CheckJson {
+    matches: bool,
+    /// Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise.
+    path: Option<String>,
+}
+
+/// The rehearsal check, as JSON: `{"matches": bool, "path": string | null}`. Only whether the
+/// recovery matches comes out, and for a matched address the path where it was found.
 ///
 /// `reference_kind` is "address", "fingerprint" or "words"; `reference` is the address, the
 /// eight hex digits or the word count; `path` is empty for the standard path search.
@@ -219,7 +227,7 @@ pub fn check(
     passphrase_utf8: Vec<u8>,
     argon2: JsArgon2,
     on_round: &js_sys::Function,
-) -> Result<bool, JsError> {
+) -> Result<String, JsError> {
     // Both secrets are put under a wiping owner before anything can fail, so that no early
     // return drops either of them unwiped. The passphrase is read in place, without a copy.
     let passphrase_bytes = Zeroizing::new(passphrase_utf8);
@@ -260,10 +268,16 @@ pub fn check(
         }
     };
     let mut mhfe = mhfe_for(pim, memory_level, argon2)?;
-    mhfe.check(container, &password, &reference, &mut |round, rounds| {
-        report(on_round, round, rounds)
-    })
-    .map_err(js_error)
+    let outcome = mhfe
+        .check(container, &password, &reference, &mut |round, rounds| {
+            report(on_round, round, rounds)
+        })
+        .map_err(js_error)?;
+    let json = CheckJson {
+        matches: outcome.matches(),
+        path: outcome.path().map(ToString::to_string),
+    };
+    serde_json::to_string(&json).map_err(serialization_error)
 }
 
 fn password_from(password_utf8: Vec<u8>) -> Result<Password, JsError> {

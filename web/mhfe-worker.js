@@ -93,8 +93,8 @@ function runOperation(request, argon2, onRound) {
         ),
       );
     case "check":
-      return {
-        matches: wasm_bindgen.check(
+      return JSON.parse(
+        wasm_bindgen.check(
           request.container,
           request.password,
           pim,
@@ -106,7 +106,7 @@ function runOperation(request, argon2, onRound) {
           argon2,
           onRound,
         ),
-      };
+      );
     default:
       throw new Error(`INVALID_REQUEST: unknown operation ${String(request.operation)}`);
   }

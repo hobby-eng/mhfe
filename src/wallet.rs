@@ -37,8 +37,15 @@ pub enum Network {
 }
 
 impl Network {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Bitcoin => "Bitcoin",
+            Self::Testnet => "Bitcoin testnet",
+        }
+    }
+
     /// Coin type of the BIP44-style paths: 0' on Bitcoin, 1' on every test network.
-    fn coin_type(self) -> u32 {
+    pub fn coin_type(self) -> u32 {
         match self {
             Self::Bitcoin => 0,
             Self::Testnet => 1,
@@ -60,7 +67,17 @@ pub enum AddressType {
 }
 
 impl AddressType {
-    fn purpose(self) -> u32 {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::P2pkh => "legacy",
+            Self::P2shP2wpkh => "nested SegWit",
+            Self::P2wpkh => "native SegWit",
+            Self::P2tr => "Taproot",
+        }
+    }
+
+    /// The first step of its standard paths: 44, 49, 84 or 86, as in the BIP of the same number.
+    pub fn purpose(self) -> u32 {
         match self {
             Self::P2pkh => 44,
             Self::P2shP2wpkh => 49,

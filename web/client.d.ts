@@ -127,7 +127,11 @@ export class MhfeClient {
       reference: MhfeReference;
       passphrase?: string | Uint8Array;
     },
-  ): Promise<{ matches: boolean }>;
+  ): Promise<{
+    matches: boolean;
+    /** Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise. */
+    path: string | null;
+  }>;
   /**
    * The phrase with every word written out, for showing back to the user.
    *

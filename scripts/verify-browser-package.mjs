@@ -52,6 +52,12 @@ assert.equal(parameters.sameLengthSuiteId, "MHFE-BIP39-LP-EXPERIMENTAL-4");
 assert.equal(parameters.highestBrowserMemoryLevel, 0);
 assert.equal(parameters.apiVersion, 7, "the same-length choice of encrypt");
 
+/** Whether the core's check, which answers in JSON with `matches` and a matched address's `path`,
+ * found a match. */
+function matched(json) {
+  return JSON.parse(json).matches;
+}
+
 function expectCode(code, action) {
   assert.throws(action, (error) => error.message.startsWith(`${code}: `), code);
 }
@@ -106,32 +112,79 @@ for (const [name, createModule] of Object.entries(builds)) {
 
   const noPassphrase = new Uint8Array();
   assert.equal(
-    core.check(container, PASSWORD, 0, 0, "words", "12", "", noPassphrase, reduced, () => {}),
+    matched(
+      core.check(container, PASSWORD, 0, 0, "words", "12", "", noPassphrase, reduced, () => {}),
+    ),
     true,
   );
   assert.equal(
-    core.check(
-      container,
-      PASSWORD,
-      0,
-      0,
-      "fingerprint",
-      "73c5da0a",
-      "",
-      noPassphrase,
-      reduced,
-      () => {},
+    matched(
+      core.check(
+        container,
+        PASSWORD,
+        0,
+        0,
+        "fingerprint",
+        "73c5da0a",
+        "",
+        noPassphrase,
+        reduced,
+        () => {},
+      ),
     ),
     true,
   );
   const address = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
+  assert.deepEqual(
+    JSON.parse(
+      core.check(
+        container,
+        PASSWORD,
+        0,
+        0,
+        "address",
+        address,
+        "",
+        noPassphrase,
+        reduced,
+        () => {},
+      ),
+    ),
+    { matches: true, path: "m/84'/0'/0'/0/0" },
+  );
   assert.equal(
-    core.check(container, PASSWORD, 0, 0, "address", address, "", noPassphrase, reduced, () => {}),
+    matched(
+      core.check(
+        container,
+        PASSWORD,
+        0,
+        0,
+        "address",
+        address,
+        "",
+        noPassphrase,
+        reduced,
+        () => {},
+      ),
+    ),
     true,
   );
   const trezor = new TextEncoder().encode("TREZOR");
   assert.equal(
-    core.check(container, PASSWORD, 0, 0, "fingerprint", "73c5da0a", "", trezor, reduced, () => {}),
+    matched(
+      core.check(
+        container,
+        PASSWORD,
+        0,
+        0,
+        "fingerprint",
+        "73c5da0a",
+        "",
+        trezor,
+        reduced,
+        () => {},
+      ),
+    ),
     false,
   );
 
@@ -278,17 +331,19 @@ for (const [name, createModule] of Object.entries(builds)) {
     },
   );
   assert.equal(
-    core.check(
-      REDUCED_COST_SAME_LENGTH_CONTAINER,
-      PASSWORD,
-      0,
-      0,
-      "fingerprint",
-      "73c5da0a",
-      "",
-      noPassphrase,
-      reduced,
-      () => {},
+    matched(
+      core.check(
+        REDUCED_COST_SAME_LENGTH_CONTAINER,
+        PASSWORD,
+        0,
+        0,
+        "fingerprint",
+        "73c5da0a",
+        "",
+        noPassphrase,
+        reduced,
+        () => {},
+      ),
     ),
     true,
   );

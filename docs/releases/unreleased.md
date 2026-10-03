@@ -39,6 +39,9 @@ Planned as version 0.5.0.
   question is always at the bottom.
 - The program and its documents say "seed phrase" where they said "recovery phrase", so that it
   is not confused with recovering one: `mhfe decrypt` is now "Recover a seed phrase".
+- On a match with a receiving address, `mhfe check` shows where it was found, such as
+  `m/49'/0'/0'/0/5`: which account and address of the wallet it is. The library's `check` returns a
+  `CheckOutcome` with that path, and the browser package's `check` resolves to `{ matches, path }`.
 - Without `--pim` or `--mem`, `mhfe encrypt`, `decrypt` and `check` ask at a terminal whether to
   keep the defaults, PIM 0 and memory level 0, which come first, or to type their own. The question
   links to the README's section on both settings instead of explaining them; the memory level is

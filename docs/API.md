@@ -7,7 +7,7 @@ as a 12- to 21-word original. The command-line tool is described in the [README]
 ## Rust library
 
 ```rust
-use mhfe::{Mhfe, Password, PhraseLength, Recovery, Reference, Suite, WorkFactor};
+use mhfe::{CheckOutcome, Mhfe, Password, PhraseLength, Recovery, Reference, Suite, WorkFactor};
 
 let work = WorkFactor::new(0, 0)?;            // PIM 0..=1023, memory level 0..=21
 let password = Password::new("...")?;        // NFKD with Unicode 17.0.0, 1 to 1024 bytes
@@ -24,7 +24,7 @@ match mhfe.decrypt(&container, &password, PhraseLength::Detect, &mut |_, _| Ok((
     Recovery::Ambiguous(candidates) => { /* show every candidate; the last one is 24 words */ }
 }
 
-let matches: bool = mhfe.check(&container, &password, &reference, &mut |_, _| Ok(()))?;
+let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |_, _| Ok(()))?;
 ```
 
 - `WorkFactor` holds the two settings and computes the Argon2 cost with integers only:
@@ -78,7 +78,9 @@ let matches: bool = mhfe.check(&container, &password, &reference, &mut |_, _| Ok
   of 12 to 21, for a short original in a 24-word container (a same-length container has none:
   `MhfeError::NoBuiltInCheck`), `Address { address, passphrase, path, limits }` for a
   receiving address (the strong check) or `Fingerprint { fingerprint, passphrase }` for the BIP32
-  master key fingerprint. It returns only whether the recovery matches.
+  master key fingerprint. It returns a `CheckOutcome`: `Matches { path }` or `DoesNotMatch`, where
+  `path` is the derivation path at which a matched address was found (`None` for the other
+  references). No part of the recovered phrase comes out.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
@@ -150,7 +152,7 @@ await client.encrypt({
 // { container, suiteId } after the check; onUnverified({ container }) comes after round 12
 await client.decrypt({ container, password, pim, memoryLevel, words, onProgress });
 // { kind: "phrase" | "ambiguous", candidates: [{ words, verified, phrase, suiteId }] }
-await client.check({ container, password, reference, passphrase, onProgress }); // { matches }
+await client.check({ container, password, reference, passphrase, onProgress }); // { matches, path }
 // reference: exactly one of { address, path? }, { fingerprint } or { words }
 await client.readPhrase(phrase); // { phrase, words, otherLengths }: every word written out, no Argon2
 // otherLengths: other lengths whose check the packed phrase also passes; almost always empty
