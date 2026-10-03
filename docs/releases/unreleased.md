@@ -39,6 +39,14 @@ Planned as version 0.5.0.
   question is always at the bottom.
 - The program and its documents say "seed phrase" where they said "recovery phrase", so that it
   is not confused with recovering one: `mhfe decrypt` is now "Recover a seed phrase".
+- `mhfe check` compares with a receiving address of twelve coins instead of Bitcoin alone: Bitcoin,
+  Ethereum and every EVM network, XRP, Tron, Zcash (transparent), Dogecoin, Bitcoin Cash, Litecoin,
+  Ethereum Classic, Cosmos, Injective and Dash, for Dash both Core `X…` and Platform payment
+  `dash1k…` addresses (DIP17 and DIP18, checked against their official vectors). It asks for the
+  coin, listed alphabetically, or takes `--coin`, and shows before the check the address type and
+  the paths it searches. Shielded Zcash and Dash addresses are refused with that reason. The
+  browser package takes `reference: { address, coin }`. One new dependency, `sha3`, gives
+  Keccak-256.
 - On a match with a receiving address, `mhfe check` shows where it was found, such as
   `m/49'/0'/0'/0/5`: which account and address of the wallet it is. The library's `check` returns a
   `CheckOutcome` with that path, and the browser package's `check` resolves to `{ matches, path }`.

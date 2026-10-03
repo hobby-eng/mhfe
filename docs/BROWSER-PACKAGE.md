@@ -49,11 +49,12 @@ const recovery = await client.decrypt({ container, password });
 // recovery.kind is "phrase" or, very rarely, "ambiguous"; show every candidate then. The container's
 // word count selects the suite; a same-length container gives one phrase, never verified.
 
-// `path` is where the address was found, such as "m/84'/0'/0'/0/5", or null.
+// `coin` defaults to "bitcoin"; "ethereum" covers every EVM network. `path` is where the address
+// was found, such as "m/84'/0'/0'/0/5", or null.
 const { matches, path } = await client.check({
   container,
   password,
-  reference: { address },
+  reference: { address, coin: "bitcoin" },
 });
 ```
 

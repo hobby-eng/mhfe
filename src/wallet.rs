@@ -1,6 +1,8 @@
 //! Public wallet data for rehearsing a recovery without showing the phrase: the BIP32 master
-//! key fingerprint and Bitcoin receiving addresses on the standard paths of BIP44 (legacy),
-//! BIP49 (nested SegWit), BIP84 (native SegWit) and BIP86 (Taproot).
+//! key fingerprint and the single-key receiving addresses of twelve coins on their standard
+//! paths: Bitcoin on BIP44 (legacy), BIP49 (nested SegWit), BIP84 (native SegWit) and BIP86
+//! (Taproot), Litecoin likewise without Taproot, BIP44 for the others ([`Coin`]), and Dash
+//! Platform payment addresses on DIP17.
 //!
 //! Private keys exist only inside this module and are wiped when dropped; only public values
 //! and yes-or-no answers come out.
@@ -17,6 +19,7 @@ use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::elliptic_curve::PrimeField;
 use k256::{FieldBytes, ProjectivePoint, Scalar};
 use sha2::{Digest, Sha256, Sha512};
+use sha3::Keccak256;
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -26,99 +29,280 @@ type HmacSha512 = Hmac<Sha512>;
 
 /// Indexes from 2^31 up are hardened (BIP32).
 pub const HARDENED: u32 = 1 << 31;
-/// Receiving and change chains of a BIP44-style account.
+/// Receiving and change chains of a BIP44-style account. DIP17 calls them key classes and
+/// hardens them.
 const CHAINS: [u32; 2] = [0, 1];
+/// The DIP9 purpose of Dash's feature paths, and the feature number of Platform payments
+/// (DIP17): `m/9'/coin'/17'/account'/key_class'/index`.
+const DIP9_PURPOSE: u32 = 9;
+const DIP17_FEATURE: u32 = 17;
 
-/// Bitcoin network of an address; testnet also covers signet, which uses the same prefixes.
+/// A coin whose single-key receiving addresses the rehearsal can look for. All of them use
+/// secp256k1 keys on BIP44-style paths `m/purpose'/coin'/account'/chain/index`, or for Dash
+/// Platform on DIP17 paths; they differ only in how a public key becomes an address.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Network {
+pub enum Coin {
     Bitcoin,
-    Testnet,
+    /// Ethereum and every EVM network, which share its addresses.
+    Ethereum,
+    Xrp,
+    Tron,
+    /// Zcash transparent addresses; shielded ones are out of reach without its own cryptography.
+    Zcash,
+    Dogecoin,
+    BitcoinCash,
+    Litecoin,
+    EthereumClassic,
+    Cosmos,
+    Injective,
+    Dash,
 }
 
-impl Network {
+impl Coin {
+    /// Every coin, in the alphabetical order of their names, which is the order the program
+    /// offers them in.
+    pub const ALL: [Self; 12] = [
+        Self::Bitcoin,
+        Self::BitcoinCash,
+        Self::Cosmos,
+        Self::Dash,
+        Self::Dogecoin,
+        Self::Ethereum,
+        Self::EthereumClassic,
+        Self::Injective,
+        Self::Litecoin,
+        Self::Tron,
+        Self::Xrp,
+        Self::Zcash,
+    ];
+
+    /// The name a person knows it by.
     pub fn name(self) -> &'static str {
         match self {
             Self::Bitcoin => "Bitcoin",
-            Self::Testnet => "Bitcoin testnet",
+            Self::Ethereum => "Ethereum and EVM networks",
+            Self::Xrp => "XRP",
+            Self::Tron => "Tron",
+            Self::Zcash => "Zcash",
+            Self::Dogecoin => "Dogecoin",
+            Self::BitcoinCash => "Bitcoin Cash",
+            Self::Litecoin => "Litecoin",
+            Self::EthereumClassic => "Ethereum Classic",
+            Self::Cosmos => "Cosmos",
+            Self::Injective => "Injective",
+            Self::Dash => "Dash",
         }
     }
 
-    /// Coin type of the BIP44-style paths: 0' on Bitcoin, 1' on every test network.
-    pub fn coin_type(self) -> u32 {
+    /// The identifier of the command line and the browser package, such as "bitcoin-cash".
+    pub fn id(self) -> &'static str {
         match self {
-            Self::Bitcoin => 0,
-            Self::Testnet => 1,
+            Self::Bitcoin => "bitcoin",
+            Self::Ethereum => "ethereum",
+            Self::Xrp => "xrp",
+            Self::Tron => "tron",
+            Self::Zcash => "zcash",
+            Self::Dogecoin => "dogecoin",
+            Self::BitcoinCash => "bitcoin-cash",
+            Self::Litecoin => "litecoin",
+            Self::EthereumClassic => "ethereum-classic",
+            Self::Cosmos => "cosmos",
+            Self::Injective => "injective",
+            Self::Dash => "dash",
+        }
+    }
+
+    /// How the supported addresses begin, such as "1…, 3…, bc1q… or bc1p…".
+    pub fn address_forms(self) -> &'static str {
+        match self {
+            Self::Bitcoin => "1…, 3…, bc1q… or bc1p…",
+            Self::Ethereum | Self::EthereumClassic => "0x…",
+            Self::Xrp => "r…",
+            Self::Tron => "T…",
+            Self::Zcash => "t1…",
+            Self::Dogecoin => "D…",
+            Self::BitcoinCash => "bitcoincash:q… or 1…",
+            Self::Litecoin => "L…, M…, 3… or ltc1q…",
+            Self::Cosmos => "cosmos1…",
+            Self::Injective => "inj1…",
+            Self::Dash => "X… or dash1k…",
+        }
+    }
+
+    /// The coin types (SLIP-44) of the paths searched on its main network. Bitcoin Cash forked
+    /// from Bitcoin and Ethereum Classic from Ethereum, and wallets made for them use either their
+    /// own coin type or the one of the chain they came from, so both are searched.
+    fn coin_types(self) -> &'static [u32] {
+        match self {
+            Self::Bitcoin => &[0],
+            Self::Ethereum | Self::Injective => &[60],
+            Self::Xrp => &[144],
+            Self::Tron => &[195],
+            Self::Zcash => &[133],
+            Self::Dogecoin => &[3],
+            Self::BitcoinCash => &[145, 0],
+            Self::Litecoin => &[2],
+            Self::EthereumClassic => &[61, 60],
+            Self::Cosmos => &[118],
+            Self::Dash => &[5],
         }
     }
 }
 
-/// The four single-key address types and the standard that sets their paths.
+impl FromStr for Coin {
+    type Err = MhfeError;
+
+    /// Reads an identifier such as "bitcoin" or "bitcoin-cash".
+    fn from_str(text: &str) -> Result<Self, MhfeError> {
+        let wanted = text.trim().to_ascii_lowercase();
+        Self::ALL
+            .into_iter()
+            .find(|coin| coin.id() == wanted)
+            .ok_or_else(|| {
+                let known: Vec<&str> = Self::ALL.iter().map(|coin| coin.id()).collect();
+                MhfeError::InvalidAddress(format!(
+                    "\"{text}\" is not one of the coins {}",
+                    known.join(", ")
+                ))
+            })
+    }
+}
+
+/// How an address commits to a public key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AddressType {
-    /// Legacy address, "1..." or "m..."/"n...": BIP44, `m/44'/coin'/account'/chain/index`.
+    /// HASH160 of the compressed public key: legacy addresses ("1...", "L...", "D...", "X...",
+    /// "t1...", a Bitcoin Cash "q..."), XRP and Cosmos. BIP44.
     P2pkh,
-    /// Nested SegWit address, "3..." or "2...": BIP49, `m/49'/...`.
+    /// Nested SegWit, "3..." or "M...": HASH160 of the P2WPKH script. BIP49.
     P2shP2wpkh,
-    /// Native SegWit address, "bc1q..." or "tb1q...": BIP84, `m/84'/...`.
+    /// Native SegWit, "bc1q..." or "ltc1q...": HASH160 of the compressed public key. BIP84.
     P2wpkh,
-    /// Taproot address, "bc1p..." or "tb1p...": BIP86, `m/86'/...`.
+    /// Taproot, "bc1p...": the tweaked output key. BIP86.
     P2tr,
+    /// The last 20 bytes of Keccak-256 of the uncompressed public key: Ethereum and EVM
+    /// networks, Ethereum Classic, Tron and Injective. BIP44 paths.
+    Keccak,
+    /// A Dash Platform payment address, "dash1k...": HASH160 of the compressed public key,
+    /// written in Bech32m after the type byte 0xb0 (DIP18). DIP17 paths.
+    DashPlatform,
 }
 
 impl AddressType {
+    /// The name of a Bitcoin or Litecoin address of this type.
     pub fn name(self) -> &'static str {
         match self {
             Self::P2pkh => "legacy",
             Self::P2shP2wpkh => "nested SegWit",
             Self::P2wpkh => "native SegWit",
             Self::P2tr => "Taproot",
+            Self::Keccak => "Keccak",
+            Self::DashPlatform => "Platform payment",
         }
     }
 
-    /// The first step of its standard paths: 44, 49, 84 or 86, as in the BIP of the same number.
+    /// The first step of its standard paths: 44, 49, 84 or 86, as in the BIP of the same number,
+    /// or 9 for Dash's feature paths (DIP9).
     pub fn purpose(self) -> u32 {
         match self {
-            Self::P2pkh => 44,
+            Self::P2pkh | Self::Keccak => 44,
             Self::P2shP2wpkh => 49,
             Self::P2wpkh => 84,
             Self::P2tr => 86,
+            Self::DashPlatform => DIP9_PURPOSE,
         }
     }
 }
 
-/// A receiving address the user knows, reduced to what identifies it: the network, the type
-/// and the 20-byte key or script hash (32-byte output key for Taproot). It is made only by parsing
-/// an address, and its parts cannot be changed afterwards, so it always describes a real address.
+/// A receiving address the user knows, reduced to what identifies it: the coin, whether it is a
+/// Bitcoin test network address, the type and the 20-byte key or script hash (32-byte output key
+/// for Taproot). It is made only by parsing an address, and its parts cannot be changed afterwards,
+/// so it always describes a real address.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BitcoinAddress {
-    network: Network,
+pub struct Address {
+    coin: Coin,
+    /// A Bitcoin testnet or signet address, or a Dash Platform testnet address, searched under
+    /// coin type 1.
+    testnet: bool,
     address_type: AddressType,
     program: Vec<u8>,
 }
 
-impl BitcoinAddress {
-    pub fn network(&self) -> Network {
-        self.network
+impl Address {
+    /// Reads `text` as a single-key receiving address of `coin`. Multisignature and script
+    /// addresses, Zcash shielded addresses and those of other coins are refused.
+    pub fn parse(coin: Coin, text: &str) -> Result<Self, MhfeError> {
+        let text = text.trim();
+        let address = match coin {
+            Coin::Bitcoin if is_bech32(text, &["bc1", "tb1"]) => parse_segwit(coin, text)?,
+            Coin::Litecoin if is_bech32(text, &["ltc1"]) => parse_segwit(coin, text)?,
+            Coin::BitcoinCash if !text.starts_with('1') => parse_cashaddr(text)?,
+            Coin::Ethereum | Coin::EthereumClassic => parse_hex(coin, text)?,
+            Coin::Cosmos => parse_bech32_account(coin, text, "cosmos", AddressType::P2pkh)?,
+            Coin::Injective => parse_bech32_account(coin, text, "inj", AddressType::Keccak)?,
+            Coin::Dash if is_bech32(text, &["dash1", "tdash1"]) => parse_dash_platform(text)?,
+            Coin::Zcash if is_shielded_zcash(text) => {
+                return Err(invalid_address(
+                    "it is shielded; use a transparent t1… address of the same wallet",
+                ))
+            }
+            _ => parse_base58(coin, text)?,
+        };
+        Ok(address)
+    }
+
+    pub fn coin(&self) -> Coin {
+        self.coin
     }
 
     pub fn address_type(&self) -> AddressType {
         self.address_type
     }
-}
 
-impl FromStr for BitcoinAddress {
-    type Err = MhfeError;
-
-    /// Reads a Bitcoin mainnet or testnet address of one of the four supported types.
-    fn from_str(text: &str) -> Result<Self, MhfeError> {
-        let text = text.trim();
-        let lowercase = text.to_ascii_lowercase();
-        if lowercase.starts_with("bc1") || lowercase.starts_with("tb1") {
-            parse_segwit(text)
-        } else {
-            parse_base58(text)
+    /// Its type, for a person, where its coin has several: "nested SegWit (BIP49)", "testnet,
+    /// Taproot (BIP86)", "Platform payment (DIP17)" or, for Zcash, "transparent". `None` for a
+    /// coin with one kind of address.
+    pub fn type_description(&self) -> Option<String> {
+        let network = if self.testnet { "testnet, " } else { "" };
+        match self.coin {
+            Coin::Bitcoin | Coin::Litecoin => Some(format!(
+                "{network}{} (BIP{})",
+                self.address_type.name(),
+                self.address_type.purpose()
+            )),
+            Coin::Dash => Some(match self.address_type {
+                AddressType::DashPlatform => format!("{network}Platform payment (DIP17)"),
+                _ => "Core (BIP44)".to_owned(),
+            }),
+            Coin::Zcash => Some("transparent".to_owned()),
+            _ => None,
         }
+    }
+
+    /// The roots of the paths searched for it, every step hardened: `[44, 5]` for `m/44'/5'`, or
+    /// `[9, 5, 17]` for Dash Platform. Under a root come the account, `root/account'`, its two
+    /// chains and their addresses. Coins with two coin types have a root for each.
+    pub fn search_roots(&self) -> Vec<Vec<u32>> {
+        // Every test network of Bitcoin, and Dash's, uses coin type 1.
+        let coin_types: &[u32] = if self.testnet {
+            &[1]
+        } else {
+            self.coin.coin_types()
+        };
+        let purpose = self.address_type.purpose();
+        coin_types
+            .iter()
+            .map(|&coin| match self.address_type {
+                AddressType::DashPlatform => vec![purpose, coin, DIP17_FEATURE],
+                _ => vec![purpose, coin],
+            })
+            .collect()
+    }
+
+    /// Whether the two chains under an account are hardened: DIP17 hardens its key classes,
+    /// `0'` for receiving and `1'` for change, where BIP44 has `0` and `1`.
+    pub fn hardened_chains(&self) -> bool {
+        self.address_type == AddressType::DashPlatform
     }
 }
 
@@ -126,65 +310,313 @@ fn invalid_address(reason: &str) -> MhfeError {
     MhfeError::InvalidAddress(reason.to_owned())
 }
 
-/// Bech32 and Bech32m addresses (BIP173, BIP350).
-fn parse_segwit(text: &str) -> Result<BitcoinAddress, MhfeError> {
+fn not_of(coin: Coin) -> MhfeError {
+    MhfeError::InvalidAddress(format!(
+        "it is not a {} address ({})",
+        coin.name(),
+        coin.address_forms()
+    ))
+}
+
+/// Prefixes of Zcash shielded addresses: Sapling (Bech32), unified (Bech32m) and Sprout (Base58),
+/// on mainnet and testnet. Deriving them needs Zcash's own curves and key tree (ZIP-32), so a
+/// check refuses them and asks for the wallet's transparent address instead of searching in vain.
+const ZCASH_SHIELDED_PREFIXES: &[&str] = &["zs1", "ztestsapling1", "u1", "utest1", "zc", "zt"];
+
+fn is_shielded_zcash(text: &str) -> bool {
+    let lowercase = text.to_ascii_lowercase();
+    ZCASH_SHIELDED_PREFIXES
+        .iter()
+        .any(|prefix| lowercase.starts_with(prefix))
+}
+
+/// The type byte that starts a Dash Platform address (DIP18): a payment address of a DIP17 key,
+/// or an Orchard shielded address.
+const DASH_PLATFORM_P2PKH: u8 = 0xb0;
+const DASH_ORCHARD: u8 = 0x10;
+
+/// Dash Platform addresses, Bech32m with the prefix "dash" or "tdash" (DIP18). A payment address
+/// of a single key is read; an Orchard address is refused, as its keys need Orchard's own
+/// cryptography, and so is any other kind.
+fn parse_dash_platform(text: &str) -> Result<Address, MhfeError> {
+    use bech32::primitives::decode::CheckedHrpstring;
+    let decoded = CheckedHrpstring::new::<bech32::Bech32m>(text)
+        .map_err(|_| invalid_address("its checksum or format is wrong"))?;
+    let testnet = match decoded.hrp().as_str().to_ascii_lowercase().as_str() {
+        "dash" => false,
+        "tdash" => true,
+        _ => return Err(not_of(Coin::Dash)),
+    };
+    let data: Vec<u8> = decoded.byte_iter().collect();
+    match data.split_first() {
+        Some((&DASH_PLATFORM_P2PKH, hash)) if hash.len() == 20 => Ok(Address {
+            coin: Coin::Dash,
+            testnet,
+            address_type: AddressType::DashPlatform,
+            program: hash.to_vec(),
+        }),
+        Some((&DASH_PLATFORM_P2PKH, _)) => Err(invalid_address("it has the wrong length")),
+        Some((&DASH_ORCHARD, _)) => Err(invalid_address(
+            "it is shielded; use a Dash Core X… or Platform dash1k… address of the same wallet",
+        )),
+        _ => Err(invalid_address(
+            "it is not the Platform payment address of a single key",
+        )),
+    }
+}
+
+/// Whether `text` starts with one of the Bech32 prefixes, in either case.
+fn is_bech32(text: &str, prefixes: &[&str]) -> bool {
+    let lowercase = text.to_ascii_lowercase();
+    prefixes.iter().any(|prefix| lowercase.starts_with(prefix))
+}
+
+/// SegWit addresses of Bitcoin and Litecoin, Bech32 and Bech32m (BIP173, BIP350).
+fn parse_segwit(coin: Coin, text: &str) -> Result<Address, MhfeError> {
     let (hrp, version, program) = bech32::segwit::decode(text)
         .map_err(|_| invalid_address("its checksum or format is wrong"))?;
     // BIP173 allows an address written all in capitals, as in QR codes; the decoder has already
     // refused mixed case, and keeps the prefix as written.
-    let network = match hrp.as_str().to_ascii_lowercase().as_str() {
-        "bc" => Network::Bitcoin,
-        "tb" => Network::Testnet,
-        _ => {
-            return Err(invalid_address(
-                "it is not a Bitcoin mainnet or testnet address",
-            ))
-        }
+    let testnet = match (coin, hrp.as_str().to_ascii_lowercase().as_str()) {
+        (Coin::Bitcoin, "bc") | (Coin::Litecoin, "ltc") => false,
+        (Coin::Bitcoin, "tb") => true,
+        _ => return Err(not_of(coin)),
     };
-    let address_type = match (version.to_u8(), program.len()) {
-        (0, 20) => AddressType::P2wpkh,
-        (1, 32) => AddressType::P2tr,
-        _ => {
-            return Err(invalid_address(
-                "only single-key addresses (bc1q with 42 characters or bc1p) can be checked",
-            ))
-        }
-    };
-    Ok(BitcoinAddress {
-        network,
+    let address_type =
+        match (version.to_u8(), program.len(), coin) {
+            (0, 20, _) => AddressType::P2wpkh,
+            (1, 32, Coin::Bitcoin) => AddressType::P2tr,
+            _ => return Err(invalid_address(
+                "only single-key addresses (bc1q with 42 characters, bc1p or ltc1q) can be checked",
+            )),
+        };
+    Ok(Address {
+        coin,
+        testnet,
         address_type,
         program,
     })
 }
 
-/// Base58Check addresses: version byte and 20-byte hash.
-fn parse_base58(text: &str) -> Result<BitcoinAddress, MhfeError> {
+/// The version prefixes of a coin's Base58Check addresses: prefix, type and whether it is a
+/// Bitcoin test network address. A "3..." Bitcoin or Litecoin address is taken as nested SegWit,
+/// the only single-key address of that form.
+fn base58_versions(coin: Coin) -> &'static [(&'static [u8], AddressType, bool)] {
+    use AddressType::{Keccak, P2pkh, P2shP2wpkh};
+    match coin {
+        Coin::Bitcoin => &[
+            (&[0x00], P2pkh, false),
+            (&[0x05], P2shP2wpkh, false),
+            (&[0x6f], P2pkh, true),
+            (&[0xc4], P2shP2wpkh, true),
+        ],
+        // "L..." and "M...", and the "3..." that Litecoin used before "M...".
+        Coin::Litecoin => &[
+            (&[0x30], P2pkh, false),
+            (&[0x32], P2shP2wpkh, false),
+            (&[0x05], P2shP2wpkh, false),
+        ],
+        Coin::Dogecoin => &[(&[0x1e], P2pkh, false)],
+        Coin::Dash => &[(&[0x4c], P2pkh, false)],
+        // "t1...": a two-byte prefix.
+        Coin::Zcash => &[(&[0x1c, 0xb8], P2pkh, false)],
+        // The legacy form "1...", the same as Bitcoin's.
+        Coin::BitcoinCash => &[(&[0x00], P2pkh, false)],
+        Coin::Xrp => &[(&[0x00], P2pkh, false)],
+        Coin::Tron => &[(&[0x41], Keccak, false)],
+        Coin::Ethereum | Coin::EthereumClassic | Coin::Cosmos | Coin::Injective => &[],
+    }
+}
+
+/// Base58Check addresses: a version prefix and a 20-byte hash. XRP writes them with its own
+/// alphabet.
+fn parse_base58(coin: Coin, text: &str) -> Result<Address, MhfeError> {
+    let alphabet = match coin {
+        Coin::Xrp => bs58::Alphabet::RIPPLE,
+        _ => bs58::Alphabet::BITCOIN,
+    };
     let decoded = bs58::decode(text)
+        .with_alphabet(alphabet)
         .with_check(None)
         .into_vec()
         .map_err(|_| invalid_address("its checksum or format is wrong"))?;
-    let (&version, hash) = decoded
-        .split_first()
-        .ok_or_else(|| invalid_address("it is empty"))?;
+    let &(prefix, address_type, testnet) = base58_versions(coin)
+        .iter()
+        .find(|(prefix, _, _)| decoded.starts_with(prefix))
+        .ok_or_else(|| not_of(coin))?;
+    let hash = &decoded[prefix.len()..];
     if hash.len() != 20 {
         return Err(invalid_address("it has the wrong length"));
     }
-    let (network, address_type) = match version {
-        0x00 => (Network::Bitcoin, AddressType::P2pkh),
-        0x05 => (Network::Bitcoin, AddressType::P2shP2wpkh),
-        0x6f => (Network::Testnet, AddressType::P2pkh),
-        0xc4 => (Network::Testnet, AddressType::P2shP2wpkh),
-        _ => {
-            return Err(invalid_address(
-                "it is not a Bitcoin mainnet or testnet address",
-            ))
-        }
-    };
-    Ok(BitcoinAddress {
-        network,
+    Ok(Address {
+        coin,
+        testnet,
         address_type,
         program: hash.to_vec(),
     })
+}
+
+/// Bech32 account addresses of Cosmos SDK chains, such as "cosmos1..." or "inj1...": a prefix and
+/// a 20-byte hash.
+fn parse_bech32_account(
+    coin: Coin,
+    text: &str,
+    prefix: &str,
+    address_type: AddressType,
+) -> Result<Address, MhfeError> {
+    let (hrp, program) =
+        bech32::decode(text).map_err(|_| invalid_address("its checksum or format is wrong"))?;
+    if hrp.as_str().to_ascii_lowercase() != prefix {
+        return Err(not_of(coin));
+    }
+    if program.len() != 20 {
+        return Err(invalid_address("it has the wrong length"));
+    }
+    Ok(Address {
+        coin,
+        testnet: false,
+        address_type,
+        program,
+    })
+}
+
+/// Ethereum-style addresses: "0x" and 40 hexadecimal digits. In mixed case they carry the EIP-55
+/// checksum, which must hold; all in lower or upper case they carry none.
+fn parse_hex(coin: Coin, text: &str) -> Result<Address, MhfeError> {
+    let digits = text
+        .strip_prefix("0x")
+        .or_else(|| text.strip_prefix("0X"))
+        .ok_or_else(|| not_of(coin))?;
+    let program = hex::decode(digits)
+        .ok()
+        .filter(|bytes| bytes.len() == 20)
+        .ok_or_else(|| invalid_address("it is not 40 hexadecimal digits after 0x"))?;
+    let mixed_case = digits.chars().any(|c| c.is_ascii_lowercase())
+        && digits.chars().any(|c| c.is_ascii_uppercase());
+    if mixed_case && eip55(&program) != digits {
+        return Err(invalid_address(
+            "its EIP-55 checksum, the mix of capital and small letters, is wrong",
+        ));
+    }
+    Ok(Address {
+        coin,
+        testnet: false,
+        address_type: AddressType::Keccak,
+        program,
+    })
+}
+
+/// The 40 hexadecimal digits of an address with the EIP-55 checksum: a letter is a capital where
+/// the matching digit of Keccak-256 of the lowercase address is 8 or more.
+fn eip55(address: &[u8]) -> String {
+    let lowercase = hex::encode(address);
+    let hash = Keccak256::digest(lowercase.as_bytes());
+    lowercase
+        .chars()
+        .enumerate()
+        .map(|(position, character)| {
+            let byte = hash[position / 2];
+            let nibble = if position % 2 == 0 {
+                byte >> 4
+            } else {
+                byte & 0x0f
+            };
+            if nibble >= 8 {
+                character.to_ascii_uppercase()
+            } else {
+                character
+            }
+        })
+        .collect()
+}
+
+/// The CashAddr alphabet and the prefix of Bitcoin Cash addresses.
+const CASHADDR_CHARSET: &[u8; 32] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+const CASHADDR_PREFIX: &str = "bitcoincash";
+
+/// A Bitcoin Cash CashAddr address, with or without its "bitcoincash:" prefix, in either case. Only
+/// a P2PKH address with a 160-bit hash (version byte 0, "q...") is single-key.
+fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
+    let lowercase = text.to_ascii_lowercase();
+    if lowercase != text && text.to_ascii_uppercase() != text {
+        return Err(invalid_address(
+            "it mixes capital and small letters, which CashAddr does not allow",
+        ));
+    }
+    let payload = match lowercase.split_once(':') {
+        Some((CASHADDR_PREFIX, payload)) => payload,
+        Some(_) => return Err(not_of(Coin::BitcoinCash)),
+        None => lowercase.as_str(),
+    };
+    let values = payload
+        .bytes()
+        .map(|byte| {
+            CASHADDR_CHARSET
+                .iter()
+                .position(|&c| c == byte)
+                .map(|v| v as u8)
+        })
+        .collect::<Option<Vec<u8>>>()
+        .ok_or_else(|| not_of(Coin::BitcoinCash))?;
+    // The prefix enters the checksum as the low five bits of each character, then a zero.
+    let mut checked: Vec<u8> = CASHADDR_PREFIX.bytes().map(|byte| byte & 0x1f).collect();
+    checked.push(0);
+    checked.extend_from_slice(&values);
+    // Eight five-bit values of checksum follow the data.
+    if values.len() <= 8 || cashaddr_polymod(&checked) != 0 {
+        return Err(invalid_address("its checksum or format is wrong"));
+    }
+    let data = regroup_five_to_eight(&values[..values.len() - 8])
+        .ok_or_else(|| invalid_address("its checksum or format is wrong"))?;
+    // Version byte 0: P2PKH with a 160-bit hash.
+    match data.split_first() {
+        Some((0, hash)) if hash.len() == 20 => Ok(Address {
+            coin: Coin::BitcoinCash,
+            testnet: false,
+            address_type: AddressType::P2pkh,
+            program: hash.to_vec(),
+        }),
+        _ => Err(invalid_address(
+            "only single-key addresses (bitcoincash:q...) can be checked",
+        )),
+    }
+}
+
+/// The CashAddr checksum function: zero for a valid address.
+fn cashaddr_polymod(values: &[u8]) -> u64 {
+    const GENERATORS: [u64; 5] = [
+        0x98_f2bc_8e61,
+        0x79_b76d_99e2,
+        0xf3_3e5f_b3c4,
+        0xae_2eab_e2a8,
+        0x1e_4f43_e470,
+    ];
+    let mut checksum: u64 = 1;
+    for &value in values {
+        let top = checksum >> 35;
+        checksum = ((checksum & 0x07_ffff_ffff) << 5) ^ u64::from(value);
+        for (bit, generator) in GENERATORS.iter().enumerate() {
+            if (top >> bit) & 1 == 1 {
+                checksum ^= generator;
+            }
+        }
+    }
+    checksum ^ 1
+}
+
+/// Five-bit values back to bytes; the padding at the end must be zero and shorter than five bits.
+fn regroup_five_to_eight(values: &[u8]) -> Option<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let (mut accumulator, mut bits) = (0u32, 0u32);
+    for &value in values {
+        accumulator = (accumulator << 5) | u32::from(value);
+        bits += 5;
+        if bits >= 8 {
+            bits -= 8;
+            bytes.push((accumulator >> bits) as u8);
+        }
+    }
+    (bits < 5 && accumulator & ((1 << bits) - 1) == 0).then_some(bytes)
 }
 
 /// A BIP32 derivation path such as `m/84'/0'/0'/0/5`. Hardened steps end with `'` or `h`.
@@ -302,12 +734,12 @@ pub fn master_fingerprint(phrase: &str, passphrase: &str) -> Result<[u8; 4], Mhf
     Ok([digest[0], digest[1], digest[2], digest[3]])
 }
 
-/// Looks for `address` on the standard path family of its type, within `limits`, or only at
-/// `path` when one is given. Returns the path where it was found.
+/// Looks for `address` on the standard paths of its type, within `limits`, or only at `path` when
+/// one is given. Returns the path where it was found.
 pub fn find_address(
     phrase: &str,
     passphrase: &str,
-    address: &BitcoinAddress,
+    address: &Address,
     path: Option<&DerivationPath>,
     limits: SearchLimits,
 ) -> Result<Option<DerivationPath>, MhfeError> {
@@ -319,22 +751,24 @@ pub fn find_address(
         );
     }
 
-    let purpose = address.address_type.purpose() | HARDENED;
-    let coin = address.network.coin_type() | HARDENED;
-    for account in 0..limits.accounts {
-        let account_key = master.derive(&[purpose, coin, account | HARDENED])?;
-        for chain in CHAINS {
-            let chain_key = account_key.child(chain)?;
-            for index in 0..limits.indexes {
-                let key = chain_key.child(index)?;
-                if program_for(&key, address.address_type)? == address.program {
-                    return Ok(Some(DerivationPath(vec![
-                        purpose,
-                        coin,
-                        account | HARDENED,
-                        chain,
-                        index,
-                    ])));
+    let chains = if address.hardened_chains() {
+        CHAINS.map(|chain| chain | HARDENED)
+    } else {
+        CHAINS
+    };
+    for root in address.search_roots() {
+        let root: Vec<u32> = root.iter().map(|step| step | HARDENED).collect();
+        for account in 0..limits.accounts {
+            let account_path = [root.as_slice(), &[account | HARDENED]].concat();
+            let account_key = master.derive(&account_path)?;
+            for chain in chains {
+                let chain_key = account_key.child(chain)?;
+                for index in 0..limits.indexes {
+                    let key = chain_key.child(index)?;
+                    if program_for(&key, address.address_type)? == address.program {
+                        let found = [account_path.as_slice(), &[chain, index]].concat();
+                        return Ok(Some(DerivationPath(found)));
+                    }
                 }
             }
         }
@@ -342,49 +776,13 @@ pub fn find_address(
     Ok(None)
 }
 
-/// The address text at `path`, for tests and for showing a user what a path gives.
-pub fn address_at(
-    phrase: &str,
-    passphrase: &str,
-    network: Network,
-    address_type: AddressType,
-    path: &DerivationPath,
-) -> Result<String, MhfeError> {
-    let key = ExtendedKey::master(phrase, passphrase)?.derive(&path.0)?;
-    let program = program_for(&key, address_type)?;
-    Ok(match (address_type, network) {
-        (AddressType::P2pkh, Network::Bitcoin) => base58check(0x00, &program),
-        (AddressType::P2pkh, Network::Testnet) => base58check(0x6f, &program),
-        (AddressType::P2shP2wpkh, Network::Bitcoin) => base58check(0x05, &program),
-        (AddressType::P2shP2wpkh, Network::Testnet) => base58check(0xc4, &program),
-        (AddressType::P2wpkh | AddressType::P2tr, _) => {
-            let hrp = match network {
-                Network::Bitcoin => bech32::hrp::BC,
-                Network::Testnet => bech32::hrp::TB,
-            };
-            let version = match address_type {
-                AddressType::P2wpkh => bech32::segwit::VERSION_0,
-                _ => bech32::segwit::VERSION_1,
-            };
-            bech32::segwit::encode(hrp, version, &program)
-                .map_err(|error| MhfeError::Internal(error.to_string()))?
-        }
-    })
-}
-
-fn base58check(version: u8, hash: &[u8]) -> String {
-    let mut payload = Vec::with_capacity(1 + hash.len());
-    payload.push(version);
-    payload.extend_from_slice(hash);
-    bs58::encode(payload).with_check().into_string()
-}
-
 /// What an address of `address_type` commits to for this key: HASH160 of the public key, of the
-/// P2WPKH script for nested SegWit, or the tweaked output key for Taproot.
+/// P2WPKH script for nested SegWit, the tweaked output key for Taproot, or the last 20 bytes of
+/// Keccak-256 of the uncompressed public key.
 fn program_for(key: &ExtendedKey, address_type: AddressType) -> Result<Vec<u8>, MhfeError> {
     let public_key = key.public_key()?;
     Ok(match address_type {
-        AddressType::P2pkh | AddressType::P2wpkh => {
+        AddressType::P2pkh | AddressType::P2wpkh | AddressType::DashPlatform => {
             hash160::Hash::hash(&public_key).to_byte_array().to_vec()
         }
         AddressType::P2shP2wpkh => {
@@ -394,6 +792,11 @@ fn program_for(key: &ExtendedKey, address_type: AddressType) -> Result<Vec<u8>, 
             hash160::Hash::hash(&script).to_byte_array().to_vec()
         }
         AddressType::P2tr => taproot_output_key(key)?.to_vec(),
+        AddressType::Keccak => {
+            // The 64 bytes of the uncompressed key without its 0x04 prefix (Ethereum yellow paper).
+            let uncompressed = key.uncompressed_public_key()?;
+            Keccak256::digest(&uncompressed[1..])[12..].to_vec()
+        }
     })
 }
 
@@ -535,6 +938,18 @@ impl ExtendedKey {
             .map_err(|_| MhfeError::Internal("a public key is not 33 bytes".to_owned()))
     }
 
+    /// The public key in SEC1 uncompressed form: 0x04 and both coordinates.
+    fn uncompressed_public_key(&self) -> Result<[u8; 65], MhfeError> {
+        let mut scalar = self.scalar()?;
+        let point = (ProjectivePoint::GENERATOR * scalar).to_affine();
+        scalar.zeroize();
+        let encoded = point.to_sec1_point(false);
+        encoded
+            .as_bytes()
+            .try_into()
+            .map_err(|_| MhfeError::Internal("a public key is not 65 bytes".to_owned()))
+    }
+
     fn clone_key(&self) -> Self {
         Self {
             key: self.key.clone(),
@@ -574,108 +989,437 @@ mod tests {
         );
     }
 
+    /// Where the wallets of the public test phrase put each address: coin, BIP39 passphrase, path,
+    /// address. The Bitcoin mainnet values at index 0 are the published vectors of BIP44, BIP49,
+    /// BIP84 and BIP86; the other Bitcoin values were computed independently with Python's hashlib
+    /// and agree with BIP49's testnet vector. The other coins were computed independently with the
+    /// audited JavaScript libraries @scure/bip32, @noble/hashes, @noble/curves and @scure/base, and
+    /// ethers for EIP-55, at the first address and at account 3, change chain, index 7.
+    const ADDRESSES: [(Coin, &str, &str, &str); 43] = [
+        (
+            Coin::Bitcoin,
+            "",
+            "m/44'/0'/0'/0/0",
+            "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/49'/0'/0'/0/0",
+            "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/84'/0'/0'/0/0",
+            "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/84'/0'/0'/0/1",
+            "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/84'/0'/0'/1/0",
+            "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/86'/0'/0'/0/0",
+            "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/86'/0'/0'/1/0",
+            "bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/44'/0'/3'/1/7",
+            "12DCYXCcRpBJ5VoWDvSijepPu8mshEihvX",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/49'/0'/3'/1/7",
+            "3K7gGbTWfdq3kyBgkVTMbhfftnrhxB6jpW",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/84'/0'/3'/1/7",
+            "bc1q8r4wsa3nye5qypv80vpfg4sh99uf02u5mmh5ry",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/86'/0'/3'/1/7",
+            "bc1preq6saz8z9zrn3clx9eaen0dcsynwseakek7nwqlrj52wd2dsfsqlfsyut",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/44'/1'/0'/0/0",
+            "mkpZhYtJu2r87Js3pDiWJDmPte2NRZ8bJV",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/49'/1'/0'/0/0",
+            "2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/84'/1'/0'/0/0",
+            "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
+        ),
+        (
+            Coin::Bitcoin,
+            "",
+            "m/86'/1'/0'/0/0",
+            "tb1p8wpt9v4frpf3tkn0srd97pksgsxc5hs52lafxwru9kgeephvs7rqlqt9zj",
+        ),
+        (
+            Coin::Bitcoin,
+            "TREZOR",
+            "m/84'/0'/0'/0/0",
+            "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu",
+        ),
+        (
+            Coin::Ethereum,
+            "",
+            "m/44'/60'/0'/0/0",
+            "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
+        ),
+        (
+            Coin::Ethereum,
+            "",
+            "m/44'/60'/3'/1/7",
+            "0xc1A30611797762aea209daC2aC7E900f0cE95f9e",
+        ),
+        (
+            Coin::Xrp,
+            "",
+            "m/44'/144'/0'/0/0",
+            "rHsMGQEkVNJmpGWs8XUBoTBiAAbwxZN5v3",
+        ),
+        (
+            Coin::Xrp,
+            "",
+            "m/44'/144'/3'/1/7",
+            "rnU3BdqhZk8DL3FKjQcaAyf3DJSoUZD8eM",
+        ),
+        (
+            Coin::Tron,
+            "",
+            "m/44'/195'/0'/0/0",
+            "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH",
+        ),
+        (
+            Coin::Tron,
+            "",
+            "m/44'/195'/3'/1/7",
+            "TTD7MudE8L26nvnrEf2LHzXm6stKRpFZH1",
+        ),
+        (
+            Coin::Zcash,
+            "",
+            "m/44'/133'/0'/0/0",
+            "t1XVXWCvpMgBvUaed4XDqWtgQgJSu1Ghz7F",
+        ),
+        (
+            Coin::Zcash,
+            "",
+            "m/44'/133'/3'/1/7",
+            "t1Pii1UXFrpcFucY5NBEFa664pymr7boHq4",
+        ),
+        (
+            Coin::Dogecoin,
+            "",
+            "m/44'/3'/0'/0/0",
+            "DBus3bamQjgJULBJtYXpEzDWQRwF5iwxgC",
+        ),
+        (
+            Coin::Dogecoin,
+            "",
+            "m/44'/3'/3'/1/7",
+            "DNuJKZiVoQ6t67t8dE4NuBDhd2FNpMBsg6",
+        ),
+        (
+            Coin::BitcoinCash,
+            "",
+            "m/44'/145'/0'/0/0",
+            "bitcoincash:qqyx49mu0kkn9ftfj6hje6g2wfer34yfnq5tahq3q6",
+        ),
+        (
+            Coin::BitcoinCash,
+            "",
+            "m/44'/145'/3'/1/7",
+            "bitcoincash:qrhejavdmlfh9eajjxra3s3mn8gxls9hkvsq2yd62y",
+        ),
+        (
+            Coin::BitcoinCash,
+            "",
+            "m/44'/145'/0'/0/0",
+            "1mW6fDEMjKrDHvLvoEsaeLxSCzZBf3Bfg",
+        ),
+        // A Bitcoin Cash wallet on Bitcoin's coin type, found under the second root.
+        (
+            Coin::BitcoinCash,
+            "",
+            "m/44'/0'/0'/0/0",
+            "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA",
+        ),
+        (
+            Coin::Litecoin,
+            "",
+            "m/44'/2'/0'/0/0",
+            "LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez",
+        ),
+        (
+            Coin::Litecoin,
+            "",
+            "m/49'/2'/0'/0/0",
+            "M7wtsL7wSHDBJVMWWhtQfTMSYYkyooAAXM",
+        ),
+        (
+            Coin::Litecoin,
+            "",
+            "m/84'/2'/3'/1/7",
+            "ltc1qnnphcvq5zgyf4f0uepust6d7gyt2zl69vftnz2",
+        ),
+        (
+            Coin::EthereumClassic,
+            "",
+            "m/44'/61'/0'/0/0",
+            "0xFA22515E43658ce56A7682B801e9B5456f511420",
+        ),
+        // An Ethereum Classic wallet on Ethereum's coin type, found under the second root.
+        (
+            Coin::EthereumClassic,
+            "",
+            "m/44'/60'/0'/0/0",
+            "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
+        ),
+        (
+            Coin::Cosmos,
+            "",
+            "m/44'/118'/0'/0/0",
+            "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4",
+        ),
+        (
+            Coin::Cosmos,
+            "",
+            "m/44'/118'/3'/1/7",
+            "cosmos1j8dc8g9sux68h924yj646shrsjmkd7g6fwevky",
+        ),
+        (
+            Coin::Injective,
+            "",
+            "m/44'/60'/0'/0/0",
+            "inj1npvwllfr9dqr8erajqqr6s0vxnk2ak55re90dz",
+        ),
+        (
+            Coin::Dash,
+            "",
+            "m/44'/5'/0'/0/0",
+            "XoJA8qE3N2Y3jMLEtZ3vcN42qseZ8LvFf5",
+        ),
+        (
+            Coin::Dash,
+            "",
+            "m/44'/5'/3'/1/7",
+            "XbAei18dD6mdL9LR6sTmbFJTQAJBcpxuxL",
+        ),
+        // Dash Platform payment addresses: the official DIP17/DIP18 vectors, receiving key class
+        // 0' and change key class 1'.
+        (
+            Coin::Dash,
+            "",
+            "m/9'/5'/17'/0'/0'/0",
+            "dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rs",
+        ),
+        (
+            Coin::Dash,
+            "",
+            "m/9'/5'/17'/0'/0'/1",
+            "dash1kzjl7qzxy9lar37j8r37z3kvt07epqe20ckxfezw",
+        ),
+        (
+            Coin::Dash,
+            "",
+            "m/9'/5'/17'/0'/1'/0",
+            "dash1kpkeye606ez89g7lelp7hnldwwpt76va0v3j6x28",
+        ),
+    ];
+
     #[test]
-    fn addresses_match_the_bip_test_vectors() {
-        // Mainnet values are the published vectors of BIP44, BIP49, BIP84 and BIP86; the testnet
-        // and passphrase values were computed independently (Python, hashlib) and agree with
-        // BIP49's testnet vector.
-        let cases = [
-            (
-                "m/44'/0'/0'/0/0",
-                Network::Bitcoin,
-                AddressType::P2pkh,
-                "",
-                "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA",
-            ),
-            (
-                "m/49'/0'/0'/0/0",
-                Network::Bitcoin,
-                AddressType::P2shP2wpkh,
-                "",
-                "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf",
-            ),
-            (
-                "m/84'/0'/0'/0/0",
-                Network::Bitcoin,
-                AddressType::P2wpkh,
-                "",
-                "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
-            ),
-            (
-                "m/84'/0'/0'/0/1",
-                Network::Bitcoin,
-                AddressType::P2wpkh,
-                "",
-                "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g",
-            ),
-            (
-                "m/84'/0'/0'/1/0",
-                Network::Bitcoin,
-                AddressType::P2wpkh,
-                "",
-                "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el",
-            ),
-            (
-                "m/86'/0'/0'/0/0",
-                Network::Bitcoin,
-                AddressType::P2tr,
-                "",
-                "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-            ),
-            (
-                "m/86'/0'/0'/1/0",
-                Network::Bitcoin,
-                AddressType::P2tr,
-                "",
-                "bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7",
-            ),
-            (
-                "m/44'/1'/0'/0/0",
-                Network::Testnet,
-                AddressType::P2pkh,
-                "",
-                "mkpZhYtJu2r87Js3pDiWJDmPte2NRZ8bJV",
-            ),
-            (
-                "m/49'/1'/0'/0/0",
-                Network::Testnet,
-                AddressType::P2shP2wpkh,
-                "",
-                "2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2",
-            ),
-            (
-                "m/84'/1'/0'/0/0",
-                Network::Testnet,
-                AddressType::P2wpkh,
-                "",
-                "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
-            ),
-            (
-                "m/86'/1'/0'/0/0",
-                Network::Testnet,
-                AddressType::P2tr,
-                "",
-                "tb1p8wpt9v4frpf3tkn0srd97pksgsxc5hs52lafxwru9kgeephvs7rqlqt9zj",
-            ),
-            (
-                "m/84'/0'/0'/0/0",
-                Network::Bitcoin,
-                AddressType::P2wpkh,
-                "TREZOR",
-                "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu",
-            ),
-        ];
-        for (path_text, network, address_type, passphrase, expected) in cases {
-            let derived =
-                address_at(ABANDON, passphrase, network, address_type, &path(path_text)).unwrap();
-            assert_eq!(derived, expected, "{path_text}");
-            let parsed: BitcoinAddress = expected.parse().unwrap();
+    fn addresses_are_found_where_their_wallets_put_them() {
+        let one = SearchLimits::new(1, 1).unwrap();
+        for (coin, passphrase, path_text, text) in ADDRESSES {
+            let address = Address::parse(coin, text).unwrap();
+            let expected = path(path_text);
             assert_eq!(
-                (parsed.network(), parsed.address_type()),
-                (network, address_type),
-                "{expected}"
+                find_address(ABANDON, passphrase, &address, Some(&expected), one).unwrap(),
+                Some(expected.clone()),
+                "{text} at its path"
+            );
+            assert_eq!(
+                find_address(ABANDON, passphrase, &address, None, SearchLimits::default()).unwrap(),
+                Some(expected),
+                "{text} by the search"
             );
         }
+    }
+
+    #[test]
+    fn addresses_name_their_coin_and_type() {
+        let described = |coin, text| Address::parse(coin, text).unwrap().type_description();
+        assert_eq!(
+            described(Coin::Bitcoin, "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf").as_deref(),
+            Some("nested SegWit (BIP49)")
+        );
+        assert_eq!(
+            described(Coin::Bitcoin, "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl").as_deref(),
+            Some("testnet, native SegWit (BIP84)")
+        );
+        assert_eq!(
+            described(Coin::Litecoin, "LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez").as_deref(),
+            Some("legacy (BIP44)")
+        );
+        assert_eq!(
+            described(Coin::Zcash, "t1XVXWCvpMgBvUaed4XDqWtgQgJSu1Ghz7F").as_deref(),
+            Some("transparent")
+        );
+        assert_eq!(
+            described(Coin::Ethereum, "0x9858effd232b4033e47d90003d41ec34ecaeda94"),
+            None
+        );
+        assert_eq!(
+            described(Coin::Dash, "XoJA8qE3N2Y3jMLEtZ3vcN42qseZ8LvFf5").as_deref(),
+            Some("Core (BIP44)")
+        );
+        assert_eq!(
+            described(Coin::Dash, "dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rs").as_deref(),
+            Some("Platform payment (DIP17)")
+        );
+        let roots = |coin, text| Address::parse(coin, text).unwrap().search_roots();
+        assert_eq!(
+            roots(Coin::BitcoinCash, "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA"),
+            [vec![44, 145], vec![44, 0]]
+        );
+        assert_eq!(
+            roots(Coin::Bitcoin, "2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2"),
+            [vec![49, 1]]
+        );
+        assert_eq!(
+            roots(Coin::Dash, "dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rs"),
+            [vec![9, 5, 17]]
+        );
+    }
+
+    #[test]
+    fn a_shielded_zcash_address_is_refused_with_its_reason() {
+        // Only the prefix matters: the address is refused before it is decoded.
+        for text in [
+            "zs1z7rejlpsa98s2rrrfkwmaxu53e4ue0ulcrw0h4x5g8jl04tak0d3mm47vdtahatqrlkngh9slya",
+            "u1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+            "zcU1Cd6zYyZCd2VJF8yKgmzjxdiiU1rgTTjEwoN1CGUWCziPkUTXUjXmX7TMqdMNsTfuiGN1jQoVN4kGxUR4sAPN4XZ7pxb",
+            "ZS1Z7REJLPSA98S2RRRFKWMAXU53E4UE0ULCRW0H4X5G8JL04TAK0D3MM47VDTAHATQRLKNGH9SLYA",
+        ] {
+            let error = Address::parse(Coin::Zcash, text).unwrap_err().to_string();
+            assert!(error.contains("it is shielded"), "{text}: {error}");
+        }
+        // A transparent address still reads.
+        assert!(Address::parse(Coin::Zcash, "t1XVXWCvpMgBvUaed4XDqWtgQgJSu1Ghz7F").is_ok());
+    }
+
+    #[test]
+    fn a_dash_orchard_or_other_platform_address_is_refused_with_its_reason() {
+        let encoded = |data: &[u8]| {
+            bech32::encode::<bech32::Bech32m>(bech32::Hrp::parse("dash").unwrap(), data).unwrap()
+        };
+        let short = encoded(&[&[DASH_PLATFORM_P2PKH][..], &[0x11; 19]].concat());
+        let error = Address::parse(Coin::Dash, &short).unwrap_err().to_string();
+        assert!(error.contains("wrong length"), "{error}");
+        // Another type byte, such as a script, is not a single key's payment address.
+        let other = encoded(&[&[0x80][..], &[0x11; 20]].concat());
+        let error = Address::parse(Coin::Dash, &other).unwrap_err().to_string();
+        assert!(
+            error.contains("not the Platform payment address"),
+            "{error}"
+        );
+        // DIP18 uses Bech32m; the same data with a Bech32 checksum is refused.
+        let bech32 = bech32::encode::<bech32::Bech32>(
+            bech32::Hrp::parse("dash").unwrap(),
+            &[&[DASH_PLATFORM_P2PKH][..], &[0x11; 20]].concat(),
+        )
+        .unwrap();
+        assert!(Address::parse(Coin::Dash, &bech32).is_err());
+        // The testnet Orchard address that multi-chain-wallet-tools pins for Dash's own format.
+        let orchard =
+            "tdash1zrhflqt5ly4r7q64wrktl6tf466x7h30vjkknaudxsckc3l28rp0qzzm27yta0683nnnd2qum8gyq";
+        let error = Address::parse(Coin::Dash, orchard).unwrap_err().to_string();
+        assert!(error.contains("it is shielded"), "{error}");
+        let error = Address::parse(Coin::Dash, "dash1qqqqqq")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("checksum or format"), "{error}");
+    }
+
+    #[test]
+    fn dash_platform_testnet_addresses_are_found_under_coin_type_1() {
+        // The Platform address vector of Dash Desktop, a public test phrase.
+        const PHRASE: &str =
+            "deliver frame tomato ring tool second dream mutual fade sponsor visa teach";
+        for (index, text) in [
+            "tdash1kr0xt5wj85ht5u464rfysjrq75rewz9mysjwf59p",
+            "tdash1kqgy7ngm2wf0zsv20k4mc62s5rapw26yeg6em4jq",
+            "tdash1kzlatzl0u06uxrqz8hkc7naz9d2g3v8g7gw83ew3",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let address = Address::parse(Coin::Dash, text).unwrap();
+            assert_eq!(
+                address.type_description().as_deref(),
+                Some("testnet, Platform payment (DIP17)")
+            );
+            let found = find_address(PHRASE, "", &address, None, SearchLimits::default()).unwrap();
+            assert_eq!(
+                found.map(|path| path.to_string()),
+                Some(format!("m/9'/1'/17'/0'/0'/{index}")),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn coins_are_listed_alphabetically_by_name() {
+        // As a person reads them: "Ethereum and EVM networks" before "Ethereum Classic".
+        let names: Vec<String> = Coin::ALL
+            .iter()
+            .map(|coin| coin.name().to_lowercase())
+            .collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(names, sorted);
+    }
+
+    #[test]
+    fn every_coin_reads_its_identifier() {
+        for coin in Coin::ALL {
+            assert_eq!(coin.id().parse::<Coin>().unwrap(), coin);
+        }
+        assert_eq!("Bitcoin-Cash".parse::<Coin>().unwrap(), Coin::BitcoinCash);
+        assert!("solana".parse::<Coin>().is_err());
     }
 
     #[test]
@@ -696,9 +1440,8 @@ mod tests {
     #[test]
     fn the_search_finds_an_address_on_its_standard_path() {
         // Account 2, change chain, index 19: computed independently (Python, hashlib).
-        let target: BitcoinAddress = "bc1q4du7e3vw34vsflf76xf9h8gktms9wzqcl7vlh5"
-            .parse()
-            .unwrap();
+        let target =
+            Address::parse(Coin::Bitcoin, "bc1q4du7e3vw34vsflf76xf9h8gktms9wzqcl7vlh5").unwrap();
         let found = find_address(ABANDON, "", &target, None, SearchLimits::default()).unwrap();
         assert_eq!(found, Some(path("m/84'/0'/2'/1/19")));
 
@@ -754,35 +1497,100 @@ mod tests {
         assert!(with_key(order).child(HARDENED).is_err());
     }
 
-    /// BIP173: an address may be written all in lower or all in upper case, never mixed.
+    /// BIP173 and CashAddr: an address may be written all in lower or all in upper case, never
+    /// mixed. A CashAddr address may leave out its prefix.
     #[test]
-    fn segwit_addresses_are_accepted_in_either_case() {
-        for lower in [
-            "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
-            "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-            "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
+    fn bech32_and_cashaddr_addresses_are_accepted_in_either_case() {
+        for (coin, lower) in [
+            (Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"),
+            (
+                Coin::Bitcoin,
+                "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
+            ),
+            (Coin::Bitcoin, "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl"),
+            (
+                Coin::Litecoin,
+                "ltc1qnnphcvq5zgyf4f0uepust6d7gyt2zl69vftnz2",
+            ),
+            (
+                Coin::Cosmos,
+                "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4",
+            ),
+            (
+                Coin::BitcoinCash,
+                "bitcoincash:qqyx49mu0kkn9ftfj6hje6g2wfer34yfnq5tahq3q6",
+            ),
         ] {
             let upper = lower.to_ascii_uppercase();
             assert_eq!(
-                upper.parse::<BitcoinAddress>().unwrap(),
-                lower.parse::<BitcoinAddress>().unwrap(),
+                Address::parse(coin, &upper).unwrap(),
+                Address::parse(coin, lower).unwrap(),
                 "{upper}"
             );
-            let mixed = format!("{}{}", &upper[..4], &lower[4..]);
-            assert!(mixed.parse::<BitcoinAddress>().is_err(), "{mixed}");
+            let mixed = format!("{}{}", &upper[..14], &lower[14..]);
+            assert!(Address::parse(coin, &mixed).is_err(), "{mixed}");
         }
+        assert_eq!(
+            Address::parse(
+                Coin::BitcoinCash,
+                "qqyx49mu0kkn9ftfj6hje6g2wfer34yfnq5tahq3q6"
+            )
+            .unwrap(),
+            Address::parse(Coin::BitcoinCash, "1mW6fDEMjKrDHvLvoEsaeLxSCzZBf3Bfg").unwrap()
+        );
+    }
+
+    /// EIP-55: in mixed case the capitals are a checksum, all in one case there is none.
+    #[test]
+    fn ethereum_addresses_check_eip55_in_mixed_case_only() {
+        let checksummed = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94";
+        let parsed = Address::parse(Coin::Ethereum, checksummed).unwrap();
+        for same in [
+            checksummed.to_ascii_lowercase(),
+            format!("0x{}", checksummed[2..].to_ascii_uppercase()),
+        ] {
+            assert_eq!(
+                Address::parse(Coin::Ethereum, &same).unwrap(),
+                parsed,
+                "{same}"
+            );
+        }
+        // One capital made small breaks the checksum.
+        let broken = "0x9858efFD232B4033E47d90003D41EC34EcaEda94";
+        assert!(Address::parse(Coin::Ethereum, broken).is_err());
     }
 
     #[test]
     fn rejects_unsupported_or_damaged_addresses() {
-        for text in [
-            "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyv", // checksum changed
-            "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabB",         // checksum changed
-            "bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3", // P2WSH
-            "ltc1qcr8te4kr609gcawutmrza0j4xv80jy8zkvrefp", // another coin
-            "",
+        for (coin, text) in [
+            (Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyv"), // checksum changed
+            (Coin::Bitcoin, "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabB"),         // checksum changed
+            // P2WSH, a script rather than a single key.
+            (
+                Coin::Bitcoin,
+                "bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3",
+            ),
+            (Coin::Bitcoin, "ltc1qcr8te4kr609gcawutmrza0j4xv80jy8zkvrefp"), // another coin
+            (Coin::Bitcoin, "LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez"),          // another coin
+            (Coin::Litecoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"), // another coin
+            (Coin::Tron, "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"),     // another coin
+            (Coin::Ethereum, "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH"),         // another coin
+            (Coin::Ethereum, "0x9858EfFD232B4033E47d90003D41EC34EcaEda"),   // too short
+            (Coin::Xrp, "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA"),              // other alphabet
+            (Coin::Cosmos, "inj1npvwllfr9dqr8erajqqr6s0vxnk2ak55re90dz"),   // another chain
+            // A P2SH CashAddr address, a script rather than a single key.
+            (
+                Coin::BitcoinCash,
+                "bitcoincash:pqkh9ahfj069qv8l6eysyufazpe4fdjq3u4hna323j",
+            ),
+            (
+                Coin::BitcoinCash,
+                "bitcoincash:qqyx49mu0kkn9ftfj6hje6g2wfer34yfnq5tahq3q7",
+            ), // checksum changed
+            (Coin::Zcash, "t3Vz22vK5z2LcKEdg16Yv4FFneEL1zg9ojd"), // P2SH
+            (Coin::Dash, ""),
         ] {
-            assert!(text.parse::<BitcoinAddress>().is_err(), "{text:?}");
+            assert!(Address::parse(coin, text).is_err(), "{coin:?} {text:?}");
         }
     }
 

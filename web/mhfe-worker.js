@@ -101,6 +101,7 @@ function runOperation(request, argon2, onRound) {
           memoryLevel,
           request.referenceKind,
           request.reference,
+          request.coin,
           request.path,
           request.passphrase,
           argon2,
