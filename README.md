@@ -215,10 +215,13 @@ miscopied word passes the BIP39 checksum in one case in 256, or as often as one 
 12-word container of the same length, and for a 24-word original or a same-length container
 silently gives another wallet. A same-length container has no built-in check, so compare it with
 your wallet. Compare with a receiving address of the wallet, the strong check that also
-covers a BIP39 passphrase (MHFE names the coin and address type it reads from the address and
-searches the first 100 receiving and change addresses of accounts 0 to 9 on that type's standard
-paths, or one path with `--path`), or with the master key fingerprint, quick but only 32 bits. Do not
-keep the address or fingerprint next to the container.
+covers a BIP39 passphrase, or with the master key fingerprint, quick but only 32 bits. The address
+may be one of twelve coins: Bitcoin, Ethereum and every EVM network (BNB Smart Chain, Polygon,
+Avalanche C-Chain, Arbitrum, Optimism, Base and others), XRP, Tron, Zcash (transparent addresses),
+Dogecoin, Bitcoin Cash, Litecoin, Ethereum Classic, Cosmos, Injective and Dash. MHFE asks for the
+coin, or takes it from `--coin`, and shows before the check what it searches: the first 100
+receiving and change addresses of accounts 0 to 9 on the standard paths of that address, or one
+path with `--path`. Do not keep the address or fingerprint next to the container.
 
 **`mhfe decrypt`** gives back the original phrase. The container is typed on a private screen,
 which shows it as you type it; the phrase then appears on a
