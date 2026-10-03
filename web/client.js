@@ -29,6 +29,21 @@ const MAX_PIM = 1023;
 const MAX_MEMORY_LEVEL = 21;
 const WORD_COUNTS = [12, 15, 18, 21, 24];
 const REFERENCE_KINDS = ["address", "fingerprint", "words"];
+/** The coins of an address reference, as `Coin::id` names them in the Rust core. */
+const COINS = [
+  "bitcoin",
+  "ethereum",
+  "xrp",
+  "tron",
+  "zcash",
+  "dogecoin",
+  "bitcoin-cash",
+  "litecoin",
+  "ethereum-classic",
+  "cosmos",
+  "injective",
+  "dash",
+];
 
 export class MhfeError extends Error {
   /** `options.cause` keeps the original error, as for CALLBACK_FAILED. */
@@ -146,7 +161,7 @@ export class MhfeClient {
     onProgress,
   } = {}) {
     requireText(container, "container");
-    const [referenceKind, referenceValue, path] = describeReference(reference);
+    const [referenceKind, referenceValue, coin, path] = describeReference(reference);
     // Everything that is not secret is checked before the passphrase is copied into bytes.
     this.#requireIdle();
     requireSettings(pim, memoryLevel);
@@ -157,6 +172,7 @@ export class MhfeClient {
       container,
       referenceKind,
       reference: referenceValue,
+      coin,
       path,
       passphrase: passphraseBytes,
     };
@@ -411,20 +427,25 @@ function describeReference(reference) {
   const kinds = isObject ? REFERENCE_KINDS.filter(given) : [];
   if (kinds.length !== 1) {
     throw new TypeError(
-      "reference must be exactly one of { address, path? }, { fingerprint } or { words }.",
+      "reference must be exactly one of { address, coin?, path? }, { fingerprint } or { words }.",
     );
   }
-  if (reference.path !== undefined && kinds[0] !== "address") {
-    throw new TypeError("reference.path belongs only to an address reference.");
+  for (const key of ["coin", "path"]) {
+    if (reference[key] !== undefined && kinds[0] !== "address") {
+      throw new TypeError(`reference.${key} belongs only to an address reference.`);
+    }
   }
   switch (kinds[0]) {
     case "address":
       requireText(reference.address, "reference.address");
       if (reference.path !== undefined) requireText(reference.path, "reference.path");
-      return ["address", reference.address, reference.path ?? ""];
+      if (reference.coin !== undefined && !COINS.includes(reference.coin)) {
+        throw new TypeError(`reference.coin must be one of ${COINS.join(", ")}.`);
+      }
+      return ["address", reference.address, reference.coin ?? "bitcoin", reference.path ?? ""];
     case "fingerprint":
       requireText(reference.fingerprint, "reference.fingerprint");
-      return ["fingerprint", reference.fingerprint, ""];
+      return ["fingerprint", reference.fingerprint, "", ""];
     default:
       if (![12, 15, 18, 21].includes(reference.words)) {
         throw new MhfeError(
@@ -432,6 +453,6 @@ function describeReference(reference) {
           "The built-in check needs a 12-, 15-, 18- or 21-word original.",
         );
       }
-      return ["words", String(reference.words), ""];
+      return ["words", String(reference.words), "", ""];
   }
 }

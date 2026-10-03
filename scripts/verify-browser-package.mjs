@@ -113,7 +113,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   const noPassphrase = new Uint8Array();
   assert.equal(
     matched(
-      core.check(container, PASSWORD, 0, 0, "words", "12", "", noPassphrase, reduced, () => {}),
+      core.check(container, PASSWORD, 0, 0, "words", "12", "", "", noPassphrase, reduced, () => {}),
     ),
     true,
   );
@@ -126,6 +126,7 @@ for (const [name, createModule] of Object.entries(builds)) {
         0,
         "fingerprint",
         "73c5da0a",
+        "",
         "",
         noPassphrase,
         reduced,
@@ -144,6 +145,7 @@ for (const [name, createModule] of Object.entries(builds)) {
         0,
         "address",
         address,
+        "bitcoin",
         "",
         noPassphrase,
         reduced,
@@ -161,6 +163,7 @@ for (const [name, createModule] of Object.entries(builds)) {
         0,
         "address",
         address,
+        "bitcoin",
         "",
         noPassphrase,
         reduced,
@@ -168,6 +171,25 @@ for (const [name, createModule] of Object.entries(builds)) {
       ),
     ),
     true,
+  );
+  // An Ethereum address of the same wallet, on Ethereum's path.
+  assert.deepEqual(
+    JSON.parse(
+      core.check(
+        container,
+        PASSWORD,
+        0,
+        0,
+        "address",
+        "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
+        "ethereum",
+        "",
+        noPassphrase,
+        reduced,
+        () => {},
+      ),
+    ),
+    { matches: true, path: "m/44'/60'/0'/0/0" },
   );
   const trezor = new TextEncoder().encode("TREZOR");
   assert.equal(
@@ -179,6 +201,7 @@ for (const [name, createModule] of Object.entries(builds)) {
         0,
         "fingerprint",
         "73c5da0a",
+        "",
         "",
         trezor,
         reduced,
@@ -257,6 +280,7 @@ for (const [name, createModule] of Object.entries(builds)) {
       0,
       "fingerprint",
       "73c5da0a",
+      "",
       "",
       sentinel.slice(),
       reduced,
@@ -340,6 +364,7 @@ for (const [name, createModule] of Object.entries(builds)) {
         "fingerprint",
         "73c5da0a",
         "",
+        "",
         noPassphrase,
         reduced,
         () => {},
@@ -355,6 +380,7 @@ for (const [name, createModule] of Object.entries(builds)) {
       0,
       "words",
       "12",
+      "",
       "",
       noPassphrase,
       reduced,

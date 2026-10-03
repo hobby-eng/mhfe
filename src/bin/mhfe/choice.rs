@@ -199,18 +199,22 @@ pub fn fits(explanation: &[&str]) -> bool {
 }
 
 /// "↑ ↓ choose · Enter selects · 1 or 2 at once · Esc cancels", with the help before Esc. q
-/// cancels too but is not offered: a keyboard layout may have no q.
+/// cancels too but is not offered: a keyboard layout may have no q. Only the first nine answers
+/// have a digit key.
 fn hint(answers: usize, help_hint: Option<&str>) -> String {
-    let numbers = if answers == 2 {
-        "1 or 2".to_owned()
-    } else {
-        format!("1 to {answers}")
+    let numbers = match answers {
+        2 => "1 or 2".to_owned(),
+        _ => format!("1 to {}", answers.min(DIGIT_KEYS)),
     };
     let help = help_hint
         .map(|hint| format!("{hint} · "))
         .unwrap_or_default();
     format!("↑ ↓ choose · Enter selects · {numbers} at once · {help}Esc cancels")
 }
+
+/// Answers that a digit key chooses at once: 1 to 9. Further answers are reached with the arrows
+/// and show no number.
+const DIGIT_KEYS: usize = 9;
 
 /// Draws one line per entry, a label and a grey note, and returns how many lines they took. The
 /// highlighted entry has a cyan marker and a bold label, so that it stands out also without
@@ -222,7 +226,11 @@ pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
         .max()
         .unwrap_or(0);
     for (index, (label, note)) in entries.iter().enumerate() {
-        let number = paint(MUTED, index + 1);
+        let number = if index < DIGIT_KEYS {
+            paint(MUTED, index + 1)
+        } else {
+            " ".to_owned()
+        };
         let (marker, shown_label) = if index == selected {
             (paint(ACCENT, "›"), paint(STRONG, label))
         } else {
@@ -283,6 +291,10 @@ mod tests {
             "↑ ↓ choose · Enter selects · 1 to 4 at once · ? explains both · Esc cancels"
         );
         assert!(hint(9, Some("? explains both")).chars().count() <= LINE_WIDTH);
+        assert_eq!(
+            hint(12, None),
+            "↑ ↓ choose · Enter selects · 1 to 9 at once · Esc cancels"
+        );
     }
 
     #[test]

@@ -77,7 +77,8 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
 - `check` compares the recovery with a `Reference`: `BuiltInCheck { words }`, with a `WordCount`
   of 12 to 21, for a short original in a 24-word container (a same-length container has none:
   `MhfeError::NoBuiltInCheck`), `Address { address, passphrase, path, limits }` for a
-  receiving address (the strong check) or `Fingerprint { fingerprint, passphrase }` for the BIP32
+  receiving address (the strong check), read with `wallet::Address::parse(coin, text)` for one of
+  the twelve `wallet::Coin`s, whose standard paths `Address::search_roots` names, or `Fingerprint { fingerprint, passphrase }` for the BIP32
   master key fingerprint. It returns a `CheckOutcome`: `Matches { path }` or `DoesNotMatch`, where
   `path` is the derivation path at which a matched address was found (`None` for the other
   references). No part of the recovered phrase comes out.
@@ -153,7 +154,9 @@ await client.encrypt({
 await client.decrypt({ container, password, pim, memoryLevel, words, onProgress });
 // { kind: "phrase" | "ambiguous", candidates: [{ words, verified, phrase, suiteId }] }
 await client.check({ container, password, reference, passphrase, onProgress }); // { matches, path }
-// reference: exactly one of { address, path? }, { fingerprint } or { words }
+// reference: exactly one of { address, coin?, path? }, { fingerprint } or { words };
+// coin: "bitcoin" (default), "ethereum" (every EVM network), "xrp", "tron", "zcash", "dogecoin",
+// "bitcoin-cash", "litecoin", "ethereum-classic", "cosmos", "injective" or "dash"
 await client.readPhrase(phrase); // { phrase, words, otherLengths }: every word written out, no Argon2
 // otherLengths: other lengths whose check the packed phrase also passes; almost always empty
 await client.readContainer(container); // { container, words }: 24, or 12 to 21 for the same length

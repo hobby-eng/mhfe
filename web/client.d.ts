@@ -59,17 +59,38 @@ export interface MhfeRecovery {
   candidates: MhfeCandidate[];
 }
 
+/**
+ * The coin of an address reference. "ethereum" covers every EVM network, such as BNB Smart Chain,
+ * Polygon, Avalanche C-Chain, Arbitrum, Optimism and Base.
+ */
+export type MhfeCoin =
+  | "bitcoin"
+  | "ethereum"
+  | "xrp"
+  | "tron"
+  | "zcash"
+  | "dogecoin"
+  | "bitcoin-cash"
+  | "litecoin"
+  | "ethereum-classic"
+  | "cosmos"
+  | "injective"
+  | "dash";
+
 /** Exactly one kind of reference; an object with several is refused with a TypeError. */
 export type MhfeReference =
-  /** A receiving address of the wallet: the strong check. */
-  | { address: string; path?: string; fingerprint?: never; words?: never }
+  /**
+   * A single-key receiving address of the wallet, the strong check. `coin` defaults to "bitcoin";
+   * the address is searched on that coin's standard paths, or only at `path`.
+   */
+  | { address: string; coin?: MhfeCoin; path?: string; fingerprint?: never; words?: never }
   /** The BIP32 master key fingerprint, eight hex digits: quick but weaker. */
-  | { fingerprint: string; address?: never; path?: never; words?: never }
+  | { fingerprint: string; address?: never; coin?: never; path?: never; words?: never }
   /**
    * The built-in check of a 12- to 21-word original in a 24-word container: confirms the
    * password, not the wallet. A same-length container has none (NO_BUILT_IN_CHECK).
    */
-  | { words: 12 | 15 | 18 | 21; address?: never; path?: never; fingerprint?: never };
+  | { words: 12 | 15 | 18 | 21; address?: never; coin?: never; path?: never; fingerprint?: never };
 
 export class MhfeError extends Error {
   readonly code: string;
