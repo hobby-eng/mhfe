@@ -11,7 +11,7 @@ use wasm_bindgen::prelude::*;
 use zeroize::Zeroizing;
 
 use crate::engine::browser::{BrowserEngine, JsArgon2, HIGHEST_BROWSER_MEMORY_LEVEL};
-use crate::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
+use crate::wallet::{parse_fingerprint, Address, Coin, DerivationPath, SearchLimits};
 use crate::{
     Mhfe, MhfeError, Password, PhraseLength, Recovery, Reference, Suite, WordCount,
     MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
@@ -213,7 +213,8 @@ struct CheckJson {
 /// recovery matches comes out, and for a matched address the path where it was found.
 ///
 /// `reference_kind` is "address", "fingerprint" or "words"; `reference` is the address, the
-/// eight hex digits or the word count; `path` is empty for the standard path search.
+/// eight hex digits or the word count; `coin` is the address's coin, such as "bitcoin" or
+/// "ethereum" (`Coin::id`); `path` is empty for the standard path search.
 #[allow(clippy::too_many_arguments)]
 #[wasm_bindgen]
 pub fn check(
@@ -223,6 +224,7 @@ pub fn check(
     memory_level: f64,
     reference_kind: &str,
     reference: &str,
+    coin: &str,
     path: &str,
     passphrase_utf8: Vec<u8>,
     argon2: JsArgon2,
@@ -234,11 +236,12 @@ pub fn check(
     let password = password_from(password_utf8)?;
     let passphrase = std::str::from_utf8(&passphrase_bytes)
         .map_err(|_| JsError::new("INVALID_PASSPHRASE: the BIP39 passphrase is not UTF-8"))?;
-    let address: BitcoinAddress;
+    let address: Address;
     let derivation_path: Option<DerivationPath>;
     let reference = match reference_kind {
         "address" => {
-            address = reference.parse().map_err(js_error)?;
+            let coin: Coin = coin.parse().map_err(js_error)?;
+            address = Address::parse(coin, reference).map_err(js_error)?;
             derivation_path = match path {
                 "" => None,
                 text => Some(text.parse().map_err(js_error)?),

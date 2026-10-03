@@ -7,7 +7,7 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::wallet::{parse_fingerprint, BitcoinAddress, DerivationPath, SearchLimits};
+use mhfe::wallet::{parse_fingerprint, Address, Coin, DerivationPath, SearchLimits};
 use mhfe::{MhfeError, Reference, Suite, WordCount};
 use zeroize::Zeroizing;
 
@@ -26,6 +26,10 @@ pub struct Options {
     /// Compare with a receiving address (strong check)
     #[arg(long, long_help = address_help())]
     address: bool,
+
+    /// With --address: the coin of the address (default bitcoin)
+    #[arg(long, value_name = "COIN", requires = "address", long_help = coin_help())]
+    coin: Option<Coin>,
 
     /// Compare with the master key fingerprint (quick, weaker)
     #[arg(long, long_help = fingerprint_help())]
@@ -47,11 +51,26 @@ pub struct Options {
 fn address_help() -> String {
     style::option_help(&[
         "Compare with a receiving address (strong check).",
-        "Asks for a Bitcoin address of the wallet, mainnet or testnet: legacy (1..., BIP44), \
-         nested SegWit (3..., BIP49), native SegWit (bc1q..., BIP84) or Taproot (bc1p..., \
-         BIP86). It searches the first 100 receiving and change addresses of accounts 0 to 9 \
-         on the standard path of that address type.",
+        "Asks for the coin and a single-key receiving address of the wallet: Bitcoin (1..., \
+         3..., bc1q... or bc1p..., also on testnet), Ethereum and EVM networks (0x...), XRP, \
+         Tron, Zcash (transparent t1...), Dogecoin, Bitcoin Cash, Litecoin, Ethereum Classic, \
+         Cosmos, Injective or Dash. It searches the first 100 receiving and change addresses \
+         of accounts 0 to 9 on the standard paths of that address, which it shows before the \
+         check.",
         "A match confirms the phrase, the wallet and its BIP39 passphrase together.",
+    ])
+}
+
+fn coin_help() -> String {
+    let coins: Vec<&str> = Coin::ALL.iter().map(|coin| coin.id()).collect();
+    style::option_help(&[
+        "With --address: the coin of the address (default bitcoin).",
+        &format!(
+            "One of {}. ethereum covers every EVM network, such as BNB Smart Chain, Polygon, \
+             Avalanche C-Chain, Arbitrum, Optimism and Base. Without this option a person is \
+             asked, and a script means bitcoin.",
+            coins.join(", ")
+        ),
     ])
 }
 
@@ -198,16 +217,25 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     // The reference and passphrase are read before the long computation starts, so the user
     // can walk away while it runs.
-    let address: BitcoinAddress;
+    let address: Address;
     let passphrase: Zeroizing<String>;
     let limits = SearchLimits::default();
     let reference = match choice {
         Choice::Address => {
+            let coin = match options.coin {
+                Some(coin) => coin,
+                None if input.is_script() => Coin::Bitcoin,
+                None => ask_for_coin(&mut input)?,
+            };
+            if options.coin.is_some() && !input.is_script() {
+                // The summary names the coin, as the question would have recorded it.
+                choice::record("Coin", coin.name());
+            }
             address = read_public(
                 &mut input,
-                "Receiving address of the wallet: ",
+                &format!("Receiving address ({}): ", coin.address_forms()),
                 ("Address", ""),
-                str::parse,
+                |text| Address::parse(coin, text),
             )?;
             show_search(&address, options.path.as_ref(), limits);
             passphrase = read_passphrase(&mut input)?;
@@ -279,30 +307,73 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     }
 }
 
+/// One 0x... address serves Ethereum and every EVM network, so the list names them under it.
+const COIN_EXPLANATION: &[&str] = &[
+    "One 0x… address serves Ethereum and every EVM network: BNB Smart Chain,",
+    "Polygon, Avalanche C-Chain, Arbitrum, Optimism, Base, Hyperliquid and",
+    "more, with their tokens such as USDT and USDC.",
+];
+
+/// Asks which coin the address belongs to, in alphabetical order.
+fn ask_for_coin(input: &mut Input) -> Result<Coin, Failure> {
+    let answers: Vec<Answer> = Coin::ALL
+        .iter()
+        .map(|coin| Answer::new(coin.name(), coin.address_forms()))
+        .collect();
+    let question = Question {
+        text: "Which coin is the address for?",
+        explanation: COIN_EXPLANATION,
+        more: &[],
+        record: Some("Coin"),
+    };
+    Ok(Coin::ALL[input.choose(&question, &answers)?])
+}
+
 /// States before the check what an address is and which addresses are searched for it, as the
 /// specification asks of a search: a "does not match" covers only these.
-fn show_search(address: &BitcoinAddress, path: Option<&DerivationPath>, limits: SearchLimits) {
-    let kind = address.address_type();
-    style::fact(
-        "Type",
-        format!(
-            "{}, {} (BIP{})",
-            address.network().name(),
-            kind.name(),
-            kind.purpose()
-        ),
-    );
+/// The roots of a search as one pattern, every step hardened: "44'/5'", or "44'/{145,0}'" where a
+/// coin has two coin types. Roots differ only in that step.
+fn root_pattern(roots: &[Vec<u32>]) -> String {
+    let steps = roots.first().map_or(0, Vec::len);
+    (0..steps)
+        .map(|step| {
+            let mut values: Vec<String> = Vec::new();
+            for root in roots {
+                let value = root[step].to_string();
+                if !values.contains(&value) {
+                    values.push(value);
+                }
+            }
+            match values.as_slice() {
+                [only] => format!("{only}'"),
+                several => format!("{{{}}}'", several.join(",")),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn show_search(address: &Address, path: Option<&DerivationPath>, limits: SearchLimits) {
+    if let Some(kind) = address.type_description() {
+        style::fact("Type", kind);
+    }
     let search = match path {
         Some(path) => format!("only {path}"),
         None => {
-            let last = |count: u32| count - 1;
+            let roots = address.search_roots();
+            let chains = if address.hardened_chains() {
+                "0'-1'"
+            } else {
+                "0-1"
+            };
+            let addresses =
+                roots.len() as u64 * 2 * u64::from(limits.accounts()) * u64::from(limits.indexes());
             format!(
-                "m/{}'/{}'/0'-{}'/0-1/0-{}, {} addresses",
-                kind.purpose(),
-                address.network().coin_type(),
-                last(limits.accounts()),
-                last(limits.indexes()),
-                grouped(2 * u64::from(limits.accounts()) * u64::from(limits.indexes()))
+                "m/{}/0'-{}'/{chains}/0-{}, {} addresses",
+                root_pattern(&roots),
+                limits.accounts() - 1,
+                limits.indexes() - 1,
+                grouped(addresses)
             )
         }
     };
@@ -435,6 +506,18 @@ fn read_passphrase(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_coin_explanation_fits_a_list() {
+        assert!(crate::choice::fits(COIN_EXPLANATION));
+    }
+
+    #[test]
+    fn search_roots_read_as_one_pattern() {
+        assert_eq!(root_pattern(&[vec![44, 5]]), "44'/5'");
+        assert_eq!(root_pattern(&[vec![44, 145], vec![44, 0]]), "44'/{145,0}'");
+        assert_eq!(root_pattern(&[vec![9, 5, 17]]), "9'/5'/17'");
+    }
 
     #[test]
     fn counts_are_grouped_by_thousands() {

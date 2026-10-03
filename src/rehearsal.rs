@@ -9,7 +9,7 @@ use crate::engine::Argon2Engine;
 use crate::mhfe::{phrase_from_entropy, suite_3_state};
 use crate::packing::{self, State};
 use crate::suite::Suite;
-use crate::wallet::{self, BitcoinAddress, DerivationPath, SearchLimits};
+use crate::wallet::{self, Address, DerivationPath, SearchLimits};
 use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
 
 /// What a rehearsal found. A match on a receiving address names the path where the address was
@@ -53,7 +53,7 @@ pub enum Reference<'a> {
     /// A receiving address of the wallet, the strong check. The address is searched on the
     /// standard paths of its type within `limits`, or only at `path` when given.
     Address {
-        address: &'a BitcoinAddress,
+        address: &'a Address,
         passphrase: &'a str,
         path: Option<&'a DerivationPath>,
         limits: SearchLimits,
@@ -170,9 +170,11 @@ mod tests {
             })
             .unwrap();
 
-        let address: BitcoinAddress = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
-            .parse()
-            .unwrap();
+        let address = Address::parse(
+            wallet::Coin::Bitcoin,
+            "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
+        )
+        .unwrap();
         let references = [
             Reference::BuiltInCheck {
                 words: WordCount::new(12).unwrap(),
