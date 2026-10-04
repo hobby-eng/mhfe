@@ -39,6 +39,10 @@ Planned as version 0.5.0.
   question is always at the bottom.
 - The program and its documents say "seed phrase" where they said "recovery phrase", so that it
   is not confused with recovering one: `mhfe decrypt` is now "Recover a seed phrase".
+- Secrets stay out of core dumps and swap: the tool forbids core dumps and, on Linux, other
+  programs of the same user from reading its memory; it keeps the password, the phrases and a BIP39
+  passphrase in locked memory, and marks Argon2's work area to be left out of a dump. On Linux it
+  warns before any secret is typed when swap is not encrypted.
 - `mhfe check` compares with a receiving address of twelve coins instead of Bitcoin alone: Bitcoin,
   Ethereum and every EVM network, XRP, Tron, Zcash (transparent), Dogecoin, Bitcoin Cash, Litecoin,
   Ethereum Classic, Cosmos, Injective and Dash, for Dash both Core `X…` and Platform payment

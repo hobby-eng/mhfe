@@ -1,5 +1,6 @@
-//! The only module with `unsafe` code: the calls into the vendored reference Argon2 C code and
-//! the operating-system queries for free memory. Every `unsafe` block states what it relies on.
+//! The only module with `unsafe` code: the calls into the vendored reference Argon2 C code, the
+//! operating-system queries for free memory, and the calls that keep secrets out of swap and core
+//! dumps. Every `unsafe` block states what it relies on.
 #![allow(unsafe_code)]
 
 use std::alloc::{self, Layout};
@@ -230,6 +231,7 @@ impl WorkArea {
         // SAFETY: the layout has a non-zero size. Zeroed memory comes from the operating
         // system lazily, so the pages are only committed when Argon2 writes them.
         let start = NonNull::new(unsafe { alloc::alloc_zeroed(layout) }).ok_or(refused)?;
+        exclude_from_core_dumps(start.as_ptr(), layout.size());
         Ok(Self { start, layout })
     }
 
@@ -257,6 +259,55 @@ impl WorkArea {
         unsafe { std::slice::from_raw_parts(self.start.as_ptr(), self.layout.size()) }
     }
 }
+
+/// Leaves the whole pages of `bytes` at `start` out of any core dump (MADV_DONTDUMP), so that a
+/// crash cannot write Argon2's blocks, from which a password guess could be tested cheaply, to
+/// disk. Best effort: the process also forbids core dumps as a whole (src/bin/mhfe/protect.rs),
+/// and a refusal leaves the area as it was. The partial pages at either end, at most two, stay
+/// as they are, because madvise works on whole pages only.
+#[cfg(target_os = "linux")]
+fn exclude_from_core_dumps(start: *mut u8, bytes: usize) {
+    // SAFETY: sysconf only reads a system value.
+    let page = match usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }) {
+        Ok(page) if page.is_power_of_two() => page,
+        _ => return,
+    };
+    let first = (start as usize).next_multiple_of(page);
+    let end = (start as usize + bytes) & !(page - 1);
+    if end > first {
+        // SAFETY: [first, end) lies inside the allocation of `bytes` bytes at `start`, which this
+        // process owns; MADV_DONTDUMP only marks the pages and changes no content.
+        unsafe { libc::madvise(first as *mut libc::c_void, end - first, libc::MADV_DONTDUMP) };
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn exclude_from_core_dumps(_start: *mut u8, _bytes: usize) {}
+
+/// Asks the operating system to keep the pages under `bytes` bytes at `start` in memory, never in
+/// swap (mlock). Returns whether it agreed: a low RLIMIT_MEMLOCK, for example, refuses.
+#[cfg(unix)]
+pub(crate) fn lock_pages(start: *const u8, bytes: usize) -> bool {
+    // SAFETY: mlock only changes how the kernel treats the pages of this process that contain
+    // the range; it reads and writes no memory, and a range that is not mapped is refused.
+    unsafe { libc::mlock(start.cast(), bytes) == 0 }
+}
+
+/// Undoes [`lock_pages`] for the same range.
+#[cfg(unix)]
+pub(crate) fn unlock_pages(start: *const u8, bytes: usize) {
+    // SAFETY: as for mlock; munlock of pages that are no longer locked or mapped is refused
+    // without effect.
+    unsafe { libc::munlock(start.cast(), bytes) };
+}
+
+#[cfg(not(unix))]
+pub(crate) fn lock_pages(_start: *const u8, _bytes: usize) -> bool {
+    false
+}
+
+#[cfg(not(unix))]
+pub(crate) fn unlock_pages(_start: *const u8, _bytes: usize) {}
 
 impl Drop for WorkArea {
     fn drop(&mut self) {

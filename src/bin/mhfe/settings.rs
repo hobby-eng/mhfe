@@ -110,8 +110,36 @@ pub fn choose(
         defaults
     };
     show(work, operation, asked);
+    warn_about_swap();
     check_resources(work)?;
     Ok(work)
+}
+
+/// Warns, before any secret is typed, when swap could write memory to a disk unencrypted.
+fn warn_about_swap() {
+    let areas = crate::protect::unprotected_swap();
+    if areas.is_empty() {
+        return;
+    }
+    let names: Vec<&str> = areas.iter().map(|area| area.name.as_str()).collect();
+    let headline = if areas.iter().all(|area| area.unknown) {
+        format!(
+            "MHFE cannot tell whether swap is encrypted: {}.",
+            names.join(", ")
+        )
+    } else {
+        format!(
+            "Swap on this computer is not encrypted: {}.",
+            names.join(", ")
+        )
+    };
+    style::warn(
+        &headline,
+        "The system may write memory there, Argon2's work area included, from which a password \
+         guess can be tested cheaply, and it can stay on the disk for years. Use a computer with \
+         encrypted swap or none, best a live system started from a USB stick.",
+    );
+    eprintln!();
 }
 
 /// Asks whether to keep the defaults; true when the person wants to give their own settings. The
