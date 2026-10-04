@@ -303,6 +303,9 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
             gray("on a current computer".into())
         ),
     );
+    if let Some(enforced) = isolation_text(crate::protect::isolation()) {
+        style::fact("Isolation", enforced);
+    }
     eprintln!();
     if matches!(operation, Operation::Encrypt) && work.memory_level() > 0 {
         style::warn(
@@ -314,6 +317,21 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         );
         eprintln!();
     }
+}
+
+/// What the kernel forbids this command, for the summary; `None` where it forbids nothing, as
+/// outside Linux.
+fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
+    let forbidden = match (isolation.no_network, isolation.no_writes) {
+        (true, true) => "no network, no file writes",
+        (true, false) => "no network",
+        (false, true) => "no file writes",
+        (false, false) => return None,
+    };
+    Some(format!(
+        "{forbidden} {}",
+        paint(MUTED, "(enforced by the kernel)")
+    ))
 }
 
 /// Refuses at once, before any secret is asked for, a memory level that this build or computer
