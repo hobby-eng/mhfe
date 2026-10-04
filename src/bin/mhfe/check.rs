@@ -7,6 +7,7 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
+use mhfe::memory::LockedPages;
 use mhfe::wallet::{parse_fingerprint, Address, Coin, DerivationPath, SearchLimits};
 use mhfe::{MhfeError, Reference, Suite, WordCount};
 use zeroize::Zeroizing;
@@ -219,6 +220,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // can walk away while it runs.
     let address: Address;
     let passphrase: Zeroizing<String>;
+    let _passphrase_locked: LockedPages;
     let limits = SearchLimits::default();
     let reference = match choice {
         Choice::Address => {
@@ -238,7 +240,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
                 |text| Address::parse(coin, text),
             )?;
             show_search(&address, options.path.as_ref(), limits);
-            passphrase = read_passphrase(&mut input)?;
+            (passphrase, _passphrase_locked) = read_passphrase(&mut input)?;
             Reference::Address {
                 address: &address,
                 passphrase: &passphrase,
@@ -253,7 +255,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
                 ("Master key", "fingerprint "),
                 parse_fingerprint,
             )?;
-            passphrase = read_passphrase(&mut input)?;
+            (passphrase, _passphrase_locked) = read_passphrase(&mut input)?;
             Reference::Fingerprint {
                 fingerprint,
                 passphrase: &passphrase,
@@ -465,13 +467,15 @@ fn read_public<T>(
 }
 
 /// The BIP39 passphrase is a separate secret from the MHFE password; most wallets have none. It is
-/// typed on the private screen, and the summary records only whether there is one.
-fn read_passphrase(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
+/// typed on the private screen, and the summary records only whether there is one. It comes with
+/// the lock that keeps it out of swap, which must live as long as it does.
+fn read_passphrase(input: &mut Input) -> Result<(Zeroizing<String>, LockedPages), Failure> {
     let screen = PrivateScreen::enter(input, Operation::Check.title());
     if screen.is_active() {
         eprintln!();
     }
     let passphrase = input.secret("BIP39 passphrase of the wallet, or Enter if it has none")?;
+    let locked = LockedPages::of_string(&passphrase);
     drop(screen);
     let what = if passphrase.is_empty() {
         "none"
@@ -479,7 +483,7 @@ fn read_passphrase(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
         "typed"
     };
     choice::record("Passphrase", what);
-    Ok(passphrase)
+    Ok((passphrase, locked))
 }
 
 #[cfg(test)]

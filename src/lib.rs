@@ -35,6 +35,7 @@
 pub mod engine;
 mod error;
 mod feistel;
+pub mod memory;
 mod mhfe;
 mod packing;
 mod password;
