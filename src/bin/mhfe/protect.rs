@@ -1,12 +1,19 @@
-//! What the tool does to keep secrets inside its own memory: no core dumps, no reading of its
-//! memory by other programs of the same user, and a warning when swap could write memory to a disk
-//! without encryption. Argon2's work area is far too large to keep out of swap (src/memory.rs), and
-//! from its blocks a password guess can be tested cheaply, so unencrypted swap matters.
+//! What the tool does to keep secrets inside its own memory and itself offline:
+//!
+//! - no core dumps, and no reading of its memory by other programs of the same user;
+//! - a warning when swap could write memory to a disk without encryption. Argon2's work area is far
+//!   too large to keep out of swap (src/memory.rs), and from its blocks a password guess can be
+//!   tested cheaply, so unencrypted swap matters;
+//! - on Linux, a command that handles secrets cannot open a network socket (seccomp) or write to
+//!   any file (Landlock): the kernel enforces that it stays offline, so not even a fault or a
+//!   tampered dependency could send a secret away or leave it in a file. Both apply to the thread
+//!   that runs the command and every thread it starts, such as Argon2's, and cannot be undone.
 
-// prctl and setrlimit are operating-system calls that Rust offers only through unsafe foreign
-// functions.
+// prctl, setrlimit and the Landlock calls are operating-system calls that Rust offers only through
+// unsafe foreign functions.
 #![allow(unsafe_code)]
 
+use std::cell::Cell;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -28,6 +35,260 @@ pub fn harden_process() {
     {
         // SAFETY: PR_SET_DUMPABLE takes an integer and touches no memory of this process.
         unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) };
+    }
+}
+
+/// What a command needs that isolation would forbid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Needs {
+    pub network: bool,
+    pub writes: bool,
+}
+
+impl Needs {
+    /// A command that handles secrets needs neither.
+    pub const NOTHING: Self = Self {
+        network: false,
+        writes: false,
+    };
+}
+
+/// What the kernel enforces for the thread that runs a command.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Isolation {
+    pub no_network: bool,
+    pub no_writes: bool,
+}
+
+thread_local! {
+    /// Set by [`isolate`] for the thread it isolated, read by the summary of the command.
+    static ISOLATION: Cell<Isolation> = const { Cell::new(Isolation { no_network: false, no_writes: false }) };
+}
+
+/// Forbids the calling thread, and every thread it starts afterwards, what `needs` does not
+/// include, as far as the kernel allows: sockets through seccomp, writes to files through
+/// Landlock (Linux 5.13 and later). Files and terminals that are already open stay usable. Returns
+/// what is now enforced; elsewhere than on Linux nothing is.
+pub fn isolate(needs: Needs) -> Isolation {
+    let isolation = isolate_thread(needs);
+    ISOLATION.with(|current| current.set(isolation));
+    isolation
+}
+
+/// What [`isolate`] enforced for the calling thread.
+pub fn isolation() -> Isolation {
+    ISOLATION.with(Cell::get)
+}
+
+#[cfg(target_os = "linux")]
+fn isolate_thread(needs: Needs) -> Isolation {
+    if needs.network && needs.writes {
+        return Isolation::default();
+    }
+    // Both seccomp and Landlock require no_new_privs for an unprivileged process: no program it
+    // starts can gain privileges, as a set-user-ID program would.
+    // SAFETY: PR_SET_NO_NEW_PRIVS takes integers and touches no memory of this process.
+    if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
+        return Isolation::default();
+    }
+    Isolation {
+        no_writes: !needs.writes && landlock::forbid_writes(!needs.network),
+        no_network: !needs.network && seccomp::forbid_sockets(),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn isolate_thread(_needs: Needs) -> Isolation {
+    Isolation::default()
+}
+
+/// A seccomp filter that refuses the creation of any socket with EACCES. Without a socket nothing
+/// can be sent or received over a network; Unix sockets go too, which the tool does not use.
+#[cfg(target_os = "linux")]
+mod seccomp {
+    /// The architecture of the system calls the filter expects (AUDIT_ARCH_* in
+    /// linux/audit.h); calls of any other ABI, such as 32-bit ones, are refused as well.
+    #[cfg(target_arch = "x86_64")]
+    const ARCH: u32 = 0xC000_003E;
+    #[cfg(target_arch = "aarch64")]
+    const ARCH: u32 = 0xC000_00B7;
+    /// x32 system calls on x86-64 carry this bit in their number (__X32_SYSCALL_BIT); refused.
+    #[cfg(target_arch = "x86_64")]
+    const X32_SYSCALL_BIT: u32 = 0x4000_0000;
+    /// Offsets in `struct seccomp_data` (linux/seccomp.h): `int nr`, then `__u32 arch`.
+    const NUMBER_OFFSET: u32 = 0;
+    const ARCH_OFFSET: u32 = 4;
+
+    fn load(offset: u32) -> libc::sock_filter {
+        libc::sock_filter {
+            code: (libc::BPF_LD | libc::BPF_W | libc::BPF_ABS) as u16,
+            jt: 0,
+            jf: 0,
+            k: offset,
+        }
+    }
+
+    fn jump(condition: u32, value: u32, jt: u8, jf: u8) -> libc::sock_filter {
+        libc::sock_filter {
+            code: (libc::BPF_JMP | condition | libc::BPF_K) as u16,
+            jt,
+            jf,
+            k: value,
+        }
+    }
+
+    fn ret(value: u32) -> libc::sock_filter {
+        libc::sock_filter {
+            code: (libc::BPF_RET | libc::BPF_K) as u16,
+            jt: 0,
+            jf: 0,
+            k: value,
+        }
+    }
+
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    pub(super) fn forbid_sockets() -> bool {
+        let refuse = libc::SECCOMP_RET_ERRNO | libc::EACCES as u32;
+        // Each test jumps forward to the final instruction, which refuses; `to_refusal` counts the
+        // instructions between a test and it.
+        let mut tests = vec![
+            (libc::BPF_JEQ, libc::SYS_socket as u32),
+            (libc::BPF_JEQ, libc::SYS_socketpair as u32),
+        ];
+        #[cfg(target_arch = "x86_64")]
+        tests.insert(0, (libc::BPF_JGE, X32_SYSCALL_BIT));
+        let mut program = vec![load(ARCH_OFFSET)];
+        // Instructions after the architecture test: load, the tests, allow; then the refusal.
+        let after_arch = 1 + tests.len() + 1;
+        program.push(jump(libc::BPF_JEQ, ARCH, 0, after_arch as u8));
+        program.push(load(NUMBER_OFFSET));
+        for (position, &(condition, value)) in tests.iter().enumerate() {
+            let to_refusal = (tests.len() - position) as u8;
+            program.push(jump(condition, value, to_refusal, 0));
+        }
+        program.push(ret(libc::SECCOMP_RET_ALLOW));
+        program.push(ret(refuse));
+        let filter = libc::sock_fprog {
+            len: program.len() as u16,
+            filter: program.as_mut_ptr(),
+        };
+        // SAFETY: the filter points to `len` instructions that live for the call; the kernel copies
+        // them. It affects only the calling thread and the threads it starts afterwards.
+        unsafe {
+            libc::prctl(
+                libc::PR_SET_SECCOMP,
+                libc::SECCOMP_MODE_FILTER,
+                &filter as *const libc::sock_fprog,
+                0,
+                0,
+            ) == 0
+        }
+    }
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    pub(super) fn forbid_sockets() -> bool {
+        false
+    }
+}
+
+/// A Landlock ruleset that handles every right to change the file system and grants none, so that
+/// no file can be written, created, renamed or removed; reading stays unrestricted. On Linux 6.7
+/// and later it also refuses TCP bind and connect, besides seccomp.
+#[cfg(target_os = "linux")]
+mod landlock {
+    use std::mem::size_of;
+    use std::ptr;
+
+    /// `struct landlock_ruleset_attr` of linux/landlock.h; ABI 1 to 3 know only its first field.
+    #[repr(C)]
+    struct RulesetAttr {
+        handled_access_fs: u64,
+        handled_access_net: u64,
+    }
+
+    /// LANDLOCK_CREATE_RULESET_VERSION: asks for the ABI version instead of creating a ruleset.
+    const CREATE_RULESET_VERSION: u32 = 1;
+    /// The rights of linux/landlock.h that change the file system, by the ABI that added them.
+    const WRITE_FILE: u64 = 1 << 1;
+    const REMOVE_DIR: u64 = 1 << 4;
+    const REMOVE_FILE: u64 = 1 << 5;
+    const MAKE_CHAR: u64 = 1 << 6;
+    const MAKE_DIR: u64 = 1 << 7;
+    const MAKE_REG: u64 = 1 << 8;
+    const MAKE_SOCK: u64 = 1 << 9;
+    const MAKE_FIFO: u64 = 1 << 10;
+    const MAKE_BLOCK: u64 = 1 << 11;
+    const MAKE_SYM: u64 = 1 << 12;
+    const REFER: u64 = 1 << 13; // ABI 2
+    const TRUNCATE: u64 = 1 << 14; // ABI 3
+    const BIND_TCP: u64 = 1 << 0; // ABI 4, network rights
+    const CONNECT_TCP: u64 = 1 << 1;
+
+    pub(super) fn forbid_writes(also_tcp: bool) -> bool {
+        // SAFETY: with a null attribute and the version flag the call only returns a number.
+        let abi = unsafe {
+            libc::syscall(
+                libc::SYS_landlock_create_ruleset,
+                ptr::null::<RulesetAttr>(),
+                0usize,
+                CREATE_RULESET_VERSION,
+            )
+        };
+        if abi < 1 {
+            // No Landlock in this kernel, or it is switched off.
+            return false;
+        }
+        let mut handled_fs = WRITE_FILE
+            | REMOVE_DIR
+            | REMOVE_FILE
+            | MAKE_CHAR
+            | MAKE_DIR
+            | MAKE_REG
+            | MAKE_SOCK
+            | MAKE_FIFO
+            | MAKE_BLOCK
+            | MAKE_SYM;
+        if abi >= 2 {
+            handled_fs |= REFER;
+        }
+        if abi >= 3 {
+            handled_fs |= TRUNCATE;
+        }
+        let with_network = abi >= 4;
+        let attr = RulesetAttr {
+            handled_access_fs: handled_fs,
+            handled_access_net: if with_network && also_tcp {
+                BIND_TCP | CONNECT_TCP
+            } else {
+                0
+            },
+        };
+        let size = if with_network {
+            size_of::<RulesetAttr>()
+        } else {
+            size_of::<u64>()
+        };
+        // SAFETY: the attribute lives for the call and `size` covers only the fields this ABI
+        // knows; the kernel returns a new file descriptor or an error.
+        let ruleset = unsafe {
+            libc::syscall(
+                libc::SYS_landlock_create_ruleset,
+                &attr as *const RulesetAttr,
+                size,
+                0u32,
+            )
+        };
+        if ruleset < 0 {
+            return false;
+        }
+        let ruleset = ruleset as libc::c_int;
+        // No rule grants any of the handled rights: they are refused everywhere.
+        // SAFETY: the descriptor came from the call above and is closed once.
+        unsafe {
+            let restricted = libc::syscall(libc::SYS_landlock_restrict_self, ruleset, 0u32) == 0;
+            libc::close(ruleset);
+            restricted
+        }
     }
 }
 
@@ -247,6 +508,47 @@ mod tests {
     #[test]
     fn no_swap_needs_no_warning() {
         assert_eq!(FakeSystem::new("").unprotected(), []);
+    }
+
+    /// In a thread of its own, so that the other tests stay free: a socket cannot be opened and a
+    /// file cannot be written, where the kernel offers each, while the test's own thread can.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_isolated_thread_cannot_open_a_socket_or_write_a_file() {
+        let folder = std::env::temp_dir().join(format!("mhfe-isolation-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        let target = folder.join("written");
+        let (isolation, socket, write) = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let isolation = isolate(Needs::NOTHING);
+                    assert_eq!(super::isolation(), isolation);
+                    let socket = std::net::TcpListener::bind("127.0.0.1:0").is_ok();
+                    let write = fs::write(&target, "x").is_ok();
+                    (isolation, socket, write)
+                })
+                .join()
+                .unwrap()
+        });
+        // seccomp is in every kernel this tool supports.
+        assert!(isolation.no_network);
+        assert!(!socket, "a socket was opened");
+        assert_eq!(write, !isolation.no_writes, "Landlock: {isolation:?}");
+        // The rest of the process is not isolated.
+        assert_eq!(super::isolation(), Isolation::default());
+        assert!(std::net::TcpListener::bind("127.0.0.1:0").is_ok());
+        fs::write(&target, "x").unwrap();
+        let _ = fs::remove_dir_all(&folder);
+    }
+
+    #[test]
+    fn a_command_that_needs_everything_is_not_isolated() {
+        let needs = Needs {
+            network: true,
+            writes: true,
+        };
+        let isolation = std::thread::scope(|scope| scope.spawn(|| isolate(needs)).join().unwrap());
+        assert_eq!(isolation, Isolation::default());
     }
 
     #[cfg(target_os = "linux")]

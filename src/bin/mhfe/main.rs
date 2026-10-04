@@ -139,13 +139,16 @@ fn main_help() -> String {
 fn main() {
     // Before anything else, so that no secret can ever be in a core dump.
     protect::harden_process();
-    terminal::stop_on_ctrl_c();
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
-    // menu, which runs the same commands.
+    // menu, which runs the same commands, each in an isolated thread of its own.
     let result = if std::env::args_os().len() == 1 && choice::can_run() {
+        terminal::stop_on_ctrl_c();
         menu::run()
     } else {
-        run(Cli::parse().command)
+        let command = Cli::parse().command;
+        protect::isolate(needs_of(&command));
+        terminal::stop_on_ctrl_c();
+        run(command)
     };
     let exit_code = match result {
         Ok(code) => code,
@@ -166,6 +169,24 @@ fn show_failure(failure: &Failure) {
     } else if !failure.message.is_empty() {
         anstream::eprintln!();
         style::error(&failure.to_string());
+    }
+}
+
+/// What a command needs that isolation would otherwise forbid (protect.rs).
+fn needs_of(command: &Command) -> protect::Needs {
+    match command {
+        // The fast mode serves a page to a browser it may start, which must write its profile; it
+        // handles no secret itself.
+        Command::Serve(_) => protect::Needs {
+            network: true,
+            writes: true,
+        },
+        // Writes the vector files into the folder it is given.
+        Command::TestVectors(_) => protect::Needs {
+            network: false,
+            writes: true,
+        },
+        _ => protect::Needs::NOTHING,
     }
 }
 
