@@ -98,6 +98,9 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      # For the build provenance (actions/attest): the workflow's OIDC identity gets a short-lived
+      # Sigstore signing certificate, and GitHub stores the attestation. No artifact-metadata: the
+      # action writes a storage record only for images pushed to a registry, not for files.
       id-token: write
       attestations: write
     steps:
