@@ -43,6 +43,9 @@ Planned as version 0.5.0.
   programs of the same user from reading its memory; it keeps the password, the phrases and a BIP39
   passphrase in locked memory, and marks Argon2's work area to be left out of a dump. On Linux it
   warns before any secret is typed when swap is not encrypted.
+- On Linux the kernel enforces that `encrypt`, `decrypt`, `check` and `password` stay offline and
+  write no file: seccomp refuses sockets and Landlock refuses file writes, for every thread the
+  command starts. The summary shows it; the start menu runs each command in an isolated thread.
 - `mhfe check` compares with a receiving address of twelve coins instead of Bitcoin alone: Bitcoin,
   Ethereum and every EVM network, XRP, Tron, Zcash (transparent), Dogecoin, Bitcoin Cash, Litecoin,
   Ethereum Classic, Cosmos, Injective and Dash. It asks for the coin, or takes `--coin`, and shows

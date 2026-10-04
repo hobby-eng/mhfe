@@ -18,7 +18,7 @@ use crate::choice::{draw_entries, redraw_from, write_control};
 use crate::exit::{Failure, SUCCESS};
 use crate::hidden_input::{self, Key};
 use crate::style;
-use crate::{serve, show_failure, terminal, Cli};
+use crate::{protect, serve, show_failure, terminal, Cli};
 
 /// What an entry does when it is chosen.
 enum Action {
@@ -169,11 +169,21 @@ fn draw(entries: &[Entry], selected: usize) -> usize {
     entry_lines + 2
 }
 
+/// Runs a command in a thread of its own, isolated as a command started directly would be: the
+/// isolation cannot be undone, and the menu must stay free to start the fast mode later.
 fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
     let typed = std::iter::once(OsString::from("mhfe")).chain(arguments.iter().cloned());
     let cli = Cli::try_parse_from(typed)
         .map_err(|error| Failure::internal(format!("The menu built a wrong command: {error}")))?;
-    crate::run(cli.command)
+    std::thread::scope(|scope| {
+        let worker = scope.spawn(|| {
+            protect::isolate(crate::needs_of(&cli.command));
+            crate::run(cli.command)
+        });
+        worker
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+    })
 }
 
 /// Runs `mhfe password` on the private screen, again on every Enter, until Escape returns to the
