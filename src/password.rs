@@ -9,14 +9,18 @@ use unicode_normalization::char::is_public_assigned;
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
+use crate::memory::LockedPages;
 use crate::MhfeError;
 
 /// Longest accepted password after normalization, in bytes.
 pub const MAX_PASSWORD_BYTES: usize = 1024;
 
-/// A normalized password. It is wiped from memory when dropped and never printed.
+/// A normalized password. It is kept out of swap, wiped from memory when dropped and never
+/// printed.
 pub struct Password {
     encoded: Zeroizing<Vec<u8>>,
+    // Declared after `encoded`, so that the pages are unlocked only once they are wiped.
+    _locked: LockedPages,
 }
 
 impl Password {
@@ -42,6 +46,8 @@ impl Password {
         // The buffer is allocated once at its largest allowed size and never grows, so no
         // reallocation can leave an unwiped copy of the password behind.
         let mut encoded = Zeroizing::new(Vec::with_capacity(MAX_PASSWORD_BYTES));
+        // Locked before the password is written into it.
+        let locked = LockedPages::of_vec(&encoded);
         let mut encoded_length = 0usize;
         let mut character_bytes = [0u8; 4];
         for character in text.nfkd() {
@@ -56,7 +62,10 @@ impl Password {
         match encoded_length {
             0 => Err(MhfeError::EmptyPassword),
             length if length > MAX_PASSWORD_BYTES => Err(MhfeError::PasswordTooLong(length)),
-            _ => Ok(Self { encoded }),
+            _ => Ok(Self {
+                encoded,
+                _locked: locked,
+            }),
         }
     }
 

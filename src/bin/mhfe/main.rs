@@ -2,9 +2,10 @@
 //!
 //! It turns an English BIP39 seed phrase into a password-protected 24-word container and
 //! back, rehearses a recovery without showing the phrase, and makes strong passwords from dice
-//! words. Secrets are only ever typed at a hidden prompt or read from standard input, never
-//! taken from command-line arguments.
-// No unsafe code, except the few terminal calls in hidden_input.rs that switch the echo off.
+//! words. Secrets are only ever typed at a terminal or read from standard input, never taken from
+//! command-line arguments.
+// No unsafe code, except the few operating-system calls in hidden_input.rs, which switch the
+// terminal's echo off, and in protect.rs, which forbid core dumps.
 #![deny(unsafe_code)]
 
 mod check;
@@ -16,6 +17,7 @@ mod exit;
 mod hidden_input;
 mod length_choice;
 mod menu;
+mod protect;
 mod serve;
 mod settings;
 mod style;
@@ -135,6 +137,8 @@ fn main_help() -> String {
 }
 
 fn main() {
+    // Before anything else, so that no secret can ever be in a core dump.
+    protect::harden_process();
     terminal::stop_on_ctrl_c();
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
     // menu, which runs the same commands.

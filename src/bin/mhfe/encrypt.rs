@@ -6,6 +6,7 @@ use std::io::{self, IsTerminal};
 use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::engine::NativeEngine;
+use mhfe::memory::LockedPages;
 use mhfe::{
     other_detected_lengths, read_phrase, Mhfe, MhfeError, NewContainer, Password, Suite, WorkFactor,
 };
@@ -127,6 +128,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let work = settings::choose(options.settings, &mut input, Operation::Encrypt)?;
 
     let original = read_original(&mut input)?;
+    // Kept out of swap until it is wiped, through all of the long computation.
+    let _original_locked = LockedPages::of_string(&original);
     let original_words = original.split(' ').count();
     let suite = choose_suite(original_words, options.same_length, &input)?;
     // The rare phrase that also passes the check of another length; only a 24-word container
