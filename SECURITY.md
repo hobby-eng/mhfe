@@ -36,10 +36,21 @@ Never include a real seed phrase, password, private key or wallet file.
   system, swap or a terminal's scrollback can keep copies beyond the program's reach, and so can the
   standard library's own buffer of standard input. Answers read from standard input are limited to
   8192 bytes and read into a buffer of that size, so the program's copy never has to grow and leave
-  an unwiped copy behind. At a terminal, the phrase or password that a person asks to see and a
-  recovered phrase appear on the terminal's alternate screen, which is cleared before the tool
-  returns to the main screen, so they do not enter its scrollback; a terminal that logs its output
-  or a screen recording keeps them all the same.
+  an unwiped copy behind. At a terminal, secrets, a new container and a recovered phrase appear on
+  the terminal's alternate screen, which is cleared before the tool returns to the main screen, so
+  they do not enter its scrollback; a terminal that logs its output or a screen recording keeps
+  them all the same.
+- The tool keeps secrets out of core dumps and swap. It forbids core dumps (`RLIMIT_CORE` 0) and,
+  on Linux, makes itself non-dumpable (`PR_SET_DUMPABLE` 0), which also keeps other programs of the
+  same user from attaching to it or reading its memory through `/proc`, so a crash writes nothing
+  to disk; the Argon2 work area is marked `MADV_DONTDUMP` as well. The password, the original
+  phrase while it is encrypted, the entropy kept for the check, a recovered phrase, a BIP39
+  passphrase and the line a secret is typed into are locked in memory (`mlock`), so that the system
+  does not write them to swap; this is best effort and does not apply in a browser or on Windows.
+  The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
+  can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
+  area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap in memory
+  (zram) is safe. macOS encrypts its swap; on Windows, use BitLocker or no page file.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original phrase: a typing mistake or a
   hardware fault cannot silently produce a container that no password opens. At a terminal the
@@ -59,7 +70,10 @@ Never include a real seed phrase, password, private key or wallet file.
 Argon2 is the reference C implementation, vendored unchanged (see
 [`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code of the library
 is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
-The command-line tool denies it too, except in `src/bin/mhfe/hidden_input.rs`, which switches the
+The engine module also makes the calls that lock secrets in memory and keep the work area out of
+core dumps (`mlock`, `madvise`). The command-line tool denies unsafe code too, except in
+`src/bin/mhfe/protect.rs`, which forbids core dumps (`setrlimit`, `prctl`), and in
+`src/bin/mhfe/hidden_input.rs`, which switches the
 terminal's echo and line mode for a secret's prompt and a list (`tcgetattr`/`tcsetattr` on Unix,
 `GetConsoleMode`/`SetConsoleMode` on Windows) and restores them, and reads the terminal's width and
 whether a key follows Escape (`ioctl`/`select` on Unix, `GetConsoleScreenBufferInfo`/

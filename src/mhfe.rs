@@ -8,6 +8,7 @@ use crate::engine::Argon2Engine;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::engine::NativeEngine;
 use crate::feistel::{Geometry, Permutation};
+use crate::memory::LockedPages;
 use crate::packing::{self, State};
 use crate::suite::{Suite, ROUNDS};
 use crate::{phrase, MhfeError, Password, WorkFactor};
@@ -56,6 +57,21 @@ pub struct RecoveredPhrase {
     pub phrase: Zeroizing<String>,
     /// The suite of the container it came from.
     pub suite: Suite,
+    // The pages of `phrase`, kept out of swap; declared after it, so they are unlocked once wiped.
+    _locked: LockedPages,
+}
+
+impl RecoveredPhrase {
+    fn new(words: usize, verified: bool, phrase: Zeroizing<String>, suite: Suite) -> Self {
+        let locked = LockedPages::of_string(&phrase);
+        Self {
+            words,
+            verified,
+            phrase,
+            suite,
+            _locked: locked,
+        }
+    }
 }
 
 /// The result of recovery.
@@ -80,6 +96,8 @@ pub struct NewContainer {
     pub suite: Suite,
     /// The state `X` the check must get back: the packed original, or the entropy itself.
     source: Zeroizing<Vec<u8>>,
+    // The pages of `source`, kept out of swap while the check runs.
+    _locked: LockedPages,
 }
 
 /// MHFE at one work factor, together with the Argon2 engine that computes it.
@@ -157,10 +175,12 @@ impl<E: Argon2Engine> Mhfe<E> {
             None,
         )?;
         reject_fixed_point(&x, &y)?;
+        let locked = LockedPages::of_vec(&x);
         Ok(NewContainer {
             words: phrase_from_entropy(&y)?,
             suite,
             source: x,
+            _locked: locked,
         })
     }
 
@@ -230,12 +250,12 @@ impl<E: Argon2Engine> Mhfe<E> {
                 let x = suite_3_state(&x)?;
                 recover(&x, length)
             }
-            Suite::SameLength => Ok(Recovery::Phrase(RecoveredPhrase {
-                words: x.len() / 4 * 3,
-                verified: false,
-                phrase: phrase_from_entropy(&x)?,
+            Suite::SameLength => Ok(Recovery::Phrase(RecoveredPhrase::new(
+                x.len() / 4 * 3,
+                false,
+                phrase_from_entropy(&x)?,
                 suite,
-            })),
+            ))),
         }
     }
 
@@ -366,12 +386,12 @@ pub(crate) fn container_state(
 /// Reads `X` as a phrase of `words` words; a short length must pass its check.
 fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
     let entropy = packing::unpack(x, words)?;
-    Ok(RecoveredPhrase {
+    Ok(RecoveredPhrase::new(
         words,
-        verified: words < 24,
-        phrase: phrase_from_entropy(&entropy)?,
-        suite: Suite::TwentyFourWords,
-    })
+        words < 24,
+        phrase_from_entropy(&entropy)?,
+        Suite::TwentyFourWords,
+    ))
 }
 
 pub(crate) fn phrase_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>, MhfeError> {

@@ -284,6 +284,8 @@ fn edit_line(
     use keys::{BACKSPACE, CTRL_D, CTRL_U, DELETE};
 
     let mut line = Zeroizing::new(Vec::with_capacity(LINE_CAPACITY));
+    // Locked before anything is typed into it: the line may be a password or a phrase.
+    let _line_locked = mhfe::memory::LockedPages::of_vec(&line);
     // For every character of the line, whether it was written to `echo`; only those are erased.
     let mut written: Vec<bool> = Vec::with_capacity(LINE_CAPACITY);
     // Where the character still arriving begins: a UTF-8 character comes one byte at a time.
