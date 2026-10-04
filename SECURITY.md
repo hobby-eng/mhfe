@@ -62,6 +62,15 @@ Never include a real seed phrase, password, private key or wallet file.
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
   (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which
   listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
+- On Linux the kernel enforces this. A command that handles secrets (`encrypt`, `decrypt`,
+  `check`, `password`) runs under a seccomp filter that refuses to create any socket, and under a
+  Landlock ruleset that refuses every write to the file system (Linux 5.13 and later; from Linux
+  6.7 also TCP bind and connect). Both cover every thread the command starts, Argon2's included,
+  and cannot be undone; the start menu runs each command in a thread of its own, so that it can
+  still start `mhfe serve`, which is not isolated because the browser it opens must write its
+  profile. The summary of a command says what the kernel enforces. A fault or a tampered
+  dependency therefore cannot send a secret away or leave it in a file; the program's own output
+  goes only to the terminal or to where standard output is redirected.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 
@@ -72,7 +81,8 @@ Argon2 is the reference C implementation, vendored unchanged (see
 is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
 The engine module also makes the calls that lock secrets in memory and keep the work area out of
 core dumps (`mlock`, `madvise`). The command-line tool denies unsafe code too, except in
-`src/bin/mhfe/protect.rs`, which forbids core dumps (`setrlimit`, `prctl`), and in
+`src/bin/mhfe/protect.rs`, which forbids core dumps (`setrlimit`, `prctl`) and isolates a command
+(seccomp, Landlock), and in
 `src/bin/mhfe/hidden_input.rs`, which switches the
 terminal's echo and line mode for a secret's prompt and a list (`tcgetattr`/`tcsetattr` on Unix,
 `GetConsoleMode`/`SetConsoleMode` on Windows) and restores them, and reads the terminal's width and

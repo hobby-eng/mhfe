@@ -177,7 +177,8 @@ offer their answers as a list: choose with the arrow keys and Enter, or press an
 Escape cancels.
 
 Use it on a trusted computer that stays offline while the phrase and the password are on it, best a
-Linux system started from a USB stick with the network off. On Windows, Windows PE from a USB stick
+Linux system started from a USB stick with the network off. On Linux the kernel also keeps MHFE
+itself from opening any network connection or writing any file while it handles a secret. On Windows, Windows PE from a USB stick
 is better than your everyday system; `mhfe.exe` needs nothing beyond Windows itself, though it has
 not been tested in Windows PE yet.
 
