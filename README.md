@@ -1,8 +1,11 @@
 # MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics
 
-[![CI](https://github.com/hobby-eng/mhfe/actions/workflows/ci.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/ci.yml)
+[![CI](https://github.com/hobby-eng/mhfe/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hobby-eng/mhfe/actions/workflows/ci.yml)
+[![Release](https://github.com/hobby-eng/mhfe/actions/workflows/release.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/release.yml)
 [![Test vectors](https://github.com/hobby-eng/mhfe/actions/workflows/vectors.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/vectors.yml)
 [![RustSec audit](https://github.com/hobby-eng/mhfe/actions/workflows/audit.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/audit.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Build provenance: GitHub attestations](https://img.shields.io/badge/build%20provenance-GitHub%20attestations-2ea44f)](https://github.com/hobby-eng/mhfe/attestations)
 
 <p align="center">
   <img src="assets/mhfe-mascot.png" alt="MHFE penguin mascot carrying a cold-storage plate" width="240">
@@ -353,6 +356,14 @@ Check a download against the release's `SHA256SUMS` before you use it:
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS
+```
+
+Every release file also has a signed build provenance: GitHub records which run of the release
+workflow built it, from which commit. Check it on the computer you downloaded the file with, since
+the check needs the network, and only then carry the file to the offline computer:
+
+```bash
+gh attestation verify mhfe-v0.4.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
 ```
 
 ## For developers
