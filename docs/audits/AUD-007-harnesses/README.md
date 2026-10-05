@@ -91,6 +91,25 @@ are written only in the ignored evidence directory. The terminal probe's expecte
 the reviewed bugs are reproduced and fail after the corresponding behavior is repaired. Reruns
 overwrite their own evidence labels, so preserve the existing records before rerunning.
 
+`wallets_private_session.py` belongs to the remediation update of 2026-10-05, not to the review
+of `d1cf47d0960a5023e6e503310802e5e2da438568`. It verifies AUD-007-SEC005 at commit
+`ba75301b91e2cb2715c8c442a3f7907d6881d81e` with one real `mhfe wallets` session at full cost on
+the public zero-12 suite 3 container: the container's own public password is refused by rule I29
+and its message stays readable, a synthetic password opens a 24-word wallet, and the main screen,
+everything outside the terminal's alternate screen, shows no wallet, no wallet number and no
+question about another one. `mhfe decrypt` with the synthetic password must then give the shown
+wallet, unverified. It needs Linux or macOS, Python 3 and a release build
+(`cargo build --locked --release`, or a program path as its argument). It runs the self-test and
+three recoveries at 2 GiB, about four minutes, so run it in a memory-capped unit:
+
+```sh
+python3 docs/audits/AUD-007-harnesses/run.py run remediation-wallets-private-session -- systemd-run --user --wait --pipe --quiet -p MemoryMax=3500M --working-directory="$PWD" /usr/bin/python3 "$PWD/docs/audits/AUD-007-harnesses/wallets_private_session.py"
+```
+
+Expected output ends with two `OK:` lines and exits zero; a failed assertion exits nonzero. The
+remediation update also reran the FUN001 and SEC002 probes above, which now fail as expected, and
+records every command, exit code and log hash in the report.
+
 `validate_report.py` checks the paired AUD-007 Markdown/JSON against the shared audit schema,
 rejects duplicate keys, verifies all 32 procedure IDs and finding records, compares command-log
 hashes and the reviewed source snapshot, and checks the later Electrum documentation follow-up
@@ -101,7 +120,10 @@ procedure files and the local ignored evidence captured by this audit.
 python3 docs/audits/AUD-007-harnesses/validate_report.py
 ```
 
-Expected output is passing validation JSON with 12 findings and 32 procedure checks. A failed
+Since the remediation update it accepts every status of the audit standard; a finding's status
+must agree in the register, the remediation table and the JSON, and every named fix or
+verification commit must exist in this repository. Expected output is passing validation JSON with
+12 findings and 32 procedure checks. A failed
 assertion or schema error exits nonzero. It writes only local `report-validation.json` and
 `SHA256SUMS` in the ignored evidence folder; it does not update publication records or production
 source.
