@@ -25,6 +25,8 @@ pub const CHECK: &str = section!("mhfe-check");
 pub const DECRYPT: &str = section!("mhfe-decrypt");
 /// What a new password or new settings change, and what they do not.
 pub const REKEY: &str = section!("mhfe-rekey");
+/// What a failed self-test means.
+pub const SELF_TEST: &str = section!("mhfe-self-test");
 
 #[cfg(test)]
 mod tests {
@@ -40,6 +42,7 @@ mod tests {
         CHECK,
         DECRYPT,
         REKEY,
+        SELF_TEST,
     ];
 
     /// The anchor GitHub gives a heading: lower case, spaces as hyphens, and only letters,

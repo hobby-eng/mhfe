@@ -65,6 +65,8 @@ BACKSPACE, CTRL_U, CTRL_C = b"\x7f", b"\x15", b"\x03"
 UP, DOWN, ENTER, CTRL_UP, ESCAPE = b"\x1b[A", b"\x1b[B", b"\r", b"\x1b[1;5A", b"\x1b"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
 PASSWORD_ENTRY = 5
+# The entry that shows the help and returns to the menu on Enter; mhfe self-test lies between.
+HELP_ENTRY = PASSWORD_ENTRY + 2
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN, PASSWORD_MADE = b"Esc quits", b"bits"
 BACK_TO_MENU = b"Press Enter to return to the menu (Esc quits)."
@@ -256,7 +258,7 @@ def check_menu():
     session.type(str(PASSWORD_ENTRY).encode())
     session.wait_for(PASSWORD_AGAIN)
     session.answer(b"q", MENU_SHOWN)
-    session.answer(str(PASSWORD_ENTRY + 1).encode(), BACK_TO_MENU)
+    session.answer(str(HELP_ENTRY).encode(), BACK_TO_MENU)
     session.answer(ENTER, MENU_SHOWN)
     session.type(b"q")
     # The tool needs a moment to end; close() would send Ctrl+C to a tool that is still running.

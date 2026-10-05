@@ -20,6 +20,7 @@ mod menu;
 mod protect;
 mod readme;
 mod rekey;
+mod self_test;
 mod serve;
 mod settings;
 mod strength;
@@ -82,6 +83,9 @@ enum Command {
     /// Make a strong password of random dice words
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
+    /// Test this program with the published vectors
+    #[command(long_about = self_test::about())]
+    SelfTest,
     /// Serve a browser tool on this computer in fast mode
     #[command(long_about = serve::about(), after_help = serve::help())]
     Serve(serve::Options),
@@ -125,6 +129,10 @@ fn main_help() -> String {
             (
                 "mhfe password --dice --words 6",
                 "Make a password of six words from real dice",
+            ),
+            (
+                "mhfe self-test",
+                "Test this program with the published vectors",
             ),
             ("mhfe serve tool.html", "Open a browser tool in fast mode"),
             (
@@ -207,6 +215,7 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::Check(options) => check::run(options),
         Command::Rekey(options) => rekey::run(options),
         Command::Password(options) => diceware::run(options),
+        Command::SelfTest => self_test::run(),
         Command::Serve(options) => serve::run(options),
         Command::TestVectors(options) => test_tools::write_vectors(options),
         Command::TestBenchmark(options) => test_tools::benchmark(options),

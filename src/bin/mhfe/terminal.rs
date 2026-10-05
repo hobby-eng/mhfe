@@ -522,6 +522,13 @@ impl Progress {
         self.draw(stage_round - 1, &note);
     }
 
+    /// Finishes the stage on screen and starts the time estimate again, for a second operation
+    /// shown under the first.
+    pub fn next_operation(&mut self) {
+        self.finish();
+        self.started = Instant::now();
+    }
+
     /// Shows the stage on screen as complete, with the time it took, and ends its line so that
     /// other text can follow. Does nothing when no stage is on screen.
     pub fn finish(&mut self) {

@@ -309,6 +309,15 @@ Every wallet that another password opens on the old container, such as a decoy, 
 on the new container: move its funds first. MHFE says so every time, without asking whether such a
 wallet exists, as an answer would be a record of it.
 
+### `mhfe self-test`
+
+`mhfe self-test` checks this program on this computer against the published test vectors: it
+encrypts the public suite 3 vector zero-12 and recovers the public suite 4 vector
+same-length-zero-12 at their full cost, 2 GiB and 12 rounds each, about two minutes, and compares
+the results with the published ones. A fault that a single encryption would not notice, because it
+would encrypt and check the same wrong way, shows here. Run it before you trust a computer with a
+real phrase. If it fails, do not use that program or computer for a real phrase, and report it.
+
 ## Settings: PIM and memory level
 
 Both default to 0, and most people should leave them there. At a terminal, each command offers the
