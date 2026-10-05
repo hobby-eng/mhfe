@@ -7,11 +7,8 @@ use mhfe::Suite;
 
 use crate::choice::{self, Answer, Help, Question};
 use crate::exit::Failure;
+use crate::readme;
 use crate::style::{self, paint, GOOD, MUTED, STRONG, WARNING};
-
-/// Where the README explains the choice. The question shows only this link; ? compares both
-/// answers on request ([`explain`]).
-const README_LENGTH: &str = "https://github.com/hobby-eng/mhfe#24-words-or-the-same-length";
 
 /// A 24-word container has an 8-bit BIP39 checksum.
 const TWENTY_FOUR_WORD_CHECKSUM_BITS: u32 = 8;
@@ -37,7 +34,8 @@ pub fn choose(words: usize) -> Result<Suite, Failure> {
     let question = Question {
         text: &text,
         explanation: &[],
-        more: &[README_LENGTH],
+        // The README explains the choice; ? compares both answers on request ([`explain`]).
+        more: Some(readme::CONTAINER_LENGTH),
         record: Some("Container"),
     };
     let chosen = choice::choose(
@@ -106,18 +104,13 @@ pub fn explain(words: usize) {
 
 /// The consequences of a same-length container, which the person must see once it is chosen.
 pub fn show_consequences(words: usize) {
-    let bits = checksum_bits(words);
     // Set apart from the summary above and below it.
     eprintln!();
     style::warn(
-        "A wrong password will not be detected.",
-        &format!(
-            "It opens another, empty wallet of {words} words. The container also shows that your \
-             phrase has {words} words, and a word copied wrongly still passes its {bits}-bit \
-             checksum about once in {}.",
-            passes_wrongly(bits)
-        ),
+        &format!("A wrong password will not be detected: it opens another {words}-word wallet."),
+        "",
     );
+    style::more(readme::CONTAINER_LENGTH);
     eprintln!();
 }
 
