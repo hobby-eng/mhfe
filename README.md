@@ -201,13 +201,22 @@ lines; a grey "More:" line links to the section here that explains them.
 
 `mhfe password` makes a password of random words from the
 [EFF dice list](https://www.eff.org/dice) of 7,776 words: use four, better five. `--dice` uses real
-dice, `--words N` sets the count. Any text on one line can be a password, but control characters
+dice, `--words N` sets the count. `--chars N` makes N random characters instead (16 by default,
+about 93.3 bits) from 57 letters and digits without look-alikes such as 0 and O; words are easier
+to type correctly years later. Any text on one line can be a password, but control characters
 such as a tab are refused, and letter case and spaces count: lowercase words with single spaces
 are the easiest to type again years later. The password is not your wallet's BIP39 passphrase.
 
 The password is shown only once and is not stored: write it down and keep it apart from the
-container. A password you make up yourself, or one of fewer than four different words from the
-list, is probably much weaker than it looks, and `mhfe encrypt` says so.
+container. Random words or characters are both drawn from the system's cryptographic random
+generator, every one equally likely.
+
+`mhfe encrypt` estimates the strength of the password you type and warns below about 50 bits,
+a little under four dice words. The estimate is rough and uses nothing from outside the program: it
+knows the words of the EFF and BIP39 lists, common passwords, years, repeats, runs such as `1234`
+and keyboard rows such as `qwerty`, also with substitutions such as `0` for `o`. It can overrate a
+password made of words it does not know, such as names or words of other languages. A password
+from `mhfe password` has a known strength.
 
 From the start menu, Enter generates other words and Escape returns to the menu. Each password
 replaces the previous one on the private screen; leaving it clears the screen.

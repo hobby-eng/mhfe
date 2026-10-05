@@ -1,5 +1,5 @@
-//! `mhfe password`: a password of random words from the EFF large wordlist, and the check that
-//! warns when a chosen password is weaker than four different such words.
+//! `mhfe password`: a password of random words from the EFF large wordlist, or of random
+//! characters, and the count of dice words in a password, which the strength estimate uses.
 
 use std::io::IsTerminal;
 
@@ -17,13 +17,24 @@ const EFF_LIST: &str = include_str!("../../../vendor/eff-large-wordlist/eff_larg
 /// 6^5: one word for every roll of five dice.
 const LIST_SIZE: usize = 7776;
 /// Recommended minimum; fewer words get a warning.
-pub const RECOMMENDED_WORDS: usize = 4;
+const RECOMMENDED_WORDS: usize = 4;
 const DEFAULT_WORDS: usize = 5;
 const MOST_WORDS: usize = 32;
 /// The longest word of the EFF large list has nine letters.
 const LONGEST_WORD: usize = 9;
 /// log2(7776) = 12.925 bits per word, in thousandths, to print the strength without floats.
-const MILLIBITS_PER_WORD: usize = 12_925;
+pub const MILLIBITS_PER_WORD: usize = 12_925;
+
+/// The characters of a character password: digits, capital and small letters without those
+/// easily confused when read back from paper (0 and O, 1, l and I).
+const CHARACTERS: &[u8; 57] = b"23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+/// log2(57) = 5.833 bits per character, in thousandths.
+const MILLIBITS_PER_CHARACTER: usize = 5_833;
+/// Twelve characters, about 70 bits: fewer get a warning. The strength estimate of `mhfe encrypt`
+/// counts a random letter as 4.7 bits rather than 5.8, so twelve also pass there. The default, 16
+/// characters, gives about 93.3 bits.
+const RECOMMENDED_CHARACTERS: usize = 12;
+const MOST_CHARACTERS: usize = 64;
 
 #[derive(Args)]
 pub struct Options {
@@ -40,6 +51,18 @@ pub struct Options {
     /// Roll real dice instead of using the computer's randomness
     #[arg(long, long_help = dice_help())]
     dice: bool,
+
+    /// Random characters instead of words, N of them (default 16)
+    #[arg(
+        long,
+        value_name = "N",
+        num_args = 0..=1,
+        // --chars alone means sixteen characters.
+        default_missing_value = "16",
+        conflicts_with_all = ["words", "dice"],
+        long_help = chars_help()
+    )]
+    chars: Option<usize>,
 }
 
 fn words_help() -> String {
@@ -47,6 +70,15 @@ fn words_help() -> String {
         "Number of words, 1 to 32 (default 5; fewer than 4 are weak).",
         "Each word adds about 12.9 bits: four words give about 51.7 bits, five about 64.6, six \
          about 77.5. Fewer than four get a warning.",
+    ])
+}
+
+fn chars_help() -> String {
+    style::option_help(&[
+        "Random characters instead of words, N of them, 1 to 64 (default 16).",
+        "Digits and letters without those easily confused, such as 0 and O or 1 and l: 57 \
+         characters, about 5.8 bits each. Sixteen give about 93.3 bits, but words are easier to \
+         type correctly years later.",
     ])
 }
 
@@ -79,6 +111,10 @@ pub fn help() -> String {
                 "Roll real dice instead of using the computer",
             ),
             ("mhfe password --dice --words 6", "Six words from real dice"),
+            (
+                "mhfe password --chars",
+                "Sixteen random characters, about 93.3 bits",
+            ),
         ],
     );
     let note = style::help_note("The password is shown once and never stored.");
@@ -86,6 +122,9 @@ pub fn help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
+    if let Some(count) = options.chars {
+        return run_characters(count);
+    }
     if !(1..=MOST_WORDS).contains(&options.words) {
         return Err(Failure::invalid_input(format!(
             "Choose between 1 and {MOST_WORDS} words."
@@ -127,14 +166,66 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     style::ok(format!(
         "{} words from the EFF list, about {} bits.",
         options.words,
-        strength_text(options.words)
+        strength_text(options.words * MILLIBITS_PER_WORD)
     ));
     style::hint("Shown only once and not stored: write it down, apart from the container.");
     Ok(SUCCESS)
 }
 
+/// `mhfe password --chars N`: N characters drawn evenly from [`CHARACTERS`].
+fn run_characters(count: usize) -> Result<i32, Failure> {
+    if !(1..=MOST_CHARACTERS).contains(&count) {
+        return Err(Failure::invalid_input(format!(
+            "Choose between 1 and {MOST_CHARACTERS} characters."
+        )));
+    }
+    style::title("Make a password");
+    eprintln!();
+    if count < RECOMMENDED_CHARACTERS {
+        style::warn(
+            &format!("Fewer than {RECOMMENDED_CHARACTERS} characters is weak."),
+            "Twelve characters give about 70.0 bits, sixteen about 93.3.",
+        );
+        eprintln!();
+    }
+    // Built in place at its final size, so no reallocation leaves a copy of the password.
+    let mut password = Zeroizing::new(String::with_capacity(count));
+    for _ in 0..count {
+        password.push(char::from(CHARACTERS[random_character()?]));
+    }
+    if std::io::stdout().is_terminal() {
+        println!("  {STRONG}{}{STRONG:#}", *password);
+        eprintln!();
+    } else {
+        println!("{}", *password);
+    }
+    style::ok(format!(
+        "{count} random characters, about {} bits.",
+        strength_text(count * MILLIBITS_PER_CHARACTER)
+    ));
+    style::hint("Shown only once and not stored: write it down, apart from the container.");
+    Ok(SUCCESS)
+}
+
+/// An unbiased index below 57 from the operating system's random generator. A random byte gives
+/// 256 values; only the first 228 = 4 x 57 are used, and a byte above them is drawn again.
+fn random_character() -> Result<usize, Failure> {
+    const ACCEPTED: u8 = 4 * CHARACTERS.len() as u8;
+    loop {
+        let mut byte = [0u8; 1];
+        getrandom::fill(&mut byte).map_err(|error| {
+            Failure::internal(format!("The system random generator failed: {error}"))
+        })?;
+        let value = byte[0];
+        byte.zeroize();
+        if value < ACCEPTED {
+            return Ok(usize::from(value) % CHARACTERS.len());
+        }
+    }
+}
+
 /// The 7,776 words in dice order.
-fn eff_words() -> Vec<&'static str> {
+pub fn eff_words() -> Vec<&'static str> {
     let words: Vec<&'static str> = EFF_LIST
         .lines()
         .map(|line| {
@@ -220,9 +311,9 @@ pub fn different_dice_words(password: &str) -> usize {
     found.len()
 }
 
-/// "64.6" for five words: the strength in bits with one decimal.
-fn strength_text(words: usize) -> String {
-    let tenths = words * MILLIBITS_PER_WORD / 100;
+/// "64.6" for 64,625 millibits, five words: the strength in bits, rounded to one decimal.
+fn strength_text(millibits: usize) -> String {
+    let tenths = (millibits + 50) / 100;
     format!("{}.{}", tenths / 10, tenths % 10)
 }
 
@@ -287,8 +378,25 @@ mod tests {
     }
 
     #[test]
-    fn strength_is_about_12_9_bits_per_word() {
-        assert_eq!(strength_text(4), "51.7");
-        assert_eq!(strength_text(5), "64.6");
+    fn strength_is_about_12_9_bits_per_word_and_5_8_per_character() {
+        assert_eq!(strength_text(4 * MILLIBITS_PER_WORD), "51.7");
+        assert_eq!(strength_text(5 * MILLIBITS_PER_WORD), "64.6");
+        assert_eq!(strength_text(12 * MILLIBITS_PER_CHARACTER), "70.0");
+        assert_eq!(strength_text(16 * MILLIBITS_PER_CHARACTER), "93.3");
+    }
+
+    #[test]
+    fn characters_leave_out_those_easily_confused() {
+        let mut sorted = CHARACTERS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), CHARACTERS.len(), "no character twice");
+        for confused in b"0O1lI" {
+            assert!(!CHARACTERS.contains(confused), "{}", char::from(*confused));
+        }
+        assert!(CHARACTERS.iter().all(u8::is_ascii_alphanumeric));
+        for _ in 0..1000 {
+            assert!(random_character().unwrap() < CHARACTERS.len());
+        }
     }
 }

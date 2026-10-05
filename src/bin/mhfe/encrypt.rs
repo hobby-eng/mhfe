@@ -13,11 +13,11 @@ use mhfe::{
 use zeroize::Zeroizing;
 
 use crate::choice;
-use crate::diceware::{different_dice_words, RECOMMENDED_WORDS};
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::length_choice;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
+use crate::strength;
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
 use crate::terminal::{self, Input, Progress};
 
@@ -351,10 +351,10 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, F
 }
 
 /// Asks for the password twice on the private screen, so that a typing mistake cannot lock the
-/// phrase away, and warns when it is weaker than four different dice words.
+/// phrase away, and warns when its estimated strength falls short of four dice words.
 fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
     let screen = terminal::PrivateScreen::enter(input, Operation::Encrypt.title());
-    let (password, weak) = loop {
+    let (password, bits) = loop {
         eprintln!();
         style::hint("Letter case and spaces count.");
         let text = input.secret("Password")?;
@@ -379,14 +379,14 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
                 "The two passwords differ. Nothing was encrypted.",
             ));
         }
-        break (password, different_dice_words(&text) < RECOMMENDED_WORDS);
+        break (password, strength::estimated_bits(&text));
     };
     drop(screen);
     choice::record("Password", "typed twice");
-    if weak {
+    if strength::is_weak(bits) {
         eprintln!();
         style::warn(
-            "This password is not four different words from the EFF dice list.",
+            &format!("This password is weak: about {bits:.0} bits, by a rough estimate."),
             &format!("{} makes a strong one.", paint(ACCENT, "mhfe password")),
         );
         style::more(readme::PASSWORD);

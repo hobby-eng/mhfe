@@ -27,6 +27,12 @@ Planned as version 0.5.0.
   `y`/`n` answers of `mhfe encrypt` and the typed choice of `mhfe check`. Laid out as in MnemoCode,
   each question stands apart with a short explanation, and once answered it gives way to one line
   of a summary. Scripts (`--stdin`) answer as before.
+- `mhfe password --chars N` makes N random characters (16 by default, about 93.3 bits) from 57
+  letters and digits without look-alikes, instead of dice words.
+- `mhfe encrypt` estimates the strength of a typed password and warns below about 50 bits, instead
+  of warning whenever it is not four dice words. The estimate needs no dependency: it reads the
+  password as words of the EFF and BIP39 lists, common passwords, years, repeats, runs and keyboard
+  rows, with letter substitutions, and the README states what it can overrate.
 - The start menu's password generator repeats on Enter and returns to the menu on Escape. Each
   password replaces the previous one on the private screen, which is cleared when leaving.
 - Secrets are typed on a private screen, the terminal's alternate screen, which shows them as they
