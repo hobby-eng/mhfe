@@ -315,11 +315,15 @@ that the funds of any such wallet are moved or backed up another way, without as
 a wallet exists, as an answer would be a record of it; "No" stops before anything is typed. The
 result says once more that the old plate still opens the wallet with the old password.
 
+The phrase is shown for the comparison only on a private screen. Where none can be opened, such as
+when the output goes to a file, that choice is not offered.
+
 ### `mhfe new`
 
 `mhfe new` makes a new 24-word wallet and its container in one go. It draws the phrase from the
 operating system's random generator, shows it once on a private screen for your wallet, and
-encrypts it under your password as `mhfe encrypt` does.
+encrypts it under your password as `mhfe encrypt` does. Where no private screen can be opened, such
+as when the output goes to a file, it refuses to start.
 
 It asks for the BIP39 passphrase of the new wallet, if it is to have one. Only with a passphrase
 does it then ask whether you want a check that confirms the password at recovery, with nothing
@@ -360,8 +364,10 @@ password, and the wallet it opens, with its genuine history, is all anyone sees.
 describes this as a hidden wallet behind an honest disclosure.
 
 It first checks itself against the published vectors, as `mhfe self-test` does: a hidden wallet
-exists only as the output of the program, and any correct program must find it again later. Each
-wallet appears on a private screen. It need not be written down, as the container and its password
+exists only as the output of the program, and any correct program must find it again later. All
+wallets appear on one private screen, together with their passwords, which is cleared at the end,
+so the main screen shows neither the wallets nor how many you opened; without a private screen the
+command refuses to start. A wallet need not be written down, as the container and its password
 give it again, and nothing records which passwords you used or how many. A password whose wallet
 passes the built-in check of a shorter phrase, as the container's own password of a 12- to 21-word
 phrase does, is refused, so that recovery never calls a hidden wallet verified.

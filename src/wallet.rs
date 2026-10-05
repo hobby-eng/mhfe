@@ -4,8 +4,10 @@
 //! (Taproot), Litecoin likewise without Taproot, BIP44 for the others ([`Coin`]), and Dash
 //! Platform payment addresses on DIP17.
 //!
-//! Private keys exist only inside this module and are wiped when dropped; only public values
-//! and yes-or-no answers come out.
+//! Private keys exist only inside this module, and every binding that holds one, as bytes or as a
+//! scalar, is wiped when dropped; only public values and yes-or-no answers come out. Copies that
+//! the compiler or the curve library makes on the way, in registers or on the stack, are outside
+//! this control.
 
 use std::fmt;
 use std::str::FromStr;
@@ -807,7 +809,7 @@ fn program_for(key: &ExtendedKey, address_type: AddressType) -> Result<Vec<u8>, 
 /// BIP86: the key-path-only Taproot output key `Q = P + t*G`, where `P` is the public key with
 /// an even Y coordinate and `t = TaggedHash("TapTweak", x(P))` (BIP341).
 fn taproot_output_key(key: &ExtendedKey) -> Result<[u8; 32], MhfeError> {
-    let point = ProjectivePoint::GENERATOR * key.scalar()?;
+    let point = key.public_point()?;
     let internal = if bool::from(point.to_affine().y_is_odd()) {
         -point
     } else {
@@ -871,10 +873,7 @@ impl ExtendedKey {
         let seed = bip39_seed(&mnemonic, passphrase);
         let master = Self::from_hmac(b"Bitcoin seed", &[&seed[..]])?;
         // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
-        let mut scalar = master.scalar()?;
-        let invalid = bool::from(scalar.is_zero());
-        scalar.zeroize();
-        if invalid {
+        if bool::from(master.scalar()?.is_zero()) {
             return Err(MhfeError::Internal(
                 "BIP32 gives no valid master key for this seed".to_owned(),
             ));
@@ -919,28 +918,32 @@ impl ExtendedKey {
         // when IL is not below n or the sum is zero, which happens with probability below 2^-127,
         // and wallets then use the next index. This tool reports it instead of silently checking a
         // different index than the path says.
-        let mut tweak = parse_scalar(&child.key)?;
-        let mut sum = tweak + self.scalar()?;
-        tweak.zeroize();
+        let tweak = parse_scalar(&child.key)?;
+        let sum = Zeroizing::new(*tweak + *self.scalar()?);
         if bool::from(sum.is_zero()) {
             return Err(MhfeError::Internal(format!(
                 "BIP32 has no valid key at index {index} of this path; wallets use the next index"
             )));
         }
-        child.key.copy_from_slice(&sum.to_repr());
-        sum.zeroize();
+        child
+            .key
+            .copy_from_slice(&Zeroizing::new(sum.to_repr())[..]);
         Ok(child)
     }
 
-    fn scalar(&self) -> Result<Scalar, MhfeError> {
+    /// The private key as a scalar, wiped when dropped like every scalar binding here.
+    fn scalar(&self) -> Result<Zeroizing<Scalar>, MhfeError> {
         parse_scalar(&self.key)
+    }
+
+    /// The public point `k*G` of the private key `k`.
+    fn public_point(&self) -> Result<ProjectivePoint, MhfeError> {
+        Ok(ProjectivePoint::GENERATOR * *self.scalar()?)
     }
 
     /// The compressed SEC1 public key, 33 bytes.
     fn public_key(&self) -> Result<[u8; 33], MhfeError> {
-        let mut scalar = self.scalar()?;
-        let point = (ProjectivePoint::GENERATOR * scalar).to_affine();
-        scalar.zeroize();
+        let point = self.public_point()?.to_affine();
         let encoded = point.to_sec1_point(true);
         encoded
             .as_bytes()
@@ -950,9 +953,7 @@ impl ExtendedKey {
 
     /// The public key in SEC1 uncompressed form: 0x04 and both coordinates.
     fn uncompressed_public_key(&self) -> Result<[u8; 65], MhfeError> {
-        let mut scalar = self.scalar()?;
-        let point = (ProjectivePoint::GENERATOR * scalar).to_affine();
-        scalar.zeroize();
+        let point = self.public_point()?.to_affine();
         let encoded = point.to_sec1_point(false);
         encoded
             .as_bytes()
@@ -968,9 +969,11 @@ impl ExtendedKey {
     }
 }
 
-fn parse_scalar(bytes: &[u8; 32]) -> Result<Scalar, MhfeError> {
-    Option::from(Scalar::from_repr(FieldBytes::from(*bytes)))
-        .ok_or_else(|| MhfeError::Internal("BIP32 produced a key out of range".to_owned()))
+fn parse_scalar(bytes: &[u8; 32]) -> Result<Zeroizing<Scalar>, MhfeError> {
+    let mut repr = FieldBytes::from(*bytes);
+    let scalar = Option::<Scalar>::from(Scalar::from_repr(repr)).map(Zeroizing::new);
+    repr.zeroize();
+    scalar.ok_or_else(|| MhfeError::Internal("BIP32 produced a key out of range".to_owned()))
 }
 
 #[cfg(test)]

@@ -10,7 +10,7 @@ use mhfe::{MhfeError, Password, Suite};
 use zeroize::Zeroizing;
 
 use crate::check;
-use crate::choice::{self, Answer, Question};
+use crate::choice::{Answer, Question};
 use crate::encrypt;
 use crate::exit::{Failure, SUCCESS};
 use crate::readme;
@@ -48,6 +48,9 @@ pub fn help() -> String {
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; a wallet is only ever shown on a private screen.
     let mut input = Input::new(false);
+    if !terminal::can_show_privately(&input) {
+        return Err(Failure::invalid_input(NO_PRIVATE_SCREEN));
+    }
     let work = settings::choose(options.settings, &mut input, Operation::Wallets)?;
     self_test::require_pass()?;
     eprintln!();
@@ -66,9 +69,16 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     }
     // A hidden wallet that passes the main wallet's check with its passphrase is refused too; the
     // question comes every time, so that it tells nothing about the main wallet.
-    let (passphrase, _passphrase_locked) =
-        check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;
+    let passphrase = check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;
     let mut mhfe = settings::reserve_memory(work)?;
+    // Every wallet, its password, its progress and the question for another one stay on one
+    // private screen, cleared at the end: nothing on the main screen tells how many wallets were
+    // opened (AUD-007-SEC005).
+    let screen = terminal::PrivateScreen::enter_to_show(&input);
+    if !screen.is_active() {
+        return Err(Failure::invalid_input(NO_PRIVATE_SCREEN));
+    }
+    style::title(Operation::Wallets.title());
     // The passwords of this run, as normalized bytes, so that none is typed twice.
     let mut used: Vec<Zeroizing<Vec<u8>>> = Vec::new();
     loop {
@@ -91,12 +101,15 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             Err(error) => return Err(error.into()),
         };
         used.push(Zeroizing::new(password.as_bytes().to_vec()));
-        show_wallet(&input, number, &wallet.phrase)?;
-        choice::record(&format!("Wallet {number}"), "24 words, shown and cleared");
+        show_wallet(&input, number, &wallet.phrase);
         if !another(&mut input)? {
             break;
         }
+        // Cleared only for the next wallet, so that a refused password's message stays readable.
+        screen.clear();
+        style::title(Operation::Wallets.title());
     }
+    drop(screen);
     style::fact(
         "Next",
         format!(
@@ -125,25 +138,19 @@ fn read_unused_password(
     }
 }
 
-/// Shows a wallet on a private screen until Enter or Escape clears it.
-fn show_wallet(input: &Input, number: usize, phrase: &str) -> Result<(), Failure> {
-    let screen = terminal::PrivateScreen::enter_to_show(input);
-    if screen.is_active() {
-        style::title(Operation::Wallets.title());
-    }
+/// Why the command does not start: it shows wallets only on a private screen.
+const NO_PRIVATE_SCREEN: &str = "mhfe wallets shows wallets only on a private screen: run it at a \
+                                 terminal, with no output redirected.";
+
+/// Shows a wallet on the private screen of the run.
+fn show_wallet(input: &Input, number: usize, phrase: &str) {
     eprintln!();
     eprintln!("{}", paint(HEADING, format!("Wallet {number}, 24 words")));
     terminal::print_phrase(phrase, input);
-    if screen.is_active() {
-        terminal::wait_to_leave_saying(
-            "No need to write it down: the container and this password give it again. Enter or \
-             Escape clears this screen.",
-        )?;
-    }
-    Ok(())
+    style::hint("No need to write it down: the container and this password give it again.");
 }
 
-/// Whether to open another wallet.
+/// Whether to open another wallet; the answer stays on the private screen too.
 fn another(input: &mut Input) -> Result<bool, Failure> {
     let question = Question::new("Open another wallet?", "Another");
     let answers = [

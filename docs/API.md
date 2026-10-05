@@ -116,10 +116,11 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   for suite 3, `SAME_LENGTH_INPUTS` and `SAME_LENGTH_NEGATIVE_INPUTS` for suite 4. Vectors contain
   the password and every round key by design.
 
-Every buffer this crate owns that holds a password, phrase, passphrase, state, key or mask is wiped
-when dropped. Short-lived working buffers inside dependencies, such as those of Unicode
-normalization and BIP39 word parsing, are outside its control, and so are immutable JavaScript
-strings in the browser.
+Every buffer and binding this crate owns that holds a password, phrase, passphrase, state, key,
+private scalar or mask is wiped when dropped. Short-lived working buffers inside dependencies, such
+as those of Unicode normalization, BIP39 word parsing and elliptic-curve arithmetic, copies that
+the compiler makes in registers or on the stack, and immutable JavaScript strings in the browser
+are outside its control.
 
 ### Errors
 

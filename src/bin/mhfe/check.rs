@@ -7,13 +7,12 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::memory::LockedPages;
 use mhfe::wallet::{parse_fingerprint, Address, Coin, DerivationPath, SearchLimits};
 use mhfe::{MhfeError, Reference, Suite, WordCount};
-use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
+use crate::locked_text::LockedText;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT};
@@ -222,7 +221,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // The reference and passphrase are read before the long computation starts, so the user
     // can walk away while it runs.
     let wallet_reference: WalletReference;
-    let check_passphrase: (Zeroizing<String>, LockedPages);
+    let check_passphrase: LockedText;
     let reference = match choice {
         Choice::Address | Choice::Fingerprint => {
             wallet_reference = WalletReference::read_given(
@@ -240,11 +239,11 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         Choice::WalletCheck => {
             check_passphrase = read_passphrase(&mut input, Operation::Check)?;
             // Refused before the long computation: the check is tested with its passphrase only.
-            if check_passphrase.0.is_empty() {
+            if check_passphrase.is_empty() {
                 return Err(MhfeError::WalletCheckNeedsPassphrase.into());
             }
             Reference::WalletCheck {
-                passphrase: &check_passphrase.0,
+                passphrase: &check_passphrase,
             }
         }
     };
@@ -444,10 +443,7 @@ fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failur
 pub struct WalletReference {
     kind: ReferenceKind,
     path: Option<DerivationPath>,
-    passphrase: Zeroizing<String>,
-    // The pages of `passphrase`, kept out of swap; declared after it, so they are unlocked once
-    // it is wiped.
-    _passphrase_locked: LockedPages,
+    passphrase: LockedText,
 }
 
 enum ReferenceKind {
@@ -503,12 +499,11 @@ impl WalletReference {
             show_search(&address, path.as_ref(), SearchLimits::default());
             ReferenceKind::Address(address)
         };
-        let (passphrase, passphrase_locked) = read_passphrase(input, operation)?;
+        let passphrase = read_passphrase(input, operation)?;
         Ok(Self {
             kind,
             path,
             passphrase,
-            _passphrase_locked: passphrase_locked,
         })
     }
 
@@ -563,12 +558,8 @@ fn read_public<T>(
 }
 
 /// The BIP39 passphrase is a separate secret from the MHFE password; most wallets have none. It is
-/// typed on the private screen, and the summary records only whether there is one. It comes with
-/// the lock that keeps it out of swap, which must live as long as it does.
-pub fn read_passphrase(
-    input: &mut Input,
-    operation: Operation,
-) -> Result<(Zeroizing<String>, LockedPages), Failure> {
+/// typed on the private screen, and the summary records only whether there is one.
+pub fn read_passphrase(input: &mut Input, operation: Operation) -> Result<LockedText, Failure> {
     read_passphrase_of(input, operation, "the wallet")
 }
 
@@ -577,7 +568,7 @@ pub fn read_passphrase_of(
     input: &mut Input,
     operation: Operation,
     wallet: &str,
-) -> Result<(Zeroizing<String>, LockedPages), Failure> {
+) -> Result<LockedText, Failure> {
     let screen = PrivateScreen::enter(input, operation.title());
     if screen.is_active() {
         eprintln!();
@@ -585,7 +576,6 @@ pub fn read_passphrase_of(
     let passphrase = input.secret(&format!(
         "BIP39 passphrase of {wallet}, or Enter if it has none"
     ))?;
-    let locked = LockedPages::of_string(&passphrase);
     drop(screen);
     let what = if passphrase.is_empty() {
         "none"
@@ -593,7 +583,7 @@ pub fn read_passphrase_of(
         "typed"
     };
     choice::record("Passphrase", what);
-    Ok((passphrase, locked))
+    Ok(passphrase)
 }
 
 #[cfg(test)]

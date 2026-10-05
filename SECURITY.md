@@ -17,8 +17,12 @@ Never include a real seed phrase, password, private key or wallet file.
   container and a recovered seed phrase are shown the same way, until the person presses Enter or
   Escape after writing them down, and a container typed for a recovery or a check is read on a
   private screen as well. Anyone who can see the screen meanwhile can read them. Where no private
-  screen is possible, they are typed without echo. The tool never takes them from command-line arguments, never writes them to files
-  and never logs them. Error messages never contain a phrase, a password or any part of them.
+  screen is possible, they are typed without echo. A phrase that the person did not ask to export
+  is shown only on a private screen: `new` and `wallets` refuse to start, and `rekey` does not
+  offer the owner's comparison, when standard output is not a terminal that has one, such as when
+  it goes to a file or a pipe. The tool never takes secrets from command-line arguments, never
+  writes them to files and never logs them. Error messages never contain a phrase, a password or
+  any part of them.
 - A secret's prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
   on an empty line and Ctrl+C keep their meaning; every other character, including those a
   terminal would usually act on (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+W, Ctrl+Z, Ctrl+\\), reaches the
@@ -46,7 +50,10 @@ Never include a real seed phrase, password, private key or wallet file.
   to disk; the Argon2 work area is marked `MADV_DONTDUMP` as well. The password, the original
   phrase while it is encrypted, the entropy kept for the check, a recovered phrase, a BIP39
   passphrase and the line a secret is typed into are locked in memory (`mlock`), so that the system
-  does not write them to swap; this is best effort and does not apply in a browser or on Windows.
+  does not write them to swap; a typed line stays locked until it is wiped. The system locks whole
+  pages, and one page may hold several secrets, so the tool counts the secrets on each page and
+  unlocks it only after the last of them is wiped. This is best effort and does not apply in a
+  browser or on Windows.
   The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
   can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
   area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap in memory
@@ -68,8 +75,9 @@ Never include a real seed phrase, password, private key or wallet file.
   draft over the BIP39 seed with the passphrase, which may not be empty: it tells a right password
   and passphrase from wrong ones with 16 bits, never which wallet it is, and `rekey` does not accept
   it as the only confirmation.
-- `wallets` shows a hidden wallet only on a private screen and only after the published vectors
-  have passed, and it keeps no record of the passwords or the wallets.
+- `wallets` shows hidden wallets only after the published vectors have passed, all on one private
+  screen with their passwords and progress, so that the main screen shows neither the wallets nor
+  how many were opened, and it keeps no record of the passwords or the wallets.
 - Nothing connects to a network. The browser package loads no remote resources and contains no
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
   (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which

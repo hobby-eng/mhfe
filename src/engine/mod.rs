@@ -49,6 +49,6 @@ mod ffi;
 mod native;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use ffi::{lock_pages, unlock_pages};
+pub(crate) use ffi::{lock_pages, page_size, unlock_pages};
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::{available_memory_bytes, check_can_run, NativeEngine, HIGHEST_MEMORY_LEVEL};

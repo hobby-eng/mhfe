@@ -20,6 +20,7 @@ use zeroize::Zeroizing;
 use crate::choice::{self, Answer, Help, Question};
 use crate::encrypt;
 use crate::exit::{Failure, SUCCESS};
+use crate::locked_text::LockedText;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::strength;
@@ -46,11 +47,18 @@ pub fn about() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    // Every answer is a choice at the terminal; the new phrase is shown only on a private screen.
+    // Every answer is a choice at the terminal; the new phrase is shown only on a private screen,
+    // so the command does not start where there can be none (AUD-007-SEC001).
     let mut input = Input::new(false);
+    if !terminal::can_show_privately(&input) {
+        return Err(Failure::invalid_input(
+            "mhfe new shows the new phrase only on a private screen: run it at a terminal, with no \
+             output redirected.",
+        ));
+    }
     let work = settings::choose(options.settings, &mut input, Operation::New)?;
     // A wallet check exists only with a passphrase, so its question comes only after one.
-    let (passphrase, _passphrase_locked) = read_new_passphrase(&mut input)?;
+    let passphrase = read_new_passphrase(&mut input)?;
     let checked = !passphrase.is_empty() && ask_for_check()?;
     if checked {
         let bits = strength::estimated_bits(&passphrase);
@@ -70,7 +78,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         style::more(readme::NEW);
     }
 
-    let phrase = draw_phrase(checked.then_some(passphrase.as_str()))?;
+    let phrase = draw_phrase(checked.then_some(&*passphrase))?;
     let _phrase_locked = LockedPages::of_string(&phrase);
     show_new_phrase(&input, &phrase)?;
     let check = if checked { ", with a wallet check" } else { "" };
@@ -156,7 +164,7 @@ fn explain() {
 
 /// The BIP39 passphrase of the new wallet on the private screen: Enter alone for none, otherwise
 /// typed twice.
-fn read_new_passphrase(input: &mut Input) -> Result<(Zeroizing<String>, LockedPages), Failure> {
+fn read_new_passphrase(input: &mut Input) -> Result<LockedText, Failure> {
     let screen = terminal::PrivateScreen::enter(input, Operation::New.title());
     let passphrase = loop {
         eprintln!();
@@ -177,8 +185,7 @@ fn read_new_passphrase(input: &mut Input) -> Result<(Zeroizing<String>, LockedPa
         "typed twice"
     };
     choice::record("Passphrase", what);
-    let locked = LockedPages::of_string(&passphrase);
-    Ok((passphrase, locked))
+    Ok(passphrase)
 }
 
 /// A new 24-word phrase from the operating system's generator; with a `passphrase`, drawn on
@@ -254,6 +261,11 @@ fn fill_random(bytes: &mut [u8]) -> Result<(), Failure> {
 /// Shows the new phrase on a private screen until Enter or Escape clears it.
 fn show_new_phrase(input: &Input, phrase: &str) -> Result<(), Failure> {
     let screen = terminal::PrivateScreen::enter_to_show(input);
+    if !screen.shows_privately() {
+        return Err(Failure::internal(
+            "No private screen to show the new phrase on.",
+        ));
+    }
     if screen.is_active() {
         style::title(Operation::New.title());
     }
