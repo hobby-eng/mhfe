@@ -211,10 +211,7 @@ pub fn exit_cancelled() -> ! {
 
 /// What a cancelled command says, after Ctrl+C or q in a list.
 pub fn show_cancelled() {
-    style::warn(
-        "Cancelled.",
-        "Nothing was saved; the memory the tool used is released.",
-    );
+    style::warn("Cancelled. Nothing was saved.", "");
 }
 
 fn read_secret(question: &str) -> Result<Zeroizing<String>, Failure> {
@@ -334,10 +331,7 @@ impl PrivateScreen {
         let screen = Self::enter_if(input, true);
         if screen.active {
             style::title(title);
-            style::hint(
-                "This screen shows what you type and is cleared as soon as you are done. Anyone \
-                 who can see it meanwhile can read it.",
-            );
+            style::hint("Cleared when you are done; until then anyone who sees it can read it.");
         }
         screen
     }
@@ -380,11 +374,7 @@ impl PrivateScreen {
 /// Every other key is ignored, so that a stray one cannot clear the screen too early.
 pub fn wait_to_leave() -> Result<(), Failure> {
     eprintln!();
-    style::warn(
-        "Write it down now: Enter or Escape clears this screen.",
-        "What it shows then leaves the terminal and its history, for your protection. Press only \
-         once you have written down and checked every word.",
-    );
+    style::warn("Write it down now: Enter or Escape clears this screen.", "");
     hidden_input::with_keys(|next_key| loop {
         match next_key()? {
             hidden_input::Key::Enter | hidden_input::Key::Quit => return Ok(()),

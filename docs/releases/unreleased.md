@@ -37,6 +37,10 @@ Planned as version 0.5.0.
   screen too, which Enter or Escape clears once they are written down. Each answered step gives
   way to one line of a summary on the main screen, and warnings stand apart, so that the next
   question is always at the bottom.
+- Screens keep to short lines while a command runs. Explanations moved to the README, whose
+  commands now have sections of their own, and a grey "More:" line links to the section that
+  explains a question, a warning or a result. After an encryption, two lines say what to keep and
+  what to do next.
 - The program and its documents say "seed phrase" where they said "recovery phrase", so that it
   is not confused with recovering one: `mhfe decrypt` is now "Recover a seed phrase".
 - Secrets stay out of core dumps and swap: the tool forbids core dumps and, on Linux, other

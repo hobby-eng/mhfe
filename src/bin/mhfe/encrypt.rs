@@ -16,12 +16,10 @@ use crate::choice;
 use crate::diceware::{different_dice_words, RECOMMENDED_WORDS};
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::length_choice;
+use crate::readme;
 use crate::settings::{self, Operation, Settings};
-use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
+use crate::style::{self, paint, ACCENT, HEADING, MUTED};
 use crate::terminal::{self, Input, Progress};
-
-/// A 24-word original fills the whole state and carries no verifier.
-const WORDS_WITHOUT_CHECK: usize = 24;
 
 #[derive(Args)]
 pub struct Options {
@@ -181,32 +179,19 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     }
     // The format of the container, which the specification asks to show after creating it.
     style::fact("Format", paint(MUTED, new.suite.id()));
-    eprintln!();
-    print_what_to_remember(work, original_words, length_must_be_chosen, suite);
-    eprintln!();
-    style::hint(&format!(
-        "Use a different password for each phrase you encrypt, and nowhere else. To make another \
-         copy, copy the container's {container_words} words exactly."
-    ));
+    style::fact(
+        "Keep",
+        what_to_keep(work, original_words, length_must_be_chosen, container_words),
+    );
     // The check above covered the words this program produced, not the copy the user wrote down.
-    style::hint(&format!(
-        "Before relying on the container, rehearse the recovery with {}, typing the words from \
-         the plate or paper you wrote, not from the screen, and keep the original backup until \
-         it matches.",
-        paint(ACCENT, "mhfe check")
-    ));
-    if suite == Suite::SameLength {
-        style::warn(
-            "Rehearse from the finished backup, not from the screen.",
-            &format!(
-                "A word copied wrongly still passes the checksum of {container_words} words \
-                 about once in {}, and the container then opens a different wallet without any \
-                 error. Only mhfe check against your wallet's fingerprint or a known address \
-                 shows it.",
-                1u32 << (container_words / 3)
-            ),
-        );
-    }
+    style::fact(
+        "Next",
+        format!(
+            "rehearse with {} from the backup you wrote",
+            paint(ACCENT, "mhfe check")
+        ),
+    );
+    style::more(readme::ENCRYPT);
     Ok(SUCCESS)
 }
 
@@ -234,92 +219,25 @@ fn choose_suite(words: usize, same_length: bool, input: &Input) -> Result<Suite,
     length_choice::choose(words)
 }
 
-/// One line of the advice printed after an encryption, before it is styled.
-#[derive(Debug, PartialEq)]
-enum Advice {
-    /// A sentence with a bold lead-in.
-    Statement(&'static str, String),
-    /// A quieter hint.
-    Hint(String),
-    /// A hint that ends with a command, which is shown in the accent colour.
-    HintWithCommand(&'static str, String),
-}
-
-/// What the owner must keep besides the container and the password: nothing at the default
-/// settings, otherwise the changed settings and, if detection would misread the phrase, its length.
-fn what_to_remember(
+/// What the owner must keep: the container's words and the password, and only where they are
+/// needed the changed settings and the word count, when detection would misread the phrase
+/// (AUD-003-DOC002). Why each matters is in the README.
+fn what_to_keep(
     work: WorkFactor,
     original_words: usize,
     length_must_be_chosen: bool,
-    suite: Suite,
-) -> Vec<Advice> {
-    let mut advice = Vec::new();
-    let changed = settings::changed_settings(work);
-    let container_words = match suite {
-        Suite::TwentyFourWords => 24,
-        Suite::SameLength => original_words,
-    };
-    if changed.is_none() && !length_must_be_chosen {
-        advice.push(Advice::Statement(
-            "Nothing else needs to be kept:",
-            format!("the {container_words} words and the password are enough."),
-        ));
-    }
-    if let Some(changed) = changed {
-        advice.push(Advice::Statement(
-            "You changed the default settings; remember them:",
-            format!("{changed}."),
-        ));
-        advice.push(Advice::Hint(
-            "Recovery needs exactly these values: with others the container turns into a \
-             different phrase that looks just as valid."
-                .into(),
-        ));
-    }
+    container_words: usize,
+) -> String {
+    let mut items = vec![
+        format!("the {container_words} words"),
+        "the password".to_owned(),
+    ];
+    items.extend(settings::changed_settings(work));
     if length_must_be_chosen {
-        advice.push(Advice::Statement(
-            "Remember the word count:",
-            format!("your phrase has {original_words} words."),
-        ));
-        advice.push(Advice::HintWithCommand(
-            "As warned above, automatic length detection would misread this phrase; recover it \
-             with ",
-            format!("mhfe decrypt --words {original_words}"),
-        ));
+        items.push(format!("the word count, {original_words}"));
     }
-    if suite == Suite::SameLength {
-        advice.push(Advice::HintWithCommand(
-            "This container has no built-in check, so recovery will show the phrase as not \
-             verified, also with a wrong password. Confirm it against your wallet with ",
-            "mhfe check --fingerprint or --address".into(),
-        ));
-    } else if original_words == WORDS_WITHOUT_CHECK {
-        advice.push(Advice::Hint(
-            "A 24-word phrase has no built-in check, so recovery will show it as not verified; \
-             that is expected. mhfe check with a known address of the wallet confirms it."
-                .into(),
-        ));
-    }
-    advice
-}
-
-fn print_what_to_remember(
-    work: WorkFactor,
-    original_words: usize,
-    length_must_be_chosen: bool,
-    suite: Suite,
-) {
-    for line in what_to_remember(work, original_words, length_must_be_chosen, suite) {
-        match line {
-            Advice::Statement(lead, rest) => eprintln!("{} {rest}", paint(STRONG, lead)),
-            Advice::Hint(text) => {
-                style::hint(&text);
-            }
-            Advice::HintWithCommand(text, command) => {
-                style::hint(&format!("{text}{}.", paint(ACCENT, command)));
-            }
-        }
-    }
+    let last = items.pop().unwrap_or_default();
+    format!("{} and {last}", items.join(", "))
 }
 
 /// Rounds 13 to 24: recovers the new container from its words and compares the result with
@@ -374,10 +292,8 @@ fn show_before_the_check(container: &str, input: &Input) {
     terminal::print_phrase(container, input);
     eprintln!();
     style::warn(
-        "Not verified yet.",
-        "MHFE now decrypts the container again to make sure that no memory error or other \
-         fault changed it. You can start writing it down, but wait for the result before you \
-         rely on it.",
+        "Not verified yet: write it down, but wait for the check.",
+        "",
     );
     eprintln!();
     terminal::set_unverified_container_shown(true);
@@ -425,10 +341,8 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, F
     style::warn(
         &format!("Write down that your phrase has {words} words."),
         &format!(
-            "By chance it also passes the built-in check of {} words, which happens to about \
-             one phrase in four billion. Recovery with automatic length detection would then \
-             show a different reading or several candidates. When you recover, choose the length \
-             yourself: mhfe decrypt --words {words}.",
+            "By rare chance it also reads as {} words: recover it with mhfe decrypt --words \
+             {words}.",
             others.join(" and ")
         ),
     );
@@ -442,10 +356,7 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
     let screen = terminal::PrivateScreen::enter(input, Operation::Encrypt.title());
     let (password, weak) = loop {
         eprintln!();
-        style::hint(
-            "Letter case and spaces count: lowercase words with single spaces are the easiest \
-             to type again years later.",
-        );
+        style::hint("Letter case and spaces count.");
         let text = input.secret("Password")?;
         let password = match Password::new(&text) {
             Ok(password) => password,
@@ -475,13 +386,10 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
     if weak {
         eprintln!();
         style::warn(
-            "This password is not four or more words from the EFF dice list, all different.",
-            &format!(
-                "Unless it was chosen at random, it is probably much weaker than it looks; {} \
-                 makes a strong one.",
-                paint(ACCENT, "mhfe password")
-            ),
+            "This password is not four different words from the EFF dice list.",
+            &format!("{} makes a strong one.", paint(ACCENT, "mhfe password")),
         );
+        style::more(readme::PASSWORD);
     }
     Ok(password)
 }
@@ -490,88 +398,40 @@ fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
 mod tests {
     use super::*;
 
-    /// The advice as plain text, one line per entry, without colours.
-    fn plain(work: WorkFactor, words: usize, length_must_be_chosen: bool) -> Vec<String> {
-        plain_for(work, words, length_must_be_chosen, Suite::TwentyFourWords)
-    }
-
-    fn plain_for(
-        work: WorkFactor,
-        words: usize,
-        length_must_be_chosen: bool,
-        suite: Suite,
-    ) -> Vec<String> {
-        what_to_remember(work, words, length_must_be_chosen, suite)
-            .into_iter()
-            .map(|advice| match advice {
-                Advice::Statement(lead, rest) => format!("{lead} {rest}"),
-                Advice::Hint(text) => text,
-                Advice::HintWithCommand(text, command) => format!("{text}{command}."),
-            })
-            .collect()
-    }
-
     fn defaults() -> WorkFactor {
         WorkFactor::new(0, 0).unwrap()
     }
 
-    /// AUD-003-DOC002: the advice for the cases the audit names.
+    /// AUD-003-DOC002: what to keep in the cases the audit names.
     #[test]
-    fn a_short_phrase_at_the_defaults_needs_nothing_else() {
+    fn a_short_phrase_at_the_defaults_needs_only_the_words_and_the_password() {
         assert_eq!(
-            plain(defaults(), 12, false),
-            ["Nothing else needs to be kept: the 24 words and the password are enough."]
+            what_to_keep(defaults(), 12, false, 24),
+            "the 24 words and the password"
+        );
+        assert_eq!(
+            what_to_keep(defaults(), 15, false, 15),
+            "the 15 words and the password"
         );
     }
 
     #[test]
     fn a_phrase_that_detection_would_misread_needs_its_word_count() {
-        let advice = plain(defaults(), 15, true);
-        assert!(!advice.iter().any(|line| line.starts_with("Nothing else")));
         assert_eq!(
-            advice[0],
-            "Remember the word count: your phrase has 15 words."
+            what_to_keep(defaults(), 15, true, 24),
+            "the 24 words, the password and the word count, 15"
         );
-        assert!(advice[1].ends_with("recover it with mhfe decrypt --words 15."));
-        assert_eq!(advice.len(), 2);
     }
 
     #[test]
-    fn a_24_word_phrase_is_told_why_recovery_shows_it_unverified() {
-        let advice = plain(defaults(), 24, false);
-        assert!(advice[0].starts_with("Nothing else needs to be kept"));
-        assert!(advice[1].starts_with("A 24-word phrase has no built-in check"));
-        assert_eq!(advice.len(), 2);
-    }
-
-    #[test]
-    fn changed_settings_must_be_remembered() {
-        let advice = plain(WorkFactor::new(3, 1).unwrap(), 12, false);
-        assert!(!advice.iter().any(|line| line.starts_with("Nothing else")));
+    fn changed_settings_must_be_kept() {
         assert_eq!(
-            advice[0],
-            "You changed the default settings; remember them: PIM 3, memory level 1."
+            what_to_keep(WorkFactor::new(3, 1).unwrap(), 12, false, 24),
+            "the 24 words, the password, PIM 3 and memory level 1"
         );
-        assert!(advice[1].starts_with("Recovery needs exactly these values"));
-        let both = plain(WorkFactor::new(1, 0).unwrap(), 24, true);
         assert_eq!(
-            both[0],
-            "You changed the default settings; remember them: PIM 1."
+            what_to_keep(WorkFactor::new(1, 0).unwrap(), 24, true, 24),
+            "the 24 words, the password, PIM 1 and the word count, 24"
         );
-        assert!(both
-            .iter()
-            .any(|line| line == "Remember the word count: your phrase has 24 words."));
-    }
-
-    #[test]
-    fn a_same_length_container_is_confirmed_against_the_wallet() {
-        let advice = plain_for(defaults(), 15, false, Suite::SameLength);
-        assert_eq!(
-            advice[0],
-            "Nothing else needs to be kept: the 15 words and the password are enough."
-        );
-        assert!(advice[1].contains("also with a wrong password"));
-        assert!(advice[1].ends_with("mhfe check --fingerprint or --address."));
-        assert_eq!(advice.len(), 2);
     }
 }

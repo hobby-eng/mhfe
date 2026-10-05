@@ -14,6 +14,7 @@ use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
+use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT};
 use crate::terminal::{self, Input, PrivateScreen, Progress, Step};
@@ -297,24 +298,18 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     } else {
         style::hint(match choice {
             Choice::BuiltInCheck(_) => {
-                "The password, PIM, memory level, container or word count may be wrong. The check \
-                 cannot tell which."
+                "The password, a setting, the container or the word count is wrong."
             }
-            _ => {
-                "The password, PIM, memory level, container, BIP39 passphrase or reference may be \
-                 wrong. The check cannot tell which."
-            }
+            _ => "The password, a setting, the container, passphrase or reference is wrong.",
         });
+        style::more(readme::CHECK);
         Ok(NO_MATCH)
     }
 }
 
-/// One 0x... address serves Ethereum and every EVM network, so the list names them under it.
-const COIN_EXPLANATION: &[&str] = &[
-    "One 0x… address serves Ethereum and every EVM network: BNB Smart Chain,",
-    "Polygon, Avalanche C-Chain, Arbitrum, Optimism, Base, Hyperliquid and",
-    "more, with their tokens such as USDT and USDC.",
-];
+/// One 0x... address serves Ethereum and every EVM network, which the README lists.
+const COIN_EXPLANATION: &[&str] =
+    &["Ethereum also covers every EVM network, such as BNB Smart Chain."];
 
 /// Asks which coin the address belongs to, in the order of their market capitalisation.
 fn ask_for_coin(input: &mut Input) -> Result<Coin, Failure> {
@@ -325,7 +320,7 @@ fn ask_for_coin(input: &mut Input) -> Result<Coin, Failure> {
     let question = Question {
         text: "Which coin is the address for?",
         explanation: COIN_EXPLANATION,
-        more: &[],
+        more: None,
         record: Some("Coin"),
     };
     Ok(Coin::ALL[input.choose(&question, &answers)?])
@@ -386,17 +381,11 @@ fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
         Choice::Fingerprint => (
             "the recovered wallet, with this BIP39 passphrase, has this master key fingerprint."
                 .to_owned(),
-            Some(
-                "A fingerprint is a quick 32-bit check; a receiving address (--address) confirms \
-                 the wallet more strongly.",
-            ),
+            Some("A fingerprint is a quick 32-bit check; an address (--address) is stronger."),
         ),
         Choice::BuiltInCheck(words) => (
             format!("the password and settings recover a consistent {words}-word phrase."),
-            Some(
-                "This built-in check does not show that it is your wallet and does not check a \
-                 BIP39 passphrase. Compare a receiving address (--address) for that.",
-            ),
+            Some("It does not prove the wallet or its passphrase; an address (--address) does."),
         ),
     }
 }
@@ -506,9 +495,7 @@ mod tests {
     fn only_a_wallet_reference_claims_the_wallet() {
         let (built_in, limit) = match_meaning(Choice::BuiltInCheck(12));
         assert!(!built_in.contains("wallet"), "{built_in}");
-        assert!(limit
-            .unwrap()
-            .contains("does not show that it is your wallet"));
+        assert!(limit.unwrap().contains("does not prove the wallet"));
         for choice in [Choice::Address, Choice::Fingerprint] {
             assert!(match_meaning(choice).0.contains("recovered wallet"));
         }

@@ -5,6 +5,7 @@ use clap::Args;
 use mhfe::{PhraseLength, RecoveredPhrase, Recovery, Suite, WordCount};
 
 use crate::exit::{Failure, SUCCESS};
+use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, HEADING, STRONG};
 use crate::terminal::{self, Input, Progress};
@@ -116,8 +117,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let mut mhfe = settings::reserve_memory(work)?;
     eprintln!();
     style::warn(
-        "The recovered seed phrase will be shown on the screen.",
-        "Recover only on a trusted computer without a network connection.",
+        "The seed phrase will be shown: recover only on a trusted offline computer.",
+        "",
     );
 
     let mut progress = Progress::start();
@@ -155,10 +156,9 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
                 "Not verified: a {}-word container has no built-in check.",
                 phrase.words
             ),
-            "Any password gives a valid phrase of the same length, so a wrong one is not \
-             detected. Before you rely on it, confirm it against your wallet with mhfe check \
-             --fingerprint or --address.",
+            "Confirm it against your wallet with mhfe check.",
         );
+        style::more(readme::DECRYPT);
     } else if phrase.verified {
         style::ok(format!(
             "{} a {}-word phrase that passed its built-in check.",
@@ -166,19 +166,19 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
             phrase.words
         ));
         // The built-in check confirms the password and settings, never which wallet this is.
-        style::hint("This confirms the password and settings, not the wallet: mhfe check --address does that.");
+        style::hint("It confirms the password, not the wallet: mhfe check does that.");
     } else if length == PhraseLength::Detect {
         style::warn(
-            "Not verified: no shorter length passed its check, so the result is read as 24 words.",
-            "If your original has 24 words, compare this phrase with your wallet. If it has \
-             fewer, this usually means a wrong password, PIM, memory level or container.",
+            "Not verified: read as 24 words.",
+            "For a shorter original, the password or a setting is wrong.",
         );
+        style::more(readme::DECRYPT);
     } else {
         style::warn(
             "Not verified: read as 24 words, as you chose.",
-            "A 24-word phrase has no built-in check, so any password gives a valid phrase: compare \
-             it with your wallet.",
+            "Compare it with your wallet.",
         );
+        style::more(readme::DECRYPT);
     }
     eprintln!();
     eprintln!(
@@ -194,9 +194,8 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
 fn show_ambiguous(candidates: &[RecoveredPhrase], input: &Input) {
     eprintln!();
     style::warn(
-        "Several lengths passed their check.",
-        "This happens by accident for about one container in four billion. Compare each phrase \
-         with your wallet, or run again with --words N if you know the length.",
+        "Several lengths passed their check, a rare accident.",
+        "Compare each with your wallet, or run again with --words N.",
     );
     for candidate in candidates {
         let status = if candidate.verified {
