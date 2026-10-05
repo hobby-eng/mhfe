@@ -219,48 +219,17 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     // The reference and passphrase are read before the long computation starts, so the user
     // can walk away while it runs.
-    let address: Address;
-    let passphrase: Zeroizing<String>;
-    let _passphrase_locked: LockedPages;
-    let limits = SearchLimits::default();
+    let wallet_reference: WalletReference;
     let reference = match choice {
-        Choice::Address => {
-            let coin = match options.coin {
-                Some(coin) => coin,
-                None if input.is_script() => Coin::Bitcoin,
-                None => ask_for_coin(&mut input)?,
-            };
-            if options.coin.is_some() && !input.is_script() {
-                // The summary names the coin, as the question would have recorded it.
-                choice::record("Coin", coin.name());
-            }
-            address = read_public(
+        Choice::Address | Choice::Fingerprint => {
+            wallet_reference = WalletReference::read_given(
                 &mut input,
-                &format!("Receiving address ({}): ", coin.address_forms()),
-                ("Address", ""),
-                |text| Address::parse(coin, text),
+                matches!(choice, Choice::Fingerprint),
+                options.coin,
+                options.path.clone(),
+                Operation::Check,
             )?;
-            show_search(&address, options.path.as_ref(), limits);
-            (passphrase, _passphrase_locked) = read_passphrase(&mut input)?;
-            Reference::Address {
-                address: &address,
-                passphrase: &passphrase,
-                path: options.path.as_ref(),
-                limits,
-            }
-        }
-        Choice::Fingerprint => {
-            let fingerprint = read_public(
-                &mut input,
-                "Master key fingerprint, eight hex digits: ",
-                ("Master key", "fingerprint "),
-                parse_fingerprint,
-            )?;
-            (passphrase, _passphrase_locked) = read_passphrase(&mut input)?;
-            Reference::Fingerprint {
-                fingerprint,
-                passphrase: &passphrase,
-            }
+            wallet_reference.reference()
         }
         Choice::BuiltInCheck(words) => Reference::BuiltInCheck {
             words: WordCount::new(words)?,
@@ -442,6 +411,96 @@ fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failur
 }
 
 /// The length of the original, for its built-in check.
+/// A reference of the wallet that the owner typed, a receiving address or the master key
+/// fingerprint, with the wallet's BIP39 passphrase: what a check compares a recovery with, and what
+/// confirms a recovery without a built-in check before it is encrypted again.
+pub struct WalletReference {
+    kind: ReferenceKind,
+    path: Option<DerivationPath>,
+    passphrase: Zeroizing<String>,
+    // The pages of `passphrase`, kept out of swap; declared after it, so they are unlocked once
+    // it is wiped.
+    _passphrase_locked: LockedPages,
+}
+
+enum ReferenceKind {
+    Address(Address),
+    Fingerprint([u8; 4]),
+}
+
+impl WalletReference {
+    /// Reads a receiving address, of a coin asked for, or with `fingerprint` the master key
+    /// fingerprint, and then the passphrase on the private screen of `operation`.
+    pub fn read(
+        input: &mut Input,
+        fingerprint: bool,
+        operation: Operation,
+    ) -> Result<Self, Failure> {
+        Self::read_given(input, fingerprint, None, None, operation)
+    }
+
+    /// [`WalletReference::read`] with a coin and a path from the command line. A script without
+    /// a coin means Bitcoin. A receiving address shows what the search covers.
+    fn read_given(
+        input: &mut Input,
+        fingerprint: bool,
+        coin: Option<Coin>,
+        path: Option<DerivationPath>,
+        operation: Operation,
+    ) -> Result<Self, Failure> {
+        let kind = if fingerprint {
+            ReferenceKind::Fingerprint(read_public(
+                input,
+                "Master key fingerprint, eight hex digits: ",
+                ("Master key", "fingerprint "),
+                parse_fingerprint,
+            )?)
+        } else {
+            let coin = match coin {
+                Some(coin) => {
+                    if !input.is_script() {
+                        // The summary names the coin, as the question would have recorded it.
+                        choice::record("Coin", coin.name());
+                    }
+                    coin
+                }
+                None if input.is_script() => Coin::Bitcoin,
+                None => ask_for_coin(input)?,
+            };
+            let address = read_public(
+                input,
+                &format!("Receiving address ({}): ", coin.address_forms()),
+                ("Address", ""),
+                |text| Address::parse(coin, text),
+            )?;
+            show_search(&address, path.as_ref(), SearchLimits::default());
+            ReferenceKind::Address(address)
+        };
+        let (passphrase, passphrase_locked) = read_passphrase(input, operation)?;
+        Ok(Self {
+            kind,
+            path,
+            passphrase,
+            _passphrase_locked: passphrase_locked,
+        })
+    }
+
+    pub fn reference(&self) -> Reference<'_> {
+        match &self.kind {
+            ReferenceKind::Address(address) => Reference::Address {
+                address,
+                passphrase: &self.passphrase,
+                path: self.path.as_ref(),
+                limits: SearchLimits::default(),
+            },
+            ReferenceKind::Fingerprint(fingerprint) => Reference::Fingerprint {
+                fingerprint: *fingerprint,
+                passphrase: &self.passphrase,
+            },
+        }
+    }
+}
+
 fn ask_for_original_length(input: &mut Input) -> Result<usize, Failure> {
     let answers = BUILT_IN_CHECK_LENGTHS.map(|words| Answer::new(format!("{words} words"), ""));
     let question = Question::new("How many words does the original have?", "Original");
@@ -479,8 +538,11 @@ fn read_public<T>(
 /// The BIP39 passphrase is a separate secret from the MHFE password; most wallets have none. It is
 /// typed on the private screen, and the summary records only whether there is one. It comes with
 /// the lock that keeps it out of swap, which must live as long as it does.
-fn read_passphrase(input: &mut Input) -> Result<(Zeroizing<String>, LockedPages), Failure> {
-    let screen = PrivateScreen::enter(input, Operation::Check.title());
+fn read_passphrase(
+    input: &mut Input,
+    operation: Operation,
+) -> Result<(Zeroizing<String>, LockedPages), Failure> {
+    let screen = PrivateScreen::enter(input, operation.title());
     if screen.is_active() {
         eprintln!();
     }

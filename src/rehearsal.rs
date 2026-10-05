@@ -1,12 +1,13 @@
 //! The rehearsal check (specification: "Application requirements"): a full recovery that answers
 //! "matches" or "does not match", and on a match with an address the path where it was found.
-//! No part of the recovered phrase leaves this module, and a wrong password gives no hint of how
-//! close it was.
+//! No part of the recovered phrase leaves the check, and a wrong password gives no hint of how
+//! close it was. The re-encryption guard uses the same comparison: a phrase recovered to be
+//! encrypted again comes out only once it is confirmed.
 
 use zeroize::Zeroizing;
 
 use crate::engine::Argon2Engine;
-use crate::mhfe::{phrase_from_entropy, suite_3_state};
+use crate::mhfe::{phrase_from_entropy, suite_3_state, PhraseLength, RecoveredPhrase, Recovery};
 use crate::packing::{self, State};
 use crate::suite::Suite;
 use crate::wallet::{self, Address, DerivationPath, SearchLimits};
@@ -111,6 +112,78 @@ impl<E: Argon2Engine> Mhfe<E> {
     }
 }
 
+/// How a phrase recovered to be encrypted again is confirmed (the re-encryption guard).
+pub enum Confirmation<'a> {
+    /// Its built-in check at the stated length: a 12- to 21-word original of a 24-word container
+    /// only.
+    BuiltInCheck,
+    /// A receiving address or the fingerprint of the wallet, compared as the rehearsal check
+    /// compares them.
+    Wallet(&'a Reference<'a>),
+    /// The owner compares the phrase with their backup and confirms it. The library cannot tell:
+    /// the caller must show the phrase and go on only if the owner confirms it.
+    Owner,
+}
+
+impl<E: Argon2Engine> Mhfe<E> {
+    /// Recovers the phrase of `container` to encrypt it again under a new password or settings,
+    /// and gives it only once it is confirmed (the re-encryption guard), as `confirmation` says:
+    /// a 12- to 21-word original of a 24-word container passes its built-in check at the length
+    /// `words` the owner states in every case, and a 24-word original or a same-length container,
+    /// which have none, need a wallet reference or the owner. Encrypting the phrase again under the
+    /// old password and comparing proves nothing, as that gives the same container for every
+    /// password, so it is not a confirmation. Everything is checked before the first Argon2 call.
+    pub fn recover_confirmed(
+        &mut self,
+        container: &str,
+        password: &Password,
+        words: WordCount,
+        confirmation: Confirmation<'_>,
+        on_progress: ProgressCallback<'_>,
+    ) -> Result<RecoveredPhrase, MhfeError> {
+        let container_words = container.split_whitespace().count();
+        let same_length = Suite::of_container(container_words) == Ok(Suite::SameLength);
+        if same_length && words.get() != container_words {
+            return Err(MhfeError::LengthChoiceNotApplicable { container_words });
+        }
+        let has_check = !same_length && packing::SHORT_WORD_COUNTS.contains(&words.get());
+        let reference = match confirmation {
+            // The built-in check is the stated length's own, not a reference of the wallet.
+            Confirmation::Wallet(Reference::BuiltInCheck { .. }) | Confirmation::BuiltInCheck
+                if !has_check =>
+            {
+                return Err(MhfeError::ReferenceRequired)
+            }
+            Confirmation::Wallet(Reference::BuiltInCheck { .. }) | Confirmation::BuiltInCheck => {
+                None
+            }
+            Confirmation::Wallet(reference) => Some(reference),
+            Confirmation::Owner => None,
+        };
+        let length = if same_length {
+            PhraseLength::Detect
+        } else {
+            PhraseLength::Words(words)
+        };
+        // A stated length gives one reading, which for a short length has passed its check.
+        let Recovery::Phrase(phrase) = self.decrypt(container, password, length, on_progress)?
+        else {
+            return Err(MhfeError::Internal(
+                "a stated length gave several readings".to_owned(),
+            ));
+        };
+        if has_check && !phrase.verified {
+            return Err(MhfeError::VerifierMismatch);
+        }
+        if let Some(reference) = reference {
+            if !compare(&phrase.phrase, reference)?.matches() {
+                return Err(MhfeError::ReferenceMismatch);
+            }
+        }
+        Ok(phrase)
+    }
+}
+
 fn read_phrase(x: &State, words: usize) -> Result<Zeroizing<String>, MhfeError> {
     let entropy = packing::unpack(x, words)?;
     phrase_from_entropy(&entropy)
@@ -157,6 +230,152 @@ mod tests {
             WorkFactor::default(),
             NativeEngine::reduced_for_tests(cost).unwrap(),
         )
+    }
+
+    /// The re-encryption guard: a phrase comes out only once confirmed.
+    #[test]
+    fn a_recovery_to_encrypt_again_needs_a_confirmation() {
+        let password = Password::new("public test password").unwrap();
+        let wrong = Password::new("public test passwore").unwrap();
+        let none = &mut |_, _| Ok(());
+        let mut mhfe = reduced();
+        let twelve = WordCount::new(12).unwrap();
+        let twenty_four = WordCount::new(24).unwrap();
+
+        // A 12-word original in a 24-word container: its built-in check at the stated length.
+        let container = mhfe
+            .encrypt(ABANDON, &password, Suite::TwentyFourWords, none)
+            .unwrap();
+        let phrase = mhfe
+            .recover_confirmed(
+                &container,
+                &password,
+                twelve,
+                Confirmation::BuiltInCheck,
+                none,
+            )
+            .unwrap();
+        assert_eq!(*phrase.phrase, ABANDON);
+        assert!(matches!(
+            mhfe.recover_confirmed(&container, &wrong, twelve, Confirmation::BuiltInCheck, none),
+            Err(MhfeError::VerifierMismatch)
+        ));
+
+        // A 24-word original has no check: refused without a reference, before any Argon2 call.
+        const ART: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
+            abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+            abandon abandon abandon abandon abandon art";
+        let container = mhfe
+            .encrypt(ART, &password, Suite::TwentyFourWords, none)
+            .unwrap();
+        let mut rounds = 0;
+        assert!(matches!(
+            mhfe.recover_confirmed(
+                &container,
+                &password,
+                twenty_four,
+                Confirmation::BuiltInCheck,
+                &mut |_, _| {
+                    rounds += 1;
+                    Ok(())
+                }
+            ),
+            Err(MhfeError::ReferenceRequired)
+        ));
+        assert_eq!(rounds, 0);
+        let fingerprint = wallet::master_fingerprint(ART, "").unwrap();
+        let right = Reference::Fingerprint {
+            fingerprint,
+            passphrase: "",
+        };
+        let phrase = mhfe
+            .recover_confirmed(
+                &container,
+                &password,
+                twenty_four,
+                Confirmation::Wallet(&right),
+                none,
+            )
+            .unwrap();
+        assert_eq!(*phrase.phrase, ART);
+        // The wrong password gives another valid phrase, which the reference refuses.
+        assert!(matches!(
+            mhfe.recover_confirmed(
+                &container,
+                &wrong,
+                twenty_four,
+                Confirmation::Wallet(&right),
+                none
+            ),
+            Err(MhfeError::ReferenceMismatch)
+        ));
+        let other_passphrase = Reference::Fingerprint {
+            fingerprint,
+            passphrase: "TREZOR",
+        };
+        assert!(matches!(
+            mhfe.recover_confirmed(
+                &container,
+                &password,
+                twenty_four,
+                Confirmation::Wallet(&other_passphrase),
+                none
+            ),
+            Err(MhfeError::ReferenceMismatch)
+        ));
+
+        // The owner may confirm a 24-word original instead: the phrase comes out for showing.
+        let phrase = mhfe
+            .recover_confirmed(
+                &container,
+                &password,
+                twenty_four,
+                Confirmation::Owner,
+                none,
+            )
+            .unwrap();
+        assert_eq!(*phrase.phrase, ART);
+
+        // A same-length container: its own length, and a reference.
+        let container = mhfe
+            .encrypt(ABANDON, &password, Suite::SameLength, none)
+            .unwrap();
+        assert!(matches!(
+            mhfe.recover_confirmed(
+                &container,
+                &password,
+                twelve,
+                Confirmation::BuiltInCheck,
+                none
+            ),
+            Err(MhfeError::ReferenceRequired)
+        ));
+        assert!(matches!(
+            mhfe.recover_confirmed(
+                &container,
+                &password,
+                twenty_four,
+                Confirmation::Wallet(&right),
+                none
+            ),
+            Err(MhfeError::LengthChoiceNotApplicable {
+                container_words: 12
+            })
+        ));
+        let abandon = Reference::Fingerprint {
+            fingerprint: [0x73, 0xc5, 0xda, 0x0a],
+            passphrase: "",
+        };
+        let phrase = mhfe
+            .recover_confirmed(
+                &container,
+                &password,
+                twelve,
+                Confirmation::Wallet(&abandon),
+                none,
+            )
+            .unwrap();
+        assert_eq!(*phrase.phrase, ABANDON);
     }
 
     #[test]

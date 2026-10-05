@@ -287,6 +287,28 @@ yourself; it then accepts only a 24-word container or a same-length container of
 For about one container in four billion, several lengths pass their check by accident; MHFE then
 shows each reading, and you compare them with your wallet or choose the length with `--words N`.
 
+### `mhfe rekey`
+
+`mhfe rekey` puts the same seed phrase into a new container, under a new password, new settings or
+both. It asks for the old container, its password and settings, and the length of your phrase.
+Before it encrypts anything again, it confirms the recovery. A 12- to 21-word phrase in a 24-word
+container passes its built-in check at that length. A 24-word phrase or a container of the same
+length has no such check: it is compared with a receiving address or the master key fingerprint of
+your wallet, as `mhfe check` compares them, or, if you choose, shown to you on a private screen to
+compare word for word with an independent written record of it, such as the original backup. From
+memory such a comparison confirms little; without a record, use an address or the fingerprint.
+Encrypting under the old password and comparing would prove nothing, so it does not offer that.
+Then it asks for the new settings and password and makes the new container as `mhfe encrypt` does,
+in the same format as the old one.
+
+The old container is not revoked: with the old password it still opens your wallet. Rehearse the
+new plate with `mhfe check`, best on another day, and only then destroy every copy of the old one.
+Until then two containers of the same phrase exist, which plausible deniability does not cover.
+
+Every wallet that another password opens on the old container, such as a decoy, is a different one
+on the new container: move its funds first. MHFE says so every time, without asking whether such a
+wallet exists, as an answer would be a record of it.
+
 ## Settings: PIM and memory level
 
 Both default to 0, and most people should leave them there. At a terminal, each command offers the

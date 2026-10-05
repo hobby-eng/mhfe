@@ -64,7 +64,7 @@ BACKSPACE, CTRL_U, CTRL_C = b"\x7f", b"\x15", b"\x03"
 # The keys of the menu, as a terminal sends them. Ctrl+Up carries a 5, which must not choose entry 5.
 UP, DOWN, ENTER, CTRL_UP, ESCAPE = b"\x1b[A", b"\x1b[B", b"\r", b"\x1b[1;5A", b"\x1b"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
-PASSWORD_ENTRY = 4
+PASSWORD_ENTRY = 5
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN, PASSWORD_MADE = b"Esc quits", b"bits"
 BACK_TO_MENU = b"Press Enter to return to the menu (Esc quits)."

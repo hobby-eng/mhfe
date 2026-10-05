@@ -75,6 +75,11 @@ pub enum Operation {
     Decrypt,
     /// Twelve rounds backwards, compared with a reference instead of shown.
     Check,
+    /// `mhfe rekey`, first the twelve rounds backwards of the old container, confirmed but not
+    /// shown...
+    Rekey,
+    /// ...then the 24 rounds of the new one, as an encryption, under the same title.
+    RekeyNew,
 }
 
 impl Operation {
@@ -84,6 +89,7 @@ impl Operation {
             Operation::Encrypt => "Encrypt a seed phrase",
             Operation::Decrypt => "Recover a seed phrase",
             Operation::Check => "Rehearse a recovery",
+            Operation::Rekey | Operation::RekeyNew => "Change the password",
         }
     }
 }
@@ -98,7 +104,10 @@ pub fn choose(
     input: &mut Input,
     operation: Operation,
 ) -> Result<WorkFactor, Failure> {
-    style::title(operation.title());
+    // The new settings of a rekey continue its screen.
+    if !matches!(operation, Operation::RekeyNew) {
+        style::title(operation.title());
+    }
     let defaults = settings.work_factor()?;
     let asked = !settings.given() && input.can_ask_again();
     let work = if asked && ask_for_own(input, operation, defaults)? {
@@ -150,14 +159,14 @@ fn ask_for_own(
     let scale = u64::from(rounds_of(operation) / ROUNDS);
     let time = format!("about {}", time_range(low * scale, high * scale));
     let (text, answers) = match operation {
-        Operation::Encrypt => (
+        Operation::Encrypt | Operation::RekeyNew => (
             "Which settings should protect the phrase?",
             [
                 Answer::new("PIM 0 and memory level 0 (recommended)", time),
                 Answer::new("My own PIM and memory level", "typed next"),
             ],
         ),
-        Operation::Decrypt | Operation::Check => (
+        Operation::Decrypt | Operation::Check | Operation::Rekey => (
             "Which settings was the container made with?",
             [
                 Answer::new("PIM 0 and memory level 0, the defaults", time),
@@ -250,8 +259,8 @@ fn ask_number(
 /// The rounds of an operation: twelve, or for an encryption twelve more to check it.
 fn rounds_of(operation: Operation) -> u32 {
     match operation {
-        Operation::Encrypt => ENCRYPTION_ROUNDS,
-        Operation::Decrypt | Operation::Check => ROUNDS,
+        Operation::Encrypt | Operation::RekeyNew => ENCRYPTION_ROUNDS,
+        Operation::Decrypt | Operation::Check | Operation::Rekey => ROUNDS,
     }
 }
 
@@ -261,8 +270,8 @@ fn rounds_of(operation: Operation) -> u32 {
 fn show(work: WorkFactor, operation: Operation, asked: bool) {
     let rounds = rounds_of(operation);
     let how = match operation {
-        Operation::Encrypt => "24 rounds (12 to encrypt, 12 to check)",
-        Operation::Decrypt | Operation::Check => "12 rounds",
+        Operation::Encrypt | Operation::RekeyNew => "24 rounds (12 to encrypt, 12 to check)",
+        Operation::Decrypt | Operation::Check | Operation::Rekey => "12 rounds",
     };
     // The estimate is for the twelve rounds of one pass through the cipher.
     let (low, high) = work.estimated_seconds();
@@ -305,7 +314,7 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         style::fact("Isolation", enforced);
     }
     eprintln!();
-    if matches!(operation, Operation::Encrypt) && work.memory_level() > 0 {
+    if matches!(operation, Operation::Encrypt | Operation::RekeyNew) && work.memory_level() > 0 {
         style::warn(
             &format!(
                 "Recovery will need a computer with {} GiB of free memory.",
