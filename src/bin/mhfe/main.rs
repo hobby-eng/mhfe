@@ -21,6 +21,7 @@ mod protect;
 mod readme;
 mod serve;
 mod settings;
+mod strength;
 mod style;
 mod terminal;
 mod test_tools;
