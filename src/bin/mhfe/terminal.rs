@@ -373,8 +373,13 @@ impl PrivateScreen {
 /// after which the screen is cleared: what it showed then leaves the terminal and its scrollback.
 /// Every other key is ignored, so that a stray one cannot clear the screen too early.
 pub fn wait_to_leave() -> Result<(), Failure> {
+    wait_to_leave_saying("Write it down now: Enter or Escape clears this screen.")
+}
+
+/// [`wait_to_leave`] with another line above the wait, for a screen that needs no writing down.
+pub fn wait_to_leave_saying(line: &str) -> Result<(), Failure> {
     eprintln!();
-    style::warn("Write it down now: Enter or Escape clears this screen.", "");
+    style::warn(line, "");
     hidden_input::with_keys(|next_key| loop {
         match next_key()? {
             hidden_input::Key::Enter | hidden_input::Key::Quit => return Ok(()),

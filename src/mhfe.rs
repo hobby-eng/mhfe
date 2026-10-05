@@ -384,7 +384,7 @@ pub(crate) fn container_state(
 }
 
 /// Reads `X` as a phrase of `words` words; a short length must pass its check.
-fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
+pub(crate) fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
     let entropy = packing::unpack(x, words)?;
     Ok(RecoveredPhrase::new(
         words,
