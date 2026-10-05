@@ -8,6 +8,7 @@ use anstream::eprintln;
 use mhfe::{Password, PhraseLength, Recovery, Suite, WorkFactor};
 use serde_json::Value;
 
+use crate::choice;
 use crate::exit::{Failure, INTERNAL_ERROR, SUCCESS};
 use crate::readme;
 use crate::settings;
@@ -79,9 +80,60 @@ pub fn run() -> Result<i32, Failure> {
             (2 * high).div_ceil(60)
         ),
     );
-    let mut mhfe = settings::reserve_memory(work)?;
     let mut progress = Progress::start();
+    let (suite_3_ok, suite_4_ok) = run_vectors(&suite_3, &suite_4, &mut progress)?;
 
+    eprintln!();
+    let verdict = |ok: bool| {
+        if ok {
+            paint(style::GOOD, "as published")
+        } else {
+            paint(style::BAD, "NOT as published")
+        }
+    };
+    style::fact("Suite 3", format!("encrypts {}", verdict(suite_3_ok)));
+    style::fact("Suite 4", format!("recovers {}", verdict(suite_4_ok)));
+    eprintln!();
+    if suite_3_ok && suite_4_ok {
+        style::ok("This program computes MHFE as the published vectors say.");
+        Ok(SUCCESS)
+    } else {
+        style::alarm(
+            "This program does not compute MHFE as published.",
+            "Do not use it for a real phrase; try another computer or build.",
+        );
+        style::more(readme::SELF_TEST);
+        Ok(INTERNAL_ERROR)
+    }
+}
+
+/// The self-test that must pass before a wallet derived from a container is shown (the
+/// specification asks for it): a fault that derives and recovers the same wrong way would
+/// otherwise give a wallet no correct program finds again.
+pub fn require_pass() -> Result<(), Failure> {
+    let suite_3 = vector(SUITE_3_VECTOR)?;
+    let suite_4 = vector(SUITE_4_VECTOR)?;
+    let mut progress = Progress::start();
+    let passed = run_vectors(&suite_3, &suite_4, &mut progress)? == (true, true);
+    if !passed {
+        return Err(Failure::internal(
+            "This program does not compute MHFE as the published vectors say (mhfe self-test), \
+             so it shows no wallet. Try another computer or build.",
+        ));
+    }
+    choice::record("Self-test", "the published vectors match");
+    Ok(())
+}
+
+/// Encrypts the suite 3 vector and recovers the suite 4 vector at full cost; whether each result
+/// is the published one.
+fn run_vectors(
+    suite_3: &Vector,
+    suite_4: &Vector,
+    progress: &mut Progress,
+) -> Result<(bool, bool), Failure> {
+    // Both vectors use the default settings, PIM 0 and memory level 0.
+    let mut mhfe = settings::reserve_memory(WorkFactor::default())?;
     let password = Password::new(&suite_3.password)?;
     let encrypted = mhfe.encrypt_unchecked(
         &suite_3.phrase,
@@ -108,29 +160,7 @@ pub fn run() -> Result<i32, Failure> {
     progress.finish();
     let suite_4_ok =
         matches!(&recovered, Recovery::Phrase(phrase) if *phrase.phrase == suite_4.phrase);
-
-    eprintln!();
-    let verdict = |ok: bool| {
-        if ok {
-            paint(style::GOOD, "as published")
-        } else {
-            paint(style::BAD, "NOT as published")
-        }
-    };
-    style::fact("Suite 3", format!("encrypts {}", verdict(suite_3_ok)));
-    style::fact("Suite 4", format!("recovers {}", verdict(suite_4_ok)));
-    eprintln!();
-    if suite_3_ok && suite_4_ok {
-        style::ok("This program computes MHFE as the published vectors say.");
-        Ok(SUCCESS)
-    } else {
-        style::alarm(
-            "This program does not compute MHFE as published.",
-            "Do not use it for a real phrase; try another computer or build.",
-        );
-        style::more(readme::SELF_TEST);
-        Ok(INTERNAL_ERROR)
-    }
+    Ok((suite_3_ok, suite_4_ok))
 }
 
 #[cfg(test)]

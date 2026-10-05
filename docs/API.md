@@ -92,6 +92,11 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `REFERENCE_MISMATCH` when it does not match), or `Confirmation::Owner`: the caller then shows the
   phrase and goes on only if the owner confirms it against their backup. Encrypting under the old
   password and comparing proves nothing, so it is not offered.
+- `derive_wallet(container, password, on_progress)` gives the hidden wallet that `password` opens on
+  a 24-word container, read as 24 words, unverified (a hidden wallet behind an honest disclosure).
+  A password whose reading passes the built-in check of a 12- to 21-word phrase is refused
+  (`HIDDEN_WALLET_PASSES_CHECK`). A program should run the published vectors first, as
+  `mhfe self-test` does, before it shows such a wallet.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
@@ -123,6 +128,7 @@ strings in the browser.
 | `NO_BUILT_IN_CHECK`               | The built-in check was asked for a same-length container                            |
 | `REFERENCE_REQUIRED`              | A recovery to encrypt again has no built-in check and no address or fingerprint     |
 | `REFERENCE_MISMATCH`              | The phrase recovered to encrypt again does not match the address or fingerprint     |
+| `HIDDEN_WALLET_PASSES_CHECK`      | A hidden wallet's phrase passes the built-in check of a shorter phrase              |
 | `INVALID_PIM`                     | PIM outside 0 to 1023                                                               |
 | `INVALID_MEMORY_LEVEL`            | Memory level outside 0 to 21                                                        |
 | `EMPTY_PASSWORD`                  | The password is empty                                                               |

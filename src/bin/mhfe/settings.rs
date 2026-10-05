@@ -80,6 +80,8 @@ pub enum Operation {
     Rekey,
     /// ...then the 24 rounds of the new one, as an encryption, under the same title.
     RekeyNew,
+    /// `mhfe wallets`: twelve rounds backwards for each wallet another password opens.
+    Wallets,
 }
 
 impl Operation {
@@ -90,6 +92,7 @@ impl Operation {
             Operation::Decrypt => "Recover a seed phrase",
             Operation::Check => "Rehearse a recovery",
             Operation::Rekey | Operation::RekeyNew => "Change the password",
+            Operation::Wallets => "Open hidden wallets",
         }
     }
 }
@@ -166,7 +169,7 @@ fn ask_for_own(
                 Answer::new("My own PIM and memory level", "typed next"),
             ],
         ),
-        Operation::Decrypt | Operation::Check | Operation::Rekey => (
+        Operation::Decrypt | Operation::Check | Operation::Rekey | Operation::Wallets => (
             "Which settings was the container made with?",
             [
                 Answer::new("PIM 0 and memory level 0, the defaults", time),
@@ -260,7 +263,7 @@ fn ask_number(
 fn rounds_of(operation: Operation) -> u32 {
     match operation {
         Operation::Encrypt | Operation::RekeyNew => ENCRYPTION_ROUNDS,
-        Operation::Decrypt | Operation::Check | Operation::Rekey => ROUNDS,
+        Operation::Decrypt | Operation::Check | Operation::Rekey | Operation::Wallets => ROUNDS,
     }
 }
 
@@ -272,6 +275,7 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     let how = match operation {
         Operation::Encrypt | Operation::RekeyNew => "24 rounds (12 to encrypt, 12 to check)",
         Operation::Decrypt | Operation::Check | Operation::Rekey => "12 rounds",
+        Operation::Wallets => "12 rounds a wallet",
     };
     // The estimate is for the twelve rounds of one pass through the cipher.
     let (low, high) = work.estimated_seconds();

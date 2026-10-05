@@ -57,6 +57,7 @@ impl From<MhfeError> for Failure {
             | MhfeError::LengthChoiceNotApplicable { .. }
             | MhfeError::NoBuiltInCheck { .. }
             | MhfeError::ReferenceRequired
+            | MhfeError::HiddenWalletPassesCheck
             | MhfeError::InvalidPim(_)
             | MhfeError::InvalidMemoryLevel(_)
             | MhfeError::EmptyPassword

@@ -25,6 +25,8 @@ pub const CHECK: &str = section!("mhfe-check");
 pub const DECRYPT: &str = section!("mhfe-decrypt");
 /// What a new password or new settings change, and what they do not.
 pub const REKEY: &str = section!("mhfe-rekey");
+/// What hidden wallets are, and how to keep them hidden.
+pub const WALLETS: &str = section!("mhfe-wallets");
 /// What a failed self-test means.
 pub const SELF_TEST: &str = section!("mhfe-self-test");
 
@@ -42,6 +44,7 @@ mod tests {
         CHECK,
         DECRYPT,
         REKEY,
+        WALLETS,
         SELF_TEST,
     ];
 

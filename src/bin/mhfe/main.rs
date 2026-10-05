@@ -27,6 +27,7 @@ mod strength;
 mod style;
 mod terminal;
 mod test_tools;
+mod wallets;
 
 use clap::{Parser, Subcommand};
 
@@ -80,6 +81,9 @@ enum Command {
     /// Change the password or settings of a container
     #[command(long_about = rekey::about(), after_help = rekey::help())]
     Rekey(rekey::Options),
+    /// Open hidden wallets on a container with other passwords
+    #[command(long_about = wallets::about(), after_help = wallets::help())]
+    Wallets(wallets::Options),
     /// Make a strong password of random dice words
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
@@ -125,6 +129,7 @@ fn main_help() -> String {
                 "mhfe rekey",
                 "Change the password, never showing the phrase",
             ),
+            ("mhfe wallets", "Open hidden wallets with other passwords"),
             ("mhfe password", "Make a strong password of five dice words"),
             (
                 "mhfe password --dice --words 6",
@@ -214,6 +219,7 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::Decrypt(options) => decrypt::run(options),
         Command::Check(options) => check::run(options),
         Command::Rekey(options) => rekey::run(options),
+        Command::Wallets(options) => wallets::run(options),
         Command::Password(options) => diceware::run(options),
         Command::SelfTest => self_test::run(),
         Command::Serve(options) => serve::run(options),

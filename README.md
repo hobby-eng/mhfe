@@ -309,6 +309,32 @@ Every wallet that another password opens on the old container, such as a decoy, 
 on the new container: move its funds first. MHFE says so every time, without asking whether such a
 wallet exists, as an answer would be a record of it.
 
+### `mhfe wallets`
+
+Every password other than the container's own opens another valid 24-word wallet on a 24-word
+container. `mhfe wallets` shows the wallet each password you type opens, so that one container can
+carry hidden wallets behind the one you could disclose: under pressure you give the container's own
+password, and the wallet it opens, with its genuine history, is all anyone sees. The specification
+describes this as a hidden wallet behind an honest disclosure.
+
+It first checks itself against the published vectors, as `mhfe self-test` does: a hidden wallet
+exists only as the output of the program, and any correct program must find it again later. Each
+wallet appears on a private screen. It need not be written down, as the container and its password
+give it again, and nothing records which passwords you used or how many. A password whose wallet
+passes the built-in check of a shorter phrase, as the container's own password of a 12- to 21-word
+phrase does, is refused, so that recovery never calls a hidden wallet verified.
+
+To keep a hidden wallet hidden:
+
+- Fund it only from sources linked neither to you nor to the main wallet. Moving money from the
+  main wallet to it links the two.
+- It depends on the exact container and settings. `mhfe rekey`, another suite, a forgotten password
+  or the loss of every copy of the container loses it, unless its funds were moved first.
+- Give each a strong password of its own, different from the container's own and from the others.
+- A watch-only copy of it on an everyday device is evidence of it.
+
+Hidden wallets have 24 words for now.
+
 ### `mhfe self-test`
 
 `mhfe self-test` checks this program on this computer against the published test vectors: it
