@@ -47,6 +47,7 @@ mod suite;
 mod validation_cases;
 pub mod vectors;
 pub mod wallet;
+pub mod wallet_check;
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 mod wasm_api;
 

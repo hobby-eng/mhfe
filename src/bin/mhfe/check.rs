@@ -131,6 +131,8 @@ enum Choice {
     Address,
     Fingerprint,
     BuiltInCheck(usize),
+    /// The wallet check of a phrase that `mhfe new` made with one (a draft).
+    WalletCheck,
 }
 
 fn examples() -> String {
@@ -220,6 +222,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // The reference and passphrase are read before the long computation starts, so the user
     // can walk away while it runs.
     let wallet_reference: WalletReference;
+    let check_passphrase: (Zeroizing<String>, LockedPages);
     let reference = match choice {
         Choice::Address | Choice::Fingerprint => {
             wallet_reference = WalletReference::read_given(
@@ -234,6 +237,16 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         Choice::BuiltInCheck(words) => Reference::BuiltInCheck {
             words: WordCount::new(words)?,
         },
+        Choice::WalletCheck => {
+            check_passphrase = read_passphrase(&mut input, Operation::Check)?;
+            // Refused before the long computation: the check is tested with its passphrase only.
+            if check_passphrase.0.is_empty() {
+                return Err(MhfeError::WalletCheckNeedsPassphrase.into());
+            }
+            Reference::WalletCheck {
+                passphrase: &check_passphrase.0,
+            }
+        }
     };
 
     let mut mhfe = settings::reserve_memory(work)?;
@@ -268,6 +281,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         style::hint(match choice {
             Choice::BuiltInCheck(_) => {
                 "The password, a setting, the container or the word count is wrong."
+            }
+            Choice::WalletCheck => {
+                "If this wallet was made with a check, the password, a setting or the passphrase is \
+                 wrong."
             }
             _ => "The password, a setting, the container, passphrase or reference is wrong.",
         });
@@ -377,6 +394,11 @@ fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
             format!("the password and settings recover a consistent {words}-word phrase."),
             Some("It does not prove the wallet or its passphrase; an address (--address) does."),
         ),
+        Choice::WalletCheck => (
+            "the recovered phrase with this passphrase passes its wallet check (16 bits)."
+                .to_owned(),
+            Some("It does not prove the wallet; an address (--address) does."),
+        ),
     }
 }
 
@@ -398,6 +420,10 @@ fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failur
             "Only the built-in check",
             "checks the password, not the wallet",
         ));
+        answers.push(Answer::new(
+            "Its wallet check",
+            "made by mhfe new; needs the passphrase",
+        ));
     }
     let question = Question::new(
         "What should the recovered seed phrase be compared with?",
@@ -406,7 +432,8 @@ fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failur
     match input.choose(&question, &answers)? {
         0 => Ok(Choice::Address),
         1 => Ok(Choice::Fingerprint),
-        _ => ask_for_original_length(input).map(Choice::BuiltInCheck),
+        2 => ask_for_original_length(input).map(Choice::BuiltInCheck),
+        _ => Ok(Choice::WalletCheck),
     }
 }
 
@@ -538,15 +565,26 @@ fn read_public<T>(
 /// The BIP39 passphrase is a separate secret from the MHFE password; most wallets have none. It is
 /// typed on the private screen, and the summary records only whether there is one. It comes with
 /// the lock that keeps it out of swap, which must live as long as it does.
-fn read_passphrase(
+pub fn read_passphrase(
     input: &mut Input,
     operation: Operation,
+) -> Result<(Zeroizing<String>, LockedPages), Failure> {
+    read_passphrase_of(input, operation, "the wallet")
+}
+
+/// [`read_passphrase`] of a wallet named otherwise, such as "the main wallet".
+pub fn read_passphrase_of(
+    input: &mut Input,
+    operation: Operation,
+    wallet: &str,
 ) -> Result<(Zeroizing<String>, LockedPages), Failure> {
     let screen = PrivateScreen::enter(input, operation.title());
     if screen.is_active() {
         eprintln!();
     }
-    let passphrase = input.secret("BIP39 passphrase of the wallet, or Enter if it has none")?;
+    let passphrase = input.secret(&format!(
+        "BIP39 passphrase of {wallet}, or Enter if it has none"
+    ))?;
     let locked = LockedPages::of_string(&passphrase);
     drop(screen);
     let what = if passphrase.is_empty() {

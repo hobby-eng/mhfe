@@ -11,6 +11,7 @@ use crate::mhfe::{phrase_from_entropy, suite_3_state, PhraseLength, RecoveredPhr
 use crate::packing::{self, State};
 use crate::suite::Suite;
 use crate::wallet::{self, Address, DerivationPath, SearchLimits};
+use crate::wallet_check;
 use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
 
 /// What a rehearsal found. A match on a receiving address names the path where the address was
@@ -64,6 +65,11 @@ pub enum Reference<'a> {
         fingerprint: [u8; 4],
         passphrase: &'a str,
     },
+    /// The wallet check of a phrase that `mhfe new` made with one (a draft, [`crate::wallet_check`]),
+    /// with its BIP39 `passphrase`, which may not be empty. It tells a right password and
+    /// passphrase from wrong ones with 16 bits, not which wallet it is, so it never confirms a
+    /// recovery to encrypt again.
+    WalletCheck { passphrase: &'a str },
 }
 
 impl<E: Argon2Engine> Mhfe<E> {
@@ -96,7 +102,9 @@ impl<E: Argon2Engine> Mhfe<E> {
             Reference::BuiltInCheck { words } => {
                 Ok(CheckOutcome::of(packing::unpack(&x, words.get()).is_ok()))
             }
-            Reference::Address { .. } | Reference::Fingerprint { .. } => {
+            Reference::Address { .. }
+            | Reference::Fingerprint { .. }
+            | Reference::WalletCheck { .. } => {
                 // Every reading of X is compared: each short length that passes its check and
                 // the 24-word reading, so that no accidental match hides the real phrase.
                 for words in packing::matching_short_lengths(&x).into_iter().chain([24]) {
@@ -149,14 +157,19 @@ impl<E: Argon2Engine> Mhfe<E> {
         let has_check = !same_length && packing::SHORT_WORD_COUNTS.contains(&words.get());
         let reference = match confirmation {
             // The built-in check is the stated length's own, not a reference of the wallet.
-            Confirmation::Wallet(Reference::BuiltInCheck { .. }) | Confirmation::BuiltInCheck
+            // A wallet check has 16 bits: too few to seal a phrase on its own.
+            Confirmation::Wallet(
+                Reference::BuiltInCheck { .. } | Reference::WalletCheck { .. },
+            )
+            | Confirmation::BuiltInCheck
                 if !has_check =>
             {
                 return Err(MhfeError::ReferenceRequired)
             }
-            Confirmation::Wallet(Reference::BuiltInCheck { .. }) | Confirmation::BuiltInCheck => {
-                None
-            }
+            Confirmation::Wallet(
+                Reference::BuiltInCheck { .. } | Reference::WalletCheck { .. },
+            )
+            | Confirmation::BuiltInCheck => None,
             Confirmation::Wallet(reference) => Some(reference),
             Confirmation::Owner => None,
         };
@@ -209,6 +222,9 @@ fn compare(phrase: &str, reference: &Reference<'_>) -> Result<CheckOutcome, Mhfe
         } => Ok(CheckOutcome::of(
             wallet::master_fingerprint(phrase, passphrase)? == *fingerprint,
         )),
+        Reference::WalletCheck { passphrase } => Ok(CheckOutcome::of(wallet_check::phrase_passes(
+            phrase, passphrase,
+        )?)),
     }
 }
 
@@ -376,6 +392,58 @@ mod tests {
             )
             .unwrap();
         assert_eq!(*phrase.phrase, ABANDON);
+    }
+
+    #[test]
+    fn a_wallet_check_matches_a_phrase_made_with_it_and_never_confirms_a_rekey() {
+        let none = &mut |_, _| Ok(());
+        let mut mhfe = reduced();
+        let password = Password::new("public test password").unwrap();
+        let wrong = Password::new("public test passwore").unwrap();
+        // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
+        let mut entropy = [0u8; 32];
+        entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
+        let phrase = phrase_from_entropy(&entropy).unwrap();
+        let container = mhfe
+            .encrypt(&phrase, &password, Suite::TwentyFourWords, none)
+            .unwrap();
+        let reference = Reference::WalletCheck {
+            passphrase: "TREZOR",
+        };
+        assert!(mhfe
+            .check(&container, &password, &reference, none)
+            .unwrap()
+            .matches());
+        assert!(!mhfe
+            .check(&container, &wrong, &reference, none)
+            .unwrap()
+            .matches());
+        let other = Reference::WalletCheck {
+            passphrase: "trezor",
+        };
+        assert!(!mhfe
+            .check(&container, &password, &other, none)
+            .unwrap()
+            .matches());
+        assert!(matches!(
+            mhfe.check(
+                &container,
+                &password,
+                &Reference::WalletCheck { passphrase: "" },
+                none
+            ),
+            Err(MhfeError::WalletCheckNeedsPassphrase)
+        ));
+        assert!(matches!(
+            mhfe.recover_confirmed(
+                &container,
+                &password,
+                WordCount::new(24).unwrap(),
+                Confirmation::Wallet(&reference),
+                none
+            ),
+            Err(MhfeError::ReferenceRequired)
+        ));
     }
 
     #[test]

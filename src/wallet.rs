@@ -840,6 +840,13 @@ const NFKD_MAX_GROWTH: usize = 11;
 /// The passphrase in NFKD, as BIP39 requires, in a buffer that is wiped when dropped. It is
 /// reserved at the largest size NFKD can produce, so it never grows and leaves no unwiped copy;
 /// `Mnemonic::to_seed` would normalize into an ordinary string instead.
+/// The BIP39 seed of a phrase and a passphrase: PBKDF2-HMAC-SHA512, 2,048 iterations, with the
+/// salt "mnemonic" and the passphrase in NFKD.
+pub(crate) fn bip39_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u8; 64]> {
+    let normalized = normalized_passphrase(passphrase);
+    Zeroizing::new(mnemonic.to_seed_normalized(&normalized))
+}
+
 fn normalized_passphrase(passphrase: &str) -> Zeroizing<String> {
     let mut normalized = Zeroizing::new(String::with_capacity(passphrase.len() * NFKD_MAX_GROWTH));
     normalized.extend(passphrase.nfkd());
@@ -857,8 +864,7 @@ impl ExtendedKey {
     fn master(phrase: &str, passphrase: &str) -> Result<Self, MhfeError> {
         let mnemonic = Mnemonic::parse_in(Language::English, phrase)
             .map_err(|error| MhfeError::InvalidPhrase(error.to_string()))?;
-        let normalized = normalized_passphrase(passphrase);
-        let seed = Zeroizing::new(mnemonic.to_seed_normalized(&normalized));
+        let seed = bip39_seed(&mnemonic, passphrase);
         let master = Self::from_hmac(b"Bitcoin seed", &[&seed[..]])?;
         // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
         let mut scalar = master.scalar()?;

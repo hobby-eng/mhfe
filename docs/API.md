@@ -92,11 +92,19 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `REFERENCE_MISMATCH` when it does not match), or `Confirmation::Owner`: the caller then shows the
   phrase and goes on only if the owner confirms it against their backup. Encrypting under the old
   password and comparing proves nothing, so it is not offered.
-- `derive_wallet(container, password, on_progress)` gives the hidden wallet that `password` opens on
-  a 24-word container, read as 24 words, unverified (a hidden wallet behind an honest disclosure).
-  A password whose reading passes the built-in check of a 12- to 21-word phrase is refused
+- `derive_wallet(container, password, passphrase, on_progress)` gives the hidden wallet that
+  `password` opens on a 24-word container, read as 24 words, unverified (a hidden wallet behind an
+  honest disclosure). A password whose reading passes the built-in check of a 12- to 21-word
+  phrase, or the wallet check with the main wallet's `passphrase` unless it is empty, is refused
   (`HIDDEN_WALLET_PASSES_CHECK`). A program should run the published vectors first, as
   `mhfe self-test` does, before it shows such a wallet.
+- `wallet_check` (a draft): `passes(entropy, passphrase)`, `phrase_passes(phrase, passphrase)` and
+  `new_phrase(fill, passphrase, on_draw)`. A new phrase is drawn until
+  `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(ENT) || seed)`, over its BIP39 seed with the
+  passphrase, starts with 16 zero bits. The passphrase may not be empty
+  (`WALLET_CHECK_NEEDS_PASSPHRASE`): the check would then confirm the MHFE password alone.
+  `Reference::WalletCheck { passphrase }` lets `check` test it; it never confirms a recovery to
+  encrypt again.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
@@ -129,6 +137,7 @@ strings in the browser.
 | `REFERENCE_REQUIRED`              | A recovery to encrypt again has no built-in check and no address or fingerprint     |
 | `REFERENCE_MISMATCH`              | The phrase recovered to encrypt again does not match the address or fingerprint     |
 | `HIDDEN_WALLET_PASSES_CHECK`      | A hidden wallet's phrase passes the built-in check of a shorter phrase              |
+| `WALLET_CHECK_NEEDS_PASSPHRASE`   | A wallet check was asked without a BIP39 passphrase                                 |
 | `INVALID_PIM`                     | PIM outside 0 to 1023                                                               |
 | `INVALID_MEMORY_LEVEL`            | Memory level outside 0 to 21                                                        |
 | `EMPTY_PASSWORD`                  | The password is empty                                                               |

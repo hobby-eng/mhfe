@@ -17,6 +17,7 @@ mod exit;
 mod hidden_input;
 mod length_choice;
 mod menu;
+mod new_wallet;
 mod protect;
 mod readme;
 mod rekey;
@@ -64,6 +65,9 @@ enum Command {
         after_long_help = encrypt::long_help()
     )]
     Encrypt(encrypt::Options),
+    /// Make a new wallet and its container
+    #[command(long_about = new_wallet::about())]
+    New(new_wallet::Options),
     /// Recover the original phrase from a container
     #[command(
         long_about = decrypt::about(),
@@ -108,6 +112,7 @@ fn main_help() -> String {
         &[
             ("mhfe", "Choose a command from a menu"),
             ("mhfe encrypt", "Encrypt a phrase with the default settings"),
+            ("mhfe new", "Make a new wallet and its container"),
             (
                 "mhfe encrypt --pim 1 --mem 1",
                 "Encrypt with twice the passes and 3 GiB",
@@ -218,6 +223,7 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::Encrypt(options) => encrypt::run(options),
         Command::Decrypt(options) => decrypt::run(options),
         Command::Check(options) => check::run(options),
+        Command::New(options) => new_wallet::run(options),
         Command::Rekey(options) => rekey::run(options),
         Command::Wallets(options) => wallets::run(options),
         Command::Password(options) => diceware::run(options),

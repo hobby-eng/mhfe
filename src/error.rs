@@ -30,9 +30,12 @@ pub enum MhfeError {
     ReferenceRequired,
     /// The phrase recovered to re-encrypt does not match the address or fingerprint given.
     ReferenceMismatch,
-    /// The wallet a password opens on a container passes the check of a 12- to 21-word phrase by
-    /// chance, so it cannot serve as a hidden wallet (rule I29).
+    /// The wallet a password opens on a container passes the check of a 12- to 21-word phrase, or
+    /// the wallet check of a new phrase, so it cannot serve as a hidden wallet (rule I29).
     HiddenWalletPassesCheck,
+    /// A wallet check was asked without a BIP39 passphrase: with an empty one it would confirm the
+    /// MHFE password alone.
+    WalletCheckNeedsPassphrase,
     InvalidPim(u32),
     InvalidMemoryLevel(u32),
     EmptyPassword,
@@ -124,10 +127,15 @@ impl fmt::Display for MhfeError {
             ),
             Self::HiddenWalletPassesCheck => write!(
                 f,
-                "with this password the container gives a phrase that passes the built-in check \
-                 of a shorter phrase, as the main password of a 12- to 21-word phrase does, or by \
-                 chance about once in a billion: recovery would call it verified, so choose another \
-                 password"
+                "with this password the container gives a phrase that passes a check: the \
+                 built-in check of a shorter phrase, as the container's own password of a 12- to \
+                 21-word phrase does, or the wallet check of a new phrase, by chance once in 65,536; \
+                 recovery would take it for a verified or main wallet, so choose another password"
+            ),
+            Self::WalletCheckNeedsPassphrase => write!(
+                f,
+                "a wallet check needs the wallet's BIP39 passphrase; without one, compare the \
+                 recovery with a receiving address or the master key fingerprint"
             ),
             Self::InvalidPim(pim) => {
                 write!(
@@ -229,6 +237,7 @@ impl MhfeError {
             Self::ReferenceRequired => "REFERENCE_REQUIRED",
             Self::ReferenceMismatch => "REFERENCE_MISMATCH",
             Self::HiddenWalletPassesCheck => "HIDDEN_WALLET_PASSES_CHECK",
+            Self::WalletCheckNeedsPassphrase => "WALLET_CHECK_NEEDS_PASSPHRASE",
             Self::InvalidPim(_) => "INVALID_PIM",
             Self::InvalidMemoryLevel(_) => "INVALID_MEMORY_LEVEL",
             Self::EmptyPassword => "EMPTY_PASSWORD",

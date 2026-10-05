@@ -35,6 +35,12 @@ Planned as version 0.5.0.
   `Mhfe::recover_confirmed`, with the new error codes `REFERENCE_REQUIRED` and
   `REFERENCE_MISMATCH`. It warns every time that wallets of other passwords on the old container
   change, and that the old container stays valid until it is destroyed. The start menu offers it.
+- `mhfe new` makes a new 24-word wallet and its container. With a BIP39 passphrase for it, the owner
+  chooses no check or a wallet check with the passphrase (a draft, 16 bits): the phrase is drawn so
+  that a tagged hash of its BIP39 seed starts with 16 zero bits, and `mhfe check` with the
+  passphrase recognises the right password. The library has `wallet_check` and
+  `Reference::WalletCheck`, which never confirms a rekey; `derive_wallet` takes the main wallet's
+  passphrase, so that no hidden wallet passes the check either.
 - `mhfe wallets` opens hidden wallets: every other password gives its own 24-word wallet on a
   24-word container, shown on a private screen after the self-test has passed, recorded nowhere.
   A password whose wallet passes a short phrase's built-in check is refused. The library offers
@@ -68,10 +74,10 @@ Planned as version 0.5.0.
   programs of the same user from reading its memory; it keeps the password, the phrases and a BIP39
   passphrase in locked memory, and marks Argon2's work area to be left out of a dump. On Linux it
   warns before any secret is typed when swap is not encrypted.
-- On Linux the kernel enforces that `encrypt`, `decrypt`, `check`, `rekey`, `wallets` and `password`
-  stay offline and write no file: seccomp refuses sockets and Landlock refuses file writes, for
-  every thread the command starts. The summary shows it; the start menu runs each command in an
-  isolated thread.
+- On Linux the kernel enforces that `encrypt`, `decrypt`, `check`, `rekey`, `new`, `wallets` and
+  `password` stay offline and write no file: seccomp refuses sockets and Landlock refuses file
+  writes, for every thread the command starts. The summary shows it; the start menu runs each
+  command in an isolated thread.
 - `mhfe check` compares with a receiving address of twelve coins instead of Bitcoin alone: Bitcoin,
   Ethereum and every EVM network, XRP, Tron, Zcash (transparent), Dogecoin, Bitcoin Cash, Litecoin,
   Ethereum Classic, Cosmos, Injective and Dash, for Dash both Core `X…` and Platform payment

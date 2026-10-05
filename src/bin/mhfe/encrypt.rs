@@ -149,7 +149,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     style::fact("Format", paint(MUTED, new.suite.id()));
     style::fact(
         "Keep",
-        what_to_keep(work, original_words, length_must_be_chosen, container_words),
+        what_to_keep(
+            work,
+            original_words,
+            length_must_be_chosen,
+            container_words,
+            &[],
+        ),
     );
     // The check above covered the words this program produced, not the copy the user wrote down.
     style::fact(
@@ -249,11 +255,13 @@ pub fn what_to_keep(
     original_words: usize,
     length_must_be_chosen: bool,
     container_words: usize,
+    also: &[&str],
 ) -> String {
     let mut items = vec![
         format!("the {container_words} words"),
         "the password".to_owned(),
     ];
+    items.extend(also.iter().map(|item| (*item).to_owned()));
     items.extend(settings::changed_settings(work));
     if length_must_be_chosen {
         items.push(format!("the word count, {original_words}"));
@@ -428,11 +436,11 @@ mod tests {
     #[test]
     fn a_short_phrase_at_the_defaults_needs_only_the_words_and_the_password() {
         assert_eq!(
-            what_to_keep(defaults(), 12, false, 24),
+            what_to_keep(defaults(), 12, false, 24, &[]),
             "the 24 words and the password"
         );
         assert_eq!(
-            what_to_keep(defaults(), 15, false, 15),
+            what_to_keep(defaults(), 15, false, 15, &[]),
             "the 15 words and the password"
         );
     }
@@ -440,7 +448,7 @@ mod tests {
     #[test]
     fn a_phrase_that_detection_would_misread_needs_its_word_count() {
         assert_eq!(
-            what_to_keep(defaults(), 15, true, 24),
+            what_to_keep(defaults(), 15, true, 24, &[]),
             "the 24 words, the password and the word count, 15"
         );
     }
@@ -448,11 +456,11 @@ mod tests {
     #[test]
     fn changed_settings_must_be_kept() {
         assert_eq!(
-            what_to_keep(WorkFactor::new(3, 1).unwrap(), 12, false, 24),
+            what_to_keep(WorkFactor::new(3, 1).unwrap(), 12, false, 24, &[]),
             "the 24 words, the password, PIM 3 and memory level 1"
         );
         assert_eq!(
-            what_to_keep(WorkFactor::new(1, 0).unwrap(), 24, true, 24),
+            what_to_keep(WorkFactor::new(1, 0).unwrap(), 24, true, 24, &[]),
             "the 24 words, the password, PIM 1 and the word count, 24"
         );
     }

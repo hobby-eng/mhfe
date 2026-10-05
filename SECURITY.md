@@ -63,6 +63,11 @@ Never include a real seed phrase, password, private key or wallet file.
   an address or the fingerprint of the wallet, or by the owner, who chose to see the phrase on a
   private screen and compare it with their backup. So a wrong password cannot be sealed into a new
   container that then looks verified. It does not revoke the old container, and says so.
+- `new` draws a new phrase from the operating system's random generator, on every processor core
+  when it must pass a wallet check, and shows it only on a private screen. The wallet check is a
+  draft over the BIP39 seed with the passphrase, which may not be empty: it tells a right password
+  and passphrase from wrong ones with 16 bits, never which wallet it is, and `rekey` does not accept
+  it as the only confirmation.
 - `wallets` shows a hidden wallet only on a private screen and only after the published vectors
   have passed, and it keeps no record of the passwords or the wallets.
 - Nothing connects to a network. The browser package loads no remote resources and contains no
@@ -70,14 +75,14 @@ Never include a real seed phrase, password, private key or wallet file.
   (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which
   listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
 - On Linux the kernel enforces this. A command that handles secrets (`encrypt`, `decrypt`, `check`,
-  `rekey`, `wallets`, `password`) runs under a seccomp filter that refuses to create any socket, and
-  under a Landlock ruleset that refuses every write to the file system (Linux 5.13 and later; from
-  Linux 6.7 also TCP bind and connect). Both cover every thread the command starts, Argon2's
-  included, and cannot be undone; the start menu runs each command in a thread of its own, so that
-  it can still start `mhfe serve`, which is not isolated because the browser it opens must write its
-  profile. The summary of a command says what the kernel enforces. A fault or a tampered dependency
-  therefore cannot send a secret away or leave it in a file; the program's own output goes only to
-  the terminal or to where standard output is redirected.
+  `rekey`, `new`, `wallets`, `password`) runs under a seccomp filter that refuses to create any
+  socket, and under a Landlock ruleset that refuses every write to the file system (Linux 5.13 and
+  later; from Linux 6.7 also TCP bind and connect). Both cover every thread the command starts,
+  Argon2's included, and cannot be undone; the start menu runs each command in a thread of its own,
+  so that it can still start `mhfe serve`, which is not isolated because the browser it opens must
+  write its profile. The summary of a command says what the kernel enforces. A fault or a tampered
+  dependency therefore cannot send a secret away or leave it in a file; the program's own output
+  goes only to the terminal or to where standard output is redirected.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 

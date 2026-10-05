@@ -47,7 +47,7 @@ BACKSPACE, CTRL_U, CTRL_C = "\x08", "\x15", "\x03"
 # The keys of the menu as VT input; the pseudo-console turns them into key presses.
 UP, DOWN, ENTER, CTRL_UP = "\x1b[A", "\x1b[B", "\r", "\x1b[1;5A"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
-PASSWORD_ENTRY = 6
+PASSWORD_ENTRY = 7
 # The entry that shows the help and returns to the menu on Enter; mhfe self-test lies between.
 HELP_ENTRY = PASSWORD_ENTRY + 2
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.

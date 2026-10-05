@@ -163,6 +163,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             phrase.words,
             length_must_be_chosen,
             container_words,
+            &[],
         ),
     );
     // Rekeying revokes nothing: the old plate and password open the wallet until destroyed.
