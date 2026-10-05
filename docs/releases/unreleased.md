@@ -34,7 +34,9 @@ Planned as version 0.5.0.
   compares it with their backup. The library offers this as
   `Mhfe::recover_confirmed`, with the new error codes `REFERENCE_REQUIRED` and
   `REFERENCE_MISMATCH`. It warns every time that wallets of other passwords on the old container
-  change, and that the old container stays valid until it is destroyed. The start menu offers it.
+  change and asks every user to confirm that their funds are moved or backed up another way, and
+  it says before and after that the old container stays valid until it is destroyed. The start menu
+  offers it.
 - `mhfe new` makes a new 24-word wallet and its container. With a BIP39 passphrase for it, the owner
   chooses no check or a wallet check with the passphrase (a draft, 16 bits): the phrase is drawn so
   that a tagged hash of its BIP39 seed starts with 16 zero bits, and `mhfe check` with the
@@ -83,7 +85,8 @@ Planned as version 0.5.0.
   Ethereum Classic, Cosmos, Injective and Dash, for Dash both Core `X…` and Platform payment
   `dash1k…` addresses (DIP17 and DIP18, checked against their official vectors). It asks for the
   coin, listed alphabetically, or takes `--coin`, and shows before the check the address type and
-  the paths it searches. Shielded Zcash and Dash addresses are refused with that reason. The
+  the paths it searches. Shielded Zcash and Dash addresses are refused with that reason, and a
+  Cosmos or Injective address only with a Bech32 checksum, as those chains use, not Bech32m. The
   browser package takes `reference: { address, coin }`. One new dependency, `sha3`, gives
   Keccak-256.
 - On a match with a receiving address, `mhfe check` shows where it was found, such as

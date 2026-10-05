@@ -310,8 +310,10 @@ new plate with `mhfe check`, best on another day, and only then destroy every co
 Until then two containers of the same phrase exist, which plausible deniability does not cover.
 
 Every wallet that another password opens on the old container, such as a decoy, is a different one
-on the new container: move its funds first. MHFE says so every time, without asking whether such a
-wallet exists, as an answer would be a record of it.
+on the new container: move its funds first. MHFE says so every time and asks every user to confirm
+that the funds of any such wallet are moved or backed up another way, without asking whether such
+a wallet exists, as an answer would be a record of it; "No" stops before anything is typed. The
+result says once more that the old plate still opens the wallet with the old password.
 
 ### `mhfe new`
 

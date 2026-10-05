@@ -26,6 +26,11 @@ terminal settings are restored either way. The `mhfe password` entry shows each 
 private screen, which it clears for the next one on Enter and when Escape or q returns to the menu;
 the help entry returns on Enter. Neither needs secret input.
 
+It answers the first question of `mhfe rekey`, which every user gets: whether the funds of other
+wallets on the container are moved or backed up another way (AUD-007-FUN002). Yes goes on to the
+container, No stops with exit code 130 before anything is typed, and so does Escape; the question
+never asks for another wallet or its password.
+
 Last, it answers the questions of `mhfe encrypt` up to the password, so again without Argon2: its
 own settings, PIM 1 after a mistyped one, which the settings shown next record; the phrase on the
 private screen, refused once for its checksum and then taken without a question, which the
@@ -295,6 +300,25 @@ def check_menu():
     print("menu: Ctrl+C, exit code 130, terminal restored")
 
 
+def check_rekey_asks_about_other_wallets():
+    question = b"backed up another way?"
+    for label, key, expected in (("Yes", b"1", (b"original: ",)),
+                                 ("No", b"2", (b"Move the funds", b"Cancelled")),
+                                 ("Escape", ESCAPE, (b"Cancelled",))):
+        session = Session(("rekey", "--pim", "0", "--words", "24"))
+        session.wait_for(question)
+        session.answer(key, *expected)
+        code, settings = session.close()
+        assert code == CANCELLED, f"rekey, {label}: exit code {code}"
+        assert settings == session.original, f"rekey, {label}: terminal settings changed"
+        asked = session.output[: session.output.find(question)]
+        assert b"Password" not in asked, f"rekey, {label}: a password was asked first"
+        if label != "Yes":
+            assert b"original: " not in session.output, f"rekey, {label}: went on to the container"
+        result = "goes on to the container" if label == "Yes" else "stops, exit code 130"
+        print(f"rekey: {label} at the question about other wallets {result}")
+
+
 def check_encrypt_lists():
     session = Session(arguments=("encrypt",))
     # Nothing typed yet: this waits for the whole first question, its link and its list.
@@ -358,6 +382,7 @@ def main():
     print("cancelled: Ctrl+C at the password, exit code 130, private screen left, terminal restored")
 
     check_menu()
+    check_rekey_asks_about_other_wallets()
     check_encrypt_lists()
 
 
