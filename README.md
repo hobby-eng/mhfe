@@ -268,6 +268,10 @@ coin, or takes it from `--coin`, and shows before the check what it searches: th
 receiving and change addresses of accounts 0 to 9 on the standard paths of that address, or one
 path with `--path`. Do not keep the address or fingerprint next to the container.
 
+For a wallet that `mhfe new` made with a wallet check, the list also offers that check. It asks
+for the BIP39 passphrase, which the check needs, and confirms the password and passphrase, not the
+wallet.
+
 When it does not match, the check cannot tell what is wrong: the password, a setting, the
 container, the BIP39 passphrase or the reference. Without an address or fingerprint, for a 12- to
 21-word original in a 24-word container, it uses the built-in check, which proves the password and
@@ -308,6 +312,42 @@ Until then two containers of the same phrase exist, which plausible deniability 
 Every wallet that another password opens on the old container, such as a decoy, is a different one
 on the new container: move its funds first. MHFE says so every time, without asking whether such a
 wallet exists, as an answer would be a record of it.
+
+### `mhfe new`
+
+`mhfe new` makes a new 24-word wallet and its container in one go. It draws the phrase from the
+operating system's random generator, shows it once on a private screen for your wallet, and
+encrypts it under your password as `mhfe encrypt` does.
+
+It asks for the BIP39 passphrase of the new wallet, if it is to have one. Only with a passphrase
+does it then ask whether you want a check that confirms the password at recovery, with nothing
+preselected:
+
+- **No check**, the usual case for a 24-word phrase and the only one without a passphrase. Every
+  password gives an equally valid wallet, so a decoy password keeps working, and a recovery cannot
+  tell a wrong password: confirm it with an address or the fingerprint.
+- **A wallet check with your passphrase**, for funds kept under it. The phrase is
+  drawn so that a tagged SHA-256 of its BIP39 seed, made with the passphrase, starts with 16 zero
+  bits. `mhfe check` with the passphrase then says whether a recovery passes; a wrong password or
+  passphrase slips through once in 65,536. Only the right password and passphrase pass together,
+  so an attacker's searches for the two still multiply. The check takes 16 of the 256 bits of the
+  phrase; the 240 that remain are still far beyond any search. It never proves which wallet it is.
+
+The check has costs:
+
+- Keep all funds in the wallet the passphrase opens. The wallet of the phrase alone stays empty and
+  is never used: its public history would let an attacker confirm the MHFE password on its own, and
+  the searches would add instead of multiplying. The check is only as strong as the passphrase, and
+  MHFE warns about a weak one.
+- The passphrase is fixed when the wallet is made: another one, or a decoy passphrase, fails the
+  check.
+- A decoy MHFE password gives a phrase without the check, unless it is prepared with about 65,536
+  recoveries.
+- A phrase that passes is evidence that it was made for MHFE, since a random one passes once in
+  65,536.
+- It is for new wallets only, and a draft that the specification does not define yet; its
+  supplement describes it under Research directions. Keep a copy of this program with the
+  container.
 
 ### `mhfe wallets`
 

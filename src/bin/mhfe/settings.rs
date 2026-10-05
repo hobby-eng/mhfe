@@ -82,6 +82,8 @@ pub enum Operation {
     RekeyNew,
     /// `mhfe wallets`: twelve rounds backwards for each wallet another password opens.
     Wallets,
+    /// `mhfe new`: a new phrase, then the 24 rounds of an encryption.
+    New,
 }
 
 impl Operation {
@@ -93,6 +95,7 @@ impl Operation {
             Operation::Check => "Rehearse a recovery",
             Operation::Rekey | Operation::RekeyNew => "Change the password",
             Operation::Wallets => "Open hidden wallets",
+            Operation::New => "Make a new wallet",
         }
     }
 }
@@ -162,7 +165,7 @@ fn ask_for_own(
     let scale = u64::from(rounds_of(operation) / ROUNDS);
     let time = format!("about {}", time_range(low * scale, high * scale));
     let (text, answers) = match operation {
-        Operation::Encrypt | Operation::RekeyNew => (
+        Operation::Encrypt | Operation::RekeyNew | Operation::New => (
             "Which settings should protect the phrase?",
             [
                 Answer::new("PIM 0 and memory level 0 (recommended)", time),
@@ -262,7 +265,7 @@ fn ask_number(
 /// The rounds of an operation: twelve, or for an encryption twelve more to check it.
 fn rounds_of(operation: Operation) -> u32 {
     match operation {
-        Operation::Encrypt | Operation::RekeyNew => ENCRYPTION_ROUNDS,
+        Operation::Encrypt | Operation::RekeyNew | Operation::New => ENCRYPTION_ROUNDS,
         Operation::Decrypt | Operation::Check | Operation::Rekey | Operation::Wallets => ROUNDS,
     }
 }
@@ -273,7 +276,9 @@ fn rounds_of(operation: Operation) -> u32 {
 fn show(work: WorkFactor, operation: Operation, asked: bool) {
     let rounds = rounds_of(operation);
     let how = match operation {
-        Operation::Encrypt | Operation::RekeyNew => "24 rounds (12 to encrypt, 12 to check)",
+        Operation::Encrypt | Operation::RekeyNew | Operation::New => {
+            "24 rounds (12 to encrypt, 12 to check)"
+        }
         Operation::Decrypt | Operation::Check | Operation::Rekey => "12 rounds",
         Operation::Wallets => "12 rounds a wallet",
     };
@@ -318,7 +323,11 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         style::fact("Isolation", enforced);
     }
     eprintln!();
-    if matches!(operation, Operation::Encrypt | Operation::RekeyNew) && work.memory_level() > 0 {
+    if matches!(
+        operation,
+        Operation::Encrypt | Operation::RekeyNew | Operation::New
+    ) && work.memory_level() > 0
+    {
         style::warn(
             &format!(
                 "Recovery will need a computer with {} GiB of free memory.",

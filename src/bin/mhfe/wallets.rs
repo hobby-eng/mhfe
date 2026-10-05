@@ -9,6 +9,7 @@ use clap::Args;
 use mhfe::{MhfeError, Password, Suite};
 use zeroize::Zeroizing;
 
+use crate::check;
 use crate::choice::{self, Answer, Question};
 use crate::encrypt;
 use crate::exit::{Failure, SUCCESS};
@@ -63,6 +64,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             "Hidden wallets are opened on a 24-word container only, for now.",
         ));
     }
+    // A hidden wallet that passes the main wallet's check with its passphrase is refused too; the
+    // question comes every time, so that it tells nothing about the main wallet.
+    let (passphrase, _passphrase_locked) =
+        check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;
     let mut mhfe = settings::reserve_memory(work)?;
     // The passwords of this run, as normalized bytes, so that none is typed twice.
     let mut used: Vec<Zeroizing<Vec<u8>>> = Vec::new();
@@ -70,16 +75,17 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         let number = used.len() + 1;
         let password = read_unused_password(&mut input, &used)?;
         let mut progress = Progress::start();
-        let derived = mhfe.derive_wallet(&container, &password, &mut |round, rounds| {
-            progress.round_starts(round, rounds);
-            Ok(())
-        });
+        let derived =
+            mhfe.derive_wallet(&container, &password, &passphrase, &mut |round, rounds| {
+                progress.round_starts(round, rounds);
+                Ok(())
+            });
         progress.finish();
         let wallet = match derived {
             Ok(wallet) => wallet,
             Err(MhfeError::HiddenWalletPassesCheck) => {
                 // Rule I29: the container's own password of a short phrase, or a rare chance.
-                style::retry("This password opens a verified short phrase. Choose another.");
+                style::retry("This password opens a phrase that passes a check. Choose another.");
                 continue;
             }
             Err(error) => return Err(error.into()),
