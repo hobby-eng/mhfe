@@ -111,6 +111,7 @@ fn entries() -> Vec<Entry> {
         action: Action::Password,
         ..Entry::command("password")
     });
+    entries.push(Entry::command("self-test"));
     entries.push(Entry {
         label: "Show every command and option".to_owned(),
         command: "mhfe --help".to_owned(),

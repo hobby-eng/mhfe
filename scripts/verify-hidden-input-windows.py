@@ -48,6 +48,8 @@ BACKSPACE, CTRL_U, CTRL_C = "\x08", "\x15", "\x03"
 UP, DOWN, ENTER, CTRL_UP = "\x1b[A", "\x1b[B", "\r", "\x1b[1;5A"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
 PASSWORD_ENTRY = 5
+# The entry that shows the help and returns to the menu on Enter; mhfe self-test lies between.
+HELP_ENTRY = PASSWORD_ENTRY + 2
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN = "Esc quits"
 BACK_TO_MENU = "Press Enter to return to the menu (Esc quits)."
@@ -140,7 +142,7 @@ def check_menu():
         session.wait_for(PASSWORD_AGAIN)
         session.type("q")
         session.wait_for(MENU_SHOWN)
-        session.type(str(PASSWORD_ENTRY + 1))
+        session.type(str(HELP_ENTRY))
         session.wait_for(BACK_TO_MENU)
         session.type(ENTER)
         session.wait_for(MENU_SHOWN)

@@ -35,6 +35,9 @@ Planned as version 0.5.0.
   `Mhfe::recover_confirmed`, with the new error codes `REFERENCE_REQUIRED` and
   `REFERENCE_MISMATCH`. It warns every time that wallets of other passwords on the old container
   change, and that the old container stays valid until it is destroyed. The start menu offers it.
+- `mhfe self-test` checks the program on this computer against two published vectors at full cost,
+  an encryption of suite 3 and a recovery of suite 4, in about two minutes. The start menu offers
+  it.
 - `mhfe password --chars N` makes N random characters (16 by default, about 93.3 bits) from 57
   letters and digits without look-alikes, instead of dice words.
 - `mhfe encrypt` estimates the strength of a typed password and warns below about 50 bits, instead
