@@ -1,0 +1,1221 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-007",
+  "auditNumber": 7,
+  "date": "2026-10-05",
+  "title": "MHFE specification conformance, wallet seed-check and native trust-boundary review",
+  "reviewer": {
+    "name": "OpenAI Codex with scoped review agents",
+    "model": null,
+    "reasoningEffort": null,
+    "phases": [
+      {
+        "scope": "Specification, mathematics, native crypto core, wallet derivation and CLI trust boundaries",
+        "model": null,
+        "reasoningEffort": null
+      }
+    ]
+  },
+  "snapshot": {
+    "commit": "0455e386a88c0718336039a81d5dceb0cd0b3957",
+    "commitComplete": true,
+    "workingTree": "?? docs/audits/AUD-007-harnesses/\n",
+    "sourceFingerprint": "2909e61a8afcfa97c35dfea4e7d1d72a806ea479d556f306b2040cca31aadb12",
+    "capturedAt": "2026-10-05T13:39:25.536083+00:00",
+    "fingerprintMethod": "SHA-256 of each git-tracked path + NUL + file SHA-256 + LF in captured git order.",
+    "specificationCommit": "d3483b3872b42e263f7b2b3cd612a7357d6456ff",
+    "specificationWorkingTree": " M CHANGELOG.md\n M README.md\n M docs/DESIGN-NOTES.md\n M docs/audits/AUD-004-publication.json\n M docs/audits/AUD-005-publication.json\n?? AGENTS.md\n?? docs/drafts/\n",
+    "specificationFiles": {
+      "README.md": "1255eebb4389700a456faccbe557fcdb7a83777e2ad2c098580029442c78d64a",
+      "docs/DESIGN-NOTES.md": "c387291e893c6a9ae760de83f9244cffcabbbaefe67eb48856e7a7ba1ee282ea",
+      "CHANGELOG.md": "0c3739508c53b0796a769cf681330f85fbc08c619eb9dd595f5fac2bd54d450a"
+    },
+    "specificationDiffSha256": "0934ef444e181d36362a5a781bd45936b799206036227d0781f11fb3c0df3624",
+    "snapshotEvidenceSha256": "baa0bd16863b052042aabe62c1754de1b0c8d678806fb9dfaaa79f53f5acfb4d",
+    "artifacts": "No fresh release/browser artifacts reviewed."
+  },
+  "scope": "Full-scope audit with incomplete execution: current suites 3/4 specification and supplement, Rust library/native CLI, C Argon2 integration, wallet references, optional seed-check draft, browser/WASM source and build/workflow source. Review only; no production fixes.",
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "d47df01252ad6fb11d8cad00b7d9e6dde62b3ee3331c3bfbef9a7b99adda30f7"
+  },
+  "checks": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "category": "SEC",
+      "logicalGroup": "Threat model and secret ownership",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Native secret ownership and private-display traces; terminal-display probe.",
+      "outcome": "failed",
+      "evidence": "AUD-007-SEC001; SEC003; SEC004; SEC005",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "category": "SEC",
+      "logicalGroup": "Secret Vault, CSP, sandbox, and transport",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Source review of worker transfer boundary, offline loader and loopback server; bounded CLI isolation/server tests. No real-browser CSP acceptance claimed.",
+      "outcome": "passed",
+      "evidence": "cli-tests-loopback; source review",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "category": "SEC",
+      "logicalGroup": "Network egress and secret guards",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Source graph review: no public blockchain provider/telemetry paths; fixed loopback-only bundled server.",
+      "outcome": "passed",
+      "evidence": "Source review; cli-tests-loopback",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "category": "SEC",
+      "logicalGroup": "Randomness, encryption, and authentication",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Suite 3/4 Feistel, domain separation, settings, salts/masks, state widths and RNG review plus reduced-cost tests; no proof of attack-cost lower bounds.",
+      "outcome": "passed",
+      "evidence": "bounded-tests; integration-tests; seed-check",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "category": "SEC",
+      "logicalGroup": "Secret lifecycle and exceptional paths",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Native page-lock/zeroization lifetime traces and distinct-Password overlap probe; C work-area cleanup and worker disposal source review.",
+      "outcome": "failed",
+      "evidence": "AUD-007-SEC002; SEC003; SEC004; memory-lock",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "category": "SEC",
+      "logicalGroup": "Browser injection, persistence, and sensitive APIs",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Worker/client source review for storage, dynamic-code/logging and network behavior. Runtime browser/artifact inspection not performed.",
+      "outcome": "passed",
+      "evidence": "Source review; WASM compilation",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "category": "SEC",
+      "logicalGroup": "Read-only guarantees and availability bounds",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Bounded input/work settings and loopback server concurrency/deadline/isolation tests; no provider/spending API.",
+      "outcome": "passed",
+      "evidence": "cli-tests-loopback; bounded-tests",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "category": "FUN",
+      "logicalGroup": "BIP39, entropy, and seed interpretation",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "English BIP39 length/checksum/normalization, BIP39 seed and seed-check predicate review; independent public seed-check fixture.",
+      "outcome": "failed",
+      "evidence": "AUD-007-DOC001; DOC002; bounded-tests; seed-check",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "category": "FUN",
+      "logicalGroup": "HD derivation and every coin/profile",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Supported wallet-reference derivation paths and literal vectors; Bech32 account checksum-variant probe.",
+      "outcome": "failed",
+      "evidence": "AUD-007-FUN001; bounded-tests; wallet-bech32-variant",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "category": "FUN",
+      "logicalGroup": "BIP85, BIP38, messages, and Silent Payments",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "MHFE exposes no BIP85, BIP38, message signing or Silent Payments feature.",
+      "outcome": "not-applicable",
+      "evidence": "Not applicable to this project.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "category": "FUN",
+      "logicalGroup": "Scripts, descriptors, Miniscript, and multisig",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "MHFE exposes no descriptor/Miniscript/multisig scripting interface. Its fixed wallet-reference derivations are covered by FUN-002.",
+      "outcome": "not-applicable",
+      "evidence": "Not applicable to this project.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "category": "FUN",
+      "logicalGroup": "Transactions, PSBT version context, and commitments",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "MHFE does not parse, create, sign or broadcast PSBTs/transactions.",
+      "outcome": "not-applicable",
+      "evidence": "Not applicable to this project.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "category": "FUN",
+      "logicalGroup": "Recovery and backup formats",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Suite 3/4 pack/unpack, fixed-point refusal, recovery validation and rehearsal/rekey workflow review; reduced-cost unit tests and retained vector structure tests.",
+      "outcome": "failed",
+      "evidence": "AUD-007-FUN002; bounded-tests; integration-tests; transcript-reconstruction (27 transcripts/648 round records, retained K_i)",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "category": "FUN",
+      "logicalGroup": "Discovery, providers, proofs, and accounting",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "MHFE performs no connected discovery, provider proof/history or balance accounting.",
+      "outcome": "not-applicable",
+      "evidence": "Not applicable to this project.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "category": "API",
+      "logicalGroup": "Actual dependency call contracts",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Rust/C Argon2 context, BLAKE2 digest size, public/FFI/WASM contracts and validation source review; native/WASM Clippy and bounded tests.",
+      "outcome": "passed",
+      "evidence": "clippy-native; clippy-wasm; bounded-tests",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "category": "API",
+      "logicalGroup": "Async state, cancellation, and revisions",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Worker cancellation/ownership source review completed, but async browser ordering, late replies and real WASM traps were not executed.",
+      "outcome": "not-run",
+      "evidence": "Real browser/runtime execution gap.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "category": "API",
+      "logicalGroup": "Public export schema and monetary fidelity",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "No CSV/JSON/XLSX public monetary export contract; mnemonic-output safety is covered by SEC-001/UI-003.",
+      "outcome": "not-applicable",
+      "evidence": "Not applicable to this project.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "category": "API",
+      "logicalGroup": "Encoding and import/export interoperability",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "BIP39 canonical-word and address encoding checks, including checksum variants.",
+      "outcome": "failed",
+      "evidence": "AUD-007-FUN001; wallet-bech32-variant; bounded-tests",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "category": "BLD",
+      "logicalGroup": "Manifest, flags, and feature composition",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Native all-target/all-feature checks and WASM library compilation; Cargo feature/target source inspection.",
+      "outcome": "passed",
+      "evidence": "clippy-native; clippy-wasm; bounded-tests",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "category": "BLD",
+      "logicalGroup": "Matrix depth and runtime sampling",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Representative native/WASM compilation ran; full Linux/macOS/Windows/ARM target matrix and runtime sampling did not.",
+      "outcome": "not-run",
+      "evidence": "Cross-platform execution gap.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "category": "BLD",
+      "logicalGroup": "Lockfiles, source provenance, and licenses",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Local RustSec scan used a retained advisory database (no fetch); source provenance/manifests/licenses inspected, but complete upstream/license-integrity execution did not run.",
+      "outcome": "not-run",
+      "evidence": "rustsec-local; rustsec-db; exhaustive upstream/license execution gap.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "category": "BLD",
+      "logicalGroup": "Canonical WASM and Docker bytes",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Canonical Docker/WASM build scripts reviewed only; no fresh reproducible build or generated-byte comparison.",
+      "outcome": "not-run",
+      "evidence": "Excluded release-level rebuild.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "category": "BLD",
+      "logicalGroup": "Artifacts, CI, and release workflows",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "CI/action pins, permissions and release prerequisites source-reviewed. No release asset, attestation, current remote CI or publisher-state verification.",
+      "outcome": "not-run",
+      "evidence": "Release assets/remote execution excluded.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "category": "UI",
+      "logicalGroup": "Real files and representative viewports",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "No generated final browser files were opened in pinned Chromium/Firefox or screenshot/viewports inspected.",
+      "outcome": "not-run",
+      "evidence": "Real browser/viewport execution gap.",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "category": "UI",
+      "logicalGroup": "Navigation, inputs, and state preservation",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "CLI choice/input/menu/retry unit tests and actual prompt-path source traces; not a browser navigation acceptance result.",
+      "outcome": "passed",
+      "evidence": "cli-tests-loopback; source review",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "category": "UI",
+      "logicalGroup": "Secret visibility, help, QR, and accessibility",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Private phrase visibility and rekey confirmation traced; redirected-output production display probe.",
+      "outcome": "failed",
+      "evidence": "AUD-007-SEC001; FUN002; terminal-display",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "category": "ARC",
+      "logicalGroup": "Ownership, imports, and composition seams",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Native engine/FFI, core packing/password/suite modules, CLI operation boundaries and browser worker ownership inspected.",
+      "outcome": "passed",
+      "evidence": "Source review; clippy-native; clippy-wasm",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "category": "ARC",
+      "logicalGroup": "Dead code, duplication, and false positives",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "First-party module/API consumers and selected stale names reviewed; no generic refactor recommendation substituted for demonstrated defects.",
+      "outcome": "passed",
+      "evidence": "Source inspection; DOC004",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "category": "ARC",
+      "logicalGroup": "Comments, tests, and production-path fidelity",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Comments and test paths compared with actual behavior; blanket seed-check and wiping statements overstate guarantees.",
+      "outcome": "failed",
+      "evidence": "AUD-007-DOC002; SEC004",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "category": "DOC",
+      "logicalGroup": "User-facing capability and safety descriptions",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Specification/README/supplement/code guidance compared, including check-vs-identity, passphrase composition and deniability.",
+      "outcome": "failed",
+      "evidence": "AUD-007-DOC001; DOC002; DOC003",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "category": "DOC",
+      "logicalGroup": "Commands, metadata, links, and legal materials",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "API names and documentation/link/reference checks inspected; seed-check byte description and current exported API disagree.",
+      "outcome": "failed",
+      "evidence": "AUD-007-DOC001; DOC004; specification documents 15 PASS",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "category": "DOC",
+      "logicalGroup": "Audit records and evidence consistency",
+      "scope": "MHFE library, native CLI and browser/WASM source at reviewed snapshot",
+      "method": "Audit snapshot, procedure hashes and publication record validation checked; AUD-007 pairing/schema validation is separate from stale spec publication records.",
+      "outcome": "failed",
+      "evidence": "AUD-007-DOC005; report validator",
+      "snapshot": "0455e386a88c0718336039a81d5dceb0cd0b3957"
+    }
+  ],
+  "commands": [
+    {
+      "label": "bounded-tests",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--all-targets",
+        "--all-features"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:40:38.795253+00:00",
+      "finishedAt": "2026-10-05T13:41:04.120938+00:00",
+      "exitCode": 101,
+      "logSha256": "29088ad405bc103f5740b04a3d9ef252af5abaca8d0308d3a4f31b90ea00a8b4",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/bounded-tests.log",
+      "commandRecordSha256": "0e5e292ea26861bda72ee2d061b7f5066fd2d77e861605e846493c9eb8bc7e7b"
+    },
+    {
+      "label": "cli-build",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "build",
+        "--locked",
+        "--bin",
+        "mhfe"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:50:14.785312+00:00",
+      "finishedAt": "2026-10-05T13:50:15.313194+00:00",
+      "exitCode": 0,
+      "logSha256": "a53b366c4033a205d44ec474685dad2ab400872876f91a30c1c9c8a5df21b7b0",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/cli-build.log",
+      "commandRecordSha256": "dfb72b6c781180328371ffe1ed1bad517e2b53f3413680c5d482fd78cff4da7f"
+    },
+    {
+      "label": "cli-tests-loopback",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--all-features",
+        "--bin",
+        "mhfe"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:45:51.024942+00:00",
+      "finishedAt": "2026-10-05T13:45:51.715172+00:00",
+      "exitCode": 0,
+      "logSha256": "10e5acaafa6a7246e5dcf504e2de85af494eb610b8c7f8ff3d681281cbdb662e",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/cli-tests-loopback.log",
+      "commandRecordSha256": "cdc13b196926839b1d65079626da3abe9d6a6bb5911b94d203b072ba4474c9d8"
+    },
+    {
+      "label": "clippy-native",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "clippy",
+        "--locked",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:46:01.700874+00:00",
+      "finishedAt": "2026-10-05T13:46:01.809073+00:00",
+      "exitCode": 0,
+      "logSha256": "ee1d3fffa2022e962e63e0dbe4d35c9c198450a20c29fc09030f635dbb38bfcd",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/clippy-native.log",
+      "commandRecordSha256": "5c3775f58fe06c71751e1ea7f0cafd1ed48c66443d92a41a4afa348b85d9d812"
+    },
+    {
+      "label": "clippy-wasm",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "clippy",
+        "--locked",
+        "--lib",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--features",
+        "wasm",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:46:06.276680+00:00",
+      "finishedAt": "2026-10-05T13:46:07.159530+00:00",
+      "exitCode": 0,
+      "logSha256": "68a98b331686741f88c523f20f000a8f09b1bcd0309b98df2b14ea1fc48fe08e",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/clippy-wasm.log",
+      "commandRecordSha256": "e680d7e40f397d874007967fd1784de9e47a899fd069a2adbdc8adc0d10c5523"
+    },
+    {
+      "label": "environment",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "-vV"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:39:25.513219+00:00",
+      "finishedAt": "2026-10-05T13:39:25.544881+00:00",
+      "exitCode": 0,
+      "logSha256": "b569b0c98ea3133c7252b4b8ea6b39b7b353813df0dd5f5c412c355691424112",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/environment.log",
+      "commandRecordSha256": "225d95f199006e787aaad3a5136e8bbfbc906e6ed4b38f6aa42efb355fd48db9"
+    },
+    {
+      "label": "integration-tests",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--all-features",
+        "--test",
+        "suite3_vectors",
+        "--test",
+        "suite4_vectors"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:45:56.387350+00:00",
+      "finishedAt": "2026-10-05T13:45:56.485648+00:00",
+      "exitCode": 0,
+      "logSha256": "e4ef61b00e176b54c65300fe02eee08067419e8430552b95876f6afc41816b29",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/integration-tests.log",
+      "commandRecordSha256": "2cc3149dfa576f31c1c3c4bf1fc932a9aca2ea24afcd3c5fe55add30b1613af2"
+    },
+    {
+      "label": "memory-lock-distinct-allocation-first-attempt",
+      "command": [
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition=2021",
+        "/home/sergio/Documents/bip_tools/mhfe/docs/audits/AUD-007-evidence/memory_lock_probe.rs",
+        "-L",
+        "dependency=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps",
+        "--extern",
+        "mhfe=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/libmhfe-6c0fb1389dbc3570.rlib",
+        "-o",
+        "/home/sergio/Documents/bip_tools/mhfe/docs/audits/AUD-007-evidence/memory_lock_probe"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:42:28.432237+00:00",
+      "finishedAt": "2026-10-05T13:42:28.554296+00:00",
+      "exitCode": 101,
+      "logSha256": "a1d7c8c9aabee1cfda89adb1894a3197a7331ce5b225a238b332f8c19e092096",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/memory-lock-distinct-allocation-first-attempt.log",
+      "commandRecordSha256": "10f56ee1144c9313d895d750d22ddd87320e5c37a9b174c04a3d42fdf49b3118"
+    },
+    {
+      "label": "memory-lock",
+      "command": [
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition=2021",
+        "/home/sergio/Documents/bip_tools/mhfe/docs/audits/AUD-007-harnesses/memory_lock_probe.rs",
+        "-L",
+        "dependency=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps",
+        "--extern",
+        "mhfe=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/libmhfe-6c0fb1389dbc3570.rlib",
+        "-o",
+        "/home/sergio/Documents/bip_tools/mhfe/docs/audits/AUD-007-evidence/memory_lock_probe"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:47:05.909504+00:00",
+      "finishedAt": "2026-10-05T13:47:06.048134+00:00",
+      "exitCode": 0,
+      "logSha256": "155b75e269465aa6e231661f62f8e0fd93e8765968ebd02d691ef810bad4688b",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/memory-lock.log",
+      "commandRecordSha256": "c46af8086b5b64db9e7199e0abb315c77f1b53feff15aef5d1242531136e7901"
+    },
+    {
+      "label": "prettier",
+      "command": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "."
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:40:38.784886+00:00",
+      "finishedAt": "2026-10-05T13:40:40.039682+00:00",
+      "exitCode": 0,
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/prettier.log",
+      "commandRecordSha256": "a477aaa31491489e1b4005fd2fb70f8827cda146078c9658cc0f6c37a9271ceb"
+    },
+    {
+      "label": "rust-format",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "fmt",
+        "--check"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:40:38.794318+00:00",
+      "finishedAt": "2026-10-05T13:40:38.994632+00:00",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/rust-format.log",
+      "commandRecordSha256": "a665bf6d3a61fd3958cc40bd5e206b8b5e4c24dd25af9725c3ebf4a82713431e"
+    },
+    {
+      "label": "rustsec-db",
+      "command": [
+        "git",
+        "log",
+        "-1",
+        "--format=%H%n%cI"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/workingspace/cargo/advisory-db",
+      "startedAt": "2026-10-05T13:50:51.689975+00:00",
+      "finishedAt": "2026-10-05T13:50:51.692141+00:00",
+      "exitCode": 0,
+      "logSha256": "d611f9ef57759852d82009f9eb4d3d02bd20fd4ffd4ceeff49282b8004422c75",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/rustsec-db.log",
+      "commandRecordSha256": "cbaf3842ef077e11c0b6788b352804f87379e6c62e63ceffc572ec6d2b005a0a"
+    },
+    {
+      "label": "rustsec-local",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/sergio/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/sergio/Documents/bip_tools/workingspace/rustup",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "audit",
+        "--db",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/advisory-db",
+        "--no-fetch",
+        "--no-yanked"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:49:33.907541+00:00",
+      "finishedAt": "2026-10-05T13:49:34.155228+00:00",
+      "exitCode": 0,
+      "logSha256": "9c207ef339efc9c60975998486ea75cad293f790a92fe54d6d7ea38e323380b3",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/rustsec-local.log",
+      "commandRecordSha256": "141fbefd7c7f522f9864b92cdd0e5b2ed5df9f9fe30e7050eb9ceaa9d1e7d5d7"
+    },
+    {
+      "label": "seed-check",
+      "command": [
+        "python3",
+        "docs/audits/AUD-007-harnesses/seed_check.py",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bip39-3.0.0/src/language/english.rs"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:39:25.616477+00:00",
+      "finishedAt": "2026-10-05T13:39:25.642675+00:00",
+      "exitCode": 0,
+      "logSha256": "3e73f6e54f5e245d192a00874366702100a2aa045120f49fae36ed40d6010df3",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/seed-check.log",
+      "commandRecordSha256": "f43eea47d7268113a103ccf20659258e7ad86969588676e3fdaf8c71c8ce23f9"
+    },
+    {
+      "label": "specification-analysis",
+      "command": [
+        "python3",
+        "scripts/check-spec.py",
+        "analysis",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bip39-3.0.0/src/language/english.rs",
+        "/home/sergio/Documents/bip_tools/mhfe/tests/fixtures/suite3-vectors/zero-12.json"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe_spec",
+      "startedAt": "2026-10-05T13:47:52.082406+00:00",
+      "finishedAt": "2026-10-05T13:47:52.130064+00:00",
+      "exitCode": 0,
+      "logSha256": "db0c09ee8e760c3662a63c0556840db11645f27d7a08e9dbefbf94a3016dda2a",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/specification-analysis.log",
+      "commandRecordSha256": "642499c7d3234d63d90d7feb17437e953ba39ea2aea9a87caca0945cf29409e3"
+    },
+    {
+      "label": "specification-documents",
+      "command": [
+        "python3",
+        "scripts/check-spec.py",
+        "documents",
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bip39-3.0.0/src/language/english.rs"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe_spec",
+      "startedAt": "2026-10-05T13:47:52.083104+00:00",
+      "finishedAt": "2026-10-05T13:47:52.470747+00:00",
+      "exitCode": 0,
+      "logSha256": "8ae1899f3e8efd69ef5a164355a26791b43cbc28eeab7d84e2d7953031dcd341",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/specification-documents.log",
+      "commandRecordSha256": "19b13e0fb962ba32c0e2b4cd5c310b9916689e8cc17ebdef51e31c5f24940c58"
+    },
+    {
+      "label": "specification-format",
+      "command": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "README.md",
+        "docs/DESIGN-NOTES.md",
+        "CHANGELOG.md"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe_spec",
+      "startedAt": "2026-10-05T13:49:33.912375+00:00",
+      "finishedAt": "2026-10-05T13:49:34.547615+00:00",
+      "exitCode": 0,
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/specification-format.log",
+      "commandRecordSha256": "3a4eb743e7ae1ca84f4273bfe7ed6b88d758b2f45d73b03d43c6a7d2f034e41f"
+    },
+    {
+      "label": "specification-record",
+      "command": [
+        "python3",
+        "docs/audits/AUD-005-harnesses/record.py",
+        "validate"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe_spec",
+      "startedAt": "2026-10-05T13:47:52.082406+00:00",
+      "finishedAt": "2026-10-05T13:47:52.182125+00:00",
+      "exitCode": 1,
+      "logSha256": "e29d8cb7261e7230e34b255882fa0a471aa392e8f4f7b28c6e7082374be1e9d6",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/specification-record.log",
+      "commandRecordSha256": "a07b642efa614d92fda9ba749c516e77f0cf37468792fc178935c2c7a9d4ef9a"
+    },
+    {
+      "label": "terminal-display",
+      "command": [
+        "/home/sergio/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition=2021",
+        "/home/sergio/Documents/bip_tools/mhfe/docs/audits/AUD-007-harnesses/terminal_display_probe.rs",
+        "-L",
+        "dependency=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps",
+        "-o",
+        "/home/sergio/Documents/bip_tools/mhfe/docs/audits/AUD-007-evidence/terminal_display_probe",
+        "--extern",
+        "mhfe=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/libmhfe-6c0fb1389dbc3570.rlib",
+        "--extern",
+        "anstream=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/libanstream-353fb9cff00379ad.rlib",
+        "--extern",
+        "anstyle=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/libanstyle-32a918a3829821ca.rlib",
+        "--extern",
+        "zeroize=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/libzeroize-e6ee79bb34d17f00.rlib",
+        "--extern",
+        "libc=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/liblibc-ddd656a41df4503b.rlib",
+        "--extern",
+        "ctrlc=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/libctrlc-9e76701b89f09d37.rlib",
+        "--extern",
+        "clap=/home/sergio/Documents/bip_tools/mhfe/target/debug/deps/libclap-058d550e673ed7ce.rlib"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:47:05.907411+00:00",
+      "finishedAt": "2026-10-05T13:47:06.190638+00:00",
+      "exitCode": 0,
+      "logSha256": "39d033e9541fb933219ee49dd6beb28253fb2989cf0c339f60563ab0a20d11f6",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/terminal-display.log",
+      "commandRecordSha256": "07a65fc2c86c0a705c9582e7264ba62e82eda58a00a7bd788a6ef6543ca46ef8"
+    },
+    {
+      "label": "terminal-regressions-xterm",
+      "command": [
+        "env",
+        "TERM=xterm-256color",
+        "python3",
+        "scripts/verify-hidden-input.py",
+        "target/debug/mhfe"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:50:19.481921+00:00",
+      "finishedAt": "2026-10-05T13:50:22.201060+00:00",
+      "exitCode": 0,
+      "logSha256": "7ee4d40893a0e2871ad1a8d378611e161c03a93ef275e6692b2486ebab3e7989",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/terminal-regressions-xterm.log",
+      "commandRecordSha256": "3638f4e14d1a63d8a22c54280533c21eeced2e1b17cdabe92b3edc62a2aca17a"
+    },
+    {
+      "label": "terminal-regressions",
+      "command": [
+        "python3",
+        "scripts/verify-hidden-input.py",
+        "target/debug/mhfe"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:49:33.908658+00:00",
+      "finishedAt": "2026-10-05T13:49:44.123381+00:00",
+      "exitCode": 1,
+      "logSha256": "2763e582d8642a5b4c3f5cdb92d38705cb888898ec4db6c5931d2b7f59be87e3",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/terminal-regressions.log",
+      "commandRecordSha256": "1ca2b138f56391e5f3ecfeb8657954d8226e7c94854a38b5593ec694416fc8ce"
+    },
+    {
+      "label": "transcript-reconstruction",
+      "command": [
+        "python3",
+        "docs/audits/AUD-007-harnesses/transcript_reconstruction.py"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:46:40.269209+00:00",
+      "finishedAt": "2026-10-05T13:46:40.296645+00:00",
+      "exitCode": 0,
+      "logSha256": "4667b57d5d71f9651e8b1628a7a49350e101263a287a182815a4de12eecda4bb",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/transcript-reconstruction.log",
+      "commandRecordSha256": "5ab7c7f8c14c9c34940c0373d873d851ecae2a7e790ae2ba024c9ed9cd1d6dc7"
+    },
+    {
+      "label": "wallet-bech32-variant",
+      "command": [
+        "python3",
+        "docs/audits/AUD-007-harnesses/wallet_bech32_variant.py"
+      ],
+      "cwd": "/home/sergio/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-05T13:40:29.660726+00:00",
+      "finishedAt": "2026-10-05T13:40:29.875034+00:00",
+      "exitCode": 0,
+      "logSha256": "a0d3439514c129dad71928b8cc920386810eff2571e3082db38330c422ff545a",
+      "evidence": "Local only: docs/audits/AUD-007-evidence/wallet-bech32-variant.log",
+      "commandRecordSha256": "c554cbd51cc658f4be9f589fb1b034cd2516b8ec6c00fac9de201cadc7eef28c"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-007-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Private-display paths write source mnemonics to redirected stdout",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "affectedFiles": [
+        "src/bin/mhfe/terminal.rs:341",
+        "src/bin/mhfe/new_wallet.rs:252",
+        "src/bin/mhfe/wallets.rs:128",
+        "src/bin/mhfe/rekey.rs:216"
+      ],
+      "evidence": [
+        "terminal-display"
+      ],
+      "reproduction": "Attach stdin/stderr to a pseudo-terminal but redirect stdout. Call the actual PrivateScreen::enter_to_show and print_phrase functions with the public 128-bit zero-entropy BIP39 fixture, as terminal_display_probe.py does. Trace its three interactive callers.",
+      "expected": "A private-screen-only reveal must refuse or explicitly obtain consent for a persistent export when the private screen cannot be opened.",
+      "observed": "The private screen reports inactive, then the callers unconditionally print the source phrase to stdout. The retained probe captured the public mnemonic in the pipe.",
+      "impact": "Interactive new/wallets/rekey flows can persist an unencrypted phrase in redirected output that the owner intended to contain only encrypted results. The probe uses the shared production display path; it does not replay full Argon2 operations.",
+      "recommendedFix": "Require a suitable private output terminal before these reveals, or implement a separate explicit export choice that names the destination. Do not silently fall back to ordinary stdout.",
+      "requiredVerification": "Run PTY regressions for redirected stdout, TERM=dumb, normal terminal, and intentional export. Confirm no phrase is emitted before export consent."
+    },
+    {
+      "id": "AUD-007-SEC002",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Dropping one page-lock guard unlocks another live secret on the same page",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "src/memory.rs:19",
+        "src/memory.rs:44"
+      ],
+      "evidence": [
+        "memory-lock",
+        "https://man7.org/linux/man-pages/man2/mlock.2.html"
+      ],
+      "reproduction": "Run memory_lock_probe.py on Linux. Its final probe uses two distinct live Password allocations sharing a kernel page, then drops one and examines /proc/self/smaps.",
+      "expected": "A successfully acquired guard must not revoke the memory protection of another live guarded secret.",
+      "observed": "The synthetic probe records distinct_Password_allocations_share_page=true, live_password_page_locked_after_other_password_drop=false, while the remaining guard still reports locked. Linux mlock locks are page-based and do not stack.",
+      "impact": "The promised best-effort protection against swapping silently disappears despite successful locking. Actual swap disclosure or secret recovery was not demonstrated; Windows/browser locking remains intentionally unsupported.",
+      "recommendedFix": "Use page-granular reference counting across guards, or allocations whose locked pages cannot overlap. Make is_locked represent the currently maintained guarantee.",
+      "requiredVerification": "Exercise overlapping and disjoint allocations, arbitrary drop order, denied mlock, allocation lifetime, and concurrency. Confirm live pages remain locked until the last owning guard drops."
+    },
+    {
+      "id": "AUD-007-SEC003",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "The raw terminal input lock ends before its returned secret buffer dies",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "src/bin/mhfe/hidden_input.rs:286",
+        "src/bin/mhfe/hidden_input.rs:350",
+        "src/bin/mhfe/encrypt.rs:390",
+        "src/bin/mhfe/new_wallet.rs:163"
+      ],
+      "evidence": [
+        "Source lifetime inspection at the reviewed commit; independent of AUD-007-SEC002."
+      ],
+      "reproduction": "Trace edit_line: the local LockedPages guard covers its Vec; mem::take moves the allocation into the returned Zeroizing<String>; the guard then drops at function return. Inspect callers retaining or copying that returned string.",
+      "expected": "A returned secret should retain its acquired page-lock guard for its full owned lifetime, or the limitation must be accurately stated.",
+      "observed": "The bytes remain owned by the returned String, but the only guard is local to edit_line and unlocks those same pages on return. The raw first password remains alive while a repeat is requested; a new-wallet passphrase is relocked only after the repeat prompt finishes.",
+      "impact": "Typed secret material can become pageable after input and before its eventual wipe, independent of the overlapping-page defect. No actual swap disclosure was demonstrated.",
+      "recommendedFix": "Return an owning locked-secret type carrying both bytes and guard, or transfer an equivalent guard to the caller without an unlocked lifetime gap.",
+      "requiredVerification": "Trace and test the page-lock state after read_line returns and until the returned secret is dropped, including error paths and conversions."
+    },
+    {
+      "id": "AUD-007-SEC004",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Owned private-scalar temporaries are not explicitly zeroized",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "src/wallet.rs:806",
+        "src/wallet.rs:919",
+        "docs/API.md:119"
+      ],
+      "evidence": [
+        "Source and type-lifetime inspection at the reviewed commit."
+      ],
+      "reproduction": "Trace key.scalar() in taproot_output_key and the temporary parent scalar in ExtendedKey::child. The scalar type is Copy and has no zeroizing Drop; selected other scalar bindings are explicitly wiped.",
+      "expected": "The documentation claim that every owned key buffer is wiped must match all owned scalar temporaries, or state a narrower supported guarantee.",
+      "observed": "These private-scalar temporaries are created as plain values and leave scope without explicit zeroization.",
+      "impact": "This limits the secret-lifecycle guarantee. Residual memory exfiltration was not demonstrated; dependency/compiler/register erasure is a separate limitation.",
+      "recommendedFix": "Use zeroizing owned bindings where practical and revise blanket guarantees to describe unavoidable compiler/dependency copies honestly.",
+      "requiredVerification": "Review all private scalar conversions and early returns; add meaningful zeroization/lifetime regression evidence without claiming physical erasure of registers."
+    },
+    {
+      "id": "AUD-007-SEC005",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Hidden-wallet count remains in terminal history after the private screen clears",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "src/bin/mhfe/wallets.rs:95",
+        "README.md:363"
+      ],
+      "evidence": [
+        "Source trace of choice::record outside the private-screen lifetime."
+      ],
+      "reproduction": "Trace show_wallet returning after its private screen is cleared, then choice::record(&format!(\"Wallet {number}\"), \"24 words, shown and cleared\") in wallets::run.",
+      "expected": "The claim that nothing records how many hidden wallets were used must include the visible terminal transcript, or explicitly exclude it.",
+      "observed": "Each derived-wallet reveal is followed on the ordinary screen by a numbered Wallet 1, Wallet 2, and so on record. These labels can remain in scrollback or a terminal-session recording.",
+      "impact": "An observer of the terminal transcript can learn the count of wallets opened in that session. No mnemonic or password is disclosed by this label, and this is outside the formal container/disclosure-only experiment.",
+      "recommendedFix": "Avoid count-revealing records after the private screen, or narrow the documentation and provide an intentional private-session mode that clears these records.",
+      "requiredVerification": "Capture an ordinary PTY session using bounded synthetic inputs and confirm no persistent per-wallet count appears when the documented private mode is used."
+    },
+    {
+      "id": "AUD-007-FUN001",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "Cosmos and Injective wallet references accept the wrong Bech32 checksum variant",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "affectedFiles": [
+        "src/wallet.rs:467"
+      ],
+      "evidence": [
+        "wallet-bech32-variant",
+        "https://github.com/cosmos/cosmos-sdk/blob/main/types/bech32/bech32.go",
+        "https://github.com/cosmos/btcutil/blob/master/bech32/bech32.go"
+      ],
+      "reproduction": "Run wallet_bech32_variant.py: re-encode the public Cosmos/Injective vector payloads with Bech32m, then call production Address parsing and find_address.",
+      "expected": "Cosmos SDK account addresses require Bech32, not Bech32m. Invalid references must be rejected before recovery or identity comparison.",
+      "observed": "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0afua36h and inj1npvwllfr9dqr8erajqqr6s0vxnk2ak55k94rgq are accepted and reported as matching wallet addresses. Generic bech32::decode accepts both checksum variants.",
+      "impact": "An invalid chain address can be treated as an independent wallet-identity reference. This is a validation/identity-contract defect, not a demonstrated incorrect private-key derivation.",
+      "recommendedFix": "Require the exact Bech32 variant for Cosmos/Injective while preserving Bech32m for address types that require it.",
+      "requiredVerification": "Retain literal invalid references and valid public vectors; test Bech32/Bech32m variant mismatch, HRP, casing, payload size, and every other supported Bech32 address family."
+    },
+    {
+      "id": "AUD-007-FUN002",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "Rekey warns about dependent wallets but omits the required preservation confirmation",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "affectedFiles": [
+        "src/bin/mhfe/rekey.rs:84",
+        "../mhfe_spec/README.md:424"
+      ],
+      "evidence": [
+        "Source trace against reviewed specification README application requirements."
+      ],
+      "reproduction": "Trace rekey::run from its warning through confirmation and creation of the replacement. Compare the updated specification application requirement.",
+      "expected": "Before proceeding, every user must explicitly confirm that affected wallets have moved their funds or have independently usable verified backups; the question must not expose which derived wallets exist.",
+      "observed": "The warning is displayed universally, but no explicit funds-or-backups preservation confirmation is obtained before re-encryption proceeds.",
+      "impact": "A required guard against loss of dependent-wallet access is absent. The encryption operation itself still round-trips; this finding concerns the supported rekey workflow.",
+      "recommendedFix": "Add the same explicit preservation confirmation for every user before proceeding; abort safely when it is not confirmed, and retain the statement that old copies are not revoked.",
+      "requiredVerification": "Test both choices and cancellation through the actual command path; ensure no new container is emitted before confirmation and no question requests hidden-wallet identities/passwords."
+    },
+    {
+      "id": "AUD-007-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The seed-check description omits bytes included by the implementation",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "affectedFiles": [
+        "../mhfe_spec/docs/DESIGN-NOTES.md:3072",
+        "src/wallet_check.rs:5",
+        "src/wallet_check.rs:53"
+      ],
+      "evidence": [
+        "seed-check"
+      ],
+      "reproduction": "Run seed_check.py with the public TREZOR fixture, counter 76562, and official English wordlist. Compare the documented tag || seed with actual tag || BE32(ENT) || seed.",
+      "expected": "The draft profile description and current implementation must identify the same byte-level predicate.",
+      "observed": "The implementation hash is 0000e86481bdfe6dbf45e6e41fba4f309fcf09d3f0af2fe3f46736c663840853, which passes. Omitting ENT produces f2c9f7654eb84903d2a508cdf7ef27f9e4d57fff54b6e13ee35ddabbc9278dbf, which fails.",
+      "impact": "An independently written recovery program following the prose can disagree about a prepared wallet. This is a draft-profile description mismatch, not a mismatch in suites 3/4 encryption.",
+      "recommendedFix": "Specify ASCII domain MHFE-WALLET-CHECK-SEED-1 without NUL, BE32 entropy length in bits, raw 64-byte BIP39 seed, canonical English mnemonic, NFKD passphrase, nonempty passphrase, and first 16 digest bits zero. Separate implemented draft behavior from future variants.",
+      "requiredVerification": "Retain a public no-Argon fixture in the specification and two independent implementations; verify exact bytes, all relevant entropy lengths, Unicode, empty passphrase rejection, and leading-bit semantics."
+    },
+    {
+      "id": "AUD-007-DOC002",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Seed-check security, entropy and decoy claims exceed the stated model",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "../mhfe_spec/docs/DESIGN-NOTES.md:3073",
+        "../mhfe_spec/docs/DESIGN-NOTES.md:3081",
+        "../mhfe_spec/docs/DESIGN-NOTES.md:3091",
+        "src/wallet_check.rs:9",
+        "src/bin/mhfe/new_wallet.rs:147"
+      ],
+      "evidence": [
+        "Source/model comparison; related exact-byte reproduction in seed-check."
+      ],
+      "reproduction": "Read the implemented seed-check description and code module comments. Evaluate the fixed-passphrase rejection-sampling distribution and false-match probability, then distinguish a fixed decoy passphrase from a passphrase that the owner may search.",
+      "expected": "A 16-bit condition is a probabilistic consistency filter. Under a balanced ideal predicate and fixed BIP39 passphrase, accepted entropy is approximately ENT-16 bits; attack estimates and deniability must be scoped to explicit procedures and distributions.",
+      "observed": "The text says only the right phrase/passphrase passes, that no protection is lost, that resistance equals the unconditioned profile and that a second passphrase fails. Wrong pairs can pass with probability about 2^-16; deliberately selecting another passphrase can also find a passing result in about 2^16 seed computations. The prior uniform-source deniability theorems do not automatically apply to this conditioned source. The new-wallet help repeats the categorical decoy/passphrase failure and claims that a passing phrase shows MHFE provenance.",
+      "impact": "These claims can cause users or reviewers to treat a filter as unique wallet identification, a search estimate as an attack lower bound, or an existing theorem as covering a new source distribution. No cheaper complete attack or break of MHFE is established by this audit.",
+      "recommendedFix": "State conditional entropy (~240 bits for new 24-word creation), false positives and prior dependence; keep the independent strong BIP39 passphrase recommendation; describe the pair-testing procedure without optimality claims, address-comparison savings, and separate decoy strategies. Require a new experiment/proof before extending deniability guarantees.",
+      "requiredVerification": "Review revised statements against the explicit probability model; preserve warnings that a match is not wallet identity and a failure is meaningful only when this profile was used; verify the creation/check/rekey UI uses those distinctions."
+    },
+    {
+      "id": "AUD-007-DOC003",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The disclosure-simulation corollary does not specify the wallet-record oracle",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "../mhfe_spec/docs/DESIGN-NOTES.md:519"
+      ],
+      "evidence": [
+        "Reviewed deniability experiment and corollary source."
+      ],
+      "reproduction": "Compare the prepared-disclosure simulator with the experiment defining wallet-record lookups. Its sampled record must remain consistent with later queries on the sampled wallet.",
+      "expected": "A simulation statement involving a record oracle must say whether the simulator programs it or uses an already fixed public ledger.",
+      "observed": "The corollary samples a usage record from the container alone without specifying record-oracle programming or consistency with subsequent lookups.",
+      "impact": "The broad wording can be read as a claim about a fixed real blockchain that is not justified by the supplied simulator. Theorem 1/2 are not disproved by this clarification request.",
+      "recommendedFix": "Restrict the corollary to the synthetic fresh-record experiment with explicitly consistent oracle programming, or prove the corresponding statement for the intended fixed-ledger experiment.",
+      "requiredVerification": "Check the simulator and adversary view step by step, including repeated lookups and the hidden real-wallet record; retain the stated theorem bounds separately."
+    },
+    {
+      "id": "AUD-007-DOC004",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The API guide names removed wallet APIs",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "docs/API.md:111"
+      ],
+      "evidence": [
+        "API guide and exported-symbol inspection."
+      ],
+      "reproduction": "Compare the wallet API summary with exported types and functions in src/wallet.rs.",
+      "expected": "Published API names must refer to available exports at the reviewed commit.",
+      "observed": "The guide names BitcoinAddress and address_at; the current implementation exports Address and the current find_address interface instead.",
+      "impact": "Library consumers following the guide can write code that does not compile.",
+      "recommendedFix": "Update the guide to the actual exported API and representative usage.",
+      "requiredVerification": "Compile a small documented example against the reviewed public exports and check links/symbol names."
+    },
+    {
+      "id": "AUD-007-DOC005",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Specification publication records no longer match the reviewed supplement",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "../mhfe_spec/docs/audits/AUD-005-publication.json",
+        "../mhfe_spec/docs/DESIGN-NOTES.md"
+      ],
+      "evidence": [
+        "specification-record: post-follow-up retained command fails with ValueError: Published file changed: README.md.",
+        "Earlier root session tool result (not the retained post-follow-up command): ValueError: Published file changed: docs/DESIGN-NOTES.md."
+      ],
+      "reproduction": "Validate the existing specification AUD-005 publication record against the dirty working documents. The initial root-session command was before Electrum edits; the retained specification-record command ran afterward.",
+      "expected": "The publication record must either identify the reviewed bytes or be explicitly marked as awaiting refresh after edits.",
+      "observed": "Initial pre-follow-up validation failed with ValueError: Published file changed: docs/DESIGN-NOTES.md. The separately retained post-follow-up specification-record command fails with ValueError: Published file changed: README.md; neither is represented as a successful record refresh.",
+      "impact": "Recorded provenance is stale for the working supplement. This does not establish a cryptographic or citation-numbering defect.",
+      "recommendedFix": "After final content review, refresh the existing publication records using their retained harness; do not pretend the new prose was part of an earlier published audit snapshot.",
+      "requiredVerification": "Rerun record.py validate and retain hashes of the finalized publication documents."
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-007-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-SEC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-SEC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-SEC004",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-SEC005",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Original source trace; no remediation applied."
+    },
+    {
+      "id": "AUD-007-FUN001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-FUN002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-DOC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-DOC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-DOC004",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    },
+    {
+      "id": "AUD-007-DOC005",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+    }
+  ],
+  "limitations": [
+    "This is a full-scope first-party audit with incomplete execution, not a fully executed end-to-end or release acceptance audit.",
+    "No full-size Argon2 replay, full-size independent OpenSSL vector replay, canonical Docker rebuild, release archive verification or current remote CI or freshly fetched advisory database check ran.",
+    "No actual final-browser CSP, worker cancellation, viewport, mobile or cross-platform Windows/macOS/ARM acceptance ran. WASM compilation is not browser execution.",
+    "No cryptographic security proof, exhaustive absence-of-bugs claim or independent expert certification. Reviewed primitives and integration are not a complete upstream audit.",
+    "The new wallet seed check is an explicitly marked draft creation profile. Normative core suites 3/4 are unchanged; missing README normative profile definition alone is not a core-conformance defect.",
+    "Related specification was dirty at capture. Later owner-authorized Electrum reference follow-up must be identified separately from the reviewed baseline; no production remediation is claimed.",
+    "Initial socket test failures were sandbox PermissionDenied results; successful scoped loopback rerun is recorded separately. Initial failed memory probe was a harness/allocation issue, not an extra product finding.",
+    "Only public BIP39 fixtures and synthetic passwords were used. No funds, user secrets, transaction broadcasting, commit, push or release operation occurred."
+  ],
+  "supplementaryChecks": [
+    {
+      "command": "Specification documents and analysis harnesses after the limited Electrum follow-up",
+      "outcome": "passed",
+      "counts": "Documents 15 PASS, analysis 64 PASS",
+      "source": "Retained specification-documents and specification-analysis command logs; analysis reuses recorded Argon2 outputs."
+    },
+    {
+      "command": "python3 docs/audits/AUD-005-harnesses/record.py validate",
+      "outcome": "failed",
+      "error": "ValueError: Published file changed: README.md",
+      "source": "Retained specification-record log after Electrum follow-up; earlier root-session validation already failed with docs/DESIGN-NOTES.md before the follow-up."
+    }
+  ],
+  "targetedDocumentationFollowUp": {
+    "record": "Local only: docs/audits/AUD-007-evidence/electrum-follow-up.json",
+    "recordSha256": "7132fcad32ff18f1ebc027bbff3e830e4949580abb949b3e2cbcef11f12895f6",
+    "purpose": "User-authorized Electrum precedent and corresponding shared bibliography renumbering only",
+    "afterFormatting": {
+      "README.md": "28a3b13bb7a42e33d7119af3a987e0134b515eec0beafe8f140f9a1315753324",
+      "docs/DESIGN-NOTES.md": "a15dbe7ddf750b7b9d20cda42affb6c8682f0eaaf72ec13564ea4c53cc7377da",
+      "CHANGELOG.md": "31dc9641ef8fb03332628d8c28740bf1c9117548ce78f018cb17502e863f0483"
+    },
+    "citationMapping": {
+      "45": 46,
+      "46": 47,
+      "47": 48,
+      "48": 49,
+      "49": 50,
+      "50": 51,
+      "51": 52,
+      "52": 53,
+      "53": 54,
+      "54": 55,
+      "55": 56,
+      "56": 57,
+      "57": 58,
+      "58": 59,
+      "59": 60,
+      "60": 61,
+      "61": 62,
+      "62": 63,
+      "63": 64
+    }
+  }
+}
