@@ -37,10 +37,10 @@ pub struct Options {
 /// The top of `mhfe new --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Make a new wallet and its container",
+        "Generate a new wallet and its container",
         "Draws a new 24-word seed phrase from the operating system's random generator, shows it \
          once for your wallet, and encrypts it into a container under your password. If you \
-         choose, the phrase is drawn so that it passes a wallet check with your BIP39 passphrase, \
+         choose, the phrase is drawn so that it passes a check with your BIP39 passphrase, \
          which lets a recovery with the passphrase recognise the right password; the check has \
          costs, which ? explains at the question and the README states.",
     ])
@@ -81,7 +81,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let phrase = draw_phrase(checked.then_some(&*passphrase))?;
     let _phrase_locked = LockedPages::of_string(&phrase);
     show_new_phrase(&input, &phrase)?;
-    let check = if checked { ", with a wallet check" } else { "" };
+    let check = if checked { ", with a check" } else { "" };
     choice::record("Phrase", &format!("24 words, new{check}"));
 
     let password = encrypt::read_new_password(&mut input, Operation::New)?;
@@ -117,15 +117,15 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 fn ask_for_check() -> Result<bool, Failure> {
     let answers = [
         Answer::new("No check", "every password opens a valid wallet"),
-        // The cost in entropy, stated calmly: 240 of 256 bits are far beyond any search.
         Answer::new(
-            "A wallet check with my passphrase",
-            "240 of 256 bits remain, still plenty",
+            "A check with my BIP39 passphrase",
+            "a recovery recognises a wrong password",
         ),
     ];
     let question = Question {
         text: "Do you want a check that confirms the password at recovery?",
-        explanation: &[],
+        // The cost in entropy, stated calmly above both answers: 240 bits are far beyond any search.
+        explanation: &["A check takes 16 of the 256 bits of entropy; 240 remain, still plenty."],
         more: Some(readme::NEW),
         record: Some("Check"),
     };
@@ -151,7 +151,7 @@ fn explain() {
     good("Every password gives an equally valid wallet; decoys work.");
     bad("A recovery cannot tell a wrong password.");
     eprintln!();
-    eprintln!("{}", paint(STRONG, "A wallet check with my passphrase"));
+    eprintln!("{}", paint(STRONG, "A check with my BIP39 passphrase"));
     good("A wrong password or passphrase passes once in about 65,536.");
     good("A password guess is tested only with a passphrase guess.");
     good("About 240 of the 256 bits remain: far beyond any search.");

@@ -268,9 +268,9 @@ coin, or takes it from `--coin`, and shows before the check what it searches: th
 receiving and change addresses of accounts 0 to 9 on the standard paths of that address, or one
 path with `--path`. Do not keep the address or fingerprint next to the container.
 
-For a wallet that `mhfe new` made with a wallet check, the list also offers that check. It asks
-for the BIP39 passphrase, which the check needs, and confirms the password and passphrase, not the
-wallet.
+For a wallet that `mhfe new` made with a check, the list also offers "Check with the BIP39
+passphrase". It asks for the BIP39 passphrase, which the check needs, and confirms the password and
+passphrase, not the wallet.
 
 When it does not match, the check cannot tell what is wrong: the password, a setting, the
 container, the BIP39 passphrase or the reference. Without an address or fingerprint, for a 12- to
@@ -320,7 +320,7 @@ when the output goes to a file, that choice is not offered.
 
 ### `mhfe new`
 
-`mhfe new` makes a new 24-word wallet and its container in one go. It draws the phrase from the
+`mhfe new` generates a new 24-word wallet and its container in one go. It draws the phrase from the
 operating system's random generator, shows it once on a private screen for your wallet, and
 encrypts it under your password as `mhfe encrypt` does. Where no private screen can be opened, such
 as when the output goes to a file, it refuses to start.
@@ -332,7 +332,7 @@ preselected:
 - **No check**, the usual case for a 24-word phrase and the only one without a passphrase. Every
   password gives an equally valid wallet, so a decoy password keeps working, and a recovery cannot
   tell a wrong password: confirm it with an address or the fingerprint.
-- **A wallet check with your passphrase**, for funds kept under it. The phrase is drawn so that a
+- **A check with your BIP39 passphrase**, for funds kept under it. The phrase is drawn so that a
   tagged SHA-256 of its BIP39 seed, made with the passphrase, starts with 16 zero bits; the exact
   bytes are in [docs/API.md](docs/API.md). `mhfe check` with the passphrase then says whether a
   recovery passes. A wrong password or passphrase still slips through once in about 65,536, so a

@@ -103,7 +103,7 @@ fn entries() -> Vec<Entry> {
             style::warn("The fast mode is not offered.", &failure.message);
         }
     }
-    for name in ["encrypt", "new", "decrypt", "check", "rekey", "wallets"] {
+    for name in ["new", "encrypt", "decrypt", "check", "rekey", "wallets"] {
         entries.push(Entry::command(name));
     }
     // Passwords are made again on Enter until one suits (make_passwords).
