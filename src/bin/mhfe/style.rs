@@ -62,6 +62,13 @@ pub fn hint(text: &str) -> usize {
 }
 
 /// A warning: a yellow headline after "!", then `body` wrapped, every line marked with "!".
+/// A grey line that links to the README section explaining what a screen only names; returns
+/// the lines it took.
+pub fn more(place: &str) -> usize {
+    eprintln!("  {}", paint(MUTED, format!("More: {place}")));
+    1
+}
+
 pub fn warn(headline: &str, body: &str) {
     marked(WARNING, "!", headline, body);
 }

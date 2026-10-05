@@ -58,11 +58,7 @@ impl Entry {
 pub fn run() -> Result<i32, Failure> {
     style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
     eprintln!();
-    style::hint(
-        "Encrypts a BIP39 seed phrase into a password-protected container, 24 words or as \
-         long as the phrase, and recovers it. Choose what to do; the grey command does the same \
-         when typed.",
-    );
+    style::hint("Encrypts a seed phrase into a password-protected container and recovers it.");
     let entries = entries();
     let mut selected = 0;
     loop {
