@@ -212,7 +212,7 @@ enum How {
 /// For a recovery without a built-in check: a receiving address, the fingerprint, or the phrase
 /// shown to the owner, who compares it with their backup.
 fn ask_how_to_confirm(input: &mut Input) -> Result<How, Failure> {
-    let answers = [
+    let mut answers = vec![
         Answer::new(
             "A receiving address (recommended)",
             "checks the wallet and its passphrase",
@@ -221,9 +221,15 @@ fn ask_how_to_confirm(input: &mut Input) -> Result<How, Failure> {
             "The master key fingerprint",
             "eight hex digits; quick, weaker",
         ),
-        // Said before the phrase appears: a comparison from memory confirms little.
-        Answer::new("Show me the phrase", "against a written record, not memory"),
     ];
+    // The phrase is shown only on a private screen, so it is offered only where there can be one
+    // (AUD-007-SEC001). Said before it appears: a comparison from memory confirms little.
+    if terminal::can_show_privately(input) {
+        answers.push(Answer::new(
+            "Show me the phrase",
+            "against a written record, not memory",
+        ));
+    }
     let question = Question::new(
         "How should the recovered seed phrase be confirmed?",
         "Confirm",
@@ -239,6 +245,11 @@ fn ask_how_to_confirm(input: &mut Input) -> Result<How, Failure> {
 /// yes goes on; the screen is cleared either way.
 fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
     let screen = terminal::PrivateScreen::enter_to_show(input);
+    if !screen.shows_privately() {
+        return Err(Failure::internal(
+            "No private screen to show the phrase on.",
+        ));
+    }
     if screen.is_active() {
         style::title(Operation::Rekey.title());
     }

@@ -38,6 +38,12 @@ summary records by its length; ? explains the container lengths, and the arrows 
 words; Ctrl+C at the repeated password ends the tool and leaves the private screen. Escape at a
 list cancels with exit code 130. The phrase is the public zero-12 test phrase and the password a
 synthetic one, which never reaches the main screen.
+
+Finally it checks that a phrase the person did not ask to export is shown only on a private screen
+(AUD-007-SEC001): `mhfe new` and `mhfe wallets` refuse to start, before anything is asked and with
+nothing on standard output, when standard output goes to a pipe or TERM is dumb, while `mhfe new`
+at a terminal goes on to its first question; and `mhfe rekey` offers to show the phrase for the
+owner's comparison only when standard output is the terminal. Neither gets as far as Argon2.
 """
 
 import fcntl
@@ -55,8 +61,9 @@ ROOT = Path(__file__).resolve().parent.parent
 PROGRAM = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "target/debug/mhfe")
 ZERO_12 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-12.json").read_text())
 CONTAINER, PHRASE = ZERO_12["container"], ZERO_12["inputs"]["phrase"]
-# Exit code of the tool when the person cancels (src/bin/mhfe/exit.rs).
-CANCELLED = 130
+# Exit codes of the tool when the person cancels and when an answer or the setup is refused
+# (src/bin/mhfe/exit.rs).
+CANCELLED, INVALID_INPUT = 130, 2
 # What the tool prints next after each kind of answer. An accepted one leads to the fingerprint.
 # A refused password is asked again ("Please type it again").
 REFUSED = b"again"
@@ -115,7 +122,8 @@ def attach_terminal():
 
 
 class Session:
-    def __init__(self, arguments=("check", "--fingerprint", "--pim", "0")):
+    def __init__(self, arguments=("check", "--fingerprint", "--pim", "0"), stdout=None, term=None):
+        """`stdout` replaces the terminal as standard output, such as a pipe; `term` sets TERM."""
         self.master, self.slave = os.openpty()
         os.set_blocking(self.master, False)
         # The settings are read through the master side: on macOS the slave side stops answering
@@ -123,9 +131,11 @@ class Session:
         # terminal of an ended session. The master side reads the same terminal on every system.
         self.original = termios.tcgetattr(self.master)
         environment = dict(os.environ, NO_COLOR="1")
+        if term is not None:
+            environment["TERM"] = term
         self.process = subprocess.Popen(
             [PROGRAM, *arguments],
-            stdin=self.slave, stdout=self.slave, stderr=self.slave,
+            stdin=self.slave, stdout=self.slave if stdout is None else stdout, stderr=self.slave,
             start_new_session=True, preexec_fn=attach_terminal, env=environment,
         )
         self.output = b""
@@ -356,6 +366,67 @@ def check_encrypt_lists():
     print("encrypt: Escape at a list cancels, exit code 130, terminal restored")
 
 
+def run_with_output(arguments, redirected=False, term=None):
+    """Starts the tool with standard output in a pipe when `redirected`; returns the session and
+    the read end of the pipe, or None."""
+    if not redirected:
+        return Session(arguments, term=term), None
+    reader, writer = os.pipe()
+    session = Session(arguments, stdout=writer, term=term)
+    # The tool holds its own copy; the pipe ends once the tool has ended.
+    os.close(writer)
+    return session, reader
+
+
+def piped_output(reader):
+    """Everything the tool wrote to standard output, read once it has ended."""
+    data = b""
+    while chunk := os.read(reader, 65536):
+        data += chunk
+    os.close(reader)
+    return data
+
+
+def check_private_reveals():
+    refused = b"only on a private screen"
+    for command in ("new", "wallets"):
+        for label, redirected, term in (("standard output in a pipe", True, None),
+                                        ("TERM=dumb", False, "dumb")):
+            session, reader = run_with_output((command, "--pim", "0"), redirected, term)
+            session.wait_for(refused)
+            code, settings = session.close()
+            assert code == INVALID_INPUT, f"{command}, {label}: exit code {code}"
+            assert settings == session.original, f"{command}, {label}: terminal settings changed"
+            for asked in (b"assphrase", b"Password", b"Esc cancels"):
+                assert asked not in session.output, f"{command}, {label}: asked {asked!r} first"
+            if reader is not None:
+                assert piped_output(reader) == b"", f"{command}, {label}: wrote to the pipe"
+            print(f"{command}: refused with {label}, before any question, exit code 2")
+
+    session = Session(("new", "--pim", "0"))
+    session.wait_for(b"passphrase of the new wallet")
+    code, _ = session.close()
+    assert code == CANCELLED, f"new at a terminal: exit code {code}"
+    print("new: at a terminal it goes on to the passphrase")
+
+    for redirected in (False, True):
+        session, reader = run_with_output(("rekey", "--pim", "0", "--words", "24"), redirected)
+        # Everyone confirms that other wallets' funds are safe (AUD-007-FUN002).
+        session.wait_for(b"backed up another way?")
+        session.answer(b"1", b"original: ")
+        session.answer(CONTAINER.encode() + b"\r", b"Password: ")
+        session.answer(SECRET + b"\r", b"confirmed?", LIST_SHOWN)
+        offered = b"Show me the phrase" in session.output
+        code, _ = session.close()
+        assert code == CANCELLED, f"rekey: exit code {code}"
+        label = "with standard output in a pipe" if redirected else "at a terminal"
+        assert offered != redirected, f"rekey, {label}: showing the phrase offered: {offered}"
+        if reader is not None:
+            assert piped_output(reader) == b"", f"rekey, {label}: wrote to the pipe"
+        state = "not offered" if redirected else "offered"
+        print(f"rekey: showing the phrase for comparison {state} {label}")
+
+
 def main():
     # Each result is shown at once, so that a CI log shows how far the checks came.
     sys.stdout.reconfigure(line_buffering=True)
@@ -384,6 +455,7 @@ def main():
     check_menu()
     check_rekey_asks_about_other_wallets()
     check_encrypt_lists()
+    check_private_reveals()
 
 
 if __name__ == "__main__":

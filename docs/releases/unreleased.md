@@ -44,9 +44,13 @@ Planned as version 0.5.0.
   `Reference::WalletCheck`, which never confirms a rekey; `derive_wallet` takes the main wallet's
   passphrase, so that no hidden wallet passes the check either.
 - `mhfe wallets` opens hidden wallets: every other password gives its own 24-word wallet on a
-  24-word container, shown on a private screen after the self-test has passed, recorded nowhere.
+  24-word container, shown after the self-test has passed on one private screen that the main
+  screen keeps no trace of, not even how many wallets were opened, and recorded nowhere.
   A password whose wallet passes a short phrase's built-in check is refused. The library offers
   `Mhfe::derive_wallet`, with the error code `HIDDEN_WALLET_PASSES_CHECK`.
+- A phrase that was not asked for as a result is shown only on a private screen: `mhfe new` and
+  `mhfe wallets` refuse to start, and `mhfe rekey` does not offer the owner's comparison, when
+  standard output goes to a file, a pipe or a terminal without a private screen.
 - `mhfe self-test` checks the program on this computer against two published vectors at full cost,
   an encryption of suite 3 and a recovery of suite 4, in about two minutes. The start menu offers
   it.
@@ -74,8 +78,9 @@ Planned as version 0.5.0.
   is not confused with recovering one: `mhfe decrypt` is now "Recover a seed phrase".
 - Secrets stay out of core dumps and swap: the tool forbids core dumps and, on Linux, other
   programs of the same user from reading its memory; it keeps the password, the phrases and a BIP39
-  passphrase in locked memory, and marks Argon2's work area to be left out of a dump. On Linux it
-  warns before any secret is typed when swap is not encrypted.
+  passphrase in locked memory, and marks Argon2's work area to be left out of a dump. A typed line
+  stays locked until it is wiped, and a page that holds several secrets stays locked until the last
+  of them is wiped. On Linux it warns before any secret is typed when swap is not encrypted.
 - On Linux the kernel enforces that `encrypt`, `decrypt`, `check`, `rekey`, `new`, `wallets` and
   `password` stay offline and write no file: seccomp refuses sockets and Landlock refuses file
   writes, for every thread the command starts. The summary shows it; the start menu runs each

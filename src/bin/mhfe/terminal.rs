@@ -2,8 +2,9 @@
 //!
 //! Secrets are typed on a private screen of their own, where they are shown as they are typed and
 //! which is cleared once the person is done; anywhere else they are read without echo. Either way
-//! they go into buffers that are wiped when dropped. Results go to standard output; prompts,
-//! progress and advice go to standard error, so a result can be piped on without the messages.
+//! they go into buffers that are locked and wiped when dropped. Results go to standard output;
+//! prompts, progress and advice go to standard error, so a result can be piped on without the
+//! messages.
 
 use std::io::{self, BufRead, IsTerminal, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,6 +17,7 @@ use zeroize::Zeroizing;
 use crate::choice::{self, Answer, Question};
 use crate::exit::{self, Failure};
 use crate::hidden_input;
+use crate::locked_text::LockedText;
 use crate::style::{self, paint, ACCENT, MUTED};
 
 /// Longest line accepted, line break included. The buffer is reserved at this size and reading
@@ -54,7 +56,7 @@ impl Input {
     /// Reads a secret: at a terminal, shown as it is typed on the private screen and hidden
     /// anywhere else; from a script, the next line. `question` has no colon: "Password" is asked
     /// as "Password: ", or as "Password (hidden): ".
-    pub fn secret(&mut self, question: &str) -> Result<Zeroizing<String>, Failure> {
+    pub fn secret(&mut self, question: &str) -> Result<LockedText, Failure> {
         match self {
             Self::Terminal => read_secret(question),
             Self::Script(lines) => read_script_line(lines, question),
@@ -62,7 +64,7 @@ impl Input {
     }
 
     /// Reads a public answer, such as a container or an address, shown while typed.
-    pub fn visible(&mut self, prompt: &str) -> Result<Zeroizing<String>, Failure> {
+    pub fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
         match self {
             Self::Terminal => {
                 style::prompt(prompt);
@@ -147,11 +149,7 @@ impl Step {
     }
 
     /// Reads a public answer, which the terminal shows after the prompt and may wrap.
-    pub fn visible(
-        &mut self,
-        input: &mut Input,
-        prompt: &str,
-    ) -> Result<Zeroizing<String>, Failure> {
+    pub fn visible(&mut self, input: &mut Input, prompt: &str) -> Result<LockedText, Failure> {
         let answer = input.visible(prompt)?;
         if !input.is_script() {
             self.lines += rows(prompt.chars().count() + answer.chars().count());
@@ -214,7 +212,7 @@ pub fn show_cancelled() {
     style::warn("Cancelled. Nothing was saved.", "");
 }
 
-fn read_secret(question: &str) -> Result<Zeroizing<String>, Failure> {
+fn read_secret(question: &str) -> Result<LockedText, Failure> {
     if !io::stdin().is_terminal() {
         return Err(Failure::invalid_input(
             "There is no terminal to type secrets into. Run the command in a terminal, or pass \
@@ -247,7 +245,7 @@ fn read_secret(question: &str) -> Result<Zeroizing<String>, Failure> {
 fn read_script_line(
     lines: &mut io::StdinLock<'static>,
     prompt: &str,
-) -> Result<Zeroizing<String>, Failure> {
+) -> Result<LockedText, Failure> {
     read_bounded_line(lines)?.ok_or_else(|| {
         Failure::invalid_input(format!(
             "Standard input ended before this answer: {}",
@@ -256,14 +254,16 @@ fn read_script_line(
     })
 }
 
-/// Reads one line of at most LINE_CAPACITY bytes into a buffer reserved at that size, without
-/// its line break. `None` means that the input had ended. A longer line is refused, and what
-/// was read of it is wiped with the buffer, so the buffer never grows.
+/// Reads one line of at most LINE_CAPACITY bytes into a buffer reserved at that size and locked,
+/// without its line break. `None` means that the input had ended. A longer line is refused, and
+/// what was read of it is wiped with the buffer, so the buffer never grows.
 ///
 /// The standard library keeps its own buffer of what it read from standard input and does not
 /// wipe it; only the copies in this program's buffers are under its control.
-fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<Zeroizing<String>>, Failure> {
+fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<LockedText>, Failure> {
     let mut line = Zeroizing::new(String::with_capacity(LINE_CAPACITY));
+    // Locked before anything is read into it: a script's line may be a password or a phrase.
+    let locked = mhfe::memory::LockedPages::of_string(&line);
     let read = reader.take(LINE_CAPACITY as u64).read_line(&mut line)?;
     if read == 0 {
         return Ok(None);
@@ -276,7 +276,7 @@ fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<Zeroizing<Strin
         )));
     }
     strip_line_ending(&mut line);
-    Ok(Some(line))
+    Ok(Some(LockedText::from_locked(line, locked)))
 }
 
 /// Removes only the line break. Spaces are part of a password and are never trimmed.
@@ -343,11 +343,12 @@ impl PrivateScreen {
     }
 
     fn enter_if(input: &Input, output_allows: bool) -> Self {
-        let active = output_allows
-            && !input.is_script()
-            && io::stdin().is_terminal()
-            && io::stderr().is_terminal()
-            && std::env::var("TERM").map_or(true, |term| term != "dumb");
+        // Within a private screen, another one adds nothing: the outer one stays, and is left
+        // and cleared only when it ends, so that nothing reaches the main screen in between.
+        if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst) {
+            return Self { active: false };
+        }
+        let active = output_allows && terminal_screen_possible(input);
         if active {
             // Written raw: anstream would drop control sequences when NO_COLOR is set.
             write_control(ENTER_ALTERNATE_SCREEN);
@@ -361,12 +362,32 @@ impl PrivateScreen {
         self.active
     }
 
+    /// Whether what is printed now stays private: this screen is active, or it lies within one
+    /// that is.
+    pub fn shows_privately(&self) -> bool {
+        self.active || PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
+    }
+
     /// Clears the screen for what comes next, such as another password in its place.
     pub fn clear(&self) {
         if self.active {
             write_control(CLEAR_SCREEN);
         }
     }
+}
+
+/// Whether a person at a terminal can be shown a secret on a private screen: standard input,
+/// output and error are the terminal, and it can switch screens. A command that must show a phrase
+/// only privately refuses otherwise, before anything secret is asked (AUD-007-SEC001).
+pub fn can_show_privately(input: &Input) -> bool {
+    io::stdout().is_terminal() && terminal_screen_possible(input)
+}
+
+fn terminal_screen_possible(input: &Input) -> bool {
+    !input.is_script()
+        && io::stdin().is_terminal()
+        && io::stderr().is_terminal()
+        && std::env::var("TERM").map_or(true, |term| term != "dumb")
 }
 
 /// Asks the person to write down what the private screen shows, and waits for Enter or Escape,
@@ -652,7 +673,9 @@ mod tests {
     #[test]
     fn a_longer_line_is_refused() {
         let too_long = format!("{}\n", "a".repeat(LINE_CAPACITY));
-        let failure = read_bounded_line(&mut io::Cursor::new(too_long)).unwrap_err();
+        let Err(failure) = read_bounded_line(&mut io::Cursor::new(too_long)) else {
+            panic!("a longer line was accepted");
+        };
         assert!(
             failure.message.contains("longer than"),
             "{}",

@@ -35,6 +35,7 @@ use std::time::Duration;
 use zeroize::Zeroizing;
 
 use crate::exit::Failure;
+use crate::locked_text::LockedText;
 
 /// The terminal settings to restore while a hidden prompt has changed them. Whoever changes or
 /// restores the terminal holds this lock, so the Ctrl+C handler and a prompt never interleave.
@@ -49,7 +50,7 @@ static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);
 pub fn read_line(
     prompt: impl FnOnce() -> Result<(), Failure>,
     shown: bool,
-) -> Result<Option<Zeroizing<String>>, Failure> {
+) -> Result<Option<LockedText>, Failure> {
     let result = with_terminal_switched(platform::hide, || {
         prompt()?;
         let mut screen = io::stderr();
@@ -275,17 +276,17 @@ fn arrow(final_byte: Option<u8>) -> Key {
 /// gives `None`. Every other byte is kept. The buffer is reserved at its largest size and never
 /// grows, so it leaves no unwiped copy; a longer line is refused. With `echo`, every complete
 /// character that is not a control character is written to it as it arrives, and the editing keys
-/// erase what they remove from it.
+/// erase what they remove from it. The line keeps the lock of its buffer.
 fn edit_line(
     reader: &mut impl io::Read,
     mut echo: Option<&mut dyn io::Write>,
-) -> Result<Option<Zeroizing<String>>, Failure> {
+) -> Result<Option<LockedText>, Failure> {
     use crate::terminal::LINE_CAPACITY;
     use keys::{BACKSPACE, CTRL_D, CTRL_U, DELETE};
 
     let mut line = Zeroizing::new(Vec::with_capacity(LINE_CAPACITY));
     // Locked before anything is typed into it: the line may be a password or a phrase.
-    let _line_locked = mhfe::memory::LockedPages::of_vec(&line);
+    let line_locked = mhfe::memory::LockedPages::of_vec(&line);
     // For every character of the line, whether it was written to `echo`; only those are erased.
     let mut written: Vec<bool> = Vec::with_capacity(LINE_CAPACITY);
     // Where the character still arriving begins: a UTF-8 character comes one byte at a time.
@@ -346,8 +347,12 @@ fn edit_line(
         }
     }
     let bytes = std::mem::take(&mut *line);
+    // from_utf8 keeps the same buffer, so the lock goes with it.
     match String::from_utf8(bytes) {
-        Ok(text) => Ok(Some(Zeroizing::new(text))),
+        Ok(text) => Ok(Some(LockedText::from_locked(
+            Zeroizing::new(text),
+            line_locked,
+        ))),
         Err(error) => {
             // The error holds the bytes; they are wiped before it is dropped.
             drop(Zeroizing::new(error.into_bytes()));
@@ -490,6 +495,7 @@ mod platform {
 
     use super::terminal_error;
     use crate::exit::Failure;
+    use crate::locked_text::LockedText;
 
     pub type Settings = CONSOLE_MODE;
 
@@ -749,5 +755,15 @@ mod tests {
         let too_long = format!("{longest}a\r");
         assert!(edit_line(&mut io::Cursor::new(too_long), None).is_err());
         assert!(edit_line(&mut io::Cursor::new(b"\xff\r".to_vec()), None).is_err());
+    }
+
+    /// The lock of the buffer goes with the line to the caller (AUD-007-SEC003).
+    #[test]
+    fn a_line_stays_locked_after_it_is_returned() {
+        let line = edit_line(&mut io::Cursor::new(b"pass word\r".to_vec()), None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(&*line, "pass word");
+        assert_eq!(line.is_locked(), cfg!(unix));
     }
 }

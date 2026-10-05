@@ -267,10 +267,8 @@ impl WorkArea {
 /// as they are, because madvise works on whole pages only.
 #[cfg(target_os = "linux")]
 fn exclude_from_core_dumps(start: *mut u8, bytes: usize) {
-    // SAFETY: sysconf only reads a system value.
-    let page = match usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }) {
-        Ok(page) if page.is_power_of_two() => page,
-        _ => return,
+    let Some(page) = page_size() else {
+        return;
     };
     let first = (start as usize).next_multiple_of(page);
     let end = (start as usize + bytes) & !(page - 1);
@@ -283,6 +281,22 @@ fn exclude_from_core_dumps(start: *mut u8, bytes: usize) {
 
 #[cfg(not(target_os = "linux"))]
 fn exclude_from_core_dumps(_start: *mut u8, _bytes: usize) {}
+
+/// The size of a memory page, a power of two, or `None` when the system does not say.
+#[cfg(unix)]
+pub(crate) fn page_size() -> Option<usize> {
+    // SAFETY: sysconf only reads a system value.
+    match usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }) {
+        Ok(page) if page.is_power_of_two() => Some(page),
+        _ => None,
+    }
+}
+
+/// Nothing is locked where there is no mlock, so no page size is needed.
+#[cfg(not(unix))]
+pub(crate) fn page_size() -> Option<usize> {
+    None
+}
 
 /// Asks the operating system to keep the pages under `bytes` bytes at `start` in memory, never in
 /// swap (mlock). Returns whether it agreed: a low RLIMIT_MEMLOCK, for example, refuses.

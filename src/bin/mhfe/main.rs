@@ -16,6 +16,7 @@ mod encrypt;
 mod exit;
 mod hidden_input;
 mod length_choice;
+mod locked_text;
 mod menu;
 mod new_wallet;
 mod protect;
