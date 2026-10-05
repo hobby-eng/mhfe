@@ -100,18 +100,25 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `mhfe self-test` does, before it shows such a wallet.
 - `wallet_check` (a draft): `passes(entropy, passphrase)`, `phrase_passes(phrase, passphrase)` and
   `new_phrase(fill, passphrase, on_draw)`. A new phrase is drawn until
-  `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(ENT) || seed)`, over its BIP39 seed with the
-  passphrase, starts with 16 zero bits. The passphrase may not be empty
-  (`WALLET_CHECK_NEEDS_PASSPHRASE`): the check would then confirm the MHFE password alone.
+  `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(ENT) || seed)` starts with 16 zero bits, its first
+  two bytes being zero. The tag is 24 ASCII bytes with no NUL; `BE32(ENT)` is the entropy's length
+  in bits as a 4-byte big-endian number; `seed` is the raw 64-byte BIP39 seed of the canonical
+  English phrase (lower case, one space between words) with the passphrase in NFKD. The passphrase
+  may not be empty (`WALLET_CHECK_NEEDS_PASSPHRASE`): the check would then confirm the MHFE password
+  alone. A pass is statistical evidence: a wrong password or passphrase passes once in about
+  65,536, and drawing the phrase this way leaves about 240 of its 256 bits.
   `Reference::WalletCheck { passphrase }` lets `check` test it; it never confirms a recovery to
-  encrypt again.
+  encrypt again. The public vector: the entropy of 24 zero bytes followed by the big-endian 64-bit
+  number 76,562 passes with the passphrase `TREZOR`.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
-- `wallet` has the address and fingerprint functions the check uses: `BitcoinAddress`,
-  `DerivationPath`, `SearchLimits`, `master_fingerprint`, `find_address`, `address_at`. A
-  `BitcoinAddress` comes only from parsing an address; `SearchLimits::new` refuses counts outside
-  1 to 2^31, the BIP32 range of account numbers and address indexes.
+- `wallet` has the address and fingerprint functions the check uses: `Coin`, `Address` with its
+  `AddressType`, `DerivationPath`, `SearchLimits`, `parse_fingerprint`, `master_fingerprint` and
+  `find_address(phrase, passphrase, address, path, limits)`, which returns the path where the
+  address was found. An `Address` comes only from `Address::parse(coin, text)`;
+  `SearchLimits::new` refuses counts outside 1 to 2^31, the BIP32 range of account numbers and
+  address indexes. The module's documentation has a compiled example.
 - `vectors` writes test vectors from the fixed public inputs: `PUBLIC_INPUTS` and `NEGATIVE_INPUTS`
   for suite 3, `SAME_LENGTH_INPUTS` and `SAME_LENGTH_NEGATIVE_INPUTS` for suite 4. Vectors contain
   the password and every round key by design.

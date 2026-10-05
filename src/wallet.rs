@@ -8,6 +8,19 @@
 //! scalar, is wiped when dropped; only public values and yes-or-no answers come out. Copies that
 //! the compiler or the curve library makes on the way, in registers or on the stack, are outside
 //! this control.
+//!
+//! ```
+//! use mhfe::wallet::{find_address, master_fingerprint, Address, Coin, SearchLimits};
+//!
+//! // The public test phrase of BIP84, without a BIP39 passphrase.
+//! let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+//!               abandon about";
+//! let address = Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu")?;
+//! let found = find_address(phrase, "", &address, None, SearchLimits::default())?;
+//! assert_eq!(found.map(|path| path.to_string()).as_deref(), Some("m/84'/0'/0'/0/0"));
+//! assert_eq!(master_fingerprint(phrase, "")?, [0x73, 0xc5, 0xda, 0x0a]);
+//! # Ok::<(), mhfe::MhfeError>(())
+//! ```
 
 use std::fmt;
 use std::str::FromStr;

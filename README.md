@@ -332,12 +332,13 @@ preselected:
 - **No check**, the usual case for a 24-word phrase and the only one without a passphrase. Every
   password gives an equally valid wallet, so a decoy password keeps working, and a recovery cannot
   tell a wrong password: confirm it with an address or the fingerprint.
-- **A wallet check with your passphrase**, for funds kept under it. The phrase is
-  drawn so that a tagged SHA-256 of its BIP39 seed, made with the passphrase, starts with 16 zero
-  bits. `mhfe check` with the passphrase then says whether a recovery passes; a wrong password or
-  passphrase slips through once in 65,536. Only the right password and passphrase pass together,
-  so an attacker's searches for the two still multiply. The check takes 16 of the 256 bits of the
-  phrase; the 240 that remain are still far beyond any search. It never proves which wallet it is.
+- **A wallet check with your passphrase**, for funds kept under it. The phrase is drawn so that a
+  tagged SHA-256 of its BIP39 seed, made with the passphrase, starts with 16 zero bits; the exact
+  bytes are in [docs/API.md](docs/API.md). `mhfe check` with the passphrase then says whether a
+  recovery passes. A wrong password or passphrase still slips through once in about 65,536, so a
+  pass is strong evidence, not proof, and only an address or the fingerprint shows which wallet it
+  is. A guess of the password can be tested only together with a guess of the passphrase. Drawing
+  the phrase this way leaves about 240 of its 256 bits, still far beyond any search.
 
 The check has costs:
 
@@ -345,12 +346,13 @@ The check has costs:
   is never used: its public history would let an attacker confirm the MHFE password on its own, and
   the searches would add instead of multiplying. The check is only as strong as the passphrase, and
   MHFE warns about a weak one.
-- The passphrase is fixed when the wallet is made: another one, or a decoy passphrase, fails the
-  check.
-- A decoy MHFE password gives a phrase without the check, unless it is prepared with about 65,536
-  recoveries.
-- A phrase that passes is evidence that it was made for MHFE, since a random one passes once in
-  65,536.
+- The passphrase is fixed when the wallet is made. Another one fails the check, except by chance
+  or when someone searches for one that passes, which takes about 65,536 tries; a decoy MHFE
+  password passes only after about 65,536 recoveries.
+- A phrase that passes is statistical evidence that it was made this way, since a random one
+  passes once in about 65,536.
+- The specification's deniability results assume a uniformly random phrase and do not by
+  themselves cover a phrase drawn to pass the check.
 - It is for new wallets only, and a draft that the specification does not define yet; its
   supplement describes it under Research directions. Keep a copy of this program with the
   container.
