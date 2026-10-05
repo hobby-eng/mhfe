@@ -464,11 +464,15 @@ fn parse_bech32_account(
     prefix: &str,
     address_type: AddressType,
 ) -> Result<Address, MhfeError> {
-    let (hrp, program) =
-        bech32::decode(text).map_err(|_| invalid_address("its checksum or format is wrong"))?;
-    if hrp.as_str().to_ascii_lowercase() != prefix {
+    // Cosmos SDK accounts use Bech32 (BIP173), never Bech32m: the same data with the other
+    // checksum is not a valid address (AUD-007-FUN001).
+    use bech32::primitives::decode::CheckedHrpstring;
+    let decoded = CheckedHrpstring::new::<bech32::Bech32>(text)
+        .map_err(|_| invalid_address("its checksum or format is wrong"))?;
+    if decoded.hrp().as_str().to_ascii_lowercase() != prefix {
         return Err(not_of(coin));
     }
+    let program: Vec<u8> = decoded.byte_iter().collect();
     if program.len() != 20 {
         return Err(invalid_address("it has the wrong length"));
     }
@@ -1404,6 +1408,43 @@ mod tests {
                 Some(format!("m/9'/1'/17'/0'/0'/{index}")),
                 "{text}"
             );
+        }
+    }
+
+    /// AUD-007-FUN001: the public Cosmos and Injective vectors re-encoded with a Bech32m checksum.
+    #[test]
+    fn cosmos_accounts_refuse_a_bech32m_checksum() {
+        for (coin, text) in [
+            (
+                Coin::Cosmos,
+                "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0afua36h",
+            ),
+            (
+                Coin::Injective,
+                "inj1npvwllfr9dqr8erajqqr6s0vxnk2ak55k94rgq",
+            ),
+        ] {
+            let error = Address::parse(coin, text).unwrap_err().to_string();
+            assert!(error.contains("checksum or format"), "{text}: {error}");
+        }
+        // The Bech32 forms of the same data are the vectors and still read.
+        assert!(Address::parse(
+            Coin::Injective,
+            "inj1npvwllfr9dqr8erajqqr6s0vxnk2ak55re90dz"
+        )
+        .is_ok());
+        // A valid Bech32 string of another chain's prefix is not this coin's address.
+        let cosmos = "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4";
+        let error = Address::parse(Coin::Injective, cosmos)
+            .unwrap_err()
+            .to_string();
+        assert!(!error.contains("checksum"), "{error}");
+        // A valid Bech32 string of the right prefix whose data is not a 20-byte hash.
+        let hrp = bech32::Hrp::parse("cosmos").unwrap();
+        for length in [19, 21, 32] {
+            let text = bech32::encode::<bech32::Bech32>(hrp, &vec![7u8; length]).unwrap();
+            let error = Address::parse(Coin::Cosmos, &text).unwrap_err().to_string();
+            assert!(error.contains("wrong length"), "{length} bytes: {error}");
         }
     }
 

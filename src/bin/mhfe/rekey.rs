@@ -7,7 +7,7 @@
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::{Confirmation, Password, Suite, WordCount};
+use mhfe::{Confirmation, MhfeError, Password, Suite, WordCount};
 
 use crate::check::WalletReference;
 use crate::choice::{self, Answer, Question};
@@ -87,7 +87,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         "",
     );
     style::more(readme::REKEY);
-    eprintln!();
+    confirm_other_wallets_are_safe(&mut input)?;
 
     let (container, suite) = terminal::read_container(&mut input, Operation::Rekey.title())?;
     let container_words = container.split(' ').count();
@@ -167,6 +167,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         ),
     );
     // Rekeying revokes nothing: the old plate and password open the wallet until destroyed.
+    style::fact("Old plate", "still opens the wallet with the old password");
     style::fact(
         "Next",
         format!(
@@ -176,6 +177,29 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     );
     style::more(readme::REKEY);
     Ok(SUCCESS)
+}
+
+/// The confirmation the specification asks of every user before a container is replaced
+/// ("Preserving derived wallets"): the same question for everyone, which never asks whether such
+/// wallets exist or for their passwords. Only a yes goes on (AUD-007-FUN002).
+fn confirm_other_wallets_are_safe(input: &mut Input) -> Result<(), Failure> {
+    let question = Question::new(
+        "Are the funds of any such wallet moved, or backed up another way?",
+        "Others",
+    );
+    let answers = [
+        Answer::new("Yes, go on", "moved, or a verified backup of their own"),
+        Answer::new("No, stop", "nothing is encrypted again"),
+    ];
+    if input.choose(&question, &answers)? == 0 {
+        return Ok(());
+    }
+    // The reason comes first: a cancellation itself is reported only as "Cancelled".
+    style::warn(
+        "Move the funds of any such wallet first, then run mhfe rekey again.",
+        "",
+    );
+    Err(MhfeError::Cancelled.into())
 }
 
 /// How a recovery is confirmed before it is encrypted again.
