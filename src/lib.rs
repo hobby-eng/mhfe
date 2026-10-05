@@ -56,7 +56,7 @@ pub use mhfe::{
 };
 pub use password::{Password, MAX_PASSWORD_BYTES};
 pub use phrase::{check_container, check_phrase, read_phrase};
-pub use rehearsal::{CheckOutcome, Reference};
+pub use rehearsal::{CheckOutcome, Confirmation, Reference};
 pub use suite::{
     Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
 };

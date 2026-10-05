@@ -56,6 +56,7 @@ impl From<MhfeError> for Failure {
             | MhfeError::SameLengthNeedsShortPhrase
             | MhfeError::LengthChoiceNotApplicable { .. }
             | MhfeError::NoBuiltInCheck { .. }
+            | MhfeError::ReferenceRequired
             | MhfeError::InvalidPim(_)
             | MhfeError::InvalidMemoryLevel(_)
             | MhfeError::EmptyPassword
@@ -66,7 +67,7 @@ impl From<MhfeError> for Failure {
             | MhfeError::InvalidAddress(_)
             | MhfeError::InvalidDerivationPath(_)
             | MhfeError::InvalidFingerprint(_) => INVALID_INPUT,
-            MhfeError::VerifierMismatch => NO_MATCH,
+            MhfeError::VerifierMismatch | MhfeError::ReferenceMismatch => NO_MATCH,
             MhfeError::NotEnoughMemory { .. }
             | MhfeError::MemoryAllocation { .. }
             | MhfeError::MemoryLevelNotSupportedHere { .. } => NOT_ENOUGH_RESOURCES,

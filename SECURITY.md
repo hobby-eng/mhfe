@@ -58,14 +58,19 @@ Never include a real seed phrase, password, private key or wallet file.
   a failed or cancelled check says that the container must not be relied on. With `--stdin`, or
   when standard output goes to a file or another program, the container is printed only after
   the check has passed.
+- `rekey` recovers the phrase into locked memory. It encrypts it again only once the recovery is
+  confirmed (`Mhfe::recover_confirmed`): by the built-in check at the length the owner states, by
+  an address or the fingerprint of the wallet, or by the owner, who chose to see the phrase on a
+  private screen and compare it with their backup. So a wrong password cannot be sealed into a new
+  container that then looks verified. It does not revoke the old container, and says so.
 - Nothing connects to a network. The browser package loads no remote resources and contains no
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
   (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which
   listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
 - On Linux the kernel enforces this. A command that handles secrets (`encrypt`, `decrypt`,
-  `check`, `password`) runs under a seccomp filter that refuses to create any socket, and under a
-  Landlock ruleset that refuses every write to the file system (Linux 5.13 and later; from Linux
-  6.7 also TCP bind and connect). Both cover every thread the command starts, Argon2's included,
+  `check`, `rekey`, `password`) runs under a seccomp filter that refuses to create any socket,
+  and under a Landlock ruleset that refuses every write to the file system (Linux 5.13 and later;
+  from Linux 6.7 also TCP bind and connect). Both cover every thread the command starts, Argon2's included,
   and cannot be undone; the start menu runs each command in a thread of its own, so that it can
   still start `mhfe serve`, which is not isolated because the browser it opens must write its
   profile. The summary of a command says what the kernel enforces. A fault or a tampered

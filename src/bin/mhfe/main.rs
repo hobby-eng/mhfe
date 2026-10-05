@@ -19,6 +19,7 @@ mod length_choice;
 mod menu;
 mod protect;
 mod readme;
+mod rekey;
 mod serve;
 mod settings;
 mod strength;
@@ -75,6 +76,9 @@ enum Command {
         after_long_help = check::long_help()
     )]
     Check(check::Options),
+    /// Change the password or settings of a container
+    #[command(long_about = rekey::about(), after_help = rekey::help())]
+    Rekey(rekey::Options),
     /// Make a strong password of random dice words
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
@@ -112,6 +116,10 @@ fn main_help() -> String {
             (
                 "mhfe check --address",
                 "Rehearse it against a wallet address",
+            ),
+            (
+                "mhfe rekey",
+                "Change the password, never showing the phrase",
             ),
             ("mhfe password", "Make a strong password of five dice words"),
             (
@@ -197,6 +205,7 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::Encrypt(options) => encrypt::run(options),
         Command::Decrypt(options) => decrypt::run(options),
         Command::Check(options) => check::run(options),
+        Command::Rekey(options) => rekey::run(options),
         Command::Password(options) => diceware::run(options),
         Command::Serve(options) => serve::run(options),
         Command::TestVectors(options) => test_tools::write_vectors(options),

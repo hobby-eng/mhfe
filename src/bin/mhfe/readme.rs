@@ -23,6 +23,8 @@ pub const ENCRYPT: &str = section!("mhfe-encrypt");
 pub const CHECK: &str = section!("mhfe-check");
 /// What a recovered phrase that is not verified means.
 pub const DECRYPT: &str = section!("mhfe-decrypt");
+/// What a new password or new settings change, and what they do not.
+pub const REKEY: &str = section!("mhfe-rekey");
 
 #[cfg(test)]
 mod tests {
@@ -37,6 +39,7 @@ mod tests {
         ENCRYPT,
         CHECK,
         DECRYPT,
+        REKEY,
     ];
 
     /// The anchor GitHub gives a heading: lower case, spaces as hyphens, and only letters,

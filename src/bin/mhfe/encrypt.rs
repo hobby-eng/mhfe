@@ -134,49 +134,17 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // carries such checks.
     let length_must_be_chosen = suite == Suite::TwentyFourWords
         && warn_if_detection_would_mislead(&original, original_words)?;
-    let password = read_new_password(&mut input)?;
-    let mut mhfe = settings::reserve_memory(work)?;
-
-    let mut progress = Progress::start();
-    let new = mhfe.encrypt_unchecked(&original, &password, suite, &mut |round, rounds| {
-        progress.round_starts(round, rounds);
-        Ok(())
-    })?;
+    let password = read_new_password(&mut input, Operation::Encrypt)?;
+    let new = seal(
+        &input,
+        Operation::Encrypt,
+        work,
+        &original,
+        suite,
+        &password,
+    )?;
     drop(original);
     let container_words = new.words.split(' ').count();
-    // Only a person reading a terminal sees the container before its check, with the warning
-    // that it is not verified yet. A script, or output redirected to a file or another program,
-    // gets it only after the check: a program would take the first container it reads as final.
-    let person_reads_output = !input.is_script() && io::stdout().is_terminal();
-    if !person_reads_output {
-        check(&mut mhfe, &new, &password, &mut progress)?;
-        progress.finish();
-        println!("{}", *new.words);
-        if !input.is_script() {
-            report_check(&Ok(()));
-        }
-    } else {
-        // A person can write the container down while the check runs. It is shown on the private
-        // screen, as a recovered phrase is: it is a valid seed phrase too, and should leave no
-        // copy in the terminal's history.
-        progress.finish();
-        let screen = terminal::PrivateScreen::enter_to_show(&input);
-        if screen.is_active() {
-            style::title(Operation::Encrypt.title());
-        }
-        show_before_the_check(&new.words, &input);
-        let checked = check(&mut mhfe, &new, &password, &mut progress);
-        terminal::set_unverified_container_shown(false);
-        progress.finish();
-        report_check(&checked);
-        if screen.is_active() {
-            terminal::wait_to_leave()?;
-            drop(screen);
-            // The main screen gets the outcome too: the private screen and its copy are gone.
-            report_check(&checked);
-        }
-        checked?;
-    }
     // The format of the container, which the specification asks to show after creating it.
     style::fact("Format", paint(MUTED, new.suite.id()));
     style::fact(
@@ -193,6 +161,60 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     );
     style::more(readme::ENCRYPT);
     Ok(SUCCESS)
+}
+
+/// Encrypts `original` and checks the new container (creation steps 1 to 6). A person reading
+/// the terminal sees the container on a private screen while the check runs, marked as not
+/// verified yet, and the outcome on both screens; anything else gets the container only once it
+/// is checked. Shared by `mhfe encrypt` and `mhfe rekey`.
+pub fn seal(
+    input: &Input,
+    operation: Operation,
+    work: WorkFactor,
+    original: &str,
+    suite: Suite,
+    password: &Password,
+) -> Result<NewContainer, Failure> {
+    let mut mhfe = settings::reserve_memory(work)?;
+    let mut progress = Progress::start();
+    let new = mhfe.encrypt_unchecked(original, password, suite, &mut |round, rounds| {
+        progress.round_starts(round, rounds);
+        Ok(())
+    })?;
+    // Only a person reading a terminal sees the container before its check, with the warning
+    // that it is not verified yet. A script, or output redirected to a file or another program,
+    // gets it only after the check: a program would take the first container it reads as final.
+    let person_reads_output = !input.is_script() && io::stdout().is_terminal();
+    if !person_reads_output {
+        check(&mut mhfe, &new, password, &mut progress)?;
+        progress.finish();
+        println!("{}", *new.words);
+        if !input.is_script() {
+            report_check(&Ok(()));
+        }
+    } else {
+        // A person can write the container down while the check runs. It is shown on the private
+        // screen, as a recovered phrase is: it is a valid seed phrase too, and should leave no
+        // copy in the terminal's history.
+        progress.finish();
+        let screen = terminal::PrivateScreen::enter_to_show(input);
+        if screen.is_active() {
+            style::title(operation.title());
+        }
+        show_before_the_check(&new.words, input);
+        let checked = check(&mut mhfe, &new, password, &mut progress);
+        terminal::set_unverified_container_shown(false);
+        progress.finish();
+        report_check(&checked);
+        if screen.is_active() {
+            terminal::wait_to_leave()?;
+            drop(screen);
+            // The main screen gets the outcome too: the private screen and its copy are gone.
+            report_check(&checked);
+        }
+        checked?;
+    }
+    Ok(new)
 }
 
 /// The container for a phrase of `words` words: 24 words unless the person chooses the same
@@ -222,7 +244,7 @@ fn choose_suite(words: usize, same_length: bool, input: &Input) -> Result<Suite,
 /// What the owner must keep: the container's words and the password, and only where they are
 /// needed the changed settings and the word count, when detection would misread the phrase
 /// (AUD-003-DOC002). Why each matters is in the README.
-fn what_to_keep(
+pub fn what_to_keep(
     work: WorkFactor,
     original_words: usize,
     length_must_be_chosen: bool,
@@ -330,7 +352,7 @@ fn read_original(input: &mut Input) -> Result<Zeroizing<String>, Failure> {
 /// About once in four billion phrases, the packed phrase also passes the built-in check of
 /// another length. Recovery with automatic detection would then not give this phrase on its own,
 /// so the owner is told, before the long computation, to note the length and choose it later.
-fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, Failure> {
+pub fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, Failure> {
     let others = other_detected_lengths(phrase)?;
     if others.is_empty() {
         return Ok(false);
@@ -352,8 +374,8 @@ fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<bool, F
 
 /// Asks for the password twice on the private screen, so that a typing mistake cannot lock the
 /// phrase away, and warns when its estimated strength falls short of four dice words.
-fn read_new_password(input: &mut Input) -> Result<Password, Failure> {
-    let screen = terminal::PrivateScreen::enter(input, Operation::Encrypt.title());
+pub fn read_new_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
+    let screen = terminal::PrivateScreen::enter(input, operation.title());
     let (password, bits) = loop {
         eprintln!();
         style::hint("Letter case and spaces count.");

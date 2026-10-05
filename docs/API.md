@@ -84,6 +84,14 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   master key fingerprint. It returns a `CheckOutcome`: `Matches { path }` or `DoesNotMatch`, where
   `path` is the derivation path at which a matched address was found (`None` for the other
   references). No part of the recovered phrase comes out.
+- `recover_confirmed(container, password, words, confirmation, on_progress)` recovers a phrase to
+  encrypt it again under a new password or settings, and returns it only once it is confirmed (the
+  re-encryption guard). A 12- to 21-word original of a 24-word container always passes its
+  built-in check at the stated length `words`. A 24-word original or a same-length container needs
+  `Confirmation::Wallet(reference)`, an address or a fingerprint (`REFERENCE_REQUIRED` without one,
+  `REFERENCE_MISMATCH` when it does not match), or `Confirmation::Owner`: the caller then shows the
+  phrase and goes on only if the owner confirms it against their backup. Encrypting under the old
+  password and comparing proves nothing, so it is not offered.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
@@ -113,6 +121,8 @@ strings in the browser.
 | `SAME_LENGTH_NEEDS_SHORT_PHRASE`  | A same-length container was asked for a 24-word original                            |
 | `LENGTH_CHOICE_NOT_APPLICABLE`    | The chosen length does not fit the container's word count                           |
 | `NO_BUILT_IN_CHECK`               | The built-in check was asked for a same-length container                            |
+| `REFERENCE_REQUIRED`              | A recovery to encrypt again has no built-in check and no address or fingerprint     |
+| `REFERENCE_MISMATCH`              | The phrase recovered to encrypt again does not match the address or fingerprint     |
 | `INVALID_PIM`                     | PIM outside 0 to 1023                                                               |
 | `INVALID_MEMORY_LEVEL`            | Memory level outside 0 to 21                                                        |
 | `EMPTY_PASSWORD`                  | The password is empty                                                               |

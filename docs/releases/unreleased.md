@@ -27,6 +27,14 @@ Planned as version 0.5.0.
   `y`/`n` answers of `mhfe encrypt` and the typed choice of `mhfe check`. Laid out as in MnemoCode,
   each question stands apart with a short explanation, and once answered it gives way to one line
   of a summary. Scripts (`--stdin`) answer as before.
+- `mhfe rekey` puts the same seed phrase into a new container under a new password or new
+  settings. It encrypts again only once the recovery is confirmed: by the built-in check at the
+  length the owner states, or, for a 24-word phrase or a same-length container, by an address or
+  the fingerprint of the wallet or by the owner, who sees the phrase on a private screen and
+  compares it with their backup. The library offers this as
+  `Mhfe::recover_confirmed`, with the new error codes `REFERENCE_REQUIRED` and
+  `REFERENCE_MISMATCH`. It warns every time that wallets of other passwords on the old container
+  change, and that the old container stays valid until it is destroyed. The start menu offers it.
 - `mhfe password --chars N` makes N random characters (16 by default, about 93.3 bits) from 57
   letters and digits without look-alikes, instead of dice words.
 - `mhfe encrypt` estimates the strength of a typed password and warns below about 50 bits, instead
@@ -53,9 +61,9 @@ Planned as version 0.5.0.
   programs of the same user from reading its memory; it keeps the password, the phrases and a BIP39
   passphrase in locked memory, and marks Argon2's work area to be left out of a dump. On Linux it
   warns before any secret is typed when swap is not encrypted.
-- On Linux the kernel enforces that `encrypt`, `decrypt`, `check` and `password` stay offline and
-  write no file: seccomp refuses sockets and Landlock refuses file writes, for every thread the
-  command starts. The summary shows it; the start menu runs each command in an isolated thread.
+- On Linux the kernel enforces that `encrypt`, `decrypt`, `check`, `rekey` and `password` stay
+  offline and write no file: seccomp refuses sockets and Landlock refuses file writes, for every
+  thread the command starts. The summary shows it; the start menu runs each command in an isolated thread.
 - `mhfe check` compares with a receiving address of twelve coins instead of Bitcoin alone: Bitcoin,
   Ethereum and every EVM network, XRP, Tron, Zcash (transparent), Dogecoin, Bitcoin Cash, Litecoin,
   Ethereum Classic, Cosmos, Injective and Dash, for Dash both Core `X…` and Platform payment

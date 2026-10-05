@@ -25,6 +25,11 @@ pub enum MhfeError {
     NoBuiltInCheck {
         container_words: usize,
     },
+    /// A recovery to re-encrypt has no built-in check, a 24-word original or a same-length
+    /// container, and no address or fingerprint was given to confirm it.
+    ReferenceRequired,
+    /// The phrase recovered to re-encrypt does not match the address or fingerprint given.
+    ReferenceMismatch,
     InvalidPim(u32),
     InvalidMemoryLevel(u32),
     EmptyPassword,
@@ -101,6 +106,18 @@ impl fmt::Display for MhfeError {
                 f,
                 "a container of {container_words} words has no built-in check; compare it with a \
                  receiving address or the master key fingerprint of the wallet instead"
+            ),
+            Self::ReferenceRequired => write!(
+                f,
+                "a 24-word original or a same-length container has no built-in check, so a \
+                 receiving address or the master key fingerprint of the wallet must confirm the \
+                 recovery before it is encrypted again"
+            ),
+            Self::ReferenceMismatch => write!(
+                f,
+                "the recovered phrase does not match the address or fingerprint: the password, \
+                 PIM, memory level, container, word count or BIP39 passphrase is wrong; nothing \
+                 was encrypted again"
             ),
             Self::InvalidPim(pim) => {
                 write!(
@@ -199,6 +216,8 @@ impl MhfeError {
             Self::SameLengthNeedsShortPhrase => "SAME_LENGTH_NEEDS_SHORT_PHRASE",
             Self::LengthChoiceNotApplicable { .. } => "LENGTH_CHOICE_NOT_APPLICABLE",
             Self::NoBuiltInCheck { .. } => "NO_BUILT_IN_CHECK",
+            Self::ReferenceRequired => "REFERENCE_REQUIRED",
+            Self::ReferenceMismatch => "REFERENCE_MISMATCH",
             Self::InvalidPim(_) => "INVALID_PIM",
             Self::InvalidMemoryLevel(_) => "INVALID_MEMORY_LEVEL",
             Self::EmptyPassword => "EMPTY_PASSWORD",
