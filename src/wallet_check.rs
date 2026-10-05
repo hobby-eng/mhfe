@@ -2,15 +2,27 @@
 //! supplement records it under Research directions, "A check for new 24-word and suite 4 sources by
 //! choosing the entropy", as a creation mode the owner chooses.
 //!
-//! A new phrase is drawn at random until `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(ENT) || seed)`
-//! starts with 16 zero bits, where `seed` is the BIP39 seed of the phrase and the owner's BIP39
-//! passphrase, and `ENT` the entropy's length in bits. The passphrase may not be empty: the seed
-//! with an empty one is a function of the phrase alone, and the check would then confirm the MHFE
-//! password on its own, which makes an attacker's two searches add instead of multiplying. Only the right phrase
-//! with the right passphrase passes, so an attacker's searches for the MHFE password and for the
-//! passphrase still multiply. A recovered phrase that passes with the passphrase was very likely
-//! made that way, as a random one passes once in 65,536. The check never identifies the wallet:
-//! only an address or the fingerprint does that.
+//! A new phrase is drawn at random until its check passes. The check, byte for byte: the SHA-256
+//! digest of
+//!
+//! - the ASCII tag `MHFE-WALLET-CHECK-SEED-1`, 24 bytes, with no terminating NUL;
+//! - `BE32(ENT)`, the entropy's length in bits as a 4-byte big-endian number, 256 for 24 words;
+//! - the raw 64-byte BIP39 seed: PBKDF2-HMAC-SHA512 with 2,048 iterations of the canonical English
+//!   phrase of the entropy (its words in lower case, one space apart), with the salt "mnemonic"
+//!   followed by the BIP39 passphrase in NFKD;
+//!
+//! starts with 16 zero bits: its first two bytes are zero. The passphrase may not be empty: the
+//! seed with an empty one is a function of the phrase alone, and the check would then confirm the
+//! MHFE password on its own.
+//!
+//! A pass is statistical evidence, not proof. A random phrase with a given passphrase passes once
+//! in about 65,536, so a wrong MHFE password or passphrase slips through at that rate, and a
+//! passphrase that passes with a given phrase is found after about 65,536 tries by anyone who
+//! searches for one. A guess of the MHFE password can be tested only together with a guess of the
+//! passphrase. Drawing the phrase this way leaves about 240 of its 256 bits of entropy for a given
+//! passphrase. The specification's deniability results assume a uniformly random phrase; they do
+//! not by themselves cover a phrase drawn to pass the check. The check never identifies the
+//! wallet: only an address or the fingerprint does that.
 
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;

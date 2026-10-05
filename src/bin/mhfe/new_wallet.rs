@@ -152,14 +152,14 @@ fn explain() {
     bad("A recovery cannot tell a wrong password.");
     eprintln!();
     eprintln!("{}", paint(STRONG, "A wallet check with my passphrase"));
-    good("Password and passphrase pass only together; searches multiply.");
-    good("240 of the 256 bits remain: far beyond any search.");
+    good("A wrong password or passphrase passes once in about 65,536.");
+    good("A password guess is tested only with a passphrase guess.");
+    good("About 240 of the 256 bits remain: far beyond any search.");
     bad("Keep all funds under it; the wallet without it stays unused.");
-    bad("The passphrase is fixed: another or a decoy one fails the check.");
-    bad("A decoy MHFE password passes only after about 65,536 tries.");
+    bad("A decoy password or passphrase passes after about 65,536 tries.");
     bad("Only mhfe check with the passphrase tests it.");
     eprintln!();
-    style::hint("A draft, for new wallets only; a passing phrase shows it was made for MHFE.");
+    style::hint("A draft, for new wallets only. A pass is evidence, not proof.");
 }
 
 /// The BIP39 passphrase of the new wallet on the private screen: Enter alone for none, otherwise

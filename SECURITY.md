@@ -72,9 +72,9 @@ Never include a real seed phrase, password, private key or wallet file.
   container that then looks verified. It does not revoke the old container, and says so.
 - `new` draws a new phrase from the operating system's random generator, on every processor core
   when it must pass a wallet check, and shows it only on a private screen. The wallet check is a
-  draft over the BIP39 seed with the passphrase, which may not be empty: it tells a right password
-  and passphrase from wrong ones with 16 bits, never which wallet it is, and `rekey` does not accept
-  it as the only confirmation.
+  draft over the BIP39 seed with the passphrase, which may not be empty: a filter of 16 bits that a
+  wrong password or passphrase passes once in about 65,536. It never shows which wallet it is, and
+  `rekey` does not accept it as the only confirmation.
 - `wallets` shows hidden wallets only after the published vectors have passed, all on one private
   screen with their passwords and progress, so that the main screen shows neither the wallets nor
   how many were opened, and it keeps no record of the passwords or the wallets.

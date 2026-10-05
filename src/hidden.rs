@@ -19,8 +19,9 @@ impl<E: Argon2Engine> Mhfe<E> {
     /// once in a billion, is refused (rule I29): recovery would take the hidden wallet for that
     /// short phrase and call it verified. So is one whose reading passes the wallet check with
     /// `passphrase`, the main wallet's BIP39 passphrase, once in 65,536, which would make it look
-    /// like the main wallet; without a passphrase there is no wallet check to pass. Only 24-word containers are taken for now; the same
-    /// derivation on a same-length container would give wallets of its length.
+    /// like the main wallet; without a passphrase there is no wallet check to pass. Only 24-word
+    /// containers are taken for now; the same derivation on a same-length container would give
+    /// wallets of its length.
     pub fn derive_wallet(
         &mut self,
         container: &str,
