@@ -807,7 +807,7 @@
       "kind": "finding",
       "title": "Private-display paths write source mnemonics to redirected stdout",
       "severity": "medium",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": true,
       "affectedFiles": [
         "src/bin/mhfe/terminal.rs:341",
@@ -831,7 +831,7 @@
       "kind": "finding",
       "title": "Dropping one page-lock guard unlocks another live secret on the same page",
       "severity": "medium",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "affectedFiles": [
         "src/memory.rs:19",
@@ -854,7 +854,7 @@
       "kind": "finding",
       "title": "The raw terminal input lock ends before its returned secret buffer dies",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "affectedFiles": [
         "src/bin/mhfe/hidden_input.rs:286",
@@ -878,7 +878,7 @@
       "kind": "finding",
       "title": "Owned private-scalar temporaries are not explicitly zeroized",
       "severity": "low",
-      "status": "open",
+      "status": "fixed",
       "releaseBlocking": false,
       "affectedFiles": [
         "src/wallet.rs:806",
@@ -901,7 +901,7 @@
       "kind": "finding",
       "title": "Hidden-wallet count remains in terminal history after the private screen clears",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "affectedFiles": [
         "src/bin/mhfe/wallets.rs:95",
@@ -923,7 +923,7 @@
       "kind": "finding",
       "title": "Cosmos and Injective wallet references accept the wrong Bech32 checksum variant",
       "severity": "medium",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": true,
       "affectedFiles": [
         "src/wallet.rs:467"
@@ -946,7 +946,7 @@
       "kind": "finding",
       "title": "Rekey warns about dependent wallets but omits the required preservation confirmation",
       "severity": "medium",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": true,
       "affectedFiles": [
         "src/bin/mhfe/rekey.rs:84",
@@ -1037,7 +1037,7 @@
       "kind": "finding",
       "title": "The API guide names removed wallet APIs",
       "severity": "low",
-      "status": "open",
+      "status": "verified",
       "releaseBlocking": false,
       "affectedFiles": [
         "docs/API.md:111"
@@ -1080,87 +1080,87 @@
   "remediation": [
     {
       "id": "AUD-007-SEC001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "status": "verified",
+      "fixCommit": "e558924",
+      "verificationCommit": "7369c7181396d8d9aad8ca641e107dd8c2d3a497",
+      "evidence": "remediation-terminal-regressions: new and wallets refuse with standard output in a pipe and with TERM=dumb before any question, exit code 2, nothing in the pipe; new goes on at a terminal; rekey offers the phrase for comparison at a terminal only. No export choice exists, so no export path needs consent."
     },
     {
       "id": "AUD-007-SEC002",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "status": "verified",
+      "fixCommit": "e558924",
+      "verificationCommit": "7369c7181396d8d9aad8ca641e107dd8c2d3a497",
+      "evidence": "remediation-tests: a shared page stays locked until its last guard drops in either order (kernel VmFlags lo), a refused mlock holds nothing, and 8 threads x 500 guards on one page keep exact counts. remediation-memory-lock: the retained probe now reports after_first_drop_kib=12 and fails its reproduction assertion."
     },
     {
       "id": "AUD-007-SEC003",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "status": "verified",
+      "fixCommit": "e558924",
+      "verificationCommit": "7369c7181396d8d9aad8ca641e107dd8c2d3a497",
+      "evidence": "remediation-tests: a line returned by the raw line editor is still locked; LockedText owns the text and its lock until both drop, and the --stdin reader and passphrase readers return it. Error paths return no text."
     },
     {
       "id": "AUD-007-SEC004",
-      "status": "open",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "e558924",
       "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "evidence": "Every private-scalar binding of the BIP32 and Taproot code is Zeroizing; docs/API.md and the wallet module say which compiler and dependency copies remain. Source review only: no runtime zeroization regression, which could not observe register or stack copies."
     },
     {
       "id": "AUD-007-SEC005",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Original source trace; no remediation applied."
+      "status": "verified",
+      "fixCommit": "e558924",
+      "verificationCommit": "7369c7181396d8d9aad8ca641e107dd8c2d3a497",
+      "evidence": "remediation-wallets-private-session (full cost): the I29 refusal stays readable, and the main screen outside the alternate screen shows no wallet, no wallet number and no question; decrypt gives the shown wallet, unverified."
     },
     {
       "id": "AUD-007-FUN001",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "status": "verified",
+      "fixCommit": "3280178",
+      "verificationCommit": "7369c7181396d8d9aad8ca641e107dd8c2d3a497",
+      "evidence": "remediation-tests: Bech32m forms of the Cosmos and Injective vectors are refused, their Bech32 forms read, another chain's prefix and 19, 21 and 32-byte data are refused; the existing case, segwit, Taproot and Dash Platform tests pass. remediation-wallet-bech32-variant: the retained probe now fails at the refused Bech32m address."
     },
     {
       "id": "AUD-007-FUN002",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "status": "verified",
+      "fixCommit": "3280178",
+      "verificationCommit": "7369c7181396d8d9aad8ca641e107dd8c2d3a497",
+      "evidence": "remediation-terminal-regressions through the actual command: Yes goes on to the container, No and Escape stop with exit code 130 before anything is typed, and no password or wallet is asked first. The result keeps the Old plate line."
     },
     {
       "id": "AUD-007-DOC001",
       "status": "open",
-      "fixCommit": null,
+      "fixCommit": "7369c71 (MHFE part)",
       "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "evidence": "src/wallet_check.rs and docs/API.md give the exact bytes and the public TREZOR vector. The specification supplement still omits BE32(ENT); handed to the specification session."
     },
     {
       "id": "AUD-007-DOC002",
       "status": "open",
-      "fixCommit": null,
+      "fixCommit": "7369c71 (MHFE part)",
       "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "evidence": "MHFE comments, the help behind ? in mhfe new, README and SECURITY now state a 2^-16 filter, a searchable passphrase, about 240 bits and the unproved deniability of the conditioned source. The specification supplement is still to be corrected; handed to the specification session."
     },
     {
       "id": "AUD-007-DOC003",
       "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "evidence": "Specification only; handed to the specification session."
     },
     {
       "id": "AUD-007-DOC004",
-      "status": "open",
-      "fixCommit": null,
-      "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "status": "verified",
+      "fixCommit": "7369c71",
+      "verificationCommit": "7369c7181396d8d9aad8ca641e107dd8c2d3a497",
+      "evidence": "remediation-doc-tests: the compiled example in the wallet module uses Address, Coin, find_address and master_fingerprint; docs/API.md names only current exports."
     },
     {
       "id": "AUD-007-DOC005",
       "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
-      "evidence": "Reviewed source and original reproduction; remediation not authorized in this baseline."
+      "evidence": "Specification publication records only; handed to the specification session."
     }
   ],
   "limitations": [
@@ -1171,7 +1171,8 @@
     "The new wallet seed check is an explicitly marked draft creation profile. Normative core suites 3/4 are unchanged; missing README normative profile definition alone is not a core-conformance defect.",
     "Related specification was dirty at capture. Later owner-authorized Electrum reference follow-up must be identified separately from the reviewed baseline; no production remediation is claimed.",
     "Initial socket test failures were sandbox PermissionDenied results; successful scoped loopback rerun is recorded separately. Initial failed memory probe was a harness/allocation issue, not an extra product finding.",
-    "Only public BIP39 fixtures and synthetic passwords were used. No funds, user secrets, transaction broadcasting, commit, push or release operation occurred."
+    "Only public BIP39 fixtures and synthetic passwords were used. No funds, user secrets, transaction broadcasting, commit, push or release operation occurred.",
+    "The remediation update ran the bounded tests, lints, terminal regressions and one full-cost mhfe wallets session listed in remediationUpdate; it is not a new audit and no release-level verification ran."
   ],
   "supplementaryChecks": [
     {
@@ -1217,5 +1218,59 @@
       "62": 63,
       "63": 64
     }
+  },
+  "remediationUpdate": {
+    "date": "2026-10-05",
+    "fixCommits": {
+      "FUN": "3280178",
+      "SEC": "e558924",
+      "DOC": "7369c71"
+    },
+    "verificationCommit": "7369c7181396d8d9aad8ca641e107dd8c2d3a497",
+    "commands": [
+      {
+        "label": "remediation-tests",
+        "exitCode": 0,
+        "logSha256": "a0e42da7f5c9ccce35d3f729ab17f233b2248874a074fa30b8baa1b906f9a65c"
+      },
+      {
+        "label": "remediation-doc-tests",
+        "exitCode": 0,
+        "logSha256": "5a9ec22b5b13424efd8d857431d7ba6c325e6e50c9bd828f7340a0b8f43b32bb"
+      },
+      {
+        "label": "remediation-clippy",
+        "exitCode": 0,
+        "logSha256": "d8e99c4f34d4a86176e1fc99d3b4bddaab9c44e8ee975732147aca8055c5814a"
+      },
+      {
+        "label": "remediation-terminal-regressions",
+        "exitCode": 0,
+        "logSha256": "d4944d58cd68b4d72ebe5fa160962060b53759c75c23e062a1b96d10e15a5817"
+      },
+      {
+        "label": "remediation-wallets-private-session",
+        "exitCode": 0,
+        "logSha256": "f32de817a73f4a0695961d11619240a899f18d04eb36861352d0959cd376f8ee"
+      },
+      {
+        "label": "remediation-wallet-bech32-variant",
+        "exitCode": 1,
+        "expected": "fails after the fix",
+        "logSha256": "d75e8c283d230fcd5da06b052e130e2a47da6b54ba8098c568fc11287803cbb5"
+      },
+      {
+        "label": "remediation-memory-lock",
+        "exitCode": 101,
+        "expected": "fails after the fix",
+        "logSha256": "8e7f26724df249cf5b8c245b18b8981c2a04f7f492abb9312c38eb7573559c96"
+      }
+    ],
+    "handedToSpecification": [
+      "AUD-007-DOC001",
+      "AUD-007-DOC002",
+      "AUD-007-DOC003",
+      "AUD-007-DOC005"
+    ]
   }
 }

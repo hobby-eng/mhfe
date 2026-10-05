@@ -22,6 +22,10 @@ WORKSPACE = ROOT.parent
 GUIDE = WORKSPACE / "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md"
 SCHEMA = WORKSPACE / "multi-chain-wallet-tools/docs/audit-report.schema.json"
 PROCEDURE_CHECK_COUNT = 32
+# The JSON statuses of multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md.
+REMEDIATION_STATUSES = {
+    "open", "fixed", "verified", "deferred", "accepted", "not-reproduced", "withdrawn", "duplicate",
+}
 
 
 def unique_object(pairs):
@@ -71,14 +75,25 @@ for item in records:
     assert heading and heading.group(1).lower() == item["severity"], item["id"]
     assert heading.group(2) == item["title"], item["id"]
     assert f"| {item['id']} | {item['category']} | finding |" in markdown, item["id"]
-    assert item["status"] == "open", item["id"]
+    assert item["status"] in REMEDIATION_STATUSES, item["id"]
 assert set(re.findall(r"^#### (AUD-007-[A-Z]+\d+) —", markdown, re.M)) == set(ids)
 remediation = {item["id"]: item for item in data["remediation"]}
 assert set(ids) == set(remediation), "missing or unexpected remediation rows"
+# The remediation update records fixes made after the reviewed commit; each finding still describes
+# that commit. A named fix or verification commit must exist in this repository.
 for item in records:
-    assert remediation[item["id"]]["status"] == item["status"], item["id"]
-    assert remediation[item["id"]]["fixCommit"] is None, item["id"]
-    assert remediation[item["id"]]["verificationCommit"] is None, item["id"]
+    row = remediation[item["id"]]
+    assert row["status"] == item["status"], item["id"]
+    assert f"| {item['id']} | {item['status']} |" in markdown, item["id"]
+    for commit in re.findall(r"\b[0-9a-f]{7,40}\b", row["fixCommit"] or ""):
+        git("cat-file", "-e", commit + "^{commit}")
+    if item["status"] in ("fixed", "verified"):
+        assert row["fixCommit"], item["id"]
+    if item["status"] == "verified":
+        assert re.fullmatch(r"[0-9a-f]{40}", row["verificationCommit"] or ""), item["id"]
+        git("cat-file", "-e", row["verificationCommit"] + "^{commit}")
+    else:
+        assert row["verificationCommit"] is None, item["id"]
 
 expected_checks = set(re.findall(r"^### (CHECK-[A-Z]+-\d+)", GUIDE.read_text(), re.M))
 assert len(expected_checks) == PROCEDURE_CHECK_COUNT
