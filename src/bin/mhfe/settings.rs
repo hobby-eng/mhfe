@@ -95,7 +95,7 @@ impl Operation {
             Operation::Check => "Rehearse a recovery",
             Operation::Rekey | Operation::RekeyNew => "Change the password",
             Operation::Wallets => "Open hidden wallets",
-            Operation::New => "Make a new wallet",
+            Operation::New => "Generate a new wallet",
         }
     }
 }

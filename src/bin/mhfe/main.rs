@@ -59,6 +59,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Generate a new wallet and its container
+    #[command(long_about = new_wallet::about())]
+    New(new_wallet::Options),
     /// Encrypt a seed phrase into a container
     #[command(
         long_about = encrypt::about(),
@@ -66,9 +69,6 @@ enum Command {
         after_long_help = encrypt::long_help()
     )]
     Encrypt(encrypt::Options),
-    /// Make a new wallet and its container
-    #[command(long_about = new_wallet::about())]
-    New(new_wallet::Options),
     /// Recover the original phrase from a container
     #[command(
         long_about = decrypt::about(),
@@ -112,8 +112,8 @@ fn main_help() -> String {
         "Examples:",
         &[
             ("mhfe", "Choose a command from a menu"),
+            ("mhfe new", "Generate a new wallet and its container"),
             ("mhfe encrypt", "Encrypt a phrase with the default settings"),
-            ("mhfe new", "Make a new wallet and its container"),
             (
                 "mhfe encrypt --pim 1 --mem 1",
                 "Encrypt with twice the passes and 3 GiB",

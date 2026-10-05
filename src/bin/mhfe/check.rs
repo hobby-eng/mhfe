@@ -394,8 +394,7 @@ fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
             Some("It does not prove the wallet or its passphrase; an address (--address) does."),
         ),
         Choice::WalletCheck => (
-            "the recovered phrase with this passphrase passes its wallet check (16 bits)."
-                .to_owned(),
+            "the recovered phrase passes its check with the BIP39 passphrase (16 bits).".to_owned(),
             Some("It does not prove the wallet; an address (--address) does."),
         ),
     }
@@ -419,9 +418,10 @@ fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failur
             "Only the built-in check",
             "checks the password, not the wallet",
         ));
+        // Named as mhfe new names it when the owner chooses it there.
         answers.push(Answer::new(
-            "Its wallet check",
-            "made by mhfe new; needs the passphrase",
+            "Check with the BIP39 passphrase",
+            "if mhfe new added it; checks the password",
         ));
     }
     let question = Question::new(
