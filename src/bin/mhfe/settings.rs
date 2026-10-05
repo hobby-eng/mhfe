@@ -9,6 +9,7 @@ use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
+use crate::readme;
 use crate::style::{self, paint, ACCENT, MUTED};
 use crate::terminal::Input;
 
@@ -87,10 +88,6 @@ impl Operation {
     }
 }
 
-/// Where the README explains both settings. The question shows only this link: what the settings
-/// mean is documentation, not text to read during the work.
-const README_SETTINGS: &str = "https://github.com/hobby-eng/mhfe#settings-pim-and-memory-level";
-
 /// Announces the command, settles its settings and states them with the memory and the expected
 /// time, and refuses at once settings that this computer cannot run. A person at a terminal who
 /// gave neither setting is asked first: the defaults, or their own. Nothing secret has been asked
@@ -133,12 +130,12 @@ fn warn_about_swap() {
             names.join(", ")
         )
     };
+    // Why it matters, Argon2's work area on a disk for years, is in the README.
     style::warn(
         &headline,
-        "The system may write memory there, Argon2's work area included, from which a password \
-         guess can be tested cheaply, and it can stay on the disk for years. Use a computer with \
-         encrypted swap or none, best a live system started from a USB stick.",
+        "Use encrypted swap or none, best a live system from a USB stick.",
     );
+    style::more(readme::SAFE_COMPUTER);
     eprintln!();
 }
 
@@ -171,7 +168,8 @@ fn ask_for_own(
     let question = Question {
         text,
         explanation: &[],
-        more: &[README_SETTINGS],
+        // What the settings mean is documentation, not text to read during the work.
+        more: Some(readme::SETTINGS),
         record: None,
     };
     Ok(input.choose(&question, &answers)? == 1)
@@ -187,7 +185,7 @@ fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
             &Question {
                 text: "PIM, 0 to 1023",
                 explanation: &["Each step adds the default work again: 1 doubles the time."],
-                more: &[],
+                more: None,
                 record: None,
             },
             "PIM: ",
@@ -204,7 +202,7 @@ fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
             &Question {
                 text: "Memory level, 0 to 21",
                 explanation: &explanation,
-                more: &[],
+                more: None,
                 record: None,
             },
             "Memory level: ",
@@ -313,7 +311,7 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
                 "Recovery will need a computer with {} GiB of free memory.",
                 work.memory_bytes() / GIB
             ),
-            "One must still be available when you recover, perhaps years from now.",
+            "",
         );
         eprintln!();
     }
@@ -370,11 +368,11 @@ pub fn highest_available_level() -> Option<u32> {
         .map(WorkFactor::memory_level)
 }
 
-/// The settings that differ from the defaults, such as "PIM 1, memory level 1", or `None` when
+/// The settings that differ from the defaults, such as "PIM 1" and "memory level 1"; none when
 /// both are 0. Only these need remembering: the container's word count selects the suite and the
 /// original's length is detected, so with the defaults the container and the password are all that
 /// recovery needs.
-pub fn changed_settings(work: WorkFactor) -> Option<String> {
+pub fn changed_settings(work: WorkFactor) -> Vec<String> {
     let mut values = Vec::new();
     if work.pim() != 0 {
         values.push(format!("PIM {}", work.pim()));
@@ -382,7 +380,7 @@ pub fn changed_settings(work: WorkFactor) -> Option<String> {
     if work.memory_level() != 0 {
         values.push(format!("memory level {}", work.memory_level()));
     }
-    (!values.is_empty()).then(|| values.join(", "))
+    values
 }
 
 /// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the

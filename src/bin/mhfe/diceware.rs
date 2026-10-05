@@ -129,10 +129,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         options.words,
         strength_text(options.words)
     ));
-    style::hint(
-        "The password is shown only this once and is not stored. Write it down and keep it \
-         apart from the container.",
-    );
+    style::hint("Shown only once and not stored: write it down, apart from the container.");
     Ok(SUCCESS)
 }
 

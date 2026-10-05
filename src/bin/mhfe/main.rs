@@ -18,6 +18,7 @@ mod hidden_input;
 mod length_choice;
 mod menu;
 mod protect;
+mod readme;
 mod serve;
 mod settings;
 mod style;

@@ -185,18 +185,36 @@ itself from opening any network connection or writing any file while it handles 
 is better than your everyday system; `mhfe.exe` needs nothing beyond Windows itself, though it has
 not been tested in Windows PE yet.
 
+Swap matters too. The system may write memory to a swap area on a disk, Argon2's work area
+included, from which a password guess can be tested cheaply, and it can stay there for years. On
+Linux MHFE therefore warns when a swap area is not encrypted. Use a computer with encrypted swap or
+none: a live system started from a USB stick usually has none, macOS encrypts its swap, and on
+Windows use BitLocker or no page file.
+
 ## Commands
 
-**`mhfe password`** makes a password of random words from the
+`mhfe <command> --help` explains every option. Keep a copy of this program offline as well, so that
+a compatible version is at hand years from now. While a command runs, its screens keep to short
+lines; a grey "More:" line links to the section here that explains them.
+
+### `mhfe password`
+
+`mhfe password` makes a password of random words from the
 [EFF dice list](https://www.eff.org/dice) of 7,776 words: use four, better five. `--dice` uses real
 dice, `--words N` sets the count. Any text on one line can be a password, but control characters
-such as a tab are refused, and letter case and spaces count. The password is not your wallet's
-BIP39 passphrase.
+such as a tab are refused, and letter case and spaces count: lowercase words with single spaces
+are the easiest to type again years later. The password is not your wallet's BIP39 passphrase.
+
+The password is shown only once and is not stored: write it down and keep it apart from the
+container. A password you make up yourself, or one of fewer than four different words from the
+list, is probably much weaker than it looks, and `mhfe encrypt` says so.
 
 From the start menu, Enter generates other words and Escape returns to the menu. Each password
 replaces the previous one on the private screen; leaving it clears the screen.
 
-**`mhfe encrypt`** asks for the phrase and twice for the password, as a mistyped password would
+### `mhfe encrypt`
+
+`mhfe encrypt` asks for the phrase and twice for the password, as a mistyped password would
 lock the phrase away for good. Both are typed on a private screen that shows what you type and is
 cleared as soon as you are done; a mistyped word is refused by the word list or the checksum. For a phrase of 12 to 21 words it first asks how long the
 container should be: 24 words, the recommended default, or the same length as your phrase; `?`
@@ -212,7 +230,17 @@ you to note the word count, do so. The same phrase, password and settings always
 lost plate can be made again, and two identical containers reveal the same phrase: use a different
 password for each phrase.
 
-**`mhfe check`** rehearses a recovery before you rely on a container and shows only "matches" or
+After the encryption MHFE lists what to keep, the container's words and the password and, only
+where needed, changed settings or the word count. Use the password for this phrase and nowhere
+else, and make another copy of the container only by copying its words exactly. Before you rely on
+the container, rehearse the recovery with `mhfe check`, typing the words from the plate or paper
+you wrote, not from the screen, and keep the original backup until it matches. This matters most
+for a container of the same length: its shorter checksum lets a miscopied word through more often,
+and the container then opens another wallet without any error.
+
+### `mhfe check`
+
+`mhfe check` rehearses a recovery before you rely on a container and shows only "matches" or
 "does not match", never the phrase; for a matched address it also shows where it was found, such as
 `m/84'/0'/0'/0/5`. Type the container from the plate, not from the screen: one
 miscopied word passes the BIP39 checksum in one case in 256, or as often as one in 16 for a
@@ -231,7 +259,14 @@ coin, or takes it from `--coin`, and shows before the check what it searches: th
 receiving and change addresses of accounts 0 to 9 on the standard paths of that address, or one
 path with `--path`. Do not keep the address or fingerprint next to the container.
 
-**`mhfe decrypt`** gives back the original phrase. The container is typed on a private screen,
+When it does not match, the check cannot tell what is wrong: the password, a setting, the
+container, the BIP39 passphrase or the reference. Without an address or fingerprint, for a 12- to
+21-word original in a 24-word container, it uses the built-in check, which proves the password and
+settings but not the wallet or its passphrase.
+
+### `mhfe decrypt`
+
+`mhfe decrypt` gives back the original phrase. The container is typed on a private screen,
 which shows it as you type it; the phrase then appears on a
 private screen as well, which Enter or Escape clears once you have written it down. Neither stays
 in the terminal's history; the summary shows the container's format. The number of words tells it the format: 24 words is the default format, 12 to 21 words a
@@ -240,9 +275,8 @@ password and finds the length itself; a wrong password then shows as "Not verifi
 original and a same-length container have no such check: a wrong password gives another valid
 phrase, so compare the result with your wallet. `--words N` sets the length of the original
 yourself; it then accepts only a 24-word container or a same-length container of exactly N words.
-
-`mhfe <command> --help` explains every option. Keep a copy of this program offline as well, so that
-a compatible version is at hand years from now.
+For about one container in four billion, several lengths pass their check by accident; MHFE then
+shows each reading, and you compare them with your wallet or choose the length with `--words N`.
 
 ## Settings: PIM and memory level
 

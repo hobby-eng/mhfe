@@ -28,17 +28,16 @@ use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 /// up line by line, which a line wrapped by the terminal would upset. As style.rs: 78 columns.
 pub const LINE_WIDTH: usize = 78;
 
-/// The indent of an explanation, and of the places to read more under "More:".
+/// The indent of an explanation.
 const TEXT_INDENT: &str = "  ";
-const MORE_INDENT: &str = "    ";
 
 /// A question with what explains it.
 pub struct Question<'a> {
     pub text: &'a str,
     /// Short lines, each written to fit LINE_WIDTH with its indent; "" separates two topics.
     pub explanation: &'a [&'a str],
-    /// Where to read more, such as a command or a README section, one per line.
-    pub more: &'a [&'a str],
+    /// The README section that explains the question, linked on one grey line.
+    pub more: Option<&'a str>,
     /// The grey label of the line that records the answer, at most 10 characters; `None` when
     /// what the program shows next states the answer anyway.
     pub record: Option<&'a str>,
@@ -50,7 +49,7 @@ impl<'a> Question<'a> {
         Self {
             text,
             explanation: &[],
-            more: &[],
+            more: None,
             record: Some(record),
         }
     }
@@ -171,19 +170,15 @@ pub fn draw_question(question: &Question) -> usize {
         }
     }
     lines += question.explanation.len();
-    if !question.more.is_empty() {
-        // Without an explanation the links follow the question directly, as part of it.
+    if let Some(place) = question.more {
+        // Without an explanation the link follows the question directly, as part of it.
         if !question.explanation.is_empty() {
             eprintln!();
             lines += 1;
         }
-        eprintln!("{TEXT_INDENT}{}", paint(MUTED, "More:"));
-        for place in question.more {
-            eprintln!("{MORE_INDENT}{}", paint(MUTED, place));
-        }
-        lines += 1 + question.more.len();
+        lines += style::more(place);
     }
-    if !question.explanation.is_empty() || !question.more.is_empty() {
+    if !question.explanation.is_empty() || question.more.is_some() {
         eprintln!();
         lines += 1;
     }
