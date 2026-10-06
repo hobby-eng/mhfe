@@ -165,24 +165,26 @@ fn draw(
         .collect();
     lines += draw_entries(&entries, selected);
     eprintln!();
-    style::hint(&hint(answers.len(), help_hint));
-    lines + 2
+    lines + 1 + style::hint(&hint(answers.len(), help_hint))
 }
 
 /// Draws a blank line, the question in bold and its explanation, and returns how many lines they
 /// took. A list or a prompt follows; after an explanation, a blank line separates it.
 pub fn draw_question(question: &Question) -> usize {
+    let text = paint(STRONG, question.text);
     eprintln!();
-    eprintln!("{}", paint(STRONG, question.text));
-    let mut lines = 2;
+    eprintln!("{text}");
+    let mut lines = 1 + style::rows(&text);
     for line in question.explanation {
         if line.is_empty() {
             eprintln!();
+            lines += 1;
         } else {
-            eprintln!("{TEXT_INDENT}{line}");
+            let line = format!("{TEXT_INDENT}{line}");
+            eprintln!("{line}");
+            lines += style::rows(&line);
         }
     }
-    lines += question.explanation.len();
     if let Some(place) = question.more {
         // Without an explanation the link follows the question directly, as part of it.
         if !question.explanation.is_empty() {
@@ -224,7 +226,8 @@ fn hint(answers: usize, help_hint: Option<&str>) -> String {
 /// and show no number.
 pub(crate) const DIGIT_KEYS: usize = 9;
 
-/// Draws one line per entry, a label and a grey note, and returns how many lines they took. The
+/// Draws one line per entry, a label and a grey note, and returns how many rows they took, a line
+/// wider than a narrow terminal taking more than one. The
 /// highlighted entry has a cyan marker and a bold label, so that it stands out also without
 /// colours. The notes line up after the longest label and are shortened to fit the width.
 pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
@@ -233,6 +236,7 @@ pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
         .map(|(label, _)| label.chars().count())
         .max()
         .unwrap_or(0);
+    let mut rows = 0;
     for (index, (label, note)) in entries.iter().enumerate() {
         let number = if index < DIGIT_KEYS {
             paint(MUTED, index + 1)
@@ -247,18 +251,20 @@ pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
         // Marker, number and the gaps: "› 1  " and two spaces before the note.
         let note_room = LINE_WIDTH.saturating_sub(5 + label_width + 2);
         let note = shortened(note, note_room);
-        if note.is_empty() {
-            eprintln!("{marker} {number}  {shown_label}");
+        let line = if note.is_empty() {
+            format!("{marker} {number}  {shown_label}")
         } else {
             // Padded by hand: the width of a painted label would count its colour codes.
             let padding = " ".repeat(label_width - label.chars().count());
-            eprintln!(
+            format!(
                 "{marker} {number}  {shown_label}{padding}  {}",
                 paint(MUTED, note)
-            );
-        }
+            )
+        };
+        eprintln!("{line}");
+        rows += style::rows(&line);
     }
-    entries.len()
+    rows
 }
 
 /// `text` cut to `room` characters with "…" at the end, so that a long note cannot wrap the line.

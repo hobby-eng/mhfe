@@ -35,7 +35,8 @@ pub enum MhfeError {
     HiddenWalletPassesCheck,
     /// Repair words that are not 2, 4, 6 or 8 English BIP39 words.
     InvalidRepairWords(String),
-    /// The damage is more than the repair words can repair, or the card belongs to another plate.
+    /// No repair within the bound of the repair words passes the BIP39 checksum: more damage than
+    /// they repair, or a card of another plate, as far as the decoder can tell.
     RepairNotPossible {
         repair_words: usize,
     },

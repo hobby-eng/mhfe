@@ -402,9 +402,10 @@ The check has costs:
   passes once in about 65,536.
 - The specification's deniability results assume a uniformly random phrase and do not by
   themselves cover a phrase drawn to pass the check.
-- It is for new wallets only, and a draft that the specification does not define yet; its
-  supplement describes it under Research directions. Keep a copy of this program with the
-  container.
+- It is for new wallets only: the draft profile MHFE-WALLET-CHECK-SEED-1, which the
+  specification defines as an
+  [optional source profile](https://github.com/hobby-eng/mhfe-spec#optional-source-profile-a-recovery-check-for-new-24-word-phrases).
+  It is still experimental. Keep a copy of this program with the container.
 
 ### `mhfe wallets`
 

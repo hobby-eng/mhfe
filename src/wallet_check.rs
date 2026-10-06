@@ -1,6 +1,6 @@
-//! The wallet check of a new seed phrase: a DRAFT, not yet part of the specification. Its
-//! supplement records it under Research directions, "A check for new 24-word and suite 4 sources by
-//! choosing the entropy", as a creation mode the owner chooses.
+//! The wallet check of a new seed phrase: the DRAFT profile MHFE-WALLET-CHECK-SEED-1, which the
+//! specification defines as an optional source profile ("Optional source profile: a recovery check
+//! for new 24-word phrases"), a creation mode the owner chooses. It is still experimental.
 //!
 //! A new phrase is drawn at random until its check passes. The check, byte for byte: the SHA-256
 //! digest of

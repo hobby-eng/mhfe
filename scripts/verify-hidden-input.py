@@ -147,9 +147,9 @@ class Session:
         # once the tool, the leader of its session, has ended, because the system revokes the
         # terminal of an ended session. The master side reads the same terminal on every system.
         self.original = termios.tcgetattr(self.master)
-        environment = dict(os.environ, NO_COLOR="1")
-        if term is not None:
-            environment["TERM"] = term
+        # A capable terminal unless a case asks for another: the shell that runs the checks may
+        # itself be a dumb one, as some editors' consoles are.
+        environment = dict(os.environ, NO_COLOR="1", TERM=term or "xterm-256color")
         self.process = subprocess.Popen(
             [PROGRAM, *arguments],
             stdin=self.slave, stdout=self.slave if stdout is None else stdout, stderr=self.slave,

@@ -65,10 +65,10 @@ pub enum Reference<'a> {
         fingerprint: [u8; 4],
         passphrase: &'a str,
     },
-    /// The wallet check of a phrase that `mhfe new` made with one (a draft, [`crate::wallet_check`]),
-    /// with its BIP39 `passphrase`, which may not be empty. It tells a right password and
-    /// passphrase from wrong ones with 16 bits, not which wallet it is, so it never confirms a
-    /// recovery to encrypt again.
+    /// The wallet check of a phrase drawn to pass it, as `mhfe new` does on request (the draft
+    /// profile MHFE-WALLET-CHECK-SEED-1, [`crate::wallet_check`]), with its BIP39 `passphrase`,
+    /// empty for a wallet without one. It tells a right password and passphrase from wrong ones
+    /// with 16 bits, not which wallet it is, so it never confirms a recovery to encrypt again.
     WalletCheck { passphrase: &'a str },
 }
 
