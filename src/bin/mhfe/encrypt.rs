@@ -23,7 +23,7 @@ use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::strength;
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
-use crate::terminal::{self, Input, Progress};
+use crate::terminal::{self, Input, Progress, Wallet};
 
 #[derive(Args)]
 pub struct Options {
@@ -345,7 +345,7 @@ fn show_before_the_check(container: &str, input: &Input) {
             format!("Container, {} words", container.split(' ').count())
         )
     );
-    terminal::print_phrase(container, input);
+    terminal::print_phrase(container, Wallet::Container, input);
     eprintln!();
     style::warn_here(
         "Not verified yet: write it down, but wait for the check.",

@@ -18,7 +18,7 @@ use crate::plate_repair;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
-use crate::terminal::{self, Input, Progress};
+use crate::terminal::{self, Input, Progress, Wallet};
 
 #[derive(Args)]
 pub struct Options {
@@ -45,7 +45,7 @@ const LENGTHS: [usize; 5] = [12, 15, 18, 21, 24];
 /// The top of `mhfe rekey --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Change the password or settings of a container, never showing the phrase",
+        "Change the password or settings of a container",
         "Recovers the seed phrase from the old container, confirms it, by its built-in check, by \
          a receiving address or the master key fingerprint of the wallet, or by showing it to you \
          to compare with your backup, and encrypts it under a new password or new settings. The \
@@ -262,7 +262,7 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
     }
     eprintln!();
     eprintln!("{}", paint(HEADING, "Recovered seed phrase"));
-    terminal::print_phrase(phrase, input);
+    terminal::print_phrase(phrase, Wallet::NoPassphrase, input);
     let question = Question {
         text: "Does it match your written record, word for word?",
         explanation: &[],

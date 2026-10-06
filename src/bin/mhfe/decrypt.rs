@@ -9,7 +9,7 @@ use crate::flow::Flow;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, HEADING, STRONG};
-use crate::terminal::{self, Input, Progress};
+use crate::terminal::{self, Input, Progress, Wallet};
 
 #[derive(Args)]
 pub struct Options {
@@ -238,6 +238,6 @@ fn print_result(phrase: &RecoveredPhrase, input: &Input) {
         };
         println!("{} {status} {}", phrase.words, *phrase.phrase);
     } else {
-        terminal::print_phrase(&phrase.phrase, input);
+        terminal::print_phrase(&phrase.phrase, Wallet::NoPassphrase, input);
     }
 }

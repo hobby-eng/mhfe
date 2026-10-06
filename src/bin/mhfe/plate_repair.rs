@@ -13,7 +13,7 @@ use crate::flow::Flow;
 use crate::locked_text::LockedText;
 use crate::readme;
 use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
-use crate::terminal::{self, Input, PrivateScreen};
+use crate::terminal::{self, Input, PrivateScreen, Wallet};
 
 #[derive(Args)]
 pub struct RepairOptions {
@@ -87,7 +87,7 @@ pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
             )
         )
     );
-    terminal::print_phrase(&repaired.container, &input);
+    terminal::print_phrase(&repaired.container, Wallet::Container, &input);
     eprintln!();
     style::ok(what_was_repaired(&repaired));
     print_changes(&repaired);

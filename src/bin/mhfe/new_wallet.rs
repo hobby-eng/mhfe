@@ -27,7 +27,7 @@ use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::strength;
 use crate::style::{self, paint, ACCENT, GOOD, HEADING, MUTED, STRONG, WARNING};
-use crate::terminal::{self, Input};
+use crate::terminal::{self, Input, Wallet};
 
 #[derive(Args)]
 pub struct Options {
@@ -85,7 +85,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let repair_count = plate_repair::ask_when_creating(&mut input)?;
     let phrase = draw_phrase(checked.then_some(&*passphrase))?;
     let _phrase_locked = LockedPages::of_string(&phrase);
-    show_new_phrase(&input, &phrase)?;
+    show_new_phrase(&input, &phrase, &passphrase)?;
     let check = if checked { ", with a check" } else { "" };
     choice::record("Phrase", &format!("24 words, new{check}"));
 
@@ -268,7 +268,7 @@ fn fill_random(bytes: &mut [u8]) -> Result<(), Failure> {
 }
 
 /// Shows the new phrase on a private screen until Enter or Escape clears it.
-fn show_new_phrase(input: &Input, phrase: &str) -> Result<(), Failure> {
+fn show_new_phrase(input: &Input, phrase: &str, passphrase: &str) -> Result<(), Failure> {
     let screen = terminal::PrivateScreen::enter_to_show(input);
     if !screen.shows_privately() {
         return Err(Failure::internal(
@@ -280,7 +280,7 @@ fn show_new_phrase(input: &Input, phrase: &str) -> Result<(), Failure> {
     }
     eprintln!();
     eprintln!("{}", paint(HEADING, "New seed phrase, 24 words"));
-    terminal::print_phrase(phrase, input);
+    terminal::print_phrase(phrase, Wallet::NewPassphrase(passphrase), input);
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }
