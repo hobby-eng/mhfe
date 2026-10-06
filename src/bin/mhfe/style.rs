@@ -11,6 +11,8 @@ use anstream::{eprint, eprintln};
 use anstyle::{AnsiColor, Style};
 use zeroize::Zeroizing;
 
+use crate::flow::{self, Kind};
+
 /// Titles, section headings and the words `mhfe` and its commands.
 pub const HEADING: Style = AnsiColor::Cyan.on_default().bold();
 /// Command names and the progress bar.
@@ -30,8 +32,16 @@ pub fn paint(style: Style, text: impl Display) -> String {
     format!("{style}{text}{style:#}")
 }
 
-/// The first lines of a command: its name and what it does.
+/// The first lines of a command: its name and what it does. A command shown one step at a time
+/// heads every step and its summary itself (flow.rs).
 pub fn title(what: &str) {
+    if !flow::is_active() {
+        write_title(what);
+    }
+}
+
+/// Writes the title line at once, after a blank line.
+pub fn write_title(what: &str) {
     eprintln!();
     eprintln!(
         "{} {} {}",
@@ -43,12 +53,37 @@ pub fn title(what: &str) {
 
 /// One line of a summary table: a grey label and its value.
 pub fn fact(label: &str, value: impl Display) {
-    eprintln!("  {} {value}", paint(MUTED, format!("{label:<10}")));
+    fact_as(Kind::Fact, label, value);
 }
 
-/// Something that went right, after a green tick.
+/// A line of a summary table of `kind`: in a command shown one step at a time it waits for the
+/// summary at the end.
+pub fn fact_as(kind: Kind, label: &str, value: impl Display) {
+    let line = fact_line(label, value);
+    if !flow::keep(kind, std::slice::from_ref(&line)) {
+        eprintln!("{line}");
+    }
+}
+
+/// [`fact`] that is shown at the top of the next step too, so that it is read before the work it
+/// describes starts.
+pub fn fact_before_work(label: &str, value: impl Display) {
+    let line = fact_line(label, value);
+    if !flow::keep_next(Kind::Fact, std::slice::from_ref(&line)) {
+        eprintln!("{line}");
+    }
+}
+
+fn fact_line(label: &str, value: impl Display) -> String {
+    format!("  {} {value}", paint(MUTED, format!("{label:<10}")))
+}
+
+/// Something that went right, after a green tick. It is shown at once, on the step it belongs to,
+/// and kept for the summary too.
 pub fn ok(text: impl Display) {
-    eprintln!("{} {text}", paint(GOOD, "✓"));
+    let line = format!("{} {text}", paint(GOOD, "✓"));
+    eprintln!("{line}");
+    flow::keep_shown(Kind::Result, &[line]);
 }
 
 /// Advice that can be read and passed over, in grey, wrapped to the text width. Returns the lines
@@ -61,27 +96,74 @@ pub fn hint(text: &str) -> usize {
     lines.len()
 }
 
-/// A warning: a yellow headline after "!", then `body` wrapped, every line marked with "!".
 /// A grey line that links to the README section explaining what a screen only names; returns
-/// the lines it took.
+/// the lines it took on the screen. In a command shown one step at a time it goes with the
+/// summary line or warning before it.
 pub fn more(place: &str) -> usize {
-    eprintln!("  {}", paint(MUTED, format!("More: {place}")));
+    let line = more_line(place);
+    if !flow::keep_link(line.clone()) {
+        return 0;
+    }
+    eprintln!("{line}");
     1
 }
 
+/// [`more`] written at once, as part of a question or another step.
+pub fn more_here(place: &str) -> usize {
+    eprintln!("{}", more_line(place));
+    1
+}
+
+fn more_line(place: &str) -> String {
+    format!("  {}", paint(MUTED, format!("More: {place}")))
+}
+
+/// A warning: a yellow headline after "!", then `body` wrapped, every line marked with "!". In a
+/// command shown one step at a time it is kept for the summary and shown at the top of the next
+/// step, so that it is read before the person goes on.
 pub fn warn(headline: &str, body: &str) {
-    marked(WARNING, "!", headline, body);
+    let lines = marked(WARNING, "!", headline, body);
+    if !flow::keep_notice(&lines) {
+        write_lines(&lines);
+    }
+}
+
+/// A warning about the screen it is on, such as the wait to clear it, never kept for a summary.
+pub fn warn_here(headline: &str, body: &str) {
+    write_lines(&marked(WARNING, "!", headline, body));
+}
+
+/// A warning shown at once, next to what it is about, and kept for the summary too, such as the
+/// status of a recovered phrase.
+pub fn warn_now(headline: &str, body: &str) {
+    let lines = marked(WARNING, "!", headline, body);
+    write_lines(&lines);
+    flow::keep_shown(Kind::Notice, &lines);
 }
 
 /// A mistake in an answer that can be typed again: the message wrapped, every line after a yellow
 /// "!". Returns the lines it took, as `hint` does.
 pub fn retry(text: impl Display) -> usize {
-    // Two columns go to the mark and its space.
-    let lines = wrap(&text.to_string(), TEXT_WIDTH - 2);
-    for line in &lines {
-        eprintln!("{} {line}", paint(WARNING, "!"));
-    }
+    let lines = retry_lines(text);
+    write_lines(&lines);
     lines.len()
+}
+
+/// [`retry`] for an answer that is asked again on a step of its own: in a command shown one step
+/// at a time the message heads that step, and is kept nowhere.
+pub fn retry_next(text: impl Display) {
+    let lines = retry_lines(text);
+    if !flow::show_at_next_step(&lines) {
+        write_lines(&lines);
+    }
+}
+
+fn retry_lines(text: impl Display) -> Vec<String> {
+    // Two columns go to the mark and its space.
+    wrap(&text.to_string(), TEXT_WIDTH - 2)
+        .iter()
+        .map(|line| format!("{} {line}", paint(WARNING, "!")))
+        .collect()
 }
 
 /// An error message after a red "✗ Error:".
@@ -90,19 +172,30 @@ pub fn error(text: &str) {
 }
 
 /// An error or a failed check: a red headline after "✗", then `body` wrapped, every line
-/// marked in red.
+/// marked in red. It is shown at once and kept for the summary too.
 pub fn alarm(headline: &str, body: &str) {
-    marked(BAD, "✗", headline, body);
+    let lines = marked(BAD, "✗", headline, body);
+    write_lines(&lines);
+    flow::keep_shown(Kind::Notice, &lines);
 }
 
-fn marked(style: Style, mark: &str, headline: &str, body: &str) {
+/// The lines of a warning or alarm: `headline` after `mark`, then `body`, both wrapped and every
+/// line marked in `style`.
+fn marked(style: Style, mark: &str, headline: &str, body: &str) -> Vec<String> {
     // Two columns go to the mark and its space.
-    let lines = wrap(headline, TEXT_WIDTH - 2);
-    for line in &lines {
-        eprintln!("{} {}", paint(style, mark), paint(style, line));
-    }
+    let mut lines: Vec<String> = wrap(headline, TEXT_WIDTH - 2)
+        .iter()
+        .map(|line| format!("{} {}", paint(style, mark), paint(style, line)))
+        .collect();
     for line in wrap(body, TEXT_WIDTH - 2) {
-        eprintln!("{} {line}", paint(style, "!"));
+        lines.push(format!("{} {line}", paint(style, "!")));
+    }
+    lines
+}
+
+fn write_lines(lines: &[String]) {
+    for line in lines {
+        eprintln!("{line}");
     }
 }
 

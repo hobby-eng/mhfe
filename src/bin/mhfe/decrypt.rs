@@ -5,6 +5,7 @@ use clap::Args;
 use mhfe::{PhraseLength, RecoveredPhrase, Recovery, Suite, WordCount};
 
 use crate::exit::{Failure, SUCCESS};
+use crate::flow::Flow;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, HEADING, STRONG};
@@ -110,10 +111,12 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         None => PhraseLength::Detect,
     };
     let mut input = Input::new(options.stdin);
+    // At a terminal every step on a screen of its own, the summary at the end.
+    let flow = Flow::start(&input, Operation::Decrypt.title());
     let work = settings::choose(options.settings, &mut input, Operation::Decrypt)?;
 
     let (container, _) = terminal::read_container(&mut input, Operation::Decrypt.title())?;
-    let password = terminal::read_password(&mut input, Operation::Decrypt.title())?;
+    let password = terminal::read_password(&mut input, Operation::Decrypt)?;
     let mut mhfe = settings::reserve_memory(work)?;
     eprintln!();
     style::warn(
@@ -140,6 +143,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     if screen.is_active() {
         terminal::wait_to_leave()?;
         drop(screen);
+        flow.finish();
         style::ok("Recovered. The seed phrase is no longer on the screen.");
         style::hint("When you are done, close this terminal.");
     } else {
@@ -151,7 +155,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
     eprintln!();
     if phrase.suite == Suite::SameLength {
-        style::warn(
+        style::warn_now(
             &format!(
                 "Not verified: a {}-word container has no built-in check.",
                 phrase.words
@@ -168,13 +172,13 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
         // The built-in check confirms the password and settings, never which wallet this is.
         style::hint("It confirms the password, not the wallet: mhfe check does that.");
     } else if length == PhraseLength::Detect {
-        style::warn(
+        style::warn_now(
             "Not verified: read as 24 words.",
             "For a shorter original, the password or a setting is wrong.",
         );
         style::more(readme::DECRYPT);
     } else {
-        style::warn(
+        style::warn_now(
             "Not verified: read as 24 words, as you chose.",
             "Compare it with your wallet.",
         );
@@ -193,7 +197,7 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
 
 fn show_ambiguous(candidates: &[RecoveredPhrase], input: &Input) {
     eprintln!();
-    style::warn(
+    style::warn_now(
         "Several lengths passed their check, a rare accident.",
         "Compare each with your wallet, or run again with --words N.",
     );

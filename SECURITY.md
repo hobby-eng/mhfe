@@ -75,9 +75,9 @@ Never include a real seed phrase, password, private key or wallet file.
   check is a draft over the BIP39 seed with the passphrase, which may not be empty: a filter of 16 bits that a
   wrong password or passphrase passes once in about 65,536. It never shows which wallet it is, and
   `rekey` does not accept it as the only confirmation.
-- `wallets` shows hidden wallets only after the published vectors have passed, all on one private
-  screen with their passwords and progress, so that the main screen shows neither the wallets nor
-  how many were opened, and it keeps no record of the passwords or the wallets.
+- `wallets` shows hidden wallets all on one private screen with their passwords and progress, so
+  that the main screen shows neither the wallets nor how many were opened, and it keeps no record
+  of the passwords or the wallets.
 - Nothing connects to a network. The browser package loads no remote resources and contains no
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
   (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which

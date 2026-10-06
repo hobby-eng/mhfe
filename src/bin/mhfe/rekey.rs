@@ -13,6 +13,7 @@ use crate::check::WalletReference;
 use crate::choice::{self, Answer, Question};
 use crate::encrypt;
 use crate::exit::{Failure, NO_MATCH, SUCCESS};
+use crate::flow::Flow;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
@@ -78,6 +79,8 @@ pub fn help() -> String {
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; no script reads a phrase back and forth.
     let mut input = Input::new(false);
+    // At a terminal every step on a screen of its own, the summary at the end.
+    let flow = Flow::start(&input, Operation::Rekey.title());
     let old_work = settings::choose(options.old, &mut input, Operation::Rekey)?;
     // Shown to everyone, so that it says nothing about this container (specification: a hidden
     // wallet behind an honest disclosure).
@@ -92,7 +95,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let (container, suite) = terminal::read_container(&mut input, Operation::Rekey.title())?;
     let container_words = container.split(' ').count();
     let words = phrase_length(&mut input, options.words, suite, container_words)?;
-    let password = terminal::read_password(&mut input, Operation::Rekey.title())?;
+    let password = terminal::read_password(&mut input, Operation::Rekey)?;
     // A recovery without a built-in check needs another confirmation. It is chosen, and a
     // reference typed, before the long computation, so the user can walk away while it runs.
     let has_check = suite == Suite::TwentyFourWords && words.get() < 24;
@@ -155,6 +158,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         suite,
         &new_password,
     )?;
+    flow.finish();
     style::fact("Format", paint(MUTED, new.suite.id()));
     style::fact(
         "Keep",
@@ -266,7 +270,8 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
         Answer::new("Yes, every word", ""),
         Answer::new("No, stop", "nothing is encrypted again"),
     ];
-    let mine = input.choose(&question, &answers)? == 0;
+    // Asked below the phrase, which stays on the screen until the answer.
+    let mine = input.choose_here(&question, &answers)? == 0;
     drop(screen);
     if mine {
         Ok(())
@@ -314,6 +319,9 @@ fn read_different_password(
         if !(same_settings && new.as_bytes() == old.as_bytes()) {
             return Ok(new);
         }
-        style::retry("This is the old password, which gives the old container. Choose another.");
+        // Said where the new password is typed again.
+        style::retry_next(
+            "This is the old password, which gives the old container. Choose another.",
+        );
     }
 }

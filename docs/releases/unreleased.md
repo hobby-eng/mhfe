@@ -44,8 +44,9 @@ Planned as version 0.5.0.
   `Reference::WalletCheck`, which never confirms a rekey; `derive_wallet` takes the main wallet's
   passphrase, so that no hidden wallet passes the check either.
 - `mhfe wallets` opens hidden wallets: every other password gives its own 24-word wallet on a
-  24-word container, shown after the self-test has passed on one private screen that the main
-  screen keeps no trace of, not even how many wallets were opened, and recorded nowhere.
+  24-word container, shown on one private screen that the main screen keeps no trace of, not even
+  how many wallets were opened, and recorded nowhere; the README advises running
+  `mhfe self-test` before funding one.
   A password whose wallet passes a short phrase's built-in check is refused. The library offers
   `Mhfe::derive_wallet`, with the error code `HIDDEN_WALLET_PASSES_CHECK`.
 - A phrase that was not asked for as a result is shown only on a private screen: `mhfe new` and
@@ -60,8 +61,9 @@ Planned as version 0.5.0.
   of warning whenever it is not four dice words. The estimate needs no dependency: it reads the
   password as words of the EFF and BIP39 lists, common passwords, years, repeats, runs and keyboard
   rows, with letter substitutions, and the README states what it can overrate.
-- The start menu's password generator repeats on Enter and returns to the menu on Escape. Each
-  password replaces the previous one on the private screen, which is cleared when leaving.
+- The start menu's password generator first asks for five dice words or sixteen random characters,
+  repeats on Enter and returns to the menu on Escape. Each password replaces the previous one on
+  the private screen, which is cleared when leaving.
 - Secrets are typed on a private screen, the terminal's alternate screen, which shows them as they
   are typed and is cleared as soon as they are accepted, with no question to confirm them: a
   mistyped word is refused by the word list or the checksum. This replaces the hidden prompts and
@@ -70,6 +72,10 @@ Planned as version 0.5.0.
   screen too, which Enter or Escape clears once they are written down. Each answered step gives
   way to one line of a summary on the main screen, and warnings stand apart, so that the next
   question is always at the bottom.
+- At a terminal, every step of a command has a clean screen of its own, with nothing of the start
+  menu or the earlier steps above it, and when the command ends the main screen gets the summary.
+  Each password prompt says which password it asks for, and "NOT" in capitals marks where a
+  container password and a BIP39 passphrase differ.
 - Screens keep to short lines while a command runs. Explanations moved to the README, whose
   commands now have sections of their own, and a grey "More:" line links to the section that
   explains a question, a warning or a result. After an encryption, two lines say what to keep and

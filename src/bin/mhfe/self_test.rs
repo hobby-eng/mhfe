@@ -8,12 +8,12 @@ use anstream::eprintln;
 use mhfe::{Password, PhraseLength, Recovery, Suite, WorkFactor};
 use serde_json::Value;
 
-use crate::choice;
 use crate::exit::{Failure, INTERNAL_ERROR, SUCCESS};
+use crate::flow::Flow;
 use crate::readme;
 use crate::settings;
 use crate::style::{self, paint, MUTED};
-use crate::terminal::Progress;
+use crate::terminal::{Input, Progress};
 
 /// The public vectors, as the repository and the specification publish them.
 const SUITE_3_VECTOR: &str = include_str!("../../../tests/fixtures/suite3-vectors/zero-12.json");
@@ -29,6 +29,9 @@ pub fn about() -> String {
          results with the published ones. It takes about two minutes and uses no secret.",
     ])
 }
+
+/// The title of `mhfe self-test`.
+const TITLE: &str = "Test this program";
 
 /// What a vector gives: its phrase, password and container.
 struct Vector {
@@ -57,7 +60,9 @@ fn vector(json: &str) -> Result<Vector, Failure> {
 }
 
 pub fn run() -> Result<i32, Failure> {
-    style::title("Test this program");
+    // At a terminal the work is a step of its own, and the summary and verdict follow it.
+    let flow = Flow::start(&Input::new(false), TITLE);
+    style::title(TITLE);
     let suite_3 = vector(SUITE_3_VECTOR)?;
     let suite_4 = vector(SUITE_4_VECTOR)?;
     // Both vectors use the default settings, PIM 0 and memory level 0.
@@ -82,6 +87,7 @@ pub fn run() -> Result<i32, Failure> {
     );
     let mut progress = Progress::start();
     let (suite_3_ok, suite_4_ok) = run_vectors(&suite_3, &suite_4, &mut progress)?;
+    flow.finish();
 
     eprintln!();
     let verdict = |ok: bool| {
@@ -99,30 +105,12 @@ pub fn run() -> Result<i32, Failure> {
         Ok(SUCCESS)
     } else {
         style::alarm(
-            "This program does not compute MHFE as published.",
-            "Do not use it for a real phrase; try another computer or build.",
+            "This program does NOT compute MHFE as published.",
+            "Do NOT use it for a real phrase; try another computer or build.",
         );
         style::more(readme::SELF_TEST);
         Ok(INTERNAL_ERROR)
     }
-}
-
-/// The self-test that must pass before a wallet derived from a container is shown (the
-/// specification asks for it): a fault that derives and recovers the same wrong way would
-/// otherwise give a wallet no correct program finds again.
-pub fn require_pass() -> Result<(), Failure> {
-    let suite_3 = vector(SUITE_3_VECTOR)?;
-    let suite_4 = vector(SUITE_4_VECTOR)?;
-    let mut progress = Progress::start();
-    let passed = run_vectors(&suite_3, &suite_4, &mut progress)? == (true, true);
-    if !passed {
-        return Err(Failure::internal(
-            "This program does not compute MHFE as the published vectors say (mhfe self-test), \
-             so it shows no wallet. Try another computer or build.",
-        ));
-    }
-    choice::record("Self-test", "the published vectors match");
-    Ok(())
 }
 
 /// Encrypts the suite 3 vector and recovers the suite 4 vector at full cost; whether each result

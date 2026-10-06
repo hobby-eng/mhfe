@@ -96,8 +96,9 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `password` opens on a 24-word container, read as 24 words, unverified (a hidden wallet behind an
   honest disclosure). A password whose reading passes the built-in check of a 12- to 21-word
   phrase, or the wallet check with the main wallet's `passphrase` unless it is empty, is refused
-  (`HIDDEN_WALLET_PASSES_CHECK`). A program should run the published vectors first, as
-  `mhfe self-test` does, before it shows such a wallet.
+  (`HIDDEN_WALLET_PASSES_CHECK`). Running the published vectors on the computer, as
+  `mhfe self-test` does, before such a wallet is funded guards against a build or computer that
+  computes MHFE wrongly and would show a wallet no correct program finds again.
 - `wallet_check` (a draft): `passes(entropy, passphrase)`, `phrase_passes(phrase, passphrase)` and
   `new_phrase(fill, passphrase, on_draw)`. A new phrase is drawn until
   `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(ENT) || seed)` starts with 16 zero bits, its first

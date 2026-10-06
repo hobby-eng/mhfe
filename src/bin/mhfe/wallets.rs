@@ -1,8 +1,9 @@
 //! `mhfe wallets`: the hidden wallets that other passwords open on a 24-word container
 //! (specification supplement: "A hidden wallet behind an honest disclosure"). Each password gives
 //! its own 24-word wallet, `D_P(Y)`, which the container and the password give again at any time,
-//! so nothing is written down and nothing records how many there are. The published vectors are
-//! checked first, as the specification asks before a derived wallet is shown.
+//! so nothing is written down and nothing records how many there are. The README advises running
+//! `mhfe self-test` on the computer before a hidden wallet is funded; it is not repeated here, as
+//! it takes minutes.
 
 use anstream::eprintln;
 use clap::Args;
@@ -13,8 +14,8 @@ use crate::check;
 use crate::choice::{Answer, Question};
 use crate::encrypt;
 use crate::exit::{Failure, SUCCESS};
+use crate::flow::{self, Flow};
 use crate::readme;
-use crate::self_test;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING};
 use crate::terminal::{self, Input, Progress};
@@ -31,9 +32,8 @@ pub fn about() -> String {
     style::command_about(&[
         "Open hidden wallets on a container with other passwords",
         "Every password other than the container's own opens another valid 24-word wallet on a \
-         24-word container. This command shows the wallet of each password you type, after it has \
-         checked itself against the published vectors. Nothing records the passwords or how many \
-         there are; the container and a password give its wallet again at any time.",
+         24-word container. This command shows the wallet of each password you type. Nothing is \
+         created or stored: the container and a password give the same wallet at any time.",
     ])
 }
 
@@ -51,15 +51,19 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     if !terminal::can_show_privately(&input) {
         return Err(Failure::invalid_input(NO_PRIVATE_SCREEN));
     }
+    // Every step on a screen of its own, the summary at the end. The steps lie on the alternate
+    // screen, which is what keeps the wallets private: without it the command does not go on.
+    let flow = Flow::start(&input, Operation::Wallets.title());
+    if !flow::is_active() {
+        return Err(Failure::invalid_input(NO_PRIVATE_SCREEN));
+    }
     let work = settings::choose(options.settings, &mut input, Operation::Wallets)?;
-    self_test::require_pass()?;
-    eprintln!();
     style::warn(
-        "Each other password opens its own 24-word wallet; nothing records them.",
+        "Nothing is created or stored: the container and each password give the same wallet \
+         every time.",
         "",
     );
     style::more(readme::WALLETS);
-    eprintln!();
 
     let (container, suite) = terminal::read_container(&mut input, Operation::Wallets.title())?;
     if suite != Suite::TwentyFourWords {
@@ -71,20 +75,15 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // question comes every time, so that it tells nothing about the main wallet.
     let passphrase = check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;
     let mut mhfe = settings::reserve_memory(work)?;
-    // Every wallet, its password, its progress and the question for another one stay on one
-    // private screen, cleared at the end: nothing on the main screen tells how many wallets were
-    // opened (AUD-007-SEC005).
-    let screen = terminal::PrivateScreen::enter_to_show(&input);
-    if !screen.is_active() {
-        return Err(Failure::invalid_input(NO_PRIVATE_SCREEN));
-    }
-    style::title(Operation::Wallets.title());
+    // Every wallet, its password, its progress and the question for another one leave nothing in
+    // the summary: nothing on the main screen tells how many wallets were opened (AUD-007-SEC005).
+    let off_the_record = flow::off_the_record();
     // The passwords of this run, as normalized bytes, so that none is typed twice.
     let mut used: Vec<Zeroizing<Vec<u8>>> = Vec::new();
     loop {
         let number = used.len() + 1;
         let password = read_unused_password(&mut input, &used)?;
-        let mut progress = Progress::start();
+        let mut progress = Progress::start_as("Opening");
         let derived =
             mhfe.derive_wallet(&container, &password, &passphrase, &mut |round, rounds| {
                 progress.round_starts(round, rounds);
@@ -95,7 +94,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             Ok(wallet) => wallet,
             Err(MhfeError::HiddenWalletPassesCheck) => {
                 // Rule I29: the container's own password of a short phrase, or a rare chance.
-                style::retry("This password opens a phrase that passes a check. Choose another.");
+                style::retry_next(
+                    "This password opens a phrase that passes a check. Choose another.",
+                );
                 continue;
             }
             Err(error) => return Err(error.into()),
@@ -105,11 +106,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         if !another(&mut input)? {
             break;
         }
-        // Cleared only for the next wallet, so that a refused password's message stays readable.
-        screen.clear();
-        style::title(Operation::Wallets.title());
     }
-    drop(screen);
+    drop(off_the_record);
+    flow.finish();
     style::fact(
         "Next",
         format!(
@@ -134,7 +133,7 @@ fn read_unused_password(
         {
             return Ok(password);
         }
-        style::retry("This password has opened a wallet already. Choose another.");
+        style::retry_next("This password has opened a wallet already. Choose another.");
     }
 }
 
@@ -142,7 +141,7 @@ fn read_unused_password(
 const NO_PRIVATE_SCREEN: &str = "mhfe wallets shows wallets only on a private screen: run it at a \
                                  terminal, with no output redirected.";
 
-/// Shows a wallet on the private screen of the run.
+/// Shows a wallet below its progress, on the step's private screen.
 fn show_wallet(input: &Input, number: usize, phrase: &str) {
     eprintln!();
     eprintln!("{}", paint(HEADING, format!("Wallet {number}, 24 words")));
@@ -150,12 +149,12 @@ fn show_wallet(input: &Input, number: usize, phrase: &str) {
     style::hint("No need to write it down: the container and this password give it again.");
 }
 
-/// Whether to open another wallet; the answer stays on the private screen too.
+/// Whether to open another wallet, asked below the wallet shown.
 fn another(input: &mut Input) -> Result<bool, Failure> {
     let question = Question::new("Open another wallet?", "Another");
     let answers = [
         Answer::new("Yes, with another password", ""),
         Answer::new("No, done", ""),
     ];
-    Ok(input.choose(&question, &answers)? == 0)
+    Ok(input.choose_here(&question, &answers)? == 0)
 }

@@ -154,6 +154,12 @@ pub fn columns() -> Option<usize> {
     platform::columns()
 }
 
+/// Whether the terminal on standard error carries out control sequences such as the switch to the
+/// alternate screen; on Windows the console is asked to do so first.
+pub fn control_sequences() -> bool {
+    platform::control_sequences()
+}
+
 /// How long a lone Escape waits for the rest of an escape sequence. A terminal sends an arrow
 /// key's sequence at once, so an Escape that nothing follows within this time is the Escape key;
 /// MnemoCode waits as long (ESCAPE_DELAY_MS in its src/cli/terminal-input.ts).
@@ -434,6 +440,11 @@ mod platform {
         hide(original)
     }
 
+    /// A Unix terminal carries out control sequences as they come.
+    pub fn control_sequences() -> bool {
+        true
+    }
+
     pub fn columns() -> Option<usize> {
         let mut size = MaybeUninit::<libc::winsize>::zeroed();
         // SAFETY: TIOCGWINSZ fills the winsize when it returns 0; it was zeroed before.
@@ -541,6 +552,18 @@ mod platform {
             }
         }
         Ok(())
+    }
+
+    /// Asks the console to carry out the VT control sequences written to standard error, such as
+    /// switching to the alternate screen; whether it agreed. The mode stays on, as in single_keys.
+    pub fn control_sequences() -> bool {
+        // SAFETY: plain console calls on the standard error handle.
+        unsafe {
+            let output = GetStdHandle(STD_ERROR_HANDLE);
+            let mut mode: CONSOLE_MODE = 0;
+            GetConsoleMode(output, &mut mode) != 0
+                && SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0
+        }
     }
 
     /// The width of the console window that standard error writes to.

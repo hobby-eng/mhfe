@@ -14,9 +14,10 @@ use std::io::{self, Write};
 use anstream::eprintln;
 use clap::{CommandFactory, Parser};
 
-use crate::choice::{draw_entries, redraw_from, write_control};
+use crate::choice::{self, draw_entries, redraw_from, write_control, Answer, Question};
 use crate::exit::{Failure, SUCCESS};
 use crate::hidden_input::{self, Key};
+use crate::readme;
 use crate::style;
 use crate::{protect, serve, show_failure, terminal, Cli};
 
@@ -58,14 +59,24 @@ impl Entry {
 pub fn run() -> Result<i32, Failure> {
     style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
     eprintln!();
-    style::hint("Encrypts a seed phrase into a password-protected container and recovers it.");
+    let hint_lines =
+        style::hint("Encrypts a seed phrase into a password-protected container and recovers it.");
     let entries = entries();
     let mut selected = 0;
+    // The lines the menu takes on the screen: the first time its title, blank lines and hint too,
+    // later the wait to return to it.
+    let mut menu_lines = 3 + hint_lines;
     loop {
         eprintln!();
-        let Some(chosen) = choose(&entries, &mut selected)? else {
+        menu_lines += 1;
+        let chosen = choose(&entries, &mut selected, &mut menu_lines)?;
+        // The menu leaves the screen once an entry is chosen, so that nothing of it stands above
+        // what the entry shows: a command's steps, and then its summary in the menu's place.
+        write_control(&redraw_from(menu_lines))?;
+        let Some(chosen) = chosen else {
             return Ok(SUCCESS);
         };
+        menu_lines = 0;
         match &entries[chosen].action {
             Action::Quit => return Ok(SUCCESS),
             Action::Help => Cli::command().print_long_help()?,
@@ -83,6 +94,8 @@ pub fn run() -> Result<i32, Failure> {
         if !wait_for_enter("Press Enter to return to the menu (Esc quits).")? {
             return Ok(SUCCESS);
         }
+        // The blank line and the line of the wait.
+        menu_lines = 2;
     }
 }
 
@@ -127,11 +140,16 @@ fn entries() -> Vec<Entry> {
 
 /// Draws the entries and reads keys until one is chosen; `None` means quit. `selected` keeps the
 /// highlighted entry for the next time the menu is shown.
-fn choose(entries: &[Entry], selected: &mut usize) -> Result<Option<usize>, Failure> {
+fn choose(
+    entries: &[Entry],
+    selected: &mut usize,
+    menu_lines: &mut usize,
+) -> Result<Option<usize>, Failure> {
     // The terminal reads single keys before the menu appears, as a hidden prompt does, so that a
     // key pressed as soon as the menu shows is read as a key and never echoed.
     hidden_input::with_keys(|next_key| {
         let drawn_lines = draw(entries, *selected);
+        *menu_lines += drawn_lines;
         loop {
             match next_key()? {
                 Key::Up => *selected = (*selected + entries.len() - 1) % entries.len(),
@@ -159,7 +177,8 @@ fn draw(entries: &[Entry], selected: usize) -> usize {
         .collect();
     let entry_lines = draw_entries(&lines, selected);
     eprintln!();
-    let last = entries.len();
+    // Only the first nine entries have a number key.
+    let last = entries.len().min(choice::DIGIT_KEYS);
     style::hint(&format!(
         "↑ ↓ choose · Enter runs · 1 to {last} run at once · Esc quits"
     ));
@@ -183,17 +202,39 @@ fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
     })
 }
 
-/// Runs `mhfe password` on the private screen, again on every Enter, until Escape returns to the
-/// menu. Each password replaces the one before on the screen, which is cleared when the person
-/// leaves; the generator wipes its own copy as soon as it has shown it, before a key is read.
+/// Runs `mhfe password` on the private screen, of the kind the person chooses first, again on
+/// every Enter, until Escape returns to the menu. Each password replaces the one before on the
+/// screen, which is cleared when the person leaves; the generator wipes its own copy as soon as it
+/// has shown it, before a key is read.
 fn make_passwords() -> Result<(), Failure> {
+    let question = Question {
+        text: "What kind of password?",
+        explanation: &[],
+        more: Some(readme::PASSWORD),
+        record: None,
+    };
+    // The answers with the options of mhfe password they choose.
+    let kinds: [(Answer, Option<&str>); 2] = [
+        (Answer::new("Five dice words", "easy to say and type"), None),
+        // --chars alone means sixteen characters.
+        (
+            Answer::new("Sixteen random characters", "letters and digits"),
+            Some("--chars"),
+        ),
+    ];
+    let (answers, options): (Vec<Answer>, Vec<Option<&str>>) = kinds.into_iter().unzip();
+    // Escape here returns to the menu too.
+    let Some(kind) = choice::choose(&question, &answers, None)? else {
+        return Ok(());
+    };
+    let mut arguments = vec![OsString::from("password")];
+    arguments.extend(options[kind].map(OsString::from));
     let input = terminal::Input::new(false);
-    let arguments = [OsString::from("password")];
     let screen = terminal::PrivateScreen::enter_to_show(&input);
     loop {
         run_command(&arguments)?;
         eprintln!();
-        if !wait_for_enter("Press Enter to generate other words (Esc returns to the menu).")? {
+        if !wait_for_enter("Press Enter for another password (Esc returns to the menu).")? {
             return Ok(());
         }
         screen.clear();

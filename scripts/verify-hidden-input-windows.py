@@ -5,7 +5,7 @@
 The Windows counterpart of scripts/verify-hidden-input.py, for CI on a Windows machine; it needs
 the pywinpty package, pinned in scripts/verify-hidden-input-windows-requirements.txt. The default
 program is target\\debug\\mhfe.exe. It drives `mhfe check --fingerprint --pim 0`, which reads the
-container on a private screen, taken at once, and then the password on another, and stops
+container on a step of its own, taken at once, and then the container password on another, and stops
 the tool before a fingerprint is given, so no memory is reserved and Argon2 never runs; the PIM
 given skips the question of the settings. Only the public zero-12 test container is used. The pseudo-console redraws
 the screen in its own way, so where the password is shown is checked in the Unix pseudo-terminal
@@ -53,7 +53,9 @@ HELP_ENTRY = PASSWORD_ENTRY + 2
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN = "Esc quits"
 BACK_TO_MENU = "Press Enter to return to the menu (Esc quits)."
-PASSWORD_AGAIN = "Press Enter to generate other words (Esc returns to the menu)."
+PASSWORD_AGAIN = "Press Enter for another password (Esc returns to the menu)."
+# The question of the password entry: five dice words, or sixteen random characters.
+PASSWORD_KIND = "What kind of password?"
 ESCAPE = "\x1b"
 CONTROLS = {
     "TAB": "\t",
@@ -109,9 +111,9 @@ class Session:
 
     def at_password_prompt(self):
         self.wait_for("original: ")
-        # The container is read on its own private screen and taken at once.
+        # The container is read on a step of its own and taken at once.
         self.type(CONTAINER + "\r")
-        self.wait_for("Password: ")
+        self.wait_for("Container password: ")
 
 
 def check_password(label, password, expected):
@@ -130,6 +132,8 @@ def check_menu():
     try:
         session.wait_for(MENU_SHOWN)
         session.type(CTRL_UP + DOWN * PASSWORD_ENTRY + UP + ENTER)
+        session.wait_for(PASSWORD_KIND)
+        session.type(ENTER)
         # The password and this prompt may arrive together, and wait_for looks only at new text.
         session.wait_for(PASSWORD_AGAIN)
         assert "bits" in session.output, "menu: the arrow keys did not choose mhfe password"
@@ -139,6 +143,9 @@ def check_menu():
         session.type(ESCAPE)
         session.wait_for(MENU_SHOWN)
         session.type(str(PASSWORD_ENTRY))
+        session.wait_for(PASSWORD_KIND)
+        # The second time, random characters.
+        session.type("2")
         session.wait_for(PASSWORD_AGAIN)
         session.type("q")
         session.wait_for(MENU_SHOWN)

@@ -21,6 +21,7 @@ use std::io::{self, IsTerminal, Write};
 use anstream::eprintln;
 
 use crate::exit::Failure;
+use crate::flow::{self, Kind};
 use crate::hidden_input::{self, Key};
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
@@ -86,8 +87,20 @@ pub fn can_run() -> bool {
 
 /// Asks `question` and returns the index of the chosen answer, or `None` when the person pressed
 /// Escape or q; the block is then erased without a record. The first answer is highlighted at the
-/// start, so that Enter alone chooses it.
+/// start, so that Enter alone chooses it. In a command shown one step at a time the question is a
+/// step of its own.
 pub fn choose(
+    question: &Question,
+    answers: &[Answer],
+    help: Option<Help>,
+) -> Result<Option<usize>, Failure> {
+    flow::step();
+    choose_here(question, answers, help)
+}
+
+/// [`choose`] below what the screen shows already, for a question about it, such as whether a
+/// phrase shown matches the owner's record.
+pub fn choose_here(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
@@ -135,7 +148,7 @@ pub fn choose(
 
 /// The line that records an answer: a grey label and the answer in cyan, as a fact of a summary.
 pub fn record(label: &str, answer: &str) {
-    style::fact(label, paint(ACCENT, answer));
+    style::fact_as(Kind::Record, label, paint(ACCENT, answer));
 }
 
 /// Draws the question block and returns how many lines it took.
@@ -176,7 +189,7 @@ pub fn draw_question(question: &Question) -> usize {
             eprintln!();
             lines += 1;
         }
-        lines += style::more(place);
+        lines += style::more_here(place);
     }
     if !question.explanation.is_empty() || question.more.is_some() {
         eprintln!();
@@ -209,7 +222,7 @@ fn hint(answers: usize, help_hint: Option<&str>) -> String {
 
 /// Answers that a digit key chooses at once: 1 to 9. Further answers are reached with the arrows
 /// and show no number.
-const DIGIT_KEYS: usize = 9;
+pub(crate) const DIGIT_KEYS: usize = 9;
 
 /// Draws one line per entry, a label and a grey note, and returns how many lines they took. The
 /// highlighted entry has a cyan marker and a bold label, so that it stands out also without
