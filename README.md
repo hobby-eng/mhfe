@@ -180,10 +180,12 @@ offer their answers as a list: choose with the arrow keys and Enter, or press an
 Escape cancels.
 
 Use it on a trusted computer that stays offline while the phrase and the password are on it, best a
-Linux system started from a USB stick with the network off. On Linux the kernel also keeps MHFE
-itself from opening any network connection or writing any file while it handles a secret; a command
-started directly, not from the start menu, also runs in a network of its own without any interface,
-where the system allows it, and its summary then says "no network at all". On Windows, Windows PE
+Linux system started from a USB stick with the network off. On Linux MHFE also applies kernel
+restrictions against creating sockets and opening files for writing; the command's summary shows
+which restrictions took effect. A command started directly, not from the start menu, also runs in
+its own network namespace where the system allows it, with only inactive loopback and no external
+routes. Descriptors already open remain usable, including sockets and redirected output, so these
+restrictions do not replace a trusted offline environment. On Windows, Windows PE
 from a USB stick is better than your everyday system; `mhfe.exe` needs nothing beyond Windows
 itself, though it has not been tested in Windows PE yet.
 

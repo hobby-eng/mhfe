@@ -104,6 +104,8 @@ Planned as version 0.5.0.
   commands now have sections of their own, and a grey "More:" line links to the section that
   explains a question, a warning or a result. After an encryption, two lines say what to keep and
   what to do next.
+- Arrow-key menus redraw correctly after the terminal width changes. Answer lists recount
+  wrapped rows while leaving the phrase above a confirmation visible.
 - The program and its documents say "seed phrase" where they said "recovery phrase", so that it
   is not confused with recovering one: `mhfe decrypt` is now "Recover a seed phrase".
 - Secrets stay out of core dumps and swap: the tool forbids core dumps and, on Linux, other
@@ -111,12 +113,14 @@ Planned as version 0.5.0.
   passphrase in locked memory, and marks Argon2's work area to be left out of a dump. A typed line
   stays locked until it is wiped, and a page that holds several secrets stays locked until the last
   of them is wiped. On Linux it warns before any secret is typed when swap is not encrypted.
-- On Linux the kernel enforces that `encrypt`, `decrypt`, `check`, `rekey`, `new`, `wallets` and
-  `password` stay offline and write no file: seccomp refuses sockets, and io_uring, through which
+- On Linux `encrypt`, `decrypt`, `check`, `rekey`, `new`, `wallets` and
+  `password` apply kernel restrictions: seccomp refuses socket creation, and io_uring, through which
   the kernel could create one unseen, and Landlock refuses file writes, for every thread the command
-  starts. A command started directly also runs in a network namespace of its own without any
-  interface, where the system allows user namespaces, and its summary then says "no network at
-  all". The summary shows it; the start menu runs each command in an isolated thread.
+  starts. A command started directly also runs in its own network namespace with only inactive
+  loopback and no external routes where the system allows user namespaces. The summary reports
+  the restrictions; the start menu runs each command in an isolated thread. Descriptors already
+  open, including sockets and writable files, remain usable. `serve` keeps its localhost listener
+  and encryption/decryption keep their Argon2 worker threads.
 - `mhfe check` compares with a receiving address of twelve coins instead of Bitcoin alone: Bitcoin,
   Ethereum and every EVM network, XRP, Tron, Zcash (transparent), Dogecoin, Bitcoin Cash, Litecoin,
   Ethereum Classic, Cosmos, Injective and Dash, for Dash both Core `X…` and Platform payment

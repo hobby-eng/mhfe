@@ -61,7 +61,7 @@ impl Needs {
 pub struct Isolation {
     pub no_network: bool,
     pub no_writes: bool,
-    /// The process runs in a network namespace of its own, without any network interface.
+    /// The process runs in its own network namespace, with only an inactive loopback interface.
     pub empty_network: bool,
 }
 
@@ -74,7 +74,8 @@ thread_local! {
 
 /// Forbids the calling thread, and every thread it starts afterwards, what `needs` does not
 /// include, as far as the kernel allows: sockets through seccomp, writes to files through
-/// Landlock (Linux 5.13 and later). Files and terminals that are already open stay usable. Returns
+/// Landlock (Linux 5.13 and later). Descriptors already open, including sockets, files and
+/// terminals, stay usable. Returns
 /// what is now enforced; elsewhere than on Linux nothing is.
 pub fn isolate(needs: Needs) -> Isolation {
     let isolation = isolate_thread(needs);
@@ -108,9 +109,10 @@ fn isolate_thread(needs: Needs) -> Isolation {
     }
 }
 
-/// A network namespace of its own for the process, which has no network interface but a loopback
-/// that stays down: no socket made in any way, past the seccomp filter or through it, reaches
-/// anything. An unprivileged process may create one only together with a user namespace of its
+/// A network namespace of its own for the process, with only a loopback interface that stays
+/// down and no external routes. Previously opened sockets remain in their original namespace;
+/// this supplements the socket-creation filter rather than revoking inherited descriptors.
+/// An unprivileged process may create one only together with a user namespace of its
 /// own, which the kernel allows only while the process has a single thread, as a command started
 /// directly has at this point, and only where the system allows user namespaces. A command of the
 /// start menu, which runs in a thread of the menu, does not get one.
@@ -128,8 +130,8 @@ fn isolate_thread(_needs: Needs) -> Isolation {
     Isolation::default()
 }
 
-/// A seccomp filter that refuses the creation of any socket with EACCES. Without a socket nothing
-/// can be sent or received over a network; Unix sockets go too, which the tool does not use. It
+/// A seccomp filter that refuses the creation of any socket with EACCES. Previously opened sockets
+/// remain usable; Unix socket creation is refused too, which the tool does not use. It
 /// refuses io_uring altogether as well: its operations, a socket among them since Linux 5.19
 /// (IORING_OP_SOCKET), run inside the kernel without a system call of their own, so the filter
 /// would never see them (AUD-008-SEC001). Nothing in the tool uses io_uring.
@@ -224,7 +226,8 @@ mod seccomp {
 }
 
 /// A Landlock ruleset that handles every right to change the file system and grants none, so that
-/// no file can be written, created, renamed or removed; reading stays unrestricted. On Linux 6.7
+/// files cannot be opened for writing, created, renamed or removed; descriptors already open for
+/// writing stay usable, and reading stays unrestricted. On Linux 6.7
 /// and later it also refuses TCP bind and connect, besides seccomp.
 #[cfg(target_os = "linux")]
 mod landlock {

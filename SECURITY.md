@@ -94,15 +94,18 @@ Never include a real seed phrase, password, private key or wallet file.
   call the filter sees; and under a Landlock ruleset that refuses every write to the file system
   (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect). Both cover every thread the
   command starts, Argon2's included, and cannot be undone. A command started directly also moves
-  into a network namespace of its own, which has no network interface at all, so that a socket made
-  in any way reaches nothing; where the system allows no user namespaces it runs on without one,
-  and its summary says "no network" instead of "no network at all". The start menu runs each
+  into a network namespace of its own, with only inactive loopback and no external routes; where
+  the system allows no user namespaces it runs on without one. The summary distinguishes
+  "isolated network" from "new sockets blocked" and reports file writes as restricted. The start menu runs each
   command in a thread of its own, so that it can still start `mhfe serve`, which is not isolated
   because the browser it opens must write its profile; a thread cannot get a namespace of its own,
   so the menu's commands have the filter and the ruleset only. The summary of a command says what
-  the kernel enforces. A fault or a tampered dependency therefore cannot send a secret away or leave
-  it in a file; the program's own output goes only to the terminal or to where standard output is
-  redirected.
+  the kernel enforces. These boundaries do not revoke descriptors already open: an inherited
+  socket remains in its original network namespace, and an already writable file, pipe or
+  redirected standard output remains writable. They therefore restrict new access rather than
+  guarantee containment of arbitrary compromised code. Start the tool from a trusted terminal
+  in the offline environment described above. `serve` remains outside these command restrictions
+  so that a browser can reach its localhost listener.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 

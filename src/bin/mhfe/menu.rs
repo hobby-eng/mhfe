@@ -59,15 +59,12 @@ impl Entry {
 }
 
 pub fn run() -> Result<i32, Failure> {
-    let title_lines = style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
-    eprintln!();
-    let hint_lines =
-        style::hint("Encrypts a seed phrase into a password-protected container and recovers it.");
+    let header_lines = draw_header();
     let entries = entries();
     let mut selected = 0;
     // The lines the menu takes on the screen: the first time its title, blank lines and hint too,
     // later the wait to return to it.
-    let mut menu_lines = title_lines + 1 + hint_lines;
+    let mut menu_lines = header_lines;
     loop {
         eprintln!();
         menu_lines += 1;
@@ -110,6 +107,15 @@ pub fn run() -> Result<i32, Failure> {
         // The blank line and the rows of the wait.
         menu_lines = 1 + style::rows(wait);
     }
+}
+
+/// The menu heading, also redrawn after a width change discards the old layout.
+fn draw_header() -> usize {
+    let title_lines = style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
+    eprintln!();
+    title_lines
+        + 1
+        + style::hint("Encrypts a seed phrase into a password-protected container and recovers it.")
 }
 
 /// The entries: the fast mode first when a browser tool and its checksum file lie next to the
@@ -167,10 +173,23 @@ fn choose(
     // The terminal reads single keys before the menu appears, as a hidden prompt does, so that a
     // key pressed as soon as the menu shows is read as a key and never echoed.
     hidden_input::with_keys(|next_key| {
-        let drawn_lines = draw(entries, *selected);
+        let mut columns = hidden_input::columns();
+        let mut drawn_lines = draw(entries, *selected);
         *menu_lines += drawn_lines;
         loop {
-            match next_key()? {
+            let key = next_key()?;
+            let current_columns = hidden_input::columns();
+            if current_columns != columns {
+                // Terminals differ in whether a resize reflows existing rows. Discard that
+                // layout before any key, including Enter or Escape, uses its old row count.
+                write_control("\x1b[2J\x1b[H")?;
+                *menu_lines = draw_header();
+                eprintln!();
+                drawn_lines = draw(entries, *selected);
+                *menu_lines += 1 + drawn_lines;
+                columns = current_columns;
+            }
+            match key {
                 Key::Up => *selected = (*selected + entries.len() - 1) % entries.len(),
                 Key::Down => *selected = (*selected + 1) % entries.len(),
                 Key::Enter => return Ok(Some(*selected)),
@@ -182,7 +201,9 @@ fn choose(
                 Key::Digit(_) | Key::Help | Key::Other => continue,
             }
             write_control(&redraw_from(drawn_lines))?;
-            draw(entries, *selected);
+            *menu_lines = menu_lines.saturating_sub(drawn_lines);
+            drawn_lines = draw(entries, *selected);
+            *menu_lines += drawn_lines;
         }
     })
 }
