@@ -17,6 +17,8 @@ pub const SETTINGS: &str = section!("settings-pim-and-memory-level");
 pub const CONTAINER_LENGTH: &str = section!("24-words-or-the-same-length");
 /// Making a password, and what makes one strong.
 pub const PASSWORD: &str = section!("mhfe-password");
+/// A password with a check word: what it repairs, and what it does not tell.
+pub const CHECK_WORD: &str = section!("a-check-word");
 /// What to keep after an encryption, and the rehearsal before relying on it.
 pub const ENCRYPT: &str = section!("mhfe-encrypt");
 /// What a check can and cannot tell.
@@ -44,6 +46,7 @@ mod tests {
         SETTINGS,
         CONTAINER_LENGTH,
         PASSWORD,
+        CHECK_WORD,
         ENCRYPT,
         CHECK,
         DECRYPT,

@@ -7,6 +7,7 @@ use anstream::{eprintln, println};
 use clap::Args;
 use zeroize::{Zeroize, Zeroizing};
 
+use crate::check_word;
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::{self, Flow};
 use crate::style::{self, STRONG};
@@ -53,6 +54,10 @@ pub struct Options {
     #[arg(long, long_help = dice_help())]
     dice: bool,
 
+    /// Five words and a check word that repairs one mistyped word
+    #[arg(long, conflicts_with_all = ["words", "chars"], long_help = check_word_help())]
+    check_word: bool,
+
     /// Random characters instead of words, N of them (default 16)
     #[arg(
         long,
@@ -71,6 +76,16 @@ fn words_help() -> String {
         "Number of words, 1 to 32 (default 5; fewer than 4 are weak).",
         "Each word adds about 12.9 bits: four words give about 51.7 bits, five about 64.6, six \
          about 77.5. Fewer than four get a warning.",
+    ])
+}
+
+fn check_word_help() -> String {
+    style::option_help(&[
+        "Five words and a check word that repairs one mistyped word.",
+        "The sixth word is computed from the five before it (MHFE-PASSWORD-CHECK-1). When the \
+         password is typed, it restores one word that is missing or misspelt and notices one \
+         wrong word, before the long wait. It adds no strength: the password keeps about 64.6 \
+         bits, and the check word must stay as secret as the rest.",
     ])
 }
 
@@ -113,6 +128,10 @@ pub fn help() -> String {
             ),
             ("mhfe password --dice --words 6", "Six words from real dice"),
             (
+                "mhfe password --check-word",
+                "Five words and a check word, about 64.6 bits",
+            ),
+            (
                 "mhfe password --chars",
                 "Sixteen random characters, about 93.3 bits",
             ),
@@ -150,9 +169,17 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         // The rolls are typed on a step of their own.
         flow::step();
     }
+    let drawn_words = if options.check_word {
+        check_word::DRAWN_WORDS
+    } else {
+        options.words
+    };
+    let all_words = drawn_words + usize::from(options.check_word);
     // Built in place at its final size, so no reallocation leaves a copy of the password.
-    let mut password = Zeroizing::new(String::with_capacity(options.words * (LONGEST_WORD + 1)));
-    for number in 1..=options.words {
+    let mut password = Zeroizing::new(String::with_capacity(all_words * (LONGEST_WORD + 1)));
+    // The indexes the check word is computed from, wiped when done.
+    let mut drawn = Zeroizing::new([0; check_word::DRAWN_WORDS]);
+    for number in 1..=drawn_words {
         let index = if options.dice {
             index_from_dice(&mut input, number)?
         } else {
@@ -162,14 +189,25 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             password.push(' ');
         }
         password.push_str(words[index]);
+        if let Some(slot) = drawn.get_mut(number - 1) {
+            *slot = index;
+        }
     }
+    let strength = strength_text(drawn_words * MILLIBITS_PER_WORD);
+    if !options.check_word {
+        return show(
+            &password,
+            &format!("{drawn_words} words from the EFF list, about {strength} bits."),
+            &[],
+            flow,
+        );
+    }
+    password.push(' ');
+    password.push_str(words[check_word::check_index(&drawn)]);
     show(
         &password,
-        &format!(
-            "{} words from the EFF list, about {} bits.",
-            options.words,
-            strength_text(options.words * MILLIBITS_PER_WORD)
-        ),
+        &format!("5 words from the EFF list and a check word, about {strength} bits."),
+        &["The last word is the check word; it adds no strength and is just as secret."],
         flow,
     )
 }
@@ -177,10 +215,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 /// The title of `mhfe password`.
 const TITLE: &str = "Make a password";
 
-/// Shows a new password with how strong it is. At a terminal it is set apart and in bold for
-/// writing down, on a step of its own that is cleared when the person is done; a script gets the
-/// bare password.
-fn show(password: &str, strength: &str, flow: Flow) -> Result<i32, Failure> {
+/// Shows a new password with how strong it is and `notes` about it. At a terminal it is set apart
+/// and in bold for writing down, on a step of its own that is cleared when the person is done; a
+/// script gets the bare password.
+fn show(password: &str, strength: &str, notes: &[&str], flow: Flow) -> Result<i32, Failure> {
     flow::step();
     if std::io::stdout().is_terminal() {
         println!("  {STRONG}{password}{STRONG:#}");
@@ -189,6 +227,9 @@ fn show(password: &str, strength: &str, flow: Flow) -> Result<i32, Failure> {
         println!("{password}");
     }
     style::ok(strength);
+    for note in notes {
+        style::hint(note);
+    }
     style::hint("Shown only once and not stored: write it down, apart from the container.");
     if flow::is_active() {
         terminal::wait_to_leave()?;
@@ -226,6 +267,7 @@ fn run_characters(count: usize) -> Result<i32, Failure> {
             "{count} random characters, about {} bits.",
             strength_text(count * MILLIBITS_PER_CHARACTER)
         ),
+        &[],
         flow,
     )
 }

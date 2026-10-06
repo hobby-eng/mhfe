@@ -9,6 +9,7 @@
 #![deny(unsafe_code)]
 
 mod check;
+mod check_word;
 mod choice;
 mod decrypt;
 mod diceware;

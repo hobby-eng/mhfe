@@ -55,7 +55,8 @@ HELP_FROM_PASSWORD = 2
 MENU_SHOWN = "Esc quits"
 BACK_TO_MENU = "Press Enter to return to the menu (Esc quits)."
 PASSWORD_AGAIN = "Press Enter for another password (Esc returns to the menu)."
-# The question of the password entry: five dice words, or sixteen random characters.
+# The question of the password entry: five dice words, five words and a check word, or sixteen
+# random characters.
 PASSWORD_KIND = "What kind of password?"
 ESCAPE = "\x1b"
 CONTROLS = {
@@ -146,7 +147,7 @@ def check_menu():
         session.type(str(PASSWORD_ENTRY))
         session.wait_for(PASSWORD_KIND)
         # The second time, random characters.
-        session.type("2")
+        session.type("3")
         session.wait_for(PASSWORD_AGAIN)
         session.type("q")
         session.wait_for(MENU_SHOWN)
