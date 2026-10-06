@@ -603,9 +603,13 @@ A release has archives for Linux (x86-64 and ARM64), macOS (Intel and Apple sili
 x86-64 program fits every 64-bit x86 processor: it uses SSSE3 where the processor has it, 7 to 10%
 faster ([measured](docs/measurements/README.md)), and SSE2 otherwise.
 
-Check a download against the release's `SHA256SUMS` before you use it:
+Check a download against the release's `SHA256SUMS` before you use it, and from v0.5.0 check the
+OpenPGP signature of that file too: import `RELEASE-SIGNING-KEY.asc` from the release, compare its
+fingerprint with `28FC51B1DB80DF2101128CB30EDD4814591DD095`, as given in
+[docs/RELEASING.md](docs/RELEASING.md) and at `https://github.com/hobby-eng.gpg`, then run:
 
 ```bash
+gpg --verify SHA256SUMS.asc SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
@@ -614,7 +618,7 @@ workflow built it, from which commit. Check it on the computer you downloaded th
 the check needs the network, and only then carry the file to the offline computer:
 
 ```bash
-gh attestation verify mhfe-v0.4.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
+gh attestation verify mhfe-v0.5.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
 ```
 
 ## For developers
