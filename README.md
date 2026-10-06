@@ -199,6 +199,15 @@ lines; a grey "More:" line links to the section here that explains them. At a te
 of a command has a clean screen of its own, and when the command ends the main screen keeps only a
 short summary of the answers and results.
 
+The line under every seed phrase or container that mhfe shows gives its master key fingerprint:
+eight hexadecimal digits that wallet apps show to tell wallets apart (Sparrow calls it "Master
+fingerprint"). A BIP39 passphrase changes it, so the line says which wallet it is for: with your
+passphrase in `mhfe new`, and otherwise the wallet without one, since `mhfe decrypt`, `rekey` and
+`wallets` do not know the passphrase it is used with; for a wallet with one, `mhfe check
+--fingerprint` compares the fingerprint your wallet app shows. Under a container, it is the
+fingerprint of the container's own words, not of your wallet: do not note it as your wallet's. The
+line appears where the words appear, never in the summary or in the output for scripts.
+
 ### `mhfe password`
 
 `mhfe password` makes a password of random words from the

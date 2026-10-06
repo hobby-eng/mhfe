@@ -142,7 +142,7 @@ fn main_help() -> String {
             ),
             (
                 "mhfe rekey",
-                "Change the password, never showing the phrase",
+                "Change the password or settings of a container",
             ),
             ("mhfe wallets", "Open hidden wallets with other passwords"),
             ("mhfe repair", "Repair a plate with its repair words"),

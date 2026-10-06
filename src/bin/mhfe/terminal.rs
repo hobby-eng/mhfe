@@ -21,7 +21,7 @@ use crate::flow::{self, Kind};
 use crate::hidden_input;
 use crate::locked_text::LockedText;
 use crate::settings::Operation;
-use crate::style::{self, paint, ACCENT, MUTED};
+use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
 /// Longest line accepted, line break included. The buffer is reserved at this size and reading
 /// stops there, so it is never reallocated, which would leave an unwiped copy of a secret
@@ -315,7 +315,7 @@ fn strip_line_ending(line: &mut String) {
 /// Prints a phrase to standard output. For a person: in a frame, numbered, for comparing with
 /// what was written down, and below it on one plain line, for copying. For a script: the plain
 /// line only.
-pub fn print_phrase(phrase: &str, input: &Input) {
+pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) {
     if input.is_script() {
         println!("{phrase}");
         return;
@@ -325,7 +325,50 @@ pub fn print_phrase(phrase: &str, input: &Input) {
     }
     eprintln!("{}", paint(MUTED, "On one line, for copying:"));
     println!("{phrase}");
+    print_fingerprint(phrase, wallet);
 }
+
+/// The wallet a phrase shown opens, whose master key fingerprint is shown under it.
+pub enum Wallet<'a> {
+    /// A new seed phrase with the BIP39 passphrase chosen for it, empty for none.
+    NewPassphrase(&'a str),
+    /// A seed phrase whose BIP39 passphrase the command does not know: the wallet without one.
+    NoPassphrase,
+    /// A container, a valid phrase itself: the wallet its own words open, without a passphrase,
+    /// which is not the owner's wallet.
+    Container,
+}
+
+/// The BIP32 master key fingerprint under a phrase, the eight hex digits that wallet apps show
+/// (Sparrow: "Master fingerprint"), to tell which wallet it is. A BIP39 passphrase changes it, so
+/// the note says which wallet it belongs to. It goes where the words go, to the terminal; when
+/// they go to a file, it would be left alone on the screen and its history, so it is not shown.
+/// Scripts get the phrase alone.
+fn print_fingerprint(phrase: &str, wallet: Wallet) {
+    if !(io::stdout().is_terminal() && io::stderr().is_terminal()) {
+        return;
+    }
+    let (passphrase, which) = match wallet {
+        Wallet::NewPassphrase("") => ("", "no BIP39 passphrase"),
+        Wallet::NewPassphrase(passphrase) => (passphrase, "with your BIP39 passphrase"),
+        Wallet::NoPassphrase => ("", "if the wallet has no BIP39 passphrase"),
+        Wallet::Container => ("", "of the container itself, not your wallet"),
+    };
+    // Every phrase shown is a valid BIP39 phrase. Should the fingerprint fail all the same, the
+    // phrase above is what matters, so it stands without one.
+    let Ok(fingerprint) = mhfe::wallet::master_fingerprint(phrase, passphrase) else {
+        return;
+    };
+    eprintln!(
+        "{} {}  {}",
+        paint(MUTED, FINGERPRINT_LABEL),
+        paint(STRONG, hex::encode(fingerprint)),
+        paint(MUTED, format!("({which})"))
+    );
+}
+
+/// The name `mhfe check --fingerprint` asks for, so that the same number is recognised there.
+const FINGERPRINT_LABEL: &str = "Master key fingerprint";
 
 /// Switches to the terminal's alternate screen, clears it and moves to its top left (xterm
 /// control sequences, also understood by tmux and most terminals).

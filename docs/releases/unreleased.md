@@ -54,6 +54,11 @@ Planned as version 0.5.0.
 - A phrase that was not asked for as a result is shown only on a private screen: `mhfe new` and
   `mhfe wallets` refuse to start, and `mhfe rekey` does not offer the owner's comparison, when
   standard output goes to a file, a pipe or a terminal without a private screen.
+- Every seed phrase and container shown at a terminal has its master key fingerprint on the line
+  below, for comparing with a wallet app: with the new wallet's BIP39 passphrase in `mhfe new`, and
+  without one in `mhfe decrypt`, `rekey` and `wallets`, which do not know it. Under a container
+  (`encrypt`, `new`, `rekey`, `repair`) it is the fingerprint of the container's own words, not of
+  the original wallet. The summary and the output for scripts do not show it.
 - Repair words for a plate (MHFE-REPAIR-1, an optional profile of the specification): 2, 4, 6 or
   8 extra words on a card kept apart from the plate, a Reed–Solomon code over its words, repair
   unreadable or wrongly copied words without the password. `mhfe encrypt`, `new` and `rekey` offer

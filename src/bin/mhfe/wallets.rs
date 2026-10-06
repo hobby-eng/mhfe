@@ -18,7 +18,7 @@ use crate::flow::{self, Flow};
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING};
-use crate::terminal::{self, Input, Progress};
+use crate::terminal::{self, Input, Progress, Wallet};
 
 #[derive(Args)]
 pub struct Options {
@@ -145,7 +145,9 @@ const NO_PRIVATE_SCREEN: &str = "mhfe wallets shows wallets only on a private sc
 fn show_wallet(input: &Input, number: usize, phrase: &str) {
     eprintln!();
     eprintln!("{}", paint(HEADING, format!("Wallet {number}, 24 words")));
-    terminal::print_phrase(phrase, input);
+    // The main wallet's passphrase, asked only to refuse wallets that pass its check, is not the
+    // hidden wallet's: a hidden wallet should have a passphrase of its own, or none.
+    terminal::print_phrase(phrase, Wallet::NoPassphrase, input);
     style::hint("No need to write it down: the container and this password give it again.");
 }
 
