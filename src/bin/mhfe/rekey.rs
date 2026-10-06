@@ -290,18 +290,24 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
 
 /// The length of the seed phrase, which the owner states: a same-length container has its own,
 /// and for a 24-word container it comes from --words or is asked. The built-in check of a short
-/// phrase is taken at that length only.
+/// phrase is taken at that length only. A length given with --words is checked before the
+/// password is asked: one that no phrase has, or one that contradicts a same-length container, is
+/// refused (AUD-008-FUN002).
 fn phrase_length(
     input: &mut Input,
     given: Option<usize>,
     suite: Suite,
     container_words: usize,
 ) -> Result<WordCount, Failure> {
+    let given = given.map(WordCount::new).transpose()?;
     if suite == Suite::SameLength {
+        if given.is_some_and(|words| words.get() != container_words) {
+            return Err(MhfeError::LengthChoiceNotApplicable { container_words }.into());
+        }
         return Ok(WordCount::new(container_words)?);
     }
     if let Some(words) = given {
-        return Ok(WordCount::new(words)?);
+        return Ok(words);
     }
     let answers = LENGTHS.map(|words| Answer::new(format!("{words} words"), ""));
     let question = Question::new("How many words does your seed phrase have?", "Phrase");
@@ -326,5 +332,44 @@ fn read_different_password(
         style::retry_next(
             "This is the old password, which gives the old container. Choose another.",
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// AUD-008-FUN002: a length given for a same-length container must be its own, and a length
+    /// that no phrase has is refused, both before the password is asked.
+    #[test]
+    fn a_length_given_must_fit_the_container() {
+        let mut input = Input::new(false);
+        let length = |input: &mut Input, given, suite, words| {
+            phrase_length(input, given, suite, words).map(WordCount::get)
+        };
+        for words in [12, 15, 18, 21] {
+            let suite = Suite::SameLength;
+            assert_eq!(length(&mut input, None, suite, words).ok(), Some(words));
+            assert_eq!(
+                length(&mut input, Some(words), suite, words).ok(),
+                Some(words)
+            );
+            for other in LENGTHS.into_iter().filter(|&other| other != words) {
+                let refused = length(&mut input, Some(other), suite, words).unwrap_err();
+                assert!(
+                    refused.message.contains("keeps the length"),
+                    "{}",
+                    refused.message
+                );
+            }
+            for impossible in [0, 13, 25] {
+                assert!(length(&mut input, Some(impossible), suite, words).is_err());
+            }
+        }
+        let suite = Suite::TwentyFourWords;
+        for words in LENGTHS {
+            assert_eq!(length(&mut input, Some(words), suite, 24).ok(), Some(words));
+        }
+        assert!(length(&mut input, Some(13), suite, 24).is_err());
     }
 }

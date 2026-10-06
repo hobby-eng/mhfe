@@ -364,13 +364,18 @@ fn parse_dash_platform(text: &str) -> Result<Address, MhfeError> {
     };
     let data: Vec<u8> = decoded.byte_iter().collect();
     match data.split_first() {
-        Some((&DASH_PLATFORM_P2PKH, hash)) if hash.len() == 20 => Ok(Address {
+        Some((&DASH_PLATFORM_P2PKH, hash)) if hash.len() != 20 => {
+            Err(invalid_address("it has the wrong length"))
+        }
+        Some((&DASH_PLATFORM_P2PKH, _)) if !whole_payment_payload(&decoded) => {
+            Err(invalid_address("its checksum or format is wrong"))
+        }
+        Some((&DASH_PLATFORM_P2PKH, hash)) => Ok(Address {
             coin: Coin::Dash,
             testnet,
             address_type: AddressType::DashPlatform,
             program: hash.to_vec(),
         }),
-        Some((&DASH_PLATFORM_P2PKH, _)) => Err(invalid_address("it has the wrong length")),
         Some((&DASH_ORCHARD, _)) => Err(invalid_address(
             "it is shielded; use a Dash Core X… or Platform dash1k… address of the same wallet",
         )),
@@ -378,6 +383,22 @@ fn parse_dash_platform(text: &str) -> Result<Address, MhfeError> {
             "it is not the Platform payment address of a single key",
         )),
     }
+}
+
+/// Whether a Platform payment address holds its 21 bytes, the type byte and the 160-bit hash, as
+/// the one encoding Bech32 allows: 34 five-bit groups, whose last two bits are padding and zero
+/// (BIP173). byte_iter alone would read the same bytes from another group added at the end or from
+/// padding bits set, and take such a string for the address (AUD-008-FUN001).
+fn whole_payment_payload(decoded: &bech32::primitives::decode::CheckedHrpstring) -> bool {
+    /// 21 bytes are 168 bits: 34 groups of five bits, 170 bits, the last two of them padding.
+    const GROUPS: usize = 34;
+    const PADDING_MASK: u8 = 0b11;
+    let groups = decoded.data_part_ascii_no_checksum();
+    let padding_is_zero = groups
+        .last()
+        .and_then(|&last| bech32::Fe32::from_char(char::from(last)).ok())
+        .is_some_and(|last| last.to_u8() & PADDING_MASK == 0);
+    groups.len() == GROUPS && padding_is_zero
 }
 
 /// Whether `text` starts with one of the Bech32 prefixes, in either case.
@@ -479,6 +500,8 @@ fn parse_bech32_account(
     prefix: &str,
     address_type: AddressType,
 ) -> Result<Address, MhfeError> {
+    const ACCOUNT_BYTES: usize = 20;
+    const ACCOUNT_DATA_GROUPS: usize = ACCOUNT_BYTES * 8 / 5;
     // Cosmos SDK accounts use Bech32 (BIP173), never Bech32m: the same data with the other
     // checksum is not a valid address (AUD-007-FUN001).
     use bech32::primitives::decode::CheckedHrpstring;
@@ -487,8 +510,13 @@ fn parse_bech32_account(
     if decoded.hrp().as_str().to_ascii_lowercase() != prefix {
         return Err(not_of(coin));
     }
+    // A 160-bit account has exactly 32 groups, with no padding. byte_iter alone discards
+    // incomplete trailing bytes and would accept an extra five-bit group (AUD-007-FUN003).
+    if decoded.data_part_ascii_no_checksum().len() != ACCOUNT_DATA_GROUPS {
+        return Err(invalid_address("it has the wrong length"));
+    }
     let program: Vec<u8> = decoded.byte_iter().collect();
-    if program.len() != 20 {
+    if program.len() != ACCOUNT_BYTES {
         return Err(invalid_address("it has the wrong length"));
     }
     Ok(Address {
@@ -1389,6 +1417,42 @@ mod tests {
         )
         .unwrap();
         assert!(Address::parse(Coin::Dash, &bech32).is_err());
+        // AUD-008-FUN001: a group added at the end, or padding bits set, keep a valid checksum and
+        // the same bytes for byte_iter; only the one encoding of the 21 bytes is an address.
+        {
+            use bech32::primitives::iter::{ByteIterExt, Fe32IterExt};
+            let hrp = bech32::Hrp::parse("dash").unwrap();
+            let with_checksum = |groups: &[bech32::Fe32]| -> String {
+                groups
+                    .iter()
+                    .copied()
+                    .with_checksum::<bech32::Bech32m>(&hrp)
+                    .chars()
+                    .collect()
+            };
+            let payload = [&[DASH_PLATFORM_P2PKH][..], &[0x11; 20]].concat();
+            let groups: Vec<bech32::Fe32> = payload.iter().copied().bytes_to_fes().collect();
+            let canonical = with_checksum(&groups);
+            assert!(Address::parse(Coin::Dash, &canonical).is_ok());
+            assert!(Address::parse(Coin::Dash, &canonical.to_ascii_uppercase()).is_ok());
+            let mut longer = groups.clone();
+            longer.push(bech32::Fe32::Q);
+            let mut padded = groups.clone();
+            let last = padded.len() - 1;
+            padded[last] = bech32::Fe32::try_from(padded[last].to_u8() | 1).unwrap();
+            for malformed in [with_checksum(&longer), with_checksum(&padded)] {
+                assert!(
+                    bech32::primitives::decode::CheckedHrpstring::new::<bech32::Bech32m>(
+                        &malformed
+                    )
+                    .is_ok()
+                );
+                for input in [malformed.clone(), malformed.to_ascii_uppercase()] {
+                    let error = Address::parse(Coin::Dash, &input).unwrap_err().to_string();
+                    assert!(error.contains("checksum or format"), "{input}: {error}");
+                }
+            }
+        }
         // The testnet Orchard address that multi-chain-wallet-tools pins for Dash's own format.
         let orchard =
             "tdash1zrhflqt5ly4r7q64wrktl6tf466x7h30vjkknaudxsckc3l28rp0qzzm27yta0683nnnd2qum8gyq";
@@ -1461,6 +1525,37 @@ mod tests {
             let text = bech32::encode::<bech32::Bech32>(hrp, &vec![7u8; length]).unwrap();
             let error = Address::parse(Coin::Cosmos, &text).unwrap_err().to_string();
             assert!(error.contains("wrong length"), "{length} bytes: {error}");
+        }
+    }
+
+    /// AUD-007-FUN003: these public vectors have a valid Bech32 checksum but an extra data group.
+    #[test]
+    fn cosmos_accounts_refuse_redundant_data_groups() {
+        use bech32::primitives::decode::CheckedHrpstring;
+        for (coin, text) in [
+            (
+                Coin::Cosmos,
+                "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0aqyjnds4",
+            ),
+            (
+                Coin::Cosmos,
+                "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0apey8cd8",
+            ),
+            (
+                Coin::Injective,
+                "inj1npvwllfr9dqr8erajqqr6s0vxnk2ak55qhk6md7",
+            ),
+            (
+                Coin::Injective,
+                "inj1npvwllfr9dqr8erajqqr6s0vxnk2ak55p2qwwsv",
+            ),
+        ] {
+            // Recompute neither the encoding nor checksum: retain the formerly accepted strings.
+            assert!(CheckedHrpstring::new::<bech32::Bech32>(text).is_ok());
+            for input in [text.to_owned(), text.to_ascii_uppercase()] {
+                let error = Address::parse(coin, &input).unwrap_err().to_string();
+                assert!(error.contains("wrong length"), "{input}: {error}");
+            }
         }
     }
 
