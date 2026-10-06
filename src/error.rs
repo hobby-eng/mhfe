@@ -33,6 +33,12 @@ pub enum MhfeError {
     /// The wallet a password opens on a container passes the check of a 12- to 21-word phrase, or
     /// the wallet check of a new phrase, so it cannot serve as a hidden wallet (rule I29).
     HiddenWalletPassesCheck,
+    /// Repair words that are not 2, 4, 6 or 8 English BIP39 words.
+    InvalidRepairWords(String),
+    /// The damage is more than the repair words can repair, or the card belongs to another plate.
+    RepairNotPossible {
+        repair_words: usize,
+    },
     InvalidPim(u32),
     InvalidMemoryLevel(u32),
     EmptyPassword,
@@ -128,6 +134,15 @@ impl fmt::Display for MhfeError {
                  built-in check of a shorter phrase, as the container's own password of a 12- to \
                  21-word phrase does, or the wallet check of a new phrase, by chance once in 65,536; \
                  recovery would take it for a verified or main wallet, so choose another password"
+            ),
+            Self::InvalidRepairWords(reason) => {
+                write!(f, "the repair words cannot be used: {reason}")
+            }
+            Self::RepairNotPossible { repair_words } => write!(
+                f,
+                "the plate cannot be repaired with {repair_words} repair words: more words are \
+                 damaged than they can repair (each repairs one unreadable word, two repair one \
+                 wrong word), or the card belongs to another plate"
             ),
             Self::InvalidPim(pim) => {
                 write!(
@@ -229,6 +244,8 @@ impl MhfeError {
             Self::ReferenceRequired => "REFERENCE_REQUIRED",
             Self::ReferenceMismatch => "REFERENCE_MISMATCH",
             Self::HiddenWalletPassesCheck => "HIDDEN_WALLET_PASSES_CHECK",
+            Self::InvalidRepairWords(_) => "INVALID_REPAIR_WORDS",
+            Self::RepairNotPossible { .. } => "REPAIR_NOT_POSSIBLE",
             Self::InvalidPim(_) => "INVALID_PIM",
             Self::InvalidMemoryLevel(_) => "INVALID_MEMORY_LEVEL",
             Self::EmptyPassword => "EMPTY_PASSWORD",

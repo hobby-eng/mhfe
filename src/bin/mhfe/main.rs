@@ -20,6 +20,7 @@ mod length_choice;
 mod locked_text;
 mod menu;
 mod new_wallet;
+mod plate_repair;
 mod protect;
 mod readme;
 mod rekey;
@@ -90,6 +91,12 @@ enum Command {
     /// Open hidden wallets on a container with other passwords
     #[command(long_about = wallets::about(), after_help = wallets::help())]
     Wallets(wallets::Options),
+    /// Repair a plate with its repair words
+    #[command(long_about = plate_repair::repair_about())]
+    Repair(plate_repair::RepairOptions),
+    /// Make repair words for a plate
+    #[command(long_about = plate_repair::words_about())]
+    RepairWords(plate_repair::WordsOptions),
     /// Make a strong password of words or random characters
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
@@ -137,6 +144,11 @@ fn main_help() -> String {
                 "Change the password, never showing the phrase",
             ),
             ("mhfe wallets", "Open hidden wallets with other passwords"),
+            ("mhfe repair", "Repair a plate with its repair words"),
+            (
+                "mhfe repair-words --count 4",
+                "Make four repair words for a plate",
+            ),
             ("mhfe password", "Make a strong password of five dice words"),
             (
                 "mhfe password --dice --words 6",
@@ -228,6 +240,8 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::New(options) => new_wallet::run(options),
         Command::Rekey(options) => rekey::run(options),
         Command::Wallets(options) => wallets::run(options),
+        Command::Repair(options) => plate_repair::run_repair(options),
+        Command::RepairWords(options) => plate_repair::run_words(options),
         Command::Password(options) => diceware::run(options),
         Command::SelfTest => self_test::run(),
         Command::Serve(options) => serve::run(options),

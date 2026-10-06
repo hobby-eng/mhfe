@@ -7,6 +7,7 @@ use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::engine::NativeEngine;
 use mhfe::memory::LockedPages;
+use mhfe::repair;
 use mhfe::{
     other_detected_lengths, read_phrase, Mhfe, MhfeError, NewContainer, Password, Suite, WorkFactor,
 };
@@ -16,6 +17,7 @@ use crate::choice;
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::flow::{self, Flow};
 use crate::length_choice;
+use crate::plate_repair;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::strength;
@@ -137,6 +139,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // carries such checks.
     let length_must_be_chosen = suite == Suite::TwentyFourWords
         && warn_if_detection_would_mislead(&original, original_words)?;
+    let repair_count = plate_repair::ask_when_creating(&mut input)?;
     let password = read_new_password(&mut input, Operation::Encrypt)?;
     let new = seal(
         &input,
@@ -145,6 +148,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &original,
         suite,
         &password,
+        repair_count,
     )?;
     drop(original);
     flow.finish();
@@ -158,7 +162,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             original_words,
             length_must_be_chosen,
             container_words,
-            &[],
+            plate_repair::to_keep(repair_count),
         ),
     );
     // The check above covered the words this program produced, not the copy the user wrote down.
@@ -184,6 +188,7 @@ pub fn seal(
     original: &str,
     suite: Suite,
     password: &Password,
+    repair_count: Option<usize>,
 ) -> Result<NewContainer, Failure> {
     let mut mhfe = settings::reserve_memory(work)?;
     let mut progress = Progress::start();
@@ -191,6 +196,10 @@ pub fn seal(
         progress.round_starts(round, rounds);
         Ok(())
     })?;
+    // The repair words of the new plate, shown and written with it (plate_repair.rs).
+    let card = repair_count
+        .map(|count| repair::repair_words(&new.words, count))
+        .transpose()?;
     // Only a person reading a terminal sees the container before its check, with the warning
     // that it is not verified yet. A script, or output redirected to a file or another program,
     // gets it only after the check: a program would take the first container it reads as final.
@@ -199,6 +208,10 @@ pub fn seal(
         check(&mut mhfe, &new, password, &mut progress)?;
         progress.finish();
         println!("{}", *new.words);
+        // After the check, which has passed here.
+        if let Some(card) = &card {
+            println!("{card}");
+        }
         if !input.is_script() {
             report_check(&Ok(()));
         }
@@ -216,6 +229,11 @@ pub fn seal(
         terminal::set_unverified_container_shown(false);
         progress.finish();
         report_check(&checked);
+        // The card is made from the container once its check has passed (the specification's
+        // MHFE-REPAIR-1), below it on the same screen.
+        if let (Ok(()), Some(card)) = (&checked, &card) {
+            plate_repair::print_card(card, input);
+        }
         if screen.is_active() {
             terminal::wait_to_leave()?;
             drop(screen);

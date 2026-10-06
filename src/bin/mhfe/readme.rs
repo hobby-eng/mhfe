@@ -31,6 +31,8 @@ pub const NEW: &str = section!("mhfe-new");
 pub const WALLETS: &str = section!("mhfe-wallets");
 /// What a failed self-test means.
 pub const SELF_TEST: &str = section!("mhfe-self-test");
+/// Repair words for a plate: what they repair, and where to keep them.
+pub const REPAIR: &str = section!("mhfe-repair");
 
 #[cfg(test)]
 mod tests {
@@ -49,6 +51,7 @@ mod tests {
         NEW,
         WALLETS,
         SELF_TEST,
+        REPAIR,
     ];
 
     /// The anchor GitHub gives a heading: lower case, spaces as hyphens, and only letters,

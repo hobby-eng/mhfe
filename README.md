@@ -397,6 +397,47 @@ To keep a hidden wallet hidden:
 
 Hidden wallets have 24 words for now.
 
+### `mhfe repair`
+
+A plate can rust, be scratched or be copied with a wrong word. Repair words are a few extra words,
+kept on a card apart from the plate, with which MHFE repairs the plate without the password: each
+repair word repairs one word that cannot be read, and two repair one word that is wrong. When you
+make a container with `mhfe encrypt`, `mhfe new` or `mhfe rekey`, MHFE asks whether you want them,
+four recommended:
+
+| Repair words | Unreadable words repaired | Or wrong words repaired |
+| ------------ | ------------------------- | ----------------------- |
+| 2            | 2                         | 1                       |
+| 4            | 4                         | 2                       |
+| 6            | 6                         | 3                       |
+| 8            | 8                         | 4                       |
+
+They appear under the container once its check has passed, as a card to write down: the name of
+the profile, MHFE-REPAIR-1, and the words numbered as `1/4` to `4/4`. The summary adds the card to
+what to keep. A new password or new settings give a new container, which needs a new card. For a
+container you already have, `mhfe repair-words` makes them; the start menu has one entry for both
+commands.
+
+`mhfe repair` repairs a plate: type its words with `?` for each word you cannot read, then the
+repair words, with `?` where needed too; the card can be typed as written, with its name and
+numbers. A word that is not in the BIP39 list counts as unreadable, and four letters of a word are
+enough. It shows the repaired container and every word it repaired with what was read there,
+never repairing silently; write them on the plate and rehearse with `mhfe check`. A detected
+decoding failure or invalid BIP39 checksum is rejected. Damage beyond the code's bound, or a card
+from another plate, can instead produce a wrong result that passes the checksum; the program cannot
+always recognise this. Successful decoding is therefore not confirmation of the intended wallet.
+
+Keep the card apart from the plate, so that one accident or one thief does not take both, and guard
+it like the plate: a container is what someone needs to try passwords, and whoever finds the card
+together with a damaged or partial copy of the plate can repair that copy as you can. The card
+alone also reduces the number of possible containers: eight repair words leave roughly `2^168`
+checksum-valid candidates for a 24-word container, but roughly `2^40` for a 12-word container in
+the idealized checksum model. These counts do not identify the true container or bypass its MHFE
+password, but the card is a partial copy and must be protected accordingly. The repair words use
+the optional Reed–Solomon profile
+[MHFE-REPAIR-1](https://github.com/hobby-eng/mhfe-spec#optional-repair-words-mhfe-repair-1) of the
+specification; [`src/repair.rs`](src/repair.rs) describes it byte for byte.
+
 ### `mhfe self-test`
 
 `mhfe self-test` checks this program on this computer against the published test vectors: it

@@ -54,6 +54,13 @@ Planned as version 0.5.0.
 - A phrase that was not asked for as a result is shown only on a private screen: `mhfe new` and
   `mhfe wallets` refuse to start, and `mhfe rekey` does not offer the owner's comparison, when
   standard output goes to a file, a pipe or a terminal without a private screen.
+- Repair words for a plate (MHFE-REPAIR-1, an optional profile of the specification): 2, 4, 6 or
+  8 extra words on a card kept apart from the plate, a Reed–Solomon code over its words, repair
+  unreadable or wrongly copied words without the password. `mhfe encrypt`, `new` and `rekey` offer
+  them under the new container, `mhfe repair-words` makes them for a container you have and
+  `mhfe repair` repairs a plate with them; the start menu has one entry for both. The library has
+  `repair::repair_words` and `repair::repair`, with the error codes `INVALID_REPAIR_WORDS` and
+  `REPAIR_NOT_POSSIBLE`.
 - `mhfe self-test` checks the program on this computer against two published vectors at full cost,
   an encryption of suite 3 and a recovery of suite 4, in about two minutes. The start menu offers
   it.

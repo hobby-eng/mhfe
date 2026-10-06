@@ -36,8 +36,9 @@ never asks for another wallet or its password.
 Last, it answers the questions of `mhfe encrypt` up to the password, so again without Argon2: its
 own settings, PIM 1 after a mistyped one; the phrase, refused once for its checksum and then taken
 without a question; the length question on a cleared screen, where ? explains both lengths and the
-arrows and Enter keep 24 words; Ctrl+C at the repeated password ends the tool. The summary then
-records the settings, the phrase's length and the container's, and holds none of the questions.
+arrows and Enter keep 24 words; no repair words; Ctrl+C at the repeated password ends the tool. The
+summary then records the settings, the phrase's length, the container's and the repair choice, and
+holds none of the questions.
 Escape at a list cancels with exit code 130. The phrase is the public zero-12 test phrase and the
 password a synthetic one, which never reaches the main screen.
 
@@ -79,9 +80,10 @@ BACKSPACE, CTRL_U, CTRL_C = b"\x7f", b"\x15", b"\x03"
 # The keys of the menu, as a terminal sends them. Ctrl+Up carries a 5, which must not choose entry 5.
 UP, DOWN, ENTER, CTRL_UP, ESCAPE = b"\x1b[A", b"\x1b[B", b"\r", b"\x1b[1;5A", b"\x1b"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
-PASSWORD_ENTRY = 7
-# The entry that shows the help and returns to the menu on Enter; mhfe self-test lies between.
-HELP_ENTRY = PASSWORD_ENTRY + 2
+PASSWORD_ENTRY = 8
+# The entry that shows the help, two below the password entry with mhfe self-test between: it is
+# the tenth, past the number keys, so it is reached with the arrows from the password entry.
+HELP_FROM_PASSWORD = 2
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN, PASSWORD_MADE = b"Esc quits", b"bits"
 BACK_TO_MENU = b"Press Enter to return to the menu (Esc quits)."
@@ -92,6 +94,8 @@ PASSWORD_KIND = b"What kind of password?"
 # that records the chosen container length.
 LIST_SHOWN, EXPLAINED = b"Esc cancels", b"8-character code"
 LENGTH_RECORDED = b"Container  24 words (recommended)"
+# The question about repair words for the plate, and the record of "No repair words".
+REPAIR_ASKED, REPAIR_RECORDED = b"Repair words for the plate?", b"Repair     No repair words"
 PHRASE_RECORDED = b"Phrase     12 words, valid"
 # Valid words whose checksum fails: the phrase is refused and asked again.
 BAD_CHECKSUM = b" ".join([b"abandon"] * 12)
@@ -278,7 +282,8 @@ def check_menu():
     session.answer(str(PASSWORD_ENTRY).encode(), PASSWORD_KIND)
     session.answer(b"2", b"random characters", PASSWORD_AGAIN)
     session.answer(b"q", MENU_SHOWN)
-    session.answer(str(HELP_ENTRY).encode(), BACK_TO_MENU)
+    # The menu keeps the password entry highlighted after it.
+    session.answer(DOWN * HELP_FROM_PASSWORD + ENTER, BACK_TO_MENU)
     session.answer(ENTER, MENU_SHOWN)
     session.type(b"q")
     # The tool needs a moment to end; close() would send Ctrl+C to a tool that is still running.
@@ -350,7 +355,9 @@ def check_encrypt_lists():
     # A valid phrase is taken at once, without a question; the next step clears the screen.
     session.answer(PHRASE.encode() + b"\r", CLEAR, b"How long should", LIST_SHOWN)
     session.answer(b"?", EXPLAINED, LIST_SHOWN)
-    session.answer(IGNORED_KEY + DOWN + UP + ENTER, b"Container password: ")
+    session.answer(IGNORED_KEY + DOWN + UP + ENTER, REPAIR_ASKED, LIST_SHOWN)
+    # No repair words: they would appear only after the encryption, which this test never reaches.
+    session.answer(b"5", b"Container password: ")
     session.answer(SECRET + b"\r", b"Repeat the container password: ")
     session.answer(SECRET + CTRL_C, b"Cancelled")
     assert session.drain_until_exit(10), "encrypt: Ctrl+C did not end the tool"
@@ -361,7 +368,7 @@ def check_encrypt_lists():
     assert IGNORED_KEY not in session.output, "encrypt: a key was shown"
     # The steps stayed on the alternate screen; the main screen got the summary when it ended.
     summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
-    for record in (OWN_SETTINGS, PHRASE_RECORDED, LENGTH_RECORDED):
+    for record in (OWN_SETTINGS, PHRASE_RECORDED, LENGTH_RECORDED, REPAIR_RECORDED):
         assert record in summary, f"encrypt: the summary lacks {record!r}"
     for step in (b"How long should", b"seed phrase: ", EXPLAINED):
         assert step not in summary, f"encrypt: {step!r} reached the main screen"

@@ -95,7 +95,7 @@ pub fn check_container(input: &str) -> Result<String, MhfeError> {
 
 /// A word of the English list, or the only word that starts with the typed letters when at
 /// least four were typed.
-fn complete_word(typed: &str) -> Option<&'static str> {
+pub(crate) fn complete_word(typed: &str) -> Option<&'static str> {
     let english = Language::English;
     if let Some(index) = english.find_word(typed) {
         return Some(english.word_list()[usize::from(index)]);

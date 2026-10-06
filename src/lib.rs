@@ -42,6 +42,7 @@ mod packing;
 mod password;
 mod phrase;
 mod rehearsal;
+pub mod repair;
 mod suite;
 #[cfg(test)]
 mod validation_cases;
