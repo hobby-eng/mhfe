@@ -6,6 +6,9 @@ stops at once if it is missing.
 
 Planned as version 0.5.0.
 
+- Cosmos and Injective wallet references reject redundant Bech32 data groups, including strings
+  with a valid checksum whose extra bits would otherwise be discarded.
+
 - **Containers of the same length (suite 4, `MHFE-BIP39-LP-EXPERIMENTAL-4`).** For a phrase of 12,
   15, 18 or 21 words, `mhfe encrypt` now asks how long the container should be: 24 words, the
   recommended default, or the same length as the phrase. The question links to the README's
@@ -115,7 +118,8 @@ Planned as version 0.5.0.
 - `mhfe check` compares with a receiving address of twelve coins instead of Bitcoin alone: Bitcoin,
   Ethereum and every EVM network, XRP, Tron, Zcash (transparent), Dogecoin, Bitcoin Cash, Litecoin,
   Ethereum Classic, Cosmos, Injective and Dash, for Dash both Core `X…` and Platform payment
-  `dash1k…` addresses (DIP17 and DIP18, checked against their official vectors). It asks for the
+  `dash1k…` addresses (DIP17 and DIP18, checked against their official vectors; only their one
+  valid Bech32m encoding is taken). It asks for the
   coin, listed alphabetically, or takes `--coin`, and shows before the check the address type and
   the paths it searches. Shielded Zcash and Dash addresses are refused with that reason, and a
   Cosmos or Injective address only with a Bech32 checksum, as those chains use, not Bech32m. The
