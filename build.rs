@@ -49,25 +49,39 @@ fn main() {
         // one for every call from the processor's features. SSSE3 is never assumed: a program
         // that used it unconditionally would stop with "Illegal instruction" on common virtual
         // CPUs (upstream issue #308) and on AMD processors made before 2011. AVX2 is never used.
+        //
+        // Microsoft's cl takes no -m options (warning D9002) and needs none: it compiles SSE2 and
+        // SSSE3 intrinsics as they are. It never defines __SSSE3__, though, which is what selects
+        // the SSSE3 code in opt.c, so cl gets that macro directly. clang-cl takes -m options.
+        let compiler = build.get_compiler();
+        let microsoft_cl = compiler.is_like_msvc() && !compiler.is_like_clang_cl();
         let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
-        for (variant, flag) in [("sse2", "-msse2"), ("ssse3", "-mssse3")] {
+        for (variant, flag, cl_macro) in [
+            ("sse2", "-msse2", None),
+            ("ssse3", "-mssse3", Some("__SSSE3__")),
+        ] {
             let renamed = format!("mhfe_fill_segment_{variant}");
-            let objects = cc::Build::new()
-                .include(argon2.join("include"))
+            let mut copy = cc::Build::new();
+            copy.include(argon2.join("include"))
                 .include(argon2.join("src"))
                 .file(argon2.join("src/opt.c"))
                 // opt.c's only global function; the two copies need two names.
                 .define("fill_segment", Some(renamed.as_str()))
-                .flag(flag)
                 .opt_level(3)
                 .warnings(false)
                 // Each copy in its own folder: both object files would otherwise be named opt.o.
-                .out_dir(out_dir.join(format!("argon2-{variant}")))
-                .compile_intermediates();
-            build.objects(objects);
+                .out_dir(out_dir.join(format!("argon2-{variant}")));
+            if !microsoft_cl {
+                copy.flag(flag);
+            } else if let Some(name) = cl_macro {
+                copy.define(name, None);
+            }
+            build.objects(copy.compile_intermediates());
         }
         build.file(SIMD_CHOICE);
-        build.flag("-msse2");
+        if !microsoft_cl {
+            build.flag("-msse2");
+        }
     } else {
         // ARM64, including Apple M-series, and every other architecture use the portable code.
         build.file(argon2.join("src/ref.c"));
