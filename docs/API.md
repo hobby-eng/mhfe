@@ -118,13 +118,16 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `repair(plate, card)` repairs a plate from its words as read and its repair words as read, `?` or
   a word outside the list marking an unreadable one. It repairs `2e + s <= k` damaged words, `e`
   wrong and `s` unreadable, without the password, and returns the container with the positions it
-  repaired (`Repaired`); more damage, or a card of another plate, gives `REPAIR_NOT_POSSIBLE`. The
+  repaired (`Repaired`). When no repair within that bound passes the BIP39 checksum it gives
+  `REPAIR_NOT_POSSIBLE`. More damage, or a card of another plate, usually ends so, but can also
+  give another container that passes the checksum: a repair does not show that the card belongs to
+  the plate or that the container is the original; only a rehearsal against the wallet does. The
   module documentation gives the code byte for byte.
+- `phrase_from_entropy(entropy)` gives the English phrase of 16 to 32 bytes of entropy that a
+  program drew itself, written into a buffer reserved at its final size and wiped when dropped.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
-- `phrase_from_entropy(entropy)` gives the English phrase of 16 to 32 bytes of entropy that a
-  program drew itself, written into a buffer reserved at its final size and wiped when dropped.
 - `wallet` has the address and fingerprint functions the check uses: `Coin`, `Address` with its
   `AddressType`, `DerivationPath`, `SearchLimits`, `parse_fingerprint`, `master_fingerprint` and
   `find_address(phrase, passphrase, address, path, limits)`, which returns the path where the
@@ -158,7 +161,7 @@ are outside its control.
 | `REFERENCE_MISMATCH`              | The phrase recovered to encrypt again does not match the address or fingerprint     |
 | `HIDDEN_WALLET_PASSES_CHECK`      | A hidden wallet's phrase passes the built-in check of a shorter phrase              |
 | `INVALID_REPAIR_WORDS`            | Repair words that are not 2, 4, 6 or 8 English BIP39 words                          |
-| `REPAIR_NOT_POSSIBLE`             | More damage than the repair words can repair, or a card of another plate            |
+| `REPAIR_NOT_POSSIBLE`             | No repair within the repair words' bound passes the BIP39 checksum                  |
 | `INVALID_PIM`                     | PIM outside 0 to 1023                                                               |
 | `INVALID_MEMORY_LEVEL`            | Memory level outside 0 to 21                                                        |
 | `EMPTY_PASSWORD`                  | The password is empty                                                               |

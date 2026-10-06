@@ -81,7 +81,7 @@ stops, its worker ends and the promise rejects with `CALLBACK_FAILED`, the page'
 In fast mode the four Argon2 lanes run in parallel threads: a recovery takes about one and a half to
 two minutes. In standard mode they run one after another, about four to seven minutes. An encryption
 takes about twice as long in either mode. The measurements behind these figures are in
-[`docs/measurements/`](measurements/README.md). A page opened as a file is never isolated;
+[`docs/measurements/`](https://github.com/hobby-eng/mhfe/blob/main/docs/measurements/README.md). A page opened as a file is never isolated;
 `mhfe serve <page.html>` serves it from this computer with the headers that make it isolated. On a
 computer without the mhfe program, the package's `mhfe-fast-mode.py` does the same with Python 3.8
 or later and nothing else.

@@ -12,6 +12,7 @@ use anstyle::{AnsiColor, Style};
 use zeroize::Zeroizing;
 
 use crate::flow::{self, Kind};
+use crate::hidden_input;
 
 /// Titles, section headings and the words `mhfe` and its commands.
 pub const HEADING: Style = AnsiColor::Cyan.on_default().bold();
@@ -34,21 +35,34 @@ pub fn paint(style: Style, text: impl Display) -> String {
 
 /// The first lines of a command: its name and what it does. A command shown one step at a time
 /// heads every step and its summary itself (flow.rs).
-pub fn title(what: &str) {
-    if !flow::is_active() {
-        write_title(what);
+pub fn title(what: &str) -> usize {
+    if flow::is_active() {
+        return 0;
     }
+    write_title(what)
 }
 
-/// Writes the title line at once, after a blank line.
-pub fn write_title(what: &str) {
-    eprintln!();
-    eprintln!(
+/// Writes the title line at once, after a blank line; returns the rows they took.
+pub fn write_title(what: &str) -> usize {
+    let line = format!(
         "{} {} {}",
         paint(HEADING, "MHFE"),
         paint(MUTED, "·"),
         paint(STRONG, what)
     );
+    eprintln!();
+    eprintln!("{line}");
+    1 + rows(&line)
+}
+
+/// How many rows of the terminal on standard error `line` takes, written on a line of its own: a
+/// line wider than the terminal wraps onto further rows, which a redraw that moves the cursor up
+/// must count, also in a narrow window (AUD-008-UI001). A line that fills its last row exactly
+/// takes no more: the cursor moves on only with the next character.
+pub fn rows(line: &str) -> usize {
+    // When the width cannot be read, the usual 80 columns.
+    let columns = hidden_input::columns().unwrap_or(80).max(1);
+    visible_width(line).div_ceil(columns).max(1)
 }
 
 /// One line of a summary table: a grey label and its value.
@@ -93,7 +107,7 @@ pub fn hint(text: &str) -> usize {
     for line in &lines {
         eprintln!("{}", paint(MUTED, line));
     }
-    lines.len()
+    lines.iter().map(|line| rows(line)).sum()
 }
 
 /// A grey line that links to the README section explaining what a screen only names; returns
@@ -110,8 +124,9 @@ pub fn more(place: &str) -> usize {
 
 /// [`more`] written at once, as part of a question or another step.
 pub fn more_here(place: &str) -> usize {
-    eprintln!("{}", more_line(place));
-    1
+    let line = more_line(place);
+    eprintln!("{line}");
+    rows(&line)
 }
 
 fn more_line(place: &str) -> String {
@@ -146,7 +161,7 @@ pub fn warn_now(headline: &str, body: &str) {
 pub fn retry(text: impl Display) -> usize {
     let lines = retry_lines(text);
     write_lines(&lines);
-    lines.len()
+    lines.iter().map(|line| rows(line)).sum()
 }
 
 /// [`retry`] for an answer that is asked again on a step of its own: in a command shown one step

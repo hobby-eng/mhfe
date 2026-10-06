@@ -59,7 +59,7 @@ impl Entry {
 }
 
 pub fn run() -> Result<i32, Failure> {
-    style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
+    let title_lines = style::title("Memory-Hard Feistel Encryption for BIP39 Mnemonics");
     eprintln!();
     let hint_lines =
         style::hint("Encrypts a seed phrase into a password-protected container and recovers it.");
@@ -67,7 +67,7 @@ pub fn run() -> Result<i32, Failure> {
     let mut selected = 0;
     // The lines the menu takes on the screen: the first time its title, blank lines and hint too,
     // later the wait to return to it.
-    let mut menu_lines = 3 + hint_lines;
+    let mut menu_lines = title_lines + 1 + hint_lines;
     loop {
         eprintln!();
         menu_lines += 1;
@@ -103,11 +103,12 @@ pub fn run() -> Result<i32, Failure> {
             }
         }
         eprintln!();
-        if !wait_for_enter("Press Enter to return to the menu (Esc quits).")? {
+        let wait = "Press Enter to return to the menu (Esc quits).";
+        if !wait_for_enter(wait)? {
             return Ok(SUCCESS);
         }
-        // The blank line and the line of the wait.
-        menu_lines = 2;
+        // The blank line and the rows of the wait.
+        menu_lines = 1 + style::rows(wait);
     }
 }
 
@@ -197,10 +198,10 @@ fn draw(entries: &[Entry], selected: usize) -> usize {
     eprintln!();
     // Only the first nine entries have a number key.
     let last = entries.len().min(choice::DIGIT_KEYS);
-    style::hint(&format!(
+    let hint_lines = style::hint(&format!(
         "↑ ↓ choose · Enter runs · 1 to {last} run at once · Esc quits"
     ));
-    entry_lines + 2
+    entry_lines + 1 + hint_lines
 }
 
 /// Runs a command in a thread of its own, isolated as a command started directly would be: the

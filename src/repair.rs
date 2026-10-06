@@ -289,8 +289,11 @@ pub const PROFILE: &str = "MHFE-REPAIR-1";
 /// Repairs a container from its words as read from the plate and its repair words as read from the
 /// card. A word that cannot be read is typed as `?`; a word that is not in the English BIP39 list
 /// counts as unreadable too, and the first four letters of a word are enough, as for a container.
-/// Fails when the damage is more than the repair words can repair, or when the card does not
-/// belong to the plate.
+/// Fails when no repair within the code's bound gives a container that passes its BIP39 checksum.
+/// Damage beyond the bound, or a card of another plate, usually fails so, but can also give
+/// another container that passes the checksum: a repair does not show that the card belongs to the
+/// plate or that the container is the original, which only a rehearsal against the wallet does
+/// (AUD-008-DOC001).
 pub fn repair(plate: &str, card: &str) -> Result<Repaired, MhfeError> {
     let (plate_words, plate_unreadable) = read_words(plate);
     if !WORD_COUNTS.contains(&plate_words.len()) {
@@ -682,5 +685,19 @@ mod tests {
             repair_words(&container, 3),
             Err(MhfeError::InvalidRepairWords(_))
         ));
+    }
+
+    /// AUD-008-DOC001: a card of another plate is not always refused. The plates of the zero
+    /// entropy and of entropy 00…01 differ in their last word only; with the other plate's two
+    /// repair words, that word is "repaired" into a container that passes its checksum but is not
+    /// the plate's. A repair never proves the container; a rehearsal against the wallet does.
+    #[test]
+    fn a_card_of_another_plate_can_give_another_valid_container() {
+        let plate = [vec!["abandon"; 23], vec!["art"]].concat().join(" ");
+        let other = [vec!["abandon"; 23], vec!["diesel"]].concat().join(" ");
+        let card = repair_words(&other, 2).unwrap();
+        let repaired = repair(&plate, &card).unwrap();
+        assert_eq!(repaired.container, other);
+        assert_eq!(repaired.plate_words, [24]);
     }
 }
