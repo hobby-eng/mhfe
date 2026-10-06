@@ -50,9 +50,10 @@ password a synthetic one, which never reaches the main screen.
 
 Finally it checks that a phrase the person did not ask to export is shown only on a private screen
 (AUD-007-SEC001): `mhfe new` and `mhfe wallets` refuse to start, before anything is asked and with
-nothing on standard output, when standard output goes to a pipe or TERM is dumb, while `mhfe new`
-at a terminal goes on to its first question; and `mhfe rekey` offers to show the phrase for the
-owner's comparison only when standard output is the terminal. Neither gets as far as Argon2.
+nothing on standard output, when standard output goes to a pipe or to a second terminal
+(AUD-008-SEC004) or TERM is dumb, while `mhfe new` at a terminal goes on to its first question;
+and `mhfe rekey` offers to show the phrase for the owner's comparison only when standard output is
+the terminal. Neither gets as far as Argon2.
 """
 
 import fcntl
@@ -469,6 +470,20 @@ def piped_output(reader):
     return data
 
 
+def other_terminal_output(leader):
+    """Everything the tool wrote to a second terminal, read once it has ended. A pseudo-terminal
+    whose other end is closed reports an error instead of the end of the data."""
+    os.set_blocking(leader, False)
+    data = b""
+    try:
+        while chunk := os.read(leader, 65536):
+            data += chunk
+    except OSError:
+        pass
+    os.close(leader)
+    return data
+
+
 def check_private_reveals():
     refused = b"only on a private screen"
     for command in ("new", "wallets"):
@@ -484,6 +499,20 @@ def check_private_reveals():
             if reader is not None:
                 assert piped_output(reader) == b"", f"{command}, {label}: wrote to the pipe"
             print(f"{command}: refused with {label}, before any question, exit code 2")
+        # Standard output on a second terminal: the private screen would be switched and cleared
+        # on the first one only (AUD-008-SEC004).
+        leader, follower = os.openpty()
+        session = Session((command, "--pim", "0"), stdout=follower)
+        os.close(follower)
+        session.wait_for(refused)
+        code, settings = session.close()
+        label = "standard output on another terminal"
+        assert code == INVALID_INPUT, f"{command}, {label}: exit code {code}"
+        assert settings == session.original, f"{command}, {label}: terminal settings changed"
+        for asked in (b"assphrase", b"Password", b"Esc cancels"):
+            assert asked not in session.output, f"{command}, {label}: asked {asked!r} first"
+        assert other_terminal_output(leader) == b"", f"{command}, {label}: wrote to it"
+        print(f"{command}: refused with {label}, before any question, exit code 2")
 
     session = Session(("new", "--pim", "0"))
     session.wait_for(b"passphrase of the new wallet")

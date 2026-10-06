@@ -54,8 +54,8 @@ mod wasm_api;
 
 pub use error::MhfeError;
 pub use mhfe::{
-    other_detected_lengths, Mhfe, NewContainer, PhraseLength, ProgressCallback, RecoveredPhrase,
-    Recovery, WordCount, ENCRYPTION_ROUNDS,
+    other_detected_lengths, phrase_from_entropy, Mhfe, NewContainer, PhraseLength,
+    ProgressCallback, RecoveredPhrase, Recovery, WordCount, ENCRYPTION_ROUNDS,
 };
 pub use password::{Password, MAX_PASSWORD_BYTES};
 pub use phrase::{check_container, check_phrase, read_phrase};

@@ -147,6 +147,10 @@ mod tests {
         }
         let read = read_phrase(ZERO_12).unwrap();
         assert_eq!(read.capacity(), 12 * (LONGEST_WORD + 1));
+        // AUD-008-SEC002: the public formatter that mhfe new uses, with the BIP39 vector 7f…7f.
+        let new = crate::phrase_from_entropy(&[0x7f; 32]).unwrap();
+        assert!(new.starts_with("legal winner thank year"));
+        assert_eq!(new.capacity(), 24 * (LONGEST_WORD + 1));
     }
 
     #[test]

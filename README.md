@@ -372,7 +372,7 @@ when the output goes to a file, that choice is not offered.
 `mhfe new` generates a new 24-word wallet and its container in one go. It draws the phrase from the
 operating system's random generator, shows it once on a private screen for your wallet, and
 encrypts it under your password as `mhfe encrypt` does. Where no private screen can be opened, such
-as when the output goes to a file, it refuses to start.
+as when the output goes to a file or to another terminal, it refuses to start.
 
 It asks for the BIP39 passphrase of the new wallet, if it is to have one. Only with a passphrase
 does it then ask whether you want a check that confirms the password at recovery, with nothing

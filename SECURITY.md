@@ -20,9 +20,9 @@ Never include a real seed phrase, password, private key or wallet file.
   screen is possible, they are typed without echo. A phrase that the person did not ask to export
   is shown only on a private screen: `new` and `wallets` refuse to start, and `rekey` does not
   offer the owner's comparison, when standard output is not a terminal that has one, such as when
-  it goes to a file or a pipe. The tool never takes secrets from command-line arguments, never
-  writes them to files and never logs them. Error messages never contain a phrase, a password or
-  any part of them.
+  it goes to a file, a pipe or another terminal than the one the private screen is shown on. The
+  tool never takes secrets from command-line arguments, never writes them to files and never logs
+  them. Error messages never contain a phrase, a password or any part of them.
 - A secret's prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
   on an empty line and Ctrl+C keep their meaning; every other character, including those a
   terminal would usually act on (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+W, Ctrl+Z, Ctrl+\\), reaches the
@@ -90,13 +90,14 @@ Never include a real seed phrase, password, private key or wallet file.
   listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
 - On Linux the kernel enforces this. A command that handles secrets (`encrypt`, `decrypt`, `check`,
   `rekey`, `new`, `wallets`, `password`) runs under a seccomp filter that refuses to create any
-  socket, and under a Landlock ruleset that refuses every write to the file system (Linux 5.13 and
-  later; from Linux 6.7 also TCP bind and connect). Both cover every thread the command starts,
-  Argon2's included, and cannot be undone; the start menu runs each command in a thread of its own,
-  so that it can still start `mhfe serve`, which is not isolated because the browser it opens must
-  write its profile. The summary of a command says what the kernel enforces. A fault or a tampered
-  dependency therefore cannot send a secret away or leave it in a file; the program's own output
-  goes only to the terminal or to where standard output is redirected.
+  socket, and refuses io_uring altogether, whose operations could create one without the system
+  call the filter sees; and under a Landlock ruleset that refuses every write to the file system
+  (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect). Both cover every thread the
+  command starts, Argon2's included, and cannot be undone; the start menu runs each command in a
+  thread of its own, so that it can still start `mhfe serve`, which is not isolated because the
+  browser it opens must write its profile. The summary of a command says what the kernel enforces.
+  A fault or a tampered dependency therefore cannot send a secret away or leave it in a file; the
+  program's own output goes only to the terminal or to where standard output is redirected.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 

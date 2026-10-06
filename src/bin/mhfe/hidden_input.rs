@@ -160,6 +160,13 @@ pub fn control_sequences() -> bool {
     platform::control_sequences()
 }
 
+/// Whether standard output and standard error are one terminal, so that the private screen,
+/// switched and cleared through standard error, also holds and clears what goes to standard output.
+/// Output redirected to another terminal would stay there, on its main screen (AUD-008-SEC004).
+pub fn output_on_error_terminal() -> bool {
+    platform::output_on_error_terminal()
+}
+
 /// How long a lone Escape waits for the rest of an escape sequence. A terminal sends an arrow
 /// key's sequence at once, so an Escape that nothing follows within this time is the Escape key;
 /// MnemoCode waits as long (ESCAPE_DELAY_MS in its src/cli/terminal-input.ts).
@@ -445,6 +452,24 @@ mod platform {
         true
     }
 
+    pub fn output_on_error_terminal() -> bool {
+        same_terminal(libc::STDOUT_FILENO, libc::STDERR_FILENO)
+    }
+
+    /// Whether two descriptors are the same terminal: character devices with the same device
+    /// number. Two terminals of one system, such as two pseudo-terminals, have different numbers.
+    pub fn same_terminal(first: libc::c_int, second: libc::c_int) -> bool {
+        let device = |descriptor| {
+            let mut status = MaybeUninit::<libc::stat>::zeroed();
+            // SAFETY: fstat fills the stat when it returns 0; it was zeroed before.
+            let read = unsafe { libc::fstat(descriptor, status.as_mut_ptr()) };
+            // SAFETY: all zero bytes are a valid stat, and a successful call filled it.
+            let status = unsafe { status.assume_init() };
+            (read == 0 && status.st_mode & libc::S_IFMT == libc::S_IFCHR).then_some(status.st_rdev)
+        };
+        matches!((device(first), device(second)), (Some(first), Some(second)) if first == second)
+    }
+
     pub fn columns() -> Option<usize> {
         let mut size = MaybeUninit::<libc::winsize>::zeroed();
         // SAFETY: TIOCGWINSZ fills the winsize when it returns 0; it was zeroed before.
@@ -501,12 +526,11 @@ mod platform {
         SetConsoleMode, CONSOLE_MODE, CONSOLE_SCREEN_BUFFER_INFO, ENABLE_ECHO_INPUT,
         ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
         ENABLE_VIRTUAL_TERMINAL_PROCESSING, INPUT_RECORD, KEY_EVENT, STD_ERROR_HANDLE,
-        STD_INPUT_HANDLE,
+        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     };
 
     use super::terminal_error;
     use crate::exit::Failure;
-    use crate::locked_text::LockedText;
 
     pub type Settings = CONSOLE_MODE;
 
@@ -563,6 +587,17 @@ mod platform {
             let mut mode: CONSOLE_MODE = 0;
             GetConsoleMode(output, &mut mode) != 0
                 && SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0
+        }
+    }
+
+    /// A process has one console: standard output and standard error, when both are consoles,
+    /// are that one.
+    pub fn output_on_error_terminal() -> bool {
+        let mut mode: CONSOLE_MODE = 0;
+        // SAFETY: plain console calls on the standard output and error handles.
+        unsafe {
+            GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode) != 0
+                && GetConsoleMode(GetStdHandle(STD_ERROR_HANDLE), &mut mode) != 0
         }
     }
 
@@ -632,6 +667,41 @@ mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// AUD-008-SEC004: two pseudo-terminals are two terminals; one descriptor of each, or a file,
+    /// is told apart from the same terminal opened twice.
+    #[cfg(unix)]
+    #[test]
+    fn two_terminals_are_told_apart() {
+        use std::os::fd::AsRawFd;
+        let open = || {
+            let (mut leader, mut follower) = (0, 0);
+            // SAFETY: openpty fills the two descriptors; the name and settings are not asked for.
+            let opened = unsafe {
+                libc::openpty(
+                    &mut leader,
+                    &mut follower,
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                )
+            };
+            assert_eq!(opened, 0, "no pseudo-terminal");
+            (leader, follower)
+        };
+        let (first_leader, first) = open();
+        let (second_leader, second) = open();
+        // SAFETY: dup copies a descriptor that is open.
+        let first_again = unsafe { libc::dup(first) };
+        let file = std::fs::File::open("/dev/null").unwrap();
+        assert!(platform::same_terminal(first, first_again));
+        assert!(!platform::same_terminal(first, second));
+        assert!(!platform::same_terminal(first, file.as_raw_fd()));
+        for descriptor in [first_leader, first, second_leader, second, first_again] {
+            // SAFETY: each was opened above and is closed once.
+            unsafe { libc::close(descriptor) };
+        }
+    }
 
     fn edited(bytes: &[u8]) -> Option<String> {
         edit_line(&mut io::Cursor::new(bytes.to_vec()), None)
