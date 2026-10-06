@@ -2,10 +2,12 @@
 
     python3 scripts/verify-hidden-input.py [path/to/mhfe]
 
-The default is target/debug/mhfe. It drives `mhfe check --fingerprint --pim 0`, which reads the
-container on a private screen, taken at once, and then the password on another, and stops
-the tool before a fingerprint is given, so no memory is reserved and Argon2 never runs; the PIM
-given skips the question of the settings. Only the public zero-12 test container is used.
+The default is target/debug/mhfe. At a terminal every step of a command has a screen of its own on
+the terminal's alternate screen, and the main screen gets only the summary, when the command ends.
+It drives `mhfe check --fingerprint --pim 0`, which reads the container on a step of its own, taken
+at once, and then the container password on another, and stops the tool before a fingerprint is
+given, so no memory is reserved and Argon2 never runs; the PIM given skips the question of the
+settings. Only the public zero-12 test container is used.
 
 It checks that
 - every control character in a password reaches the password check and is refused, including
@@ -13,9 +15,9 @@ It checks that
   Ctrl+\\, Ctrl+Z and Ctrl+D inside the line), and that a Unicode password is accepted, also the
   longest one: 1024 characters U+1D400, 4096 bytes that NFKD turns into 1024;
 - Backspace and Ctrl+U edit the line: a TAB typed and then deleted leaves an accepted password;
-- the password is shown as it is typed only on the private (alternate) screen, which is cleared
-  and left once it is accepted, and none of its control characters is ever written back;
-- Ctrl+C at the password ends the tool with exit code 130 and leaves the private screen;
+- the password is shown as it is typed only on the alternate screen, which is cleared and left
+  before the summary, and none of its control characters is ever written back;
+- Ctrl+C at the password ends the tool with exit code 130 and leaves the alternate screen;
 - the terminal settings are exactly the original ones afterwards, after a normal answer and after
   Ctrl+C.
 
@@ -32,12 +34,12 @@ container, No stops with exit code 130 before anything is typed, and so does Esc
 never asks for another wallet or its password.
 
 Last, it answers the questions of `mhfe encrypt` up to the password, so again without Argon2: its
-own settings, PIM 1 after a mistyped one, which the settings shown next record; the phrase on the
-private screen, refused once for its checksum and then taken without a question, which the
-summary records by its length; ? explains the container lengths, and the arrows and Enter keep 24
-words; Ctrl+C at the repeated password ends the tool and leaves the private screen. Escape at a
-list cancels with exit code 130. The phrase is the public zero-12 test phrase and the password a
-synthetic one, which never reaches the main screen.
+own settings, PIM 1 after a mistyped one; the phrase, refused once for its checksum and then taken
+without a question; the length question on a cleared screen, where ? explains both lengths and the
+arrows and Enter keep 24 words; Ctrl+C at the repeated password ends the tool. The summary then
+records the settings, the phrase's length and the container's, and holds none of the questions.
+Escape at a list cancels with exit code 130. The phrase is the public zero-12 test phrase and the
+password a synthetic one, which never reaches the main screen.
 
 Finally it checks that a phrase the person did not ask to export is shown only on a private screen
 (AUD-007-SEC001): `mhfe new` and `mhfe wallets` refuse to start, before anything is asked and with
@@ -50,6 +52,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import re
 import select
 import signal
 import subprocess
@@ -82,7 +85,9 @@ HELP_ENTRY = PASSWORD_ENTRY + 2
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN, PASSWORD_MADE = b"Esc quits", b"bits"
 BACK_TO_MENU = b"Press Enter to return to the menu (Esc quits)."
-PASSWORD_AGAIN = b"Press Enter to generate other words (Esc returns to the menu)."
+PASSWORD_AGAIN = b"Press Enter for another password (Esc returns to the menu)."
+# The question of the password entry: five dice words, or sixteen random characters.
+PASSWORD_KIND = b"What kind of password?"
 # What the lists of `mhfe encrypt` show: a list's hint line, the explanation behind ?, and the line
 # that records the chosen container length.
 LIST_SHOWN, EXPLAINED = b"Esc cancels", b"8-character code"
@@ -229,7 +234,7 @@ class Session:
     def at_password_prompt(self):
         self.wait_for(b"original: ")
         # The container is read on its own private screen and taken at once.
-        self.answer(CONTAINER.encode() + b"\r", b"Password: ")
+        self.answer(CONTAINER.encode() + b"\r", b"Container password: ")
 
 
 def shown_privately(label, output, secret):
@@ -263,15 +268,15 @@ def check_menu():
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
     moves = DOWN * PASSWORD_ENTRY + UP
-    session.type(IGNORED_KEY + CTRL_UP + moves + ENTER)
-    # wait_for looks only at new output, and the password and the prompt arrive together; the
-    # count of passwords is checked at the end.
-    session.wait_for(PASSWORD_AGAIN)
+    # The password and the prompt arrive together; the count of passwords is checked at the end.
+    session.answer(IGNORED_KEY + CTRL_UP + moves + ENTER, PASSWORD_KIND)
+    session.answer(ENTER, PASSWORD_AGAIN)
     for _ in range(2):
         session.answer(ENTER, PASSWORD_AGAIN)
     session.answer(ESCAPE, MENU_SHOWN)
-    session.type(str(PASSWORD_ENTRY).encode())
-    session.wait_for(PASSWORD_AGAIN)
+    # The second time, random characters.
+    session.answer(str(PASSWORD_ENTRY).encode(), PASSWORD_KIND)
+    session.answer(b"2", b"random characters", PASSWORD_AGAIN)
     session.answer(b"q", MENU_SHOWN)
     session.answer(str(HELP_ENTRY).encode(), BACK_TO_MENU)
     session.answer(ENTER, MENU_SHOWN)
@@ -287,8 +292,11 @@ def check_menu():
     assert session.output.count(ENTER_PRIVATE) == 2, "menu: passwords did not use private screens"
     assert session.output.count(LEAVE_PRIVATE) == 2, "menu: password screens were not left"
     assert session.output.count(CLEAR) == 6, "menu: a password was not replaced by the next"
-    assert IGNORED_KEY not in session.output, "menu: a key was shown"
+    # A password of random characters may hold the key's letter; nothing else may.
+    shown = re.sub(rb"(?m)^  [2-9A-HJ-NP-Za-km-z]{16}\r?$", b"", session.output)
+    assert IGNORED_KEY not in shown, "menu: a key was shown"
     print("menu: password regeneration, Escape/q return, private screens cleared, terminal restored")
+    print("menu: the password entry asks for words or characters and makes both")
 
     # Escape alone: the tool waits a moment for the rest of an arrow key's sequence, then quits.
     session = Session(arguments=())
@@ -336,16 +344,14 @@ def check_encrypt_lists():
     session.answer(b"2", b"PIM: ")
     session.answer(b"x\r", b"whole number", b"PIM: ")
     session.answer(b"1\r", b"Memory level: ")
-    session.answer(b"0\r", OWN_SETTINGS, ENTER_PRIVATE, b"seed phrase: ")
+    session.answer(b"0\r", b"seed phrase: ")
     # Twelve times the first word fails the checksum; the phrase is asked again.
     session.answer(BAD_CHECKSUM + b"\r", b"Please type it again", b"seed phrase: ")
-    # A valid phrase is taken at once: the private screen is left without a question.
-    session.answer(
-        PHRASE.encode() + b"\r", LEAVE_PRIVATE, PHRASE_RECORDED, b"How long should", LIST_SHOWN
-    )
+    # A valid phrase is taken at once, without a question; the next step clears the screen.
+    session.answer(PHRASE.encode() + b"\r", CLEAR, b"How long should", LIST_SHOWN)
     session.answer(b"?", EXPLAINED, LIST_SHOWN)
-    session.answer(IGNORED_KEY + DOWN + UP + ENTER, LENGTH_RECORDED, b"Password: ")
-    session.answer(SECRET + b"\r", b"Repeat the password: ")
+    session.answer(IGNORED_KEY + DOWN + UP + ENTER, b"Container password: ")
+    session.answer(SECRET + b"\r", b"Repeat the container password: ")
     session.answer(SECRET + CTRL_C, b"Cancelled")
     assert session.drain_until_exit(10), "encrypt: Ctrl+C did not end the tool"
     code, settings = session.close()
@@ -353,8 +359,15 @@ def check_encrypt_lists():
     assert settings == session.original, "encrypt: the terminal settings were not restored"
     shown_privately("encrypt", session.output, SECRET)
     assert IGNORED_KEY not in session.output, "encrypt: a key was shown"
+    # The steps stayed on the alternate screen; the main screen got the summary when it ended.
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    for record in (OWN_SETTINGS, PHRASE_RECORDED, LENGTH_RECORDED):
+        assert record in summary, f"encrypt: the summary lacks {record!r}"
+    for step in (b"How long should", b"seed phrase: ", EXPLAINED):
+        assert step not in summary, f"encrypt: {step!r} reached the main screen"
     print("encrypt: own settings; phrase refused once, then taken at once; ? and the arrows")
-    print("encrypt: password shown only on the private screen; Ctrl+C leaves it, exit code 130")
+    print("encrypt: password shown only on the alternate screen; Ctrl+C leaves it, exit code 130")
+    print("encrypt: every step on a cleared screen; only the summary on the main screen")
 
     session = Session(arguments=("encrypt",))
     session.answer(b"", SETTINGS_ASKED, LIST_SHOWN)
@@ -414,7 +427,7 @@ def check_private_reveals():
         # Everyone confirms that other wallets' funds are safe (AUD-007-FUN002).
         session.wait_for(b"backed up another way?")
         session.answer(b"1", b"original: ")
-        session.answer(CONTAINER.encode() + b"\r", b"Password: ")
+        session.answer(CONTAINER.encode() + b"\r", b"container password: ")
         session.answer(SECRET + b"\r", b"confirmed?", LIST_SHOWN)
         offered = b"Show me the phrase" in session.output
         code, _ = session.close()

@@ -16,8 +16,10 @@ use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::{self, Failure};
+use crate::flow::{self, Kind};
 use crate::hidden_input;
 use crate::locked_text::LockedText;
+use crate::settings::Operation;
 use crate::style::{self, paint, ACCENT, MUTED};
 
 /// Longest line accepted, line break included. The buffer is reserved at this size and reading
@@ -83,8 +85,18 @@ impl Input {
     /// or a terminal that cannot redraw lines, gets the answers numbered and types the number on a
     /// line of its own, or nothing for the first.
     pub fn choose(&mut self, question: &Question, answers: &[Answer]) -> Result<usize, Failure> {
+        flow::step();
+        self.choose_here(question, answers)
+    }
+
+    /// [`Input::choose`] below what the screen shows already (choice::choose_here).
+    pub fn choose_here(
+        &mut self,
+        question: &Question,
+        answers: &[Answer],
+    ) -> Result<usize, Failure> {
         if !self.is_script() && choice::can_run() {
-            return choice::choose(question, answers, None)?
+            return choice::choose_here(question, answers, None)?
                 .ok_or_else(|| MhfeError::Cancelled.into());
         }
         choice::draw_question(question);
@@ -132,6 +144,14 @@ pub struct Step {
 impl Step {
     pub fn start(input: &Input) -> Self {
         if input.is_script() {
+            return Self {
+                lines: 0,
+                erasable: false,
+            };
+        }
+        if flow::is_active() {
+            // On a screen of its own, the step needs no erasing.
+            flow::step();
             return Self {
                 lines: 0,
                 erasable: false,
@@ -194,12 +214,14 @@ pub fn stop_on_ctrl_c() {
 }
 
 pub fn exit_cancelled() -> ! {
+    // The summary so far comes first, as when a command ends.
+    flow::end_at_exit();
     leave_private_screen();
     eprintln!();
     if UNVERIFIED_CONTAINER_SHOWN.load(Ordering::SeqCst) {
         style::alarm(
             "Cancelled before the check finished: the container shown is NOT verified.",
-            "Do not rely on it; encrypt again.",
+            "Do NOT rely on it; encrypt again.",
         );
     } else {
         show_cancelled();
@@ -322,6 +344,9 @@ static PRIVATE_SCREEN_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// script, a pipe or a file gets none of this.
 pub struct PrivateScreen {
     active: bool,
+    /// A step of a command shown one step at a time (flow.rs), on the alternate screen it is
+    /// already on: dropping it only clears the screen.
+    step: bool,
 }
 
 impl PrivateScreen {
@@ -343,18 +368,34 @@ impl PrivateScreen {
     }
 
     fn enter_if(input: &Input, output_allows: bool) -> Self {
+        // A command shown one step at a time is on the alternate screen throughout: a private
+        // screen is a step of its own there, cleared again when it ends.
+        if flow::is_active() {
+            flow::step();
+            return Self {
+                active: true,
+                step: true,
+            };
+        }
         // Within a private screen, another one adds nothing: the outer one stays, and is left
         // and cleared only when it ends, so that nothing reaches the main screen in between.
         if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst) {
-            return Self { active: false };
+            return Self {
+                active: false,
+                step: false,
+            };
         }
-        let active = output_allows && terminal_screen_possible(input);
+        let active =
+            output_allows && terminal_screen_possible(input) && hidden_input::control_sequences();
         if active {
             // Written raw: anstream would drop control sequences when NO_COLOR is set.
             write_control(ENTER_ALTERNATE_SCREEN);
             PRIVATE_SCREEN_ACTIVE.store(true, Ordering::SeqCst);
         }
-        Self { active }
+        Self {
+            active,
+            step: false,
+        }
     }
 
     /// Whether the secrets are on the alternate screen, which then waits for the person.
@@ -400,7 +441,7 @@ pub fn wait_to_leave() -> Result<(), Failure> {
 /// [`wait_to_leave`] with another line above the wait, for a screen that needs no writing down.
 pub fn wait_to_leave_saying(line: &str) -> Result<(), Failure> {
     eprintln!();
-    style::warn(line, "");
+    style::warn_here(line, "");
     hidden_input::with_keys(|next_key| loop {
         match next_key()? {
             hidden_input::Key::Enter | hidden_input::Key::Quit => return Ok(()),
@@ -411,13 +452,25 @@ pub fn wait_to_leave_saying(line: &str) -> Result<(), Failure> {
 
 /// Reads a password on a private screen headed `title`, again until it is one that the
 /// specification allows, and records it in the summary.
-pub fn read_password(input: &mut Input, title: &str) -> Result<Password, Failure> {
-    let screen = PrivateScreen::enter(input, title);
+pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
+    // A command may ask for a BIP39 passphrase or a new password too: say which secret this is.
+    let (prompt, what) = match operation {
+        Operation::Rekey => (
+            "Old container password",
+            "The password the container has now; the new one comes later.",
+        ),
+        _ => (
+            "Container password",
+            "The password the container was encrypted with; it is NOT a BIP39 passphrase.",
+        ),
+    };
+    let screen = PrivateScreen::enter(input, operation.title());
     let password = loop {
         if screen.is_active() {
             eprintln!();
+            style::hint(what);
         }
-        let text = input.secret("Password")?;
+        let text = input.secret(prompt)?;
         match Password::new(&text) {
             Ok(password) => break password,
             Err(error) if input.can_ask_again() => {
@@ -436,10 +489,38 @@ pub fn read_password(input: &mut Input, title: &str) -> Result<Password, Failure
 
 impl Drop for PrivateScreen {
     fn drop(&mut self) {
-        if self.active {
+        if self.step {
+            let _ = io::stdout().flush();
+            write_control(CLEAR_SCREEN);
+        } else if self.active {
             leave_private_screen();
         }
     }
+}
+
+/// Switches to the alternate screen for the steps of a command (flow.rs). False where they cannot
+/// be shown privately, or within a screen that is already private.
+pub fn enter_steps(input: &Input) -> bool {
+    if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
+        || !can_show_privately(input)
+        || !hidden_input::control_sequences()
+    {
+        return false;
+    }
+    write_control(ENTER_ALTERNATE_SCREEN);
+    PRIVATE_SCREEN_ACTIVE.store(true, Ordering::SeqCst);
+    true
+}
+
+/// Returns from the steps of a command to the main screen, clearing what they showed.
+pub fn leave_steps() {
+    leave_private_screen();
+}
+
+/// Clears the screen for the next step of a command.
+pub fn clear_screen() {
+    let _ = io::stdout().flush();
+    write_control(CLEAR_SCREEN);
 }
 
 fn leave_private_screen() {
@@ -509,10 +590,14 @@ pub struct Progress {
     widest: usize,
     /// The stage on screen; empty once it has been finished.
     stage: &'static str,
+    /// The name of a 12-round operation: "Recovering", or "Opening" for a hidden wallet.
+    single: &'static str,
 }
 
 impl Progress {
     pub fn start() -> Self {
+        // A stage of work is a step of its own in a command shown one step at a time.
+        flow::step();
         eprintln!();
         style::hint("Press Ctrl+C to cancel at any time.");
         eprintln!();
@@ -522,13 +607,23 @@ impl Progress {
             same_line: io::stderr().is_terminal(),
             widest: 0,
             stage: "",
+            single: "Recovering",
+        }
+    }
+
+    /// [`Progress::start`] for a 12-round operation shown under another name, such as "Opening"
+    /// for a hidden wallet, which recovers no phrase the person had.
+    pub fn start_as(single: &'static str) -> Self {
+        Self {
+            single,
+            ..Self::start()
         }
     }
 
     /// Called before each round of an operation: `rounds` is 24 for an encryption, whose rounds
     /// 13 to 24 are the check, and 12 otherwise.
     pub fn round_starts(&mut self, round: u32, rounds: u32) {
-        let stage = stage(round, rounds);
+        let stage = stage(round, rounds, self.single);
         if stage != self.stage {
             self.finish();
             self.stage = stage;
@@ -565,16 +660,19 @@ impl Progress {
             "done in {}",
             duration(self.stage_started.elapsed().as_secs())
         );
-        self.draw(ROUNDS, &note);
+        let line = self.draw(ROUNDS, &note);
         if self.same_line {
             eprintln!();
         }
+        // The finished stage belongs to the summary of a command shown one step at a time.
+        flow::keep(Kind::Result, &[line]);
         self.stage = "";
         self.widest = 0;
     }
 
     /// One line: the stage, a bar with `completed` of 12 rounds filled, the round and a note.
-    fn draw(&mut self, completed: u32, note: &str) {
+    /// Returns the line as drawn.
+    fn draw(&mut self, completed: u32, note: &str) -> String {
         let stage = format!("{:<10}", self.stage);
         let count = format!("{:>2}/{ROUNDS}", (completed + 1).min(ROUNDS));
         let bar = style::bar(completed, ROUNDS);
@@ -592,16 +690,17 @@ impl Progress {
         } else {
             eprintln!("{line}");
         }
+        line
     }
 }
 
 /// What the rounds of an operation do: an encryption encrypts in rounds 1 to 12 and checks in
 /// rounds 13 to 24.
-fn stage(round: u32, rounds: u32) -> &'static str {
+fn stage(round: u32, rounds: u32, single: &'static str) -> &'static str {
     match (rounds, round) {
         (ENCRYPTION_ROUNDS, round) if round <= ROUNDS => "Encrypting",
         (ENCRYPTION_ROUNDS, _) => "Checking",
-        _ => "Recovering",
+        _ => single,
     }
 }
 

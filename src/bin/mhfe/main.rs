@@ -14,6 +14,7 @@ mod decrypt;
 mod diceware;
 mod encrypt;
 mod exit;
+mod flow;
 mod hidden_input;
 mod length_choice;
 mod locked_text;
@@ -89,7 +90,7 @@ enum Command {
     /// Open hidden wallets on a container with other passwords
     #[command(long_about = wallets::about(), after_help = wallets::help())]
     Wallets(wallets::Options),
-    /// Make a strong password of random dice words
+    /// Make a strong password of words or random characters
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
     /// Test this program with the published vectors

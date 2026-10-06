@@ -9,6 +9,7 @@ use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
+use crate::flow;
 use crate::readme;
 use crate::style::{self, paint, ACCENT, MUTED};
 use crate::terminal::Input;
@@ -193,6 +194,8 @@ fn ask_for_own(
 /// Asks for a PIM and a memory level until this computer can run them. At a terminal that redraws
 /// lines, the questions are erased afterwards: the settings shown next record the answers.
 fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
+    // Both numbers are asked on one step of their own in a command shown one step at a time.
+    flow::step();
     let mut drawn_lines = 0;
     let work = loop {
         let pim = ask_number(
@@ -237,7 +240,7 @@ fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
             }
         }
     };
-    if choice::can_run() {
+    if choice::can_run() && !flow::is_active() {
         choice::write_control(&choice::redraw_from(drawn_lines))?;
     }
     Ok(work)

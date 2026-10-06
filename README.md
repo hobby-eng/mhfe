@@ -195,7 +195,9 @@ Windows use BitLocker or no page file.
 
 `mhfe <command> --help` explains every option. Keep a copy of this program offline as well, so that
 a compatible version is at hand years from now. While a command runs, its screens keep to short
-lines; a grey "More:" line links to the section here that explains them.
+lines; a grey "More:" line links to the section here that explains them. At a terminal, each step
+of a command has a clean screen of its own, and when the command ends the main screen keeps only a
+short summary of the answers and results.
 
 ### `mhfe password`
 
@@ -218,7 +220,8 @@ and keyboard rows such as `qwerty`, also with substitutions such as `0` for `o`.
 password made of words it does not know, such as names or words of other languages. A password
 from `mhfe password` has a known strength.
 
-From the start menu, Enter generates other words and Escape returns to the menu. Each password
+From the start menu, the entry first asks for five dice words or sixteen random characters; Enter
+then makes another password of the same kind and Escape returns to the menu. Each password
 replaces the previous one on the private screen; leaving it clears the screen.
 
 ### `mhfe encrypt`
@@ -365,9 +368,10 @@ carry hidden wallets behind the one you could disclose: under pressure you give 
 password, and the wallet it opens, with its genuine history, is all anyone sees. The specification
 describes this as a hidden wallet behind an honest disclosure.
 
-It first checks itself against the published vectors, as `mhfe self-test` does: a hidden wallet
-exists only as the output of the program, and any correct program must find it again later. All
-wallets appear on one private screen, together with their passwords, which is cleared at the end,
+Nothing is created or stored: the container and a password give the same wallet every time. A
+hidden wallet exists only as the output of the program, and any correct program must find it again
+later, so run `mhfe self-test` once on the computer before you fund one. All wallets appear on one
+private screen, together with their passwords, which is cleared at the end,
 so the main screen shows neither the wallets nor how many you opened; without a private screen the
 command refuses to start. A wallet need not be written down, as the container and its password
 give it again, and nothing records which passwords you used or how many. A password whose wallet

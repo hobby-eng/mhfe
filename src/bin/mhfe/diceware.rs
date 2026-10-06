@@ -8,8 +8,9 @@ use clap::Args;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::exit::{Failure, SUCCESS};
+use crate::flow::{self, Flow};
 use crate::style::{self, STRONG};
-use crate::terminal::Input;
+use crate::terminal::{self, Input};
 
 /// The EFF large wordlist, unchanged: "11111<TAB>abacus" to "66666<TAB>zoom", one per line.
 /// Provenance and licence: vendor/eff-large-wordlist.md.
@@ -93,7 +94,7 @@ fn dice_help() -> String {
 /// The top of `mhfe password --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Make a strong password of random dice words",
+        "Make a strong password of words or random characters",
         "Each word is drawn from the EFF large word list of 7,776 words, the same list that \
          five dice select from. Every word is equally likely.",
     ])
@@ -130,7 +131,11 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             "Choose between 1 and {MOST_WORDS} words."
         )));
     }
-    style::title("Make a password");
+    let mut input = Input::new(false);
+    // At a terminal the password has a step of its own, cleared once it is written down; the
+    // summary says only how strong it is.
+    let flow = Flow::start(&input, TITLE);
+    style::title(TITLE);
     eprintln!();
     if options.words < RECOMMENDED_WORDS {
         style::warn(
@@ -141,7 +146,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     }
 
     let words = eff_words();
-    let mut input = Input::new(false);
+    if options.dice {
+        // The rolls are typed on a step of their own.
+        flow::step();
+    }
     // Built in place at its final size, so no reallocation leaves a copy of the password.
     let mut password = Zeroizing::new(String::with_capacity(options.words * (LONGEST_WORD + 1)));
     for number in 1..=options.words {
@@ -155,20 +163,37 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         }
         password.push_str(words[index]);
     }
+    show(
+        &password,
+        &format!(
+            "{} words from the EFF list, about {} bits.",
+            options.words,
+            strength_text(options.words * MILLIBITS_PER_WORD)
+        ),
+        flow,
+    )
+}
 
+/// The title of `mhfe password`.
+const TITLE: &str = "Make a password";
+
+/// Shows a new password with how strong it is. At a terminal it is set apart and in bold for
+/// writing down, on a step of its own that is cleared when the person is done; a script gets the
+/// bare password.
+fn show(password: &str, strength: &str, flow: Flow) -> Result<i32, Failure> {
+    flow::step();
     if std::io::stdout().is_terminal() {
-        // Set apart and in bold for writing down; a script gets the bare password.
-        println!("  {STRONG}{}{STRONG:#}", *password);
+        println!("  {STRONG}{password}{STRONG:#}");
         eprintln!();
     } else {
-        println!("{}", *password);
+        println!("{password}");
     }
-    style::ok(format!(
-        "{} words from the EFF list, about {} bits.",
-        options.words,
-        strength_text(options.words * MILLIBITS_PER_WORD)
-    ));
+    style::ok(strength);
     style::hint("Shown only once and not stored: write it down, apart from the container.");
+    if flow::is_active() {
+        terminal::wait_to_leave()?;
+    }
+    flow.finish();
     Ok(SUCCESS)
 }
 
@@ -179,7 +204,9 @@ fn run_characters(count: usize) -> Result<i32, Failure> {
             "Choose between 1 and {MOST_CHARACTERS} characters."
         )));
     }
-    style::title("Make a password");
+    let input = Input::new(false);
+    let flow = Flow::start(&input, TITLE);
+    style::title(TITLE);
     eprintln!();
     if count < RECOMMENDED_CHARACTERS {
         style::warn(
@@ -193,18 +220,14 @@ fn run_characters(count: usize) -> Result<i32, Failure> {
     for _ in 0..count {
         password.push(char::from(CHARACTERS[random_character()?]));
     }
-    if std::io::stdout().is_terminal() {
-        println!("  {STRONG}{}{STRONG:#}", *password);
-        eprintln!();
-    } else {
-        println!("{}", *password);
-    }
-    style::ok(format!(
-        "{count} random characters, about {} bits.",
-        strength_text(count * MILLIBITS_PER_CHARACTER)
-    ));
-    style::hint("Shown only once and not stored: write it down, apart from the container.");
-    Ok(SUCCESS)
+    show(
+        &password,
+        &format!(
+            "{count} random characters, about {} bits.",
+            strength_text(count * MILLIBITS_PER_CHARACTER)
+        ),
+        flow,
+    )
 }
 
 /// An unbiased index below 57 from the operating system's random generator. A random byte gives

@@ -12,6 +12,7 @@ use mhfe::{MhfeError, Reference, Suite, WordCount};
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
+use crate::flow::Flow;
 use crate::locked_text::LockedText;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
@@ -199,6 +200,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         }
     }
     let mut input = Input::new(options.stdin);
+    // At a terminal every step on a screen of its own, the summary at the end.
+    let flow = Flow::start(&input, Operation::Check.title());
     let work = settings::choose(options.settings, &mut input, Operation::Check)?;
 
     let (container, suite) = terminal::read_container(&mut input, Operation::Check.title())?;
@@ -210,7 +213,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         }
         .into());
     }
-    let password = terminal::read_password(&mut input, Operation::Check.title())?;
+    let password = terminal::read_password(&mut input, Operation::Check)?;
     let choice = match (options.address, options.fingerprint, options.words) {
         (true, _, _) => Choice::Address,
         (_, true, _) => Choice::Fingerprint,
@@ -255,6 +258,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         Ok(())
     })?;
     progress.finish();
+    // The result follows the summary on the main screen.
+    flow.finish();
     let matches = outcome.matches();
 
     eprintln!();
@@ -336,8 +341,9 @@ fn root_pattern(roots: &[Vec<u32>]) -> String {
 }
 
 fn show_search(address: &Address, path: Option<&DerivationPath>, limits: SearchLimits) {
+    // Shown before the work starts too, so that a wrong address type can still be cancelled.
     if let Some(kind) = address.type_description() {
-        style::fact("Type", kind);
+        style::fact_before_work("Type", kind);
     }
     let search = match path {
         Some(path) => format!("only {path}"),
@@ -359,7 +365,7 @@ fn show_search(address: &Address, path: Option<&DerivationPath>, limits: SearchL
             )
         }
     };
-    style::fact("Search", search);
+    style::fact_before_work("Search", search);
 }
 
 /// A count with thousands separated by commas, such as "2,000".
@@ -572,6 +578,9 @@ pub fn read_passphrase_of(
     let screen = PrivateScreen::enter(input, operation.title());
     if screen.is_active() {
         eprintln!();
+        style::hint(&format!(
+            "Part of {wallet}; it is NOT the container password."
+        ));
     }
     let passphrase = input.secret(&format!(
         "BIP39 passphrase of {wallet}, or Enter if it has none"

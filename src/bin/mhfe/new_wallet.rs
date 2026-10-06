@@ -20,6 +20,7 @@ use zeroize::Zeroizing;
 use crate::choice::{self, Answer, Help, Question};
 use crate::encrypt;
 use crate::exit::{Failure, SUCCESS};
+use crate::flow::{self, Flow};
 use crate::locked_text::LockedText;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
@@ -56,6 +57,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
              output redirected.",
         ));
     }
+    // Every step on a screen of its own, the summary at the end.
+    let flow = Flow::start(&input, Operation::New.title());
     let work = settings::choose(options.settings, &mut input, Operation::New)?;
     // A wallet check exists only with a passphrase, so its question comes only after one.
     let passphrase = read_new_passphrase(&mut input)?;
@@ -93,6 +96,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         Suite::TwentyFourWords,
         &password,
     )?;
+    flow.finish();
     style::fact("Format", paint(MUTED, new.suite.id()));
     // A passphrase belongs to the wallet, checked or not.
     let also: &[&str] = if passphrase.is_empty() {
@@ -168,6 +172,7 @@ fn read_new_passphrase(input: &mut Input) -> Result<LockedText, Failure> {
     let screen = terminal::PrivateScreen::enter(input, Operation::New.title());
     let passphrase = loop {
         eprintln!();
+        style::hint("Part of the wallet, as a 25th word; it is NOT the container password.");
         let passphrase = input.secret("BIP39 passphrase of the new wallet, or Enter for none")?;
         if passphrase.is_empty() {
             break passphrase;
@@ -199,6 +204,7 @@ fn draw_phrase(passphrase: Option<&str>) -> Result<Zeroizing<String>, Failure> {
             entropy
         }
         Some(passphrase) => {
+            flow::step();
             eprintln!();
             style::hint("Drawing a phrase that passes the check, about 65,536 draws.");
             let entropy = draw_checked(passphrase)?;

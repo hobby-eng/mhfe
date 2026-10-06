@@ -14,6 +14,7 @@ use zeroize::Zeroizing;
 
 use crate::choice;
 use crate::exit::{capitalize, Failure, SUCCESS};
+use crate::flow::{self, Flow};
 use crate::length_choice;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
@@ -123,6 +124,8 @@ pub fn long_help() -> String {
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     let mut input = Input::new(options.stdin);
+    // At a terminal every step on a screen of its own, the summary at the end.
+    let flow = Flow::start(&input, Operation::Encrypt.title());
     let work = settings::choose(options.settings, &mut input, Operation::Encrypt)?;
 
     let original = read_original(&mut input)?;
@@ -144,6 +147,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &password,
     )?;
     drop(original);
+    flow.finish();
     let container_words = new.words.split(' ').count();
     // The format of the container, which the specification asks to show after creating it.
     style::fact("Format", paint(MUTED, new.suite.id()));
@@ -215,8 +219,11 @@ pub fn seal(
         if screen.is_active() {
             terminal::wait_to_leave()?;
             drop(screen);
-            // The main screen gets the outcome too: the private screen and its copy are gone.
-            report_check(&checked);
+            // The main screen gets the outcome too: the private screen and its copy are gone. A
+            // command shown one step at a time has kept it for its summary already.
+            if !flow::is_active() {
+                report_check(&checked);
+            }
         }
         checked?;
     }
@@ -296,14 +303,14 @@ fn report_check(checked: &Result<(), MhfeError>) {
             eprintln!();
             style::alarm(
                 "The container shown is WRONG: it did not turn back into your phrase.",
-                "Do not use it; cross it out if you wrote it down, and encrypt again.",
+                "Do NOT use it; cross it out if you wrote it down, and encrypt again.",
             );
         }
         Err(_) => {
             eprintln!();
             style::alarm(
                 "The check stopped with an error: the container shown is NOT verified.",
-                "Do not rely on it; encrypt again.",
+                "Do NOT rely on it; encrypt again.",
             );
         }
     }
@@ -321,7 +328,7 @@ fn show_before_the_check(container: &str, input: &Input) {
     );
     terminal::print_phrase(container, input);
     eprintln!();
-    style::warn(
+    style::warn_here(
         "Not verified yet: write it down, but wait for the check.",
         "",
     );
@@ -384,10 +391,36 @@ pub fn warn_if_detection_would_mislead(phrase: &str, words: usize) -> Result<boo
 /// phrase away, and warns when its estimated strength falls short of four dice words.
 pub fn read_new_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
     let screen = terminal::PrivateScreen::enter(input, operation.title());
+    // A command may ask for a BIP39 passphrase or another password too: say which secret this is.
+    let (what, prompt, repeat) = match operation {
+        Operation::New => (
+            "The container password encrypts the 24 words; it is NOT the BIP39 passphrase.",
+            "Container password",
+            "Repeat the container password",
+        ),
+        Operation::Rekey | Operation::RekeyNew => (
+            "The new password replaces the old one in the new container.",
+            "New container password",
+            "Repeat the new container password",
+        ),
+        Operation::Wallets => (
+            "Each password other than the container's own opens a hidden wallet of its own.",
+            "Hidden wallet password",
+            "Repeat the hidden wallet password",
+        ),
+        _ => (
+            "The container password encrypts your phrase; it is NOT a BIP39 passphrase.",
+            "Container password",
+            "Repeat the container password",
+        ),
+    };
     let (password, bits) = loop {
         eprintln!();
+        if screen.is_active() {
+            style::hint(what);
+        }
         style::hint("Letter case and spaces count.");
-        let text = input.secret("Password")?;
+        let text = input.secret(prompt)?;
         let password = match Password::new(&text) {
             Ok(password) => password,
             Err(error) if input.can_ask_again() => {
@@ -399,7 +432,7 @@ pub fn read_new_password(input: &mut Input, operation: Operation) -> Result<Pass
             }
             Err(error) => return Err(error.into()),
         };
-        let repeated = input.secret("Repeat the password")?;
+        let repeated = input.secret(repeat)?;
         if *repeated != *text {
             if input.can_ask_again() {
                 style::retry("The two passwords differ. Please type them again.");
