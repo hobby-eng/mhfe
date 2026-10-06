@@ -4,13 +4,12 @@
 //! - a warning when swap could write memory to a disk without encryption. Argon2's work area is far
 //!   too large to keep out of swap (src/memory.rs), and from its blocks a password guess can be
 //!   tested cheaply, so unencrypted swap matters;
-//! - on Linux, a command that handles secrets cannot open a network socket (seccomp) or write to
-//!   any file (Landlock): the kernel enforces that it stays offline, so not even a fault or a
-//!   tampered dependency could send a secret away or leave it in a file. Both apply to the thread
-//!   that runs the command and every thread it starts, such as Argon2's, and cannot be undone;
-//! - on Linux, a command started directly also moves into a network namespace of its own, where no
-//!   network interface exists: whatever way a socket were made, it would reach nothing. Where the
-//!   system does not allow that, the command runs on with the two above.
+//! - on Linux, seccomp refuses new sockets and io_uring, and Landlock restricts opening files for
+//!   writing. Both cover the calling thread and workers it starts, including Argon2's, and cannot
+//!   be undone. Already-open descriptors remain usable, so a trusted offline host is required;
+//! - a command started directly also enters its own network namespace, where permitted, with only
+//!   inactive loopback and no external routes. Previously opened sockets keep their original
+//!   namespace. The localhost browser server stays outside these secret-command restrictions.
 
 // prctl, setrlimit and the Landlock calls are operating-system calls that Rust offers only through
 // unsafe foreign functions.

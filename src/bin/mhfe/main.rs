@@ -166,7 +166,7 @@ fn main_help() -> String {
             ),
         ],
     );
-    let note = "Secrets are typed at hidden prompts, never passed as arguments. Use MHFE on a \
+    let note = "Secrets are typed on a private screen, never passed as arguments. Use MHFE on a \
                 trusted computer without a network connection. -h gives a short summary of a \
                 command, --help the full explanation.";
     format!(

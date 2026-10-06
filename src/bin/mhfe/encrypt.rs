@@ -108,13 +108,13 @@ pub fn long_help() -> String {
         &[
             (
                 "Original seed phrase",
-                "hidden; 12 to 24 words; four letters per word are enough",
+                "on a private screen; 12 to 24 words; four letters per word are enough",
             ),
             (
                 "Container length",
                 "for 12 to 21 words: 24 words (default) or the same length; ? explains both",
             ),
-            ("Password", "hidden, typed twice"),
+            ("Password", "on a private screen, typed twice"),
         ],
     );
     let note = style::help_note(
