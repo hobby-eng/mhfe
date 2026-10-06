@@ -66,7 +66,7 @@ windows-sys = { version = "=0.61.2", features = [
 
 [build-dependencies]
 # Compiles the vendored reference Argon2 C code (build.rs).
-cc = "=1.5.1"
+cc = "=1.6.0"
 
 [dev-dependencies]
 # An independent Argon2 implementation, used only to cross-check the C engine in tests.
