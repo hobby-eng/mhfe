@@ -95,8 +95,8 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
 - `derive_wallet(container, password, passphrase, on_progress)` gives the hidden wallet that
   `password` opens on a 24-word container, read as 24 words, unverified (a hidden wallet behind an
   honest disclosure). A password whose reading passes the built-in check of a 12- to 21-word
-  phrase, or the wallet check with the main wallet's `passphrase` unless it is empty, is refused
-  (`HIDDEN_WALLET_PASSES_CHECK`). Running the published vectors on the computer, as
+  phrase, or the wallet check with the main wallet's `passphrase` or without a passphrase, is
+  refused (`HIDDEN_WALLET_PASSES_CHECK`). Running the published vectors on the computer, as
   `mhfe self-test` does, before such a wallet is funded guards against a build or computer that
   computes MHFE wrongly and would show a wallet no correct program finds again.
 - `wallet_check` (a draft): `passes(entropy, passphrase)`, `phrase_passes(phrase, passphrase)` and
@@ -105,12 +105,13 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   two bytes being zero. The tag is 24 ASCII bytes with no NUL; `BE32(ENT)` is the entropy's length
   in bits as a 4-byte big-endian number; `seed` is the raw 64-byte BIP39 seed of the canonical
   English phrase (lower case, one space between words) with the passphrase in NFKD. The passphrase
-  may not be empty (`WALLET_CHECK_NEEDS_PASSPHRASE`): the check would then confirm the MHFE password
-  alone. A pass is statistical evidence: a wrong password or passphrase passes once in about
-  65,536, and drawing the phrase this way leaves about 240 of its 256 bits.
-  `Reference::WalletCheck { passphrase }` lets `check` test it; it never confirms a recovery to
-  encrypt again. The public vector: the entropy of 24 zero bytes followed by the big-endian 64-bit
-  number 76,562 passes with the passphrase `TREZOR`.
+  is empty for a wallet without one; the check then confirms the MHFE password alone, as the
+  built-in check of a 12- to 21-word phrase does. A pass is statistical evidence: a wrong password
+  or passphrase passes once in about 65,536, and drawing the phrase this way leaves about 240 of its
+  256 bits. `Reference::WalletCheck { passphrase }` lets `check` test it; it never confirms a
+  recovery to encrypt again. The public vectors: the entropy of 24 zero bytes followed by the
+  big-endian 64-bit number 76,562 passes with the passphrase `TREZOR`, and with 98,918 it passes
+  without a passphrase.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
@@ -146,7 +147,6 @@ are outside its control.
 | `REFERENCE_REQUIRED`              | A recovery to encrypt again has no built-in check and no address or fingerprint     |
 | `REFERENCE_MISMATCH`              | The phrase recovered to encrypt again does not match the address or fingerprint     |
 | `HIDDEN_WALLET_PASSES_CHECK`      | A hidden wallet's phrase passes the built-in check of a shorter phrase              |
-| `WALLET_CHECK_NEEDS_PASSPHRASE`   | A wallet check was asked without a BIP39 passphrase                                 |
 | `INVALID_PIM`                     | PIM outside 0 to 1023                                                               |
 | `INVALID_MEMORY_LEVEL`            | Memory level outside 0 to 21                                                        |
 | `EMPTY_PASSWORD`                  | The password is empty                                                               |

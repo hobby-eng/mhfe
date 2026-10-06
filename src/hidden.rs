@@ -18,8 +18,8 @@ impl<E: Argon2Engine> Mhfe<E> {
     /// built-in check. A password whose reading passes the check of a 12- to 21-word phrase, about
     /// once in a billion, is refused (rule I29): recovery would take the hidden wallet for that
     /// short phrase and call it verified. So is one whose reading passes the wallet check with
-    /// `passphrase`, the main wallet's BIP39 passphrase, once in 65,536, which would make it look
-    /// like the main wallet; without a passphrase there is no wallet check to pass. Only 24-word
+    /// `passphrase`, the main wallet's BIP39 passphrase, or without a passphrase, each once in
+    /// 65,536, which would make it look like the main wallet or a checked one. Only 24-word
     /// containers are taken for now; the same derivation on a same-length container would give
     /// wallets of its length.
     pub fn derive_wallet(
@@ -47,13 +47,12 @@ impl<E: Argon2Engine> Mhfe<E> {
 /// or a new 24-word one that passes the wallet check with `passphrase`. The 24-word reading of a
 /// state is the state itself.
 fn passes_a_check(x: &packing::State, passphrase: &str) -> Result<bool, MhfeError> {
-    if !packing::matching_short_lengths(x).is_empty() {
+    if !packing::matching_short_lengths(x).is_empty() || wallet_check::passes(&x[..], passphrase)? {
         return Ok(true);
     }
-    if passphrase.is_empty() {
-        return Ok(false);
-    }
-    wallet_check::passes(&x[..], passphrase)
+    // mhfe decrypt reports a pass without a passphrase, so a hidden wallet must not pass that
+    // either, whatever the main wallet's passphrase.
+    Ok(!passphrase.is_empty() && wallet_check::passes(&x[..], "")?)
 }
 
 #[cfg(test)]
@@ -130,10 +129,15 @@ mod tests {
         let mut state = [0u8; packing::STATE_BYTES];
         state[24..].copy_from_slice(&76_562u64.to_be_bytes());
         assert!(passes_a_check(&state, "TREZOR").unwrap());
-        // Without the main wallet's passphrase there is no wallet check to pass.
+        // The same reading with the main wallet's empty passphrase is another seed, which fails.
         assert!(!passes_a_check(&state, "").unwrap());
         state[24..].copy_from_slice(&76_561u64.to_be_bytes());
         assert!(!passes_a_check(&state, "TREZOR").unwrap());
+        // A reading that passes the check without a passphrase is refused as well, also when the
+        // main wallet has one: mhfe decrypt would report that pass.
+        state[24..].copy_from_slice(&98_918u64.to_be_bytes());
+        assert!(passes_a_check(&state, "").unwrap());
+        assert!(passes_a_check(&state, "TREZOR").unwrap());
     }
 
     #[test]

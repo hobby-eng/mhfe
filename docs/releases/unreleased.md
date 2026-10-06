@@ -41,8 +41,10 @@ Planned as version 0.5.0.
   chooses no check or a wallet check with the passphrase (a draft, 16 bits): the phrase is drawn so
   that a tagged hash of its BIP39 seed starts with 16 zero bits, and `mhfe check` with the
   passphrase recognises the right password. The library has `wallet_check` and
-  `Reference::WalletCheck`, which never confirms a rekey; `derive_wallet` takes the main wallet's
-  passphrase, so that no hidden wallet passes the check either.
+  `Reference::WalletCheck`, which never confirms a rekey; the check may also be tested without a
+  passphrase, and `mhfe decrypt` reports in one line when a recovered 24-word phrase passes it
+  without one, and says nothing otherwise. `derive_wallet` takes the main wallet's passphrase, so
+  that no hidden wallet passes the check, with it or without a passphrase.
 - `mhfe wallets` opens hidden wallets: every other password gives its own 24-word wallet on a
   24-word container, shown on one private screen that the main screen keeps no trace of, not even
   how many wallets were opened, and recorded nowhere; the README advises running

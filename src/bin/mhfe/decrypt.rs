@@ -2,7 +2,7 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::{PhraseLength, RecoveredPhrase, Recovery, Suite, WordCount};
+use mhfe::{wallet_check, PhraseLength, RecoveredPhrase, Recovery, Suite, WordCount};
 
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::Flow;
@@ -184,6 +184,9 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
         );
         style::more(readme::DECRYPT);
     }
+    if passes_check_without_passphrase(phrase) {
+        style::ok("It passes its 16-bit check without a BIP39 passphrase.");
+    }
     eprintln!();
     eprintln!(
         "{}",
@@ -193,6 +196,15 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
         )
     );
     print_result(phrase, input);
+}
+
+/// Whether a 24-word phrase passes the check that a new wallet can be made with, without a BIP39
+/// passphrase (mhfe::wallet_check). Only a pass is reported: a phrase without the check fails it,
+/// so a failure means something only to an owner who knows the wallet was made with it. With a
+/// passphrase the check is tested by mhfe check, which asks for it.
+fn passes_check_without_passphrase(phrase: &RecoveredPhrase) -> bool {
+    // A recovered phrase is always valid, so the test cannot fail; an error would count as no pass.
+    phrase.words == 24 && wallet_check::phrase_passes(&phrase.phrase, "").unwrap_or(false)
 }
 
 fn show_ambiguous(candidates: &[RecoveredPhrase], input: &Input) {
