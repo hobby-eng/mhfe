@@ -232,8 +232,15 @@ fn make_passwords() -> Result<(), Failure> {
         record: None,
     };
     // The answers with the options of mhfe password they choose.
-    let kinds: [(Answer, Option<&str>); 2] = [
+    let kinds: [(Answer, Option<&str>); 3] = [
         (Answer::new("Five dice words", "easy to say and type"), None),
+        (
+            Answer::new(
+                "Five words and a check word",
+                "one mistyped word is repaired",
+            ),
+            Some("--check-word"),
+        ),
         // --chars alone means sixteen characters.
         (
             Answer::new("Sixteen random characters", "letters and digits"),

@@ -78,6 +78,12 @@ Never include a real seed phrase, password, private key or wallet file.
 - `wallets` shows hidden wallets all on one private screen with their passwords and progress, so
   that the main screen shows neither the wallets nor how many were opened, and it keeps no record
   of the passwords or the wallets.
+- A password from `mhfe password --check-word` has a sixth word computed from the other five
+  (MHFE-PASSWORD-CHECK-1). When six list words are typed, the program may offer to restore or
+  replace one of them before any Argon2 work. The offer shows words of the password, so it is made
+  only on the private screen and only to a person at a terminal; nothing is changed unless they
+  choose it, and the summary says only how the check word came out. The list positions it computes
+  are wiped. The check word adds no strength and is as secret as the rest of the password.
 - Nothing connects to a network. The browser package loads no remote resources and contains no
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
   (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which

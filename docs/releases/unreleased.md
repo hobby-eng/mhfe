@@ -66,13 +66,19 @@ Planned as version 0.5.0.
   it.
 - `mhfe password --chars N` makes N random characters (16 by default, about 93.3 bits) from 57
   letters and digits without look-alikes, instead of dice words.
+- `mhfe password --check-word` makes five dice words and a sixth computed from them, the check
+  word of the optional profile MHFE-PASSWORD-CHECK-1, still about 64.6 bits. When a password of
+  six list words is typed, a forgotten word typed as `?` or a misspelt one is restored, a wrong
+  word gets its six possible repairs, and extra spaces or capitals are offered corrected. Each is
+  used only when chosen and before any Argon2 work; the password as typed is always an answer,
+  and the summary says how the check word came out.
 - `mhfe encrypt` estimates the strength of a typed password and warns below about 50 bits, instead
   of warning whenever it is not four dice words. The estimate needs no dependency: it reads the
   password as words of the EFF and BIP39 lists, common passwords, years, repeats, runs and keyboard
   rows, with letter substitutions, and the README states what it can overrate.
-- The start menu's password generator first asks for five dice words or sixteen random characters,
-  repeats on Enter and returns to the menu on Escape. Each password replaces the previous one on
-  the private screen, which is cleared when leaving.
+- The start menu's password generator first asks for five dice words, five words and a check word
+  or sixteen random characters, repeats on Enter and returns to the menu on Escape. Each password
+  replaces the previous one on the private screen, which is cleared when leaving.
 - Secrets are typed on a private screen, the terminal's alternate screen, which shows them as they
   are typed and is cleared as soon as they are accepted, with no question to confirm them: a
   mistyped word is refused by the word list or the checksum. This replaces the hidden prompts and

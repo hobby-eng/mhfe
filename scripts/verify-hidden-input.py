@@ -21,6 +21,12 @@ It checks that
 - the terminal settings are exactly the original ones afterwards, after a normal answer and after
   Ctrl+C.
 
+A password with a check word (MHFE-PASSWORD-CHECK-1) is repaired only on the person's choice and
+before Argon2: a word typed as ? is restored as the third public vector says, "chokehold", with the
+repair as the first answer, also after a stray leading space, which the repair removes; a wrong word
+gets the question with the password as typed first, and "Type the password again" asks for it
+again. The summary records how the check word came out and none of the words.
+
 It also drives the menu that `mhfe` shows when it starts without arguments: the arrow keys and Enter
 choose an entry, its number chooses it at once, other escape sequences (Ctrl+Up) and keys do
 nothing and are not shown, q and a lone Escape quit with exit code 0 and Ctrl+C with 130, and the
@@ -88,7 +94,8 @@ HELP_FROM_PASSWORD = 2
 MENU_SHOWN, PASSWORD_MADE = b"Esc quits", b"bits"
 BACK_TO_MENU = b"Press Enter to return to the menu (Esc quits)."
 PASSWORD_AGAIN = b"Press Enter for another password (Esc returns to the menu)."
-# The question of the password entry: five dice words, or sixteen random characters.
+# The question of the password entry: five dice words, five words and a check word, or sixteen
+# random characters.
 PASSWORD_KIND = b"What kind of password?"
 # What the lists of `mhfe encrypt` show: a list's hint line, the explanation behind ?, and the line
 # that records the chosen container length.
@@ -268,6 +275,61 @@ def check_password(label, password, expected, not_shown=None):
     return code
 
 
+# The third public vector of MHFE-PASSWORD-CHECK-1, and the question asked about its check word.
+CHECK_WORD_PASSWORD = b"jovial trailing chokehold pavilion cresting ninth"
+CHECK_WORD_ASKED = b"Repair the password with its check word?"
+
+
+def check_check_word():
+    session = Session()
+    try:
+        session.at_password_prompt()
+        session.answer(CHECK_WORD_PASSWORD.replace(b"chokehold", b"?") + b"\r", CHECK_WORD_ASKED,
+                       b"Word 3: chokehold", LIST_SHOWN)
+        session.answer(ENTER, ACCEPTED)
+    finally:
+        code, settings = session.close()
+    assert settings == session.original, "check word: the terminal settings were not restored"
+    left = session.output.rfind(LEAVE_PRIVATE)
+    record = b"Password   typed, word 3 repaired by its check word"
+    assert record in session.output[left:], "check word: no record"
+    assert b"chokehold" not in session.output[left:], "check word: a word reached the main screen"
+    print("check word: a word typed as ? restored on Enter, recorded without the words")
+
+    session = Session()
+    try:
+        session.at_password_prompt()
+        wrong = CHECK_WORD_PASSWORD.replace(b"ninth", b"zoom")
+        session.answer(wrong + b"\r", CHECK_WORD_ASKED, b"Word 6: ninth instead of zoom",
+                       LIST_SHOWN)
+        session.answer(b"2", b"Container password: ")
+        session.answer(CHECK_WORD_PASSWORD + b"\r", ACCEPTED)
+    finally:
+        code, settings = session.close()
+    assert settings == session.original, "check word: the terminal settings were not restored"
+    left = session.output.rfind(LEAVE_PRIVATE)
+    record = b"Password   typed, its check word fits"
+    assert record in session.output[left:], "check word: a fit was not recorded"
+    assert b"ninth" not in session.output[left:], "check word: a word reached the main screen"
+    print("check word: a wrong word asked about, typed again, then the fit recorded")
+
+    session = Session()
+    try:
+        session.at_password_prompt()
+        # The stray space of a password typed in a hurry: the repair also removes it.
+        typed = b" " + CHECK_WORD_PASSWORD.replace(b"chokehold", b"?")
+        session.answer(typed + b"\r", CHECK_WORD_ASKED, b"Word 3: chokehold",
+                       b"extra spaces removed", LIST_SHOWN)
+        session.answer(ENTER, ACCEPTED)
+    finally:
+        code, settings = session.close()
+    assert settings == session.original, "check word: the terminal settings were not restored"
+    left = session.output.rfind(LEAVE_PRIVATE)
+    record = b"Password   typed, word 3 repaired by its check word; extra spaces removed"
+    assert record in session.output[left:], "check word: the corrected repair was not recorded"
+    print("check word: a leading space removed together with the repair")
+
+
 def check_menu():
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
@@ -280,7 +342,7 @@ def check_menu():
     session.answer(ESCAPE, MENU_SHOWN)
     # The second time, random characters.
     session.answer(str(PASSWORD_ENTRY).encode(), PASSWORD_KIND)
-    session.answer(b"2", b"random characters", PASSWORD_AGAIN)
+    session.answer(b"3", b"random characters", PASSWORD_AGAIN)
     session.answer(b"q", MENU_SHOWN)
     # The menu keeps the password entry highlighted after it.
     session.answer(DOWN * HELP_FROM_PASSWORD + ENTER, BACK_TO_MENU)
@@ -472,6 +534,7 @@ def main():
     shown_privately("Ctrl+C", session.output, SECRET)
     print("cancelled: Ctrl+C at the password, exit code 130, private screen left, terminal restored")
 
+    check_check_word()
     check_menu()
     check_rekey_asks_about_other_wallets()
     check_encrypt_lists()

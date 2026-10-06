@@ -13,6 +13,7 @@ use mhfe::{
 };
 use zeroize::Zeroizing;
 
+use crate::check_word;
 use crate::choice;
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::flow::{self, Flow};
@@ -432,7 +433,7 @@ pub fn read_new_password(input: &mut Input, operation: Operation) -> Result<Pass
             "Repeat the container password",
         ),
     };
-    let (password, bits) = loop {
+    let (password, bits, check) = loop {
         eprintln!();
         if screen.is_active() {
             style::hint(what);
@@ -460,10 +461,26 @@ pub fn read_new_password(input: &mut Input, operation: Operation) -> Result<Pass
                 "The two passwords differ. Nothing was encrypted.",
             ));
         }
-        break (password, strength::estimated_bits(&text));
+        drop(repeated);
+        // Typed twice the same, a word copied wrongly from paper is still caught by the check word.
+        let (text, check) = match check_word::review(input, text, &screen)? {
+            check_word::Reviewed::Use(text, check) => (text, check),
+            check_word::Reviewed::TypeAgain => {
+                screen.clear();
+                continue;
+            }
+        };
+        // A repaired or corrected password is another text than the one first read.
+        let password = match check {
+            check_word::Outcome::Repaired(..) | check_word::Outcome::Fits(Some(_)) => {
+                Password::new(&text)?
+            }
+            _ => password,
+        };
+        break (password, strength::estimated_bits(&text), check);
     };
     drop(screen);
-    choice::record("Password", "typed twice");
+    choice::record("Password", &check.record("typed twice"));
     if strength::is_weak(bits) {
         eprintln!();
         style::warn(

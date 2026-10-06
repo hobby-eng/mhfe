@@ -220,9 +220,39 @@ and keyboard rows such as `qwerty`, also with substitutions such as `0` for `o`.
 password made of words it does not know, such as names or words of other languages. A password
 from `mhfe password` has a known strength.
 
-From the start menu, the entry first asks for five dice words or sixteen random characters; Enter
-then makes another password of the same kind and Escape returns to the menu. Each password
-replaces the previous one on the private screen; leaving it clears the screen.
+From the start menu, the entry first asks for five dice words, five words and a check word, or
+sixteen random characters; Enter then makes another password of the same kind and Escape returns to
+the menu. Each password replaces the previous one on the private screen; leaving it clears the
+screen.
+
+#### A check word
+
+`mhfe password --check-word` makes five words and a sixth computed from them, the check word, as the
+optional profile
+[MHFE-PASSWORD-CHECK-1](https://github.com/hobby-eng/mhfe-spec#optional-password-check-word-mhfe-password-check-1)
+of the specification defines it. When you type such a password, mhfe compares its words with the
+list before the long wait:
+
+- the words fit their check word: the summary says so;
+- one word is forgotten and typed as `?` in its place, as the password screen says, or misspelt:
+  the check word restores it, and mhfe shows the word and asks before using it. A word simply left
+  out does not work, since five words are an ordinary password;
+- every word is in the list but they do not fit: one is wrong, and which one cannot be told. mhfe
+  shows the six possible repairs, one for each place, to compare with what you wrote down.
+
+Spaces and capitals count in such a password as in any other. When its words fit their check word
+only once they are written in small letters with single spaces, mhfe offers that corrected
+password as well, also together with a repair.
+
+mhfe never repairs anything without asking and never refuses a password: the container does not
+record whether its password has a check word, so the password as typed is always one of the answers.
+A check word that fits shows only that the six words belong together, not that the password opens
+this container. Type the words in lower case with single spaces, as shown.
+
+The check word adds no strength: the password keeps the 64.6 bits of its five random words, and the
+check word must stay as secret as the rest, since anyone who learns it alone has about 51.7 bits
+left to guess. If you may give away another password of the same container, such as the one of the
+main wallet in front of hidden ones, make both with `--check-word`, so that they look alike.
 
 ### `mhfe encrypt`
 

@@ -14,6 +14,7 @@ use anstream::{eprint, eprintln, println};
 use mhfe::{MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
 use zeroize::Zeroizing;
 
+use crate::check_word::{self, Reviewed};
 use crate::choice::{self, Answer, Question};
 use crate::exit::{self, Failure};
 use crate::flow::{self, Kind};
@@ -465,14 +466,23 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
         ),
     };
     let screen = PrivateScreen::enter(input, operation.title());
-    let password = loop {
+    let (password, check) = loop {
         if screen.is_active() {
             eprintln!();
             style::hint(what);
+            style::hint(check_word::FORGOTTEN_WORD_HINT);
         }
-        let text = input.secret(prompt)?;
+        let typed = input.secret(prompt)?;
+        // A mistyped word of a password with a check word is repaired here, before any Argon2 work.
+        let (text, check) = match check_word::review(input, typed, &screen)? {
+            Reviewed::Use(text, check) => (text, check),
+            Reviewed::TypeAgain => {
+                screen.clear();
+                continue;
+            }
+        };
         match Password::new(&text) {
-            Ok(password) => break password,
+            Ok(password) => break (password, check),
             Err(error) if input.can_ask_again() => {
                 style::retry(format!(
                     "{}. Please type it again.",
@@ -483,7 +493,7 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
         }
     };
     drop(screen);
-    choice::record("Password", "typed");
+    choice::record("Password", &check.record("typed"));
     Ok(password)
 }
 
