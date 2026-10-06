@@ -271,14 +271,16 @@ coin, or takes it from `--coin`, and shows before the check what it searches: th
 receiving and change addresses of accounts 0 to 9 on the standard paths of that address, or one
 path with `--path`. Do not keep the address or fingerprint next to the container.
 
-For a wallet that `mhfe new` made with a check, the list also offers "Check with the BIP39
-passphrase". It asks for the BIP39 passphrase, which the check needs, and confirms the password and
-passphrase, not the wallet.
+For a phrase drawn so that its BIP39 seed passes a check, as `mhfe new` does on request and other
+programs following the specification can, the list also offers "The phrase + passphrase check": a
+16-bit hash of the seed, which BIP39 derives from the phrase and the passphrase together. It asks
+for the BIP39 passphrase and confirms the password and passphrase, not the wallet. "The container's
+built-in check" is the one of a 12- to 21-word original in a 24-word container.
 
 When it does not match, the check cannot tell what is wrong: the password, a setting, the
 container, the BIP39 passphrase or the reference. Without an address or fingerprint, for a 12- to
-21-word original in a 24-word container, it uses the built-in check, which proves the password and
-settings but not the wallet or its passphrase.
+21-word original in a 24-word container, it uses the container's built-in check, which proves the
+password and settings but not the wallet or its passphrase.
 
 ### `mhfe decrypt`
 
@@ -289,7 +291,12 @@ in the terminal's history; the summary shows the container's format. The number 
 container of the same length. For a 12- to 21-word original in a 24-word container it confirms the
 password and finds the length itself; a wrong password then shows as "Not verified". A 24-word
 original and a same-length container have no such check: a wrong password gives another valid
-phrase, so compare the result with your wallet. `--words N` sets the length of the original
+phrase, so compare the result with your wallet. A new 24-word phrase can be made with a check of
+its own, as the specification allows. For a phrase made with it and without a BIP39 passphrase,
+MHFE says in one line when the recovered phrase passes that 16-bit check, and nothing when it does
+not: a phrase made without the check fails it, so a failure tells nothing. A pass makes a right
+password very likely but does not show which wallet it is; with a passphrase, `mhfe check` tests
+it. `--words N` sets the length of the original
 yourself; it then accepts only a 24-word container or a same-length container of exactly N words.
 For about one container in four billion, several lengths pass their check by accident; MHFE then
 shows each reading, and you compare them with your wallet or choose the length with `--words N`.
@@ -335,7 +342,7 @@ preselected:
 - **No check**, the usual case for a 24-word phrase and the only one without a passphrase. Every
   password gives an equally valid wallet, so a decoy password keeps working, and a recovery cannot
   tell a wrong password: confirm it with an address or the fingerprint.
-- **A check with your BIP39 passphrase**, for funds kept under it. The phrase is drawn so that a
+- **A phrase + passphrase check**, for funds kept under it. The phrase is drawn so that a
   tagged SHA-256 of its BIP39 seed, made with the passphrase, starts with 16 zero bits; the exact
   bytes are in [docs/API.md](docs/API.md). `mhfe check` with the passphrase then says whether a
   recovery passes. A wrong password or passphrase still slips through once in about 65,536, so a
@@ -376,7 +383,8 @@ so the main screen shows neither the wallets nor how many you opened; without a 
 command refuses to start. A wallet need not be written down, as the container and its password
 give it again, and nothing records which passwords you used or how many. A password whose wallet
 passes the built-in check of a shorter phrase, as the container's own password of a 12- to 21-word
-phrase does, is refused, so that recovery never calls a hidden wallet verified.
+phrase does, is refused, so that recovery never calls a hidden wallet verified. So is one whose
+wallet passes the check of a new phrase, with the main wallet's passphrase or without one.
 
 To keep a hidden wallet hidden:
 

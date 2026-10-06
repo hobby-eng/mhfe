@@ -122,7 +122,7 @@ fn ask_for_check() -> Result<bool, Failure> {
     let answers = [
         Answer::new("No check", "every password opens a valid wallet"),
         Answer::new(
-            "A check with my BIP39 passphrase",
+            "A phrase + passphrase check",
             "a recovery recognises a wrong password",
         ),
     ];
@@ -155,7 +155,7 @@ fn explain() {
     good("Every password gives an equally valid wallet; decoys work.");
     bad("A recovery cannot tell a wrong password.");
     eprintln!();
-    eprintln!("{}", paint(STRONG, "A check with my BIP39 passphrase"));
+    eprintln!("{}", paint(STRONG, "A phrase + passphrase check"));
     good("A wrong password or passphrase passes once in about 65,536.");
     good("A password guess is tested only with a passphrase guess.");
     good("About 240 of the 256 bits remain: far beyond any search.");

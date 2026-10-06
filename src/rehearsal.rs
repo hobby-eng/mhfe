@@ -425,15 +425,16 @@ mod tests {
             .check(&container, &password, &other, none)
             .unwrap()
             .matches());
-        assert!(matches!(
-            mhfe.check(
+        // Without the passphrase it is the check of another seed, which this phrase fails.
+        assert!(!mhfe
+            .check(
                 &container,
                 &password,
                 &Reference::WalletCheck { passphrase: "" },
                 none
-            ),
-            Err(MhfeError::WalletCheckNeedsPassphrase)
-        ));
+            )
+            .unwrap()
+            .matches());
         assert!(matches!(
             mhfe.recover_confirmed(
                 &container,

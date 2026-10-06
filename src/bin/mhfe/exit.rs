@@ -58,7 +58,6 @@ impl From<MhfeError> for Failure {
             | MhfeError::NoBuiltInCheck { .. }
             | MhfeError::ReferenceRequired
             | MhfeError::HiddenWalletPassesCheck
-            | MhfeError::WalletCheckNeedsPassphrase
             | MhfeError::InvalidPim(_)
             | MhfeError::InvalidMemoryLevel(_)
             | MhfeError::EmptyPassword

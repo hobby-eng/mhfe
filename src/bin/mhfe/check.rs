@@ -37,7 +37,7 @@ pub struct Options {
     #[arg(long, long_help = fingerprint_help())]
     fingerprint: bool,
 
-    /// Only the built-in check of a 12- to 21-word original
+    /// The container's built-in check, of a 12- to 21-word original
     #[arg(long, value_name = "N", long_help = words_help())]
     words: Option<usize>,
 
@@ -87,7 +87,7 @@ fn fingerprint_help() -> String {
 
 fn words_help() -> String {
     style::option_help(&[
-        "Only the built-in check of a 12- to 21-word original.",
+        "The container's built-in check, of a 12- to 21-word original.",
         "N is the length of the original: 12, 15, 18 or 21. Nothing more is asked for. A match \
          confirms the password and the settings only, not the wallet or a BIP39 passphrase. A \
          24-word original and a container as long as its original have no built-in check; \
@@ -131,7 +131,8 @@ enum Choice {
     Address,
     Fingerprint,
     BuiltInCheck(usize),
-    /// The wallet check of a phrase that `mhfe new` made with one (a draft).
+    /// The check of a phrase that `mhfe new` made with one (a draft), with the wallet's BIP39
+    /// passphrase or without one.
     WalletCheck,
 }
 
@@ -240,11 +241,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             words: WordCount::new(words)?,
         },
         Choice::WalletCheck => {
+            // With the wallet's passphrase, or Enter for a wallet that has none.
             check_passphrase = read_passphrase(&mut input, Operation::Check)?;
-            // Refused before the long computation: the check is tested with its passphrase only.
-            if check_passphrase.is_empty() {
-                return Err(MhfeError::WalletCheckNeedsPassphrase.into());
-            }
             Reference::WalletCheck {
                 passphrase: &check_passphrase,
             }
@@ -287,8 +285,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
                 "The password, a setting, the container or the word count is wrong."
             }
             Choice::WalletCheck => {
-                "If this wallet was made with a check, the password, a setting or the passphrase is \
-                 wrong."
+                "If the phrase was drawn with this check, the password, a setting or the \
+                 passphrase is wrong."
             }
             _ => "The password, a setting, the container, passphrase or reference is wrong.",
         });
@@ -400,7 +398,8 @@ fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
             Some("It does not prove the wallet or its passphrase; an address (--address) does."),
         ),
         Choice::WalletCheck => (
-            "the recovered phrase passes its check with the BIP39 passphrase (16 bits).".to_owned(),
+            "the recovered phrase, with this BIP39 passphrase, passes its check (16 bits)."
+                .to_owned(),
             Some("It does not prove the wallet; an address (--address) does."),
         ),
     }
@@ -420,14 +419,17 @@ fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failur
         ),
     ];
     if !same_length {
+        // A check in the container, of a 12- to 21-word original, and one in the BIP39 seed of
+        // the phrase and its passphrase: a phrase drawn so that a 16-bit hash of that seed is zero
+        // (mhfe::wallet_check), which any program following the specification can make. The
+        // passphrase is asked next.
         answers.push(Answer::new(
-            "Only the built-in check",
+            "The container's built-in check",
             "checks the password, not the wallet",
         ));
-        // Named as mhfe new names it when the owner chooses it there.
         answers.push(Answer::new(
-            "Check with the BIP39 passphrase",
-            "if mhfe new added it; checks the password",
+            "The phrase + passphrase check",
+            "16-bit hash of the BIP39 seed",
         ));
     }
     let question = Question::new(
