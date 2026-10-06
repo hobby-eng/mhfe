@@ -2,14 +2,16 @@
 
 The branch CI must pass for the exact release commit, including Linux, Windows, macOS and the
 Chromium/Firefox browser checks. The tag workflow then builds the four canonical Docker archives,
-builds both macOS archives, audits dependencies and replays every full-cost suite 3 and suite 4
-vector with the native and independent implementations. It creates a draft only after those jobs
-pass. Finish the draft locally so the OpenPGP private key never enters GitHub Actions.
+builds both macOS archives and audits dependencies, and creates a draft once those jobs pass.
+Finish the draft locally so the OpenPGP private key never enters GitHub Actions. The same tag starts
+the Test vectors workflow on its own: it replays every full-cost suite 3 and suite 4 vector with the
+native and independent implementations in about three hours, and its result shows on the tag and in
+the README's badge; the draft does not wait for it.
 
 Before tagging, publish curated notes in `docs/releases/v<version>.md`, check all new commit
 signatures and create a signed annotated tag matching `Cargo.toml`. Run the repository's
 `scripts/check.sh` and a cached/uncached canonical comparison locally; keep heavy builds sequential.
-The long vector replays run in the release workflow rather than being duplicated locally.
+The long vector replays run on GitHub for the tag rather than being duplicated locally.
 
 ## Sign the downloaded files
 

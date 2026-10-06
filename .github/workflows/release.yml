@@ -87,14 +87,10 @@ jobs:
             macos-output/${{ matrix.package }}.sha256
           if-no-files-found: error
 
-  # The full-size vectors, replayed natively and checked with the independent script, for the
-  # exact tagged commit. Publishing waits for them, so a release cannot go out before its
-  # conformance is checked, nor after that check failed.
-  vectors:
-    uses: ./.github/workflows/vectors.yml
-
+  # The full-size vectors are replayed for the same tag by vectors.yml, on its own, in about
+  # three hours; the draft does not wait for them, and their result shows on the tag.
   publish:
-    needs: [canonical, macos, vectors]
+    needs: [canonical, macos]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
