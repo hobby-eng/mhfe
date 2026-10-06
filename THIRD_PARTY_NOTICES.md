@@ -457,7 +457,7 @@ is described above.
 - `js-sys` 0.3.106: `MIT OR Apache-2.0`, used under MIT; [text 12](#text-12).
 - `k256` 0.14.0: `Apache-2.0 OR MIT`, used under MIT; [text 31](#text-31).
 - `keccak` 0.2.2: `Apache-2.0 OR MIT`, used under MIT; [text 32](#text-32).
-- `libc` 0.2.189: `MIT OR Apache-2.0`, used under MIT; [text 33](#text-33).
+- `libc` 0.2.190: `MIT OR Apache-2.0`, used under MIT; [text 33](#text-33).
 - `memchr` 2.8.3: `Unlicense OR MIT`, used under MIT; [text 34](#text-34).
 - `nix` 0.31.3: `MIT`, used under MIT; [text 35](#text-35).
 - `num-traits` 0.2.19: `MIT OR Apache-2.0`, used under MIT; [text 6](#text-6).
@@ -1591,7 +1591,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 33
 
-MIT, for libc 0.2.189.
+MIT, for libc 0.2.190.
 
 ```
 Copyright (c) The Rust Project Developers

@@ -4,6 +4,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # bip39 3.0.0, its newest version, accepts only bitcoin_hashes below 0.15, so a newer one here
+      # would build a second copy of the crate. Remove this once bip39 accepts a newer version.
+      - dependency-name: bitcoin_hashes
+        versions: [">= 0.15"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
