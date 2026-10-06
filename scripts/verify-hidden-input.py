@@ -27,9 +27,10 @@ repair as the first answer, also after a stray leading space, which the repair r
 gets the question with the password as typed first, and "Type the password again" asks for it
 again. The summary records how the check word came out and none of the words.
 
-A command started directly runs in a network namespace of its own, without any interface, where the
-system allows user namespaces, and its summary says "no network at all"; elsewhere it says "no
-network", enforced by seccomp alone.
+A command started directly runs in a network namespace with only inactive loopback where the
+system allows user namespaces. Its summary says "isolated network, new sockets blocked";
+elsewhere it says "new sockets blocked" for the seccomp restriction. Previously opened
+descriptors are not revoked by these restrictions.
 
 It also drives the menu that `mhfe` shows when it starts without arguments: the arrow keys and Enter
 choose an entry, its number chooses it at once, other escape sequences (Ctrl+Up) and keys do
@@ -363,7 +364,11 @@ def check_empty_network():
         session.close()
     shown = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", session.output)
     allowed = user_namespaces_allowed()
-    expected = b"no network at all" if allowed else b"Isolation  no network,"
+    expected = (
+        b"isolated network, new sockets blocked"
+        if allowed
+        else b"Isolation  new sockets blocked,"
+    )
     assert expected in shown, f"empty network: {expected!r} not in the summary"
     state = "an empty network" if allowed else "seccomp alone, as this system allows no namespace"
     print(f"isolation: a command started directly runs with {state}")

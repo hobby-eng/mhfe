@@ -110,7 +110,7 @@ pub fn choose_here(
     // key pressed as soon as the list shows is read as a key and never echoed.
     hidden_input::with_keys(|next_key| {
         let mut selected = 0;
-        let mut drawn_lines = draw(question, answers, selected, help_hint);
+        let mut drawn = draw(question, answers, selected, help_hint);
         loop {
             match next_key()? {
                 Key::Up => selected = (selected + answers.len() - 1) % answers.len(),
@@ -123,22 +123,22 @@ pub fn choose_here(
                 Key::Help => {
                     let Some(help) = &help else { continue };
                     // The explanation takes the place of the block, which is drawn again below it.
-                    write_control(&redraw_from(drawn_lines))?;
+                    write_control(&redraw_from(drawn.rows()))?;
                     eprintln!();
                     (help.show)();
-                    drawn_lines = draw(question, answers, selected, help_hint);
+                    drawn = draw(question, answers, selected, help_hint);
                     continue;
                 }
                 Key::Quit => {
-                    write_control(&redraw_from(drawn_lines))?;
+                    write_control(&redraw_from(drawn.rows()))?;
                     return Ok(None);
                 }
                 Key::Digit(_) | Key::Other => continue,
             }
-            write_control(&redraw_from(drawn_lines))?;
-            drawn_lines = draw(question, answers, selected, help_hint);
+            write_control(&redraw_from(drawn.rows()))?;
+            drawn = draw(question, answers, selected, help_hint);
         }
-        write_control(&redraw_from(drawn_lines))?;
+        write_control(&redraw_from(drawn.rows()))?;
         if let Some(label) = question.record {
             record(label, &answers[selected].label);
         }
@@ -151,51 +151,85 @@ pub fn record(label: &str, answer: &str) {
     style::fact_as(Kind::Record, label, paint(ACCENT, answer));
 }
 
-/// Draws the question block and returns how many lines it took.
+/// The visible widths of logical lines, without retaining their text. A resize can reflow those
+/// lines, so their old physical row count cannot be reused. Keeping only widths also avoids a
+/// second copy of any sensitive labels and leaves the phrase above a confirmation visible.
+#[derive(Default)]
+struct DrawnRows {
+    widths: Vec<usize>,
+}
+
+impl DrawnRows {
+    fn line(&mut self, text: &str) {
+        eprintln!("{text}");
+        self.widths.push(style::visible_width(text));
+    }
+
+    fn extend(&mut self, other: Self) {
+        self.widths.extend(other.widths);
+    }
+
+    fn rows(&self) -> usize {
+        let columns = hidden_input::columns().unwrap_or(80).max(1);
+        self.rows_at(columns)
+    }
+
+    fn rows_at(&self, columns: usize) -> usize {
+        self.widths
+            .iter()
+            .map(|width| width.div_ceil(columns.max(1)).max(1))
+            .sum()
+    }
+}
+
+/// Draws the question block and retains only its line widths for later redraws.
 fn draw(
     question: &Question,
     answers: &[Answer],
     selected: usize,
     help_hint: Option<&str>,
-) -> usize {
-    let mut lines = draw_question(question);
+) -> DrawnRows {
+    let mut lines = draw_question_rows(question);
     let entries: Vec<(&str, &str)> = answers
         .iter()
         .map(|answer| (answer.label.as_str(), answer.note.as_str()))
         .collect();
-    lines += draw_entries(&entries, selected);
-    eprintln!();
-    lines + 1 + style::hint(&hint(answers.len(), help_hint))
+    lines.extend(draw_entry_rows(&entries, selected));
+    lines.line("");
+    for line in style::wrap(&hint(answers.len(), help_hint), style::TEXT_WIDTH) {
+        lines.line(&paint(MUTED, line));
+    }
+    lines
 }
 
 /// Draws a blank line, the question in bold and its explanation, and returns how many lines they
 /// took. A list or a prompt follows; after an explanation, a blank line separates it.
 pub fn draw_question(question: &Question) -> usize {
+    draw_question_rows(question).rows()
+}
+
+fn draw_question_rows(question: &Question) -> DrawnRows {
+    let mut lines = DrawnRows::default();
     let text = paint(STRONG, question.text);
-    eprintln!();
-    eprintln!("{text}");
-    let mut lines = 1 + style::rows(&text);
+    lines.line("");
+    lines.line(&text);
     for line in question.explanation {
         if line.is_empty() {
-            eprintln!();
-            lines += 1;
+            lines.line("");
         } else {
             let line = format!("{TEXT_INDENT}{line}");
-            eprintln!("{line}");
-            lines += style::rows(&line);
+            lines.line(&line);
         }
     }
     if let Some(place) = question.more {
         // Without an explanation the link follows the question directly, as part of it.
         if !question.explanation.is_empty() {
-            eprintln!();
-            lines += 1;
+            lines.line("");
         }
-        lines += style::more_here(place);
+        lines.line(&style::more_line(place));
     }
     if !question.explanation.is_empty() || question.more.is_some() {
-        eprintln!();
-        lines += 1;
+        lines.line("");
     }
     lines
 }
@@ -231,12 +265,16 @@ pub(crate) const DIGIT_KEYS: usize = 9;
 /// highlighted entry has a cyan marker and a bold label, so that it stands out also without
 /// colours. The notes line up after the longest label and are shortened to fit the width.
 pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
+    draw_entry_rows(entries, selected).rows()
+}
+
+fn draw_entry_rows(entries: &[(&str, &str)], selected: usize) -> DrawnRows {
     let label_width = entries
         .iter()
         .map(|(label, _)| label.chars().count())
         .max()
         .unwrap_or(0);
-    let mut rows = 0;
+    let mut rows = DrawnRows::default();
     for (index, (label, note)) in entries.iter().enumerate() {
         let number = if index < DIGIT_KEYS {
             paint(MUTED, index + 1)
@@ -261,8 +299,7 @@ pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
                 paint(MUTED, note)
             )
         };
-        eprintln!("{line}");
-        rows += style::rows(&line);
+        rows.line(&line);
     }
     rows
 }
@@ -293,6 +330,17 @@ pub fn write_control(sequence: &str) -> Result<(), Failure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rendered_line_widths_recount_rows_after_a_resize() {
+        let drawn = DrawnRows {
+            widths: vec![0, 54, 78, 40, 39],
+        };
+        assert_eq!(drawn.rows_at(80), 5);
+        assert_eq!(drawn.rows_at(60), 6);
+        assert_eq!(drawn.rows_at(40), 7);
+        assert_eq!(drawn.rows_at(80), 5);
+    }
 
     #[test]
     fn the_hint_names_the_numbers_and_the_help() {

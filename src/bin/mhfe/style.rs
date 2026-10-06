@@ -122,14 +122,8 @@ pub fn more(place: &str) -> usize {
     1
 }
 
-/// [`more`] written at once, as part of a question or another step.
-pub fn more_here(place: &str) -> usize {
-    let line = more_line(place);
-    eprintln!("{line}");
-    rows(&line)
-}
-
-fn more_line(place: &str) -> String {
+/// A link line, also used by choice lists that retain only its visible width for redraws.
+pub fn more_line(place: &str) -> String {
     format!("  {}", paint(MUTED, format!("More: {place}")))
 }
 
@@ -215,7 +209,7 @@ fn write_lines(lines: &[String]) {
 }
 
 /// Longest line of running text, so that messages read well in an 80-column terminal.
-const TEXT_WIDTH: usize = 78;
+pub const TEXT_WIDTH: usize = 78;
 
 /// Breaks `text` into lines of at most `width` visible characters at spaces; a line break in
 /// `text` is kept. Colour codes do not count towards the width.
@@ -246,7 +240,7 @@ pub fn wrap(text: &str, width: usize) -> Vec<String> {
 }
 
 /// Characters a terminal shows for `text`, without colour codes such as "\u{1b}[1m".
-fn visible_width(text: &str) -> usize {
+pub fn visible_width(text: &str) -> usize {
     let mut width = 0;
     let mut in_code = false;
     for character in text.chars() {

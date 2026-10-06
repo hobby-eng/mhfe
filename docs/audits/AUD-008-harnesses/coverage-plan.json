@@ -1,0 +1,51 @@
+{
+  "auditId": "AUD-008",
+  "requestedIndependentReviewers": 11,
+  "coordinator": "root",
+  "checks": {
+    "CHECK-SEC-001": "native-secrets",
+    "CHECK-SEC-002": "browser-boundaries",
+    "CHECK-SEC-003": "browser-boundaries",
+    "CHECK-SEC-004": "crypto",
+    "CHECK-SEC-005": "native-secrets",
+    "CHECK-SEC-006": "browser-boundaries",
+    "CHECK-SEC-007": "native-secrets",
+    "CHECK-FUN-001": "crypto",
+    "CHECK-FUN-002": "wallet-recovery",
+    "CHECK-FUN-003": "wallet-recovery",
+    "CHECK-FUN-004": "wallet-recovery",
+    "CHECK-FUN-005": "wallet-recovery",
+    "CHECK-FUN-006": "wallet-recovery",
+    "CHECK-FUN-007": "wallet-recovery",
+    "CHECK-API-001": "crypto",
+    "CHECK-API-002": "browser-boundaries",
+    "CHECK-API-003": "browser-boundaries",
+    "CHECK-API-004": "wallet-recovery",
+    "CHECK-BLD-001": "devops",
+    "CHECK-BLD-002": "qa",
+    "CHECK-BLD-003": "devops",
+    "CHECK-BLD-004": "devops",
+    "CHECK-BLD-005": "devops",
+    "CHECK-UI-001": "interface",
+    "CHECK-UI-002": "interface",
+    "CHECK-UI-003": "interface",
+    "CHECK-ARC-001": "architecture",
+    "CHECK-ARC-002": "architecture",
+    "CHECK-ARC-003": "architecture",
+    "CHECK-DOC-001": "documentation",
+    "CHECK-DOC-002": "documentation",
+    "CHECK-DOC-003": "audit-records"
+  },
+  "additionalRoles": {
+    "research": "Focused improvements and opportunities; no production changes or unproved security claims.",
+    "skeptic": "Challenge each wave and the final finding register using shared evidence."
+  },
+  "waves": [
+    ["crypto", "native-secrets", "wallet-recovery"],
+    ["browser-boundaries", "qa", "architecture"],
+    ["interface", "devops", "documentation", "research"],
+    ["skeptic"]
+  ],
+  "audit-records": "Coordinator responsibility, independently challenged by skeptic.",
+  "execution": "Sequential waves within available agent slots; heavy commands run only by coordinator. Long full Rust and Python vector replays excluded by owner. No remediation in this baseline."
+}
