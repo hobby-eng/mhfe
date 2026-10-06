@@ -25,11 +25,15 @@ ARG RUSTUP_VERSION=1.29.1
 ARG RUSTUP_INIT_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
 # Ubuntu archive snapshot for the cross compilers, so that their versions never change.
 ARG UBUNTU_SNAPSHOT=20261002T000000Z
+# Bound compilation and test concurrency on the maintainer's machine without changing Argon2.
+ARG BUILD_JOBS=2
 
 ENV CARGO_HOME=/root/.cargo \
     RUSTUP_HOME=/root/.rustup \
     PATH=/root/.cargo/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
-    CI=true
+    CI=true \
+    CARGO_BUILD_JOBS=${BUILD_JOBS} \
+    RUST_TEST_THREADS=2
 
 # C cross compilers for ARM64 Linux and for Windows (MinGW-w64); the native C compiler comes with
 # the pinned base image. The update and security suites of the same snapshot are needed too: the

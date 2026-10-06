@@ -126,11 +126,14 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: "release/*"
-      - name: Publish the GitHub release
+      # The signing key stays on the maintainer's computer. Publish only after downloading,
+      # checking and OpenPGP-signing SHA256SUMS as described in docs/RELEASING.md.
+      - name: Prepare the verified release draft for OpenPGP signing
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" release/* \
+            --draft \
             --title "MHFE $GITHUB_REF_NAME" \
             --notes-file "docs/releases/$GITHUB_REF_NAME.md" \
             --verify-tag
