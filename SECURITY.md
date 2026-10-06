@@ -93,11 +93,16 @@ Never include a real seed phrase, password, private key or wallet file.
   socket, and refuses io_uring altogether, whose operations could create one without the system
   call the filter sees; and under a Landlock ruleset that refuses every write to the file system
   (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect). Both cover every thread the
-  command starts, Argon2's included, and cannot be undone; the start menu runs each command in a
-  thread of its own, so that it can still start `mhfe serve`, which is not isolated because the
-  browser it opens must write its profile. The summary of a command says what the kernel enforces.
-  A fault or a tampered dependency therefore cannot send a secret away or leave it in a file; the
-  program's own output goes only to the terminal or to where standard output is redirected.
+  command starts, Argon2's included, and cannot be undone. A command started directly also moves
+  into a network namespace of its own, which has no network interface at all, so that a socket made
+  in any way reaches nothing; where the system allows no user namespaces it runs on without one,
+  and its summary says "no network" instead of "no network at all". The start menu runs each
+  command in a thread of its own, so that it can still start `mhfe serve`, which is not isolated
+  because the browser it opens must write its profile; a thread cannot get a namespace of its own,
+  so the menu's commands have the filter and the ruleset only. The summary of a command says what
+  the kernel enforces. A fault or a tampered dependency therefore cannot send a secret away or leave
+  it in a file; the program's own output goes only to the terminal or to where standard output is
+  redirected.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 

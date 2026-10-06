@@ -27,6 +27,10 @@ repair as the first answer, also after a stray leading space, which the repair r
 gets the question with the password as typed first, and "Type the password again" asks for it
 again. The summary records how the check word came out and none of the words.
 
+A command started directly runs in a network namespace of its own, without any interface, where the
+system allows user namespaces, and its summary says "no network at all"; elsewhere it says "no
+network", enforced by seccomp alone.
+
 It also drives the menu that `mhfe` shows when it starts without arguments: the arrow keys and Enter
 choose an entry, its number chooses it at once, other escape sequences (Ctrl+Up) and keys do
 nothing and are not shown, q and a lone Escape quit with exit code 0 and Ctrl+C with 130, and the
@@ -331,6 +335,40 @@ def check_check_word():
     print("check word: a leading space removed together with the repair")
 
 
+def user_namespaces_allowed():
+    """Whether a process of this user may create a user namespace with an empty network, which
+    some systems refuse; tried in a child, so that this process stays as it is."""
+    if not hasattr(os, "unshare"):
+        return False
+    child = os.fork()
+    if child == 0:
+        try:
+            os.unshare(os.CLONE_NEWUSER | os.CLONE_NEWNET)
+        except OSError:
+            os._exit(1)
+        os._exit(0)
+    _, status = os.waitpid(child, 0)
+    return os.waitstatus_to_exitcode(status) == 0
+
+
+def check_empty_network():
+    """A command started directly runs in an empty network where the system allows it, and says
+    so in its summary; elsewhere it runs on with the seccomp filter alone."""
+    if sys.platform != "linux":
+        return
+    session = Session()
+    try:
+        session.at_password_prompt()
+    finally:
+        session.close()
+    shown = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", session.output)
+    allowed = user_namespaces_allowed()
+    expected = b"no network at all" if allowed else b"Isolation  no network,"
+    assert expected in shown, f"empty network: {expected!r} not in the summary"
+    state = "an empty network" if allowed else "seccomp alone, as this system allows no namespace"
+    print(f"isolation: a command started directly runs with {state}")
+
+
 def check_menu():
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
@@ -564,6 +602,7 @@ def main():
     print("cancelled: Ctrl+C at the password, exit code 130, private screen left, terminal restored")
 
     check_check_word()
+    check_empty_network()
     check_menu()
     check_rekey_asks_about_other_wallets()
     check_encrypt_lists()

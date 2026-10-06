@@ -345,11 +345,17 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
 /// What the kernel forbids this command, for the summary; `None` where it forbids nothing, as
 /// outside Linux.
 fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
-    let forbidden = match (isolation.no_network, isolation.no_writes) {
-        (true, true) => "no network, no file writes",
-        (true, false) => "no network",
-        (false, true) => "no file writes",
-        (false, false) => return None,
+    // "At all": in a network namespace without any interface as well as without sockets.
+    let network = match (isolation.empty_network, isolation.no_network) {
+        (true, _) => Some("no network at all"),
+        (false, true) => Some("no network"),
+        (false, false) => None,
+    };
+    let forbidden = match (network, isolation.no_writes) {
+        (Some(network), true) => format!("{network}, no file writes"),
+        (Some(network), false) => network.to_owned(),
+        (None, true) => "no file writes".to_owned(),
+        (None, false) => return None,
     };
     Some(format!(
         "{forbidden} {}",
