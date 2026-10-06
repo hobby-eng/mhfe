@@ -1,5 +1,95 @@
 # AUD-007 retained harnesses
 
+## Independent remediation recheck
+
+The follow-up of 2026-10-05 reviewed the initially clean commit
+`2a5e7276c1ce40fc587ae67188a5519d25ba0117`. New command records use `recheck-` labels;
+the original snapshot and command ledger are retained. Neither harness below uses Argon2,
+network access or real wallet material.
+
+`recheck_bech32_padding.py` builds `recheck_bech32_padding.rs` against the current debug MHFE
+and Bech32 libraries. Run `cargo build --locked --bin mhfe` first with the pinned toolchain,
+then, from the repository root:
+
+```sh
+python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- python3 docs/audits/AUD-007-harnesses/recheck_bech32_padding.py
+```
+
+It appends a zero or nonzero five-bit data group to the public Cosmos and Injective account
+vectors and recomputes their valid Bech32 checksums. Expected reproduction output has four
+lines with `data_groups=33; accepted=true; same_reference=true`. Exit zero reproduces FUN003;
+after repair the retained finding assertion must fail. Add proper negative regression tests
+to the production suite when the parser is repaired. The executable and its input hashes stay
+in ignored local evidence; no source checkout is copied.
+
+`recheck_evidence.py` verifies the seven recorded remediation logs and their exit codes,
+confirms that the original audit command register and snapshot equal those in `3c2793d`,
+and verifies the five commits through `2a5e727` against `~/.ssh/hobby-eng_signing.pub`.
+It requires local AUD-007 evidence and that public key; it never accesses a private key or
+changes Git configuration. Its allowed-signers file is local ignored evidence. Run:
+
+```sh
+python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- python3 docs/audits/AUD-007-harnesses/recheck_evidence.py
+```
+
+Expected output verifies seven log records and five good signatures; any discrepancy is
+nonzero. `validate_report.py` also validates the remediation and independent-recheck command
+registers, their log hashes, the recheck source snapshot and the extended report IDs. The
+original baseline coverage ledger is not rewritten into a new release-acceptance result.
+
+## Owner-authorized remediation
+
+The subsequent owner-authorized fixes were first uncommitted and bound by the local
+`AUD-007-evidence/remedy-final-source.json` manifest. Until the commit binding below existed,
+`validate_report.py` verified those exact working-source hashes; it still verifies the manifest
+itself and the separate `ownerAuthorizedRemediation` command register. These records use `remedy-`
+labels and preserve the earlier reproduction and failed-publication logs.
+
+For the repaired account parser, run the production regression suite:
+
+```sh
+cargo test --locked --lib wallet::tests
+```
+
+Use the pinned toolchain/environment from AGENTS.md. Expected result is 19 passed wallet tests,
+including the formerly accepted Cosmos/Injective references in lower and upper case. The retained
+padding finding probe now reports `accepted=false` and exits nonzero, as its reproduction
+assertion requires. No full-cost Argon2 replay or Windows runtime check is implied by this result.
+
+## Commit binding
+
+The fixes were later committed together with other work, so no commit holds the manifest's exact
+bytes. The `commitBinding` record of 2026-10-06 names the signed commits that carry them (mhfe
+`b864f5a` and `082ac0b`, mhfe_spec `739bd71`) and verifies the MHFE fixes on the released commit
+`52b6b36a16d36fa895f3b3e9e034b52c9f963c34`. `validate_report.py` checks that each named commit is
+signed, is part of the checked-out history of its repository, and covers every owner-authorized fix.
+Its commands use `binding-` labels; to rerun them at that commit, from the repository root:
+
+```sh
+python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- cargo test --locked --lib wallet::tests
+python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- gh run view 37432125420 --job 112165201404 --log
+```
+
+The first expects 19 passed wallet tests, including `cosmos_accounts_refuse_redundant_data_groups`.
+The second saves the canonical release job log; it has no LockedText warning, and its remaining
+mhfe warnings are part of the observation AUD-007-BLD002. The second command reads GitHub Actions
+and needs an authenticated `gh`; nothing else uses the network.
+
+`cross_clippy.sh` runs the canonical build's Clippy checks for `aarch64-unknown-linux-gnu` and
+`x86_64-pc-windows-gnu` on a source tree it reads as a tar stream, inside the `dependencies` stage
+of `packaging/Dockerfile.reproducible`, without network. Build that stage once, then run it on the
+reviewed commit and on the fix:
+
+```sh
+docker build --target dependencies -f packaging/Dockerfile.reproducible -t mhfe-deps:local .
+python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- bash -c "git archive 52b6b36 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
+python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- bash -c "git archive 40f1193 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
+```
+
+The first fails with exit code 101 on the BLD002 warnings; the second passes for both targets.
+
+## Original baseline harnesses
+
 These scripts retain the implementation review of commit `0455e386a88c0718336039a81d5dceb0cd0b3957`
 and the contemporaneous, modified specification. They use only public fixtures. They are audit
 tools, not tools for real wallets. No full-cost Argon2 replay or release rebuild is required.
