@@ -45,8 +45,8 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def git(*args):
-    return subprocess.check_output(["git", *args], cwd=ROOT)
+def git(*args, repository=ROOT):
+    return subprocess.check_output(["git", *args], cwd=repository)
 
 
 def check_local_links(path):
@@ -74,19 +74,21 @@ for item in records:
     heading = re.search(rf"^#### {item['id']} — (\w+) — (.+)$", markdown, re.M)
     assert heading and heading.group(1).lower() == item["severity"], item["id"]
     assert heading.group(2) == item["title"], item["id"]
-    assert f"| {item['id']} | {item['category']} | finding |" in markdown, item["id"]
+    assert f"| {item['id']} | {item['category']} | {item['kind']} |" in markdown, item["id"]
     assert item["status"] in REMEDIATION_STATUSES, item["id"]
 assert set(re.findall(r"^#### (AUD-007-[A-Z]+\d+) —", markdown, re.M)) == set(ids)
 remediation = {item["id"]: item for item in data["remediation"]}
 assert set(ids) == set(remediation), "missing or unexpected remediation rows"
 # The remediation update records fixes made after the reviewed commit; each finding still describes
-# that commit. A named fix or verification commit must exist in this repository.
+# that commit. A named fix or verification commit must exist in its repository: this one, or the
+# specification when the fix commit names "mhfe_spec".
 for item in records:
     row = remediation[item["id"]]
     assert row["status"] == item["status"], item["id"]
     assert f"| {item['id']} | {item['status']} |" in markdown, item["id"]
+    fixed_in = WORKSPACE / "mhfe_spec" if (row["fixCommit"] or "").startswith("mhfe_spec ") else ROOT
     for commit in re.findall(r"\b[0-9a-f]{7,40}\b", row["fixCommit"] or ""):
-        git("cat-file", "-e", commit + "^{commit}")
+        git("cat-file", "-e", commit + "^{commit}", repository=fixed_in)
     if item["status"] in ("fixed", "verified"):
         assert row["fixCommit"], item["id"]
     if item["status"] == "verified":
@@ -120,6 +122,79 @@ for command in data["commands"]:
     if "logSha256" in saved:
         assert saved["logSha256"] == command["logSha256"], label
     assert command["evidence"].startswith("Local only:"), label
+
+# Later command registers are separate from the immutable original audit ledger. Verify their
+# retained outputs as well: the original validator checked only data["commands"].
+follow_up_command_count = 0
+FOLLOW_UPS = ("remediationUpdate", "independentRecheck", "ownerAuthorizedRemediation", "commitBinding")
+for update_name in FOLLOW_UPS:
+    update = data.get(update_name, {})
+    update_labels = [command["label"] for command in update.get("commands", [])]
+    assert len(update_labels) == len(set(update_labels)), update_name
+    for command in update.get("commands", []):
+        label = command["label"]
+        assert label not in labels, (update_name, label)
+        log = EVIDENCE / (label + ".log")
+        saved_path = EVIDENCE / (label + ".command.json")
+        saved = read_json(saved_path)
+        assert digest(log.read_bytes()) == command["logSha256"], label
+        assert command["logSha256"] in markdown, label
+        assert saved.get("exitCode", saved.get("exit_code")) == command["exitCode"], label
+        if "logSha256" in saved:
+            assert saved["logSha256"] == command["logSha256"], label
+        if "commandRecordSha256" in command:
+            assert digest(saved_path.read_bytes()) == command["commandRecordSha256"], label
+            assert saved["command"] == command["command"], label
+            assert saved["cwd"] == command["cwd"], label
+        follow_up_command_count += 1
+
+if "ownerAuthorizedRemediation" in data:
+    update = data["ownerAuthorizedRemediation"]
+    manifest_path = EVIDENCE / "remedy-final-source.json"
+    assert digest(manifest_path.read_bytes()) == update["sourceManifestSha256"]
+    manifest = read_json(manifest_path)
+    assert manifest["sourceFingerprint"] == update["sourceFingerprint"]
+    fingerprint = digest("".join(
+        f"{name}\0{expected}\n" for name, expected in manifest["files"].items()
+    ).encode())
+    assert fingerprint == manifest["sourceFingerprint"]
+    # The manifest bound uncommitted working bytes. They were committed with later edits, so once
+    # the commit binding exists it, not the working tree, identifies the fixes.
+    if "commitBinding" not in data:
+        for name, expected in manifest["files"].items():
+            assert digest((WORKSPACE / name).read_bytes()) == expected, name
+
+if "commitBinding" in data:
+    binding = data["commitBinding"]
+    bound = set()
+    for entry in binding["commits"]:
+        repository = WORKSPACE / entry["repository"]
+        commit = entry["commit"]
+        assert re.fullmatch(r"[0-9a-f]{40}", commit), commit
+        # Signed, and part of the history that carries this record (for the specification: its
+        # checked-out history).
+        assert b"\ngpgsig " in git("cat-file", "commit", commit, repository=repository), commit
+        git("merge-base", "--is-ancestor", commit, "HEAD", repository=repository)
+        for identifier in entry["findings"]:
+            assert remediation[identifier]["fixCommit"].replace("mhfe_spec ", "").startswith(commit[:7])
+            assert commit[:7] in markdown, identifier
+            bound.add(identifier)
+    owner_fixed = set(data["ownerAuthorizedRemediation"]["findings"])
+    assert owner_fixed <= bound, "every owner-authorized fix needs its commit"
+    git("merge-base", "--is-ancestor", binding["verificationCommit"], "HEAD")
+    for identifier in bound:
+        if remediation[identifier]["status"] == "verified":
+            assert remediation[identifier]["verificationCommit"] == binding["verificationCommit"]
+
+if "independentRecheck" in data:
+    follow = data["independentRecheck"]
+    snapshot_file = EVIDENCE / "recheck-snapshot.json"
+    assert digest(snapshot_file.read_bytes()) == follow["snapshotEvidenceSha256"]
+    captured = read_json(snapshot_file)
+    assert captured["commit"] == follow["commit"]
+    assert captured["specification"] == follow["specificationFiles"]
+    for name, expected in captured["sourceFiles"].items():
+        assert digest(git("show", f"{captured['commit']}:{name}")) == expected, name
 
 snapshot_path = EVIDENCE / "snapshot.json"
 snapshot = read_json(snapshot_path)
@@ -177,6 +252,8 @@ validation = {
     "recordIdsAndHeadingsMatchMarkdown": True,
     "localLinksResolve": True,
     "commandLogHashesMatch": len(data["commands"]),
+    "followUpCommandLogHashesMatch": follow_up_command_count,
+    "ownerFixesBoundToSignedCommits": "commitBinding" in data,
     "reviewedCommitHoldsMhfeSnapshot": True,
     "dirtySpecificationSnapshotRetainedByDiffAndManifest": True,
     "electrumFollowUpCheckedSeparately": follow_up.exists(),

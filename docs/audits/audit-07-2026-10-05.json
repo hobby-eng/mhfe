@@ -13,6 +13,16 @@
         "scope": "Specification, mathematics, native crypto core, wallet derivation and CLI trust boundaries",
         "model": null,
         "reasoningEffort": null
+      },
+      {
+        "scope": "Independent remediation recheck of 2a5e727; no new agent delegation",
+        "model": null,
+        "reasoningEffort": null
+      },
+      {
+        "scope": "Owner-authorized remediation of remaining AUD-007 code and specification findings; targeted validation of uncommitted sources",
+        "model": null,
+        "reasoningEffort": null
       }
     ]
   },
@@ -968,7 +978,7 @@
       "kind": "finding",
       "title": "The seed-check description omits bytes included by the implementation",
       "severity": "medium",
-      "status": "open",
+      "status": "fixed",
       "releaseBlocking": true,
       "affectedFiles": [
         "../mhfe_spec/docs/DESIGN-NOTES.md:3072",
@@ -991,7 +1001,7 @@
       "kind": "finding",
       "title": "Seed-check security, entropy and decoy claims exceed the stated model",
       "severity": "medium",
-      "status": "open",
+      "status": "fixed",
       "releaseBlocking": false,
       "affectedFiles": [
         "../mhfe_spec/docs/DESIGN-NOTES.md:3073",
@@ -1016,7 +1026,7 @@
       "kind": "finding",
       "title": "The disclosure-simulation corollary does not specify the wallet-record oracle",
       "severity": "low",
-      "status": "open",
+      "status": "fixed",
       "releaseBlocking": false,
       "affectedFiles": [
         "../mhfe_spec/docs/DESIGN-NOTES.md:519"
@@ -1058,7 +1068,7 @@
       "kind": "finding",
       "title": "Specification publication records no longer match the reviewed supplement",
       "severity": "low",
-      "status": "open",
+      "status": "fixed",
       "releaseBlocking": false,
       "affectedFiles": [
         "../mhfe_spec/docs/audits/AUD-005-publication.json",
@@ -1074,9 +1084,58 @@
       "impact": "Recorded provenance is stale for the working supplement. This does not establish a cryptographic or citation-numbering defect.",
       "recommendedFix": "After final content review, refresh the existing publication records using their retained harness; do not pretend the new prose was part of an earlier published audit snapshot.",
       "requiredVerification": "Rerun record.py validate and retain hashes of the finalized publication documents."
+    },
+    {
+      "id": "AUD-007-FUN003",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "Cosmos and Injective references accept redundant Bech32 data groups",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "evidence": "Local only: AUD-007-evidence/recheck-bech32-padding-formatted.log; src/wallet.rs parse_bech32_account; Bech32 0.12.0 CheckedHrpstring byte_iter.",
+      "reproduction": "Build the debug CLI, then run python3 docs/audits/AUD-007-harnesses/recheck_bech32_padding.py. Append a 33rd five-bit data group to public 20-byte account vectors and recompute their valid Bech32 checksums.",
+      "expected": "A 20-byte account has exactly 32 data groups; redundant groups or discarded nonzero bits must be rejected.",
+      "observed": "Both zero and nonzero extra groups are accepted for Cosmos and Injective and compare equal to their canonical references. CheckedHrpstring validates the checksum, but byte_iter discards incomplete bytes. The previous generic decoder also lacked padding validation: this is a newly identified existing omission, not a demonstrated regression from the variant fix.",
+      "impact": "Noncanonical address strings can confirm a wallet reference. No different account is derived and no mnemonic-encryption break was demonstrated.",
+      "recommendedFix": "Require exactly 32 data groups before byte conversion, or validate padding plus the decoded 20-byte length. Keep strict Bech32 checksum selection.",
+      "requiredVerification": "Add negative Cosmos/Injective cases with valid Bech32 checksums and 33 data groups ending in zero and nonzero groups; retain canonical upper/lowercase acceptance."
     }
   ],
-  "observations": [],
+  "observations": [
+    {
+      "id": "AUD-007-BLD001",
+      "category": "BLD",
+      "kind": "observation",
+      "title": "The Windows input module imports LockedText without using it",
+      "severity": "info",
+      "status": "verified",
+      "releaseBlocking": false,
+      "evidence": "src/bin/mhfe/hidden_input.rs:498 at 2a5e727; full Windows platform module source review.",
+      "reproduction": "Inspect the cfg(windows) platform module and all of its function signatures: none uses its imported LockedText.",
+      "expected": "Platform-specific source should have no unused imports.",
+      "observed": "The Windows-only module has an unused LockedText import. Linux/WASM Clippy skip that branch. The Windows workflow does not promote warnings to errors. No Windows target is installed locally, so this is a source observation, not an executed cross-platform compile result.",
+      "impact": "Source cleanliness only; no demonstrated runtime or secret-handling defect.",
+      "recommendedFix": "Remove the unused import in the Windows platform module while preserving the required top-level import.",
+      "requiredVerification": "Compile/lint the Windows CLI on the configured Windows runner; Linux Clippy is not Windows coverage."
+    },
+    {
+      "id": "AUD-007-BLD002",
+      "category": "BLD",
+      "kind": "observation",
+      "title": "Builds for other targets warn about unused code and ignored compiler options",
+      "severity": "info",
+      "status": "fixed",
+      "releaseBlocking": false,
+      "evidence": "Local only: AUD-007-evidence/binding-release-build-log.log and AUD-007-evidence/bld002-ci-windows-log.log; src/bin/mhfe/hidden_input.rs:521, src/bin/mhfe/protect.rs:184, src/memory.rs:123 and build.rs at 52b6b36.",
+      "reproduction": "Read the canonical job log of release run 37432125420 and the portable (windows-2025) job log of CI run 37431286142, both for 52b6b36, or run cargo clippy -D warnings for aarch64-unknown-linux-gnu and x86_64-pc-windows-gnu in the canonical toolchain container (docs/audits/AUD-007-harnesses/cross_clippy.sh).",
+      "expected": "Every target compiles without warnings, as the native Clippy run with -D warnings does, and every C compiler receives only options it understands.",
+      "observed": "The Windows input module keeps an unused `use std::io;`, already unused at 2a5e727; the BLD001 review named only LockedText. The aarch64 build warns that `tests` in forbid_sockets need not be mutable, since only x86_64 inserts into it. Windows test builds warn that the test helper holders_of is never used: only Unix tests call it. Microsoft's cl, used by the native Windows CI job, ignores -msse2 and -mssse3 (warning D9002) and never defines __SSSE3__, so the SSSE3 copy of opt.c in that build is SSE2 code. Native Clippy sees none of this, and no build for another target denied warnings.",
+      "impact": "Source cleanliness, plus a slower Argon2 core in builds made with Microsoft's cl, which only CI and source builders use: their results stay correct. The released Windows archive is built with MinGW and has the real SSSE3 copy.",
+      "recommendedFix": "Remove the unused import and the unneeded mutation, limit holders_of to Unix tests, give cl the __SSSE3__ macro instead of -m options, and deny warnings in the builds for other targets.",
+      "requiredVerification": "Cross-target Clippy with -D warnings in the canonical toolchain container fails on the old source and passes on the fix; the native Windows CI job builds and tests without warnings."
+    }
+  ],
   "remediation": [
     {
       "id": "AUD-007-SEC001",
@@ -1129,24 +1188,24 @@
     },
     {
       "id": "AUD-007-DOC001",
-      "status": "open",
-      "fixCommit": "7369c71 (MHFE part)",
+      "status": "fixed",
+      "fixCommit": "mhfe_spec bbc1320f2da9eef1c377b20d3fcbf141ab523bb7 (specification v0.5.0, tag commit aa610218785de6da181cb2b2b1daea6bb4794f1a)",
       "verificationCommit": null,
-      "evidence": "src/wallet_check.rs and docs/API.md give the exact bytes and the public TREZOR vector. The specification supplement still omits BE32(ENT); handed to the specification session."
+      "evidence": "Current supplement includes the domain bytes, BE32(ENT), raw seed and public fixture; the working bytes bound by remedy-final-source.json were committed with later edits. Committed in mhfe_spec 739bd71, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
     },
     {
       "id": "AUD-007-DOC002",
-      "status": "open",
-      "fixCommit": "7369c71 (MHFE part)",
+      "status": "fixed",
+      "fixCommit": "mhfe_spec bbc1320f2da9eef1c377b20d3fcbf141ab523bb7 (specification v0.5.0, tag commit aa610218785de6da181cb2b2b1daea6bb4794f1a)",
       "verificationCommit": null,
-      "evidence": "MHFE comments, the help behind ? in mhfe new, README and SECURITY now state a 2^-16 filter, a searchable passphrase, about 240 bits and the unproved deniability of the conditioned source. The specification supplement is still to be corrected; handed to the specification session."
+      "evidence": "Qualified entropy, filtering and decoy discussion retained in current supplement; the working bytes bound by remedy-final-source.json were committed with later edits. Committed in mhfe_spec 739bd71, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
     },
     {
       "id": "AUD-007-DOC003",
-      "status": "open",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "mhfe_spec bbc1320f2da9eef1c377b20d3fcbf141ab523bb7 (specification v0.5.0, tag commit aa610218785de6da181cb2b2b1daea6bb4794f1a)",
       "verificationCommit": null,
-      "evidence": "Specification only; handed to the specification session."
+      "evidence": "Corollary now explicitly grants base real-wallet record-oracle access, forwards unrelated queries and restricts programming to fresh synthetic records. It does not construct the oracle from the container or overwrite earlier query answers. Bound first by remedy-final-source.json, then committed with later edits. Committed in mhfe_spec 739bd71, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
     },
     {
       "id": "AUD-007-DOC004",
@@ -1157,10 +1216,31 @@
     },
     {
       "id": "AUD-007-DOC005",
-      "status": "open",
-      "fixCommit": null,
+      "status": "fixed",
+      "fixCommit": "mhfe_spec bbc1320f2da9eef1c377b20d3fcbf141ab523bb7 (specification v0.5.0, tag commit aa610218785de6da181cb2b2b1daea6bb4794f1a)",
       "verificationCommit": null,
-      "evidence": "Specification publication records only; handed to the specification session."
+      "evidence": "Published document hashes and reverse patches refreshed. The added signing instruction is recovered to the original audited hash by a verified reverse patch. remedy-spec-publication passes without altering historical audit hashes. Bound first by remedy-final-source.json, then committed with later edits. Committed in mhfe_spec 739bd71, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
+    },
+    {
+      "id": "AUD-007-FUN003",
+      "status": "verified",
+      "fixCommit": "b864f5a",
+      "verificationCommit": "5a3729385ca2d6c6677a84e9618b8875564cc7f6",
+      "evidence": "Exactly 32 groups required before byte conversion. remedy-wallet-tests: 19 passed, including four malformed references in both cases. The retained finding probe now reports accepted=false and fails as expected. Committed in b864f5a. binding-wallet-tests at 52b6b36: 19 passed, including cosmos_accounts_refuse_redundant_data_groups."
+    },
+    {
+      "id": "AUD-007-BLD001",
+      "status": "verified",
+      "fixCommit": "082ac0b",
+      "verificationCommit": "5a3729385ca2d6c6677a84e9618b8875564cc7f6",
+      "evidence": "Removed the Windows-only unused LockedText import; the top-level import remains. Committed in 082ac0b. binding-release-build-log: the canonical release job of 52b6b36 cross-compiled x86_64-pc-windows-gnu with no LockedText warning. Its remaining warnings are recorded as AUD-007-BLD002."
+    },
+    {
+      "id": "AUD-007-BLD002",
+      "status": "fixed",
+      "fixCommit": "40f1193",
+      "verificationCommit": null,
+      "evidence": "bld002-cross-clippy-before fails on 5a3729385ca2d6c6677a84e9618b8875564cc7f6 with the aarch64 and Windows warnings; bld002-cross-clippy-after passes on the fix commit. The fix adds cross-target Clippy to the canonical build and RUSTFLAGS=-D warnings to the Windows and macOS CI job. The Microsoft cl part awaits the first Windows CI run of the fix."
     }
   ],
   "limitations": [
@@ -1271,6 +1351,669 @@
       "AUD-007-DOC002",
       "AUD-007-DOC003",
       "AUD-007-DOC005"
+    ]
+  },
+  "independentRecheck": {
+    "date": "2026-10-05",
+    "commit": "447c2bd22c91ac25bb4d4e442b6d4a82ee794307",
+    "workingTreeAtStart": "",
+    "snapshotEvidenceSha256": "4311d21965c70787a30c515983eb07d990c60d868fdfec547c5d7796fa9ecd7c",
+    "specificationFiles": {
+      "README.md": "28a3b13bb7a42e33d7119af3a987e0134b515eec0beafe8f140f9a1315753324",
+      "docs/DESIGN-NOTES.md": "8823176297e3dac9a18baaff8a8d6c19c73b242102d929c63926c2e2d5db09d4",
+      "CHANGELOG.md": "97f05d571b2b96bd99fdd2afaba1b80f213db82e5e9f9120cbd880ea8d719458",
+      "docs/audits/AUD-005-publication.json": "bb95d2f5c382210d1efd491c68245274686915ce5f6341b18e13a7dc6c680623"
+    },
+    "procedureHashes": {
+      "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+      "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+      "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+      "multi-chain-wallet-tools/docs/audit-report.schema.json": "d47df01252ad6fb11d8cad00b7d9e6dde62b3ee3331c3bfbef9a7b99adda30f7"
+    },
+    "commands": [
+      {
+        "label": "recheck-bech32-padding-formatted",
+        "command": [
+          "python3",
+          "docs/audits/AUD-007-harnesses/recheck_bech32_padding.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:53:57.471579Z",
+        "finishedAt": "2026-10-05T14:53:57.656706Z",
+        "exitCode": 0,
+        "logSha256": "df89ac9bb4fc90b755301bb6e64e41214a5cd73d130a237219a8a5b570dede38",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-bech32-padding-formatted.log",
+        "commandRecordSha256": "c325d56ee9406a770ca1c38c8d8dcec6969571729c543235be8fb5fd270a2ca3"
+      },
+      {
+        "label": "recheck-bech32-padding",
+        "command": [
+          "python3",
+          "docs/audits/AUD-007-harnesses/recheck_bech32_padding.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:50:32.198830Z",
+        "finishedAt": "2026-10-05T14:50:32.395249Z",
+        "exitCode": 0,
+        "logSha256": "84d0bcfef5effe10ed4d8e28a49fadf1830bb34f6d6db2451f2e41e75ce3c3ef",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-bech32-padding.log",
+        "commandRecordSha256": "77106a907978cf02a6ec320b4f0d1d282940a318c54dd6eca719efb8eb9a149c"
+      },
+      {
+        "label": "recheck-cli-build",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "build",
+          "--locked",
+          "--bin",
+          "mhfe"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:49:23.803789Z",
+        "finishedAt": "2026-10-05T14:49:23.872515Z",
+        "exitCode": 0,
+        "logSha256": "736e2582f563605dd272e5fb977840b0c0767377d27b6940c440caf75eec7157",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-cli-build.log",
+        "commandRecordSha256": "36dc53b4659e30b5e78207d4407483fcf7c3d31e243d75e5ac01db254059c07a"
+      },
+      {
+        "label": "recheck-clippy",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "clippy",
+          "--locked",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:48:47.972946Z",
+        "finishedAt": "2026-10-05T14:48:48.084447Z",
+        "exitCode": 0,
+        "logSha256": "99f71393b9903dca098310bb446022a4bdee195ea9996f351a787195555210a6",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-clippy.log",
+        "commandRecordSha256": "734f142d354934c9db716f104b51eb5f2c67fd9d25515dca285a7534a5d77e2b"
+      },
+      {
+        "label": "recheck-doc-tests",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--doc"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:49:14.393476Z",
+        "finishedAt": "2026-10-05T14:49:14.658337Z",
+        "exitCode": 0,
+        "logSha256": "5005b4823d388ccc9be6fcf5078c2aa6c5ad8b596685e48f721416d5e9b8fe24",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-doc-tests.log",
+        "commandRecordSha256": "d41edad872d01c5083ddc5889fa974f418cb2457aa2a559ac0a26e6d2eef1661"
+      },
+      {
+        "label": "recheck-evidence-and-signatures",
+        "command": [
+          "python3",
+          "docs/audits/AUD-007-harnesses/recheck_evidence.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:51:49.464342Z",
+        "finishedAt": "2026-10-05T14:51:49.567166Z",
+        "exitCode": 0,
+        "logSha256": "d3358b13de464d75cc1e5977b5b3354a8075d203832139fc52305917b8ced18a",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-evidence-and-signatures.log",
+        "commandRecordSha256": "d4c58fd05fb4cfff9f20b49c2e3fa83819db292c0d18d9b01d43ad35b5d08341"
+      },
+      {
+        "label": "recheck-markdown-format",
+        "command": [
+          "npm",
+          "run",
+          "format:check"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:50:52.835445Z",
+        "finishedAt": "2026-10-05T14:50:53.902039Z",
+        "exitCode": 0,
+        "logSha256": "51d89b2b80c5c022eae42e7644d36b1e0b623adaf1a4a16ded3fccb4ed39bf53",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-markdown-format.log",
+        "commandRecordSha256": "9559fefb5890ac247270b58d7262fe92770bc8d54e5b1165233ae8c5b2506082"
+      },
+      {
+        "label": "recheck-rust-format",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "fmt",
+          "--check"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:49:55.409538Z",
+        "finishedAt": "2026-10-05T14:49:55.563119Z",
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-rust-format.log",
+        "commandRecordSha256": "4cb6b0a4589a4911ef0be6a2f3d4ffd29dfd9bd11b8c329cc8948560af99ff56"
+      },
+      {
+        "label": "recheck-spec-analysis",
+        "command": [
+          "python3",
+          "../mhfe_spec/scripts/check-spec.py",
+          "analysis",
+          "../workingspace/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bip39-3.0.0/src/language/english.rs",
+          "../mhfe_spec/vectors/suite3/zero-12.json"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:50:07.399404Z",
+        "finishedAt": "2026-10-05T14:50:07.449898Z",
+        "exitCode": 0,
+        "logSha256": "db0c09ee8e760c3662a63c0556840db11645f27d7a08e9dbefbf94a3016dda2a",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-spec-analysis.log",
+        "commandRecordSha256": "2f6541ed718e06c177f1b675703e114eb79f372df8ab625dbdf10f85e6b99824"
+      },
+      {
+        "label": "recheck-spec-documents",
+        "command": [
+          "python3",
+          "../mhfe_spec/scripts/check-spec.py",
+          "documents",
+          "../workingspace/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bip39-3.0.0/src/language/english.rs"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:50:06.925137Z",
+        "finishedAt": "2026-10-05T14:50:07.320446Z",
+        "exitCode": 0,
+        "logSha256": "8ae1899f3e8efd69ef5a164355a26791b43cbc28eeab7d84e2d7953031dcd341",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-spec-documents.log",
+        "commandRecordSha256": "168588e05b85fc3cb49e76d9bd1c1be54dd8adfad6519ef042248898ecf9651a"
+      },
+      {
+        "label": "recheck-spec-format",
+        "command": [
+          "../mhfe_spec/node_modules/.bin/prettier",
+          "--check",
+          "../mhfe_spec/README.md",
+          "../mhfe_spec/docs/DESIGN-NOTES.md",
+          "../mhfe_spec/CHANGELOG.md"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:51:22.693505Z",
+        "finishedAt": "2026-10-05T14:51:23.307761Z",
+        "exitCode": 0,
+        "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-spec-format.log",
+        "commandRecordSha256": "4efef1e12ec086d3fc521c5d2f6a7c18f9e7b69cb6ea437b9a6a403bd59f7298"
+      },
+      {
+        "label": "recheck-spec-publication",
+        "command": [
+          "python3",
+          "../mhfe_spec/docs/audits/AUD-005-harnesses/record.py",
+          "validate"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:50:07.556451Z",
+        "finishedAt": "2026-10-05T14:50:07.673643Z",
+        "exitCode": 1,
+        "logSha256": "8f33fad7456e8045b6f29afa94c6de521e87d4e4110638e20f2dda614ba85aec",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-spec-publication.log",
+        "commandRecordSha256": "3c6edf39876c418e97f8ec09eb5407a9722b76afc35e636fe26a0e651404cfde"
+      },
+      {
+        "label": "recheck-terminal-regressions",
+        "command": [
+          "env",
+          "TERM=xterm-256color",
+          "python3",
+          "scripts/verify-hidden-input.py",
+          "target/debug/mhfe"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:49:41.515019Z",
+        "finishedAt": "2026-10-05T14:49:45.583729Z",
+        "exitCode": 0,
+        "logSha256": "d4944d58cd68b4d72ebe5fa160962060b53759c75c23e062a1b96d10e15a5817",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-terminal-regressions.log",
+        "commandRecordSha256": "e5fe9d925065dc4181203c2bad1248be7a95933b774bd54e6bc822962113cbf5"
+      },
+      {
+        "label": "recheck-tests",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--lib",
+          "--bins"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:45:56.299178Z",
+        "finishedAt": "2026-10-05T14:46:18.721648Z",
+        "exitCode": 0,
+        "logSha256": "6d1560271c6d7bf128b8742c52a85be4548db1dbfb46691f83a55d5b6eb84e8f",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-tests.log",
+        "commandRecordSha256": "6fdc71e577a7904d0080879c2dc26553b5c19571a9ee3d0f08397378b4379dc1"
+      },
+      {
+        "label": "recheck-wasm-clippy",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "clippy",
+          "--locked",
+          "--lib",
+          "--target",
+          "wasm32-unknown-unknown",
+          "--features",
+          "wasm",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T14:49:02.821295Z",
+        "finishedAt": "2026-10-05T14:49:03.177347Z",
+        "exitCode": 0,
+        "logSha256": "ec07b35bde25d6899e95ce94b40c4feca16c3c7b8d796f3e3f8c1808dd73bed5",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/recheck-wasm-clippy.log",
+        "commandRecordSha256": "fb6cfc3be1a65a744bba2fde11481dcf2a6e707c48c721027da2143237b9ba48"
+      }
+    ],
+    "originalRemediationAssessment": "Seven original verified statuses supported; SEC004 remains source-reviewed fixed. Library: 121 passed, one ignored. CLI: 69 passed. Doctests: two passed. The prior full-cost wallets run was hash-verified, not repeated.",
+    "specificationAssessment": {
+      "DOC001": "Current uncommitted supplement includes the 24-byte ASCII tag, BE32(ENT), raw 64-byte BIP39 seed and matching public fixture; reviewed byte mismatch resolved in these working bytes.",
+      "DOC002": "Current uncommitted supplement qualifies selected entropy and password filtering, accepts deliberate passphrase searches and distinguishes a match from wallet identity; substantive reviewed defects addressed.",
+      "DOC003": "The synthetic record oracle is now described, but from the container alone does not supply real-wallet lookup answers. Explicitly grant unchanged real-wallet record-oracle access and forward other lookups, or narrow the corollary to the disclosed tuple. Theorem 1/2 stand separately.",
+      "DOC005": "Current publishedFiles matches README, supplement and CHANGELOG, but validation fails: ValueError: Procedure changed: AGENTS.md. Record authorized instruction changes without replacing historical procedure hashes."
+    },
+    "limitations": [
+      "No new full-cost replay, Docker/release rebuild or browser execution.",
+      "Windows/macOS source-only review; no native execution.",
+      "SEC004 covers owned temporary zeroization, not every compiler-created register/dependency copy.",
+      "No independent rebuild of intermediate historical commits."
+    ]
+  },
+  "ownerAuthorizedRemediation": {
+    "date": "2026-10-05",
+    "authorization": "User: fix it yourself",
+    "baseCommit": "447c2bd22c91ac25bb4d4e442b6d4a82ee794307",
+    "state": "Uncommitted working trees; no fix commit invented",
+    "sourceManifestSha256": "4ccd851f802611b93e04a96e234d0dd500554710090f415d42296df6bd917b36",
+    "sourceFingerprint": "236d682490146b1fed9209eeac134e747e36d12718cb663c16aebcc3162f2b29",
+    "commands": [
+      {
+        "label": "remedy-cli-build",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "build",
+          "--locked",
+          "--bin",
+          "mhfe"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:02:23.273324Z",
+        "finishedAt": "2026-10-05T15:02:24.033638Z",
+        "exitCode": 0,
+        "logSha256": "3692fea190bc7a9498dce6a5ce1306c3fe8be6ba4b2cd65c74c004318304301a",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-cli-build.log",
+        "commandRecordSha256": "bdf44c2de383df4ba98b9bf8251efe157f9c5135eb4532e968182eef7a6bc601"
+      },
+      {
+        "label": "remedy-markdown-format",
+        "command": [
+          "npm",
+          "run",
+          "format:check"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:02:57.304288Z",
+        "finishedAt": "2026-10-05T15:02:58.576192Z",
+        "exitCode": 0,
+        "logSha256": "51d89b2b80c5c022eae42e7644d36b1e0b623adaf1a4a16ded3fccb4ed39bf53",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-markdown-format.log",
+        "commandRecordSha256": "8e4eef17f3b864711f178cb2f0ebfd3d161441554175bbf8a1879f6e8c71cbc2"
+      },
+      {
+        "label": "remedy-native-clippy",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "clippy",
+          "--locked",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:01:10.264057Z",
+        "finishedAt": "2026-10-05T15:01:10.935295Z",
+        "exitCode": 0,
+        "logSha256": "9f99a49a9a32a69d27ae64d649145393ef32ea7578037baa1ef7599f6104046b",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-native-clippy.log",
+        "commandRecordSha256": "835b1695fdc6918a45b85376a98ef9ad0440fe331aed33471ec42390f65da3d9"
+      },
+      {
+        "label": "remedy-padding-finding-probe",
+        "command": [
+          "python3",
+          "docs/audits/AUD-007-harnesses/recheck_bech32_padding.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:02:57.304278Z",
+        "finishedAt": "2026-10-05T15:02:57.609652Z",
+        "exitCode": 1,
+        "logSha256": "fc8aa14377abc8bd54f7b630cc22a7b0542ac8f0a55b248fb21b7d3cddaa5e29",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-padding-finding-probe.log",
+        "commandRecordSha256": "2046b548dadf44c613782b160c0dc830c30b9850a7b62ca1d4d6c5a4b3ca4dc8",
+        "expected": "The retained reproduction assertion fails after the parser is fixed; acceptance regression tests pass separately."
+      },
+      {
+        "label": "remedy-rust-format",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "fmt",
+          "--check"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:03:22.541206Z",
+        "finishedAt": "2026-10-05T15:03:22.691622Z",
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-rust-format.log",
+        "commandRecordSha256": "447c4661af18c3d861325205a18729c936b8e3e4e16d2214da50dd31c12b9a10"
+      },
+      {
+        "label": "remedy-spec-analysis",
+        "command": [
+          "python3",
+          "../mhfe_spec/scripts/check-spec.py",
+          "analysis",
+          "../workingspace/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bip39-3.0.0/src/language/english.rs",
+          "../mhfe_spec/vectors/suite3/zero-12.json"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:02:23.274940Z",
+        "finishedAt": "2026-10-05T15:02:23.331648Z",
+        "exitCode": 0,
+        "logSha256": "db0c09ee8e760c3662a63c0556840db11645f27d7a08e9dbefbf94a3016dda2a",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-spec-analysis.log",
+        "commandRecordSha256": "3e5111bd9ff680a591f7dbe7120ca4a78f369526afc2674d7e53ef699e3e3f6d"
+      },
+      {
+        "label": "remedy-spec-documents",
+        "command": [
+          "python3",
+          "../mhfe_spec/scripts/check-spec.py",
+          "documents",
+          "../workingspace/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bip39-3.0.0/src/language/english.rs"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:02:23.262490Z",
+        "finishedAt": "2026-10-05T15:02:23.689929Z",
+        "exitCode": 0,
+        "logSha256": "8ae1899f3e8efd69ef5a164355a26791b43cbc28eeab7d84e2d7953031dcd341",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-spec-documents.log",
+        "commandRecordSha256": "2e26e0dcb749632a1c0026ceae7440286a183a801a42ff86bdea231ad7dbd5ee"
+      },
+      {
+        "label": "remedy-spec-format",
+        "command": [
+          "../mhfe_spec/node_modules/.bin/prettier",
+          "--check",
+          "../mhfe_spec/docs/DESIGN-NOTES.md",
+          "../mhfe_spec/CHANGELOG.md"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:02:57.287962Z",
+        "finishedAt": "2026-10-05T15:02:57.976855Z",
+        "exitCode": 0,
+        "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-spec-format.log",
+        "commandRecordSha256": "605718415e49752304e03993521e1c6000a0e6e13cd5d1a1527c2c84e84aebfd"
+      },
+      {
+        "label": "remedy-spec-publication",
+        "command": [
+          "python3",
+          "../mhfe_spec/docs/audits/AUD-005-harnesses/record.py",
+          "validate"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:02:23.272420Z",
+        "finishedAt": "2026-10-05T15:02:23.450255Z",
+        "exitCode": 0,
+        "logSha256": "0ea415644c0d7bcebfeb50d1ef001e8d80bbb565ce5425a1b18c8f7c1463b918",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-spec-publication.log",
+        "commandRecordSha256": "e3a7915bfbee1f0b385be681f48b64056df2d497c2d8b9d646ede89e4047c7c4"
+      },
+      {
+        "label": "remedy-wallet-tests",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--lib",
+          "wallet::tests"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:00:10.732003Z",
+        "finishedAt": "2026-10-05T15:00:33.469579Z",
+        "exitCode": 0,
+        "logSha256": "8ce4fba8bc3e20bbf941120ba00cb4b2761487cef7c104cfdc88545521bf0d3c",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-wallet-tests.log",
+        "commandRecordSha256": "a064e62e357f7702ae75cdee414f5b119d174fc96e7d92d72e8c1ef54da501c3"
+      },
+      {
+        "label": "remedy-wasm-clippy",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "clippy",
+          "--locked",
+          "--lib",
+          "--target",
+          "wasm32-unknown-unknown",
+          "--features",
+          "wasm",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-05T15:02:57.283364Z",
+        "finishedAt": "2026-10-05T15:02:57.779607Z",
+        "exitCode": 0,
+        "logSha256": "4b5ca9794cb6310cb3c5f8aedf9f05767a07ff798667f4069f5e6f068dd03e6c",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/remedy-wasm-clippy.log",
+        "commandRecordSha256": "17ed6ce4c5a84401a259ace210826d7c5c460eaeac90a638d5d6519496a764ff"
+      }
+    ],
+    "findings": [
+      "AUD-007-FUN003",
+      "AUD-007-BLD001",
+      "AUD-007-DOC001",
+      "AUD-007-DOC002",
+      "AUD-007-DOC003",
+      "AUD-007-DOC005"
+    ],
+    "checks": "19 wallet tests, native/WASM Clippy, CLI build, 15 document checks, 64 analysis checks, publication validation and format checks passed. Retained bug probe fails as expected after repair.",
+    "limitations": [
+      "No Windows native execution; unused import removal is source-checked.",
+      "No new full-cost vector replay, browser acceptance or release build; core suite algorithms unchanged."
+    ]
+  },
+  "commitBinding": {
+    "date": "2026-10-06",
+    "reason": "The owner-authorized fixes were committed with later edits, so no commit holds the exact bytes of remedy-final-source.json. This update names the signed commits that carry each fix and verifies the MHFE fixes on the released commit. It also records the fix of the observation BLD002 that this binding found.",
+    "commits": [
+      {
+        "repository": "mhfe",
+        "commit": "db56fdd4028f27012ae2c10cdafb672139645a5a",
+        "findings": [
+          "AUD-007-FUN003"
+        ]
+      },
+      {
+        "repository": "mhfe",
+        "commit": "711c8f596a7f5548270288de4f07c5011c5784cb",
+        "findings": [
+          "AUD-007-BLD001"
+        ]
+      },
+      {
+        "repository": "mhfe_spec",
+        "commit": "bbc1320f2da9eef1c377b20d3fcbf141ab523bb7",
+        "findings": [
+          "AUD-007-DOC001",
+          "AUD-007-DOC002",
+          "AUD-007-DOC003",
+          "AUD-007-DOC005"
+        ]
+      },
+      {
+        "repository": "mhfe",
+        "commit": "be40555e70e5dc9f843deb3831949ea91dd9e2e1",
+        "findings": [
+          "AUD-007-BLD002"
+        ]
+      }
+    ],
+    "verificationCommit": "5a3729385ca2d6c6677a84e9618b8875564cc7f6",
+    "commands": [
+      {
+        "label": "binding-wallet-tests",
+        "command": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--lib",
+          "wallet::tests"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-06T08:06:41.934780Z",
+        "finishedAt": "2026-10-06T08:07:07.002795Z",
+        "exitCode": 0,
+        "logSha256": "e01d136d2fa5efc16512ae8e298ffc410f70f3cebe6d8ab68eaf0a277bad4d41",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/binding-wallet-tests.log",
+        "commandRecordSha256": "cd4ebe25c520c018f4f4cc73a72e48b31b8e095797ebfd7fd3e07bf66f0c3923",
+        "expected": "19 wallet tests pass, including the redundant-group refusals."
+      },
+      {
+        "label": "binding-release-build-log",
+        "command": [
+          "gh",
+          "run",
+          "view",
+          "37432125420",
+          "--job",
+          "112165201404",
+          "--log"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-06T08:07:07.043422Z",
+        "finishedAt": "2026-10-06T08:07:08.734301Z",
+        "exitCode": 0,
+        "logSha256": "1f5ebbb5de0e8b23e5110ed88189dd3623c02c00e6884c40e31731d17ea05df9",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/binding-release-build-log.log",
+        "commandRecordSha256": "609510a94f01e16c85f942b352e1d62316d3534759b2f18e9966b2cab764dbd2",
+        "expected": "The canonical release job log of run 37432125420; read for compiler warnings."
+      },
+      {
+        "label": "bld002-ci-windows-log",
+        "command": [
+          "gh",
+          "run",
+          "view",
+          "37431286142",
+          "--job",
+          "112162583095",
+          "--log"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-06T08:25:44.380598Z",
+        "finishedAt": "2026-10-06T08:25:46.091537Z",
+        "exitCode": 0,
+        "logSha256": "22dba76e6706b30b506328c66b716655ee7f493464ae8ae4edd577c80110ab51",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/bld002-ci-windows-log.log",
+        "commandRecordSha256": "a5b587005d9fb313b72f6d252b627630502c3d879953dd21765ca379cafdc2bc",
+        "expected": "The portable (windows-2025) job log of CI run 37431286142; read for warnings."
+      },
+      {
+        "label": "bld002-cross-clippy-before",
+        "command": [
+          "bash",
+          "-c",
+          "git archive 52b6b36 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-06T08:27:30.728988Z",
+        "finishedAt": "2026-10-06T08:27:51.733043Z",
+        "exitCode": 101,
+        "logSha256": "c491c72e5e2c3f4f5c45b7d0edbd894b8163e14105c2bf4d77715b8cfee395b0",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/bld002-cross-clippy-before.log",
+        "commandRecordSha256": "239f818fdb6c2d0992069dc7d67b64449b81e7e4575f4924f0fb2707aec65e70",
+        "expected": "Fails: Clippy reports the aarch64 and Windows warnings of 52b6b36's source."
+      },
+      {
+        "label": "bld002-cross-clippy-after",
+        "command": [
+          "bash",
+          "-c",
+          "git archive 40f1193 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startedAt": "2026-10-06T08:33:54.743904Z",
+        "finishedAt": "2026-10-06T08:34:15.435271Z",
+        "exitCode": 0,
+        "logSha256": "0ace2c47c9ba464eb3611db5dc23692c80e6ff96a5a39e46ed9d034ed809db1a",
+        "evidence": "Local only: docs/audits/AUD-007-evidence/bld002-cross-clippy-after.log",
+        "commandRecordSha256": "45bd689e70f8e8621b1e7845342b339b159d1ce3cb76bf760c47fcd7f83c3b2a",
+        "expected": "Passes: both cross targets are free of warnings with the fix."
+      }
+    ],
+    "findings": [
+      "AUD-007-BLD002"
+    ],
+    "limitations": [
+      "No native Windows or aarch64 execution; both targets were cross-compiled in the canonical container.",
+      "The specification fixes are bound to their commit; the specification's publication checks were not rerun here.",
+      "The Microsoft cl part of BLD002 is not executed locally; the native Windows CI job checks it."
     ]
   }
 }
