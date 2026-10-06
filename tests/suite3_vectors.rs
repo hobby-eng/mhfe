@@ -29,6 +29,34 @@ fn recorded(name: &str) -> Value {
     serde_json::from_str(&text).unwrap()
 }
 
+/// A vector written now, in the form it is compared with the recorded one: the version of the
+/// program that wrote a file is part of the file but not of what the vector fixes, so a later
+/// release keeps the recorded version there. The program's name and its Argon2 implementation
+/// are still compared.
+fn with_recorded_writer(mut written: Value, recorded: &Value) -> Value {
+    if let (Some(now), Some(then)) = (written.get_mut("generator"), recorded.get("generator")) {
+        now["version"] = then["version"].clone();
+    }
+    written
+}
+
+/// [`with_recorded_writer`] for a list of negative cases, each with a writer of its own.
+fn cases_with_recorded_writer(written: Value, recorded: &Value) -> Value {
+    let (written, recorded) = (written.as_array().unwrap(), recorded.as_array().unwrap());
+    assert_eq!(
+        written.len(),
+        recorded.len(),
+        "the number of negative cases"
+    );
+    Value::Array(
+        written
+            .iter()
+            .zip(recorded)
+            .map(|(case, recorded)| with_recorded_writer(case.clone(), recorded))
+            .collect(),
+    )
+}
+
 /// Fast: every vector file is present, unchanged since it was written, and made from the public
 /// inputs in the source. No Argon2 runs.
 #[test]
@@ -123,6 +151,22 @@ fn every_round_records_its_salt_and_mask_inputs() {
     }
 }
 
+/// Fast: a vector written by a later release matches the recorded one, while any change of what
+/// the vector fixes, such as its container, still does not.
+#[test]
+fn only_the_writer_version_is_set_aside() {
+    let recorded = recorded("zero-12.json");
+    let mut later = recorded.clone();
+    later["generator"]["version"] = Value::from("9.9.9");
+    assert_eq!(with_recorded_writer(later.clone(), &recorded), recorded);
+    let mut other = later;
+    other["container"] = Value::from("abandon abandon abandon");
+    assert_ne!(with_recorded_writer(other.clone(), &recorded), recorded);
+    let mut renamed = recorded.clone();
+    renamed["generator"]["program"] = Value::from("another program");
+    assert_ne!(with_recorded_writer(renamed, &recorded), recorded);
+}
+
 #[test]
 #[ignore = "full-size Argon2: about an hour for the whole set"]
 fn every_vector_is_reproduced_exactly() {
@@ -133,7 +177,7 @@ fn every_vector_is_reproduced_exactly() {
         let vector = vectors::generate(&mut mhfe, input).unwrap();
         let expected = recorded(&format!("{}.json", input.name()));
         assert_eq!(
-            serde_json::to_value(&vector).unwrap(),
+            with_recorded_writer(serde_json::to_value(&vector).unwrap(), &expected),
             expected,
             "{}",
             input.name()
@@ -153,7 +197,7 @@ fn every_vector_is_reproduced_exactly() {
         println!("{}: reproduced", input.name());
     }
     assert_eq!(
-        serde_json::to_value(&cases).unwrap(),
+        cases_with_recorded_writer(serde_json::to_value(&cases).unwrap(), &expected),
         expected,
         "negative cases"
     );
