@@ -25,7 +25,7 @@ bench = false
 bech32 = { version = "=0.12.0", default-features = false, features = ["alloc"] }
 bip39 = { version = "=3.0.0", features = ["zeroize"] }
 # RIPEMD-160 for Bitcoin addresses; the same crate bip39 already depends on.
-bitcoin_hashes = { version = "=0.14.101", default-features = false }
+bitcoin_hashes = { version = "=1.2.0", default-features = false }
 blake2 = "=0.11.0"
 bs58 = { version = "=0.5.1", default-features = false, features = ["alloc", "check"] }
 hex = "=0.4.3"
