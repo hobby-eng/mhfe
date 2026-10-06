@@ -345,7 +345,7 @@ pub enum Wallet<'a> {
 /// they go to a file, it would be left alone on the screen and its history, so it is not shown.
 /// Scripts get the phrase alone.
 fn print_fingerprint(phrase: &str, wallet: Wallet) {
-    if !(io::stdout().is_terminal() && io::stderr().is_terminal()) {
+    if !output_on_screen() {
         return;
     }
     let (passphrase, which) = match wallet {
@@ -408,7 +408,7 @@ impl PrivateScreen {
     /// A screen for showing a secret result, such as a recovered phrase, which goes to standard
     /// output: it is used only when standard output is the terminal too.
     pub fn enter_to_show(input: &Input) -> Self {
-        Self::enter_if(input, io::stdout().is_terminal())
+        Self::enter_if(input, output_on_screen())
     }
 
     fn enter_if(input: &Input, output_allows: bool) -> Self {
@@ -462,10 +462,20 @@ impl PrivateScreen {
 }
 
 /// Whether a person at a terminal can be shown a secret on a private screen: standard input,
-/// output and error are the terminal, and it can switch screens. A command that must show a phrase
-/// only privately refuses otherwise, before anything secret is asked (AUD-007-SEC001).
+/// output and error are the terminal, output and error the same one, and it can switch screens.
+/// A command that must show a phrase only privately refuses otherwise, before anything secret is
+/// asked (AUD-007-SEC001).
 pub fn can_show_privately(input: &Input) -> bool {
-    io::stdout().is_terminal() && terminal_screen_possible(input)
+    output_on_screen() && terminal_screen_possible(input)
+}
+
+/// Whether what goes to standard output appears on the terminal of standard error, on which the
+/// private screen is switched and cleared: both are terminals, and the same one. Output sent to
+/// another terminal counts as redirected (AUD-008-SEC004).
+fn output_on_screen() -> bool {
+    io::stdout().is_terminal()
+        && io::stderr().is_terminal()
+        && hidden_input::output_on_error_terminal()
 }
 
 fn terminal_screen_possible(input: &Input) -> bool {

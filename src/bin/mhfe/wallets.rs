@@ -8,7 +8,6 @@
 use anstream::eprintln;
 use clap::Args;
 use mhfe::{MhfeError, Password, Suite};
-use zeroize::Zeroizing;
 
 use crate::check;
 use crate::choice::{Answer, Question};
@@ -78,8 +77,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // Every wallet, its password, its progress and the question for another one leave nothing in
     // the summary: nothing on the main screen tells how many wallets were opened (AUD-007-SEC005).
     let off_the_record = flow::off_the_record();
-    // The passwords of this run, as normalized bytes, so that none is typed twice.
-    let mut used: Vec<Zeroizing<Vec<u8>>> = Vec::new();
+    // The passwords of this run, so that none is typed twice. Kept as the Password itself, whose
+    // buffer stays locked until it is wiped: a copy of its bytes would not be (AUD-008-SEC003).
+    let mut used: Vec<Password> = Vec::new();
     loop {
         let number = used.len() + 1;
         let password = read_unused_password(&mut input, &used)?;
@@ -101,8 +101,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             }
             Err(error) => return Err(error.into()),
         };
-        used.push(Zeroizing::new(password.as_bytes().to_vec()));
         show_wallet(&input, number, &wallet.phrase);
+        used.push(password);
         if !another(&mut input)? {
             break;
         }
@@ -121,15 +121,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 }
 
 /// A password typed twice on the private screen that this run has not used yet.
-fn read_unused_password(
-    input: &mut Input,
-    used: &[Zeroizing<Vec<u8>>],
-) -> Result<Password, Failure> {
+fn read_unused_password(input: &mut Input, used: &[Password]) -> Result<Password, Failure> {
     loop {
         let password = encrypt::read_new_password(input, Operation::Wallets)?;
+        // Normalized bytes, as the cipher takes them: "é" typed either way is one password.
         if !used
             .iter()
-            .any(|bytes| bytes.as_slice() == password.as_bytes())
+            .any(|other| other.as_bytes() == password.as_bytes())
         {
             return Ok(password);
         }

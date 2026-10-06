@@ -394,7 +394,11 @@ pub(crate) fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeEr
     ))
 }
 
-pub(crate) fn phrase_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>, MhfeError> {
+/// The English BIP39 phrase of `entropy`, 16 to 32 bytes in steps of four, written into a buffer
+/// that is reserved at its final size and wiped when dropped, so that no growing copy of the words
+/// is left in freed memory (AUD-005-SEC001, AUD-008-SEC002). For a program that draws its own
+/// entropy, as `mhfe new` does. Another length is a programming error: `MhfeError::Internal`.
+pub fn phrase_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>, MhfeError> {
     let mnemonic = Mnemonic::from_entropy_in(Language::English, entropy)
         .map_err(|error| MhfeError::Internal(error.to_string()))?;
     Ok(phrase::phrase_text(&mnemonic))

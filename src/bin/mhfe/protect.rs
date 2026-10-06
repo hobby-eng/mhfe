@@ -103,7 +103,10 @@ fn isolate_thread(_needs: Needs) -> Isolation {
 }
 
 /// A seccomp filter that refuses the creation of any socket with EACCES. Without a socket nothing
-/// can be sent or received over a network; Unix sockets go too, which the tool does not use.
+/// can be sent or received over a network; Unix sockets go too, which the tool does not use. It
+/// refuses io_uring altogether as well: its operations, a socket among them since Linux 5.19
+/// (IORING_OP_SOCKET), run inside the kernel without a system call of their own, so the filter
+/// would never see them (AUD-008-SEC001). Nothing in the tool uses io_uring.
 #[cfg(target_os = "linux")]
 mod seccomp {
     /// The architecture of the system calls the filter expects (AUDIT_ARCH_* in
@@ -154,6 +157,9 @@ mod seccomp {
         let mut tests = vec![
             (libc::BPF_JEQ, libc::SYS_socket as u32),
             (libc::BPF_JEQ, libc::SYS_socketpair as u32),
+            (libc::BPF_JEQ, libc::SYS_io_uring_setup as u32),
+            (libc::BPF_JEQ, libc::SYS_io_uring_enter as u32),
+            (libc::BPF_JEQ, libc::SYS_io_uring_register as u32),
         ];
         #[cfg(target_arch = "x86_64")]
         tests.insert(0, (libc::BPF_JGE, X32_SYSCALL_BIT));
@@ -525,6 +531,8 @@ mod tests {
                     assert_eq!(super::isolation(), isolation);
                     let socket = std::net::TcpListener::bind("127.0.0.1:0").is_ok();
                     let write = fs::write(&target, "x").is_ok();
+                    // io_uring could create a socket without the socket call (AUD-008-SEC001).
+                    assert_eq!(io_uring_setup(), Some(libc::EACCES), "io_uring was set up");
                     (isolation, socket, write)
                 })
                 .join()
@@ -539,6 +547,21 @@ mod tests {
         assert!(std::net::TcpListener::bind("127.0.0.1:0").is_ok());
         fs::write(&target, "x").unwrap();
         let _ = fs::remove_dir_all(&folder);
+    }
+
+    /// Sets up an io_uring of one entry and closes it again; the error number when that is refused.
+    #[cfg(target_os = "linux")]
+    fn io_uring_setup() -> Option<i32> {
+        // `struct io_uring_params` of linux/io_uring.h is 120 bytes; zero asks for the defaults.
+        let mut params = [0u8; 120];
+        // SAFETY: the kernel reads and fills the 120 bytes of `params`, which live for the call.
+        let ring = unsafe { libc::syscall(libc::SYS_io_uring_setup, 1u32, params.as_mut_ptr()) };
+        if ring < 0 {
+            return Some(std::io::Error::last_os_error().raw_os_error().unwrap_or(0));
+        }
+        // SAFETY: closes the descriptor that io_uring_setup returned.
+        unsafe { libc::close(ring as i32) };
+        None
     }
 
     #[test]

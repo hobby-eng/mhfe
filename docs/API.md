@@ -123,6 +123,8 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
+- `phrase_from_entropy(entropy)` gives the English phrase of 16 to 32 bytes of entropy that a
+  program drew itself, written into a buffer reserved at its final size and wiped when dropped.
 - `wallet` has the address and fingerprint functions the check uses: `Coin`, `Address` with its
   `AddressType`, `DerivationPath`, `SearchLimits`, `parse_fingerprint`, `master_fingerprint` and
   `find_address(phrase, passphrase, address, path, limits)`, which returns the path where the

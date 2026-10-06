@@ -53,7 +53,8 @@ Planned as version 0.5.0.
   `Mhfe::derive_wallet`, with the error code `HIDDEN_WALLET_PASSES_CHECK`.
 - A phrase that was not asked for as a result is shown only on a private screen: `mhfe new` and
   `mhfe wallets` refuse to start, and `mhfe rekey` does not offer the owner's comparison, when
-  standard output goes to a file, a pipe or a terminal without a private screen.
+  standard output goes to a file, a pipe, another terminal than standard error's or a terminal
+  without a private screen.
 - Every seed phrase and container shown at a terminal has its master key fingerprint on the line
   below, for comparing with a wallet app: with the new wallet's BIP39 passphrase in `mhfe new`, and
   without one in `mhfe decrypt`, `rekey` and `wallets`, which do not know it. Under a container
@@ -108,9 +109,9 @@ Planned as version 0.5.0.
   stays locked until it is wiped, and a page that holds several secrets stays locked until the last
   of them is wiped. On Linux it warns before any secret is typed when swap is not encrypted.
 - On Linux the kernel enforces that `encrypt`, `decrypt`, `check`, `rekey`, `new`, `wallets` and
-  `password` stay offline and write no file: seccomp refuses sockets and Landlock refuses file
-  writes, for every thread the command starts. The summary shows it; the start menu runs each
-  command in an isolated thread.
+  `password` stay offline and write no file: seccomp refuses sockets, and io_uring, through which
+  the kernel could create one unseen, and Landlock refuses file writes, for every thread the command
+  starts. The summary shows it; the start menu runs each command in an isolated thread.
 - `mhfe check` compares with a receiving address of twelve coins instead of Bitcoin alone: Bitcoin,
   Ethereum and every EVM network, XRP, Tron, Zcash (transparent), Dogecoin, Bitcoin Cash, Litecoin,
   Ethereum Classic, Cosmos, Injective and Dash, for Dash both Core `X…` and Platform payment

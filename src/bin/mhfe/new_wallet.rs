@@ -10,7 +10,6 @@ use std::thread;
 use std::time::Instant;
 
 use anstream::eprintln;
-use bip39::{Language, Mnemonic};
 use clap::Args;
 use mhfe::memory::LockedPages;
 use mhfe::wallet_check::{self, NEW_ENTROPY_BYTES};
@@ -218,9 +217,9 @@ fn draw_phrase(passphrase: Option<&str>) -> Result<Zeroizing<String>, Failure> {
             entropy
         }
     };
-    let mnemonic = Mnemonic::from_entropy_in(Language::English, &entropy[..])
-        .map_err(|error| Failure::internal(error.to_string()))?;
-    Ok(Zeroizing::new(mnemonic.to_string()))
+    // Written at its final size: Mnemonic::to_string would leave growing copies of the first
+    // words in freed memory (AUD-008-SEC002).
+    Ok(mhfe::phrase_from_entropy(&entropy[..])?)
 }
 
 /// Draws entropies on every core until one passes the wallet check with `passphrase`. The first
