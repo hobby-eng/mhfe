@@ -7,7 +7,10 @@
 //! - on Linux, a command that handles secrets cannot open a network socket (seccomp) or write to
 //!   any file (Landlock): the kernel enforces that it stays offline, so not even a fault or a
 //!   tampered dependency could send a secret away or leave it in a file. Both apply to the thread
-//!   that runs the command and every thread it starts, such as Argon2's, and cannot be undone.
+//!   that runs the command and every thread it starts, such as Argon2's, and cannot be undone;
+//! - on Linux, a command started directly also moves into a network namespace of its own, where no
+//!   network interface exists: whatever way a socket were made, it would reach nothing. Where the
+//!   system does not allow that, the command runs on with the two above.
 
 // prctl, setrlimit and the Landlock calls are operating-system calls that Rust offers only through
 // unsafe foreign functions.
@@ -58,11 +61,15 @@ impl Needs {
 pub struct Isolation {
     pub no_network: bool,
     pub no_writes: bool,
+    /// The process runs in a network namespace of its own, without any network interface.
+    pub empty_network: bool,
 }
 
 thread_local! {
     /// Set by [`isolate`] for the thread it isolated, read by the summary of the command.
-    static ISOLATION: Cell<Isolation> = const { Cell::new(Isolation { no_network: false, no_writes: false }) };
+    static ISOLATION: Cell<Isolation> = const {
+        Cell::new(Isolation { no_network: false, no_writes: false, empty_network: false })
+    };
 }
 
 /// Forbids the calling thread, and every thread it starts afterwards, what `needs` does not
@@ -91,9 +98,28 @@ fn isolate_thread(needs: Needs) -> Isolation {
     if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
         return Isolation::default();
     }
+    // Only a command that needs neither: in a user namespace of its own the process could not
+    // create a file, as no owner of a new file maps to the system's users.
+    let empty_network = needs == Needs::NOTHING && namespace::enter_empty_network();
     Isolation {
         no_writes: !needs.writes && landlock::forbid_writes(!needs.network),
         no_network: !needs.network && seccomp::forbid_sockets(),
+        empty_network,
+    }
+}
+
+/// A network namespace of its own for the process, which has no network interface but a loopback
+/// that stays down: no socket made in any way, past the seccomp filter or through it, reaches
+/// anything. An unprivileged process may create one only together with a user namespace of its
+/// own, which the kernel allows only while the process has a single thread, as a command started
+/// directly has at this point, and only where the system allows user namespaces. A command of the
+/// start menu, which runs in a thread of the menu, does not get one.
+#[cfg(target_os = "linux")]
+mod namespace {
+    /// Whether the process now runs in the empty network; a refusal changes nothing.
+    pub(super) fn enter_empty_network() -> bool {
+        // SAFETY: unshare takes flags only and touches no memory of this process.
+        unsafe { libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNET) == 0 }
     }
 }
 
@@ -547,6 +573,68 @@ mod tests {
         assert!(std::net::TcpListener::bind("127.0.0.1:0").is_ok());
         fs::write(&target, "x").unwrap();
         let _ = fs::remove_dir_all(&folder);
+    }
+
+    /// A process with a single thread enters the empty network, where nothing is in reach: a
+    /// datagram even to the loopback address finds no route. The check runs in a child forked off
+    /// the test, which has the single thread a new user namespace needs; on a system that allows
+    /// no user namespace there is nothing to check.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_process_with_one_thread_gets_an_empty_network() {
+        /// Exit codes of the child: the datagram found no route, it was sent, no namespace.
+        const UNREACHABLE: i32 = 0;
+        const SENT: i32 = 1;
+        const NO_NAMESPACE: i32 = 2;
+        // SAFETY: the child makes only system calls and ends with _exit, as the child of a process
+        // with several threads must.
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0, "fork failed");
+        if child == 0 {
+            let code = if namespace::enter_empty_network() {
+                let address = libc::sockaddr_in {
+                    sin_family: libc::AF_INET as libc::sa_family_t,
+                    // The discard port: nothing would answer even with a network.
+                    sin_port: 9u16.to_be(),
+                    sin_addr: libc::in_addr {
+                        s_addr: u32::from_ne_bytes([127, 0, 0, 1]),
+                    },
+                    sin_zero: [0; 8],
+                };
+                // SAFETY: a datagram of one byte to the address above, both of which live for the
+                // calls.
+                let sent = unsafe {
+                    let socket = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+                    libc::sendto(
+                        socket,
+                        b"x".as_ptr().cast(),
+                        1,
+                        0,
+                        (&address as *const libc::sockaddr_in).cast(),
+                        std::mem::size_of::<libc::sockaddr_in>() as libc::socklen_t,
+                    )
+                };
+                let error = std::io::Error::last_os_error().raw_os_error();
+                if sent < 0 && error == Some(libc::ENETUNREACH) {
+                    UNREACHABLE
+                } else {
+                    SENT
+                }
+            } else {
+                NO_NAMESPACE
+            };
+            // SAFETY: ends the child at once, without running anything of the test's process.
+            unsafe { libc::_exit(code) };
+        }
+        let mut status = 0;
+        // SAFETY: waits for the child forked above.
+        assert_eq!(unsafe { libc::waitpid(child, &mut status, 0) }, child);
+        assert!(libc::WIFEXITED(status), "the child did not end: {status}");
+        match libc::WEXITSTATUS(status) {
+            UNREACHABLE => {}
+            NO_NAMESPACE => eprintln!("This system allows no user namespace: nothing to check."),
+            code => panic!("a datagram left the empty network ({code})"),
+        }
     }
 
     /// Sets up an io_uring of one entry and closes it again; the error number when that is refused.

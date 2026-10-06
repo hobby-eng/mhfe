@@ -181,9 +181,11 @@ Escape cancels.
 
 Use it on a trusted computer that stays offline while the phrase and the password are on it, best a
 Linux system started from a USB stick with the network off. On Linux the kernel also keeps MHFE
-itself from opening any network connection or writing any file while it handles a secret. On Windows, Windows PE from a USB stick
-is better than your everyday system; `mhfe.exe` needs nothing beyond Windows itself, though it has
-not been tested in Windows PE yet.
+itself from opening any network connection or writing any file while it handles a secret; a command
+started directly, not from the start menu, also runs in a network of its own without any interface,
+where the system allows it, and its summary then says "no network at all". On Windows, Windows PE
+from a USB stick is better than your everyday system; `mhfe.exe` needs nothing beyond Windows
+itself, though it has not been tested in Windows PE yet.
 
 Swap matters too. The system may write memory to a swap area on a disk, Argon2's work area
 included, from which a password guess can be tested cheaply, and it can stay there for years. On
