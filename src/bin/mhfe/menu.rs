@@ -29,6 +29,8 @@ enum Action {
     Help,
     /// Makes passwords until the person returns to the menu.
     Password,
+    /// Repairs a plate, or makes repair words for one, as the person chooses.
+    Repair,
     Quit,
 }
 
@@ -84,6 +86,16 @@ pub fn run() -> Result<i32, Failure> {
                 Ok(()) => continue,
                 Err(failure) => show_failure(&failure),
             },
+            Action::Repair => match repair_or_make_words() {
+                Ok(Some(arguments)) => {
+                    if let Err(failure) = run_command(&arguments) {
+                        show_failure(&failure);
+                    }
+                }
+                // Escape at the question returns to the menu.
+                Ok(None) => continue,
+                Err(failure) => show_failure(&failure),
+            },
             Action::Run(arguments) => {
                 if let Err(failure) = run_command(arguments) {
                     show_failure(&failure);
@@ -119,6 +131,12 @@ fn entries() -> Vec<Entry> {
     for name in ["new", "encrypt", "decrypt", "check", "rekey", "wallets"] {
         entries.push(Entry::command(name));
     }
+    // Both repair commands under one entry, which asks which (repair_or_make_words).
+    entries.push(Entry {
+        label: "Repair a plate, or make its repair words".to_owned(),
+        command: "mhfe repair".to_owned(),
+        action: Action::Repair,
+    });
     // Passwords are made again on Enter until one suits (make_passwords).
     entries.push(Entry {
         action: Action::Password,
@@ -241,6 +259,30 @@ fn make_passwords() -> Result<(), Failure> {
     }
 }
 
+/// Asks whether to repair a plate or to make repair words for one; the arguments of the command,
+/// or `None` on Escape.
+fn repair_or_make_words() -> Result<Option<Vec<OsString>>, Failure> {
+    let question = Question {
+        text: "Repair a plate, or make repair words for one?",
+        explanation: &[],
+        more: Some(readme::REPAIR),
+        record: None,
+    };
+    let answers = [
+        Answer::new(
+            "Repair a plate",
+            "with its repair words, without the password",
+        ),
+        Answer::new("Make repair words", "for a container you have"),
+    ];
+    let command = match choice::choose(&question, &answers, None)? {
+        Some(0) => "repair",
+        Some(_) => "repair-words",
+        None => return Ok(None),
+    };
+    Ok(Some(vec![OsString::from(command)]))
+}
+
 /// Waits for Enter; false on Escape or its aliases. The caller decides where those keys lead.
 fn wait_for_enter(prompt: &str) -> Result<bool, Failure> {
     // Switched before the question appears, as in choose().
@@ -275,6 +317,10 @@ mod tests {
                 }
                 Action::Password => {
                     assert!(Cli::try_parse_from(["mhfe", "password"]).is_ok());
+                }
+                Action::Repair => {
+                    assert!(Cli::try_parse_from(["mhfe", "repair"]).is_ok());
+                    assert!(Cli::try_parse_from(["mhfe", "repair-words"]).is_ok());
                 }
                 Action::Help | Action::Quit => {}
             }

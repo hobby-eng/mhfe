@@ -47,9 +47,10 @@ BACKSPACE, CTRL_U, CTRL_C = "\x08", "\x15", "\x03"
 # The keys of the menu as VT input; the pseudo-console turns them into key presses.
 UP, DOWN, ENTER, CTRL_UP = "\x1b[A", "\x1b[B", "\r", "\x1b[1;5A"
 # The menu entry of `mhfe password` when no browser tool lies next to the program.
-PASSWORD_ENTRY = 7
-# The entry that shows the help and returns to the menu on Enter; mhfe self-test lies between.
-HELP_ENTRY = PASSWORD_ENTRY + 2
+PASSWORD_ENTRY = 8
+# The entry that shows the help, two below the password entry with mhfe self-test between: it is
+# the tenth, past the number keys, so it is reached with the arrows from the password entry.
+HELP_FROM_PASSWORD = 2
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN = "Esc quits"
 BACK_TO_MENU = "Press Enter to return to the menu (Esc quits)."
@@ -149,7 +150,8 @@ def check_menu():
         session.wait_for(PASSWORD_AGAIN)
         session.type("q")
         session.wait_for(MENU_SHOWN)
-        session.type(str(HELP_ENTRY))
+        # The menu keeps the password entry highlighted after it.
+        session.type(DOWN * HELP_FROM_PASSWORD + ENTER)
         session.wait_for(BACK_TO_MENU)
         session.type(ENTER)
         session.wait_for(MENU_SHOWN)

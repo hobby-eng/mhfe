@@ -14,6 +14,7 @@ use crate::choice::{self, Answer, Question};
 use crate::encrypt;
 use crate::exit::{Failure, NO_MATCH, SUCCESS};
 use crate::flow::Flow;
+use crate::plate_repair;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
@@ -147,6 +148,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let length_must_be_chosen = suite == Suite::TwentyFourWords
         && phrase.words < 24
         && encrypt::warn_if_detection_would_mislead(&phrase.phrase, phrase.words)?;
+    let repair_count = plate_repair::ask_when_creating(&mut input)?;
     let new_password = read_different_password(&mut input, &password, old_work == new_work)?;
     drop(password);
 
@@ -157,6 +159,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &phrase.phrase,
         suite,
         &new_password,
+        repair_count,
     )?;
     flow.finish();
     style::fact("Format", paint(MUTED, new.suite.id()));
@@ -167,7 +170,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             phrase.words,
             length_must_be_chosen,
             container_words,
-            &[],
+            plate_repair::to_keep(repair_count),
         ),
     );
     // Rekeying revokes nothing: the old plate and password open the wallet until destroyed.

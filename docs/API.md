@@ -112,6 +112,14 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   recovery to encrypt again. The public vectors: the entropy of 24 zero bytes followed by the
   big-endian 64-bit number 76,562 passes with the passphrase `TREZOR`, and with 98,918 it passes
   without a passphrase.
+- `repair` (the optional profile MHFE-REPAIR-1 of the specification):
+  `repair_words(container, count)` gives 2, 4, 6 or 8 repair words for a container, the parity of
+  a Reed–Solomon code over GF(2^11) whose symbols are the numbers of the BIP39 words, and
+  `repair(plate, card)` repairs a plate from its words as read and its repair words as read, `?` or
+  a word outside the list marking an unreadable one. It repairs `2e + s <= k` damaged words, `e`
+  wrong and `s` unreadable, without the password, and returns the container with the positions it
+  repaired (`Repaired`); more damage, or a card of another plate, gives `REPAIR_NOT_POSSIBLE`. The
+  module documentation gives the code byte for byte.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
   can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
   word in full and in lower case, for showing back to the user.
@@ -147,6 +155,8 @@ are outside its control.
 | `REFERENCE_REQUIRED`              | A recovery to encrypt again has no built-in check and no address or fingerprint     |
 | `REFERENCE_MISMATCH`              | The phrase recovered to encrypt again does not match the address or fingerprint     |
 | `HIDDEN_WALLET_PASSES_CHECK`      | A hidden wallet's phrase passes the built-in check of a shorter phrase              |
+| `INVALID_REPAIR_WORDS`            | Repair words that are not 2, 4, 6 or 8 English BIP39 words                          |
+| `REPAIR_NOT_POSSIBLE`             | More damage than the repair words can repair, or a card of another plate            |
 | `INVALID_PIM`                     | PIM outside 0 to 1023                                                               |
 | `INVALID_MEMORY_LEVEL`            | Memory level outside 0 to 21                                                        |
 | `EMPTY_PASSWORD`                  | The password is empty                                                               |

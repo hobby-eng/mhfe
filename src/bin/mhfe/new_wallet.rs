@@ -22,6 +22,7 @@ use crate::encrypt;
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::{self, Flow};
 use crate::locked_text::LockedText;
+use crate::plate_repair;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::strength;
@@ -81,6 +82,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         style::more(readme::NEW);
     }
 
+    let repair_count = plate_repair::ask_when_creating(&mut input)?;
     let phrase = draw_phrase(checked.then_some(&*passphrase))?;
     let _phrase_locked = LockedPages::of_string(&phrase);
     show_new_phrase(&input, &phrase)?;
@@ -95,16 +97,17 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &phrase,
         Suite::TwentyFourWords,
         &password,
+        repair_count,
     )?;
     flow.finish();
     style::fact("Format", paint(MUTED, new.suite.id()));
     // A passphrase belongs to the wallet, checked or not.
-    let also: &[&str] = if passphrase.is_empty() {
-        &[]
-    } else {
-        &["the BIP39 passphrase"]
-    };
-    style::fact("Keep", encrypt::what_to_keep(work, 24, false, 24, also));
+    let mut also: Vec<&str> = Vec::new();
+    if !passphrase.is_empty() {
+        also.push("the BIP39 passphrase");
+    }
+    also.extend(plate_repair::to_keep(repair_count));
+    style::fact("Keep", encrypt::what_to_keep(work, 24, false, 24, &also));
     style::fact(
         "Next",
         format!(
