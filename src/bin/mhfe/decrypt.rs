@@ -95,7 +95,7 @@ pub fn long_help() -> String {
                 "shown while typed; 24 words, or as many as the original for a container of \
                  the same length; four letters per word are enough",
             ),
-            ("Password", "hidden"),
+            ("Password", "on a private screen"),
         ],
     );
     let note = style::help_note(

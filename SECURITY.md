@@ -95,17 +95,17 @@ Never include a real seed phrase, password, private key or wallet file.
   (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect). Both cover every thread the
   command starts, Argon2's included, and cannot be undone. A command started directly also moves
   into a network namespace of its own, with only inactive loopback and no external routes; where
-  the system allows no user namespaces it runs on without one. The summary distinguishes
-  "isolated network" from "new sockets blocked" and reports file writes as restricted. The start menu runs each
-  command in a thread of its own, so that it can still start `mhfe serve`, which is not isolated
-  because the browser it opens must write its profile; a thread cannot get a namespace of its own,
-  so the menu's commands have the filter and the ruleset only. The summary of a command says what
-  the kernel enforces. These boundaries do not revoke descriptors already open: an inherited
-  socket remains in its original network namespace, and an already writable file, pipe or
-  redirected standard output remains writable. They therefore restrict new access rather than
-  guarantee containment of arbitrary compromised code. Start the tool from a trusted terminal
-  in the offline environment described above. `serve` remains outside these command restrictions
-  so that a browser can reach its localhost listener.
+  the system allows no user namespaces it runs on without one. Its summary says "isolated network,
+  no new sockets or file writes" with the namespace and "no new sockets or file writes" without it.
+  The start menu runs each command in a thread of its own, so that it can still start
+  `mhfe serve`, which is not isolated because the browser it opens must write its profile; a thread
+  cannot get a namespace of its own, so the menu's commands have the filter and the ruleset only.
+  The summary of a command says what the kernel enforces. These boundaries do not revoke
+  descriptors already open: an inherited socket remains in its original network namespace, and an
+  already writable file, pipe or redirected standard output remains writable. They therefore
+  restrict new access rather than guarantee containment of arbitrary compromised code. Start the
+  tool from a trusted terminal in the offline environment described above. `serve` remains outside
+  these command restrictions so that a browser can reach its localhost listener.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 

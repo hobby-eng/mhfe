@@ -28,8 +28,8 @@ gets the question with the password as typed first, and "Type the password again
 again. The summary records how the check word came out and none of the words.
 
 A command started directly runs in a network namespace with only inactive loopback where the
-system allows user namespaces. Its summary says "isolated network, new sockets blocked";
-elsewhere it says "new sockets blocked" for the seccomp restriction. Previously opened
+system allows user namespaces. Its summary says "isolated network, no new sockets or file writes";
+elsewhere it says "no new sockets or file writes" for seccomp and Landlock alone. Previously opened
 descriptors are not revoked by these restrictions.
 
 It also drives the menu that `mhfe` shows when it starts without arguments: the arrow keys and Enter
@@ -365,9 +365,9 @@ def check_empty_network():
     shown = re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", session.output)
     allowed = user_namespaces_allowed()
     expected = (
-        b"isolated network, new sockets blocked"
+        b"isolated network, no new sockets or file writes"
         if allowed
-        else b"Isolation  new sockets blocked,"
+        else b"Isolation  no new sockets or file writes"
     )
     assert expected in shown, f"empty network: {expected!r} not in the summary"
     state = "an empty network" if allowed else "seccomp alone, as this system allows no namespace"

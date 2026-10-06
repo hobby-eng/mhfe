@@ -173,14 +173,14 @@ pub fn long_help() -> String {
         "What it asks for:",
         &[
             ("Container", "shown while typed"),
-            ("Password", "hidden"),
+            ("Password", "on a private screen"),
             (
                 "Reference",
                 "a receiving address, the fingerprint, or the word count",
             ),
             (
                 "BIP39 passphrase",
-                "hidden; press Enter if the wallet has none",
+                "on a private screen; press Enter if the wallet has none",
             ),
         ],
     );

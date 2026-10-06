@@ -345,23 +345,23 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
 /// What the kernel forbids this command, for the summary; `None` where it forbids nothing, as
 /// outside Linux.
 fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
-    // Neither boundary revokes previously opened descriptors; the summary names the restrictions.
-    let network = match (isolation.empty_network, isolation.no_network) {
-        (true, true) => Some("isolated network, new sockets blocked"),
-        (true, false) => Some("isolated network"),
-        (false, true) => Some("new sockets blocked"),
-        (false, false) => None,
+    // "New": neither boundary revokes descriptors opened before, such as a redirected standard
+    // output. Each text keeps the summary line within 78 columns, its label included.
+    let forbidden = match (
+        isolation.empty_network,
+        isolation.no_network,
+        isolation.no_writes,
+    ) {
+        (true, true, true) => "isolated network, no new sockets or file writes",
+        (true, true, false) => "isolated network, no new sockets",
+        (true, false, true) => "isolated network, no new file writes",
+        (true, false, false) => "isolated network",
+        (false, true, true) => "no new sockets or file writes",
+        (false, true, false) => "no new sockets",
+        (false, false, true) => "no new file writes",
+        (false, false, false) => return None,
     };
-    let forbidden = match (network, isolation.no_writes) {
-        (Some(network), true) => format!("{network}, file writes restricted"),
-        (Some(network), false) => network.to_owned(),
-        (None, true) => "file writes restricted".to_owned(),
-        (None, false) => return None,
-    };
-    Some(format!(
-        "{forbidden} {}",
-        paint(MUTED, "(enforced by the kernel)")
-    ))
+    Some(format!("{forbidden} {}", paint(MUTED, "(kernel-enforced)")))
 }
 
 /// Refuses at once, before any secret is asked for, a memory level that this build or computer
@@ -435,6 +435,22 @@ fn time_range(low_seconds: u64, high_seconds: u64) -> String {
 mod tests {
     use super::*;
     use mhfe::MhfeError;
+
+    /// Every isolation text fits one summary line of 78 columns with its "  Isolation  " label.
+    #[test]
+    fn the_isolation_line_fits_the_summary() {
+        const LABEL: usize = "  Isolation  ".len();
+        for bits in 0..8u8 {
+            let isolation = crate::protect::Isolation {
+                empty_network: bits & 1 != 0,
+                no_network: bits & 2 != 0,
+                no_writes: bits & 4 != 0,
+            };
+            if let Some(text) = isolation_text(isolation) {
+                assert!(LABEL + style::visible_width(&text) <= 78, "{text}");
+            }
+        }
+    }
 
     const LEVEL_HINT: &str = "The highest memory level this computer can use now";
 

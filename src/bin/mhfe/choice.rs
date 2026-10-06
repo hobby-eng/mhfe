@@ -24,6 +24,7 @@ use crate::exit::Failure;
 use crate::flow::{self, Kind};
 use crate::hidden_input::{self, Key};
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
+use crate::terminal;
 
 /// The width that a line of a list must not exceed: the list redraws itself by moving the cursor
 /// up line by line, which a line wrapped by the terminal would upset. As style.rs: 78 columns.
@@ -151,15 +152,22 @@ pub fn record(label: &str, answer: &str) {
     style::fact_as(Kind::Record, label, paint(ACCENT, answer));
 }
 
-/// The visible widths of logical lines, without retaining their text. A resize can reflow those
-/// lines, so their old physical row count cannot be reused. Keeping only widths also avoids a
-/// second copy of any sensitive labels and leaves the phrase above a confirmation visible.
-#[derive(Default)]
+/// The visible widths of logical lines, without retaining their text, and the width of the
+/// terminal they were drawn at. Keeping only widths avoids a second copy of any sensitive labels
+/// and leaves the phrase above a confirmation visible.
 struct DrawnRows {
     widths: Vec<usize>,
+    drawn_at: usize,
 }
 
 impl DrawnRows {
+    fn new() -> Self {
+        Self {
+            widths: Vec::new(),
+            drawn_at: current_columns(),
+        }
+    }
+
     fn line(&mut self, text: &str) {
         eprintln!("{text}");
         self.widths.push(style::visible_width(text));
@@ -169,9 +177,17 @@ impl DrawnRows {
         self.widths.extend(other.widths);
     }
 
+    /// The rows the lines take now. A terminal rewraps the lines of its main screen when it is
+    /// resized, so there they take the rows of the new width; the alternate screen, which holds
+    /// the steps of a command and its private screens, is not rewrapped by VTE or Alacritty, so
+    /// there they keep the rows they were drawn in.
     fn rows(&self) -> usize {
-        let columns = hidden_input::columns().unwrap_or(80).max(1);
-        self.rows_at(columns)
+        let now = current_columns();
+        if now == self.drawn_at || terminal::on_alternate_screen() {
+            self.rows_at(self.drawn_at)
+        } else {
+            self.rows_at(now)
+        }
     }
 
     fn rows_at(&self, columns: usize) -> usize {
@@ -180,6 +196,11 @@ impl DrawnRows {
             .map(|width| width.div_ceil(columns.max(1)).max(1))
             .sum()
     }
+}
+
+/// The width of the terminal now; when it cannot be read, the usual 80 columns.
+fn current_columns() -> usize {
+    hidden_input::columns().unwrap_or(80).max(1)
 }
 
 /// Draws the question block and retains only its line widths for later redraws.
@@ -209,7 +230,7 @@ pub fn draw_question(question: &Question) -> usize {
 }
 
 fn draw_question_rows(question: &Question) -> DrawnRows {
-    let mut lines = DrawnRows::default();
+    let mut lines = DrawnRows::new();
     let text = paint(STRONG, question.text);
     lines.line("");
     lines.line(&text);
@@ -274,7 +295,7 @@ fn draw_entry_rows(entries: &[(&str, &str)], selected: usize) -> DrawnRows {
         .map(|(label, _)| label.chars().count())
         .max()
         .unwrap_or(0);
-    let mut rows = DrawnRows::default();
+    let mut rows = DrawnRows::new();
     for (index, (label, note)) in entries.iter().enumerate() {
         let number = if index < DIGIT_KEYS {
             paint(MUTED, index + 1)
@@ -335,6 +356,7 @@ mod tests {
     fn rendered_line_widths_recount_rows_after_a_resize() {
         let drawn = DrawnRows {
             widths: vec![0, 54, 78, 40, 39],
+            drawn_at: 80,
         };
         assert_eq!(drawn.rows_at(80), 5);
         assert_eq!(drawn.rows_at(60), 6);

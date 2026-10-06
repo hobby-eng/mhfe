@@ -383,6 +383,11 @@ const LEAVE_ALTERNATE_SCREEN: &str = "\x1b[2J\x1b[H\x1b[?1049l";
 /// Set while secret words are on the alternate screen, so that Ctrl+C can leave it first.
 static PRIVATE_SCREEN_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+/// Whether the tool writes on the alternate screen now, a private screen or the steps of a command.
+pub fn on_alternate_screen() -> bool {
+    PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
+}
+
 /// Secrets on the terminal's alternate screen, as `less` shows a file: they never reach the main
 /// screen or its scrollback, and dropping this clears them and returns to where the tool was. A
 /// script, a pipe or a file gets none of this.
