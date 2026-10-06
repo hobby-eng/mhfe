@@ -677,13 +677,15 @@ mod tests {
         let open = || {
             let (mut leader, mut follower) = (0, 0);
             // SAFETY: openpty fills the two descriptors; the name and settings are not asked for.
+            // Null pointers of the mutable kind, which macOS's declaration takes and Linux's
+            // accepts as well.
             let opened = unsafe {
                 libc::openpty(
                     &mut leader,
                     &mut follower,
                     std::ptr::null_mut(),
-                    std::ptr::null(),
-                    std::ptr::null(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
                 )
             };
             assert_eq!(opened, 0, "no pseudo-terminal");
