@@ -196,7 +196,9 @@ mod tests {
     }
 
     /// A refused mlock, here of a page that is not mapped, holds nothing and leaves no count.
-    #[cfg(unix)]
+    /// Linux only: it refuses that page, while macOS accepts it, as the first pages lie in the
+    /// range it reserves as __PAGEZERO, so there the lock would succeed and hold the page.
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_refused_lock_holds_nothing() {
         let size = crate::engine::page_size().expect("a Unix system reports its page size");
