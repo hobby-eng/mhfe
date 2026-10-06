@@ -518,7 +518,6 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
-    use std::io;
     use std::time::{Duration, Instant};
 
     use windows_sys::Win32::System::Console::{

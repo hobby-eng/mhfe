@@ -81,6 +81,10 @@ jobs:
         os: [windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # Code for macOS alone and the build with Microsoft's compiler are compiled only here, so
+    # warnings fail the job.
+    env:
+      RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

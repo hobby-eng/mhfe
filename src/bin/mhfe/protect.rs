@@ -181,15 +181,15 @@ mod seccomp {
         let refuse = libc::SECCOMP_RET_ERRNO | libc::EACCES as u32;
         // Each test jumps forward to the final instruction, which refuses; `to_refusal` counts the
         // instructions between a test and it.
-        let mut tests = vec![
+        let tests = [
+            #[cfg(target_arch = "x86_64")]
+            (libc::BPF_JGE, X32_SYSCALL_BIT),
             (libc::BPF_JEQ, libc::SYS_socket as u32),
             (libc::BPF_JEQ, libc::SYS_socketpair as u32),
             (libc::BPF_JEQ, libc::SYS_io_uring_setup as u32),
             (libc::BPF_JEQ, libc::SYS_io_uring_enter as u32),
             (libc::BPF_JEQ, libc::SYS_io_uring_register as u32),
         ];
-        #[cfg(target_arch = "x86_64")]
-        tests.insert(0, (libc::BPF_JGE, X32_SYSCALL_BIT));
         let mut program = vec![load(ARCH_OFFSET)];
         // Instructions after the architecture test: load, the tests, allow; then the refusal.
         let after_arch = 1 + tests.len() + 1;

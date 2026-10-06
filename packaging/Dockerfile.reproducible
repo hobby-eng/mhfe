@@ -88,9 +88,14 @@ FROM dependencies AS verified
 ENV CARGO_NET_OFFLINE=true
 COPY . .
 COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
-# The same fast checks as CI, then the release builds. No network from here on.
+# The same fast checks as CI, then the release builds. No network from here on. Clippy also runs
+# for both cross targets: the native run never sees code for Windows or ARM64 alone.
 RUN --network=none cargo fmt --all -- --check \
     && cargo clippy --locked --offline --all-targets --all-features -- -D warnings \
+    && cargo clippy --locked --offline --all-targets --all-features \
+         --target aarch64-unknown-linux-gnu -- -D warnings \
+    && cargo clippy --locked --offline --all-targets --all-features \
+         --target x86_64-pc-windows-gnu -- -D warnings \
     && cargo test --locked --offline \
     && cargo build --locked --offline --release \
     && cargo build --locked --offline --release --target aarch64-unknown-linux-gnu \
