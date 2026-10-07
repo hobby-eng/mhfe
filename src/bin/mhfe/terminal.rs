@@ -11,15 +11,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use anstream::{eprint, eprintln, println};
-use mhfe::{MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
-use zeroize::Zeroizing;
+use mhfe::memory::LockedText;
+use mhfe::{ContainerFacts, MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
 
 use crate::check_word::{self, Reviewed};
 use crate::choice::{self, Answer, Question};
 use crate::exit::{self, Failure};
 use crate::flow::{self, Kind};
 use crate::hidden_input;
-use crate::locked_text::LockedText;
 use crate::settings::Operation;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
@@ -33,23 +32,36 @@ pub(crate) const LINE_CAPACITY: usize = 8192;
 /// Where answers come from.
 pub enum Input {
     /// A person at a terminal: secrets are hidden and a mistake can be corrected.
-    Terminal,
+    /// `command_reads_stdin` tells whether the command has --stdin, so that a refusal for a
+    /// missing terminal names it only where it exists (AUD-010).
+    Terminal { command_reads_stdin: bool },
     /// A script: one answer per line on standard input, in the order the command documents.
     Script(io::StdinLock<'static>),
 }
 
 impl Input {
+    /// The input of a command that has --stdin: a script's lines on standard input when
+    /// `from_standard_input`, a person at the terminal otherwise.
     pub fn new(from_standard_input: bool) -> Self {
         if from_standard_input {
             Self::Script(io::stdin().lock())
         } else {
-            Self::Terminal
+            Self::Terminal {
+                command_reads_stdin: true,
+            }
+        }
+    }
+
+    /// The input of a command without --stdin, which only a person at a terminal answers.
+    pub fn terminal_only() -> Self {
+        Self::Terminal {
+            command_reads_stdin: false,
         }
     }
 
     /// Whether a wrong answer can be asked again.
     pub fn can_ask_again(&self) -> bool {
-        matches!(self, Self::Terminal)
+        matches!(self, Self::Terminal { .. })
     }
 
     pub fn is_script(&self) -> bool {
@@ -61,7 +73,9 @@ impl Input {
     /// as "Password: ", or as "Password (hidden): ".
     pub fn secret(&mut self, question: &str) -> Result<LockedText, Failure> {
         match self {
-            Self::Terminal => read_secret(question),
+            Self::Terminal {
+                command_reads_stdin,
+            } => read_secret(question, *command_reads_stdin),
             Self::Script(lines) => read_script_line(lines, question),
         }
     }
@@ -69,7 +83,7 @@ impl Input {
     /// Reads a public answer, such as a container or an address, shown while typed.
     pub fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
         match self {
-            Self::Terminal => {
+            Self::Terminal { .. } => {
                 style::prompt(prompt);
                 io::stderr().flush()?;
                 match read_bounded_line(&mut io::stdin().lock())? {
@@ -100,6 +114,32 @@ impl Input {
             return choice::choose_here(question, answers, None)?
                 .ok_or_else(|| MhfeError::Cancelled.into());
         }
+        self.choose_numbered(question, answers, true)
+    }
+
+    /// [`Input::choose`] with no default, for an answer that must be the person's own: no answer
+    /// is highlighted in the list, and the numbered form takes no empty line for the first.
+    pub fn choose_without_default(
+        &mut self,
+        question: &Question,
+        answers: &[Answer],
+    ) -> Result<usize, Failure> {
+        if !self.is_script() && choice::can_run() {
+            return choice::choose_without_default(question, answers, None)?
+                .ok_or_else(|| MhfeError::Cancelled.into());
+        }
+        flow::step();
+        self.choose_numbered(question, answers, false)
+    }
+
+    /// The answers numbered, for a script or a terminal that cannot redraw; with `first_default`
+    /// an empty line chooses the first.
+    fn choose_numbered(
+        &mut self,
+        question: &Question,
+        answers: &[Answer],
+        first_default: bool,
+    ) -> Result<usize, Failure> {
         choice::draw_question(question);
         for (number, answer) in answers.iter().enumerate() {
             let note = if answer.note.is_empty() {
@@ -113,10 +153,15 @@ impl Input {
                 answer.label
             );
         }
+        let prompt = if first_default {
+            "Choice [1]: "
+        } else {
+            "Choice: "
+        };
         loop {
-            let typed = self.visible("Choice [1]: ")?;
+            let typed = self.visible(prompt)?;
             let number = match typed.trim() {
-                "" => Some(1),
+                "" if first_default => Some(1),
                 text => text.parse().ok(),
             };
             if let Some(number @ 1..) = number.filter(|number| *number <= answers.len()) {
@@ -235,12 +280,13 @@ pub fn show_cancelled() {
     style::warn("Cancelled. Nothing was saved.", "");
 }
 
-fn read_secret(question: &str) -> Result<LockedText, Failure> {
+/// Reads a secret at the terminal; without one, says how to run the command, naming --stdin only
+/// for a command that has it (`command_reads_stdin`).
+fn read_secret(question: &str, command_reads_stdin: bool) -> Result<LockedText, Failure> {
     if !io::stdin().is_terminal() {
-        return Err(Failure::invalid_input(
-            "There is no terminal to type secrets into. Run the command in a terminal, or pass \
-             --stdin and give one answer per line on standard input.",
-        ));
+        return Err(Failure::invalid_input(no_terminal_advice(
+            command_reads_stdin,
+        )));
     }
     // Shown only where the screen is cleared once the person is done; hidden anywhere else.
     let shown = PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst);
@@ -265,6 +311,17 @@ fn read_secret(question: &str) -> Result<LockedText, Failure> {
     }
 }
 
+/// What a command says when it has no terminal to read a secret from.
+fn no_terminal_advice(command_reads_stdin: bool) -> &'static str {
+    if command_reads_stdin {
+        "There is no terminal to type secrets into. Run the command in a terminal, or pass \
+         --stdin and give one answer per line on standard input."
+    } else {
+        "There is no terminal to type secrets into. Run the command in a terminal: it has no \
+         form for scripts."
+    }
+}
+
 fn read_script_line(
     lines: &mut io::StdinLock<'static>,
     prompt: &str,
@@ -284,22 +341,22 @@ fn read_script_line(
 /// The standard library keeps its own buffer of what it read from standard input and does not
 /// wipe it; only the copies in this program's buffers are under its control.
 fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<LockedText>, Failure> {
-    let mut line = Zeroizing::new(String::with_capacity(LINE_CAPACITY));
+    let mut read = 0;
     // Locked before anything is read into it: a script's line may be a password or a phrase.
-    let locked = mhfe::memory::LockedPages::of_string(&line);
-    let read = reader.take(LINE_CAPACITY as u64).read_line(&mut line)?;
-    if read == 0 {
-        return Ok(None);
-    }
-    if !line.ends_with('\n') && read == LINE_CAPACITY {
-        // The line break counts towards LINE_CAPACITY, so the answer itself may have one byte less.
-        return Err(Failure::invalid_input(format!(
-            "An answer is longer than {} bytes; no valid answer is that long.",
-            LINE_CAPACITY - 1
-        )));
-    }
-    strip_line_ending(&mut line);
-    Ok(Some(LockedText::from_locked(line, locked)))
+    let line = LockedText::build(LINE_CAPACITY, |line| {
+        read = reader.take(LINE_CAPACITY as u64).read_line(line)?;
+        if !line.ends_with('\n') && read == LINE_CAPACITY {
+            // The line break counts towards LINE_CAPACITY, so the answer itself may have one byte
+            // less.
+            return Err(Failure::invalid_input(format!(
+                "An answer is longer than {} bytes; no valid answer is that long.",
+                LINE_CAPACITY - 1
+            )));
+        }
+        strip_line_ending(line);
+        Ok(())
+    })?;
+    Ok((read > 0).then_some(line))
 }
 
 /// Removes only the line break. Spaces are part of a password and are never trimmed.
@@ -611,17 +668,14 @@ pub const CONTAINER_PROMPT: &str = "Container, 24 words or as long as the origin
 /// it is a valid seed phrase too, so it is shown as it is typed, taken at once when it is valid,
 /// and leaves no copy in the terminal's history. The summary records its length and its format,
 /// the suite identifier, which the specification asks to show.
-pub fn read_container(
-    input: &mut Input,
-    title: &str,
-) -> Result<(Zeroizing<String>, Suite), Failure> {
+pub fn read_container(input: &mut Input, title: &str) -> Result<ContainerFacts, Failure> {
     let screen = PrivateScreen::enter(input, title);
     let container = loop {
         if screen.is_active() {
             eprintln!();
         }
         let typed = input.visible(CONTAINER_PROMPT)?;
-        match mhfe::check_container(&typed) {
+        match ContainerFacts::read(&typed) {
             Ok(container) => break container,
             Err(error) if input.can_ask_again() => {
                 style::retry(format!(
@@ -633,17 +687,17 @@ pub fn read_container(
         }
     };
     drop(screen);
-    let words = container.split(' ').count();
-    let suite = Suite::of_container(words).unwrap_or_default();
+    let words = container.word_count();
     choice::record("Container", &format!("{words} words, valid"));
     // A same-length container gives another valid phrase for a wrong password instead of an
     // error; the result says so again where it matters.
+    let suite = container.suite();
     let note = match suite {
         Suite::SameLength => " (no built-in check)",
         Suite::TwentyFourWords => "",
     };
     style::fact("Format", paint(MUTED, format!("{}{note}", suite.id())));
-    Ok((Zeroizing::new(container), suite))
+    Ok(container)
 }
 
 /// Shows a progress bar for each stage of an operation: "Encrypting" and "Checking" for an
@@ -792,6 +846,16 @@ pub fn duration(seconds: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Only a command with --stdin is told to use it when there is no terminal (AUD-010).
+    #[test]
+    fn the_advice_without_a_terminal_names_only_what_the_command_has() {
+        assert!(no_terminal_advice(true).contains("--stdin"));
+        let without = no_terminal_advice(false);
+        assert!(!without.contains("--stdin"), "{without}");
+        assert!(without.contains("Run the command in a terminal"));
+        assert!(Input::new(false).can_ask_again() && Input::terminal_only().can_ask_again());
+    }
 
     #[test]
     fn durations_read_naturally() {

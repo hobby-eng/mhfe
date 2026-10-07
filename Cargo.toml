@@ -1,6 +1,6 @@
 [package]
 name = "mhfe-experimental"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 rust-version = "1.99.0"
 authors = ["Sergei Semenov"]
@@ -78,7 +78,19 @@ js-sys = { version = "=0.3.106", optional = true }
 
 [features]
 default = []
-wasm = ["dep:wasm-bindgen", "dep:js-sys"]
+# The browser bindings come as independent modules. The browser package is one WebAssembly with
+# all of them (`wasm`, built by scripts/build-wasm.sh), since they share most of their code; another
+# program can build one with only the modules it needs.
+wasm = ["browser-core", "browser-repair", "browser-passwords", "browser-wallet"]
+wasm-bindings = ["dep:wasm-bindgen", "dep:js-sys"]
+# Encryption, recovery, the rehearsal check, rekey, hidden wallets and the self-test: Argon2.
+browser-core = ["wasm-bindings"]
+# Repair words of a container and the repair of a damaged plate (MHFE-REPAIR-1).
+browser-repair = ["wasm-bindings"]
+# Password check word (MHFE-PASSWORD-CHECK-1), password generator and strength estimate.
+browser-passwords = ["wasm-bindings"]
+# Wallet check of a phrase, master key fingerprints, address search scopes and new phrases.
+browser-wallet = ["wasm-bindings"]
 
 [profile.release]
 codegen-units = 1

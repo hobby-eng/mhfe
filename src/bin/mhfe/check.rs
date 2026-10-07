@@ -7,13 +7,14 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::wallet::{parse_fingerprint, Address, Coin, DerivationPath, SearchLimits};
-use mhfe::{MhfeError, Reference, Suite, WordCount};
+use mhfe::memory::LockedText;
+use mhfe::wallet::{parse_fingerprint, Address, AddressSearch, Coin, DerivationPath, SearchLimits};
+use mhfe::wallet_check;
+use mhfe::{ContainerFacts, MhfeError, Reference, WordCount, BUILT_IN_CHECK_WORD_COUNTS};
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::{capitalize, Failure, NO_MATCH, SUCCESS};
 use crate::flow::Flow;
-use crate::locked_text::LockedText;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT};
@@ -29,7 +30,7 @@ pub struct Options {
     #[arg(long, long_help = address_help())]
     address: bool,
 
-    /// With --address: the coin of the address (default bitcoin)
+    /// With --address: the coin (a script's default: bitcoin)
     #[arg(long, value_name = "COIN", requires = "address", long_help = coin_help())]
     coin: Option<Coin>,
 
@@ -37,7 +38,7 @@ pub struct Options {
     #[arg(long, long_help = fingerprint_help())]
     fingerprint: bool,
 
-    /// The container's built-in check, of a 12- to 21-word original
+    /// The built-in check of a 12- to 21-word original
     #[arg(long, value_name = "N", long_help = words_help())]
     words: Option<usize>,
 
@@ -66,11 +67,12 @@ fn address_help() -> String {
 fn coin_help() -> String {
     let coins: Vec<&str> = Coin::ALL.iter().map(|coin| coin.id()).collect();
     style::option_help(&[
-        "With --address: the coin of the address (default bitcoin).",
+        "With --address: the coin of the address; a script without it means bitcoin.",
         &format!(
             "One of {}. ethereum covers every EVM network, such as BNB Smart Chain, Polygon, \
              Avalanche C-Chain, Arbitrum, Optimism and Base. Without this option a person is \
-             asked, and a script means bitcoin.",
+             asked, and a script compares with a Bitcoin address: it says so, and refuses an \
+             address of another coin with a pointer to --coin.",
             coins.join(", ")
         ),
     ])
@@ -107,8 +109,10 @@ fn stdin_help() -> String {
     style::option_help(&[
         "Read the answers from standard input (for scripts); needs a reference option.",
         "Input: the container, the password, then with --address or --fingerprint the \
-         reference and the BIP39 passphrase (an empty line if none), one per line. Output: \
-         \"matches\" with exit code 0, or \"does not match\" with exit code 3.",
+         reference and the BIP39 passphrase (an empty line if none), one per line. With \
+         --address, --coin names the coin of the address; without it the address is \
+         Bitcoin's. Output: \"matches\" with exit code 0, or \"does not match\" with exit \
+         code 3.",
     ])
 }
 
@@ -122,9 +126,6 @@ pub fn about() -> String {
     ])
 }
 
-/// Lengths of an original that carries a built-in check; a 24-word original fills the state.
-const BUILT_IN_CHECK_LENGTHS: [usize; 4] = [12, 15, 18, 21];
-
 /// The reference as typed, before it is read into its type.
 #[derive(Clone, Copy)]
 enum Choice {
@@ -132,7 +133,7 @@ enum Choice {
     Fingerprint,
     BuiltInCheck(usize),
     /// The check of a phrase that `mhfe new` made with one (a draft), with the wallet's BIP39
-    /// passphrase or without one.
+    /// passphrase, which the check needs.
     WalletCheck,
 }
 
@@ -158,6 +159,10 @@ fn examples() -> String {
                 "mhfe check --fingerprint --pim 1 --mem 1",
                 "The fingerprint, with the settings used for encryption",
             ),
+            (
+                "your-program | mhfe check --stdin --address --coin bitcoin",
+                "A script: the answers from another program, one per line",
+            ),
         ],
     )
 }
@@ -180,7 +185,8 @@ pub fn long_help() -> String {
             ),
             (
                 "BIP39 passphrase",
-                "on a private screen; press Enter if the wallet has none",
+                "on a private screen; Enter if the wallet has none, but the phrase + \
+                 passphrase check needs one",
             ),
         ],
     );
@@ -190,10 +196,16 @@ pub fn long_help() -> String {
     format!("{asks}\n{}\n{note}", examples())
 }
 
+/// The coin of the address of a script that names none, as in v0.4.0 and v0.5.0, so that such a
+/// script keeps working. It is never assumed silently: the summary names it, and the refusal of
+/// an address of another coin says how to name that coin (AUD-010). A person is always asked, and
+/// a page of the browser package must name the coin.
+const SCRIPT_DEFAULT_COIN: Coin = Coin::Bitcoin;
+
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Refused before anything is asked: only a short original carries a built-in check.
     if let Some(words) = options.words {
-        if !BUILT_IN_CHECK_LENGTHS.contains(&words) {
+        if !BUILT_IN_CHECK_WORD_COUNTS.contains(&words) {
             return Err(Failure::invalid_input(
                 "--words must be 12, 15, 18 or 21: a 24-word original has no built-in check; \
                  compare it with --address or --fingerprint.",
@@ -205,12 +217,11 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let flow = Flow::start(&input, Operation::Check.title());
     let work = settings::choose(options.settings, &mut input, Operation::Check)?;
 
-    let (container, suite) = terminal::read_container(&mut input, Operation::Check.title())?;
-    let same_length = suite == Suite::SameLength;
-    if same_length && options.words.is_some() {
+    let container = terminal::read_container(&mut input, Operation::Check.title())?;
+    if options.words.is_some() && container.built_in_check_lengths().is_empty() {
         // Refused before the password is asked: there is nothing to check without a reference.
         return Err(MhfeError::NoBuiltInCheck {
-            container_words: container.split(' ').count(),
+            container_words: container.word_count(),
         }
         .into());
     }
@@ -219,7 +230,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         (true, _, _) => Choice::Address,
         (_, true, _) => Choice::Fingerprint,
         (_, _, Some(words)) => Choice::BuiltInCheck(words),
-        _ => ask_for_choice(&mut input, same_length)?,
+        _ => ask_for_choice(&mut input, &container)?,
     };
 
     // The reference and passphrase are read before the long computation starts, so the user
@@ -234,6 +245,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
                 options.coin,
                 options.path.clone(),
                 Operation::Check,
+                None,
             )?;
             wallet_reference.reference()
         }
@@ -241,8 +253,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             words: WordCount::new(words)?,
         },
         Choice::WalletCheck => {
-            // With the wallet's passphrase, or Enter for a wallet that has none.
-            check_passphrase = read_passphrase(&mut input, Operation::Check)?;
+            // With the wallet's passphrase, which the library's rule requires.
+            check_passphrase = read_check_passphrase(&mut input, Operation::Check)?;
             Reference::WalletCheck {
                 passphrase: &check_passphrase,
             }
@@ -251,10 +263,15 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     let mut mhfe = settings::reserve_memory(work)?;
     let mut progress = Progress::start();
-    let outcome = mhfe.check(&container, &password, &reference, &mut |round, rounds| {
-        progress.round_starts(round, rounds);
-        Ok(())
-    })?;
+    let outcome = mhfe.check(
+        container.words(),
+        &password,
+        &reference,
+        &mut |round, rounds| {
+            progress.round_starts(round, rounds);
+            Ok(())
+        },
+    )?;
     progress.finish();
     // The result follows the summary on the main screen.
     flow.finish();
@@ -314,56 +331,22 @@ fn ask_for_coin(input: &mut Input) -> Result<Coin, Failure> {
     Ok(Coin::ALL[input.choose(&question, &answers)?])
 }
 
-/// States before the check what an address is and which addresses are searched for it, as the
-/// specification asks of a search: a "does not match" covers only these.
-/// The roots of a search as one pattern, every step hardened: "44'/5'", or "44'/{145,0}'" where a
-/// coin has two coin types. Roots differ only in that step.
-fn root_pattern(roots: &[Vec<u32>]) -> String {
-    let steps = roots.first().map_or(0, Vec::len);
-    (0..steps)
-        .map(|step| {
-            let mut values: Vec<String> = Vec::new();
-            for root in roots {
-                let value = root[step].to_string();
-                if !values.contains(&value) {
-                    values.push(value);
-                }
-            }
-            match values.as_slice() {
-                [only] => format!("{only}'"),
-                several => format!("{{{}}}'", several.join(",")),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
 fn show_search(address: &Address, path: Option<&DerivationPath>, limits: SearchLimits) {
     // Shown before the work starts too, so that a wrong address type can still be cancelled.
-    if let Some(kind) = address.type_description() {
+    let search = AddressSearch::new(address, path, limits);
+    if let Some(kind) = search.type_description() {
         style::fact_before_work("Type", kind);
     }
-    let search = match path {
-        Some(path) => format!("only {path}"),
-        None => {
-            let roots = address.search_roots();
-            let chains = if address.hardened_chains() {
-                "0'-1'"
-            } else {
-                "0-1"
-            };
-            let addresses =
-                roots.len() as u64 * 2 * u64::from(limits.accounts()) * u64::from(limits.indexes());
-            format!(
-                "m/{}/0'-{}'/{chains}/0-{}, {} addresses",
-                root_pattern(&roots),
-                limits.accounts() - 1,
-                limits.indexes() - 1,
-                grouped(addresses)
-            )
-        }
+    let text = if search.only_path() {
+        format!("only {}", search.pattern())
+    } else {
+        format!(
+            "{}, {} addresses",
+            search.pattern(),
+            grouped(search.addresses())
+        )
     };
-    style::fact_before_work("Search", search);
+    style::fact_before_work("Search", text);
 }
 
 /// A count with thousands separated by commas, such as "2,000".
@@ -407,7 +390,7 @@ fn match_meaning(choice: Choice) -> (String, Option<&'static str>) {
 
 /// Asks what to compare with. A same-length container has no built-in check, so it is offered
 /// only the address and the fingerprint.
-fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failure> {
+fn ask_for_choice(input: &mut Input, container: &ContainerFacts) -> Result<Choice, Failure> {
     let mut answers = vec![
         Answer::new(
             "A receiving address (recommended)",
@@ -418,15 +401,18 @@ fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failur
             "eight hex digits; quick, weaker",
         ),
     ];
-    if !same_length {
-        // A check in the container, of a 12- to 21-word original, and one in the BIP39 seed of
-        // the phrase and its passphrase: a phrase drawn so that a 16-bit hash of that seed is zero
-        // (mhfe::wallet_check), which any program following the specification can make. The
-        // passphrase is asked next.
+    // A check in the container, of a 12- to 21-word original, and one in the BIP39 seed of the
+    // phrase and its passphrase: a phrase drawn so that a 16-bit hash of that seed is zero
+    // (mhfe::wallet_check), which any program following the specification can make. The
+    // passphrase is asked next.
+    let lengths = container.built_in_check_lengths();
+    if !lengths.is_empty() {
         answers.push(Answer::new(
             "The container's built-in check",
             "checks the password, not the wallet",
         ));
+    }
+    if container.offers_wallet_check() {
         answers.push(Answer::new(
             "The phrase + passphrase check",
             "16-bit hash of the BIP39 seed",
@@ -439,12 +425,13 @@ fn ask_for_choice(input: &mut Input, same_length: bool) -> Result<Choice, Failur
     match input.choose(&question, &answers)? {
         0 => Ok(Choice::Address),
         1 => Ok(Choice::Fingerprint),
-        2 => ask_for_original_length(input).map(Choice::BuiltInCheck),
+        2 if !lengths.is_empty() => {
+            ask_for_original_length(input, lengths).map(Choice::BuiltInCheck)
+        }
         _ => Ok(Choice::WalletCheck),
     }
 }
 
-/// The length of the original, for its built-in check.
 /// A reference of the wallet that the owner typed, a receiving address or the master key
 /// fingerprint, with the wallet's BIP39 passphrase: what a check compares a recovery with, and what
 /// confirms a recovery without a built-in check before it is encrypted again.
@@ -461,23 +448,36 @@ enum ReferenceKind {
 
 impl WalletReference {
     /// Reads a receiving address, of a coin asked for, or with `fingerprint` the master key
-    /// fingerprint, and then the passphrase on the private screen of `operation`.
-    pub fn read(
+    /// fingerprint, of a wallet whose BIP39 passphrase the person has said it has or has not:
+    /// only a wallet with one is then asked for it, on the private screen of `operation`, and it
+    /// may not be empty.
+    pub fn read_of_wallet(
         input: &mut Input,
         fingerprint: bool,
         operation: Operation,
+        wallet_has_passphrase: bool,
     ) -> Result<Self, Failure> {
-        Self::read_given(input, fingerprint, None, None, operation)
+        Self::read_given(
+            input,
+            fingerprint,
+            None,
+            None,
+            operation,
+            Some(wallet_has_passphrase),
+        )
     }
 
-    /// [`WalletReference::read`] with a coin and a path from the command line. A script without
-    /// a coin means Bitcoin. A receiving address shows what the search covers.
+    /// Reads the reference with a coin and a path from the command line. A script without a coin
+    /// means Bitcoin, and says so. A receiving address shows what the search covers. Without
+    /// `wallet_has_passphrase` the passphrase is asked as `mhfe check` asks it, Enter for none;
+    /// with it, only of a wallet that has one.
     fn read_given(
         input: &mut Input,
         fingerprint: bool,
         coin: Option<Coin>,
         path: Option<DerivationPath>,
         operation: Operation,
+        wallet_has_passphrase: Option<bool>,
     ) -> Result<Self, Failure> {
         let kind = if fingerprint {
             ReferenceKind::Fingerprint(read_public(
@@ -487,27 +487,47 @@ impl WalletReference {
                 parse_fingerprint,
             )?)
         } else {
-            let coin = match coin {
+            let (coin, assumed) = match coin {
                 Some(coin) => {
                     if !input.is_script() {
                         // The summary names the coin, as the question would have recorded it.
                         choice::record("Coin", coin.name());
                     }
-                    coin
+                    (coin, false)
                 }
-                None if input.is_script() => Coin::Bitcoin,
-                None => ask_for_coin(input)?,
+                None if input.is_script() => {
+                    choice::record(
+                        "Coin",
+                        &format!("{}, as no --coin was given", SCRIPT_DEFAULT_COIN.name()),
+                    );
+                    (SCRIPT_DEFAULT_COIN, true)
+                }
+                None => (ask_for_coin(input)?, false),
             };
             let address = read_public(
                 input,
                 &format!("Receiving address ({}): ", coin.address_forms()),
                 ("Address", ""),
-                |text| Address::parse(coin, text),
+                |text| match Address::parse(coin, text) {
+                    // The coin assumed comes first, where the refusal starts.
+                    Err(MhfeError::InvalidAddress(reason)) if assumed => {
+                        Err(MhfeError::InvalidAddress(format!(
+                            "without --coin a script compares with a {} address, and {reason}; \
+                             name the address's coin with --coin, such as --coin ethereum",
+                            coin.name()
+                        )))
+                    }
+                    parsed => parsed,
+                },
             )?;
             show_search(&address, path.as_ref(), SearchLimits::default());
             ReferenceKind::Address(address)
         };
-        let passphrase = read_passphrase(input, operation)?;
+        let passphrase = match wallet_has_passphrase {
+            None => read_passphrase(input, operation)?,
+            Some(true) => read_known_passphrase(input, operation)?,
+            Some(false) => LockedText::copy_of(""),
+        };
         Ok(Self {
             kind,
             path,
@@ -531,11 +551,15 @@ impl WalletReference {
     }
 }
 
-fn ask_for_original_length(input: &mut Input) -> Result<usize, Failure> {
-    let answers = BUILT_IN_CHECK_LENGTHS.map(|words| Answer::new(format!("{words} words"), ""));
+/// The length of the original, for its built-in check: one of `lengths`.
+fn ask_for_original_length(input: &mut Input, lengths: &[usize]) -> Result<usize, Failure> {
+    let answers: Vec<Answer> = lengths
+        .iter()
+        .map(|words| Answer::new(format!("{words} words"), ""))
+        .collect();
     let question = Question::new("How many words does the original have?", "Original");
     let chosen = input.choose(&question, &answers)?;
-    Ok(BUILT_IN_CHECK_LENGTHS[chosen])
+    Ok(lengths[chosen])
 }
 
 /// Reads a public answer, such as an address, as one step, again until `parse` accepts it; the
@@ -571,6 +595,53 @@ pub fn read_passphrase(input: &mut Input, operation: Operation) -> Result<Locked
     read_passphrase_of(input, operation, "the wallet")
 }
 
+/// The BIP39 passphrase of a wallet that the person has said has one: it may not be empty. The
+/// answer to that question is recorded already, so this records nothing.
+fn read_known_passphrase(input: &mut Input, operation: Operation) -> Result<LockedText, Failure> {
+    read_passphrase_until(input, operation, |passphrase| {
+        (!passphrase.is_empty())
+            .then_some(())
+            .ok_or("Type the passphrase: you said the wallet has one.")
+    })
+}
+
+/// The BIP39 passphrase for the phrase + passphrase check, which the library offers only with one
+/// (`wallet_check::require_passphrase`, the rule the browser package follows too): an empty one
+/// is refused and asked again.
+fn read_check_passphrase(input: &mut Input, operation: Operation) -> Result<LockedText, Failure> {
+    let passphrase = read_passphrase_until(input, operation, |passphrase| {
+        wallet_check::require_passphrase(passphrase)
+            .map_err(|_| "Type the passphrase: the phrase + passphrase check needs one.")
+    })?;
+    choice::record("Passphrase", "typed");
+    Ok(passphrase)
+}
+
+/// Reads a BIP39 passphrase on the private screen of `operation`, again until `accept` takes it;
+/// `accept` gives the message for one it refuses.
+fn read_passphrase_until(
+    input: &mut Input,
+    operation: Operation,
+    accept: impl Fn(&str) -> Result<(), &'static str>,
+) -> Result<LockedText, Failure> {
+    let screen = PrivateScreen::enter(input, operation.title());
+    if screen.is_active() {
+        eprintln!();
+        style::hint("Part of the wallet; it is NOT the container password.");
+    }
+    loop {
+        let passphrase = input.secret("BIP39 passphrase of the wallet")?;
+        let message = match accept(&passphrase) {
+            Ok(()) => return Ok(passphrase),
+            Err(message) => message,
+        };
+        if !input.can_ask_again() {
+            return Err(Failure::invalid_input(message));
+        }
+        style::retry(message);
+    }
+}
+
 /// [`read_passphrase`] of a wallet named otherwise, such as "the main wallet".
 pub fn read_passphrase_of(
     input: &mut Input,
@@ -604,13 +675,6 @@ mod tests {
     #[test]
     fn the_coin_explanation_fits_a_list() {
         assert!(crate::choice::fits(COIN_EXPLANATION));
-    }
-
-    #[test]
-    fn search_roots_read_as_one_pattern() {
-        assert_eq!(root_pattern(&[vec![44, 5]]), "44'/5'");
-        assert_eq!(root_pattern(&[vec![44, 145], vec![44, 0]]), "44'/{145,0}'");
-        assert_eq!(root_pattern(&[vec![9, 5, 17]]), "9'/5'/17'");
     }
 
     #[test]

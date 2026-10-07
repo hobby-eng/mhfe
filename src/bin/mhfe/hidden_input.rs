@@ -28,14 +28,15 @@
 // only through unsafe foreign functions.
 #![allow(unsafe_code)]
 
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, IsTerminal};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use mhfe::memory::{LockedBytes, LockedText};
+use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
 use zeroize::Zeroizing;
 
 use crate::exit::Failure;
-use crate::locked_text::LockedText;
 
 /// The terminal settings to restore while a hidden prompt has changed them. Whoever changes or
 /// restores the terminal holds this lock, so the Ctrl+C handler and a prompt never interleave.
@@ -136,6 +137,46 @@ fn terminal_error(action: &str) -> Failure {
         error.kind(),
         format!("could not {action} the terminal: {error}"),
     ))
+}
+
+/// The refusal when the terminal, asked to stop echoing, reads back with its echo or its own line
+/// editing still on: a secret typed then would be shown, so none is read.
+fn echo_stays_on() -> Failure {
+    Failure::internal("The terminal did not turn its echo off; no secret was read.")
+}
+
+/// The identifier of [`HiddenInputCheck`] in a self-check report.
+pub const HIDDEN_INPUT_ID: &str = "hidden-input";
+
+/// The `hidden-input` check of the full self-test: the terminal on standard input is switched as
+/// for a hidden prompt, read back and restored. Every prompt for a secret reads the switch back as
+/// well and refuses to read when the echo stays on.
+pub struct HiddenInputCheck;
+
+impl ComponentCheck for HiddenInputCheck {
+    fn id(&self) -> &'static str {
+        HIDDEN_INPUT_ID
+    }
+
+    fn label(&self) -> &'static str {
+        "Hidden input"
+    }
+
+    /// Only on request: the check at start never touches the terminal, so that nothing typed
+    /// ahead is changed before the first prompt.
+    fn runs_at(&self, tier: Tier) -> bool {
+        tier == Tier::Full
+    }
+
+    fn run(&mut self, _: Tier) -> ComponentOutcome {
+        if !io::stdin().is_terminal() {
+            return ComponentOutcome::NotAvailable("no terminal".to_owned());
+        }
+        match with_terminal_switched(platform::hide, || Ok(())) {
+            Ok(()) => ComponentOutcome::Passed,
+            Err(_) => ComponentOutcome::Failed("the terminal did not turn its echo off".to_owned()),
+        }
+    }
 }
 
 /// The keys that edit a hidden line; every other byte is kept.
@@ -289,17 +330,42 @@ fn arrow(final_byte: Option<u8>) -> Key {
 /// gives `None`. Every other byte is kept. The buffer is reserved at its largest size and never
 /// grows, so it leaves no unwiped copy; a longer line is refused. With `echo`, every complete
 /// character that is not a control character is written to it as it arrives, and the editing keys
-/// erase what they remove from it. The line keeps the lock of its buffer.
+/// erase what they remove from it. The line keeps the lock of its buffer, and a line that ends in
+/// any other way, refused or closed, is wiped before its pages are unlocked (AUD-010).
 fn edit_line(
     reader: &mut impl io::Read,
-    mut echo: Option<&mut dyn io::Write>,
+    echo: Option<&mut dyn io::Write>,
 ) -> Result<Option<LockedText>, Failure> {
+    use crate::terminal::LINE_CAPACITY;
+
+    let mut closed = false;
+    // Locked before anything is typed into it: the line may be a password or a phrase.
+    let line = LockedBytes::build(LINE_CAPACITY, |line| {
+        closed = edit_bytes(reader, echo, line)?;
+        Ok::<(), Failure>(())
+    })?;
+    if closed {
+        return Ok(None);
+    }
+    // In the same buffer, under the same lock.
+    match line.into_text() {
+        Ok(text) => Ok(Some(text)),
+        Err(_) => Err(Failure::invalid_input(
+            "The answer is not valid UTF-8 text.",
+        )),
+    }
+}
+
+/// The editing of [`edit_line`], into `line`, whose capacity it never exceeds. Returns whether the
+/// person closed the input instead of ending a line.
+fn edit_bytes(
+    reader: &mut impl io::Read,
+    mut echo: Option<&mut dyn io::Write>,
+    line: &mut Vec<u8>,
+) -> Result<bool, Failure> {
     use crate::terminal::LINE_CAPACITY;
     use keys::{BACKSPACE, CTRL_D, CTRL_U, DELETE};
 
-    let mut line = Zeroizing::new(Vec::with_capacity(LINE_CAPACITY));
-    // Locked before anything is typed into it: the line may be a password or a phrase.
-    let line_locked = mhfe::memory::LockedPages::of_vec(&line);
     // For every character of the line, whether it was written to `echo`; only those are erased.
     let mut written: Vec<bool> = Vec::with_capacity(LINE_CAPACITY);
     // Where the character still arriving begins: a UTF-8 character comes one byte at a time.
@@ -307,18 +373,18 @@ fn edit_line(
     let mut byte = Zeroizing::new([0u8; 1]);
     loop {
         match reader.read(&mut byte[..]) {
-            Ok(0) if line.is_empty() => return Ok(None),
-            Ok(0) => break,
+            Ok(0) if line.is_empty() => return Ok(true),
+            Ok(0) => return Ok(false),
             Ok(_) => {}
             Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(error) => return Err(error.into()),
         }
         match byte[0] {
-            b'\r' | b'\n' => break,
+            b'\r' | b'\n' => return Ok(false),
             // The first bytes of a character that has not arrived whole go without a trace.
             BACKSPACE | DELETE if complete < line.len() => line.truncate(complete),
             BACKSPACE | DELETE => {
-                remove_last_character(&mut line);
+                remove_last_character(line);
                 complete = line.len();
                 let erased = usize::from(written.pop() == Some(true));
                 erase(&mut echo, erased)?;
@@ -330,7 +396,7 @@ fn edit_line(
                 written.clear();
                 erase(&mut echo, erased)?;
             }
-            CTRL_D if line.is_empty() => return Ok(None),
+            CTRL_D if line.is_empty() => return Ok(true),
             _ if line.len() == LINE_CAPACITY => {
                 return Err(Failure::invalid_input(format!(
                     "An answer is longer than {LINE_CAPACITY} bytes; no valid answer is that long."
@@ -350,28 +416,13 @@ fn edit_line(
                     }
                     // The rest of the character is still to come.
                     Err(error) if error.error_len().is_none() => {}
-                    // Not UTF-8: kept, so that the whole answer is refused below, and not shown.
+                    // Not UTF-8: kept, so that the whole answer is refused, and not shown.
                     Err(_) => {
                         written.push(false);
                         complete = line.len();
                     }
                 }
             }
-        }
-    }
-    let bytes = std::mem::take(&mut *line);
-    // from_utf8 keeps the same buffer, so the lock goes with it.
-    match String::from_utf8(bytes) {
-        Ok(text) => Ok(Some(LockedText::from_locked(
-            Zeroizing::new(text),
-            line_locked,
-        ))),
-        Err(error) => {
-            // The error holds the bytes; they are wiped before it is dropped.
-            drop(Zeroizing::new(error.into_bytes()));
-            Err(Failure::invalid_input(
-                "The answer is not valid UTF-8 text.",
-            ))
         }
     }
 }
@@ -413,9 +464,14 @@ mod platform {
     pub type Settings = libc::termios;
 
     pub fn current() -> Result<Settings, Failure> {
+        current_on(libc::STDIN_FILENO)
+    }
+
+    /// The settings of the terminal on `descriptor`.
+    pub fn current_on(descriptor: libc::c_int) -> Result<Settings, Failure> {
         let mut settings = MaybeUninit::<libc::termios>::uninit();
         // SAFETY: tcgetattr fills the whole structure when it returns 0.
-        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, settings.as_mut_ptr()) } != 0 {
+        if unsafe { libc::tcgetattr(descriptor, settings.as_mut_ptr()) } != 0 {
             return Err(terminal_error("read the settings of"));
         }
         // SAFETY: initialised by the successful tcgetattr above.
@@ -423,10 +479,18 @@ mod platform {
     }
 
     pub fn hide(original: &Settings) -> Result<(), Failure> {
+        hide_on(libc::STDIN_FILENO, original)
+    }
+
+    /// The modes of the terminal's own echo and line editing, which a hidden prompt switches off.
+    const ECHO_AND_EDITING: libc::tcflag_t = libc::ECHO | libc::ICANON | libc::IEXTEN;
+
+    /// [`hide`] for the terminal on `descriptor`.
+    pub fn hide_on(descriptor: libc::c_int, original: &Settings) -> Result<(), Failure> {
         let mut hidden = *original;
         // No echo and no line mode: this module edits the line. ISIG keeps Ctrl+C as the
         // interrupt key; quit and suspend become ordinary characters.
-        hidden.c_lflag &= !(libc::ECHO | libc::ICANON | libc::IEXTEN);
+        hidden.c_lflag &= !ECHO_AND_EDITING;
         hidden.c_lflag |= libc::ISIG;
         hidden.c_cc[libc::VQUIT] = libc::_POSIX_VDISABLE;
         hidden.c_cc[libc::VSUSP] = libc::_POSIX_VDISABLE;
@@ -435,11 +499,21 @@ mod platform {
         hidden.c_cc[libc::VTIME] = 0;
         // No flow control (Ctrl+S, Ctrl+Q) and no changes to the bytes.
         hidden.c_iflag &= !(libc::IXON | libc::ISTRIP | libc::INLCR | libc::IGNCR | libc::ICRNL);
-        // SAFETY: a valid termios for the terminal on standard input.
-        if unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &hidden) } != 0 {
+        // SAFETY: a valid termios for the terminal on `descriptor`.
+        if unsafe { libc::tcsetattr(descriptor, libc::TCSANOW, &hidden) } != 0 {
             return Err(terminal_error("hide the input on"));
         }
+        // tcsetattr succeeds when any one of the changes was made (POSIX), so the terminal is
+        // asked what it does now before anything is read.
+        if !echo_off(&current_on(descriptor)?) {
+            return Err(super::echo_stays_on());
+        }
         Ok(())
+    }
+
+    /// Whether `settings` have neither the terminal's echo nor its own line editing.
+    pub fn echo_off(settings: &Settings) -> bool {
+        settings.c_lflag & ECHO_AND_EDITING == 0
     }
 
     /// The menu's keys need the same settings as a hidden line: every byte at once, no echo.
@@ -550,6 +624,15 @@ mod platform {
         if unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), hidden) } == 0 {
             return Err(terminal_error("hide the input on"));
         }
+        read_back_echo_off()
+    }
+
+    /// Asks the console what it does now, before anything is read: neither echo nor its own line
+    /// editing may be left on.
+    fn read_back_echo_off() -> Result<(), Failure> {
+        if current()? & (ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT) != 0 {
+            return Err(super::echo_stays_on());
+        }
         Ok(())
     }
 
@@ -574,7 +657,7 @@ mod platform {
                 return Err(terminal_error("draw the menu on"));
             }
         }
-        Ok(())
+        read_back_echo_off()
     }
 
     /// Asks the console to carry out the VT control sequences written to standard error, such as
@@ -701,6 +784,87 @@ mod tests {
         for descriptor in [first_leader, first, second_leader, second, first_again] {
             // SAFETY: each was opened above and is closed once.
             unsafe { libc::close(descriptor) };
+        }
+    }
+
+    /// A pseudo-terminal, both ends, closed when dropped.
+    #[cfg(unix)]
+    struct Pty {
+        leader: libc::c_int,
+        follower: libc::c_int,
+    }
+
+    #[cfg(unix)]
+    impl Pty {
+        fn open() -> Self {
+            let (mut leader, mut follower) = (0, 0);
+            // SAFETY: openpty fills the two descriptors; the name and settings are not asked for.
+            let opened = unsafe {
+                libc::openpty(
+                    &mut leader,
+                    &mut follower,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            };
+            assert_eq!(opened, 0, "no pseudo-terminal");
+            Self { leader, follower }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for Pty {
+        fn drop(&mut self) {
+            // SAFETY: both were opened by openpty and are closed once.
+            unsafe {
+                libc::close(self.leader);
+                libc::close(self.follower);
+            }
+        }
+    }
+
+    /// A terminal switched for a hidden prompt reads back without echo and line editing, and the
+    /// read-back tells such settings from a terminal whose echo stayed on.
+    #[cfg(unix)]
+    #[test]
+    fn hiding_reads_the_terminal_back() {
+        let pty = Pty::open();
+        let original = platform::current_on(pty.follower).unwrap();
+        assert!(!platform::echo_off(&original), "a new terminal echoes");
+        platform::hide_on(pty.follower, &original).unwrap();
+        let hidden = platform::current_on(pty.follower).unwrap();
+        assert!(platform::echo_off(&hidden));
+        // A terminal that kept any one of the three modes is refused.
+        for mode in [libc::ECHO, libc::ICANON, libc::IEXTEN] {
+            let mut kept = hidden;
+            kept.c_lflag |= mode;
+            assert!(
+                !platform::echo_off(&kept),
+                "mode {mode:#x} passed for hidden"
+            );
+        }
+    }
+
+    #[test]
+    fn hidden_input_refuses_when_echo_stays_on() {
+        let refusal = echo_stays_on();
+        assert_eq!(refusal.exit_code, crate::exit::INTERNAL_ERROR);
+        assert_eq!(
+            refusal.message,
+            "The terminal did not turn its echo off; no secret was read."
+        );
+    }
+
+    /// The check of the terminal belongs to the full self-test only, and without a terminal on
+    /// standard input, as under `cargo test`, it says so instead of failing.
+    #[test]
+    fn the_hidden_input_check_runs_on_request_only() {
+        let mut check = HiddenInputCheck;
+        assert!(!check.runs_at(Tier::Startup));
+        assert!(check.runs_at(Tier::Full));
+        if !io::stdin().is_terminal() {
+            assert_eq!(check.run(Tier::Full).name(), "notAvailable");
         }
     }
 

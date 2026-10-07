@@ -6,7 +6,8 @@
 //! entry is chosen with the arrow keys and Enter or at once with its number; Escape, or q, quits.
 //! After a command the menu waits for Enter, so that a window opened by a double-click stays until
 //! its result has been read. Password generation instead repeats on Enter and returns to the menu
-//! on Escape, with each password shown on the private screen.
+//! on Escape, with each password shown on the private screen. The self-test asks first whether to
+//! run the published vectors too, which take minutes.
 
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -19,7 +20,7 @@ use crate::exit::{Failure, SUCCESS};
 use crate::hidden_input::{self, Key};
 use crate::readme;
 use crate::style;
-use crate::{protect, serve, show_failure, terminal, Cli};
+use crate::{protect, self_test, serve, show_failure, startup, terminal, Cli};
 
 /// What an entry does when it is chosen.
 enum Action {
@@ -31,6 +32,8 @@ enum Action {
     Password,
     /// Repairs a plate, or makes repair words for one, as the person chooses.
     Repair,
+    /// Tests every part, with the published vectors or without, as the person chooses.
+    SelfTest,
     Quit,
 }
 
@@ -58,7 +61,24 @@ impl Entry {
     }
 }
 
-pub fn run() -> Result<i32, Failure> {
+/// The checks at start, once for every command of the menu, then the menu. They run in the menu's
+/// own thread before anything is isolated, so with no network namespace: the menu never enters
+/// one, and a command of the menu, which runs in a thread of it, is isolated without one
+/// (protect.rs). When a check fails, the window that a double-click opened stays until Enter, so
+/// that the failure can be read.
+pub fn start() -> Result<i32, Failure> {
+    if let Err(failure) = startup::check(startup::Checks::EveryPart) {
+        // Ctrl+C at the wait restores the terminal, which the wait switches to single keys.
+        terminal::stop_on_ctrl_c();
+        eprintln!();
+        wait_for_enter("Press Enter to quit.")?;
+        return Err(failure);
+    }
+    terminal::stop_on_ctrl_c();
+    run()
+}
+
+fn run() -> Result<i32, Failure> {
     let header_lines = draw_header();
     let entries = entries();
     let mut selected = 0;
@@ -90,6 +110,15 @@ pub fn run() -> Result<i32, Failure> {
                     }
                 }
                 // Escape at the question returns to the menu.
+                Ok(None) => continue,
+                Err(failure) => show_failure(&failure),
+            },
+            Action::SelfTest => match which_self_test() {
+                Ok(Some(arguments)) => {
+                    if let Err(failure) = run_command(&arguments) {
+                        show_failure(&failure);
+                    }
+                }
                 Ok(None) => continue,
                 Err(failure) => show_failure(&failure),
             },
@@ -149,7 +178,11 @@ fn entries() -> Vec<Entry> {
         action: Action::Password,
         ..Entry::command("password")
     });
-    entries.push(Entry::command("self-test"));
+    // With the published vectors or without, which the entry asks (which_self_test).
+    entries.push(Entry {
+        action: Action::SelfTest,
+        ..Entry::command("self-test")
+    });
     entries.push(Entry {
         label: "Show every command and option".to_owned(),
         command: "mhfe --help".to_owned(),
@@ -234,6 +267,9 @@ fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
     std::thread::scope(|scope| {
         let worker = scope.spawn(|| {
             protect::isolate(crate::needs_of(&cli.command));
+            // The checks at start ran once before the menu, in its own thread, which is not
+            // isolated; what isolate() reports for this thread is probed here.
+            protect::verify_isolation();
             crate::run(cli.command)
         });
         worker
@@ -276,7 +312,7 @@ fn make_passwords() -> Result<(), Failure> {
     };
     let mut arguments = vec![OsString::from("password")];
     arguments.extend(options[kind].map(OsString::from));
-    let input = terminal::Input::new(false);
+    let input = terminal::Input::terminal_only();
     let screen = terminal::PrivateScreen::enter_to_show(&input);
     loop {
         run_command(&arguments)?;
@@ -310,6 +346,33 @@ fn repair_or_make_words() -> Result<Option<Vec<OsString>>, Failure> {
         None => return Ok(None),
     };
     Ok(Some(vec![OsString::from(command)]))
+}
+
+/// The commands of the answers of [`which_self_test`], in their order.
+const SELF_TESTS: [&[&str]; 2] = [&["self-test"], &["self-test", "--vectors"]];
+
+/// Asks whether to test every part alone, in seconds, or with the published vectors, in minutes;
+/// the arguments of the command, or `None` on Escape.
+fn which_self_test() -> Result<Option<Vec<OsString>>, Failure> {
+    let question = Question {
+        text: "Which test?",
+        explanation: &[],
+        more: Some(readme::SELF_TEST),
+        record: None,
+    };
+    let answers = [
+        Answer::new("Every part", "a few seconds"),
+        Answer::new(
+            "Every part and the published vectors",
+            self_test::vectors_cost(),
+        ),
+    ];
+    let Some(answer) = choice::choose(&question, &answers, None)? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        SELF_TESTS[answer].iter().map(OsString::from).collect(),
+    ))
 }
 
 /// Waits for Enter; false on Escape or its aliases. The caller decides where those keys lead.
@@ -350,6 +413,15 @@ mod tests {
                 Action::Repair => {
                     assert!(Cli::try_parse_from(["mhfe", "repair"]).is_ok());
                     assert!(Cli::try_parse_from(["mhfe", "repair-words"]).is_ok());
+                }
+                // The answers of which_self_test: every part, then with the published vectors.
+                Action::SelfTest => {
+                    for arguments in SELF_TESTS {
+                        let typed = std::iter::once("mhfe").chain(arguments.iter().copied());
+                        assert!(Cli::try_parse_from(typed).is_ok(), "{arguments:?}");
+                    }
+                    assert_eq!(SELF_TESTS[1].last(), Some(&"--vectors"));
+                    assert!(!SELF_TESTS[0].contains(&"--vectors"));
                 }
                 Action::Help | Action::Quit => {}
             }

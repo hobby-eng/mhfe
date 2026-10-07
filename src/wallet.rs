@@ -22,10 +22,11 @@
 //! # Ok::<(), mhfe::MhfeError>(())
 //! ```
 
+use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
 
-use bip39::{Language, Mnemonic};
+use bip39::Mnemonic;
 use bitcoin_hashes::{hash160, Hash};
 use hmac::{Hmac, KeyInit, Mac};
 use k256::elliptic_curve::group::Group;
@@ -38,7 +39,15 @@ use sha3::Keccak256;
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::MhfeError;
+use crate::memory::LockedText;
+use crate::{phrase, MhfeError};
+
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-wallet"
+))]
+pub(crate) mod known_answers;
 
 type HmacSha512 = Hmac<Sha512>;
 
@@ -175,10 +184,7 @@ impl FromStr for Coin {
             .find(|coin| coin.id() == wanted)
             .ok_or_else(|| {
                 let known: Vec<&str> = Self::ALL.iter().map(|coin| coin.id()).collect();
-                MhfeError::InvalidAddress(format!(
-                    "\"{text}\" is not one of the coins {}",
-                    known.join(", ")
-                ))
+                MhfeError::InvalidCoin(format!("\"{text}\"; the coins are {}", known.join(", ")))
             })
     }
 }
@@ -327,7 +333,8 @@ fn invalid_address(reason: &str) -> MhfeError {
 
 fn not_of(coin: Coin) -> MhfeError {
     MhfeError::InvalidAddress(format!(
-        "it is not a {} address ({})",
+        // "an address of" reads right for every coin name ("a Ethereum address" would not).
+        "it is not an address of {} ({})",
         coin.name(),
         coin.address_forms()
     ))
@@ -624,7 +631,7 @@ fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
             program: hash.to_vec(),
         }),
         _ => Err(invalid_address(
-            "only single-key addresses (bitcoincash:q...) can be checked",
+            "only single-key addresses (bitcoincash:q…) can be checked",
         )),
     }
 }
@@ -762,6 +769,110 @@ impl Default for SearchLimits {
     }
 }
 
+/// What an address check searches, stated before the work so that a wrong address type or path
+/// can still be changed: the address type, and the path pattern with the number of addresses, or
+/// the one path given.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddressSearch {
+    type_description: Option<String>,
+    pattern: String,
+    addresses: u64,
+    only_path: bool,
+}
+
+impl AddressSearch {
+    /// The search for `address` on `path`, or on the standard paths of its type within `limits`.
+    pub fn new(address: &Address, path: Option<&DerivationPath>, limits: SearchLimits) -> Self {
+        let type_description = address.type_description();
+        if let Some(path) = path {
+            return Self {
+                type_description,
+                pattern: path.to_string(),
+                addresses: 1,
+                only_path: true,
+            };
+        }
+        let roots = address.search_roots();
+        let chains = if address.hardened_chains() {
+            "0'-1'"
+        } else {
+            "0-1"
+        };
+        Self {
+            type_description,
+            pattern: format!(
+                "m/{}/0'-{}'/{chains}/0-{}",
+                root_pattern(&roots),
+                limits.accounts() - 1,
+                limits.indexes() - 1
+            ),
+            addresses: roots.len() as u64
+                * 2
+                * u64::from(limits.accounts())
+                * u64::from(limits.indexes()),
+            only_path: false,
+        }
+    }
+
+    /// What an address check of the text `address` would search with the default limits, stated
+    /// before it runs: `coin` is the id of one of [`Coin::ALL`] and `path` is empty for the
+    /// standard paths of the address's type, or the one path to look at. It refuses an unknown
+    /// coin (INVALID_COIN), an address that is not one of the coin's (INVALID_ADDRESS) and a path
+    /// that is not a valid one (INVALID_DERIVATION_PATH). The browser package's `describeAddress`
+    /// gives this, and the self-check `address-search` compares it with known answers.
+    pub fn describe(coin: &str, address: &str, path: &str) -> Result<Self, MhfeError> {
+        let coin: Coin = coin.parse()?;
+        let address = Address::parse(coin, address)?;
+        let path = match path {
+            "" => None,
+            text => Some(text.parse::<DerivationPath>()?),
+        };
+        Ok(Self::new(&address, path.as_ref(), SearchLimits::default()))
+    }
+
+    /// The address type, such as "native SegWit (BIP84)", when the coin has several.
+    pub fn type_description(&self) -> Option<&str> {
+        self.type_description.as_deref()
+    }
+
+    /// The path pattern searched, such as "m/84'/0'/0'-9'/0-1/0-99", or the one path given.
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
+
+    /// How many addresses the search derives at most.
+    pub fn addresses(&self) -> u64 {
+        self.addresses
+    }
+
+    /// Whether only the one path given is searched.
+    pub fn only_path(&self) -> bool {
+        self.only_path
+    }
+}
+
+/// The hardened steps of the search roots, a step's values joined in braces where they differ,
+/// such as "{44,49,84,86}'/0'".
+fn root_pattern(roots: &[Vec<u32>]) -> String {
+    let steps = roots.first().map_or(0, Vec::len);
+    (0..steps)
+        .map(|step| {
+            let mut values: Vec<String> = Vec::new();
+            for root in roots {
+                let value = root[step].to_string();
+                if !values.contains(&value) {
+                    values.push(value);
+                }
+            }
+            match values.as_slice() {
+                [only] => format!("{only}'"),
+                several => format!("{{{}}}'", several.join(",")),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// Reads a master key fingerprint written as eight hexadecimal digits, as wallets show it.
 pub fn parse_fingerprint(text: &str) -> Result<[u8; 4], MhfeError> {
     let text = text.trim();
@@ -774,7 +885,8 @@ pub fn parse_fingerprint(text: &str) -> Result<[u8; 4], MhfeError> {
 }
 
 /// The first four bytes of HASH160 of the master public key (BIP32), for `phrase` and the
-/// BIP39 `passphrase` (empty when the wallet uses none).
+/// BIP39 `passphrase` (empty when the wallet uses none). The phrase is read as every phrase input
+/// of this library reads it: any spacing and letter case, and four letters of a word are enough.
 pub fn master_fingerprint(phrase: &str, passphrase: &str) -> Result<[u8; 4], MhfeError> {
     let master = ExtendedKey::master(phrase, passphrase)?;
     let digest = hash160::Hash::hash(&master.public_key()?).to_byte_array();
@@ -782,7 +894,8 @@ pub fn master_fingerprint(phrase: &str, passphrase: &str) -> Result<[u8; 4], Mhf
 }
 
 /// Looks for `address` on the standard paths of its type, within `limits`, or only at `path` when
-/// one is given. Returns the path where it was found.
+/// one is given. Returns the path where it was found. The phrase is read as for
+/// [`master_fingerprint`].
 pub fn find_address(
     phrase: &str,
     passphrase: &str,
@@ -894,9 +1007,13 @@ pub(crate) fn bip39_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u8
     Zeroizing::new(mnemonic.to_seed_normalized(&normalized))
 }
 
-fn normalized_passphrase(passphrase: &str) -> Zeroizing<String> {
-    let mut normalized = Zeroizing::new(String::with_capacity(passphrase.len() * NFKD_MAX_GROWTH));
-    normalized.extend(passphrase.nfkd());
+/// Locked before the passphrase is written into it, as the passphrase it is made from is.
+fn normalized_passphrase(passphrase: &str) -> LockedText {
+    let Ok(normalized) =
+        LockedText::build::<Infallible>(passphrase.len() * NFKD_MAX_GROWTH, |normalized| {
+            normalized.extend(passphrase.nfkd());
+            Ok(())
+        });
     normalized
 }
 
@@ -908,9 +1025,10 @@ struct ExtendedKey {
 
 impl ExtendedKey {
     /// The master key of a BIP39 phrase and passphrase: `HMAC-SHA512("Bitcoin seed", seed)`.
+    /// The phrase is read by the library's one reader of phrases (AUD-010): any spacing and
+    /// letter case, and four letters of a word, as every other phrase input takes it.
     fn master(phrase: &str, passphrase: &str) -> Result<Self, MhfeError> {
-        let mnemonic = Mnemonic::parse_in(Language::English, phrase)
-            .map_err(|error| MhfeError::InvalidPhrase(error.to_string()))?;
+        let mnemonic = phrase::parse(phrase).map_err(MhfeError::InvalidPhrase)?;
         let seed = bip39_seed(&mnemonic, passphrase);
         let master = Self::from_hmac(b"Bitcoin seed", &[&seed[..]])?;
         // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
@@ -1020,6 +1138,28 @@ fn parse_scalar(bytes: &[u8; 32]) -> Result<Zeroizing<Scalar>, MhfeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_roots_read_as_one_pattern() {
+        assert_eq!(root_pattern(&[vec![44, 5]]), "44'/5'");
+        assert_eq!(root_pattern(&[vec![44, 145], vec![44, 0]]), "44'/{145,0}'");
+        assert_eq!(root_pattern(&[vec![9, 5, 17]]), "9'/5'/17'");
+    }
+
+    #[test]
+    fn an_address_search_states_its_scope() {
+        let address =
+            Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu").unwrap();
+        let search = AddressSearch::new(&address, None, SearchLimits::default());
+        assert!(!search.only_path());
+        assert!(search.pattern().starts_with("m/84'/0'/0'-"));
+        assert!(search.addresses() > 1);
+        let path: DerivationPath = "m/84'/0'/0'/0/0".parse().unwrap();
+        let only = AddressSearch::new(&address, Some(&path), SearchLimits::default());
+        assert!(only.only_path());
+        assert_eq!(only.addresses(), 1);
+        assert_eq!(only.pattern(), "m/84'/0'/0'/0/0");
+    }
 
     /// The public BIP39 test phrase of BIP84, BIP86 and many wallets.
     const ABANDON: &str =
@@ -1620,11 +1760,42 @@ mod tests {
             .is_some());
     }
 
+    /// The fingerprint and the address search read a phrase as every other phrase input does
+    /// (AUD-010): capitals, extra spaces and tabs, and four letters of a word, give the wallet of
+    /// the BIP84 test phrase, 73c5da0a with its first receiving address at m/84'/0'/0'/0/0.
+    #[test]
+    fn the_wallet_reads_a_phrase_as_typed() {
+        let address =
+            Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu").unwrap();
+        let four_letters = format!("{}abou", "aban ".repeat(11));
+        for typed in [
+            ABANDON.to_uppercase(),
+            four_letters,
+            format!("  {}\t", ABANDON.replace(' ', "  ")),
+        ] {
+            assert_eq!(*crate::read_phrase(&typed).unwrap(), ABANDON, "{typed}");
+            assert_eq!(
+                hex::encode(master_fingerprint(&typed, "").unwrap()),
+                "73c5da0a",
+                "{typed}"
+            );
+            let first = path("m/84'/0'/0'/0/0");
+            let found = find_address(&typed, "", &address, None, SearchLimits::new(1, 1).unwrap());
+            assert_eq!(found.unwrap(), Some(first), "{typed}");
+        }
+        // A word of three letters that is not a word of the list stays refused, as everywhere.
+        let short = ABANDON.replacen("abandon", "aba", 1);
+        assert!(matches!(
+            master_fingerprint(&short, ""),
+            Err(MhfeError::InvalidPhrase(_))
+        ));
+    }
+
     /// The wiping normalization gives the seed that bip39 itself computes, also for a passphrase
     /// that NFKD changes, including one that grows the most.
     #[test]
     fn the_passphrase_is_normalized_as_bip39_does() {
-        let mnemonic = Mnemonic::parse_in(Language::English, ABANDON).unwrap();
+        let mnemonic = phrase::parse(ABANDON).unwrap();
         for passphrase in ["", "TREZOR", "Caf\u{E9} \u{FB01}", "\u{FDFA}\u{FDFA}"] {
             let normalized = normalized_passphrase(passphrase);
             assert_eq!(

@@ -12,10 +12,11 @@ pub const INVALID_INPUT: i32 = 2;
 /// The recovered phrase failed its check or does not match the reference: usually a wrong
 /// password, PIM, memory level or container.
 pub const NO_MATCH: i32 = 3;
-/// The computer cannot run the request: not enough memory for the memory level, or a processor
-/// without the features this build needs.
+/// The computer cannot run the request: not enough memory for the memory level, memory that could
+/// not be reserved, or a level beyond what this environment can use.
 pub const NOT_ENOUGH_RESOURCES: i32 = 4;
-/// Stopped with Ctrl+C (128 + SIGINT, as shells report it).
+/// Stopped by the person: Ctrl+C (128 + SIGINT, as shells report it), Escape or q at a question,
+/// "No, stop" at the first question of a rekey, or Ctrl+D at an empty prompt.
 pub const CANCELLED: i32 = 130;
 
 /// A reason to stop, with the text to show and the exit code to return.
@@ -39,6 +40,14 @@ impl Failure {
             exit_code: INTERNAL_ERROR,
         }
     }
+
+    /// A stop whose reason the command has shown already: `main` adds nothing.
+    pub fn shown(exit_code: i32) -> Self {
+        Self {
+            message: String::new(),
+            exit_code,
+        }
+    }
 }
 
 impl fmt::Display for Failure {
@@ -56,6 +65,7 @@ impl From<MhfeError> for Failure {
             | MhfeError::SameLengthNeedsShortPhrase
             | MhfeError::LengthChoiceNotApplicable { .. }
             | MhfeError::NoBuiltInCheck { .. }
+            | MhfeError::NoWalletCheck { .. }
             | MhfeError::ReferenceRequired
             | MhfeError::HiddenWalletPassesCheck
             | MhfeError::InvalidRepairWords(_)
@@ -69,8 +79,21 @@ impl From<MhfeError> for Failure {
             | MhfeError::UnassignedCharacter
             | MhfeError::InvalidAddress(_)
             | MhfeError::InvalidDerivationPath(_)
-            | MhfeError::InvalidFingerprint(_) => INVALID_INPUT,
-            MhfeError::VerifierMismatch | MhfeError::ReferenceMismatch => NO_MATCH,
+            | MhfeError::InvalidFingerprint(_)
+            | MhfeError::InvalidPassphrase
+            | MhfeError::InvalidRequest(_)
+            | MhfeError::InvalidPasswordSize(_)
+            | MhfeError::InvalidDiceRolls(_)
+            | MhfeError::PasswordRepairNotOffered
+            | MhfeError::WalletCheckNeedsPassphrase
+            | MhfeError::PasswordsDiffer
+            | MhfeError::PasswordAlreadyUsed
+            | MhfeError::OtherWalletsNotConfirmed
+            | MhfeError::NewPasswordSameAsOld
+            | MhfeError::InvalidCoin(_) => INVALID_INPUT,
+            MhfeError::VerifierMismatch
+            | MhfeError::ReferenceMismatch
+            | MhfeError::NotConfirmedByOwner => NO_MATCH,
             MhfeError::NotEnoughMemory { .. }
             | MhfeError::MemoryAllocation { .. }
             | MhfeError::MemoryLevelNotSupportedHere { .. } => NOT_ENOUGH_RESOURCES,
@@ -78,6 +101,8 @@ impl From<MhfeError> for Failure {
             MhfeError::FixedPoint
             | MhfeError::VerificationFailed
             | MhfeError::Argon2(_)
+            | MhfeError::RandomFailed(_)
+            | MhfeError::SelfCheckFailed { .. }
             | MhfeError::Internal(_) => INTERNAL_ERROR,
         };
         Self {

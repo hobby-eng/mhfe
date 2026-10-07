@@ -251,12 +251,30 @@ impl WorkArea {
         area.zeroize();
     }
 
-    /// Reads the work area; the tests use it to confirm that the C code wiped it.
-    #[cfg(test)]
+    /// Reads the work area; the tests and the known-answer check use it to confirm that the C
+    /// code wiped it.
     fn contents(&self) -> &[u8] {
         // SAFETY: the area is `layout.size()` initialized bytes (allocated zeroed and then only
         // written by the C code), and the shared borrow of `self` rules out a concurrent call.
         unsafe { std::slice::from_raw_parts(self.start.as_ptr(), self.layout.size()) }
+    }
+
+    /// Whether every byte of the area is zero, as the C code leaves it at the end of every call:
+    /// the Argon2 blocks, from which a password guess could be tested cheaply, are gone.
+    pub(super) fn is_wiped(&self) -> bool {
+        self.contents().iter().all(|&byte| byte == 0)
+    }
+
+    /// The size of the area in bytes.
+    pub(super) fn bytes(&self) -> usize {
+        self.layout.size()
+    }
+
+    /// Fills the area with `byte`, as a round leaves it before the C code wipes it.
+    #[cfg(test)]
+    pub(super) fn fill_for_tests(&mut self, byte: u8) {
+        // SAFETY: the area is `layout.size()` bytes owned by `self`, exclusively borrowed.
+        unsafe { ptr::write_bytes(self.start.as_ptr(), byte, self.layout.size()) };
     }
 }
 

@@ -4,8 +4,8 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const builds = {
-  threaded: require("../dist/argon2-mt.js"),
-  "single-threaded": require("../dist/argon2-st.js"),
+  threaded: require("../dist/core/argon2-mt.js"),
+  "single-threaded": require("../dist/core/argon2-st.js"),
 };
 
 const KEY_BYTES = 32;

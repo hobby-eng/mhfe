@@ -31,9 +31,25 @@ use bip39::{Language, Mnemonic};
 use crate::phrase::{self, WORD_COUNTS};
 use crate::MhfeError;
 
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair"
+))]
+pub(crate) mod known_answers;
+
 /// The numbers of repair words a card can have: each repairs one unreadable word, and two repair
 /// one wrong word.
 pub const REPAIR_WORD_COUNTS: [usize; 4] = [2, 4, 6, 8];
+/// Four repair words repair four unreadable words or two wrong ones: enough for the usual damage
+/// of a plate at a card of four words.
+pub const RECOMMENDED_REPAIR_WORDS: usize = 4;
+
+/// What a card of `count` repair words repairs: as many unreadable words, or half as many wrong
+/// ones.
+pub fn capacity(count: usize) -> (usize, usize) {
+    (count, count / 2)
+}
 
 /// Elements of GF(2^11): 2,048, as many as the words of the BIP39 list.
 const FIELD_SIZE: usize = 2048;
@@ -254,7 +270,33 @@ pub fn repair_words(container: &str, count: usize) -> Result<String, MhfeError> 
         .map(|word| word_number(word).expect("a parsed word is in the list"))
         .collect();
     let field = Field::new();
-    Ok(words_of(&field.parity(&data, count)))
+    let parity = field.parity(&data, count);
+    check_card(&field, &data, &parity)?;
+    Ok(words_of(&parity))
+}
+
+/// Reads a new card back before it is given out: the plate and its repair words must form a
+/// codeword, and the card must restore the plate's first words when they are unreadable, as many
+/// as it has words. A fault in the field's tables or in the division would otherwise give a card
+/// that repairs nothing, which nobody notices until the plate is damaged.
+fn check_card(field: &Field, data: &[u16], parity: &[u16]) -> Result<(), MhfeError> {
+    let count = parity.len();
+    let codeword: Vec<u16> = data.iter().chain(parity).copied().collect();
+    let is_codeword = field
+        .syndromes(&codeword, count)
+        .iter()
+        .all(|&syndrome| syndrome == 0);
+    let unreadable: Vec<usize> = (0..count).collect();
+    let mut erased = codeword.clone();
+    unreadable.iter().for_each(|&position| erased[position] = 0);
+    let restores = field.repair(&erased, &unreadable, count).as_deref() == Some(&codeword[..]);
+    if is_codeword && restores {
+        Ok(())
+    } else {
+        Err(MhfeError::Internal(
+            "the new repair words do not repair their plate".to_owned(),
+        ))
+    }
 }
 
 /// A container repaired with its repair words.
@@ -663,6 +705,22 @@ mod tests {
         let repaired = repair(&words.join(" "), &card).unwrap();
         assert_eq!(repaired.container, container);
         assert_eq!(repaired.plate_words, vec![3, 17]);
+    }
+
+    /// A card is read back before it is given out: one with a changed word is refused.
+    #[test]
+    fn a_card_that_does_not_repair_its_plate_is_refused() {
+        let field = Field::new();
+        let (data, _) = read_words(&zero_12_container());
+        for count in REPAIR_WORD_COUNTS {
+            let mut parity = field.parity(&data, count);
+            assert_eq!(check_card(&field, &data, &parity), Ok(()));
+            parity[count - 1] ^= 1;
+            assert_eq!(
+                check_card(&field, &data, &parity).unwrap_err().code(),
+                "INTERNAL_ERROR"
+            );
+        }
     }
 
     #[test]

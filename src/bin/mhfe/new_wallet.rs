@@ -4,29 +4,25 @@
 //! passphrase recognises the right password. The owner always chooses; the check has costs, which
 //! `?` and the README state.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
-use std::thread;
 use std::time::Instant;
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::memory::LockedPages;
-use mhfe::wallet_check::{self, NEW_ENTROPY_BYTES};
+use mhfe::memory::LockedText;
+use mhfe::wallet_check::{NewPhrase, PhraseDraw};
 use mhfe::Suite;
-use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Help, Question};
 use crate::encrypt;
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::{self, Flow};
-use crate::locked_text::LockedText;
 use crate::plate_repair;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
-use crate::strength;
 use crate::style::{self, paint, ACCENT, GOOD, HEADING, MUTED, STRONG, WARNING};
+use crate::system_random::SystemRandom;
 use crate::terminal::{self, Input, Wallet};
+use mhfe::strength::Strength;
 
 #[derive(Args)]
 pub struct Options {
@@ -47,10 +43,33 @@ pub fn about() -> String {
     ])
 }
 
+/// The end of `mhfe new -h` and `--help`.
+pub fn help() -> String {
+    let examples = style::help_section(
+        "Examples:",
+        &[
+            (
+                "mhfe new",
+                "A new wallet and its container, default settings",
+            ),
+            ("mhfe new --pim 1", "The container with twice the passes"),
+            (
+                "mhfe new --pim 1 --mem 1",
+                "Twice the passes and 3 GiB of memory",
+            ),
+        ],
+    );
+    let note = style::help_note(
+        "The new phrase is shown once, on a private screen: write it down for your wallet before \
+         you go on. It cannot run in a script.",
+    );
+    format!("{examples}\n{note}")
+}
+
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; the new phrase is shown only on a private screen,
     // so the command does not start where there can be none (AUD-007-SEC001).
-    let mut input = Input::new(false);
+    let mut input = Input::terminal_only();
     if !terminal::can_show_privately(&input) {
         return Err(Failure::invalid_input(
             "mhfe new shows the new phrase only on a private screen: run it at a terminal, with no \
@@ -64,9 +83,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let passphrase = read_new_passphrase(&mut input)?;
     let checked = !passphrase.is_empty() && ask_for_check()?;
     if checked {
-        let bits = strength::estimated_bits(&passphrase);
+        let strength = Strength::of(&passphrase);
+        let bits = strength.bits();
         eprintln!();
-        if strength::is_weak(bits) {
+        if strength.is_weak() {
             style::warn(
                 &format!(
                     "This passphrase is weak: about {bits:.0} bits; the check is as strong as it."
@@ -82,11 +102,12 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     }
 
     let repair_count = plate_repair::ask_when_creating(&mut input)?;
-    let phrase = draw_phrase(checked.then_some(&*passphrase))?;
-    let _phrase_locked = LockedPages::of_string(&phrase);
+    // Held locked from here on; the drawn phrase is wiped at once.
+    let phrase = LockedText::copy_of(draw_phrase(checked.then_some(&*passphrase))?.phrase());
     show_new_phrase(&input, &phrase, &passphrase)?;
     let check = if checked { ", with a check" } else { "" };
     choice::record("Phrase", &format!("24 words, new{check}"));
+    encrypt::warn_if_detection_would_mislead(&phrase, 24)?;
 
     let password = encrypt::read_new_password(&mut input, Operation::New)?;
     let new = encrypt::seal(
@@ -99,17 +120,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         repair_count,
     )?;
     flow.finish();
-    style::fact("Format", paint(MUTED, new.suite.id()));
+    style::fact("Format", paint(MUTED, new.suite().id()));
     // A passphrase belongs to the wallet, checked or not.
-    let mut also: Vec<&str> = Vec::new();
-    if !passphrase.is_empty() {
-        also.push("the BIP39 passphrase");
-    }
-    also.extend(plate_repair::to_keep(repair_count));
-    style::fact("Keep", encrypt::what_to_keep(work, 24, false, 24, &also));
-    style::fact(
+    let keep = new.keep(work, !passphrase.is_empty());
+    style::fact_wrapped("Keep", &encrypt::what_to_keep(&keep));
+    style::fact_wrapped(
         "Next",
-        format!(
+        &format!(
             "rehearse with {} from the backup you wrote",
             paint(ACCENT, "mhfe check")
         ),
@@ -118,8 +135,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     Ok(SUCCESS)
 }
 
-/// Asks whether the new phrase gets a wallet check with the passphrase. Nothing is preselected:
-/// each choice has its costs, which `?` shows.
+/// Asks whether the new phrase gets a wallet check with the passphrase. Nothing is preselected
+/// (AUD-010): each choice has its costs, which `?` shows, and a hurried Enter, perhaps typed ahead
+/// after the repeated passphrase, must not decide a property the phrase keeps for ever.
 fn ask_for_check() -> Result<bool, Failure> {
     let answers = [
         Answer::new("No check", "every password opens a valid wallet"),
@@ -135,7 +153,7 @@ fn ask_for_check() -> Result<bool, Failure> {
         more: Some(readme::NEW),
         record: Some("Check"),
     };
-    let chosen = choice::choose(
+    let chosen = choice::choose_without_default(
         &question,
         &answers,
         Some(Help {
@@ -196,74 +214,23 @@ fn read_new_passphrase(input: &mut Input) -> Result<LockedText, Failure> {
 }
 
 /// A new 24-word phrase from the operating system's generator; with a `passphrase`, drawn on
-/// every processor core until one passes the wallet check with it, about 65,536 BIP39 seeds.
-fn draw_phrase(passphrase: Option<&str>) -> Result<Zeroizing<String>, Failure> {
-    let started = Instant::now();
-    let entropy = match passphrase {
-        None => {
-            let mut entropy = Zeroizing::new([0u8; NEW_ENTROPY_BYTES]);
-            fill_random(&mut entropy[..])?;
-            entropy
-        }
-        Some(passphrase) => {
-            flow::step();
-            eprintln!();
-            style::hint("Drawing a phrase that passes the check, about 65,536 draws.");
-            let entropy = draw_checked(passphrase)?;
-            choice::record(
-                "Drawn",
-                &format!("in {} s", started.elapsed().as_secs().max(1)),
-            );
-            entropy
-        }
+/// every processor core until one passes the wallet check with it, about 65,536 BIP39 seeds. The
+/// library probes the generator first and reads the new phrase back.
+fn draw_phrase(passphrase: Option<&str>) -> Result<NewPhrase, Failure> {
+    let Some(passphrase) = passphrase else {
+        return Ok(PhraseDraw::unchecked().draw(&mut SystemRandom, &mut |_| Ok(()))?);
     };
-    // Written at its final size: Mnemonic::to_string would leave growing copies of the first
-    // words in freed memory (AUD-008-SEC002).
-    Ok(mhfe::phrase_from_entropy(&entropy[..])?)
-}
-
-/// Draws entropies on every core until one passes the wallet check with `passphrase`. The first
-/// found is taken; every passing entropy is equally likely to be it.
-fn draw_checked(passphrase: &str) -> Result<Zeroizing<[u8; NEW_ENTROPY_BYTES]>, Failure> {
-    let found = AtomicBool::new(false);
-    let draws = AtomicU64::new(0);
-    let result: Mutex<Option<Result<Zeroizing<[u8; NEW_ENTROPY_BYTES]>, Failure>>> =
-        Mutex::new(None);
-    let workers = thread::available_parallelism().map_or(1, |cores| cores.get());
-    thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| {
-                let mut entropy = Zeroizing::new([0u8; NEW_ENTROPY_BYTES]);
-                while !found.load(Ordering::Relaxed) {
-                    draws.fetch_add(1, Ordering::Relaxed);
-                    let passed = fill_random(&mut entropy[..]).and_then(|()| {
-                        wallet_check::passes(&entropy[..], passphrase).map_err(Failure::from)
-                    });
-                    match passed {
-                        Ok(false) => continue,
-                        outcome => {
-                            if !found.swap(true, Ordering::SeqCst) {
-                                let mut slot = result
-                                    .lock()
-                                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                                *slot = Some(outcome.map(|_| entropy.clone()));
-                            }
-                            return;
-                        }
-                    }
-                }
-            });
-        }
-    });
-    result
-        .into_inner()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .unwrap_or_else(|| Err(Failure::internal("No phrase was drawn.")))
-}
-
-fn fill_random(bytes: &mut [u8]) -> Result<(), Failure> {
-    getrandom::fill(bytes)
-        .map_err(|error| Failure::internal(format!("The system random generator failed: {error}")))
+    let started = Instant::now();
+    let draw = PhraseDraw::with_check(passphrase)?;
+    flow::step();
+    eprintln!();
+    style::hint("Drawing a phrase that passes the check, about 65,536 draws.");
+    let drawn = draw.draw_on_every_core(|| SystemRandom, &mut |_| Ok(()))?;
+    choice::record(
+        "Drawn",
+        &format!("in {} s", started.elapsed().as_secs().max(1)),
+    );
+    Ok(drawn)
 }
 
 /// Shows the new phrase on a private screen until Enter or Escape clears it.

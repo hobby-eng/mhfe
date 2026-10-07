@@ -2,12 +2,12 @@
 //! (specification supplement: "A hidden wallet behind an honest disclosure"). Each password gives
 //! its own 24-word wallet, `D_P(Y)`, which the container and the password give again at any time,
 //! so nothing is written down and nothing records how many there are. The README advises running
-//! `mhfe self-test` on the computer before a hidden wallet is funded; it is not repeated here, as
-//! it takes minutes.
+//! `mhfe self-test --vectors` on the computer before a hidden wallet is funded; it is not repeated
+//! here, as it takes minutes.
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::{MhfeError, Password, Suite};
+use mhfe::{HiddenWallets, MhfeError, Password};
 
 use crate::check;
 use crate::choice::{Answer, Question};
@@ -38,15 +38,23 @@ pub fn about() -> String {
 
 /// The end of `mhfe wallets -h` and `--help`.
 pub fn help() -> String {
-    style::help_note(
+    let examples = style::help_section(
+        "Examples:",
+        &[
+            ("mhfe wallets", "Open hidden wallets on a container"),
+            ("mhfe wallets --pim 1", "On a container made with PIM 1"),
+        ],
+    );
+    let note = style::help_note(
         "Fund a hidden wallet only from sources linked neither to you nor to the main wallet. A \
          new password or new settings for the container (mhfe rekey) changes every hidden wallet.",
-    )
+    );
+    format!("{examples}\n{note}")
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; a wallet is only ever shown on a private screen.
-    let mut input = Input::new(false);
+    let mut input = Input::terminal_only();
     if !terminal::can_show_privately(&input) {
         return Err(Failure::invalid_input(NO_PRIVATE_SCREEN));
     }
@@ -64,8 +72,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     );
     style::more(readme::WALLETS);
 
-    let (container, suite) = terminal::read_container(&mut input, Operation::Wallets.title())?;
-    if suite != Suite::TwentyFourWords {
+    let container = terminal::read_container(&mut input, Operation::Wallets.title())?;
+    if !container.opens_hidden_wallets() {
         return Err(Failure::invalid_input(
             "Hidden wallets are opened on a 24-word container only, for now.",
         ));
@@ -73,22 +81,19 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // A hidden wallet that passes the main wallet's check with its passphrase is refused too; the
     // question comes every time, so that it tells nothing about the main wallet.
     let passphrase = check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;
+    let mut wallets = HiddenWallets::new(container.words(), &passphrase)?;
     let mut mhfe = settings::reserve_memory(work)?;
     // Every wallet, its password, its progress and the question for another one leave nothing in
     // the summary: nothing on the main screen tells how many wallets were opened (AUD-007-SEC005).
     let off_the_record = flow::off_the_record();
-    // The passwords of this run, so that none is typed twice. Kept as the Password itself, whose
-    // buffer stays locked until it is wiped: a copy of its bytes would not be (AUD-008-SEC003).
-    let mut used: Vec<Password> = Vec::new();
+    let mut number = 0;
     loop {
-        let number = used.len() + 1;
-        let password = read_unused_password(&mut input, &used)?;
+        let password = read_unused_password(&mut input, &wallets)?;
         let mut progress = Progress::start_as("Opening");
-        let derived =
-            mhfe.derive_wallet(&container, &password, &passphrase, &mut |round, rounds| {
-                progress.round_starts(round, rounds);
-                Ok(())
-            });
+        let derived = wallets.open(&mut mhfe, password, &mut |round, rounds| {
+            progress.round_starts(round, rounds);
+            Ok(())
+        });
         progress.finish();
         let wallet = match derived {
             Ok(wallet) => wallet,
@@ -101,17 +106,17 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             }
             Err(error) => return Err(error.into()),
         };
+        number += 1;
         show_wallet(&input, number, &wallet.phrase);
-        used.push(password);
         if !another(&mut input)? {
             break;
         }
     }
     drop(off_the_record);
     flow.finish();
-    style::fact(
+    style::fact_wrapped(
         "Next",
-        format!(
+        &format!(
             "fund them only from sources not linked to you; {} changes them",
             paint(ACCENT, "mhfe rekey")
         ),
@@ -121,14 +126,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 }
 
 /// A password typed twice on the private screen that this run has not used yet.
-fn read_unused_password(input: &mut Input, used: &[Password]) -> Result<Password, Failure> {
+fn read_unused_password(input: &mut Input, wallets: &HiddenWallets) -> Result<Password, Failure> {
     loop {
         let password = encrypt::read_new_password(input, Operation::Wallets)?;
-        // Normalized bytes, as the cipher takes them: "é" typed either way is one password.
-        if !used
-            .iter()
-            .any(|other| other.as_bytes() == password.as_bytes())
-        {
+        if !wallets.was_used(&password) {
             return Ok(password);
         }
         style::retry_next("This password has opened a wallet already. Choose another.");

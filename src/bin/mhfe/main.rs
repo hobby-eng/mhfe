@@ -18,7 +18,6 @@ mod exit;
 mod flow;
 mod hidden_input;
 mod length_choice;
-mod locked_text;
 mod menu;
 mod new_wallet;
 mod plate_repair;
@@ -28,8 +27,9 @@ mod rekey;
 mod self_test;
 mod serve;
 mod settings;
-mod strength;
+mod startup;
 mod style;
+mod system_random;
 mod terminal;
 mod test_tools;
 mod wallets;
@@ -63,7 +63,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Generate a new wallet and its container
-    #[command(long_about = new_wallet::about())]
+    #[command(long_about = new_wallet::about(), after_help = new_wallet::help())]
     New(new_wallet::Options),
     /// Encrypt a seed phrase into a container
     #[command(
@@ -93,17 +93,23 @@ enum Command {
     #[command(long_about = wallets::about(), after_help = wallets::help())]
     Wallets(wallets::Options),
     /// Repair a plate with its repair words
-    #[command(long_about = plate_repair::repair_about())]
+    #[command(
+        long_about = plate_repair::repair_about(),
+        after_help = plate_repair::repair_help()
+    )]
     Repair(plate_repair::RepairOptions),
     /// Make repair words for a plate
-    #[command(long_about = plate_repair::words_about())]
+    #[command(
+        long_about = plate_repair::words_about(),
+        after_help = plate_repair::words_help()
+    )]
     RepairWords(plate_repair::WordsOptions),
     /// Make a strong password of words or random characters
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
-    /// Test this program with the published vectors
-    #[command(long_about = self_test::about())]
-    SelfTest,
+    /// Test every part of this program
+    #[command(long_about = self_test::about(), after_help = self_test::help())]
+    SelfTest(self_test::Options),
     /// Serve a browser tool on this computer in fast mode
     #[command(long_about = serve::about(), after_help = serve::help())]
     Serve(serve::Options),
@@ -157,7 +163,11 @@ fn main_help() -> String {
             ),
             (
                 "mhfe self-test",
-                "Test this program with the published vectors",
+                "Test every part of this program, in seconds",
+            ),
+            (
+                "mhfe self-test --vectors",
+                "Also run the published vectors: minutes, 2 GiB",
             ),
             ("mhfe serve tool.html", "Open a browser tool in fast mode"),
             (
@@ -183,15 +193,20 @@ fn main() {
     // Before anything else, so that no secret can ever be in a core dump.
     protect::harden_process();
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
-    // menu, which runs the same commands, each in an isolated thread of its own.
+    // menu, which runs the same commands, each in an isolated thread of its own. The checks at
+    // start run once, before the menu and before any isolation: the menu enters no network
+    // namespace of its own, and its commands, which run in threads of it, cannot. --help and
+    // --version, which clap answers in Cli::try_parse, handle nothing secret and run none.
     let result = if std::env::args_os().len() == 1 && choice::can_run() {
-        terminal::stop_on_ctrl_c();
-        menu::run()
+        menu::start()
     } else {
-        let command = Cli::parse().command;
-        protect::isolate(needs_of(&command));
-        terminal::stop_on_ctrl_c();
-        run(command)
+        let command = Cli::try_parse()
+            .unwrap_or_else(|error| exit_unparsed(error))
+            .command;
+        prepare(&command).and_then(|()| {
+            terminal::stop_on_ctrl_c();
+            run(command)
+        })
     };
     let exit_code = match result {
         Ok(code) => code,
@@ -211,7 +226,63 @@ fn show_failure(failure: &Failure) {
         terminal::show_cancelled();
     } else if !failure.message.is_empty() {
         anstream::eprintln!();
-        style::error(&failure.to_string());
+        style::error_wrapped(&failure.to_string());
+    }
+}
+
+/// Ends the tool when clap did not give a command. Help and the version, which clap reports the
+/// same way, are printed as clap prints them. A usage error, such as an unknown option, is shown
+/// as every other error of the tool, after a red "✗ Error:", with clap's tip and the usage in
+/// grey, and exit code 2 (AUD-010).
+fn exit_unparsed(error: clap::Error) -> ! {
+    use clap::error::ErrorKind;
+    if matches!(
+        error.kind(),
+        ErrorKind::DisplayHelp
+            | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            | ErrorKind::DisplayVersion
+    ) {
+        error.exit();
+    }
+    anstream::eprintln!();
+    // Rendered as plain text; mhfe adds its own colours.
+    style::usage_error(&error.render().to_string());
+    std::process::exit(exit::INVALID_INPUT);
+}
+
+/// Isolates a command started directly and runs its checks at start, before it reads anything.
+/// The order matters (G10 of the self-check plan): a process enters its own network namespace
+/// only while it has a single thread, and the Argon2 check at start runs on four threads. The
+/// start menu runs the same checks before it opens, with no network namespace (menu.rs).
+fn prepare(command: &Command) -> Result<(), Failure> {
+    protect::isolate(needs_of(command));
+    startup::check(startup_checks_of(command))
+}
+
+/// Which checks a command runs at its start (startup.rs). Every command is named, so that a new
+/// one must be decided here.
+fn startup_checks_of(command: &Command) -> startup::Checks {
+    use startup::Checks;
+    match command {
+        Command::New(_)
+        | Command::Encrypt(_)
+        | Command::Decrypt(_)
+        | Command::Check(_)
+        | Command::Rekey(_)
+        | Command::Wallets(_)
+        | Command::Repair(_)
+        | Command::RepairWords(_)
+        | Command::Password(_) => Checks::EveryPart,
+        // It runs every check itself and reports each one.
+        Command::SelfTest(_) => Checks::Nothing,
+        // It compares a page with its SHA-256 before serving it, and handles no secret.
+        Command::Serve(_) => Checks::Hashes,
+        // It writes the fixtures that the checks embed: after a deliberate change of the algorithm
+        // the checks would fail until the new fixtures are written and built in, so it must run
+        // without them. It handles public test data only.
+        Command::TestVectors(_) => Checks::Nothing,
+        // It times public test data only.
+        Command::TestBenchmark(_) => Checks::Nothing,
     }
 }
 
@@ -244,9 +315,87 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::Repair(options) => plate_repair::run_repair(options),
         Command::RepairWords(options) => plate_repair::run_words(options),
         Command::Password(options) => diceware::run(options),
-        Command::SelfTest => self_test::run(),
+        Command::SelfTest(options) => self_test::run(options),
         Command::Serve(options) => serve::run(options),
         Command::TestVectors(options) => test_tools::write_vectors(options),
         Command::TestBenchmark(options) => test_tools::benchmark(options),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command(arguments: &[&str]) -> Command {
+        let typed = std::iter::once("mhfe").chain(arguments.iter().copied());
+        Cli::try_parse_from(typed).unwrap().command
+    }
+
+    /// The help of the tool and of every command, short (-h) and long (--help, and `mhfe help`),
+    /// fits the help width and ends with examples (AUD-010).
+    #[test]
+    fn every_help_fits_the_help_width_and_has_examples() {
+        use clap::CommandFactory;
+        let mut cli = Cli::command();
+        cli.build();
+        let mut helps = vec![
+            ("mhfe -h".to_owned(), cli.render_help().to_string()),
+            ("mhfe --help".to_owned(), cli.render_long_help().to_string()),
+        ];
+        // clap's own `help` command lists the commands and has nothing else to show.
+        for command in cli.get_subcommands_mut().filter(|c| c.get_name() != "help") {
+            let name = command.get_name().to_owned();
+            helps.push((format!("{name} -h"), command.render_help().to_string()));
+            helps.push((
+                format!("{name} --help"),
+                command.render_long_help().to_string(),
+            ));
+        }
+        for (help, text) in helps {
+            for line in text.lines() {
+                assert!(
+                    style::visible_width(line) <= style::HELP_WIDTH,
+                    "{help}: {line}"
+                );
+            }
+            assert!(text.contains("\nExamples:\n"), "{help} has no examples");
+        }
+    }
+
+    /// Every command that reads a secret checks every part first; the self-test checks them
+    /// itself, the fast mode its hashes, and the test tools none.
+    #[test]
+    fn every_secret_command_checks_every_part_at_start() {
+        use startup::Checks;
+        for arguments in [
+            &["new"][..],
+            &["encrypt"],
+            &["decrypt"],
+            &["check"],
+            &["rekey"],
+            &["wallets"],
+            &["repair"],
+            &["repair-words"],
+            &["password"],
+        ] {
+            assert_eq!(
+                startup_checks_of(&command(arguments)),
+                Checks::EveryPart,
+                "{arguments:?}"
+            );
+        }
+        assert_eq!(startup_checks_of(&command(&["self-test"])), Checks::Nothing);
+        assert_eq!(
+            startup_checks_of(&command(&["self-test", "--vectors"])),
+            Checks::Nothing
+        );
+        assert_eq!(
+            startup_checks_of(&command(&["serve", "tool.html"])),
+            Checks::Hashes
+        );
+        assert_eq!(
+            startup_checks_of(&command(&["test-vectors", "--output", "folder"])),
+            Checks::Nothing
+        );
     }
 }

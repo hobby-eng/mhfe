@@ -3,12 +3,17 @@
 //! width. Nothing records which passwords were used or how many, so the container alone tells
 //! nothing about them.
 
+use crate::container::ContainerFacts;
 use crate::engine::Argon2Engine;
+use crate::memory::LockedText;
 use crate::mhfe::{read_as, suite_3_state, RecoveredPhrase};
 use crate::packing;
 use crate::suite::Suite;
 use crate::wallet_check;
 use crate::{Mhfe, MhfeError, Password, ProgressCallback};
+
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+pub(crate) mod known_answers;
 
 /// The width a hidden wallet is read at on a 24-word container: the whole state.
 const STATE_WORDS: usize = 24;
@@ -36,10 +41,66 @@ impl<E: Argon2Engine> Mhfe<E> {
             on_progress,
         )?;
         let x = suite_3_state(&x)?;
-        if passes_a_check(&x, passphrase)? {
+        if passes_a_check(x, passphrase)? {
             return Err(MhfeError::HiddenWalletPassesCheck);
         }
-        read_as(&x, STATE_WORDS)
+        read_as(x, STATE_WORDS)
+    }
+}
+
+/// A session of hidden wallets on one 24-word container: each password opens its own wallet, none
+/// twice. The main wallet's BIP39 passphrase is given once, every time, so that asking for it tells
+/// nothing about the main wallet. Nothing is created or stored: the container and each password
+/// give the same wallet every time.
+pub struct HiddenWallets {
+    container: String,
+    passphrase: LockedText,
+    /// The passwords of this session, kept as the Password itself, whose buffer stays locked
+    /// until it is wiped: a copy of its bytes would not be (AUD-008-SEC003).
+    used: Vec<Password>,
+}
+
+impl HiddenWallets {
+    /// A session on `container`, which must have 24 words, with the main wallet's passphrase,
+    /// empty for a wallet without one. Refused before any Argon2 work otherwise.
+    pub fn new(container: &str, main_passphrase: &str) -> Result<Self, MhfeError> {
+        let facts = ContainerFacts::read(container)?;
+        if !facts.opens_hidden_wallets() {
+            return Err(MhfeError::InvalidContainer(
+                "hidden wallets are opened on a 24-word container only".to_owned(),
+            ));
+        }
+        Ok(Self {
+            container: facts.words().to_owned(),
+            passphrase: LockedText::copy_of(main_passphrase),
+            used: Vec::new(),
+        })
+    }
+
+    /// Whether `password` opened a wallet of this session already, compared after normalization,
+    /// as the cipher takes it: "é" typed either way is one password.
+    pub fn was_used(&self, password: &Password) -> bool {
+        self.used
+            .iter()
+            .any(|other| other.as_bytes() == password.as_bytes())
+    }
+
+    /// Opens the wallet of `password`, read as 24 words. A password used already is refused
+    /// before any Argon2 work (PASSWORD_ALREADY_USED); one whose wallet would pass a check is
+    /// refused after it (HIDDEN_WALLET_PASSES_CHECK, rule I29) and may be replaced by another.
+    pub fn open<E: Argon2Engine>(
+        &mut self,
+        mhfe: &mut Mhfe<E>,
+        password: Password,
+        on_progress: ProgressCallback<'_>,
+    ) -> Result<RecoveredPhrase, MhfeError> {
+        if self.was_used(&password) {
+            return Err(MhfeError::PasswordAlreadyUsed);
+        }
+        let wallet =
+            mhfe.derive_wallet(&self.container, &password, &self.passphrase, on_progress)?;
+        self.used.push(password);
+        Ok(wallet)
     }
 }
 

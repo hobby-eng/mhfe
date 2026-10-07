@@ -7,7 +7,12 @@
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::{Confirmation, MhfeError, Password, Suite, WordCount};
+use mhfe::operation::Stage;
+use mhfe::rekey::Rekey;
+use mhfe::{
+    Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, Password, Suite, WordCount,
+    WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
+};
 
 use crate::check::WalletReference;
 use crate::choice::{self, Answer, Question};
@@ -30,17 +35,29 @@ pub struct Options {
     #[arg(long = "new-pim", value_name = "N")]
     new_pim: Option<u32>,
 
-    /// Memory level of the new container, 0 to 21 (default 0: 2 GiB)
-    #[arg(long = "new-mem", value_name = "LEVEL")]
+    /// New memory level, 0 to 21 (default 0: 2 GiB)
+    #[arg(long = "new-mem", value_name = "LEVEL", long_help = new_memory_help())]
     new_memory_level: Option<u32>,
 
-    /// Number of words of the seed phrase: 12, 15, 18, 21 or 24 (asked otherwise)
-    #[arg(long, value_name = "N")]
+    /// Words of the seed phrase: 12, 15, 18, 21 or 24
+    #[arg(long, value_name = "N", long_help = words_help())]
     words: Option<usize>,
 }
 
-/// The lengths a seed phrase in a 24-word container may have.
-const LENGTHS: [usize; 5] = [12, 15, 18, 21, 24];
+fn new_memory_help() -> String {
+    style::option_help(&[
+        "Memory level of the new container, 0 to 21 (default 0: 2 GiB).",
+        "Without --new-pim and --new-mem the new settings are asked at a terminal.",
+    ])
+}
+
+fn words_help() -> String {
+    style::option_help(&[
+        "Words of the seed phrase: 12, 15, 18, 21 or 24.",
+        "Asked when not given, unless the container tells it: a same-length container has the \
+         length of its phrase.",
+    ])
+}
 
 /// The top of `mhfe rekey --help`.
 pub fn about() -> String {
@@ -79,7 +96,7 @@ pub fn help() -> String {
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; no script reads a phrase back and forth.
-    let mut input = Input::new(false);
+    let mut input = Input::terminal_only();
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Rekey.title());
     let old_work = settings::choose(options.old, &mut input, Operation::Rekey)?;
@@ -93,17 +110,38 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     style::more(readme::REKEY);
     confirm_other_wallets_are_safe(&mut input)?;
 
-    let (container, suite) = terminal::read_container(&mut input, Operation::Rekey.title())?;
-    let container_words = container.split(' ').count();
-    let words = phrase_length(&mut input, options.words, suite, container_words)?;
+    let container = terminal::read_container(&mut input, Operation::Rekey.title())?;
+    let words = phrase_length(&mut input, options.words, &container)?;
     let password = terminal::read_password(&mut input, Operation::Rekey)?;
+    // The rekey's own rules (length, confirmation, a new password that changes the container)
+    // are the library's; the owner answered yes about the other wallets above.
+    let rekey = Rekey::new(
+        container.words(),
+        Some(words.get()),
+        password,
+        old_work,
+        true,
+    )?;
     // A recovery without a built-in check needs another confirmation. It is chosen, and a
     // reference typed, before the long computation, so the user can walk away while it runs.
-    let has_check = suite == Suite::TwentyFourWords && words.get() < 24;
-    let how = if has_check {
-        How::BuiltInCheck
-    } else {
-        ask_how_to_confirm(&mut input)?
+    let kind = match rekey.confirmation_needed() {
+        ConfirmationNeeded::BuiltInCheck => Kind::BuiltInCheck,
+        ConfirmationNeeded::WalletOrOwner => ask_how_to_confirm(&mut input)?,
+    };
+    // The new container's keep list names the wallet's BIP39 passphrase, so the question is asked
+    // once, before any reference: a reference without a passphrase would match the phrase's
+    // wallet without one and say nothing about funds under one. Only a wallet with one is then
+    // asked for it.
+    let wallet_passphrase = encrypt::ask_wallet_passphrase(&mut input, readme::REKEY)?;
+    let how = match kind {
+        Kind::BuiltInCheck => How::BuiltInCheck,
+        Kind::Owner => How::Owner,
+        Kind::Address | Kind::Fingerprint => How::Wallet(WalletReference::read_of_wallet(
+            &mut input,
+            kind == Kind::Fingerprint,
+            Operation::Rekey,
+            wallet_passphrase,
+        )?),
     };
 
     let mut mhfe = settings::reserve_memory(old_work)?;
@@ -117,16 +155,20 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         (How::Owner, _) => Confirmation::Owner,
         _ => Confirmation::BuiltInCheck,
     };
-    let phrase = mhfe.recover_confirmed(
-        &container,
-        &password,
-        words,
+    // The terminal shows the twelve rounds of the recovery as before; a comparison with the wallet
+    // follows them without a round of its own.
+    let recovered = rekey.recover(
+        &mut mhfe,
         confirmation,
-        &mut |round, rounds| {
-            progress.round_starts(round, rounds);
+        Some(wallet_passphrase),
+        &mut |stage, round, _| {
+            if stage == Stage::Recover {
+                progress.round_starts(round, ROUNDS);
+            }
             Ok(())
         },
     )?;
+    let phrase = recovered.phrase();
     progress.finish();
     // The old memory is released before the new settings reserve theirs.
     drop(mhfe);
@@ -145,39 +187,40 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         memory_level: options.new_memory_level,
     };
     let new_work = settings::choose(new_settings, &mut input, Operation::RekeyNew)?;
-    let length_must_be_chosen = suite == Suite::TwentyFourWords
-        && phrase.words < 24
-        && encrypt::warn_if_detection_would_mislead(&phrase.phrase, phrase.words)?;
+    // A 24-word original too can, by rare chance, read as a shorter phrase after recovery.
+    if container.suite() == Suite::TwentyFourWords {
+        encrypt::warn_if_detection_would_mislead(&phrase.phrase, phrase.words)?;
+    }
     let repair_count = plate_repair::ask_when_creating(&mut input)?;
-    let new_password = read_different_password(&mut input, &password, old_work == new_work)?;
-    drop(password);
+    let new_password = read_different_password(&mut input, &rekey, new_work)?;
 
-    let new = encrypt::seal(
-        &input,
-        Operation::Rekey,
-        new_work,
-        &phrase.phrase,
-        suite,
-        &new_password,
-        repair_count,
-    )?;
+    // Sealed by the library's rekey, which the browser package and the checks at start run too:
+    // a container of the old one's kind, and new settings or a new password that change it
+    // (AUD-010). The terminal shows it as any encryption.
+    let mut mhfe = settings::reserve_memory(new_work)?;
+    let new = encrypt::show_sealing(&input, Operation::Rekey, |progress, on_unverified| {
+        rekey.seal(
+            &mut mhfe,
+            &recovered,
+            &new_password,
+            repair_count,
+            // The rekey numbers these rounds 13 to 36 of its 36; the bar shows the encryption's
+            // own 1 to 24, as for any encryption.
+            &mut |stage, round, _| progress(stage, round - ROUNDS, ENCRYPTION_ROUNDS),
+            on_unverified,
+        )
+    })?;
     flow.finish();
-    style::fact("Format", paint(MUTED, new.suite.id()));
-    style::fact(
+    style::fact("Format", paint(MUTED, new.suite().id()));
+    style::fact_wrapped(
         "Keep",
-        encrypt::what_to_keep(
-            new_work,
-            phrase.words,
-            length_must_be_chosen,
-            container_words,
-            plate_repair::to_keep(repair_count),
-        ),
+        &encrypt::what_to_keep(&new.keep(new_work, recovered.wallet_has_passphrase())),
     );
     // Rekeying revokes nothing: the old plate and password open the wallet until destroyed.
     style::fact("Old plate", "still opens the wallet with the old password");
-    style::fact(
+    style::fact_wrapped(
         "Next",
-        format!(
+        &format!(
             "rehearse the new plate with {}, then destroy the old one",
             paint(ACCENT, "mhfe check")
         ),
@@ -216,9 +259,18 @@ enum How {
     Owner,
 }
 
+/// The kind of confirmation chosen, before its reference is read.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    BuiltInCheck,
+    Address,
+    Fingerprint,
+    Owner,
+}
+
 /// For a recovery without a built-in check: a receiving address, the fingerprint, or the phrase
 /// shown to the owner, who compares it with their backup.
-fn ask_how_to_confirm(input: &mut Input) -> Result<How, Failure> {
+fn ask_how_to_confirm(input: &mut Input) -> Result<Kind, Failure> {
     let mut answers = vec![
         Answer::new(
             "A receiving address (recommended)",
@@ -242,9 +294,9 @@ fn ask_how_to_confirm(input: &mut Input) -> Result<How, Failure> {
         "Confirm",
     );
     Ok(match input.choose(&question, &answers)? {
-        0 => How::Wallet(WalletReference::read(input, false, Operation::Rekey)?),
-        1 => How::Wallet(WalletReference::read(input, true, Operation::Rekey)?),
-        _ => How::Owner,
+        0 => Kind::Address,
+        1 => Kind::Fingerprint,
+        _ => Kind::Owner,
     })
 }
 
@@ -296,66 +348,74 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
 fn phrase_length(
     input: &mut Input,
     given: Option<usize>,
-    suite: Suite,
-    container_words: usize,
+    container: &ContainerFacts,
 ) -> Result<WordCount, Failure> {
-    let given = given.map(WordCount::new).transpose()?;
-    if suite == Suite::SameLength {
-        if given.is_some_and(|words| words.get() != container_words) {
-            return Err(MhfeError::LengthChoiceNotApplicable { container_words }.into());
-        }
-        return Ok(WordCount::new(container_words)?);
-    }
-    if let Some(words) = given {
+    if let Some(given) = given {
+        let words = WordCount::new(given)?;
+        // Only its refusal matters here, of a length that a same-length container cannot have:
+        // the confirmation itself is chosen once the password is typed.
+        container.confirmation_needed(words)?;
         return Ok(words);
     }
-    let answers = LENGTHS.map(|words| Answer::new(format!("{words} words"), ""));
+    let lengths = container.phrase_lengths();
+    if let [only] = lengths {
+        return Ok(WordCount::new(*only)?);
+    }
+    let answers: Vec<Answer> = lengths
+        .iter()
+        .map(|words| Answer::new(format!("{words} words"), ""))
+        .collect();
     let question = Question::new("How many words does your seed phrase have?", "Phrase");
     let chosen = input.choose(&question, &answers)?;
-    Ok(WordCount::new(LENGTHS[chosen])?)
+    Ok(WordCount::new(lengths[chosen])?)
 }
 
 /// The new password, typed twice. With the same settings it must differ from the old one: the
 /// same password would give the same container again.
 fn read_different_password(
     input: &mut Input,
-    old: &Password,
-    same_settings: bool,
+    rekey: &Rekey,
+    new_work: WorkFactor,
 ) -> Result<Password, Failure> {
     loop {
         let new = encrypt::read_new_password(input, Operation::Rekey)?;
-        // Normalized bytes, as the cipher takes them: "é" typed either way is one password.
-        if !(same_settings && new.as_bytes() == old.as_bytes()) {
-            return Ok(new);
+        match rekey.check_new(&new, new_work) {
+            Ok(()) => return Ok(new),
+            Err(MhfeError::NewPasswordSameAsOld) => {
+                // Said where the new password is typed again.
+                style::retry_next(
+                    "This is the old password, which gives the old container. Choose another.",
+                );
+            }
+            Err(error) => return Err(error.into()),
         }
-        // Said where the new password is typed again.
-        style::retry_next(
-            "This is the old password, which gives the old container. Choose another.",
-        );
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mhfe::WORD_COUNTS;
 
     /// AUD-008-FUN002: a length given for a same-length container must be its own, and a length
     /// that no phrase has is refused, both before the password is asked.
     #[test]
     fn a_length_given_must_fit_the_container() {
-        let mut input = Input::new(false);
-        let length = |input: &mut Input, given, suite, words| {
-            phrase_length(input, given, suite, words).map(WordCount::get)
+        let mut input = Input::terminal_only();
+        // A container of `words` words: a valid phrase of all-zero entropy, as in BIP39's vectors,
+        // with 4 bytes of entropy for every 3 words.
+        let container = |words: usize| {
+            let phrase = mhfe::phrase_from_entropy(&vec![0; words / 3 * 4]).unwrap();
+            ContainerFacts::read(&phrase).unwrap()
+        };
+        let length = |input: &mut Input, given, words| {
+            phrase_length(input, given, &container(words)).map(WordCount::get)
         };
         for words in [12, 15, 18, 21] {
-            let suite = Suite::SameLength;
-            assert_eq!(length(&mut input, None, suite, words).ok(), Some(words));
-            assert_eq!(
-                length(&mut input, Some(words), suite, words).ok(),
-                Some(words)
-            );
-            for other in LENGTHS.into_iter().filter(|&other| other != words) {
-                let refused = length(&mut input, Some(other), suite, words).unwrap_err();
+            assert_eq!(length(&mut input, None, words).ok(), Some(words));
+            assert_eq!(length(&mut input, Some(words), words).ok(), Some(words));
+            for other in WORD_COUNTS.into_iter().filter(|&other| other != words) {
+                let refused = length(&mut input, Some(other), words).unwrap_err();
                 assert!(
                     refused.message.contains("keeps the length"),
                     "{}",
@@ -363,13 +423,12 @@ mod tests {
                 );
             }
             for impossible in [0, 13, 25] {
-                assert!(length(&mut input, Some(impossible), suite, words).is_err());
+                assert!(length(&mut input, Some(impossible), words).is_err());
             }
         }
-        let suite = Suite::TwentyFourWords;
-        for words in LENGTHS {
-            assert_eq!(length(&mut input, Some(words), suite, 24).ok(), Some(words));
+        for words in WORD_COUNTS {
+            assert_eq!(length(&mut input, Some(words), 24).ok(), Some(words));
         }
-        assert!(length(&mut input, Some(13), suite, 24).is_err());
+        assert!(length(&mut input, Some(13), 24).is_err());
     }
 }

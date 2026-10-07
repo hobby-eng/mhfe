@@ -1,9 +1,20 @@
 //! Reading seed phrases the way people write them down.
 
+use std::convert::Infallible;
+
 use bip39::{Language, Mnemonic};
 use zeroize::Zeroizing;
 
+use crate::memory::LockedText;
 use crate::MhfeError;
+
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-wallet"
+))]
+pub(crate) mod known_answers;
 
 /// Word counts of a BIP39 phrase.
 pub const WORD_COUNTS: [usize; 5] = [12, 15, 18, 21, 24];
@@ -73,16 +84,51 @@ pub fn read_phrase(input: &str) -> Result<Zeroizing<String>, MhfeError> {
 /// at its final size and never grows: `Mnemonic::to_string` writes into a growing string instead,
 /// and every growth would leave an unwiped copy of the first words in freed memory.
 pub(crate) fn phrase_text(phrase: &Mnemonic) -> Zeroizing<String> {
-    let mut text = Zeroizing::new(String::with_capacity(
-        phrase.word_count() * (LONGEST_WORD + 1),
-    ));
+    let mut text = Zeroizing::new(String::with_capacity(text_capacity(phrase)));
+    write_words(phrase, &mut text);
+    text
+}
+
+/// [`phrase_text`] in a buffer that is locked before the words are written into it, for a phrase
+/// that a long operation holds, such as a recovered one or a new one.
+pub(crate) fn locked_phrase_text(phrase: &Mnemonic) -> LockedText {
+    let Ok(text) = LockedText::build::<Infallible>(text_capacity(phrase), |text| {
+        write_words(phrase, text);
+        Ok(())
+    });
+    text
+}
+
+/// The final size of the text of `phrase`: each word with at most eight letters and a space.
+fn text_capacity(phrase: &Mnemonic) -> usize {
+    phrase.word_count() * (LONGEST_WORD + 1)
+}
+
+fn write_words(phrase: &Mnemonic, text: &mut String) {
     for (position, word) in phrase.words().enumerate() {
         if position > 0 {
             text.push(' ');
         }
         text.push_str(word);
     }
-    text
+}
+
+/// The English BIP39 phrase of `entropy`, 16 to 32 bytes in steps of four, written into a buffer
+/// that is reserved at its final size and wiped when dropped, so that no growing copy of the words
+/// is left in freed memory (AUD-005-SEC001, AUD-008-SEC002). For a program that draws its own
+/// entropy, as `mhfe new` does. Another length is a programming error: `MhfeError::Internal`.
+pub fn phrase_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>, MhfeError> {
+    Ok(phrase_text(&mnemonic_of(entropy)?))
+}
+
+/// [`phrase_from_entropy`] in a buffer that is locked before the words are written into it.
+pub(crate) fn locked_phrase_from_entropy(entropy: &[u8]) -> Result<LockedText, MhfeError> {
+    Ok(locked_phrase_text(&mnemonic_of(entropy)?))
+}
+
+fn mnemonic_of(entropy: &[u8]) -> Result<Mnemonic, MhfeError> {
+    Mnemonic::from_entropy_in(Language::English, entropy)
+        .map_err(|error| MhfeError::Internal(error.to_string()))
 }
 
 /// Checks a container before anything is computed and returns it as read: every word written
@@ -147,10 +193,16 @@ mod tests {
         }
         let read = read_phrase(ZERO_12).unwrap();
         assert_eq!(read.capacity(), 12 * (LONGEST_WORD + 1));
-        // AUD-008-SEC002: the public formatter that mhfe new uses, with the BIP39 vector 7f…7f.
-        let new = crate::phrase_from_entropy(&[0x7f; 32]).unwrap();
+        // AUD-008-SEC002: the public formatter, with the BIP39 vector 7f…7f.
+        let new = phrase_from_entropy(&[0x7f; 32]).unwrap();
         assert!(new.starts_with("legal winner thank year"));
         assert_eq!(new.capacity(), 24 * (LONGEST_WORD + 1));
+        // The locked form that a new or recovered phrase is written into: the same words, in a
+        // buffer of the same size that was locked first.
+        let locked = locked_phrase_from_entropy(&[0x7f; 32]).unwrap();
+        assert_eq!(&*locked, &*new);
+        assert_eq!(locked.capacity(), 24 * (LONGEST_WORD + 1));
+        assert_eq!(locked.is_locked(), cfg!(unix));
     }
 
     #[test]

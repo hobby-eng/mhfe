@@ -1,17 +1,24 @@
 //! Creating a container and recovering a phrase (specification: "Creating a container",
 //! "Recovering a mnemonic" and their suite 4 forms).
 
-use bip39::{Language, Mnemonic};
-use zeroize::Zeroizing;
+use bip39::Mnemonic;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::engine::Argon2Engine;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::engine::NativeEngine;
 use crate::feistel::{Geometry, Permutation};
-use crate::memory::LockedPages;
+use crate::memory::{LockedBytes, LockedPages, LockedText};
 use crate::packing::{self, State};
+use crate::phrase::{self, locked_phrase_from_entropy, phrase_from_entropy};
 use crate::suite::{Suite, ROUNDS};
-use crate::{phrase, MhfeError, Password, WorkFactor};
+use crate::{MhfeError, Password, WorkFactor};
+
+// The self-checks of the cipher and the published vectors they replay; see known_answers.rs.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+pub(crate) mod known_answers;
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+mod published_rounds;
 
 /// Called with the number of the round about to start and the number of rounds in the whole
 /// operation: 12 for a recovery or a check, 24 for an encryption, which recovers its result once
@@ -61,9 +68,47 @@ pub struct RecoveredPhrase {
     _locked: LockedPages,
 }
 
+/// What a recovered phrase is known to be.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecoveryStatus {
+    /// A 12- to 21-word phrase that passed its built-in check: the password and settings are
+    /// right, though which wallet it is only a rehearsal against the wallet shows.
+    Verified,
+    /// From a same-length container, which has no built-in check.
+    NoBuiltInCheck,
+    /// Read as 24 words by automatic detection: for a shorter original the password or a setting
+    /// is wrong.
+    ReadAs24Detected,
+    /// Read as 24 words, as the person chose.
+    ReadAs24Chosen,
+}
+
 impl RecoveredPhrase {
-    fn new(words: usize, verified: bool, phrase: Zeroizing<String>, suite: Suite) -> Self {
-        let locked = LockedPages::of_string(&phrase);
+    /// What the phrase is known to be, for a recovery that took `length`.
+    pub fn status(&self, length: PhraseLength) -> RecoveryStatus {
+        if self.suite == Suite::SameLength {
+            RecoveryStatus::NoBuiltInCheck
+        } else if self.verified {
+            RecoveryStatus::Verified
+        } else if length == PhraseLength::Detect {
+            RecoveryStatus::ReadAs24Detected
+        } else {
+            RecoveryStatus::ReadAs24Chosen
+        }
+    }
+
+    /// Whether a 24-word phrase passes the wallet check that a new wallet can be made with,
+    /// without a BIP39 passphrase (`wallet_check`); `None` for another length, where it does not
+    /// apply. Only a pass means something: a phrase made without the check fails it.
+    pub fn passes_wallet_check_without_passphrase(&self) -> Option<bool> {
+        // A recovered phrase is always valid, so the test cannot fail; an error counts as no pass.
+        (self.words == 24)
+            .then(|| crate::wallet_check::phrase_passes(&self.phrase, "").unwrap_or(false))
+    }
+
+    /// Takes over `phrase`, whose buffer was locked before the words were written into it.
+    fn new(words: usize, verified: bool, phrase: LockedText, suite: Suite) -> Self {
+        let (phrase, locked) = phrase.into_parts();
         Self {
             words,
             verified,
@@ -94,10 +139,9 @@ pub struct NewContainer {
     pub words: Zeroizing<String>,
     /// The suite it was made with, which an application shows after creating it.
     pub suite: Suite,
-    /// The state `X` the check must get back: the packed original, or the entropy itself.
-    source: Zeroizing<Vec<u8>>,
-    // The pages of `source`, kept out of swap while the check runs.
-    _locked: LockedPages,
+    /// The state `X` the check must get back: the packed original, or the entropy itself. It is
+    /// kept out of swap from before the first round until the check is done.
+    source: LockedBytes,
 }
 
 /// MHFE at one work factor, together with the Argon2 engine that computes it.
@@ -120,10 +164,23 @@ impl Mhfe<NativeEngine> {
 
 impl<E: Argon2Engine> Mhfe<E> {
     /// Uses `engine`, which must compute Argon2id at `work.argon2_cost()`: the browser engine,
-    /// or a cheaper one in tests.
-    #[cfg(any(test, target_arch = "wasm32"))]
+    /// the engine of the self-checks that answers only published rounds, or a cheaper one in tests.
+    #[cfg(any(test, not(target_arch = "wasm32"), feature = "browser-core"))]
     pub(crate) fn with_engine(work: WorkFactor, engine: E) -> Self {
         Self { work, engine }
+    }
+
+    /// The engine that computes the rounds, such as the browser engine, whose known answer an
+    /// operation runs again after its last round.
+    pub fn engine(&self) -> &E {
+        &self.engine
+    }
+
+    /// The settings and the engine, for a wrapper that watches the engine's calls without
+    /// changing them, as the self-test's witness of the round keys does.
+    #[cfg(any(test, not(target_arch = "wasm32"), feature = "browser-core"))]
+    pub(crate) fn parts_mut(&mut self) -> (WorkFactor, &mut E) {
+        (self.work, &mut self.engine)
     }
 
     pub fn work_factor(&self) -> WorkFactor {
@@ -156,18 +213,17 @@ impl<E: Argon2Engine> Mhfe<E> {
         suite: Suite,
         on_progress: ProgressCallback<'_>,
     ) -> Result<NewContainer, MhfeError> {
-        let source = phrase::parse(original).map_err(MhfeError::InvalidPhrase)?;
-        let entropy = Zeroizing::new(source.to_entropy());
+        // The entropy and the state are phrase in all but form: both are locked before they are
+        // written, and stay locked through the twelve rounds, while the work area of Argon2 puts
+        // the most pressure on memory.
+        let entropy = locked_entropy(&phrase::parse(original).map_err(MhfeError::InvalidPhrase)?);
         let (geometry, x) = match suite {
-            Suite::TwentyFourWords => (
-                Geometry::SUITE_3,
-                Zeroizing::new(packing::pack(&entropy)?.to_vec()),
-            ),
+            Suite::TwentyFourWords => (Geometry::SUITE_3, packing::pack(&entropy)?),
             // Suite 4 encrypts the entropy itself: there is no room for a check value.
             Suite::SameLength if entropy.len() == packing::STATE_BYTES => {
                 return Err(MhfeError::SameLengthNeedsShortPhrase)
             }
-            Suite::SameLength => (Geometry::same_length(entropy.len())?, entropy.clone()),
+            Suite::SameLength => (Geometry::same_length(entropy.len())?, entropy),
         };
         let y = self.permutation(password, geometry).forward(
             &x,
@@ -175,12 +231,10 @@ impl<E: Argon2Engine> Mhfe<E> {
             None,
         )?;
         reject_fixed_point(&x, &y)?;
-        let locked = LockedPages::of_vec(&x);
         Ok(NewContainer {
             words: phrase_from_entropy(&y)?,
             suite,
             source: x,
-            _locked: locked,
         })
     }
 
@@ -205,7 +259,7 @@ impl<E: Argon2Engine> Mhfe<E> {
             &mut |round| on_progress(ROUNDS + round, ENCRYPTION_ROUNDS),
             None,
         )?;
-        if *recovered == *new.source {
+        if recovered[..] == new.source[..] {
             Ok(())
         } else {
             Err(MhfeError::VerificationFailed)
@@ -246,28 +300,26 @@ impl<E: Argon2Engine> Mhfe<E> {
         }
         let (suite, x) = self.recover_state(container, password, selected, on_progress)?;
         match suite {
-            Suite::TwentyFourWords => {
-                let x = suite_3_state(&x)?;
-                recover(&x, length)
-            }
+            Suite::TwentyFourWords => recover(suite_3_state(&x)?, length),
             Suite::SameLength => Ok(Recovery::Phrase(RecoveredPhrase::new(
                 x.len() / 4 * 3,
                 false,
-                phrase_from_entropy(&x)?,
+                locked_phrase_from_entropy(&x)?,
                 suite,
             ))),
         }
     }
 
     /// Steps 1 and 2 of recovery: checks the container, then computes `X = Perm^-1(Y)` with the
-    /// suite its word count selects.
+    /// suite its word count selects. `X` is written into locked memory, which the caller holds
+    /// while it compares or reads it.
     pub(crate) fn recover_state(
         &mut self,
         container: &str,
         password: &Password,
         selected: Option<Suite>,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<(Suite, Zeroizing<Vec<u8>>), MhfeError> {
+    ) -> Result<(Suite, LockedBytes), MhfeError> {
         let container = phrase::parse_container(container).map_err(MhfeError::InvalidContainer)?;
         let (suite, y) = container_state(&container)?;
         match selected {
@@ -314,17 +366,11 @@ fn geometry(suite: Suite, y: &[u8]) -> Result<Geometry, MhfeError> {
     }
 }
 
-/// A recovered suite 3 state as the fixed 256-bit array the packing works on.
-pub(crate) fn suite_3_state(x: &[u8]) -> Result<Zeroizing<State>, MhfeError> {
-    let mut state = Zeroizing::new([0u8; packing::STATE_BYTES]);
-    if x.len() != state.len() {
-        return Err(MhfeError::Internal(format!(
-            "a suite 3 state has 32 bytes, not {}",
-            x.len()
-        )));
-    }
-    state.copy_from_slice(x);
-    Ok(state)
+/// A recovered suite 3 state as the fixed 256-bit array the packing works on, read in place: a
+/// copy would lie outside the locked buffer that holds it.
+pub(crate) fn suite_3_state(x: &[u8]) -> Result<&State, MhfeError> {
+    x.try_into()
+        .map_err(|_| MhfeError::Internal(format!("a suite 3 state has 32 bytes, not {}", x.len())))
 }
 
 /// Step 3 of recovery: reads `X` as the chosen length, or tests the short layouts.
@@ -367,9 +413,8 @@ pub(crate) fn reject_fixed_point(x: &[u8], y: &[u8]) -> Result<(), MhfeError> {
 pub fn other_detected_lengths(original: &str) -> Result<Vec<usize>, MhfeError> {
     let source = phrase::parse(original).map_err(MhfeError::InvalidPhrase)?;
     let words = source.word_count();
-    let entropy = Zeroizing::new(source.to_entropy());
-    let x = packing::pack(&entropy)?;
-    Ok(packing::matching_short_lengths(&x)
+    let x = packing::pack(&locked_entropy(&source))?;
+    Ok(packing::matching_short_lengths(suite_3_state(&x)?)
         .into_iter()
         .filter(|&length| length != words)
         .collect())
@@ -385,23 +430,22 @@ pub(crate) fn container_state(
 
 /// Reads `X` as a phrase of `words` words; a short length must pass its check.
 pub(crate) fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
-    let entropy = packing::unpack(x, words)?;
     Ok(RecoveredPhrase::new(
         words,
         words < 24,
-        phrase_from_entropy(&entropy)?,
+        locked_phrase_from_entropy(packing::unpack(x, words)?)?,
         Suite::TwentyFourWords,
     ))
 }
 
-/// The English BIP39 phrase of `entropy`, 16 to 32 bytes in steps of four, written into a buffer
-/// that is reserved at its final size and wiped when dropped, so that no growing copy of the words
-/// is left in freed memory (AUD-005-SEC001, AUD-008-SEC002). For a program that draws its own
-/// entropy, as `mhfe new` does. Another length is a programming error: `MhfeError::Internal`.
-pub fn phrase_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>, MhfeError> {
-    let mnemonic = Mnemonic::from_entropy_in(Language::English, entropy)
-        .map_err(|error| MhfeError::Internal(error.to_string()))?;
-    Ok(phrase::phrase_text(&mnemonic))
+/// The entropy of `phrase` in a buffer that is locked before it is written into it, read from the
+/// array that bip39 fills on the stack, which is wiped here, rather than from a vector it would
+/// leave unlocked.
+fn locked_entropy(phrase: &Mnemonic) -> LockedBytes {
+    let (mut array, length) = phrase.to_entropy_array();
+    let entropy = LockedBytes::copy_of(&array[..length]);
+    array.zeroize();
+    entropy
 }
 
 #[cfg(test)]
@@ -453,6 +497,30 @@ mod tests {
             Recovery::Phrase(phrase) => phrase,
             Recovery::Ambiguous(_) => panic!("unexpected ambiguous result"),
         }
+    }
+
+    /// The entropy and the state of an encryption are locked before the first round and stay so
+    /// until its check is done, and a recovered state is written into locked memory (AUD-010).
+    #[test]
+    fn the_state_of_an_operation_is_held_in_locked_memory() {
+        let password = Password::new("public test password").unwrap();
+        let mut mhfe = reduced();
+        for suite in [Suite::TwentyFourWords, Suite::SameLength] {
+            let new = mhfe
+                .encrypt_unchecked(ZERO_12, &password, suite, &mut no_progress())
+                .unwrap();
+            assert_eq!(new.source.is_locked(), cfg!(unix));
+            mhfe.check_new_container(&new, &password, &mut no_progress())
+                .unwrap();
+            let (_, x) = mhfe
+                .recover_state(&new.words, &password, None, &mut no_progress())
+                .unwrap();
+            assert_eq!(x[..], new.source[..]);
+            assert_eq!(x.is_locked(), cfg!(unix));
+        }
+        let entropy = locked_entropy(&phrase::parse(LEGAL_24).unwrap());
+        assert_eq!(entropy[..], [0x7f; 32]);
+        assert_eq!(entropy.is_locked(), cfg!(unix));
     }
 
     #[test]

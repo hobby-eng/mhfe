@@ -106,22 +106,47 @@ pub fn choose_here(
     answers: &[Answer],
     help: Option<Help>,
 ) -> Result<Option<usize>, Failure> {
+    run_list(question, answers, help, Some(0))
+}
+
+/// [`choose`] with no answer highlighted at the start, for a question whose answer must be the
+/// person's own: Enter selects nothing until an arrow key has highlighted an answer, and a digit
+/// chooses at once. `help` is shown on ?, as in [`choose`].
+pub fn choose_without_default(
+    question: &Question,
+    answers: &[Answer],
+    help: Option<Help>,
+) -> Result<Option<usize>, Failure> {
+    flow::step();
+    run_list(question, answers, help, None)
+}
+
+/// The list of [`choose_here`], starting with `start` highlighted, or none.
+fn run_list(
+    question: &Question,
+    answers: &[Answer],
+    help: Option<Help>,
+    start: Option<usize>,
+) -> Result<Option<usize>, Failure> {
     let help_hint = help.as_ref().map(|help| help.hint);
+    let last = answers.len() - 1;
     // The terminal reads single keys before the list appears, as a hidden prompt does, so that a
     // key pressed as soon as the list shows is read as a key and never echoed.
     hidden_input::with_keys(|next_key| {
-        let mut selected = 0;
+        let mut selected = start;
         let mut drawn = draw(question, answers, selected, help_hint);
-        loop {
-            match next_key()? {
-                Key::Up => selected = (selected + answers.len() - 1) % answers.len(),
-                Key::Down => selected = (selected + 1) % answers.len(),
-                Key::Enter => break,
-                Key::Digit(number) if usize::from(number) <= answers.len() => {
-                    selected = usize::from(number) - 1;
-                    break;
+        let selected = loop {
+            match (next_key()?, selected) {
+                (Key::Up, Some(index)) => selected = Some(index.checked_sub(1).unwrap_or(last)),
+                (Key::Up, None) => selected = Some(last),
+                (Key::Down, Some(index)) => selected = Some((index + 1) % answers.len()),
+                (Key::Down, None) => selected = Some(0),
+                (Key::Enter, Some(index)) => break index,
+                (Key::Enter, None) => continue,
+                (Key::Digit(number), _) if usize::from(number) <= answers.len() => {
+                    break usize::from(number) - 1;
                 }
-                Key::Help => {
+                (Key::Help, _) => {
                     let Some(help) = &help else { continue };
                     // The explanation takes the place of the block, which is drawn again below it.
                     write_control(&redraw_from(drawn.rows()))?;
@@ -130,15 +155,15 @@ pub fn choose_here(
                     drawn = draw(question, answers, selected, help_hint);
                     continue;
                 }
-                Key::Quit => {
+                (Key::Quit, _) => {
                     write_control(&redraw_from(drawn.rows()))?;
                     return Ok(None);
                 }
-                Key::Digit(_) | Key::Other => continue,
+                (Key::Digit(_) | Key::Other, _) => continue,
             }
             write_control(&redraw_from(drawn.rows()))?;
             drawn = draw(question, answers, selected, help_hint);
-        }
+        };
         write_control(&redraw_from(drawn.rows()))?;
         if let Some(label) = question.record {
             record(label, &answers[selected].label);
@@ -207,7 +232,7 @@ fn current_columns() -> usize {
 fn draw(
     question: &Question,
     answers: &[Answer],
-    selected: usize,
+    selected: Option<usize>,
     help_hint: Option<&str>,
 ) -> DrawnRows {
     let mut lines = draw_question_rows(question);
@@ -217,7 +242,10 @@ fn draw(
         .collect();
     lines.extend(draw_entry_rows(&entries, selected));
     lines.line("");
-    for line in style::wrap(&hint(answers.len(), help_hint), style::TEXT_WIDTH) {
+    for line in style::wrap(
+        &hint(answers.len(), help_hint, selected.is_some()),
+        style::TEXT_WIDTH,
+    ) {
         lines.line(&paint(MUTED, line));
     }
     lines
@@ -263,18 +291,30 @@ pub fn fits(explanation: &[&str]) -> bool {
         .all(|line| TEXT_INDENT.len() + line.chars().count() <= LINE_WIDTH)
 }
 
-/// "↑ ↓ choose · Enter selects · 1 or 2 at once · Esc cancels", with the help before Esc. q
-/// cancels too but is not offered: a keyboard layout may have no q. Only the first nine answers
-/// have a digit key.
-fn hint(answers: usize, help_hint: Option<&str>) -> String {
+/// The keys of a list: "↑ ↓ choose · Enter selects · 1 or 2 at once · Esc cancels", with the help
+/// before Esc. q cancels too but is not offered: a keyboard layout may have no q. Only the first
+/// nine answers have a digit key. With no answer `marked` yet, Enter selects nothing, so the hint
+/// says it waits for one.
+fn hint(answers: usize, help_hint: Option<&str>, marked: bool) -> String {
     let numbers = match answers {
         2 => "1 or 2".to_owned(),
         _ => format!("1 to {}", answers.min(DIGIT_KEYS)),
     };
     let help = help_hint
-        .map(|hint| format!("{hint} · "))
+        .map(|hint| format!(" · {hint}"))
         .unwrap_or_default();
-    format!("↑ ↓ choose · Enter selects · {numbers} at once · {help}Esc cancels")
+    let enter = if marked {
+        "Enter selects"
+    } else {
+        "Enter selects once one is marked"
+    };
+    let line = format!("↑ ↓ choose · {enter} · {numbers} at once{help} · Esc cancels");
+    if line.chars().count() <= LINE_WIDTH {
+        return line;
+    }
+    // Too long for one line, as with no answer marked and an explanation behind ?: the keys that
+    // move and explain first, then how to choose and how to leave, each part whole on its line.
+    format!("↑ ↓ choose · {numbers} at once{help}\n{enter} · Esc cancels")
 }
 
 /// Answers that a digit key chooses at once: 1 to 9. Further answers are reached with the arrows
@@ -286,10 +326,11 @@ pub(crate) const DIGIT_KEYS: usize = 9;
 /// highlighted entry has a cyan marker and a bold label, so that it stands out also without
 /// colours. The notes line up after the longest label and are shortened to fit the width.
 pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
-    draw_entry_rows(entries, selected).rows()
+    draw_entry_rows(entries, Some(selected)).rows()
 }
 
-fn draw_entry_rows(entries: &[(&str, &str)], selected: usize) -> DrawnRows {
+/// The entries with `selected` highlighted, or none.
+fn draw_entry_rows(entries: &[(&str, &str)], selected: Option<usize>) -> DrawnRows {
     let label_width = entries
         .iter()
         .map(|(label, _)| label.chars().count())
@@ -302,7 +343,7 @@ fn draw_entry_rows(entries: &[(&str, &str)], selected: usize) -> DrawnRows {
         } else {
             " ".to_owned()
         };
-        let (marker, shown_label) = if index == selected {
+        let (marker, shown_label) = if Some(index) == selected {
             (paint(ACCENT, "›"), paint(STRONG, label))
         } else {
             (" ".to_owned(), (*label).to_owned())
@@ -367,18 +408,40 @@ mod tests {
     #[test]
     fn the_hint_names_the_numbers_and_the_help() {
         assert_eq!(
-            hint(2, None),
+            hint(2, None, true),
             "↑ ↓ choose · Enter selects · 1 or 2 at once · Esc cancels"
         );
         assert_eq!(
-            hint(4, Some("? explains both")),
+            hint(4, Some("? explains both"), true),
             "↑ ↓ choose · Enter selects · 1 to 4 at once · ? explains both · Esc cancels"
         );
-        assert!(hint(9, Some("? explains both")).chars().count() <= LINE_WIDTH);
+        assert!(hint(9, Some("? explains both"), true).chars().count() <= LINE_WIDTH);
         assert_eq!(
-            hint(12, None),
+            hint(12, None, true),
             "↑ ↓ choose · Enter selects · 1 to 9 at once · Esc cancels"
         );
+        // A list with no answer marked yet: Enter waits for one.
+        assert_eq!(
+            hint(2, None, false),
+            "↑ ↓ choose · Enter selects once one is marked · 1 or 2 at once · Esc cancels"
+        );
+        // With an explanation too, it takes two lines, Enter and Esc together on the second.
+        assert_eq!(
+            hint(2, Some("? explains both"), false),
+            "↑ ↓ choose · 1 or 2 at once · ? explains both\n\
+             Enter selects once one is marked · Esc cancels"
+        );
+        for answers in [2, 4, 12] {
+            for help in [None, Some("? explains both")] {
+                for marked in [true, false] {
+                    let text = hint(answers, help, marked);
+                    assert!(
+                        text.lines().all(|line| line.chars().count() <= LINE_WIDTH),
+                        "{text}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

@@ -2,7 +2,7 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::{wallet_check, PhraseLength, RecoveredPhrase, Recovery, Suite, WordCount};
+use mhfe::{PhraseLength, RecoveredPhrase, Recovery, RecoveryStatus, WordCount};
 
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::Flow;
@@ -115,7 +115,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let flow = Flow::start(&input, Operation::Decrypt.title());
     let work = settings::choose(options.settings, &mut input, Operation::Decrypt)?;
 
-    let (container, _) = terminal::read_container(&mut input, Operation::Decrypt.title())?;
+    let container = terminal::read_container(&mut input, Operation::Decrypt.title())?;
     let password = terminal::read_password(&mut input, Operation::Decrypt)?;
     let mut mhfe = settings::reserve_memory(work)?;
     eprintln!();
@@ -125,10 +125,15 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     );
 
     let mut progress = Progress::start();
-    let recovery = mhfe.decrypt(&container, &password, length, &mut |round, rounds| {
-        progress.round_starts(round, rounds);
-        Ok(())
-    })?;
+    let recovery = mhfe.decrypt(
+        container.words(),
+        &password,
+        length,
+        &mut |round, rounds| {
+            progress.round_starts(round, rounds);
+            Ok(())
+        },
+    )?;
     progress.finish();
 
     // The result appears on a screen of its own, which is cleared once the person is done.
@@ -154,37 +159,45 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
 fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
     eprintln!();
-    if phrase.suite == Suite::SameLength {
-        style::warn_now(
-            &format!(
-                "Not verified: a {}-word container has no built-in check.",
+    match phrase.status(length) {
+        RecoveryStatus::NoBuiltInCheck => {
+            style::warn_now(
+                &format!(
+                    "Not verified: a {}-word container has no built-in check.",
+                    phrase.words
+                ),
+                "Confirm it against your wallet with mhfe check.",
+            );
+            style::more(readme::DECRYPT);
+        }
+        RecoveryStatus::Verified => {
+            style::ok(format!(
+                "{} a {}-word phrase that passed its built-in check.",
+                paint(style::GOOD, "Verified:"),
                 phrase.words
-            ),
-            "Confirm it against your wallet with mhfe check.",
-        );
-        style::more(readme::DECRYPT);
-    } else if phrase.verified {
-        style::ok(format!(
-            "{} a {}-word phrase that passed its built-in check.",
-            paint(style::GOOD, "Verified:"),
-            phrase.words
-        ));
-        // The built-in check confirms the password and settings, never which wallet this is.
-        style::hint("It confirms the password, not the wallet: mhfe check does that.");
-    } else if length == PhraseLength::Detect {
-        style::warn_now(
-            "Not verified: read as 24 words.",
-            "For a shorter original, the password or a setting is wrong.",
-        );
-        style::more(readme::DECRYPT);
-    } else {
-        style::warn_now(
-            "Not verified: read as 24 words, as you chose.",
-            "Compare it with your wallet.",
-        );
-        style::more(readme::DECRYPT);
+            ));
+            // The built-in check confirms the password and settings, never which wallet this is.
+            style::hint("It confirms the password, not the wallet: mhfe check does that.");
+        }
+        RecoveryStatus::ReadAs24Detected => {
+            style::warn_now(
+                "Not verified: read as 24 words.",
+                "For a shorter original, the password or a setting is wrong.",
+            );
+            style::more(readme::DECRYPT);
+        }
+        RecoveryStatus::ReadAs24Chosen => {
+            style::warn_now(
+                "Not verified: read as 24 words, as you chose.",
+                "Compare it with your wallet.",
+            );
+            style::more(readme::DECRYPT);
+        }
     }
-    if passes_check_without_passphrase(phrase) {
+    // Only a pass is reported: a phrase without the check fails it, so a failure means something
+    // only to an owner who knows the wallet was made with it. With a passphrase the check is
+    // tested by mhfe check, which asks for it.
+    if phrase.passes_wallet_check_without_passphrase() == Some(true) {
         style::ok("It passes its 16-bit check without a BIP39 passphrase.");
     }
     eprintln!();
@@ -196,15 +209,6 @@ fn show_single(phrase: &RecoveredPhrase, length: PhraseLength, input: &Input) {
         )
     );
     print_result(phrase, input);
-}
-
-/// Whether a 24-word phrase passes the check that a new wallet can be made with, without a BIP39
-/// passphrase (mhfe::wallet_check). Only a pass is reported: a phrase without the check fails it,
-/// so a failure means something only to an owner who knows the wallet was made with it. With a
-/// passphrase the check is tested by mhfe check, which asks for it.
-fn passes_check_without_passphrase(phrase: &RecoveredPhrase) -> bool {
-    // A recovered phrase is always valid, so the test cannot fail; an error would count as no pass.
-    phrase.words == 24 && wallet_check::phrase_passes(&phrase.phrase, "").unwrap_or(false)
 }
 
 fn show_ambiguous(candidates: &[RecoveredPhrase], input: &Input) {

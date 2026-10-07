@@ -1,5 +1,5 @@
 //! Argon2id in the browser: the Emscripten build of the same reference C code, which the worker
-//! (web/mhfe-worker.js) hands to the WebAssembly core as a JavaScript object.
+//! (web/core-worker.js) hands to the WebAssembly core as a JavaScript object.
 
 use wasm_bindgen::prelude::*;
 
@@ -27,6 +27,11 @@ extern "C" {
         passes: u32,
         key: &mut [u8],
     ) -> Result<(), JsValue>;
+
+    /// Grows the Argon2 build's memory to the work area of `memory_kib` once and frees it again,
+    /// so that a session learns at its start whether the browser can provide it.
+    #[wasm_bindgen(method, catch)]
+    fn reserve(this: &JsArgon2, memory_kib: u32) -> Result<(), JsValue>;
 }
 
 pub struct BrowserEngine {
@@ -48,6 +53,62 @@ impl BrowserEngine {
             cost: work.argon2_cost(),
         })
     }
+
+    /// Reserves the Argon2 work area now rather than at the first round: a session of several
+    /// operations then fails at once, before anything is asked, when the browser cannot give it.
+    pub fn reserve(&self) -> Result<(), MhfeError> {
+        self.argon2
+            .reserve(self.cost.memory_kib)
+            .map_err(|error| error_of(error, self.cost))
+    }
+
+    /// Runs the known answer of the page's Argon2 build ([`BrowserArgon2Check::verify`]): an
+    /// operation calls it before its first round and after its last, so that a build that went
+    /// wrong in between, such as in the optimized code a browser makes of a long loop, is not
+    /// trusted with the result.
+    ///
+    /// [`BrowserArgon2Check::verify`]: super::BrowserArgon2Check::verify
+    pub fn verify_known_answer(&self) -> Result<(), MhfeError> {
+        super::BrowserArgon2Check::new(&self.argon2).verify()
+    }
+}
+
+/// Fills `key` with Argon2id(password, salt) at `cost` through the page's Argon2 build, as every
+/// call of the engine and of its known-answer check does.
+pub(super) fn derive_with(
+    argon2: &JsArgon2,
+    password: &[u8],
+    salt: &[u8; SALT_BYTES],
+    cost: Argon2Cost,
+    key: &mut [u8; KEY_BYTES],
+) -> Result<(), MhfeError> {
+    super::mark_key_unwritten(key);
+    argon2
+        .derive(password, salt, cost.memory_kib, cost.passes, key)
+        .map_err(|error| error_of(error, cost))?;
+    // A bridge that wrote into a stale view of this module's memory, or not at all, leaves the
+    // key as it was.
+    super::check_key_written(key)
+}
+
+/// The error of a failed call of the Argon2 build: "MEMORY_ALLOCATION_FAILED: …" becomes
+/// [`MhfeError::MemoryAllocation`], anything else [`MhfeError::Argon2`].
+fn error_of(error: JsValue, cost: Argon2Cost) -> MhfeError {
+    let message = error
+        .as_string()
+        .or_else(|| {
+            js_sys::Reflect::get(&error, &"message".into())
+                .ok()?
+                .as_string()
+        })
+        .unwrap_or_else(|| "the browser Argon2 engine failed".to_owned());
+    if message.starts_with("MEMORY_ALLOCATION_FAILED") {
+        MhfeError::MemoryAllocation {
+            bytes: cost.memory_bytes(),
+        }
+    } else {
+        MhfeError::Argon2(message)
+    }
 }
 
 impl Argon2Engine for BrowserEngine {
@@ -57,24 +118,6 @@ impl Argon2Engine for BrowserEngine {
         salt: &[u8; SALT_BYTES],
         key: &mut [u8; KEY_BYTES],
     ) -> Result<(), MhfeError> {
-        self.argon2
-            .derive(password, salt, self.cost.memory_kib, self.cost.passes, key)
-            .map_err(|error| {
-                let message = error
-                    .as_string()
-                    .or_else(|| {
-                        js_sys::Reflect::get(&error, &"message".into())
-                            .ok()?
-                            .as_string()
-                    })
-                    .unwrap_or_else(|| "the browser Argon2 engine failed".to_owned());
-                if message.starts_with("MEMORY_ALLOCATION_FAILED") {
-                    MhfeError::MemoryAllocation {
-                        bytes: self.cost.memory_bytes(),
-                    }
-                } else {
-                    MhfeError::Argon2(message)
-                }
-            })
+        derive_with(&self.argon2, password, salt, self.cost, key)
     }
 }

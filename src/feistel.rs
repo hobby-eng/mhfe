@@ -12,6 +12,8 @@
 //! M_i = Trunc_h(HMAC-SHA-256(K_i, DS_MASK || BE32(MEM) || BE32(PIM) || BE32(ENT) || BE32(i) || R))
 //! ```
 
+use std::convert::Infallible;
+
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 use hmac::{Hmac, KeyInit, Mac};
@@ -19,6 +21,7 @@ use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
+use crate::memory::LockedBytes;
 use crate::packing::STATE_BYTES;
 use crate::suite::{DS_MASK, DS_SALT, ROUNDS, SAME_LENGTH_DS_MASK, SAME_LENGTH_DS_SALT};
 use crate::{MhfeError, Password, WorkFactor};
@@ -26,8 +29,13 @@ use crate::{MhfeError, Password, WorkFactor};
 type Blake2b256 = Blake2b<U32>;
 type HmacSha256 = Hmac<Sha256>;
 
-/// The left and right half of a state, wiped when dropped.
-type Halves = (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
+/// The settings before R in a round message: `BE32(MEM)`, `BE32(PIM)`, `BE32(i)` and, in suite 4,
+/// `BE32(ENT)`, four bytes each.
+const MESSAGE_SETTINGS_BYTES: usize = 16;
+
+/// The left and right half of a state, kept out of swap through every round, and wiped when
+/// dropped: until the rounds have mixed it, the state is the phrase in all but form.
+type Halves = (LockedBytes, LockedBytes);
 
 /// Called with the number (1 to 12) of each round before it starts. Returning an error, such as
 /// [`MhfeError::Cancelled`], stops the permutation before that round.
@@ -115,21 +123,21 @@ impl Permutation<'_> {
         x: &[u8],
         on_round: RoundCallback<'_>,
         mut trace: Option<&mut Vec<RoundTrace>>,
-    ) -> Result<Zeroizing<Vec<u8>>, MhfeError> {
+    ) -> Result<LockedBytes, MhfeError> {
         let (mut left, mut right) = self.split(x)?;
         for round in 0..ROUNDS {
             on_round(round + 1)?;
             let values = self.round_values(round, &right)?;
-            let before = join(&left, &right);
-            // L_{i+1} = R_i and R_{i+1} = L_i XOR M_i.
-            let next_right = xor(&left, &values.mask);
-            left.copy_from_slice(&right);
-            right.copy_from_slice(&next_right);
-            if let Some(trace) = trace.as_deref_mut() {
+            let before = trace.is_some().then(|| join(&left, &right));
+            // L_{i+1} = R_i and R_{i+1} = L_i XOR M_i, in place: the left half takes the mask,
+            // then the two halves trade places, each in its own locked buffer.
+            xor_in_place(&mut left, &values.mask);
+            std::mem::swap(&mut left, &mut right);
+            if let (Some(trace), Some(before)) = (trace.as_deref_mut(), before) {
                 trace.push(values.into_trace(round, &before, &join(&left, &right)));
             }
         }
-        Ok(join(&left, &right))
+        Ok(locked_join(&left, &right))
     }
 
     /// `X = Perm^-1(Y)`: rounds 11 down to 0. The callback still counts from 1 to 12.
@@ -138,22 +146,23 @@ impl Permutation<'_> {
         y: &[u8],
         on_round: RoundCallback<'_>,
         mut trace: Option<&mut Vec<RoundTrace>>,
-    ) -> Result<Zeroizing<Vec<u8>>, MhfeError> {
+    ) -> Result<LockedBytes, MhfeError> {
         let (mut left, mut right) = self.split(y)?;
         for (step, round) in (0..ROUNDS).rev().enumerate() {
             on_round(step as u32 + 1)?;
             // R_i = L_{i+1}, so the mask comes from the current left half;
             // then L_i = R_{i+1} XOR M_i.
             let values = self.round_values(round, &left)?;
-            let before = join(&left, &right);
-            let previous_left = xor(&right, &values.mask);
-            right.copy_from_slice(&left);
-            left.copy_from_slice(&previous_left);
-            if let Some(trace) = trace.as_deref_mut() {
+            let before = trace.is_some().then(|| join(&left, &right));
+            // In place, as in the forward direction: the right half takes the mask, then the two
+            // halves trade places.
+            xor_in_place(&mut right, &values.mask);
+            std::mem::swap(&mut left, &mut right);
+            if let (Some(trace), Some(before)) = (trace.as_deref_mut(), before) {
                 trace.push(values.into_trace(round, &before, &join(&left, &right)));
             }
         }
-        Ok(join(&left, &right))
+        Ok(locked_join(&left, &right))
     }
 
     /// `RoundMask(i, R)` together with the salt and key it passes through.
@@ -181,17 +190,17 @@ impl Permutation<'_> {
             )));
         }
         let (left, right) = state.split_at(self.geometry.half_bytes);
-        Ok((
-            Zeroizing::new(left.to_vec()),
-            Zeroizing::new(right.to_vec()),
-        ))
+        Ok((LockedBytes::copy_of(left), LockedBytes::copy_of(right)))
     }
 }
 
 /// Message, salt, Argon2id key and mask of one round; wiped when dropped.
 #[derive(Zeroize, ZeroizeOnDrop)]
 struct RoundValues {
-    message: Vec<u8>,
+    /// Holds R through the Argon2 call of the round, locked from before R was written into it;
+    /// it wipes itself when dropped, before its pages are unlocked.
+    #[zeroize(skip)]
+    message: LockedBytes,
     salt: [u8; SALT_BYTES],
     key: [u8; KEY_BYTES],
     mask: Vec<u8>,
@@ -202,7 +211,8 @@ impl RoundValues {
         RoundTrace {
             round,
             state_before: before.to_vec(),
-            message: std::mem::take(&mut self.message),
+            // A trace is a test vector of public inputs: its copies need no lock.
+            message: self.message.to_vec(),
             salt: self.salt,
             key: self.key,
             mask: std::mem::take(&mut self.mask),
@@ -218,16 +228,20 @@ pub(crate) fn round_message(
     work: WorkFactor,
     round: u32,
     right: &[u8],
-) -> Vec<u8> {
-    // Reserved at full size, so the message holding R is never copied by a reallocation.
-    let mut message = Vec::with_capacity(16 + right.len());
-    message.extend_from_slice(&work.memory_level().to_be_bytes());
-    message.extend_from_slice(&work.pim().to_be_bytes());
-    if let Some(bits) = geometry.entropy_bits {
-        message.extend_from_slice(&bits.to_be_bytes());
-    }
-    message.extend_from_slice(&round.to_be_bytes());
-    message.extend_from_slice(right);
+) -> LockedBytes {
+    // R is the phrase in all but form in the first rounds, so the message is written into a
+    // buffer locked first, reserved at its full size so that it never moves.
+    let Ok(message) =
+        LockedBytes::build::<Infallible>(MESSAGE_SETTINGS_BYTES + right.len(), |message| {
+            message.extend_from_slice(&work.memory_level().to_be_bytes());
+            message.extend_from_slice(&work.pim().to_be_bytes());
+            if let Some(bits) = geometry.entropy_bits {
+                message.extend_from_slice(&bits.to_be_bytes());
+            }
+            message.extend_from_slice(&round.to_be_bytes());
+            message.extend_from_slice(right);
+            Ok(())
+        });
     message
 }
 
@@ -255,6 +269,18 @@ pub(crate) fn round_mask(geometry: Geometry, key: &[u8; KEY_BYTES], message: &[u
     mask
 }
 
+/// The state after the last round, written into a buffer that is locked first: after an
+/// inverse it is the recovered phrase in all but form.
+fn locked_join(left: &[u8], right: &[u8]) -> LockedBytes {
+    let Ok(state) = LockedBytes::build::<Infallible>(left.len() + right.len(), |state| {
+        state.extend_from_slice(left);
+        state.extend_from_slice(right);
+        Ok(())
+    });
+    state
+}
+
+/// A state for a trace alone, never needed otherwise: a copy outside the locked halves.
 fn join(left: &[u8], right: &[u8]) -> Zeroizing<Vec<u8>> {
     let mut state = Zeroizing::new(Vec::with_capacity(left.len() + right.len()));
     state.extend_from_slice(left);
@@ -262,8 +288,11 @@ fn join(left: &[u8], right: &[u8]) -> Zeroizing<Vec<u8>> {
     state
 }
 
-fn xor(a: &[u8], b: &[u8]) -> Zeroizing<Vec<u8>> {
-    Zeroizing::new(a.iter().zip(b).map(|(x, y)| x ^ y).collect())
+/// `half ^= mask`, in the half's own buffer.
+fn xor_in_place(half: &mut [u8], mask: &[u8]) {
+    for (byte, mask_byte) in half.iter_mut().zip(mask) {
+        *byte ^= mask_byte;
+    }
 }
 
 #[cfg(test)]
@@ -309,6 +338,29 @@ pub(crate) mod tests {
             .inverse(&y, &mut |_| Ok(()), None)
             .unwrap();
         assert_eq!(*back, x);
+    }
+
+    /// The halves, the message of each round, which holds R through its Argon2 call, and the
+    /// result are held in locked memory: until the rounds have mixed it, the state is the phrase
+    /// in all but form (AUD-010).
+    #[test]
+    fn the_state_is_held_in_locked_memory() {
+        let password = Password::new("public test password").unwrap();
+        let mut engine = HashEngine;
+        let mut permutation = permutation(&mut engine, &password);
+        let x = [7u8; STATE_BYTES];
+        let (left, right) = permutation.split(&x).unwrap();
+        assert_eq!(
+            (left.is_locked(), right.is_locked()),
+            (cfg!(unix), cfg!(unix))
+        );
+        let values = permutation.round_values(0, &right).unwrap();
+        assert_eq!(values.message.is_locked(), cfg!(unix));
+        let y = permutation.forward(&x, &mut |_| Ok(()), None).unwrap();
+        assert_eq!(y.is_locked(), cfg!(unix));
+        let back = permutation.inverse(&y, &mut |_| Ok(()), None).unwrap();
+        assert_eq!(*back, x);
+        assert_eq!(back.is_locked(), cfg!(unix));
     }
 
     #[test]

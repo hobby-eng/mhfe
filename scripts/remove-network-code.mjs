@@ -2,7 +2,7 @@
 // code that could fetch anything, not even code that never runs.
 //
 //   node scripts/remove-network-code.mjs argon2 dist/argon2-mt.js dist/argon2-st.js
-//   node scripts/remove-network-code.mjs glue target/wasm-bindgen/mhfe_core.js
+//   node scripts/remove-network-code.mjs glue target/wasm-bindgen/mhfe.js
 //
 // Emscripten and wasm-bindgen always emit loaders that fetch a WebAssembly file by URL. MHFE never
 // uses them: the Argon2 builds embed their WebAssembly (SINGLE_FILE) and read it synchronously,

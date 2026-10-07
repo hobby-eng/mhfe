@@ -98,19 +98,50 @@ impl Argon2Engine for NativeEngine {
         salt: &[u8; SALT_BYTES],
         key: &mut [u8; KEY_BYTES],
     ) -> Result<(), MhfeError> {
-        let inputs = Argon2Inputs {
-            password,
-            salt,
-            secret: &[],
-            associated_data: &[],
-            passes: self.cost.passes,
-            memory_kib: self.cost.memory_kib,
-            lanes: LANES,
-            threads: LANES,
-            version: ARGON2_VERSION_13,
-            ssse3: self.ssse3,
-        };
-        ffi::argon2id(&inputs, &mut self.work_area, key)
+        let inputs = mhfe_inputs(password, salt, self.cost, self.ssse3);
+        guarded_call(ffi::argon2id, &inputs, &mut self.work_area, key)
+    }
+}
+
+/// One Argon2 call of the C code into a work area: [`ffi::argon2id`], or a stand-in in the tests
+/// of the known-answer checks.
+pub(super) type Call = fn(&Argon2Inputs<'_>, &mut WorkArea, &mut [u8]) -> Result<(), MhfeError>;
+
+/// Runs `call` into `key` behind the guard every engine puts around its Argon2 call: the key is
+/// marked unwritten first, and a call that leaves it so or gives only zeros is refused
+/// ([`super::check_key_written`]). The engine and its known-answer checks (known_answers.rs) both
+/// call Argon2 through here, so that the checks run the guard the engine runs.
+pub(super) fn guarded_call(
+    call: Call,
+    inputs: &Argon2Inputs<'_>,
+    work_area: &mut WorkArea,
+    key: &mut [u8; KEY_BYTES],
+) -> Result<(), MhfeError> {
+    super::mark_key_unwritten(key);
+    call(inputs, work_area, key)?;
+    super::check_key_written(key)
+}
+
+/// The inputs of one Argon2id call as MHFE makes it: version 1.3, four lanes on four threads, an
+/// empty secret and empty associated data, at `cost`. The engine and its known-answer check
+/// (known_answers.rs) both build their calls here, so the check runs the call the engine runs.
+pub(super) fn mhfe_inputs<'a>(
+    password: &'a [u8],
+    salt: &'a [u8; SALT_BYTES],
+    cost: Argon2Cost,
+    ssse3: bool,
+) -> Argon2Inputs<'a> {
+    Argon2Inputs {
+        password,
+        salt,
+        secret: &[],
+        associated_data: &[],
+        passes: cost.passes,
+        memory_kib: cost.memory_kib,
+        lanes: LANES,
+        threads: LANES,
+        version: ARGON2_VERSION_13,
+        ssse3,
     }
 }
 

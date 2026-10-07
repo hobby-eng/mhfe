@@ -25,6 +25,11 @@ pub enum MhfeError {
     NoBuiltInCheck {
         container_words: usize,
     },
+    /// The wallet check was asked for a same-length container, whose phrase is never one drawn to
+    /// pass it ([`crate::ContainerFacts::offers_wallet_check`]).
+    NoWalletCheck {
+        container_words: usize,
+    },
     /// A recovery to re-encrypt has no built-in check, a 24-word original or a same-length
     /// container, and no address or fingerprint was given to confirm it.
     ReferenceRequired,
@@ -65,6 +70,8 @@ pub enum MhfeError {
     InvalidAddress(String),
     InvalidDerivationPath(String),
     InvalidFingerprint(String),
+    /// The BIP39 passphrase given as bytes is not UTF-8 text.
+    InvalidPassphrase,
     /// The computer reports less free memory than the memory level needs.
     NotEnoughMemory {
         needed_bytes: u64,
@@ -82,6 +89,42 @@ pub enum MhfeError {
     },
     /// Argon2 itself reported an error; the text comes from the reference implementation.
     Argon2(String),
+    /// A call that the API does not take, such as an unknown choice or a step out of its order;
+    /// the text says which. The browser bindings report it for what a page passed them.
+    InvalidRequest(String),
+    /// A generated password of this size is not offered: 1 to 32 words or 1 to 64 characters.
+    InvalidPasswordSize(String),
+    /// Dice digits for a word are not five digits from 1 to 6; the value names the word.
+    InvalidDiceRolls(usize),
+    /// A password review choice that the review did not offer, such as a repair at a place
+    /// without one.
+    PasswordRepairNotOffered,
+    /// The wallet check of a new phrase needs a BIP39 passphrase: without one, anyone who sees the
+    /// phrase can test it.
+    WalletCheckNeedsPassphrase,
+    /// The random source failed or gave bytes that cannot be random; nothing was drawn.
+    RandomFailed(String),
+    /// A password typed twice differs from its repetition.
+    PasswordsDiffer,
+    /// A password already used in this session, compared after Unicode normalization.
+    PasswordAlreadyUsed,
+    /// A rekey whose owner has not confirmed that the wallets of other passwords are safe: the new
+    /// container changes them.
+    OtherWalletsNotConfirmed,
+    /// A rekey whose new password and settings would give the same container as the old ones.
+    NewPasswordSameAsOld,
+    /// The recovered phrase was shown to its owner, who said it is not theirs.
+    NotConfirmedByOwner,
+    /// The coin of an address is not one the check knows.
+    InvalidCoin(String),
+    /// A part of the program gave another answer than its known answer in a self-check
+    /// ([`crate::self_check`]): nothing that part computes can be trusted on this computer. The
+    /// component is its label, such as "Repair words (MHFE-REPAIR-1)", and the detail says which
+    /// case differs, never with a secret, a vector's text or a coin's name.
+    SelfCheckFailed {
+        component: String,
+        detail: String,
+    },
     Internal(String),
 }
 
@@ -116,6 +159,12 @@ impl fmt::Display for MhfeError {
                 f,
                 "a container of {container_words} words has no built-in check; compare it with a \
                  receiving address or the master key fingerprint of the wallet instead"
+            ),
+            Self::NoWalletCheck { container_words } => write!(
+                f,
+                "a container of {container_words} words holds a phrase of its own length, which \
+                 has no wallet check; compare it with a receiving address or the master key \
+                 fingerprint of the wallet instead"
             ),
             Self::ReferenceRequired => write!(
                 f,
@@ -200,6 +249,7 @@ impl fmt::Display for MhfeError {
             Self::InvalidFingerprint(reason) => {
                 write!(f, "invalid master key fingerprint: {reason}")
             }
+            Self::InvalidPassphrase => write!(f, "the BIP39 passphrase is not valid UTF-8 text"),
             Self::NotEnoughMemory {
                 needed_bytes,
                 available_bytes,
@@ -225,6 +275,47 @@ impl fmt::Display for MhfeError {
                  tool on a 64-bit system for higher levels"
             ),
             Self::Argon2(message) => write!(f, "Argon2 failed: {message}"),
+            Self::InvalidRequest(reason) => write!(f, "invalid request: {reason}"),
+            Self::InvalidPasswordSize(reason) => write!(f, "{reason}"),
+            Self::InvalidDiceRolls(word) => write!(
+                f,
+                "the dice digits for word {word} must be exactly five digits, each from 1 to 6"
+            ),
+            Self::PasswordRepairNotOffered => {
+                write!(f, "the review of this password did not offer that choice")
+            }
+            Self::WalletCheckNeedsPassphrase => write!(
+                f,
+                "the wallet check needs a BIP39 passphrase; without one it would let anyone \
+                 who sees the phrase test it"
+            ),
+            Self::RandomFailed(reason) => write!(f, "the random generator failed: {reason}"),
+            Self::PasswordsDiffer => write!(f, "the password and its repetition differ"),
+            Self::PasswordAlreadyUsed => write!(
+                f,
+                "this password was already used here; a hidden wallet needs a password of its own"
+            ),
+            Self::OtherWalletsNotConfirmed => write!(
+                f,
+                "the wallets that other passwords open on this container change with the new \
+                 one; move their funds first and confirm that"
+            ),
+            Self::NewPasswordSameAsOld => write!(
+                f,
+                "the new password and settings are the same as the old ones, so the container \
+                 would not change"
+            ),
+            Self::NotConfirmedByOwner => write!(
+                f,
+                "the recovered phrase is not yours: the password, PIM, memory level or container \
+                 is wrong. Nothing was changed"
+            ),
+            Self::InvalidCoin(reason) => write!(f, "unknown coin {reason}"),
+            Self::SelfCheckFailed { component, detail } => write!(
+                f,
+                "the self-test failed: {component}: {detail}. Do not use this program on this \
+                 computer"
+            ),
             Self::Internal(message) => write!(f, "internal error: {message}"),
         }
     }
@@ -242,6 +333,7 @@ impl MhfeError {
             Self::SameLengthNeedsShortPhrase => "SAME_LENGTH_NEEDS_SHORT_PHRASE",
             Self::LengthChoiceNotApplicable { .. } => "LENGTH_CHOICE_NOT_APPLICABLE",
             Self::NoBuiltInCheck { .. } => "NO_BUILT_IN_CHECK",
+            Self::NoWalletCheck { .. } => "NO_WALLET_CHECK",
             Self::ReferenceRequired => "REFERENCE_REQUIRED",
             Self::ReferenceMismatch => "REFERENCE_MISMATCH",
             Self::HiddenWalletPassesCheck => "HIDDEN_WALLET_PASSES_CHECK",
@@ -261,10 +353,24 @@ impl MhfeError {
             Self::InvalidAddress(_) => "INVALID_ADDRESS",
             Self::InvalidDerivationPath(_) => "INVALID_DERIVATION_PATH",
             Self::InvalidFingerprint(_) => "INVALID_FINGERPRINT",
+            Self::InvalidPassphrase => "INVALID_PASSPHRASE",
             Self::NotEnoughMemory { .. } => "NOT_ENOUGH_MEMORY",
             Self::MemoryAllocation { .. } => "MEMORY_ALLOCATION_FAILED",
             Self::MemoryLevelNotSupportedHere { .. } => "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
             Self::Argon2(_) => "ARGON2_FAILED",
+            Self::InvalidRequest(_) => "INVALID_REQUEST",
+            Self::InvalidPasswordSize(_) => "INVALID_PASSWORD_SIZE",
+            Self::InvalidDiceRolls(_) => "INVALID_DICE_ROLLS",
+            Self::PasswordRepairNotOffered => "PASSWORD_REPAIR_NOT_OFFERED",
+            Self::WalletCheckNeedsPassphrase => "WALLET_CHECK_NEEDS_PASSPHRASE",
+            Self::RandomFailed(_) => "RANDOM_FAILED",
+            Self::PasswordsDiffer => "PASSWORDS_DIFFER",
+            Self::PasswordAlreadyUsed => "PASSWORD_ALREADY_USED",
+            Self::OtherWalletsNotConfirmed => "OTHER_WALLETS_NOT_CONFIRMED",
+            Self::NewPasswordSameAsOld => "NEW_PASSWORD_SAME_AS_OLD",
+            Self::NotConfirmedByOwner => "NOT_CONFIRMED_BY_OWNER",
+            Self::InvalidCoin(_) => "INVALID_COIN",
+            Self::SelfCheckFailed { .. } => "SELF_CHECK_FAILED",
             Self::Internal(_) => "INTERNAL_ERROR",
         }
     }
@@ -296,5 +402,21 @@ mod tests {
         );
         assert_eq!(gib_text(3 * GIB), "3 GiB");
         assert_eq!(gib_text(GIB / 10 - 1), "0.0 GiB");
+    }
+
+    /// The two codes that only the browser bindings used to write out themselves.
+    #[test]
+    fn requests_and_passphrases_have_codes_of_their_own() {
+        let request = MhfeError::InvalidRequest("unknown reference kind seed".to_owned());
+        assert_eq!(request.code(), "INVALID_REQUEST");
+        assert_eq!(
+            request.to_string(),
+            "invalid request: unknown reference kind seed"
+        );
+        assert_eq!(MhfeError::InvalidPassphrase.code(), "INVALID_PASSPHRASE");
+        assert_eq!(
+            MhfeError::InvalidPassphrase.to_string(),
+            "the BIP39 passphrase is not valid UTF-8 text"
+        );
     }
 }

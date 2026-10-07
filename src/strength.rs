@@ -5,11 +5,13 @@
 //! overrates one made of words it does not know, such as names or words of other languages, which
 //! the README says. The password is read in place: no copy of it is made.
 
-use crate::diceware::{different_dice_words, eff_words, MILLIBITS_PER_WORD};
+use std::sync::OnceLock;
+
+use crate::eff::{EffList, MILLIBITS_PER_WORD};
 
 /// About 50 bits, a little under four different dice words (51.7 bits), the least the README
 /// recommends: a weaker password gets a warning before it protects a phrase.
-const WEAK_BELOW_BITS: f64 = 50.0;
+pub const WEAK_BELOW_BITS: f64 = 50.0;
 /// Only the first 100 characters are read: they tell a weak password from a strong one, and the
 /// reading stays quick for a password thousands of characters long.
 const READ_CHARACTERS: usize = 100;
@@ -77,10 +79,33 @@ impl WordList {
     }
 }
 
-/// The estimated strength of a password in bits. A password of different EFF dice words counts
-/// 12.9 bits a word, as if drawn at random; any other is read part by part.
-pub fn estimated_bits(password: &str) -> f64 {
-    let dice_words = different_dice_words(password);
+/// The estimated strength of a password, in bits.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Strength {
+    bits: f64,
+}
+
+impl Strength {
+    /// Estimates `password`. A password of different EFF dice words counts 12.9 bits a word, as if
+    /// drawn at random; any other is read part by part.
+    pub fn of(password: &str) -> Self {
+        Self {
+            bits: estimated_bits(password),
+        }
+    }
+
+    pub fn bits(self) -> f64 {
+        self.bits
+    }
+
+    /// Whether the password deserves a warning before it protects a phrase.
+    pub fn is_weak(self) -> bool {
+        self.bits < WEAK_BELOW_BITS
+    }
+}
+
+fn estimated_bits(password: &str) -> f64 {
+    let dice_words = EffList::get().different_dice_words(password);
     if dice_words > 0 {
         return (dice_words * MILLIBITS_PER_WORD) as f64 / 1000.0;
     }
@@ -88,15 +113,17 @@ pub fn estimated_bits(password: &str) -> f64 {
         .char_indices()
         .nth(READ_CHARACTERS)
         .map_or(password.len(), |(index, _)| index);
-    let mut dictionary = eff_words();
-    dictionary.extend(bip39::Language::English.word_list());
-    let lists = [WordList::new(COMMON.to_vec()), WordList::new(dictionary)];
-    read_parts(&password[..end], &lists)
+    read_parts(&password[..end], word_lists())
 }
 
-/// Whether a password of `bits` deserves a warning.
-pub fn is_weak(bits: f64) -> bool {
-    bits < WEAK_BELOW_BITS
+/// The common passwords and the dictionary, sorted once and shared.
+fn word_lists() -> &'static [WordList; 2] {
+    static LISTS: OnceLock<[WordList; 2]> = OnceLock::new();
+    LISTS.get_or_init(|| {
+        let mut dictionary = EffList::get().words().to_vec();
+        dictionary.extend(bip39::Language::English.word_list());
+        [WordList::new(COMMON.to_vec()), WordList::new(dictionary)]
+    })
 }
 
 /// Adds up the parts of `text` from left to right, taking at each place the longest word of the
@@ -238,6 +265,10 @@ fn character_bits(character: char) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn is_weak(bits: f64) -> bool {
+        bits < WEAK_BELOW_BITS
+    }
 
     #[test]
     fn common_weak_passwords_are_recognised() {

@@ -11,6 +11,7 @@ use anstream::{eprint, eprintln};
 use anstyle::{AnsiColor, Style};
 use zeroize::Zeroizing;
 
+use crate::exit::capitalize;
 use crate::flow::{self, Kind};
 use crate::hidden_input;
 
@@ -89,7 +90,39 @@ pub fn fact_before_work(label: &str, value: impl Display) {
 }
 
 fn fact_line(label: &str, value: impl Display) -> String {
-    format!("  {} {value}", paint(MUTED, format!("{label:<10}")))
+    format!(
+        "  {} {value}",
+        paint(MUTED, format!("{label:<FACT_LABEL_WIDTH$}"))
+    )
+}
+
+/// The width a fact's label is padded to; its value starts one column after it.
+const FACT_LABEL_WIDTH: usize = 10;
+
+/// [`fact`] for a value that may be longer than a line: wrapped to the text width under its own
+/// column.
+pub fn fact_wrapped(label: &str, value: &str) {
+    let lines = fact_lines(label, value);
+    if !flow::keep(Kind::Fact, &lines) {
+        write_lines(&lines);
+    }
+}
+
+/// The lines of [`fact_wrapped`]: the first beside the label, the others under the value.
+pub fn fact_lines(label: &str, value: &str) -> Vec<String> {
+    // Two columns of indent, the label and the one space after it.
+    let value_column = 2 + FACT_LABEL_WIDTH + 1;
+    wrap(value, TEXT_WIDTH - value_column)
+        .iter()
+        .enumerate()
+        .map(|(index, line)| {
+            if index == 0 {
+                fact_line(label, line)
+            } else {
+                format!("{}{line}", " ".repeat(value_column))
+            }
+        })
+        .collect()
 }
 
 /// Something that went right, after a green tick. It is shown at once, on the step it belongs to,
@@ -175,10 +208,92 @@ fn retry_lines(text: impl Display) -> Vec<String> {
         .collect()
 }
 
-/// An error message after a red "✗ Error:".
-pub fn error(text: &str) {
-    eprintln!("{} {text}", paint(BAD, "✗ Error:"));
+const ERROR_MARK: &str = "✗ Error:";
+
+/// An error message after a red "✗ Error:", wrapped to the text width, every further line indented
+/// under the first, so that a long message, such as a check at start that failed, reads well in
+/// an 80-column terminal.
+pub fn error_wrapped(text: &str) {
+    write_lines(&error_lines(text));
 }
+
+/// A usage error of the command line, from the plain text clap writes for it ("error: ...", the
+/// arguments it lists below that, a tip, the usage, a pointer to --help), shown as mhfe shows an
+/// error: the message, with the listed arguments joined into it, after one red "✗ Error:", then
+/// every other line of clap's in grey.
+pub fn usage_error(clap_text: &str) {
+    write_lines(&usage_error_lines(clap_text));
+}
+
+fn usage_error_lines(clap_text: &str) -> Vec<String> {
+    let mut blocks = clap_text.trim().split("\n\n");
+    let mut message = blocks.next().unwrap_or_default().lines();
+    let first = message.next().unwrap_or_default();
+    let first = first.strip_prefix("error: ").unwrap_or(first);
+    // Such as the required arguments that were not given, one per indented line.
+    let listed: Vec<&str> = message
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    let text = if listed.is_empty() {
+        first.to_owned()
+    } else {
+        format!("{first} {}", listed.join(", "))
+    };
+    let mut lines = error_lines(&capitalize(&text));
+    for line in blocks.flat_map(str::lines).map(str::trim) {
+        if !line.is_empty() {
+            lines.extend(
+                wrap(&capitalize(line), TEXT_WIDTH)
+                    .into_iter()
+                    .map(|line| paint(MUTED, line)),
+            );
+        }
+    }
+    lines
+}
+
+fn error_lines(text: &str) -> Vec<String> {
+    // The mark and its space.
+    let indent = ERROR_MARK.chars().count() + 1;
+    wrap(text, TEXT_WIDTH - indent)
+        .into_iter()
+        .enumerate()
+        .map(|(index, line)| {
+            if index == 0 {
+                format!("{} {line}", paint(BAD, ERROR_MARK))
+            } else {
+                format!("{}{line}", " ".repeat(indent))
+            }
+        })
+        .collect()
+}
+
+/// A row of a report table, such as one part of `mhfe self-test`: the grey label padded to
+/// `label_width`, then `value` in `style`, wrapped to the text width under its own column.
+pub fn report_row(label: &str, label_width: usize, style: Style, value: &str) -> Vec<String> {
+    // Two columns of indent and two between label and value; the value keeps at least
+    // REPORT_VALUE_MIN columns, also beside a label that is too long for the table.
+    let value_column = 2 + label_width + 2;
+    let value_width = TEXT_WIDTH
+        .saturating_sub(value_column)
+        .max(REPORT_VALUE_MIN);
+    wrap(value, value_width)
+        .iter()
+        .enumerate()
+        .map(|(index, line)| {
+            let lead = if index == 0 {
+                format!("  {}  ", paint(MUTED, format!("{label:<label_width$}")))
+            } else {
+                " ".repeat(value_column)
+            };
+            format!("{lead}{}", paint(style, line))
+        })
+        .collect()
+}
+
+/// The narrowest value column of a report table.
+const REPORT_VALUE_MIN: usize = 24;
 
 /// An error or a failed check: a red headline after "✗", then `body` wrapped, every line
 /// marked in red. It is shown at once and kept for the summary too.
@@ -491,6 +606,88 @@ mod tests {
         );
         let short = help_section("Examples:", &[("mhfe check", "Short")]);
         assert_eq!(plain(short.lines().nth(1).unwrap()), "  mhfe check  Short");
+    }
+
+    /// A long error is one "✗ Error:" line, wrapped within the text width under its first line.
+    #[test]
+    fn a_long_error_wraps_under_its_mark() {
+        let text =
+            "Self-test at start failed: Password check word (MHFE-PASSWORD-CHECK-1): the EFF \
+                    list differs from the vendored file. Do not use this program on this computer.";
+        let lines: Vec<String> = error_lines(text).iter().map(|line| plain(line)).collect();
+        assert!(lines.len() > 1);
+        assert!(lines[0].starts_with("✗ Error: Self-test at start failed:"));
+        assert_eq!(lines.iter().filter(|line| line.contains("✗")).count(), 1);
+        for line in &lines {
+            assert!(line.chars().count() <= TEXT_WIDTH, "{line}");
+        }
+        for line in &lines[1..] {
+            assert!(line.starts_with("         ") && !line.starts_with("          "));
+        }
+        assert_eq!(
+            lines
+                .join(" ")
+                .split_whitespace()
+                .skip(2)
+                .collect::<Vec<_>>()
+                .join(" "),
+            text
+        );
+        assert_eq!(
+            error_lines("Short."),
+            [format!("{} Short.", paint(BAD, ERROR_MARK))]
+        );
+    }
+
+    /// A usage error from clap reads as every other error: one "✗ Error:" line with the listed
+    /// arguments joined into it, then clap's tip, usage and pointer to --help in grey (AUD-010).
+    #[test]
+    fn a_usage_error_reads_as_an_error_of_the_tool() {
+        let unknown = "error: unexpected argument '--stdn' found\n\n  tip: a similar argument \
+                       exists: '--stdin'\n\nUsage: mhfe encrypt --stdin\n\nFor more \
+                       information, try '--help'.\n";
+        let lines = usage_error_lines(unknown);
+        assert_eq!(
+            lines,
+            [
+                format!(
+                    "{} Unexpected argument '--stdn' found",
+                    paint(BAD, ERROR_MARK)
+                ),
+                paint(MUTED, "Tip: a similar argument exists: '--stdin'"),
+                paint(MUTED, "Usage: mhfe encrypt --stdin"),
+                paint(MUTED, "For more information, try '--help'."),
+            ]
+        );
+        let missing = "error: the following required arguments were not provided:\n  <FILE>\n\n\
+                       Usage: mhfe serve <FILE>\n\nFor more information, try '--help'.\n";
+        assert_eq!(
+            plain(&usage_error_lines(missing)[0]),
+            "✗ Error: The following required arguments were not provided: <FILE>"
+        );
+        for line in usage_error_lines(missing) {
+            assert!(visible_width(&line) <= TEXT_WIDTH, "{line}");
+        }
+    }
+
+    #[test]
+    fn a_report_row_wraps_its_value_under_its_column() {
+        let rows = report_row(
+            "Label",
+            8,
+            GOOD,
+            "one two three four five six seven eight nine",
+        );
+        let lines: Vec<String> = rows.iter().map(|line| plain(line)).collect();
+        assert_eq!(lines[0].find("one"), Some(12));
+        assert!(lines.iter().all(|line| line.chars().count() <= TEXT_WIDTH));
+        let short = report_row("Core dumps", 12, GOOD, "off");
+        assert_eq!(plain(&short[0]), "  Core dumps    off");
+        assert_eq!(short.len(), 1);
+        // A wrapped value continues in the value column.
+        let long = report_row("Label", 50, BAD, &"word ".repeat(10));
+        assert!(long.len() > 1);
+        assert_eq!(plain(&long[1]).find("word"), Some(54));
     }
 
     #[test]

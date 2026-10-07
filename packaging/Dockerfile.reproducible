@@ -89,8 +89,14 @@ ENV CARGO_NET_OFFLINE=true
 COPY . .
 COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
 # The same fast checks as CI, then the release builds. No network from here on. Clippy also runs
-# for both cross targets: the native run never sees code for Windows or ARM64 alone.
-RUN --network=none cargo fmt --all -- --check \
+# for both cross targets: the native run never sees code for Windows or ARM64 alone. Every build
+# writes the directories of the container under fixed names (packaging/remap-builder-paths.sh),
+# as a local build does, and scripts/check-release-artifacts.sh refuses a program or WebAssembly
+# that still names one; scripts/package-release.sh sets the same flags, so its builds below have
+# nothing to redo.
+RUN --network=none . packaging/remap-builder-paths.sh \
+    && remap_builder_paths "$(pwd)" \
+    && cargo fmt --all -- --check \
     && cargo clippy --locked --offline --all-targets --all-features -- -D warnings \
     && cargo clippy --locked --offline --all-targets --all-features \
          --target aarch64-unknown-linux-gnu -- -D warnings \

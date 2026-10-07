@@ -4,15 +4,20 @@
 //! close it was. The re-encryption guard uses the same comparison: a phrase recovered to be
 //! encrypted again comes out only once it is confirmed.
 
-use zeroize::Zeroizing;
-
+use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
-use crate::mhfe::{phrase_from_entropy, suite_3_state, PhraseLength, RecoveredPhrase, Recovery};
+use crate::memory::{LockedBytes, LockedText};
+use crate::mhfe::{suite_3_state, PhraseLength, RecoveredPhrase, Recovery};
+use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::packing::{self, State};
-use crate::suite::Suite;
+use crate::phrase::locked_phrase_from_entropy;
+use crate::suite::{Suite, ROUNDS};
 use crate::wallet::{self, Address, DerivationPath, SearchLimits};
 use crate::wallet_check;
 use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
+
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+pub(crate) mod known_answers;
 
 /// What a rehearsal found. A match on a receiving address names the path where the address was
 /// found, which tells the person which account and address of the wallet it is; it is not part of
@@ -65,11 +70,27 @@ pub enum Reference<'a> {
         fingerprint: [u8; 4],
         passphrase: &'a str,
     },
-    /// The wallet check of a phrase drawn to pass it, as `mhfe new` does on request (the draft
-    /// profile MHFE-WALLET-CHECK-SEED-1, [`crate::wallet_check`]), with its BIP39 `passphrase`,
-    /// empty for a wallet without one. It tells a right password and passphrase from wrong ones
-    /// with 16 bits, not which wallet it is, so it never confirms a recovery to encrypt again.
+    /// The wallet check of a 24-word phrase drawn to pass it, as `mhfe new` does on request (the
+    /// draft profile MHFE-WALLET-CHECK-SEED-1, [`crate::wallet_check`]), with its BIP39
+    /// `passphrase`, which may not be empty (`WALLET_CHECK_NEEDS_PASSPHRASE`). Only the 24-word
+    /// reading of the recovery is compared, as the profile defines the check for it alone
+    /// ([`crate::wallet_check::verify_entropy`]). It tells a right password and passphrase from
+    /// wrong ones with 16 bits, not which wallet it is, so it never confirms a recovery to encrypt
+    /// again.
     WalletCheck { passphrase: &'a str },
+}
+
+impl Reference<'_> {
+    /// The BIP39 passphrase the recovery is compared with; none for the built-in check, which
+    /// says nothing about one.
+    pub fn passphrase(&self) -> Option<&str> {
+        match self {
+            Self::BuiltInCheck { .. } => None,
+            Self::Address { passphrase, .. }
+            | Self::Fingerprint { passphrase, .. }
+            | Self::WalletCheck { passphrase } => Some(passphrase),
+        }
+    }
 }
 
 impl<E: Argon2Engine> Mhfe<E> {
@@ -82,40 +103,94 @@ impl<E: Argon2Engine> Mhfe<E> {
         reference: &Reference<'_>,
         on_progress: ProgressCallback<'_>,
     ) -> Result<CheckOutcome, MhfeError> {
-        if let Reference::BuiltInCheck { words } = reference {
-            // Refused before any Argon2 work, from the word count alone.
-            let container_words = container.split_whitespace().count();
-            if Suite::of_container(container_words) == Ok(Suite::SameLength) {
+        let (suite, x) = self.recover_to_check(container, password, reference, on_progress)?;
+        compare_state(suite, &x, reference)
+    }
+
+    /// [`Mhfe::check`], reporting its two stages: the twelve rounds of the recovery as
+    /// [`Stage::Recover`], then [`Stage::Compare`] once more at round 12 of 12, before the
+    /// recovery is compared with `reference`, which for an address can take seconds.
+    pub fn check_in_stages(
+        &mut self,
+        container: &str,
+        password: &Password,
+        reference: &Reference<'_>,
+        on_progress: StageCallback<'_>,
+    ) -> Result<CheckOutcome, MhfeError> {
+        let rounds = RoundCounter::starting_after(0, ROUNDS);
+        let (suite, x) =
+            self.recover_to_check(container, password, reference, &mut |round, _| {
+                rounds.report(Stage::Recover, round, on_progress)
+            })?;
+        rounds.report(Stage::Compare, ROUNDS, on_progress)?;
+        compare_state(suite, &x, reference)
+    }
+
+    /// The first part of a check: refuses a built-in check or a wallet check that cannot be, from
+    /// the word counts and the passphrase alone and before any Argon2 work, then recovers the
+    /// suite and the state `X` of `container`.
+    fn recover_to_check(
+        &mut self,
+        container: &str,
+        password: &Password,
+        reference: &Reference<'_>,
+        on_progress: ProgressCallback<'_>,
+    ) -> Result<(Suite, LockedBytes), MhfeError> {
+        let container_words = container.split_whitespace().count();
+        let same_length = Suite::of_container(container_words) == Ok(Suite::SameLength);
+        match reference {
+            Reference::BuiltInCheck { .. } if same_length => {
                 return Err(MhfeError::NoBuiltInCheck { container_words });
             }
-            if !packing::SHORT_WORD_COUNTS.contains(&words.get()) {
+            Reference::BuiltInCheck { words }
+                if !packing::SHORT_WORD_COUNTS.contains(&words.get()) =>
+            {
                 return Err(MhfeError::InvalidWordCount(words.get()));
             }
-        }
-        let (suite, x) = self.recover_state(container, password, None, on_progress)?;
-        if suite == Suite::SameLength {
-            // The container's own length is the only reading.
-            return compare(&phrase_from_entropy(&x)?, reference);
-        }
-        let x = suite_3_state(&x)?;
-        match reference {
-            Reference::BuiltInCheck { words } => {
-                Ok(CheckOutcome::of(packing::unpack(&x, words.get()).is_ok()))
+            Reference::WalletCheck { .. } if same_length => {
+                return Err(MhfeError::NoWalletCheck { container_words });
             }
-            Reference::Address { .. }
-            | Reference::Fingerprint { .. }
-            | Reference::WalletCheck { .. } => {
-                // Every reading of X is compared: each short length that passes its check and
-                // the 24-word reading, so that no accidental match hides the real phrase.
-                for words in packing::matching_short_lengths(&x).into_iter().chain([24]) {
-                    let phrase = read_phrase(&x, words)?;
-                    let outcome = compare(&phrase, reference)?;
-                    if outcome.matches() {
-                        return Ok(outcome);
-                    }
+            // The wallet check's own rule, the one every front end gets: it needs a passphrase.
+            Reference::WalletCheck { passphrase } => wallet_check::require_passphrase(passphrase)?,
+            _ => {}
+        }
+        self.recover_state(container, password, None, on_progress)
+    }
+}
+
+/// The second part of a check: compares the state `x` recovered from a container of `suite` with
+/// `reference`.
+fn compare_state(
+    suite: Suite,
+    x: &[u8],
+    reference: &Reference<'_>,
+) -> Result<CheckOutcome, MhfeError> {
+    if suite == Suite::SameLength {
+        // The container's own length is the only reading.
+        return compare(&locked_phrase_from_entropy(x)?, reference);
+    }
+    let x = suite_3_state(x)?;
+    match reference {
+        Reference::BuiltInCheck { words } => {
+            Ok(CheckOutcome::of(packing::unpack(x, words.get()).is_ok()))
+        }
+        // The profile defines the wallet check for the 24-word reading alone, whose entropy is X
+        // itself: a shorter reading would be a construction it does not define, and a match of
+        // its own about once in 65,536 (AUD-010).
+        Reference::WalletCheck { passphrase } => Ok(CheckOutcome::of(
+            wallet_check::verify_entropy(x, passphrase)?,
+        )),
+        Reference::Address { .. } | Reference::Fingerprint { .. } => {
+            // Every reading of X is compared: each short length that passes its check and the
+            // 24-word reading, so that no accidental match hides the real phrase.
+            for words in packing::matching_short_lengths(x).into_iter().chain([24]) {
+                let phrase = read_phrase(x, words)?;
+                let outcome = compare(&phrase, reference)?;
+                if outcome.matches() {
+                    return Ok(outcome);
                 }
-                Ok(CheckOutcome::DoesNotMatch)
             }
+            Ok(CheckOutcome::DoesNotMatch)
         }
     }
 }
@@ -149,12 +224,29 @@ impl<E: Argon2Engine> Mhfe<E> {
         confirmation: Confirmation<'_>,
         on_progress: ProgressCallback<'_>,
     ) -> Result<RecoveredPhrase, MhfeError> {
-        let container_words = container.split_whitespace().count();
-        let same_length = Suite::of_container(container_words) == Ok(Suite::SameLength);
-        if same_length && words.get() != container_words {
-            return Err(MhfeError::LengthChoiceNotApplicable { container_words });
-        }
-        let has_check = !same_length && packing::SHORT_WORD_COUNTS.contains(&words.get());
+        self.recover_confirmed_reporting(
+            container,
+            password,
+            words,
+            confirmation,
+            on_progress,
+            &mut || Ok(()),
+        )
+    }
+
+    /// [`Mhfe::recover_confirmed`], calling `before_compare` once the recovery's rounds are done
+    /// and before a wallet reference is compared, which for an address can take seconds.
+    pub(crate) fn recover_confirmed_reporting(
+        &mut self,
+        container: &str,
+        password: &Password,
+        words: WordCount,
+        confirmation: Confirmation<'_>,
+        on_progress: ProgressCallback<'_>,
+        before_compare: &mut dyn FnMut() -> Result<(), MhfeError>,
+    ) -> Result<RecoveredPhrase, MhfeError> {
+        let facts = ContainerFacts::read(container)?;
+        let has_check = facts.confirmation_needed(words)? == ConfirmationNeeded::BuiltInCheck;
         let reference = match confirmation {
             // The built-in check is the stated length's own, not a reference of the wallet.
             // A wallet check has 16 bits: too few to seal a phrase on its own.
@@ -173,10 +265,10 @@ impl<E: Argon2Engine> Mhfe<E> {
             Confirmation::Wallet(reference) => Some(reference),
             Confirmation::Owner => None,
         };
-        let length = if same_length {
-            PhraseLength::Detect
-        } else {
-            PhraseLength::Words(words)
+        let length = match facts.suite() {
+            // Its own length, which confirmation_needed has made sure of, is the only reading.
+            Suite::SameLength => PhraseLength::Detect,
+            Suite::TwentyFourWords => PhraseLength::Words(words),
         };
         // A stated length gives one reading, which for a short length has passed its check.
         let Recovery::Phrase(phrase) = self.decrypt(container, password, length, on_progress)?
@@ -189,6 +281,7 @@ impl<E: Argon2Engine> Mhfe<E> {
             return Err(MhfeError::VerifierMismatch);
         }
         if let Some(reference) = reference {
+            before_compare()?;
             if !compare(&phrase.phrase, reference)?.matches() {
                 return Err(MhfeError::ReferenceMismatch);
             }
@@ -197,9 +290,10 @@ impl<E: Argon2Engine> Mhfe<E> {
     }
 }
 
-fn read_phrase(x: &State, words: usize) -> Result<Zeroizing<String>, MhfeError> {
-    let entropy = packing::unpack(x, words)?;
-    phrase_from_entropy(&entropy)
+/// The reading of `x` as `words` words, in locked memory, as a recovered phrase is held while it
+/// is compared: an address search can take seconds.
+fn read_phrase(x: &State, words: usize) -> Result<LockedText, MhfeError> {
+    locked_phrase_from_entropy(packing::unpack(x, words)?)
 }
 
 fn compare(phrase: &str, reference: &Reference<'_>) -> Result<CheckOutcome, MhfeError> {
@@ -222,9 +316,9 @@ fn compare(phrase: &str, reference: &Reference<'_>) -> Result<CheckOutcome, Mhfe
         } => Ok(CheckOutcome::of(
             wallet::master_fingerprint(phrase, passphrase)? == *fingerprint,
         )),
-        Reference::WalletCheck { passphrase } => Ok(CheckOutcome::of(wallet_check::phrase_passes(
-            phrase, passphrase,
-        )?)),
+        Reference::WalletCheck { passphrase } => {
+            Ok(CheckOutcome::of(wallet_check::verify(phrase, passphrase)?))
+        }
     }
 }
 
@@ -232,7 +326,7 @@ fn compare(phrase: &str, reference: &Reference<'_>) -> Result<CheckOutcome, Mhfe
 mod tests {
     use super::*;
     use crate::engine::{Argon2Cost, NativeEngine};
-    use crate::WorkFactor;
+    use crate::{phrase_from_entropy, WorkFactor};
 
     const ABANDON: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -425,16 +519,22 @@ mod tests {
             .check(&container, &password, &other, none)
             .unwrap()
             .matches());
-        // Without the passphrase it is the check of another seed, which this phrase fails.
-        assert!(!mhfe
-            .check(
+        // Without a passphrase the check is not offered: refused before any Argon2 work, as the
+        // browser and wallet_check::verify refuse it (AUD-010).
+        let mut rounds = 0;
+        assert_eq!(
+            mhfe.check(
                 &container,
                 &password,
                 &Reference::WalletCheck { passphrase: "" },
-                none
-            )
-            .unwrap()
-            .matches());
+                &mut |_, _| {
+                    rounds += 1;
+                    Ok(())
+                }
+            ),
+            Err(MhfeError::WalletCheckNeedsPassphrase)
+        );
+        assert_eq!(rounds, 0);
         assert!(matches!(
             mhfe.recover_confirmed(
                 &container,
@@ -445,6 +545,43 @@ mod tests {
             ),
             Err(MhfeError::ReferenceRequired)
         ));
+    }
+
+    /// A public passphrase with which the 12-word test phrase passes the wallet check's criterion
+    /// as 12 words, under BE32(128), which the profile does not define; its 24-word reading fails
+    /// (AUD-010, harness crypto-core/short_reading_wallet_check.py).
+    const SHORT_READING_PASSPHRASE: &str = "aud010 public probe 11656";
+
+    /// The wallet check compares only the 24-word reading of a recovery: a 12-word original whose
+    /// own reading passes the criterion with a passphrase does not make a match (AUD-010).
+    #[test]
+    fn a_wallet_check_compares_the_24_word_reading_only() {
+        let none = &mut |_, _| Ok(());
+        let mut mhfe = reduced();
+        let password = Password::new("public test password").unwrap();
+        assert!(wallet_check::phrase_passes(ABANDON, SHORT_READING_PASSPHRASE).unwrap());
+        let container = mhfe
+            .encrypt(ABANDON, &password, Suite::TwentyFourWords, none)
+            .unwrap();
+        // The recovery reads as the 12-word phrase, which the built-in check confirms.
+        let built_in = Reference::BuiltInCheck {
+            words: WordCount::new(12).unwrap(),
+        };
+        assert!(mhfe
+            .check(&container, &password, &built_in, none)
+            .unwrap()
+            .matches());
+        let reference = Reference::WalletCheck {
+            passphrase: SHORT_READING_PASSPHRASE,
+        };
+        assert_eq!(
+            mhfe.check(&container, &password, &reference, none),
+            Ok(CheckOutcome::DoesNotMatch)
+        );
+        assert_eq!(
+            mhfe.check_in_stages(&container, &password, &reference, &mut |_, _, _| Ok(())),
+            Ok(CheckOutcome::DoesNotMatch)
+        );
     }
 
     #[test]
@@ -507,6 +644,49 @@ mod tests {
             .check(&container, &password, &with_passphrase, &mut |_, _| Ok(()))
             .unwrap()
             .matches());
+    }
+
+    /// The twelve rounds of the recovery, then the comparison, which can be stopped as well.
+    #[test]
+    fn a_check_in_stages_reports_its_recovery_and_its_comparison() {
+        let password = Password::new("public test password").unwrap();
+        let mut mhfe = reduced();
+        let container = mhfe
+            .encrypt(ABANDON, &password, Suite::TwentyFourWords, &mut |_, _| {
+                Ok(())
+            })
+            .unwrap();
+        let reference = Reference::Fingerprint {
+            fingerprint: [0x73, 0xc5, 0xda, 0x0a],
+            passphrase: "",
+        };
+        let mut reports = Vec::new();
+        let outcome = mhfe
+            .check_in_stages(
+                &container,
+                &password,
+                &reference,
+                &mut |stage, round, rounds| {
+                    reports.push((stage, round, rounds));
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert!(outcome.matches());
+        let mut expected: Vec<(Stage, u32, u32)> =
+            (1..=12).map(|round| (Stage::Recover, round, 12)).collect();
+        expected.push((Stage::Compare, 12, 12));
+        assert_eq!(reports, expected);
+
+        let stopped =
+            mhfe.check_in_stages(&container, &password, &reference, &mut |stage, _, _| {
+                if stage == Stage::Compare {
+                    Err(MhfeError::Cancelled)
+                } else {
+                    Ok(())
+                }
+            });
+        assert_eq!(stopped.err(), Some(MhfeError::Cancelled));
     }
 
     #[test]
@@ -575,6 +755,20 @@ mod tests {
             )
             .err(),
             Some(MhfeError::NoBuiltInCheck {
+                container_words: 12
+            })
+        );
+        assert_eq!(
+            mhfe.check(
+                &container,
+                &password,
+                &Reference::WalletCheck {
+                    passphrase: "TREZOR"
+                },
+                &mut |_, _| Ok(())
+            )
+            .err(),
+            Some(MhfeError::NoWalletCheck {
                 container_words: 12
             })
         );

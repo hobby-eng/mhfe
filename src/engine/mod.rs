@@ -38,17 +38,74 @@ pub trait Argon2Engine {
     ) -> Result<(), MhfeError>;
 }
 
-#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-pub(crate) mod browser;
+/// What a key holds before an engine writes it. An engine that leaves it as it was, or gives only
+/// zeros, did not compute Argon2: a broken bridge to the browser's Argon2 build, or a call that
+/// returned without its work. Either is refused rather than used as a round key. A real Argon2id
+/// tag equals either value with probability 2^-255.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+const UNWRITTEN_KEY: [u8; KEY_BYTES] = [0xa5; KEY_BYTES];
+
+/// Fills `key` with [`UNWRITTEN_KEY`] before an engine writes it.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+pub(crate) fn mark_key_unwritten(key: &mut [u8; KEY_BYTES]) {
+    *key = UNWRITTEN_KEY;
+}
+
+/// Refuses a key that the engine left unwritten or set to zeros, with [`MhfeError::Argon2`].
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+pub(crate) fn check_key_written(key: &mut [u8; KEY_BYTES]) -> Result<(), MhfeError> {
+    if *key == UNWRITTEN_KEY || key.iter().all(|&byte| byte == 0) {
+        *key = [0; KEY_BYTES];
+        return Err(MhfeError::Argon2(
+            "the Argon2 engine returned without writing the key".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
+pub mod browser;
 // Read by ffi.rs on Linux only, where containers and systemd units limit memory per group.
 #[cfg(target_os = "linux")]
 mod cgroup;
 #[cfg(not(target_arch = "wasm32"))]
 mod ffi;
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    all(feature = "browser-core", target_arch = "wasm32")
+))]
+pub(crate) mod known_answers;
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use ffi::{lock_pages, page_size, unlock_pages};
+#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
+pub use known_answers::{BrowserArgon2Check, BrowserArgon2SizesCheck};
+#[cfg(not(target_arch = "wasm32"))]
+pub use known_answers::{NativeArgon2Check, NativeArgon2SizesCheck};
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::{available_memory_bytes, check_can_run, NativeEngine, HIGHEST_MEMORY_LEVEL};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_unwritten_or_zero_key_is_refused() {
+        let mut key = [0u8; KEY_BYTES];
+        mark_key_unwritten(&mut key);
+        assert_eq!(
+            check_key_written(&mut key).unwrap_err().code(),
+            "ARGON2_FAILED"
+        );
+        assert_eq!(key, [0; KEY_BYTES], "the refused key is cleared");
+        assert!(check_key_written(&mut [0; KEY_BYTES]).is_err());
+        let mut written = [0u8; KEY_BYTES];
+        written[31] = 1;
+        assert_eq!(check_key_written(&mut written), Ok(()));
+        let mut almost = UNWRITTEN_KEY;
+        almost[0] ^= 1;
+        assert_eq!(check_key_written(&mut almost), Ok(()));
+    }
+}

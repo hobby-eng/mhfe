@@ -5,9 +5,12 @@
 //! and reveals the length, but does not authenticate the password (a wrong one passes with
 //! probability about 2^-r for each length). A 24-word phrase fills `X` alone and has no verifier.
 
+use std::convert::Infallible;
+
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
+use crate::memory::LockedBytes;
 use crate::MhfeError;
 
 pub const STATE_BYTES: usize = 32;
@@ -28,20 +31,23 @@ pub fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
     }
 }
 
-/// Packs the entropy `E` of a phrase into `X`.
-pub fn pack(entropy: &[u8]) -> Result<Zeroizing<State>, MhfeError> {
+/// Packs the entropy `E` of a phrase into `X`, which is the phrase in all but form: it is written
+/// into a buffer locked first, which the caller holds through the rounds.
+pub fn pack(entropy: &[u8]) -> Result<LockedBytes, MhfeError> {
     let length = entropy.len();
     if !matches!(length, 16 | 20 | 24 | 28 | 32) {
         return Err(MhfeError::Internal(format!(
             "BIP39 entropy of {length} bytes cannot be packed"
         )));
     }
-    let mut state = Zeroizing::new([0u8; STATE_BYTES]);
-    state[..length].copy_from_slice(entropy);
-    if length < STATE_BYTES {
-        let digest = sha256(entropy);
-        state[length..].copy_from_slice(&digest[..STATE_BYTES - length]);
-    }
+    let Ok(state) = LockedBytes::build::<Infallible>(STATE_BYTES, |state| {
+        state.extend_from_slice(entropy);
+        if length < STATE_BYTES {
+            let digest = sha256(entropy);
+            state.extend_from_slice(&digest[..STATE_BYTES - length]);
+        }
+        Ok(())
+    });
     Ok(state)
 }
 
@@ -50,14 +56,15 @@ fn sha256(data: &[u8]) -> Zeroizing<[u8; 32]> {
     Zeroizing::new(Sha256::digest(data).into())
 }
 
-/// Reads `X` as the entropy of a phrase with `words` words. For a short phrase all `r`
-/// verifier bits must match, otherwise the result is [`MhfeError::VerifierMismatch`].
-pub fn unpack(state: &State, words: usize) -> Result<Zeroizing<Vec<u8>>, MhfeError> {
+/// Reads `X` as the entropy of a phrase with `words` words: its first `ENT / 8` bytes, read in
+/// place, since a copy would lie outside the locked buffer that holds `X`. For a short phrase all
+/// `r` verifier bits must match, otherwise the result is [`MhfeError::VerifierMismatch`].
+pub fn unpack(state: &State, words: usize) -> Result<&[u8], MhfeError> {
     let length = entropy_bytes(words)?;
-    let entropy = Zeroizing::new(state[..length].to_vec());
+    let (entropy, verifier) = state.split_at(length);
     if length < STATE_BYTES {
-        let digest = sha256(&entropy);
-        if state[length..] != digest[..STATE_BYTES - length] {
+        let digest = sha256(entropy);
+        if *verifier != digest[..STATE_BYTES - length] {
             return Err(MhfeError::VerifierMismatch);
         }
     }
@@ -98,6 +105,11 @@ pub(crate) mod tests {
         hex::decode(text).unwrap().try_into().unwrap()
     }
 
+    /// A packed state as the fixed array that `unpack` reads.
+    fn state_of(packed: &LockedBytes) -> &State {
+        packed[..].try_into().unwrap()
+    }
+
     #[test]
     fn the_known_ambiguous_states_match_exactly_two_lengths() {
         for (text, lengths) in AMBIGUOUS_STATES {
@@ -118,7 +130,7 @@ pub(crate) mod tests {
         let digest = Sha256::digest(zero);
         assert_eq!(state[..16], zero);
         assert_eq!(state[16..], digest[..16]);
-        assert_eq!(*unpack(&state, 12).unwrap(), zero);
+        assert_eq!(unpack(state_of(&state), 12).unwrap(), zero);
     }
 
     #[test]
@@ -130,12 +142,23 @@ pub(crate) mod tests {
         assert_eq!(state[28..], [0xdc, 0x27, 0xf8, 0xe8]);
     }
 
+    /// `X` is the phrase in all but form: it is packed into memory locked before it is written,
+    /// and a reading of it is no copy but the start of the same buffer (AUD-010).
+    #[test]
+    fn the_state_is_packed_into_locked_memory_and_read_in_place() {
+        let state = pack(&entropy(20)).unwrap();
+        assert_eq!(state.is_locked(), cfg!(unix));
+        let reading = unpack(state_of(&state), 15).unwrap();
+        assert_eq!(reading.as_ptr(), state.as_ptr(), "the reading is a copy");
+        assert_eq!(reading, entropy(20));
+    }
+
     #[test]
     fn a_24_word_phrase_fills_the_state_alone() {
         let source = entropy(32);
         let state = pack(&source).unwrap();
         assert_eq!(state[..], source[..]);
-        assert_eq!(*unpack(&state, 24).unwrap(), source);
+        assert_eq!(unpack(state_of(&state), 24).unwrap(), source);
     }
 
     #[test]
@@ -143,7 +166,7 @@ pub(crate) mod tests {
         let state = pack(&entropy(28)).unwrap();
         for byte in 28..32 {
             for bit in 0..8 {
-                let mut corrupted = *state;
+                let mut corrupted = *state_of(&state);
                 corrupted[byte] ^= 1 << bit;
                 assert_eq!(
                     unpack(&corrupted, 21).unwrap_err(),
@@ -157,9 +180,9 @@ pub(crate) mod tests {
     fn detection_finds_the_packed_length() {
         for (length, words) in [(16, 12), (20, 15), (24, 18), (28, 21)] {
             let state = pack(&entropy(length)).unwrap();
-            assert_eq!(matching_short_lengths(&state), vec![words]);
+            assert_eq!(matching_short_lengths(state_of(&state)), vec![words]);
         }
-        assert!(matching_short_lengths(&pack(&entropy(32)).unwrap()).is_empty());
+        assert!(matching_short_lengths(state_of(&pack(&entropy(32)).unwrap())).is_empty());
     }
 
     #[test]

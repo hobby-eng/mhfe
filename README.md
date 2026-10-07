@@ -179,21 +179,27 @@ in the archive, it shows a menu of the same commands. Its questions
 offer their answers as a list: choose with the arrow keys and Enter, or press an answer's number;
 Escape cancels.
 
+Every command that handles a secret first tests every part of the program on this computer, in a
+fraction of a second, and stops before its first question if one gives a wrong answer;
+[`mhfe self-test`](#mhfe-self-test) says what it tests.
+
 Use it on a trusted computer that stays offline while the phrase and the password are on it, best a
 Linux system started from a USB stick with the network off. On Linux MHFE also applies kernel
 restrictions against creating sockets and opening files for writing; the command's summary shows
-which restrictions took effect. A command started directly, not from the start menu, also runs in
+which restrictions took effect, as MHFE confirms by trying what each one forbids, and warns when one
+the kernel reported does not hold. A command started directly, not from the start menu, also runs in
 its own network namespace where the system allows it, with only inactive loopback and no external
 routes. Descriptors already open remain usable, including sockets and redirected output, so these
-restrictions do not replace a trusted offline environment. On Windows, Windows PE
-from a USB stick is better than your everyday system; `mhfe.exe` needs nothing beyond Windows
-itself, though it has not been tested in Windows PE yet.
+restrictions do not replace a trusted offline environment. On Windows, Windows PE from a USB stick
+is better than your everyday system; `mhfe.exe` needs nothing beyond Windows itself, though it has
+not been tested in Windows PE yet.
 
 Swap matters too. The system may write memory to a swap area on a disk, Argon2's work area
 included, from which a password guess can be tested cheaply, and it can stay there for years. On
 Linux MHFE therefore warns when a swap area is not encrypted. Use a computer with encrypted swap or
 none: a live system started from a USB stick usually has none, macOS encrypts its swap, and on
-Windows use BitLocker or no page file.
+Windows use BitLocker or no page file. The summary of a command also says whether the secrets you
+type are kept in locked memory, out of swap, or warns when the system refused to lock it.
 
 ## Commands
 
@@ -269,24 +275,34 @@ main wallet in front of hidden ones, make both with `--check-word`, so that they
 
 ### `mhfe encrypt`
 
-`mhfe encrypt` asks for the phrase and twice for the password, as a mistyped password would
-lock the phrase away for good. Both are typed on a private screen that shows what you type and is
-cleared as soon as you are done; a mistyped word is refused by the word list or the checksum. For a phrase of 12 to 21 words it first asks how long the
-container should be: 24 words, the recommended default, or the same length as your phrase; `?`
-explains both, and `--same-length` chooses the same length without asking. After the encryption it
-shows the format of the container, the suite identifier. The words of the seed phrase may be typed in any case or as
-their first four letters; the password, by contrast, must be typed exactly, letter case and spaces
-included. The container appears after one to two minutes, on a private screen like the phrase:
-write it down while MHFE checks it by recovering your phrase from it, and rely on it only once it
-says "Verified". Enter or Escape then clears that screen, so that the container leaves no copy in
-the terminal's history; press it only once you have written the words down and checked them. With the default
-settings the container's words and the password are all you need; in the rare case that MHFE asks
-you to note the word count, do so. The same phrase, password and settings always give the same container, so a
-lost plate can be made again, and two identical containers reveal the same phrase: use a different
-password for each phrase.
+`mhfe encrypt` asks for the phrase and twice for the password, as a mistyped password would lock the
+phrase away for good. Both are typed on a private screen that shows what you type and is cleared as
+soon as you are done; a mistyped word is refused by the word list or the checksum. For a phrase of
+12 to 21 words it next asks how long the container should be: 24 words, the recommended default, or
+the same length as your phrase; `?` explains both, and `--same-length` chooses the same length
+without asking. At a terminal it then asks, for every phrase, whether its wallet has a BIP39
+passphrase. MHFE encrypts the phrase, not the passphrase, so a wallet with one still needs it; the
+answer only decides whether the list of what to keep names it, and the passphrase itself is not
+asked for. Neither answer is marked at first, so that a hurried Enter cannot leave the passphrase
+off that list: the hint below the list says "Enter selects once one is marked", and Enter does
+nothing until an arrow key has marked an answer, while 1 or 2 chooses at once. Where the answers
+come as a numbered list instead, the prompt `Choice:` has no default: type the number, as an empty
+line is refused. After the encryption it shows the format of the container, the suite identifier.
+The words of the seed phrase may be typed in any case or as their first four letters; the password,
+by contrast, must be typed exactly, letter case and spaces included. The container appears after one
+to two minutes, on a private screen like the phrase: write it down while MHFE checks it by
+recovering your phrase from it, and rely on it only once it says "Verified". Enter or Escape then
+clears that screen, so that the container leaves no copy in the terminal's history; press it only
+once you have written the words down and checked them. With the default settings the container's
+words and the password are all MHFE needs; in the rare case that MHFE asks you to note the word
+count, do so. The same phrase, password and settings always give the same container, so a lost plate
+can be made again, and two identical containers reveal the same phrase: use a different password for
+each phrase.
 
-After the encryption MHFE lists what to keep, the container's words and the password and, only
-where needed, changed settings or the word count. Use the password for this phrase and nowhere
+After the encryption MHFE lists what to keep: the container's words and the password, the wallet's
+BIP39 passphrase if it has one, and, only where needed, the repair words, changed settings or the
+word count. With `--stdin` nothing asks about a passphrase, so the list ends "also the wallet's
+BIP39 passphrase, if it has one". Use the password for this phrase and nowhere
 else, and make another copy of the container only by copying its words exactly. Before you rely on
 the container, rehearse the recovery with `mhfe check`, typing the words from the plate or paper
 you wrote, not from the screen, and keep the original backup until it matches. This matters most
@@ -310,15 +326,17 @@ Dogecoin, Bitcoin Cash, Litecoin, Ethereum Classic, Cosmos, Injective and Dash, 
 Shielded addresses of Zcash (`zs1…`, `u1…`) and Dash (Orchard, `dash1z…`) are refused with that
 reason: their keys need their own cryptography, so use the same wallet's transparent `t1…` or Dash
 `X…` or `dash1k…` address. MHFE asks for the
-coin, or takes it from `--coin`, and shows before the check what it searches: the first 100
+coin, or takes it from `--coin`; a script without `--coin` compares with a Bitcoin address and says
+so ([For scripts](#for-scripts)). Before the check it shows what it searches: the first 100
 receiving and change addresses of accounts 0 to 9 on the standard paths of that address, or one
 path with `--path`. Do not keep the address or fingerprint next to the container.
 
 For a phrase drawn so that its BIP39 seed passes a check, as `mhfe new` does on request and other
-programs following the specification can, the list also offers "The phrase + passphrase check": a
-16-bit hash of the seed, which BIP39 derives from the phrase and the passphrase together. It asks
-for the BIP39 passphrase and confirms the password and passphrase, not the wallet. "The container's
-built-in check" is the one of a 12- to 21-word original in a 24-word container.
+programs following the specification can, the list also offers "The phrase + passphrase check" for
+a 24-word container: a 16-bit hash of the seed, which BIP39 derives from the phrase and the
+passphrase together. It asks for the BIP39 passphrase, which may not be empty, compares the
+container's 24-word reading only, and confirms the password and passphrase, not the wallet. "The
+container's built-in check" is the one of a 12- to 21-word original in a 24-word container.
 
 When it does not match, the check cannot tell what is wrong: the password, a setting, the
 container, the BIP39 passphrase or the reference. Without an address or fingerprint, for a 12- to
@@ -347,16 +365,24 @@ shows each reading, and you compare them with your wallet or choose the length w
 ### `mhfe rekey`
 
 `mhfe rekey` puts the same seed phrase into a new container, under a new password, new settings or
-both. It asks for the old container, its password and settings, and the length of your phrase.
-Before it encrypts anything again, it confirms the recovery. A 12- to 21-word phrase in a 24-word
-container passes its built-in check at that length. A 24-word phrase or a container of the same
-length has no such check: it is compared with a receiving address or the master key fingerprint of
-your wallet, as `mhfe check` compares them, or, if you choose, shown to you on a private screen to
-compare word for word with an independent written record of it, such as the original backup. From
-memory such a comparison confirms little; without a record, use an address or the fingerprint.
-Encrypting under the old password and comparing would prove nothing, so it does not offer that.
-Then it asks for the new settings and password and makes the new container as `mhfe encrypt` does,
-in the same format as the old one.
+both. It asks for the old container, its password and settings, and, for a 24-word container, the
+length of your phrase. Before it encrypts anything again, it confirms the recovery. A 12- to
+21-word phrase in a 24-word container passes its built-in check at that length, with nothing to
+choose. A 24-word phrase or a container of the same length has no such check, so a list asks how to
+confirm it: by a receiving address or the master key fingerprint of your wallet, as `mhfe check`
+compares them, or by "Show me the phrase", which shows it to you on a private screen to compare
+word for word with an independent written record of it, such as the original backup. From memory
+such a comparison confirms little; without a record, use an address or the fingerprint. Encrypting
+under the old password and comparing would prove nothing, so it does not offer that.
+
+Whatever confirms the recovery, it then asks once whether the wallet has a BIP39 passphrase, as
+`mhfe encrypt` does and with neither answer marked at first, so that the list of what to keep names
+it. The question comes before any address or fingerprint is typed: one compared without a
+passphrase matches only the wallet of the phrase alone, which says nothing about funds kept under a
+passphrase. After an address or the fingerprint, MHFE asks for the passphrase only if the wallet
+has one, and refuses an empty one, since you said there is one; a wallet without one is not asked
+for it at all. All of this comes before the long work starts. Then it asks for the new settings and
+password and makes the new container as `mhfe encrypt` does, in the same format as the old one.
 
 The old container is not revoked: with the old password it still opens your wallet. Rehearse the
 new plate with `mhfe check`, best on another day, and only then destroy every copy of the old one.
@@ -419,16 +445,16 @@ carry hidden wallets behind the one you could disclose: under pressure you give 
 password, and the wallet it opens, with its genuine history, is all anyone sees. The specification
 describes this as a hidden wallet behind an honest disclosure.
 
-Nothing is created or stored: the container and a password give the same wallet every time. A
-hidden wallet exists only as the output of the program, and any correct program must find it again
-later, so run `mhfe self-test` once on the computer before you fund one. All wallets appear on one
-private screen, together with their passwords, which is cleared at the end,
-so the main screen shows neither the wallets nor how many you opened; without a private screen the
-command refuses to start. A wallet need not be written down, as the container and its password
-give it again, and nothing records which passwords you used or how many. A password whose wallet
-passes the built-in check of a shorter phrase, as the container's own password of a 12- to 21-word
-phrase does, is refused, so that recovery never calls a hidden wallet verified. So is one whose
-wallet passes the check of a new phrase, with the main wallet's passphrase or without one.
+Nothing is created or stored: the container and a password give the same wallet every time. A hidden
+wallet exists only as the output of the program, and any correct program must find it again later,
+so run `mhfe self-test --vectors` once on the computer before you fund one. All wallets appear on
+one private screen, together with their passwords, which is cleared at the end, so the main screen
+shows neither the wallets nor how many you opened; without a private screen the command refuses to
+start. A wallet need not be written down, as the container and its password give it again, and
+nothing records which passwords you used or how many. A password whose wallet passes the built-in
+check of a shorter phrase, as the container's own password of a 12- to 21-word phrase does, is
+refused, so that recovery never calls a hidden wallet verified. So is one whose wallet passes the
+check of a new phrase, with the main wallet's passphrase or without one.
 
 To keep a hidden wallet hidden:
 
@@ -484,12 +510,72 @@ specification; [`src/repair.rs`](src/repair.rs) describes it byte for byte.
 
 ### `mhfe self-test`
 
-`mhfe self-test` checks this program on this computer against the published test vectors: it
-encrypts the public suite 3 vector zero-12 and recovers the public suite 4 vector
-same-length-zero-12 at their full cost, 2 GiB and 12 rounds each, about two minutes, and compares
-the results with the published ones. A fault that a single encryption would not notice, because it
-would encrypt and check the same wrong way, shows here. Run it before you trust a computer with a
-real phrase. If it fails, do not use that program or computer for a real phrase, and report it.
+**At every start.** Before a command that handles a secret asks for anything, MHFE tests itself on
+this computer: `new`, `encrypt`, `decrypt`, `check`, `rekey`, `wallets`, `repair`, `repair-words`
+and `password` do so, and the start menu does it once before it opens. Every part of the program is
+compared with known answers, taken from published test vectors or from an independent program that
+first reproduced a published one, and each check is also given something it must refuse, such as a
+wrong repair card, a wrong check word or a damaged address. The parts are the hash functions,
+Argon2id with a small amount of memory, the twelve rounds of the cipher in both directions, the
+formats and the length detection, the password rules, the word list, repair words, the check word,
+the password generator and the test that refuses a broken random generator, wallet keys and
+addresses, the paths an address check says it will search, the wallet check, hidden wallets, rekey
+and the rehearsal check. The rounds are replayed with the keys that the published MHFE vectors
+record, so this needs no 2 GiB of memory. The command also reads back that core dumps are off, which
+of the kernel's restrictions hold and whether memory can be locked. All of this takes a few
+hundredths of a second, uses public test data only and shows nothing when every part passes.
+
+If a part gives another answer, the command stops before its first question, with exit code 1:
+
+```text
+✗ Error: Self-test at start failed: Cipher rounds: vector 5 of 10 gives other
+         repair words. Do not use this program on this computer.
+  More: https://github.com/hobby-eng/mhfe#mhfe-self-test
+```
+
+A broken build, a faulty processor or memory, or a damaged download that changes one of these
+answers then shows before you type a secret, not years later in a container that does not open.
+Damage to a part of the program that no test reaches can go unseen, so check every download against
+its `SHA256SUMS` ([Release files](#release-files)) all the same. When a test fails, do not use that
+program or that computer for a real phrase: check the download, try another computer, and report
+it. "Core dumps could not be turned off." stops a command in the same way: the system kept them on,
+so a crash could write your secrets to a disk.
+
+`mhfe serve`, which handles no secret, tests only the hashes, SHA-256 among them, before it compares
+a page with its checksum. `mhfe self-test` runs these tests itself and shows each one. The test
+tools `mhfe test-vectors` and `mhfe test-benchmark`, which handle public test data only, and
+`--help`, `mhfe help` and `--version` run no test at start.
+
+**On request.** `mhfe self-test` runs every test of the start together with slower ones, in a few
+seconds and with about 256 MiB of memory: Argon2id also at 64 and 256 MiB, all 27 published MHFE
+vectors instead of 10, more cases of the formats, the word list, repair words, the wallet check,
+seeds and addresses, every Unicode character against the rule that refuses control characters and
+line separators in a password, with a check that normalization turns no other character into one,
+and 1,024 bytes of the system's random generator. It also tests that the terminal turns its own echo
+off, as every question for a secret needs; such a question itself refuses to read when the echo
+stays on: "The terminal did not turn its echo off; no secret was read." It shows one line for each
+part: "as published", or for the protections and the generator "off", "enforced", "echo off",
+"works" or "healthy". A part that cannot be tested here says "not available here" and why, and a
+yellow "!" marks a protection weaker than it should be; neither is a failure. The test ends with
+"✓ Every part of this program gives its known answers." and exit code 0, or with "A part of this
+program does NOT give its known answers." and exit code 1.
+
+**With the published vectors.** `mhfe self-test --vectors` then also encrypts the public suite 3
+vector zero-12 and recovers the public suite 4 vector same-length-zero-12 at their full cost,
+2 GiB and 12 rounds each, about two to four minutes, and compares the results with the published
+ones. Only this shows a fault that appears only at Argon2's full size, which an encryption would
+not notice either, since it would encrypt and check in the same wrong way. When a result is not as
+published, it says where the work first left the published path. In the first round that went
+wrong, Argon2id was either given an input, password or salt, that the published vector does not
+have, so the fault lies before Argon2id, in that round's password or salt or in what the round
+started from; or it was given the published input and returned another key, so the fault lies in
+Argon2id. When every Argon2id input and key is as published, the fault lies after the last Argon2id
+call of the encryption or the recovery. Run it once before you trust a computer with a real phrase,
+and before you fund a hidden wallet. The start menu's entry asks which of the two tests to run.
+
+No test can show that a random generator is unpredictable: these find one that is stuck or plainly
+broken, not one that only looks random. If any test fails, do not use that program or computer for
+a real phrase, and report it.
 
 ## Settings: PIM and memory level
 
@@ -522,7 +608,11 @@ an attacker's work by 7,776, so a better password is worth more.
 ## In the browser
 
 The browser package in `dist/` (see [`docs/BROWSER-PACKAGE.md`](docs/BROWSER-PACKAGE.md)) runs the
-same code in a web page, for example in the offline wallet tools. It has two modes:
+same code in a web page, for example in the offline wallet tools, and offers everything the
+command-line tool does except what only an operating system or a terminal can give, such as memory
+levels above 0. It is a set of independent module classes, each usable alone, over one shared
+WebAssembly: the encryption core, repair words, the password tools and the wallet tools. Encryption
+and recovery have two modes:
 
 - **Standard mode** works everywhere, also in a page opened as a file. Argon2 runs on one thread, so
   a recovery takes about four to seven minutes, and an encryption about twice that.
@@ -531,13 +621,20 @@ same code in a web page, for example in the offline wallet tools. It has two mod
   HTML file from this computer (127.0.0.1) with the headers that enable it and opens it in the
   browser. It sees none of your secrets: all the work happens in the page. When a tool and its
   checksum file lie next to the program, the first entry of its menu serves that tool, so a
-  double-click is enough. On a computer with Python 3.8 or later but
-  without the mhfe program, `python3 mhfe-fast-mode.py tool.html` from the browser package does the
-  same. Both serve a page only when its checksum file `mhfe-fast-mode.sha256` lies next to it and
-  matches.
+  double-click is enough. On a computer with Python 3.8 or later but without the mhfe program,
+  `python3 mhfe-fast-mode.py tool.html` from the browser package's core does the same. Both serve a
+  page only when its checksum file `mhfe-fast-mode.sha256` lies next to it and matches.
 
 A browser supports memory level 0 only. It never connects to anything either: the package loads no
 remote resources.
+
+Each module of the package tests its parts in the same way before its first use and refuses to work
+if one fails; a page can also run the longer test and, on request, the published vectors. The longer
+test names what a browser cannot test, such as core dumps or locked memory, with the reason. Files
+of different builds of the package are refused before they work together, even when only one script
+differs. An Argon2 build that the browser does not start gave no wrong answer, so it is no failure:
+the test says why Argon2 is not available, or, when only the fast mode's build does not start, that
+it tested the standard mode's build instead.
 
 Both kinds of container work there too: a page asks for the same length with `sameLength: true`
 in its `encrypt` call, and recovery takes either kind.
@@ -547,11 +644,16 @@ in its `encrypt` call, and recovery takes either kind.
 `--stdin` reads the answers from standard input, one per line, instead of asking:
 
 - `encrypt`: the phrase, the password, and the password again; the container has 24 words unless
-  `--same-length` is given;
+  `--same-length` is given. Nothing asks whether the wallet has a BIP39 passphrase, so the list of
+  what to keep ends "also the wallet's BIP39 passphrase, if it has one";
 - `decrypt`: the container and the password;
 - `check`: the container and the password, then with `--address` or `--fingerprint` the reference
   and the BIP39 passphrase (an empty line if the wallet has none); with `--words N` nothing more.
   `check --stdin` needs one of these three options, because it cannot ask which reference to use.
+  Nor can it ask for the coin: `--address` without `--coin` means a Bitcoin address, as in earlier
+  versions. The summary then says "Bitcoin, as no --coin was given", and an address that is not
+  Bitcoin's is refused with a message that names Bitcoin and `--coin`; give `--coin`, such as
+  `--coin ethereum`, for an address of another coin.
 
 Secrets are never accepted as command-line arguments. `--stdin` also lets another program do the
 asking. On Linux with systemd 249 or later, for example, `systemd-ask-password` can ask for the
@@ -584,17 +686,19 @@ MHFE's own prompts or the `systemd-ask-password` example above.
 
 The exit code tells what happened:
 
-| Code | Meaning                                                                            |
-| ---- | ---------------------------------------------------------------------------------- |
-| 0    | Done; for `check`, the recovery matches                                            |
-| 1    | Internal error, including an encryption whose check failed (nothing is shown then) |
-| 2    | Invalid input: phrase, container, password, setting, address or option             |
-| 3    | Does not match: wrong password, PIM, memory level, container or selected length    |
-| 4    | Not enough memory for the memory level                                             |
-| 130  | Cancelled with Ctrl+C                                                              |
+| Code | Meaning                                                                                      |
+| ---- | -------------------------------------------------------------------------------------------- |
+| 0    | Done; for `check`, the recovery matches                                                      |
+| 1    | Internal error, a failed self-test, or a failed check of a new container, which is not shown |
+| 2    | Invalid input: phrase, container, password, setting, address or option                       |
+| 3    | Does not match: wrong password, PIM, memory level, container or selected length              |
+| 4    | Not enough memory for the memory level                                                       |
+| 130  | Cancelled: Ctrl+C, Escape or q at a list, Ctrl+D at a secret's prompt, or No in `rekey`      |
 
-Ctrl+C stops the tool at once, also in the middle of a round; the operating system then discards its
-memory.
+A command is cancelled with Ctrl+C at any moment, with Escape, or q, at a list of answers, with
+Ctrl+D on the empty prompt of a secret, and in `mhfe rekey` with "No, stop" when it asks whether
+the funds of other wallets on the container are moved or backed up. Ctrl+C stops the tool at once,
+also in the middle of a round; the operating system then discards its memory.
 
 ## Release files
 
@@ -618,13 +722,16 @@ workflow built it, from which commit. Check it on the computer you downloaded th
 the check needs the network, and only then carry the file to the offline computer:
 
 ```bash
-gh attestation verify mhfe-v0.5.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
+gh attestation verify mhfe-v0.5.1-linux-x86_64.tar.gz --repo hobby-eng/mhfe
 ```
 
 ## For developers
 
 To build from source, install Rust and run `cargo build --release --locked`; the program is then
-`target/release/mhfe`.
+`target/release/mhfe`. Release builds and the scripts below replace the builder's own paths in the
+program and the WebAssembly (`packaging/remap-builder-paths.sh`), so they refuse `RUSTFLAGS` and
+`CARGO_ENCODED_RUSTFLAGS`; give extra flags per target, such as
+`CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS`.
 
 ```bash
 cargo test --locked          # fast tests with reduced Argon2 cost
@@ -645,7 +752,10 @@ and `scripts/independent-suite4.py`, which use OpenSSL's Argon2 and the Unicode 
 `unicodedata2`; their packages install with
 `python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`, and
 `python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json` checks the
-password rule on every case of the specification.
+password rule on every case of the specification. The tests at start replay the published vectors
+from `src/mhfe/published_rounds.rs`, which `scripts/generate-published-rounds.py` writes from
+those fixtures (`--check` compares without writing, as `scripts/check.sh` does); regenerate it
+whenever the vectors change.
 
 Argon2 is the reference C implementation of its authors, vendored unchanged in
 [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) and used by both the native tool and the

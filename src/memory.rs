@@ -5,6 +5,207 @@
 //! Argon2's work area is far too large to lock; the program warns instead when swap is not
 //! encrypted.
 
+use std::convert::Infallible;
+use std::fmt;
+use std::ops::{Deref, DerefMut};
+
+use zeroize::Zeroizing;
+
+/// Text that is secret, or may be: a password, a phrase, a passphrase, or an answer read the same
+/// way as they are. Its buffer is locked before the text is written into it and stays locked
+/// until the text is wiped, also after it is handed to the code that asked for it
+/// (AUD-007-SEC003).
+pub struct LockedText {
+    text: Zeroizing<String>,
+    // Declared after `text`, so that the pages are unlocked only once they are wiped.
+    locked: LockedPages,
+}
+
+impl LockedText {
+    /// Takes over `text` together with the guard that locked its buffer before it was filled.
+    /// `locked` must cover the buffer of `text` itself, not of a copy, and `text` must not grow.
+    pub fn from_locked(text: Zeroizing<String>, locked: LockedPages) -> Self {
+        Self { text, locked }
+    }
+
+    /// A text that `fill` writes into a buffer reserved at `capacity` bytes and locked first. The
+    /// text is held here from the start, so that a `fill` that fails leaves it wiped while its
+    /// pages are still locked. `fill` must not write more than `capacity` bytes: the buffer must
+    /// never move.
+    pub fn build<E>(
+        capacity: usize,
+        fill: impl FnOnce(&mut String) -> Result<(), E>,
+    ) -> Result<Self, E> {
+        let text = Zeroizing::new(String::with_capacity(capacity));
+        let locked = LockedPages::of_string(&text);
+        let reserved = text.capacity();
+        let mut built = Self { text, locked };
+        fill(&mut built.text)?;
+        assert_eq!(
+            built.text.capacity(),
+            reserved,
+            "a locked text outgrew its buffer"
+        );
+        Ok(built)
+    }
+
+    /// A copy of `text` in a buffer reserved at its final size and locked before the copy is
+    /// written into it, so that the copy never moves and never leaves part of itself behind.
+    pub fn copy_of(text: &str) -> Self {
+        let Ok(copy) = Self::build::<Infallible>(text.len(), |copy| {
+            copy.push_str(text);
+            Ok(())
+        });
+        copy
+    }
+
+    /// Whether the operating system keeps the text out of swap.
+    pub fn is_locked(&self) -> bool {
+        self.locked.is_locked()
+    }
+
+    /// The size of the buffer, which never changes once the text is in it.
+    pub fn capacity(&self) -> usize {
+        self.text.capacity()
+    }
+
+    /// The text and the guard of its pages, for a holder of its own that keeps both, declaring
+    /// the guard after the text, as [`crate::RecoveredPhrase`] does.
+    pub(crate) fn into_parts(self) -> (Zeroizing<String>, LockedPages) {
+        (self.text, self.locked)
+    }
+}
+
+impl Deref for LockedText {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.text
+    }
+}
+
+/// Bytes that are secret, or may be: the byte form of [`LockedText`], for a password as it is
+/// encoded, the entropy of a phrase, a state of the cipher or a line as it is typed. Its buffer is
+/// locked before the bytes are written into it and stays locked until they are wiped, also when
+/// they are refused while they are written. The bytes may change in place but never grow.
+pub struct LockedBytes {
+    bytes: Zeroizing<Vec<u8>>,
+    // Declared after `bytes`, so that the pages are unlocked only once they are wiped.
+    locked: LockedPages,
+}
+
+impl LockedBytes {
+    /// Bytes that `fill` writes into a buffer reserved at `capacity` bytes and locked first. They
+    /// are held here from the start, so that a `fill` that fails, such as on a password that is
+    /// too long, leaves them wiped while their pages are still locked. `fill` must not write more
+    /// than `capacity` bytes: the buffer must never move.
+    pub fn build<E>(
+        capacity: usize,
+        fill: impl FnOnce(&mut Vec<u8>) -> Result<(), E>,
+    ) -> Result<Self, E> {
+        let bytes = Zeroizing::new(Vec::with_capacity(capacity));
+        let locked = LockedPages::of_vec(&bytes);
+        let reserved = bytes.capacity();
+        let mut built = Self { bytes, locked };
+        fill(&mut built.bytes)?;
+        assert_eq!(
+            built.bytes.capacity(),
+            reserved,
+            "locked bytes outgrew their buffer"
+        );
+        Ok(built)
+    }
+
+    /// A copy of `bytes` in a buffer reserved at its final size and locked before the copy is
+    /// written into it.
+    pub fn copy_of(bytes: &[u8]) -> Self {
+        let Ok(copy) = Self::build::<Infallible>(bytes.len(), |copy| {
+            copy.extend_from_slice(bytes);
+            Ok(())
+        });
+        copy
+    }
+
+    /// Whether the operating system keeps the bytes out of swap.
+    pub fn is_locked(&self) -> bool {
+        self.locked.is_locked()
+    }
+
+    /// The bytes as text, in the same buffer and under the same lock. Bytes that are not UTF-8
+    /// come back as they are, still locked, to be wiped when they are dropped.
+    pub fn into_text(self) -> Result<LockedText, Self> {
+        let Self { mut bytes, locked } = self;
+        // Taken without a copy: from_utf8 keeps the buffer, and gives it back on an error.
+        match String::from_utf8(std::mem::take(&mut *bytes)) {
+            Ok(text) => Ok(LockedText::from_locked(Zeroizing::new(text), locked)),
+            Err(error) => {
+                *bytes = error.into_bytes();
+                Err(Self { bytes, locked })
+            }
+        }
+    }
+}
+
+impl fmt::Debug for LockedBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("LockedBytes(hidden)")
+    }
+}
+
+impl Deref for LockedBytes {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+impl DerefMut for LockedBytes {
+    /// The bytes to change in place; as a slice, they cannot grow out of their locked buffer.
+    fn deref_mut(&mut self) -> &mut [u8] {
+        &mut self.bytes
+    }
+}
+
+/// The self-check `memory-locking`: whether this process can keep a secret out of swap, tried on
+/// one small buffer as every typed secret is. It only warns: a refusal, such as a low
+/// RLIMIT_MEMLOCK, leaves secrets working but able to reach swap. Where nothing is locked at all,
+/// it says why.
+pub struct LockProbe;
+
+impl crate::self_check::ComponentCheck for LockProbe {
+    fn id(&self) -> &'static str {
+        "memory-locking"
+    }
+
+    fn label(&self) -> &'static str {
+        "Locked memory"
+    }
+
+    fn run(&mut self, _: crate::self_check::Tier) -> crate::self_check::ComponentOutcome {
+        use crate::self_check::ComponentOutcome;
+        if cfg!(target_arch = "wasm32") {
+            return ComponentOutcome::NotAvailable(
+                "a web page cannot keep its memory out of swap".to_owned(),
+            );
+        }
+        if !cfg!(unix) {
+            return ComponentOutcome::NotAvailable(
+                "this build locks no memory on this system".to_owned(),
+            );
+        }
+        // Public text, as long as a typical password.
+        let probe = LockedText::copy_of("public probe of memory locking");
+        if probe.is_locked() {
+            ComponentOutcome::Passed
+        } else {
+            ComponentOutcome::Warning(
+                "the system refused to lock memory, so typed secrets may reach swap".to_owned(),
+            )
+        }
+    }
+}
+
 /// The locked pages under a buffer, unlocked when this is dropped. The buffer must stay where it
 /// is while this lives: lock only a buffer reserved at its final size, which never grows.
 #[derive(Debug)]
@@ -141,6 +342,20 @@ mod pages {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_lock_probe_tells_whether_memory_is_locked() {
+        use crate::self_check::{ComponentCheck, Tier};
+        let outcome = LockProbe.run(Tier::Startup);
+        let locked = LockedText::copy_of("public probe").is_locked();
+        let expected = match (cfg!(unix), locked) {
+            (true, true) => "passed",
+            (true, false) => "warning",
+            (false, _) => "notAvailable",
+        };
+        assert_eq!(outcome.name(), expected);
+        assert!(!LockProbe.run(Tier::Full).is_failure());
+    }
+
     /// A small buffer fits any usual RLIMIT_MEMLOCK (64 KiB or more) on Unix.
     #[test]
     fn a_small_buffer_is_locked_on_unix() {
@@ -150,6 +365,64 @@ mod tests {
         drop(pages);
         // An empty capacity locks nothing and unlocks nothing.
         assert!(!LockedPages::of_vec(&Vec::new()).is_locked());
+    }
+
+    /// A copy is made at its final size and locked, like the text that is read in place.
+    #[test]
+    fn a_copy_is_locked_at_its_final_size() {
+        let text = "public test password";
+        let copy = LockedText::copy_of(text);
+        assert_eq!(&*copy, text);
+        assert_eq!(copy.capacity(), text.len(), "the buffer never grew");
+        assert_eq!(copy.is_locked(), cfg!(unix));
+        // Empty text has no buffer: nothing to lock.
+        let empty = LockedText::copy_of("");
+        assert_eq!(&*empty, "");
+        assert!(!empty.is_locked());
+    }
+
+    /// Bytes are locked at their final size, may change in place, and become text in the same
+    /// buffer under the same lock; bytes that are not UTF-8 come back as they were.
+    #[test]
+    fn locked_bytes_keep_their_buffer_and_lock() {
+        let mut bytes = LockedBytes::copy_of(b"public test bytes");
+        assert_eq!(&*bytes, b"public test bytes");
+        assert_eq!(bytes.is_locked(), cfg!(unix));
+        bytes[0] = b'P';
+        let address = bytes.as_ptr();
+        let text = bytes.into_text().ok().unwrap();
+        assert_eq!(&*text, "Public test bytes");
+        assert_eq!(text.as_ptr(), address, "the text kept the buffer");
+        assert_eq!(text.is_locked(), cfg!(unix));
+        let not_utf8 = LockedBytes::copy_of(&[0xff, 0xfe]);
+        let back = not_utf8.into_text().err().unwrap();
+        assert_eq!(&*back, [0xff, 0xfe]);
+        assert_eq!(back.is_locked(), cfg!(unix));
+    }
+
+    /// A `fill` that fails, as on a password that is too long or a line that is too long, gets a
+    /// buffer that is locked while it writes, and the error comes back once the bytes are wiped
+    /// and their pages released. The wipe comes first by the order of the fields, which Rust
+    /// drops in their declared order; reading freed memory to see it would need unsafe code.
+    /// The buffer spans whole pages of its own, so that no other test's guard can hold them.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_fill_releases_its_pages() {
+        let size = crate::engine::page_size().expect("a Unix system reports its page size");
+        let mut page = 0;
+        let mut was_locked = false;
+        let refused = LockedBytes::build(3 * size, |bytes| {
+            page = (bytes.as_ptr() as usize).next_multiple_of(size);
+            was_locked = pages::holders_of(page) == 1;
+            bytes.extend_from_slice(b"public bytes of a refused answer");
+            Err("refused")
+        });
+        assert!(matches!(refused, Err("refused")));
+        if !was_locked {
+            // mlock refused here, such as with RLIMIT_MEMLOCK 0: nothing to release.
+            return;
+        }
+        assert_eq!(pages::holders_of(page), 0, "the pages were not released");
     }
 
     /// Two secrets on one page, as the allocator often places small buffers: dropping the guard

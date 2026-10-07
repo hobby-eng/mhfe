@@ -2,7 +2,9 @@
 
 `vendor/eff-large-wordlist/eff_large_wordlist.txt` is the EFF large wordlist for passphrases by
 Joseph Bonneau and the Electronic Frontier Foundation. `mhfe password` uses it to generate passwords
-from random words, and `mhfe encrypt` uses it to recognise such passwords.
+from random words, the password check word (MHFE-PASSWORD-CHECK-1) reads its words in it, and the
+strength estimate recognises such passwords. The browser package's core and passwords modules
+carry it too.
 
 | Item      | Value                                                                             |
 | --------- | --------------------------------------------------------------------------------- |

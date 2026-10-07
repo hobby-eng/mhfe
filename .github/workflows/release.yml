@@ -74,9 +74,9 @@ jobs:
       - name: Run the fast tests
         if: matrix.target == 'aarch64-apple-darwin'
         run: cargo test --locked
+      # package-release.sh builds the program itself, with the builder's directories remapped.
       - name: Build and package
         run: |
-          cargo build --locked --release --target ${{ matrix.target }}
           scripts/package-release.sh "$GITHUB_REF_NAME" macos-output ${{ matrix.package }}
           cp macos-output/SHA256SUMS "macos-output/${{ matrix.package }}.sha256"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

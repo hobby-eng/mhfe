@@ -187,7 +187,7 @@ fn record<E: Argon2Engine>(mhfe: &mut Mhfe<E>, input: &PublicInput) -> Result<Ve
         Some(&mut encryption_rounds),
     )?;
     mhfe::reject_fixed_point(&x[..], &y)?;
-    let container = mhfe::phrase_from_entropy(&y)?;
+    let container = phrase::phrase_from_entropy(&y)?;
 
     let mut decryption_rounds = Vec::new();
     let recovered = mhfe.permutation(&password, Geometry::SUITE_3).inverse(
@@ -201,7 +201,7 @@ fn record<E: Argon2Engine>(mhfe: &mut Mhfe<E>, input: &PublicInput) -> Result<Ve
             "the vector round trip did not return the original state".to_owned(),
         ));
     }
-    let recovery = match mhfe::recover(&recovered_state, PhraseLength::Detect)? {
+    let recovery = match mhfe::recover(recovered_state, PhraseLength::Detect)? {
         Recovery::Phrase(phrase) => vec![phrase],
         Recovery::Ambiguous(candidates) => candidates,
     };
@@ -275,7 +275,7 @@ fn record_same_length<E: Argon2Engine>(
         Some(&mut encryption_rounds),
     )?;
     mhfe::reject_fixed_point(&x, &y)?;
-    let container = mhfe::phrase_from_entropy(&y)?;
+    let container = phrase::phrase_from_entropy(&y)?;
 
     let mut decryption_rounds = Vec::new();
     let recovered = mhfe.permutation(&password, geometry).inverse(
@@ -308,7 +308,7 @@ fn record_same_length<E: Argon2Engine>(
         recovery: RecoveredCandidate {
             words: source.word_count(),
             verified: false,
-            phrase: mhfe::phrase_from_entropy(&recovered)?.to_string(),
+            phrase: phrase::phrase_from_entropy(&recovered)?.to_string(),
         },
     })
 }
@@ -805,8 +805,9 @@ mod tests {
             .find(|input| input.name == "ambiguous-12-21")
             .unwrap();
         let entropy = phrase::parse(ambiguous.phrase).unwrap().to_entropy();
+        let state = packing::pack(&entropy).unwrap();
         assert_eq!(
-            packing::matching_short_lengths(&packing::pack(&entropy).unwrap()),
+            packing::matching_short_lengths(mhfe::suite_3_state(&state).unwrap()),
             vec![12, 21]
         );
     }

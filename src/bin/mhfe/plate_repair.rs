@@ -5,32 +5,92 @@
 
 use anstream::{eprintln, println};
 use clap::Args;
+use mhfe::memory::LockedText;
 use mhfe::repair::{self, Repaired, REPAIR_WORD_COUNTS};
+use mhfe::WORD_COUNTS;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::{capitalize, Failure, SUCCESS};
 use crate::flow::Flow;
-use crate::locked_text::LockedText;
 use crate::readme;
 use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
 use crate::terminal::{self, Input, PrivateScreen, Wallet};
 
 #[derive(Args)]
 pub struct RepairOptions {
-    /// Read the plate and the repair words from standard input, one line each (for scripts)
-    #[arg(long)]
+    /// Read the answers from standard input (for scripts)
+    #[arg(long, long_help = repair_stdin_help())]
     stdin: bool,
 }
 
 #[derive(Args)]
 pub struct WordsOptions {
-    /// Number of repair words: 2, 4, 6 or 8; asked at a terminal when not given
-    #[arg(long, value_name = "N")]
+    /// Number of repair words: 2, 4, 6 or 8
+    #[arg(long, value_name = "N", long_help = count_help())]
     count: Option<usize>,
 
-    /// Read the container from standard input (for scripts); needs --count
-    #[arg(long, requires = "count")]
+    /// Read the container from standard input (for scripts)
+    #[arg(long, requires = "count", long_help = words_stdin_help())]
     stdin: bool,
+}
+
+fn repair_stdin_help() -> String {
+    style::option_help(&[
+        "Read the answers from standard input (for scripts).",
+        "Input: the plate, then the repair words, one line each, with ? for a word that cannot \
+         be read. Output: the repaired container on one line, or nothing when there is nothing \
+         to repair.",
+    ])
+}
+
+fn count_help() -> String {
+    style::option_help(&[
+        "Number of repair words: 2, 4, 6 or 8.",
+        "Asked at a terminal when not given; a script must give it.",
+    ])
+}
+
+fn words_stdin_help() -> String {
+    style::option_help(&[
+        "Read the container from standard input (for scripts); needs --count.",
+        "Input: the container on one line. Output: the repair words on one line.",
+    ])
+}
+
+/// The end of `mhfe repair -h` and `--help`.
+pub fn repair_help() -> String {
+    style::help_section(
+        "Examples:",
+        &[
+            (
+                "mhfe repair",
+                "Type the plate and the card; ? for a word that cannot be read",
+            ),
+            (
+                "your-program | mhfe repair --stdin",
+                "A script: the plate and the card from another program, the repaired container \
+                 out",
+            ),
+        ],
+    )
+}
+
+/// The end of `mhfe repair-words -h` and `--help`.
+pub fn words_help() -> String {
+    style::help_section(
+        "Examples:",
+        &[
+            ("mhfe repair-words", "Choose how many repair words to make"),
+            (
+                "mhfe repair-words --count 4",
+                "Four repair words, the recommended number",
+            ),
+            (
+                "your-program | mhfe repair-words --stdin --count 4",
+                "A script: the container from another program, the four words out",
+            ),
+        ],
+    )
 }
 
 /// The top of `mhfe repair --help`.
@@ -54,9 +114,6 @@ pub fn words_about() -> String {
 
 const REPAIR_TITLE: &str = "Repair a plate";
 const WORDS_TITLE: &str = "Make repair words";
-
-/// The lengths of a container: 24 words, or 12 to 21 for a same-length container.
-const PLATE_LENGTHS: [usize; 5] = [12, 15, 18, 21, 24];
 
 pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
     let mut input = Input::new(options.stdin);
@@ -96,10 +153,10 @@ pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
     }
     drop(screen);
     flow.finish();
-    style::fact(
+    style::fact_wrapped(
         "Next",
-        format!(
-            "write the repaired words on the plate, then rehearse with {}",
+        &format!(
+            "write the repaired words on the plate; rehearse with {}",
             paint(ACCENT, "mhfe check")
         ),
     );
@@ -118,13 +175,13 @@ pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
     let mut input = Input::new(options.stdin);
     let flow = Flow::start(&input, WORDS_TITLE);
     style::title(WORDS_TITLE);
-    let (container, _) = terminal::read_container(&mut input, WORDS_TITLE)?;
+    let container = terminal::read_container(&mut input, WORDS_TITLE)?;
     let count = match options.count {
         Some(count) => count,
         // Without --count a script is refused by clap, so the person at a terminal is asked.
-        None => ask_count(&mut input, false)?.unwrap_or(RECOMMENDED_COUNT),
+        None => ask_count(&mut input, false)?.unwrap_or(repair::RECOMMENDED_REPAIR_WORDS),
     };
-    let words = repair::repair_words(&container, count)?;
+    let words = repair::repair_words(container.words(), count)?;
     let screen = PrivateScreen::enter_to_show(&input);
     if screen.is_active() {
         style::title(WORDS_TITLE);
@@ -135,20 +192,16 @@ pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
     }
     drop(screen);
     flow.finish();
-    style::fact("Keep", "the repair words on a card, apart from the plate");
+    style::fact_wrapped("Keep", "the repair words on a card, apart from the plate");
     style::more(readme::REPAIR);
     Ok(SUCCESS)
 }
-
-/// Four repair words repair four unreadable words or two wrong ones: enough for the usual damage of
-/// a plate at a card of four words.
-const RECOMMENDED_COUNT: usize = 4;
 
 /// Asks how many repair words a plate gets, the recommended four first; with `offer_none`, as when
 /// a container is made, "none" too, which gives `None`.
 pub fn ask_count(input: &mut Input, offer_none: bool) -> Result<Option<usize>, Failure> {
     // The counts in the order of the answers below.
-    const COUNTS: [usize; 4] = [RECOMMENDED_COUNT, 2, 6, 8];
+    const COUNTS: [usize; 4] = [repair::RECOMMENDED_REPAIR_WORDS, 2, 6, 8];
     let mut answers = vec![
         Answer::new(
             "4 repair words (recommended)",
@@ -178,14 +231,6 @@ pub fn ask_when_creating(input: &mut Input) -> Result<Option<usize>, Failure> {
         return Ok(None);
     }
     ask_count(input, true)
-}
-
-/// What the Keep line adds for repair words: the card, apart from the plate.
-pub fn to_keep(repair_count: Option<usize>) -> &'static [&'static str] {
-    match repair_count {
-        Some(_) => &["the repair words apart from the plate"],
-        None => &[],
-    }
 }
 
 /// The repair card as it is written down: the profile's name, then the words numbered as "1/4",
@@ -249,10 +294,11 @@ fn read_damaged(input: &mut Input) -> Result<(LockedText, LockedText), Failure> 
         eprintln!();
         style::hint("Type ? for a word you cannot read; four letters of a word are enough.");
     }
+    // A container has 24 words, or 12 to 21 if it has the length of its original.
     let plate = read_words(
         input,
         "Plate",
-        &PLATE_LENGTHS,
+        &WORD_COUNTS,
         "A plate has 12, 15, 18, 21 or 24",
         |typed| typed.split_whitespace().count(),
     )?;

@@ -64,7 +64,7 @@ const SECURITY_HEADERS: [(&str, &str); 7] = [
 
 #[derive(Args)]
 pub struct Options {
-    /// The HTML file of the browser tool; mhfe-fast-mode.sha256 must lie next to it
+    /// The HTML file of the browser tool, with mhfe-fast-mode.sha256
     #[arg(long_help = file_help())]
     file: PathBuf,
 

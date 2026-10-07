@@ -9,7 +9,7 @@ use crate::packing;
 use crate::{Mhfe, MhfeError, Password, PhraseLength, WordCount, WorkFactor};
 
 fn fixture() -> Value {
-    serde_json::from_str(include_str!("../tests/fixtures/validation-cases.json")).unwrap()
+    serde_json::from_str(crate::validation_fixtures::SUITE_3).unwrap()
 }
 
 fn cases<'a>(fixture: &'a Value, section: &str) -> &'a Vec<Value> {
@@ -178,10 +178,7 @@ fn the_verifier_keeps_digest_byte_order() {
 }
 
 fn suite_4_fixture() -> Value {
-    serde_json::from_str(include_str!(
-        "../tests/fixtures/suite4-vectors/validation-cases.json"
-    ))
-    .unwrap()
+    serde_json::from_str(crate::validation_fixtures::SUITE_4).unwrap()
 }
 
 /// `BE32(ENT)` follows the settings in every suite 4 round message, so the same settings, round

@@ -1,5 +1,5 @@
 // The bridge from the Rust core to the Emscripten build of the reference Argon2 code. It is
-// joined into mhfe-worker.js by scripts/build-wasm.sh, and the Node.js tests load the same file.
+// joined into runtime/worker.js by scripts/build-wasm.sh, and the Node.js tests load the same file.
 "use strict";
 
 /** Argon2id output length and lane count of MHFE suite 3. */
@@ -54,6 +54,17 @@ function argon2Engine(module) {
         wipeAndFree(module, heap, saltPointer, salt.length);
         wipeAndFree(module, heap, keyPointer, ARGON2_KEY_BYTES);
       }
+    },
+
+    /** Grows the C heap to `memoryKib` once and frees it again (src/engine/browser.rs). */
+    reserve(memoryKib) {
+      const pointer = module._malloc(memoryKib * 1024) >>> 0;
+      if (pointer === 0) {
+        throw new Error(
+          "MEMORY_ALLOCATION_FAILED: the browser could not provide the Argon2 memory",
+        );
+      }
+      module._free(pointer);
     },
   };
 }

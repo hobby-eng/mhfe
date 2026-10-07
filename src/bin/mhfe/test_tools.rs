@@ -37,7 +37,7 @@ pub struct VectorOptions {
     #[arg(long, value_name = "TEXT", long_help = only_help())]
     only: Option<String>,
 
-    /// The suite 4 vectors of same-length containers instead of suite 3
+    /// Suite 4, of same-length containers, instead of suite 3
     #[arg(long)]
     same_length: bool,
 }

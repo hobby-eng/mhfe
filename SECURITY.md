@@ -47,12 +47,26 @@ Never include a real seed phrase, password, private key or wallet file.
 - The tool keeps secrets out of core dumps and swap. It forbids core dumps (`RLIMIT_CORE` 0) and,
   on Linux, makes itself non-dumpable (`PR_SET_DUMPABLE` 0), which also keeps other programs of the
   same user from attaching to it or reading its memory through `/proc`, so a crash writes nothing
-  to disk; the Argon2 work area is marked `MADV_DONTDUMP` as well. The password, the original
-  phrase while it is encrypted, the entropy kept for the check, a recovered phrase, a BIP39
-  passphrase and the line a secret is typed into are locked in memory (`mlock`), so that the system
-  does not write them to swap; a typed line stays locked until it is wiped. The system locks whole
-  pages, and one page may hold several secrets, so the tool counts the secrets on each page and
-  unlocks it only after the last of them is wiped. This is best effort and does not apply in a
+  to disk; the Argon2 work area is marked `MADV_DONTDUMP` as well. The secrets the program keeps
+  beyond a moment are held in locked memory (`mlock`), so that the system does not write them to
+  swap: the line a secret is typed into at a terminal or read from standard input; the password as
+  Argon2 receives it; a BIP39 passphrase and its normalized form; a password made by the generator
+  or completed by its check word; a seed phrase as text, whether typed, recovered, new or a hidden
+  wallet's, and every reading of a recovery that `check` compares with an address or a
+  fingerprint; and a phrase's entropy and the cipher's state, that is the state an encryption
+  starts from until its check is done, both halves of the state through all twelve rounds, the
+  message of each round that holds one of them, and the state a recovery, a check, a rekey or a
+  hidden wallet recovers. Each of these buffers is reserved at a size it never outgrows, locked
+  before anything is written into it, and unlocked only after it is wiped, also when what is
+  written into it is refused, such as a password that is too long. Copies made on the way are
+  wiped when dropped but not locked: the words of a typed phrase while they are read and written
+  out in full, the entropy as the BIP39 library first gives it, the hash that fills out a short
+  phrase's state while it is computed, the random bytes and word numbers a phrase or password is
+  drawn from, the BIP39 seed for an address, a fingerprint or the wallet check and the keys derived
+  from it, each round's Argon2 key, salt and mask, the lines of the frame a phrase is shown in at a
+  terminal, and buffers inside dependencies. The system locks whole pages, and one page may hold
+  several secrets, so the tool counts the secrets on each page and unlocks it only after the last
+  of them is wiped. This is best effort, natively on Linux and macOS; nothing is locked in a
   browser or on Windows.
   The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
   can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
@@ -72,9 +86,9 @@ Never include a real seed phrase, password, private key or wallet file.
   container that then looks verified. It does not revoke the old container, and says so.
 - `new` draws a new phrase from the operating system's random generator, on every processor core
   when it must pass a check with the BIP39 passphrase, and shows it only on a private screen. That
-  check is a draft over the BIP39 seed with the passphrase, which may not be empty: a filter of 16 bits that a
-  wrong password or passphrase passes once in about 65,536. It never shows which wallet it is, and
-  `rekey` does not accept it as the only confirmation.
+  check is a draft over the BIP39 seed with the passphrase, which may not be empty: a filter of 16
+  bits that a wrong password or passphrase passes once in about 65,536. It never shows which wallet
+  it is, and `rekey` does not accept it as the only confirmation.
 - `wallets` shows hidden wallets all on one private screen with their passwords and progress, so
   that the main screen shows neither the wallets nor how many were opened, and it keeps no record
   of the passwords or the wallets.
@@ -197,15 +211,59 @@ tab.
 
 ## The browser
 
+The browser package ([`docs/BROWSER-PACKAGE.md`](docs/BROWSER-PACKAGE.md)) runs the same Rust code
+and the same Argon2 C code in a web page, as independent classes: `MhfeClient` (encryption,
+recovery, the check, rekey, hidden wallets and the self-test), `MhfeRepair`, `MhfePasswords` and
+`MhfeWallet`. A page has none of the protections of the operating system described above: no
+private screen, no locked memory, no control of crash reports and no isolation of its own.
+
 - The package fetches nothing and needs no `connect-src`; it works under a policy that allows
-  scripts only by hash, WebAssembly and `blob:` workers.
-- Each operation runs in its own worker, which is terminated afterwards; that frees the Argon2
-  memory. The worker is a boundary for responsiveness and cancellation, not a vault. If an Argon2
-  round fails in the browser, the C code leaves its work area unwiped, and the worker's memory is
-  discarded with the worker rather than overwritten.
-- The Rust core and the Argon2 bridge wipe their copies of the password, keys and states. A password
-  typed into a page is a JavaScript string, and so is a recovered phrase shown on the page; browsers
-  cannot erase strings. The client refuses a password with an unpaired surrogate instead of letting
-  the browser replace it silently. It checks every setting before it copies a secret into bytes and
-  wipes its copies if the operation cannot start; the core takes both the password and the BIP39
-  passphrase into wiping buffers before anything can fail.
+  scripts only by hash, WebAssembly and `blob:` workers. The page passes its files to each class
+  as text and bytes.
+- Every operation runs in a worker of its own, which is terminated when the operation ends; that
+  frees the Argon2 memory. The worker is a boundary for responsiveness and cancellation, not a
+  vault: it runs in the page's browser process and origin. A cancelled operation is stopped at
+  once, and its memory is freed without being overwritten; so is the work area of an Argon2 round
+  that fails, which the C code leaves unwiped in the browser.
+- Two kinds of work hold secrets in workers for longer. A session of hidden wallets keeps its
+  worker with its Argon2 work area, the main wallet's BIP39 passphrase and the passwords used so
+  far, which it needs to refuse a password used twice, until the page closes it; `close()`
+  overwrites them before the worker ends, and a close while a wallet opens stops the worker at
+  once instead. A new phrase with the wallet check is drawn in several workers at once, by
+  default as many as the processor has cores, at most eight, or as many as the page asks for, each
+  from the browser's random generator (`crypto.getRandomValues`), and every worker ends with the
+  draw.
+- A password, a BIP39 passphrase, a phrase and dice rolls given to a class are copied into UTF-8
+  bytes only after the class's check at start has passed and every setting is checked. The copies
+  are transferred to the worker, so that none stays with the class, and are wiped when the
+  operation cannot start; a `Uint8Array` the page passes is copied, not emptied. Text with an
+  unpaired surrogate is refused instead of being silently changed by the browser. In the worker,
+  the Rust code takes these bytes into buffers that it wipes, and it wipes its copies of the keys
+  and states; a result that holds a secret is written into a buffer of its final size, which is
+  wiped once the result has become a JavaScript string.
+- What the page holds as a JavaScript string cannot be wiped, since browsers cannot erase strings:
+  a password or phrase typed into the page, a recovered or new phrase, the phrase shown to the
+  owner to confirm a rekey, the phrases of hidden wallets, a generated password and the words of a
+  check word review. Pass passwords and passphrases as `Uint8Array` where possible, keep such
+  values on screen only as long as needed and close the tab afterwards.
+- The rules of the library hold in the browser too: a rekey seals only a recovery that is
+  confirmed and only after the user's answer about other wallets on the container, the wallet
+  check of a new phrase needs a BIP39 passphrase and never confirms a rekey, and a hidden wallet's
+  password is refused when it was used already or when its wallet would pass a check. What the
+  terminal's private screen does falls to the page: `docs/BROWSER-PACKAGE.md` ("What the page
+  should do") asks it to show the phrase of an owner's confirmation concealed and remove it after
+  the answer, to remove a recovered phrase from the screen once the user is done, to show no list
+  or count of the hidden wallets opened, and to close a session of hidden wallets when the user
+  leaves the page and after a while without use.
+- Every class checks its parts with known answers and public test data before its first operation
+  (`startupCheck()`), and on request with slower cases (`fullCheck()`); every Argon2 operation
+  checks its Argon2 build before its first round and after its last. A wrong answer closes the
+  class for good, so that a page that checks its classes when it opens shows the fault before
+  anything secret is typed. These checks find a broken build, a damaged file that changes an answer
+  and a browser that computes wrongly. They cannot check locked memory, crash reports, isolation or
+  a random generator that is deterministic but looks random, and only `selfTest()`, which takes
+  minutes, covers Argon2 at its full 2 GiB.
+- Every file a page loads carries a build identifier derived from all of them, and files of
+  different builds are refused with `PACKAGE_MISMATCH`. This catches files mixed by accident, not
+  deliberate tampering: whoever can change a file can change its identifier too. Check the package
+  against the release's `SHA256SUMS` and its OpenPGP signature for that.

@@ -5,9 +5,12 @@
 #   scripts/package-release.sh <version> <output folder> [package ...]
 #
 # Packages: linux-x86_64, linux-aarch64, windows-x86_64, macos-x86_64, macos-aarch64, browser.
-# Without a list it packs the four that packaging/Dockerfile.reproducible builds. Build first: the
-# command-line tools with `cargo build --release [--target ...]`, the browser package with
-# scripts/build-wasm.sh. Needs GNU tar, gzip, zip and sha256sum.
+# Without a list it packs the four that packaging/Dockerfile.reproducible builds. It builds each
+# command-line tool itself (`cargo build --release [--target ...]`) with the builder's directories
+# remapped as packaging/remap-builder-paths.sh describes, the same flags as the Dockerfile's, so
+# that a program the Dockerfile built is up to date. Build the browser package first with
+# scripts/build-wasm.sh, which remaps the same way. A program or WebAssembly that still names a
+# directory of the builder is refused. Needs GNU tar, gzip, zip and sha256sum.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,6 +23,13 @@ packages=("$@")
 if [[ ${#packages[@]} -eq 0 ]]; then
   packages=(linux-x86_64 linux-aarch64 windows-x86_64 browser)
 fi
+. packaging/remap-builder-paths.sh
+remap_builder_paths "$repo_root"
+# CARGO_TARGET_DIR may move the programs out of target/.
+target_dir="$(
+  cargo metadata --locked --no-deps --format-version 1 |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])'
+)"
 tar_command="$(command -v gtar || command -v tar)"
 archives=()
 staging="$(mktemp -d)"
@@ -79,9 +89,18 @@ pack_zip() {
   archives+=("$output/$archive")
 }
 
+# Builds the command-line tool for `triple`, or for this computer without one, and packs it.
 cli_package() {
-  local name="$1" binary="$2" launcher="$3"
-  local folder="$staging/$name"
+  local name="$1" triple="$2" launcher="$3" program="${4:-mhfe}"
+  local folder="$staging/$name" binary
+  if [[ -n "$triple" ]]; then
+    cargo build --locked --release --target "$triple"
+    binary="$target_dir/$triple/release/$program"
+  else
+    cargo build --locked --release
+    binary="$target_dir/release/$program"
+  fi
+  scripts/check-release-artifacts.sh --builder-paths "$binary"
   mkdir -p "$folder"
   cp "$binary" "$folder/"
   cp "$launcher" "$folder/"
@@ -95,20 +114,22 @@ cli_package() {
 
 for package in "${packages[@]}"; do
   case "$package" in
-    linux-x86_64) cli_package "$package" target/release/mhfe packaging/mhfe-launch.sh ;;
+    # Linux on x86-64 is the computer's own target, as in the Dockerfile's container.
+    linux-x86_64) cli_package "$package" "" packaging/mhfe-launch.sh ;;
     linux-aarch64)
-      cli_package "$package" target/aarch64-unknown-linux-gnu/release/mhfe packaging/mhfe-launch.sh
+      cli_package "$package" aarch64-unknown-linux-gnu packaging/mhfe-launch.sh
       ;;
     windows-x86_64)
-      cli_package "$package" target/x86_64-pc-windows-gnu/release/mhfe.exe packaging/mhfe-launch.bat
+      cli_package "$package" x86_64-pc-windows-gnu packaging/mhfe-launch.bat mhfe.exe
       ;;
     macos-x86_64)
-      cli_package "$package" target/x86_64-apple-darwin/release/mhfe packaging/mhfe-launch.command
+      cli_package "$package" x86_64-apple-darwin packaging/mhfe-launch.command
       ;;
     macos-aarch64)
-      cli_package "$package" target/aarch64-apple-darwin/release/mhfe packaging/mhfe-launch.command
+      cli_package "$package" aarch64-apple-darwin packaging/mhfe-launch.command
       ;;
     browser)
+      scripts/check-release-artifacts.sh --builder-paths dist/runtime/mhfe.wasm
       folder="$staging/browser"
       mkdir -p "$folder"
       cp -R dist/. "$folder/"

@@ -7,10 +7,17 @@ use std::fmt;
 
 use unicode_normalization::char::is_public_assigned;
 use unicode_normalization::UnicodeNormalization;
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroize;
 
-use crate::memory::LockedPages;
+use crate::memory::LockedBytes;
 use crate::MhfeError;
+
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-passwords"
+))]
+pub(crate) mod known_answers;
 
 /// Longest accepted password after normalization, in bytes.
 pub const MAX_PASSWORD_BYTES: usize = 1024;
@@ -18,9 +25,9 @@ pub const MAX_PASSWORD_BYTES: usize = 1024;
 /// A normalized password. It is kept out of swap, wiped from memory when dropped and never
 /// printed.
 pub struct Password {
-    encoded: Zeroizing<Vec<u8>>,
-    // Declared after `encoded`, so that the pages are unlocked only once they are wiped.
-    _locked: LockedPages,
+    // Locked before the password is written into it, and wiped before its pages are unlocked,
+    // also when it is refused.
+    encoded: LockedBytes,
 }
 
 impl Password {
@@ -44,29 +51,26 @@ impl Password {
         }
 
         // The buffer is allocated once at its largest allowed size and never grows, so no
-        // reallocation can leave an unwiped copy of the password behind.
-        let mut encoded = Zeroizing::new(Vec::with_capacity(MAX_PASSWORD_BYTES));
-        // Locked before the password is written into it.
-        let locked = LockedPages::of_vec(&encoded);
-        let mut encoded_length = 0usize;
-        let mut character_bytes = [0u8; 4];
-        for character in text.nfkd() {
-            let bytes = character.encode_utf8(&mut character_bytes).as_bytes();
-            encoded_length += bytes.len();
-            if encoded_length <= MAX_PASSWORD_BYTES {
-                encoded.extend_from_slice(bytes);
+        // reallocation can leave an unwiped copy of the password behind. It is locked before the
+        // password is written into it; a password refused here is wiped while it is still locked.
+        let encoded = LockedBytes::build(MAX_PASSWORD_BYTES, |encoded| {
+            let mut encoded_length = 0usize;
+            let mut character_bytes = [0u8; 4];
+            for character in text.nfkd() {
+                let bytes = character.encode_utf8(&mut character_bytes).as_bytes();
+                encoded_length += bytes.len();
+                if encoded_length <= MAX_PASSWORD_BYTES {
+                    encoded.extend_from_slice(bytes);
+                }
             }
-        }
-        character_bytes.zeroize();
-
-        match encoded_length {
-            0 => Err(MhfeError::EmptyPassword),
-            length if length > MAX_PASSWORD_BYTES => Err(MhfeError::PasswordTooLong(length)),
-            _ => Ok(Self {
-                encoded,
-                _locked: locked,
-            }),
-        }
+            character_bytes.zeroize();
+            match encoded_length {
+                0 => Err(MhfeError::EmptyPassword),
+                length if length > MAX_PASSWORD_BYTES => Err(MhfeError::PasswordTooLong(length)),
+                _ => Ok(()),
+            }
+        })?;
+        Ok(Self { encoded })
     }
 
     /// Same as [`Password::new`] for a password that arrives as UTF-8 bytes, as from a browser.
@@ -279,6 +283,17 @@ mod tests {
 
         // The ligature fi shrinks from three bytes to two: 1,536 input bytes are accepted.
         assert_eq!(encoded(&"\u{FB01}".repeat(512)).len(), 1024);
+    }
+
+    /// The encoded password lives in a buffer locked at the largest size, which it never outgrows;
+    /// a refused one is wiped in that buffer while it is locked (LockedBytes::build).
+    #[test]
+    fn the_password_is_held_locked_at_its_largest_size() {
+        let password = Password::new("public test password").unwrap();
+        assert_eq!(password.encoded.is_locked(), cfg!(unix));
+        let longest = Password::new(&"a".repeat(MAX_PASSWORD_BYTES)).unwrap();
+        assert_eq!(longest.as_bytes().len(), MAX_PASSWORD_BYTES);
+        assert_eq!(longest.encoded.is_locked(), cfg!(unix));
     }
 
     #[test]

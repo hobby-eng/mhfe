@@ -5,13 +5,14 @@ use anstream::eprintln;
 use clap::Args;
 use mhfe::engine::HIGHEST_MEMORY_LEVEL;
 use mhfe::engine::{available_memory_bytes, check_can_run, NativeEngine};
+use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
 use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
 use crate::flow;
 use crate::readme;
-use crate::style::{self, paint, ACCENT, MUTED};
+use crate::style::{self, paint, ACCENT, MUTED, WARNING};
 use crate::terminal::Input;
 
 const GIB: u64 = 1 << 30;
@@ -325,7 +326,24 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     if let Some(enforced) = isolation_text(crate::protect::isolation()) {
         style::fact("Isolation", enforced);
     }
+    let locking = mhfe::memory::LockProbe.run(Tier::Startup);
+    style::fact(
+        "Secrets",
+        locked_memory_text(locking, crate::protect::lock_limit()),
+    );
     eprintln!();
+    let refuted = crate::protect::isolation_refuted();
+    if !refuted.is_empty() {
+        // The summary above states only what the probes confirmed (protect::verify_isolation).
+        style::warn(
+            &format!(
+                "Isolation is weaker than the kernel reported: {}.",
+                refuted.names().join(", ")
+            ),
+            "",
+        );
+        eprintln!();
+    }
     if matches!(
         operation,
         Operation::Encrypt | Operation::RekeyNew | Operation::New
@@ -364,6 +382,36 @@ fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
     Some(format!("{forbidden} {}", paint(MUTED, "(kernel-enforced)")))
 }
 
+/// Whether typed secrets are kept in locked memory, out of swap, as the library's memory-locking
+/// check finds it (mhfe::memory::LockProbe), with the most memory the process may lock when it is
+/// refused. The Argon2 work area is far too large to lock; the warning about unencrypted swap
+/// covers it.
+fn locked_memory_text(outcome: ComponentOutcome, lock_limit: Option<u64>) -> String {
+    match outcome {
+        ComponentOutcome::Passed => "kept in locked memory, out of swap".to_owned(),
+        ComponentOutcome::Failed(_) | ComponentOutcome::Warning(_) => {
+            let limit = lock_limit
+                .map(|bytes| format!(" (lock limit {})", byte_size(bytes)))
+                .unwrap_or_default();
+            paint(WARNING, format!("! not locked, may reach swap{limit}"))
+        }
+        ComponentOutcome::NotAvailable(_) | ComponentOutcome::NotRun(_) => {
+            paint(MUTED, "not locked on this system")
+        }
+    }
+}
+
+/// "64 KiB", "8 MiB": a power-of-two size in the largest unit it fills.
+fn byte_size(bytes: u64) -> String {
+    const KIB: u64 = 1 << 10;
+    const MIB: u64 = 1 << 20;
+    match bytes {
+        b if b >= MIB => format!("{} MiB", b / MIB),
+        b if b >= KIB => format!("{} KiB", b / KIB),
+        b => format!("{b} bytes"),
+    }
+}
+
 /// Refuses at once, before any secret is asked for, a memory level that this build or computer
 /// cannot run. Nothing is allocated yet.
 fn check_resources(work: WorkFactor) -> Result<(), Failure> {
@@ -377,8 +425,8 @@ pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeEngine>, Failure> {
 
 /// Adds the highest memory level this computer can use now to a refusal for lack of free memory.
 /// Only that refusal rests on the reported free memory. After a failed reservation that figure has
-/// just proved too high, and a processor refusal has nothing to do with memory, so neither gets a
-/// level to try (AUD-005-UI001).
+/// just proved too high, and a level above the highest this build runs is refused whatever memory
+/// is free, so neither gets a level to try (AUD-005-UI001).
 fn with_level_hint(error: mhfe::MhfeError) -> Failure {
     let lower_level_helps = matches!(error, mhfe::MhfeError::NotEnoughMemory { .. });
     let mut failure = Failure::from(error);
@@ -398,21 +446,6 @@ pub fn highest_available_level() -> Option<u32> {
         .filter_map(|level| WorkFactor::new(0, level).ok())
         .find(|work| work.memory_bytes() <= available)
         .map(WorkFactor::memory_level)
-}
-
-/// The settings that differ from the defaults, such as "PIM 1" and "memory level 1"; none when
-/// both are 0. Only these need remembering: the container's word count selects the suite and the
-/// original's length is detected, so with the defaults the container and the password are all that
-/// recovery needs.
-pub fn changed_settings(work: WorkFactor) -> Vec<String> {
-    let mut values = Vec::new();
-    if work.pim() != 0 {
-        values.push(format!("PIM {}", work.pim()));
-    }
-    if work.memory_level() != 0 {
-        values.push(format!("memory level {}", work.memory_level()));
-    }
-    values
 }
 
 /// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the
@@ -450,6 +483,30 @@ mod tests {
                 assert!(LABEL + style::visible_width(&text) <= 78, "{text}");
             }
         }
+    }
+
+    /// Every text of the locked-memory fact fits one summary line of 78 columns with its label.
+    #[test]
+    fn the_locked_memory_line_fits_the_summary() {
+        const LABEL: usize = "  Secrets    ".len();
+        for outcome in [
+            ComponentOutcome::Passed,
+            ComponentOutcome::Warning("refused".to_owned()),
+            ComponentOutcome::NotAvailable("Windows".to_owned()),
+        ] {
+            // A limit as long as one can be written.
+            let text = locked_memory_text(outcome, Some(1023 << 20));
+            assert!(LABEL + style::visible_width(&text) <= 78, "{text}");
+        }
+        assert_eq!(
+            locked_memory_text(ComponentOutcome::Passed, None),
+            "kept in locked memory, out of swap"
+        );
+        let refused = locked_memory_text(ComponentOutcome::Warning("x".to_owned()), Some(64 << 10));
+        assert!(refused.contains("! not locked, may reach swap (lock limit 64 KiB)"));
+        assert_eq!(byte_size(64 << 10), "64 KiB");
+        assert_eq!(byte_size(8 << 20), "8 MiB");
+        assert_eq!(byte_size(512), "512 bytes");
     }
 
     const LEVEL_HINT: &str = "The highest memory level this computer can use now";

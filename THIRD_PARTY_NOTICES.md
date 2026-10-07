@@ -19,7 +19,9 @@ release.
 ## EFF large wordlist
 
 - Source: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt, included unchanged in
-  `vendor/eff-large-wordlist/` and used by `mhfe password`.
+  `vendor/eff-large-wordlist/`. It is built into the `mhfe` program and into the browser package's
+  WebAssembly (`runtime/mhfe.wasm`), which make passwords from it, read their check word and
+  estimate their strength.
 - "EFF large wordlist" by the Electronic Frontier Foundation (Joseph Bonneau), licensed under the
   Creative Commons Attribution 4.0 International licence (CC BY 4.0):
   https://creativecommons.org/licenses/by/4.0/. See `vendor/eff-large-wordlist.md`.
@@ -343,8 +345,9 @@ obstacle to adoption, that text has been removed.
 
 ## wasm-bindgen JavaScript glue (browser package)
 
-- The first part of the browser package's `mhfe-worker.js` is the JavaScript glue that the
-  wasm-bindgen command-line tool 0.2.129 writes for the WebAssembly core (`scripts/build-wasm.sh`).
+- The first part of the browser package's `runtime/worker.js` is the JavaScript glue that the
+  wasm-bindgen command-line tool 0.2.129 writes for the package's WebAssembly
+  (`scripts/build-wasm.sh`).
   The `wasm-bindgen` crate itself is listed under [Rust crates](#rust-crates).
 - wasm-bindgen is offered under the MIT licence or the Apache License 2.0; MHFE uses it under the
   MIT licence. The notice, unchanged from the `LICENSE-MIT` file of the published
