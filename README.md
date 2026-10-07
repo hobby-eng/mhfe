@@ -121,9 +121,10 @@ not been independently reviewed.
 > word, belongs to the wallet: a wallet asks for it together with the seed phrase, and it stays
 > the same after MHFE. The MHFE password only opens the container.
 >
-> **Every password and passphrase in this tree must be different!** The MHFE password, a decoy MHFE
-> password, a decoy passphrase and the passphrase of your wallet are separate secrets. Never use one
-> text twice and never make one from another; whoever found one would then have the others.
+> **Every password and passphrase in this tree must be different!** The MHFE password, every other
+> MHFE password, every decoy passphrase and the passphrase of each wallet are separate secrets.
+> Never use one text twice and never make one from another; whoever found one would then have the
+> others.
 
 The same 24 words on the plate open different wallets, depending on what is typed with them. Every
 branch but the last is optional; the last one leads to your real wallet.
@@ -135,8 +136,10 @@ branch but the last is optional; the last one leads to your real wallet.
 │   ├── without a BIP39 passphrase ........... decoy wallet, a small amount or nothing
 │   └── with a decoy BIP39 passphrase ........ prepared decoy wallet with believable funds
 │
-├── recovered by MHFE with a decoy password    (24-word originals only)
-│   └── another valid phrase ................. decoy wallet behind an "MHFE password"
+├── recovered by MHFE with another password    (a 2nd, 3rd, 4th ..., each optional)
+│   └── another valid 24-word phrase for each password
+│       ├── without a BIP39 passphrase ....... a decoy to hand over, or a hidden wallet
+│       └── with its own BIP39 passphrase .... a hidden wallet behind a passphrase too
 │
 └── recovered by MHFE with your password
     └── your original seed phrase
@@ -155,12 +158,24 @@ advance and put a believable amount on the wallet it opens. Asked for your passp
 this one. Whoever has the plate and this passphrase can spend that amount, so keep it to what you
 can afford to lose.
 
-**A decoy MHFE password, for a 24-word original.** As described in
-[plausible deniability](#how-it-works), any other password turns the container into another valid
-phrase. Recover the container once with a decoy password, chosen as randomly as the real one, and
-use the wallet it gives as a decoy. This holds even against someone who knows that MHFE was used,
-because every password gives an equally valid 24-word phrase, as long as the decoy wallet's balance
-and history look like those of a wallet in real use.
+**Other MHFE passwords: a decoy, or hidden wallets.** Any password other than yours turns the
+container into another valid 24-word phrase, and you may use as many as you like: a second, a
+third, a fourth. [`mhfe wallets`](#mhfe-wallets) shows the wallet each of them opens. Each such
+wallet serves one of two purposes:
+
+- A decoy to hand over under pressure, for a 24-word original. As described in
+  [plausible deniability](#how-it-works), this holds even against someone who knows that MHFE was
+  used, because every password gives an equally valid 24-word phrase, as long as the decoy wallet's
+  balance and history look like those of a wallet in real use. Choose the decoy password as
+  randomly as the real one.
+- A hidden wallet behind the one you could disclose, kept secret like your own. How to keep it
+  hidden is in [`mhfe wallets`](#mhfe-wallets).
+
+Like any wallet, each of them may have its own BIP39 passphrase, which opens yet another wallet from
+the same phrase; it is one more secret, different from all the others. Nothing records which
+passwords you used or how many, so each must be remembered. Each of these wallets depends on this
+exact container and its settings: `mhfe rekey` or the loss of every copy of the container loses
+them, unless their funds were moved first.
 
 **Your original phrase.** With your password, MHFE gives back the exact original, and your wallet
 opens as before. The strongest arrangement is a 24-word original with its own BIP39 passphrase,
