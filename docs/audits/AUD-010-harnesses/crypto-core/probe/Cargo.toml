@@ -1,0 +1,19 @@
+# AUD-010 crypto-core probe: calls the public API of the mhfe library (the reviewed working tree)
+# with inputs from probe.py and prints what it returns. Not part of the mhfe package; built with
+# its own target directory and a copy of mhfe's Cargo.lock so that every dependency has the version
+# mhfe ships with.
+[package]
+name = "aud010-crypto-core-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mhfe-experimental = { path = "../../../../.." }
+
+[workspace]
+
+# Address searches derive thousands of keys per request: optimise the dependencies, mhfe included,
+# while the probe itself stays a debug build.
+[profile.dev.package."*"]
+opt-level = 3

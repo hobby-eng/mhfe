@@ -1,0 +1,22 @@
+# AUD-015 R4 probe: calls the mhfe library of this checkout through its public API only and
+# compares it with the independent oracles of ../address-oracle.mjs and ../wallet-check-oracle.mjs.
+# Its own workspace, so that it never joins or changes the mhfe package. Cargo.lock started as a
+# copy of the repository's, so that it builds offline with the same dependency versions.
+[package]
+name = "aud015-r4-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+mhfe = { package = "mhfe-experimental", path = "../../../../.." }
+bip39 = "=3.0.0"
+serde_json = "=1.0.151"
+sha2 = "=0.11.0"
+hex = "=0.4.3"
+unicode-normalization = "=0.1.25"
+
+[profile.release]
+opt-level = 3

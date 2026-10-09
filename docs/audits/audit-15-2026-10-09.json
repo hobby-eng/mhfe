@@ -1,0 +1,2736 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-015",
+  "auditNumber": 15,
+  "date": "2026-10-09",
+  "title": "mhfe full audit of the 0.5.1 working tree",
+  "reviewer": {
+    "name": "Claude Code coordinator with five independently scoped reviewers",
+    "model": "claude-opus-5-5",
+    "reasoningEffort": "40",
+    "reasoningEffortSource": "Coordinator session setting as shown to the model; reviewers' setting not recorded."
+  },
+  "snapshot": {
+    "commit": "abb16671b641378c0fc3c4d855f8d126498e754b",
+    "commitComplete": true,
+    "commitBeforeRewrite": "4c3a6909bced0f0907f61ae291b11bb6bb419689",
+    "commitAfterFirstRewrite": "ca0086acf545d07bfe008ae340554124a48442bf",
+    "commitNote": "The review started at commitBeforeRewrite, which the owner-authorized privacy rewrite replaced by commitAfterFirstRewrite during the review, with the same source files; the second privacy rewrite of the same day replaced that by commit, changing audit documents and one comment in src/bin/mhfe/hidden_input.rs. sourceFingerprint binds the reviewed bytes.",
+    "workingTree": {
+      "description": "Dirty: 156 changed or untracked paths (the uncommitted 0.5.1 work); reviewed as the source manifest below.",
+      "initialStatus": [
+        " M Cargo.toml",
+        " M README.md",
+        " M SECURITY.md",
+        " M docs/API.md",
+        " M docs/BROWSER-PACKAGE.md",
+        " M docs/audits/AUD-004-harnesses/README.md",
+        " M docs/audits/AUD-005-harnesses/README.md",
+        " M docs/audits/AUD-008-harnesses/README.md",
+        " M docs/audits/AUD-008-harnesses/browser-README.md",
+        " M docs/audits/AUD-008-harnesses/browser-independent-README.md",
+        " M docs/audits/AUD-008-harnesses/devops-README.md",
+        " M docs/audits/AUD-008-harnesses/devops-static.py",
+        " M docs/audits/AUD-008-harnesses/wallet-challenge-README.md",
+        " M docs/audits/README.md",
+        " M docs/audits/audit-03-2026-09-30.json",
+        " M docs/audits/audit-03-2026-09-30.md",
+        " M docs/audits/audit-04-2026-10-01.json",
+        " M docs/audits/audit-04-2026-10-01.md",
+        " M docs/audits/audit-05-2026-10-01.json",
+        " M docs/audits/audit-06-2026-10-01.json",
+        " M docs/audits/audit-06-2026-10-01.md",
+        " M docs/audits/audit-07-2026-10-05.json",
+        " M docs/audits/audit-07-2026-10-05.md",
+        " M docs/audits/audit-08-2026-10-06.json",
+        " M docs/audits/audit-08-2026-10-06.md",
+        " M docs/releases/v0.4.0.md",
+        " M docs/releases/v0.5.0.md",
+        " M docs/releases/v0.5.1.md",
+        " M scripts/build-wasm.sh",
+        " M scripts/check.sh",
+        " M scripts/verify-browser-package.mjs",
+        " M scripts/verify-browsers.mjs",
+        " M scripts/verify-hidden-input-windows.py",
+        " M scripts/verify-hidden-input.py",
+        " M src/bin/mhfe/check.rs",
+        " M src/bin/mhfe/check_word.rs",
+        " M src/bin/mhfe/choice.rs",
+        " M src/bin/mhfe/decrypt.rs",
+        " M src/bin/mhfe/diceware.rs",
+        " M src/bin/mhfe/encrypt.rs",
+        " M src/bin/mhfe/exit.rs",
+        " M src/bin/mhfe/hidden_input.rs",
+        " M src/bin/mhfe/length_choice.rs",
+        " M src/bin/mhfe/main.rs",
+        " M src/bin/mhfe/menu.rs",
+        " M src/bin/mhfe/new_wallet.rs",
+        " D src/bin/mhfe/plate_repair.rs",
+        " M src/bin/mhfe/readme.rs",
+        " M src/bin/mhfe/rekey.rs",
+        " M src/bin/mhfe/self_test.rs",
+        " M src/bin/mhfe/serve.rs",
+        " M src/bin/mhfe/settings.rs",
+        " M src/bin/mhfe/startup.rs",
+        " M src/bin/mhfe/style.rs",
+        " M src/bin/mhfe/terminal.rs",
+        " M src/bin/mhfe/test_tools.rs",
+        " M src/bin/mhfe/wallets.rs",
+        " M src/check_word.rs",
+        " M src/check_word/known_answers.rs",
+        " M src/container.rs",
+        " M src/container/known_answers.rs",
+        " M src/engine/browser.rs",
+        " M src/engine/ffi.rs",
+        " M src/engine/known_answers.rs",
+        " M src/engine/mod.rs",
+        " M src/engine/native.rs",
+        " M src/error.rs",
+        " M src/feistel.rs",
+        " M src/hidden.rs",
+        " M src/hidden/known_answers.rs",
+        " M src/lib.rs",
+        " M src/memory.rs",
+        " M src/mhfe.rs",
+        " M src/mhfe/known_answers.rs",
+        " M src/new_password.rs",
+        " M src/operation.rs",
+        " M src/operation/known_answers.rs",
+        " M src/packing.rs",
+        " M src/phrase.rs",
+        " M src/phrase/known_answers.rs",
+        " M src/random.rs",
+        " M src/random/health.rs",
+        " M src/rehearsal.rs",
+        " M src/rekey.rs",
+        " M src/rekey/known_answers.rs",
+        " M src/repair.rs",
+        " M src/repair/known_answers.rs",
+        " M src/self_check.rs",
+        " M src/self_check/sets.rs",
+        " M src/self_test.rs",
+        " M src/suite.rs",
+        " M src/validation_cases.rs",
+        " M src/vectors.rs",
+        " M src/wallet.rs",
+        " M src/wallet/known_answers.rs",
+        " M src/wallet_check.rs",
+        " M src/wallet_check/threads.rs",
+        " M src/wasm_api/core.rs",
+        " M src/wasm_api/mod.rs",
+        " M src/wasm_api/passwords.rs",
+        " M src/wasm_api/repair.rs",
+        " M src/wasm_api/wallet.rs",
+        " M tests/suite3_vectors.rs",
+        " M tests/suite4_vectors.rs",
+        " M web/client.d.ts",
+        " M web/client.js",
+        " M web/core-worker.js",
+        " M web/passwords-worker.js",
+        " M web/passwords.d.ts",
+        " M web/passwords.js",
+        " M web/repair-worker.js",
+        " M web/repair.d.ts",
+        " M web/repair.js",
+        " M web/runtime.d.ts",
+        " M web/runtime.js",
+        " M web/wallet-worker.js",
+        " M web/wallet.d.ts",
+        " M web/wallet.js",
+        " M web/worker-runtime.js",
+        "?? docs/audits/AUD-009-harnesses/",
+        "?? docs/audits/AUD-010-harnesses/",
+        "?? docs/audits/AUD-011-harnesses/",
+        "?? docs/audits/AUD-012-harnesses/",
+        "?? docs/audits/AUD-013-harnesses/",
+        "?? docs/audits/AUD-014-harnesses/",
+        "?? docs/audits/AUD-015-harnesses/",
+        "?? docs/audits/audit-09-2026-10-06.json",
+        "?? docs/audits/audit-09-2026-10-06.md",
+        "?? docs/audits/audit-10-2026-10-07.json",
+        "?? docs/audits/audit-10-2026-10-07.md",
+        "?? docs/audits/audit-11-2026-10-08.json",
+        "?? docs/audits/audit-11-2026-10-08.md",
+        "?? docs/audits/audit-12-2026-10-08.json",
+        "?? docs/audits/audit-12-2026-10-08.md",
+        "?? docs/audits/audit-13-2026-10-08.json",
+        "?? docs/audits/audit-13-2026-10-08.md",
+        "?? docs/audits/audit-14-2026-10-08.json",
+        "?? docs/audits/audit-14-2026-10-08.md",
+        "?? scripts/public-test-data.mjs",
+        "?? scripts/verify-cli-browser-parity.mjs",
+        "?? scripts/verify-no-copies.mjs",
+        "?? src/bin/mhfe/chosen_words.rs",
+        "?? src/bin/mhfe/container_repair.rs",
+        "?? src/bin/mhfe/container_search.rs",
+        "?? src/bin/mhfe/made_password.rs",
+        "?? src/bin/mhfe/phrase_length.rs",
+        "?? src/bin/mhfe/typed_line.rs",
+        "?? src/detection.rs",
+        "?? src/search.rs",
+        "?? src/search/",
+        "?? src/test_support.rs",
+        "?? src/wasm_api/word_hints.rs",
+        "?? src/word_hints.rs",
+        "?? src/word_hints/",
+        "?? src/word_wishes.rs",
+        "?? src/word_wishes/"
+      ]
+    },
+    "sourceFingerprint": "f79444dc9884d11a54c2c0b316ce31bf3a3a734e5bb604e9667df09cf0482a93",
+    "sourceFingerprintAfterRewrite": "4590ffabc15c60f1f1bbbd6f771508d5a43d6b190189021481f813a6f225a0d0",
+    "capturedUtc": "2026-10-08T23:11:20+00:00"
+  },
+  "artifacts": {
+    "description": "dist/ build 6a91d106c1b87634 (runtime/mhfe.wasm sha256 489f90e616382428e74c317a996ac5fc9c4f3692b4f0905ce4c7cc6a0208eefb), rebuilt from the snapshot byte for byte; target/release/mhfe sha256 89f017ae1ff26e3237dda85e7cb2ea4caaf7952397dac26e1c3eb30ba0d799c3, built from the snapshot."
+  },
+  "procedureHashes": {
+    "docs/FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+    "docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "environment": "Linux x86-64 (Ubuntu 26.04), 16 threads, 14 GiB; rustc 1.99.0, cargo 1.99.0, wasm-bindgen 0.2.129, Emscripten 6.0.10, Node 26.10.0, Python 3.14.4, Playwright 1.63.0 (Chromium 153, Firefox 155).",
+  "scope": "Full scope of the mhfe repository as of the snapshot: library, command-line tool, WebAssembly bindings, browser package, scripts, CI and release definitions, and documents, against the workspace procedure. The coordinator ran the offline steps of scripts/check.sh; five reviewers reviewed source, wrote audit-only probes with independent oracles and ran them through the runner; the coordinator challenged each finding against source or logs before accepting it. Areas that do not exist in mhfe are recorded as not applicable.",
+  "checks": {
+    "coverage": [
+      {
+        "id": "CHECK-SEC-001",
+        "group": "SEC / Secret ownership",
+        "owner": "R2, R3",
+        "outcome": "failed",
+        "evidenceOrGap": "CLI: check-word repair labels unwiped (SEC006), stdout buffer undocumented (DOC007); browser transfer and wipe paths passed (r3-api-probes P1)."
+      },
+      {
+        "id": "CHECK-SEC-002",
+        "group": "SEC / Worker transport",
+        "owner": "R3",
+        "outcome": "failed",
+        "evidenceOrGap": "Inherited Object.prototype names dispatched as page callbacks (SEC007); late replies, unknown operations and build checks pass."
+      },
+      {
+        "id": "CHECK-SEC-003",
+        "group": "SEC / Egress",
+        "owner": "R2",
+        "outcome": "passed",
+        "evidenceOrGap": "seccomp, Landlock, network namespace read back; mhfe serve loopback-only with request limits (r2-serve-live-2, r2-menu-isolation-3)."
+      },
+      {
+        "id": "CHECK-SEC-004",
+        "group": "SEC / Randomness and encryption",
+        "owner": "R1, R4",
+        "outcome": "passed",
+        "evidenceOrGap": "27 published transcripts replayed by an independent oracle; reduced-cost containers recomputed; Unicode 17 password rule over every scalar value; draw rates and bit figures measured."
+      },
+      {
+        "id": "CHECK-SEC-005",
+        "group": "SEC / Lifecycle",
+        "owner": "R2, R3",
+        "outcome": "failed",
+        "evidenceOrGap": "SIGQUIT/SIGTERM/Ctrl+Z leave the private screen (SEC004); browser failure paths pass."
+      },
+      {
+        "id": "CHECK-SEC-006",
+        "group": "SEC / Injection",
+        "owner": "R2, R3",
+        "outcome": "failed",
+        "evidenceOrGap": "Control sequences from typed answers and a checksum file reach the terminal (SEC002); the browser package has no DOM, network or dynamic code beyond Blob workers."
+      },
+      {
+        "id": "CHECK-SEC-007",
+        "group": "SEC / Bounds",
+        "owner": "R2, R3",
+        "outcome": "passed",
+        "evidenceOrGap": "Line capacity, numeric limits, serve limits, worker counts and whole-number checks."
+      },
+      {
+        "id": "CHECK-FUN-001",
+        "group": "FUN / BIP39",
+        "owner": "R1, R4",
+        "outcome": "passed",
+        "evidenceOrGap": "22,143 typed phrases against the spec's reading rule; NFKD seed and wallet check."
+      },
+      {
+        "id": "CHECK-FUN-002",
+        "group": "FUN / HD derivation",
+        "owner": "R4",
+        "outcome": "passed",
+        "evidenceOrGap": "43 table rows and 679 further cases of 12 coins against independent derivation; 9 fingerprints."
+      },
+      {
+        "id": "CHECK-FUN-003",
+        "group": "FUN / BIP85, BIP38, messages",
+        "owner": "-",
+        "outcome": "not-applicable",
+        "evidenceOrGap": "mhfe has no BIP85, BIP38, message signing or Silent Payments."
+      },
+      {
+        "id": "CHECK-FUN-004",
+        "group": "FUN / Scripts and descriptors",
+        "owner": "-",
+        "outcome": "not-applicable",
+        "evidenceOrGap": "mhfe only decodes addresses to compare them; it builds no scripts or descriptors."
+      },
+      {
+        "id": "CHECK-FUN-005",
+        "group": "FUN / Transactions",
+        "owner": "-",
+        "outcome": "not-applicable",
+        "evidenceOrGap": "mhfe handles no transactions."
+      },
+      {
+        "id": "CHECK-FUN-006",
+        "group": "FUN / Recovery formats",
+        "owner": "R1",
+        "outcome": "failed",
+        "evidenceOrGap": "Suites 3/4, repair words, check word and wallet check conform; rekey with detected length confirmed by the built-in check alone (FUN001)."
+      },
+      {
+        "id": "CHECK-FUN-007",
+        "group": "FUN / Discovery and providers",
+        "owner": "-",
+        "outcome": "not-applicable",
+        "evidenceOrGap": "mhfe contacts no provider; the address search is local."
+      },
+      {
+        "id": "CHECK-API-001",
+        "group": "API / Runtime contracts",
+        "owner": "R3, R4",
+        "outcome": "failed",
+        "evidenceOrGap": "drawPhrase accepts a non-boolean walletCheck and any workers when unchecked (API001); library and other class methods pass."
+      },
+      {
+        "id": "CHECK-API-002",
+        "group": "API / Async state",
+        "owner": "R3",
+        "outcome": "passed",
+        "evidenceOrGap": "Self-check gate on both paths, AUD-014-SEC001 race regression in both modes, cancel, BUSY, late results."
+      },
+      {
+        "id": "CHECK-API-003",
+        "group": "API / Outputs",
+        "owner": "R4",
+        "outcome": "passed",
+        "evidenceOrGap": "JSON results of the wallet module against independent expectations (208,874 checks)."
+      },
+      {
+        "id": "CHECK-API-004",
+        "group": "API / Encoding and parity",
+        "owner": "R4",
+        "outcome": "passed",
+        "evidenceOrGap": "Native and WASM agree on every wallet case; the parity script covers no wallet, password or hint operation (observation)."
+      },
+      {
+        "id": "CHECK-BLD-001",
+        "group": "BLD / Features",
+        "owner": "R3, coordinator",
+        "outcome": "passed",
+        "evidenceOrGap": "Each browser feature passes clippy alone; stamps and manifest consistent; dist rebuilt byte for byte."
+      },
+      {
+        "id": "CHECK-BLD-002",
+        "group": "BLD / Matrix sampling",
+        "owner": "R3",
+        "outcome": "blocked",
+        "evidenceOrGap": "Single-feature WASM builds were not sampled at runtime: Rust builds were stopped after the host froze under memory pressure."
+      },
+      {
+        "id": "CHECK-BLD-003",
+        "group": "BLD / Lockfiles and provenance",
+        "owner": "R5",
+        "outcome": "passed",
+        "evidenceOrGap": "Exact pins, lockfile checksums, vendored Argon2 hashes, EFF list hash, notices check."
+      },
+      {
+        "id": "CHECK-BLD-004",
+        "group": "BLD / Canonical builds",
+        "owner": "R5",
+        "outcome": "not-run",
+        "evidenceOrGap": "Owner hold: no Docker. Static review only."
+      },
+      {
+        "id": "CHECK-BLD-005",
+        "group": "BLD / CI and releases",
+        "owner": "R5",
+        "outcome": "failed",
+        "evidenceOrGap": "Release path skips several check.sh steps (BLD002); rewritten tags break release provenance (BLD001)."
+      },
+      {
+        "id": "CHECK-UI-001",
+        "group": "UI / Terminal widths",
+        "owner": "R2",
+        "outcome": "failed",
+        "evidenceOrGap": "Word hints wrap below 42 columns (UI001); HTML viewports not applicable (no HTML tool)."
+      },
+      {
+        "id": "CHECK-UI-002",
+        "group": "UI / Navigation and input",
+        "owner": "R2, R4",
+        "outcome": "failed",
+        "evidenceOrGap": "A refused --never-use value loops (UI002); menus, steps and word keys pass."
+      },
+      {
+        "id": "CHECK-UI-003",
+        "group": "UI / Secret visibility",
+        "owner": "R2, R4",
+        "outcome": "failed",
+        "evidenceOrGap": "A made password is shown on the main screen without a private screen (SEC003)."
+      },
+      {
+        "id": "CHECK-ARC-001",
+        "group": "ARC / Boundaries",
+        "owner": "R5",
+        "outcome": "passed",
+        "evidenceOrGap": "Logic in library modules; front ends translate; each browser module alone."
+      },
+      {
+        "id": "CHECK-ARC-002",
+        "group": "ARC / Duplication",
+        "owner": "R4, R5",
+        "outcome": "failed",
+        "evidenceOrGap": "Typed-again word-count lists (ARC001); duplicated address table (ARC002)."
+      },
+      {
+        "id": "CHECK-ARC-003",
+        "group": "ARC / Comments and tests",
+        "owner": "R5",
+        "outcome": "failed",
+        "evidenceOrGap": "Stale exit-code comment (ARC003)."
+      },
+      {
+        "id": "CHECK-DOC-001",
+        "group": "DOC / Capabilities",
+        "owner": "R2..R5",
+        "outcome": "failed",
+        "evidenceOrGap": "Conformance claim, review list, API.md, SECURITY.md and lifecycle wording (DOC003..DOC009)."
+      },
+      {
+        "id": "CHECK-DOC-002",
+        "group": "DOC / Commands and links",
+        "owner": "R5",
+        "outcome": "passed",
+        "evidenceOrGap": "Links, anchors, options, symbols, Prettier and list layout pass."
+      },
+      {
+        "id": "CHECK-DOC-003",
+        "group": "DOC / Audit records",
+        "owner": "R5",
+        "outcome": "failed",
+        "evidenceOrGap": "Privacy rewrite left old commit references and broken harness bindings (DOC001, DOC002)."
+      }
+    ],
+    "commands": [
+      {
+        "label": "third-party-licenses",
+        "argv": [
+          "python3",
+          "scripts/third-party-licenses.py",
+          "--check"
+        ],
+        "startUtc": "2026-10-08T23:13:24+00:00",
+        "endUtc": "2026-10-08T23:13:25+00:00",
+        "exitCode": 0,
+        "seconds": 0.8,
+        "logSha256": "ffb95df2c8006b3836b6bf8b62a766f3514337e8f65876b68dbb78fd73a6ea8f"
+      },
+      {
+        "label": "vendor-argon2-hashes",
+        "argv": [
+          "bash",
+          "-c",
+          "sed -n '/^```text$/,/^```$/p' vendor/phc-winner-argon2.md | grep -v '^```' | (cd vendor/phc-winner-argon2 && sha256sum --check)"
+        ],
+        "startUtc": "2026-10-08T23:13:24+00:00",
+        "endUtc": "2026-10-08T23:13:24+00:00",
+        "exitCode": 0,
+        "seconds": 0.0,
+        "logSha256": "fe3bb74797bbbfb6a65e90eaaccc3656a89fb9c5ddc7e5f24e18328d5ee3fd78"
+      },
+      {
+        "label": "cargo-fmt",
+        "argv": [
+          "cargo",
+          "fmt",
+          "--check"
+        ],
+        "startUtc": "2026-10-08T23:13:25+00:00",
+        "endUtc": "2026-10-08T23:13:25+00:00",
+        "exitCode": 0,
+        "seconds": 0.5,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "published-rounds",
+        "argv": [
+          "python3",
+          "scripts/generate-published-rounds.py",
+          "--check"
+        ],
+        "startUtc": "2026-10-08T23:13:25+00:00",
+        "endUtc": "2026-10-08T23:13:25+00:00",
+        "exitCode": 0,
+        "seconds": 0.0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "no-copies-self-test",
+        "argv": [
+          "node",
+          "scripts/verify-no-copies.mjs",
+          "--self-test"
+        ],
+        "startUtc": "2026-10-08T23:13:26+00:00",
+        "endUtc": "2026-10-08T23:13:26+00:00",
+        "exitCode": 0,
+        "seconds": 0.1,
+        "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419"
+      },
+      {
+        "label": "no-copies",
+        "argv": [
+          "node",
+          "scripts/verify-no-copies.mjs"
+        ],
+        "startUtc": "2026-10-08T23:13:26+00:00",
+        "endUtc": "2026-10-08T23:13:28+00:00",
+        "exitCode": 0,
+        "seconds": 2.5,
+        "logSha256": "d5100e5bf1458e749bf4ce9cb57852862e79622057d056e8df46cd9089f529d7"
+      },
+      {
+        "label": "clippy-native",
+        "argv": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "startUtc": "2026-10-08T23:13:28+00:00",
+        "endUtc": "2026-10-08T23:13:48+00:00",
+        "exitCode": 0,
+        "seconds": 19.2,
+        "logSha256": "6248da74c2eff1e0ea4f1b32a4f4753d05f6307cbf574706ac86700edb4eca65"
+      },
+      {
+        "label": "clippy-wasm",
+        "argv": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--lib",
+          "--target",
+          "wasm32-unknown-unknown",
+          "--features",
+          "wasm",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "startUtc": "2026-10-08T23:13:48+00:00",
+        "endUtc": "2026-10-08T23:14:00+00:00",
+        "exitCode": 0,
+        "seconds": 12.5,
+        "logSha256": "fc946c43588116ff45ae6f95dedde5da9f3685f1899f3250303306cae7153a27"
+      },
+      {
+        "label": "clippy-browser-core",
+        "argv": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--lib",
+          "--target",
+          "wasm32-unknown-unknown",
+          "--no-default-features",
+          "--features",
+          "browser-core",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "startUtc": "2026-10-08T23:14:00+00:00",
+        "endUtc": "2026-10-08T23:14:06+00:00",
+        "exitCode": 0,
+        "seconds": 6.0,
+        "logSha256": "a9ab7783568253911a9456af6b3b5330ea23a41df3defb8680accdf4a46d9a78"
+      },
+      {
+        "label": "clippy-browser-repair",
+        "argv": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--lib",
+          "--target",
+          "wasm32-unknown-unknown",
+          "--no-default-features",
+          "--features",
+          "browser-repair",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "startUtc": "2026-10-08T23:14:06+00:00",
+        "endUtc": "2026-10-08T23:14:08+00:00",
+        "exitCode": 0,
+        "seconds": 1.8,
+        "logSha256": "3eeea5b6304c50560bc7c4fca5f6ebd0de78703b7a9538d9482b1530dcf4a39b"
+      },
+      {
+        "label": "clippy-browser-passwords",
+        "argv": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--lib",
+          "--target",
+          "wasm32-unknown-unknown",
+          "--no-default-features",
+          "--features",
+          "browser-passwords",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "startUtc": "2026-10-08T23:14:08+00:00",
+        "endUtc": "2026-10-08T23:14:11+00:00",
+        "exitCode": 0,
+        "seconds": 3.0,
+        "logSha256": "a1bd7eb12e0991fa3369a35989f5333ed9c1ecdd1463d09a8bf17b8b6d13d67a"
+      },
+      {
+        "label": "clippy-browser-wallet",
+        "argv": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--lib",
+          "--target",
+          "wasm32-unknown-unknown",
+          "--no-default-features",
+          "--features",
+          "browser-wallet",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "startUtc": "2026-10-08T23:14:11+00:00",
+        "endUtc": "2026-10-08T23:14:14+00:00",
+        "exitCode": 0,
+        "seconds": 2.2,
+        "logSha256": "1627d4780addbedce9b7b066d89a1feaee108495227c76811b8b307a7bd71181"
+      },
+      {
+        "label": "cargo-test",
+        "argv": [
+          "cargo",
+          "test",
+          "--locked"
+        ],
+        "startUtc": "2026-10-08T23:14:14+00:00",
+        "endUtc": "2026-10-08T23:15:56+00:00",
+        "exitCode": 0,
+        "seconds": 102.8,
+        "logSha256": "5389caf71d9d4bab757170d1beacb30e2d197a2c0e27bc6f16d8831c5bb8fb8e"
+      },
+      {
+        "label": "cargo-doc",
+        "argv": [
+          "env",
+          "RUSTDOCFLAGS=-D warnings",
+          "cargo",
+          "doc",
+          "--locked",
+          "--no-deps"
+        ],
+        "startUtc": "2026-10-08T23:15:57+00:00",
+        "endUtc": "2026-10-08T23:15:58+00:00",
+        "exitCode": 0,
+        "seconds": 1.0,
+        "logSha256": "3fa84b94d1f5130ff48be10fb182283d3a1451ec2910a097ea9a7789c5d6a7b8"
+      },
+      {
+        "label": "release-build",
+        "argv": [
+          "cargo",
+          "build",
+          "--locked",
+          "--release"
+        ],
+        "startUtc": "2026-10-08T23:15:58+00:00",
+        "endUtc": "2026-10-08T23:16:41+00:00",
+        "exitCode": 0,
+        "seconds": 43.4,
+        "logSha256": "02922f864bea3e892e745f30ea4d09639b5f0fc39d54828604d196684656be51"
+      },
+      {
+        "label": "r5-markdown-links-lists",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/markdown_links_lists.py"
+        ],
+        "startUtc": "2026-10-08T23:15:59+00:00",
+        "endUtc": "2026-10-08T23:15:59+00:00",
+        "exitCode": 0,
+        "seconds": 0.1,
+        "logSha256": "6098b141affa603df455cbd3f520abe3b9781a61b21e8c7ddfb498ed57e99d60"
+      },
+      {
+        "label": "r5-markdown-audit-index",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/markdown_links_lists.py",
+          "docs/audits/README.md",
+          "docs/audits/audit-01-2026-09-22.md",
+          "docs/audits/audit-02-2026-09-22.md",
+          "docs/audits/audit-03-2026-09-30.md",
+          "docs/audits/audit-04-2026-10-01.md",
+          "docs/audits/audit-05-2026-10-01.md",
+          "docs/audits/audit-06-2026-10-01.md",
+          "docs/audits/audit-07-2026-10-05.md",
+          "docs/audits/audit-08-2026-10-06.md",
+          "docs/audits/audit-09-2026-10-06.md",
+          "docs/audits/audit-10-2026-10-07.md",
+          "docs/audits/audit-11-2026-10-08.md",
+          "docs/audits/audit-12-2026-10-08.md",
+          "docs/audits/audit-13-2026-10-08.md",
+          "docs/audits/audit-14-2026-10-08.md",
+          "docs/audits/AUD-003-harnesses/README.md",
+          "docs/audits/AUD-004-harnesses/README.md",
+          "docs/audits/AUD-005-harnesses/README.md",
+          "docs/audits/AUD-006-harnesses/README.md",
+          "docs/audits/AUD-007-harnesses/README.md",
+          "docs/audits/AUD-008-harnesses/README.md",
+          "docs/audits/AUD-008-harnesses/architecture-independent-README.md",
+          "docs/audits/AUD-008-harnesses/browser-README.md",
+          "docs/audits/AUD-008-harnesses/browser-independent-README.md",
+          "docs/audits/AUD-008-harnesses/devops-README.md",
+          "docs/audits/AUD-008-harnesses/doc-README.md",
+          "docs/audits/AUD-008-harnesses/qa-README.md",
+          "docs/audits/AUD-008-harnesses/remediation-contract-README.md",
+          "docs/audits/AUD-008-harnesses/remediation-security-README.md",
+          "docs/audits/AUD-008-harnesses/research-README.md",
+          "docs/audits/AUD-008-harnesses/secrets-README.md",
+          "docs/audits/AUD-008-harnesses/ui-README.md",
+          "docs/audits/AUD-008-harnesses/wallet-challenge-README.md",
+          "docs/audits/AUD-009-harnesses/README.md",
+          "docs/audits/AUD-010-harnesses/README.md",
+          "docs/audits/AUD-011-harnesses/README.md",
+          "docs/audits/AUD-012-harnesses/README.md",
+          "docs/audits/AUD-013-harnesses/README.md",
+          "docs/audits/AUD-014-harnesses/README.md"
+        ],
+        "startUtc": "2026-10-08T23:16:10+00:00",
+        "endUtc": "2026-10-08T23:16:10+00:00",
+        "exitCode": 1,
+        "seconds": 0.2,
+        "logSha256": "e16d070ac9abd73093c86155aad171e40549e29c67d5780a3b2c034fdabaca27"
+      },
+      {
+        "label": "r5-prettier-all",
+        "argv": [
+          "npx",
+          "prettier",
+          "--check",
+          "."
+        ],
+        "startUtc": "2026-10-08T23:16:14+00:00",
+        "endUtc": "2026-10-08T23:16:18+00:00",
+        "exitCode": 0,
+        "seconds": 3.8,
+        "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      {
+        "label": "self-test",
+        "argv": [
+          "target/release/mhfe",
+          "self-test"
+        ],
+        "startUtc": "2026-10-08T23:16:41+00:00",
+        "endUtc": "2026-10-08T23:16:43+00:00",
+        "exitCode": 0,
+        "seconds": 1.7,
+        "logSha256": "8054b75cf5a486247865f416cd89248c2b3114ad2894dee1052f20b3043b57dc"
+      },
+      {
+        "label": "hidden-input",
+        "argv": [
+          "python3",
+          "scripts/verify-hidden-input.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:16:43+00:00",
+        "endUtc": "2026-10-08T23:17:46+00:00",
+        "exitCode": 0,
+        "seconds": 62.6,
+        "logSha256": "34f464e09d81e51a36ee90833050f2037a475170691fe82f0a592bc9dfd70ac2"
+      },
+      {
+        "label": "r5-help-texts",
+        "argv": [
+          "docs/audits/AUD-015-harnesses/r5-build-docs/capture_help.sh",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:17:21+00:00",
+        "endUtc": "2026-10-08T23:17:22+00:00",
+        "exitCode": 0,
+        "seconds": 0.3,
+        "logSha256": "a3bbc3fdfc9e78367b8b4d1d271b823c421684ee9e2f5f8539f8563f9f6389ab"
+      },
+      {
+        "label": "build-wasm",
+        "argv": [
+          "bash",
+          "-c",
+          ". /home/user/Documents/bip_tools/workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1 && scripts/build-wasm.sh"
+        ],
+        "startUtc": "2026-10-08T23:17:46+00:00",
+        "endUtc": "2026-10-08T23:17:51+00:00",
+        "exitCode": 0,
+        "seconds": 5.3,
+        "logSha256": "7746a2b117cf7ed0c717feeae03469919603aef2d317a1998b6ff277e1f26ee8"
+      },
+      {
+        "label": "dist-hashes-before",
+        "argv": [
+          "bash",
+          "-c",
+          "find dist -type f | sort | xargs sha256sum"
+        ],
+        "startUtc": "2026-10-08T23:17:46+00:00",
+        "endUtc": "2026-10-08T23:17:46+00:00",
+        "exitCode": 0,
+        "seconds": 0.0,
+        "logSha256": "57c909c503dead5823ae0474d31c7cc697fc694d7a4a98f0fc3c8f2c071f1c20"
+      },
+      {
+        "label": "argon2-wasm",
+        "argv": [
+          "node",
+          "scripts/verify-argon2-wasm.mjs"
+        ],
+        "startUtc": "2026-10-08T23:17:51+00:00",
+        "endUtc": "2026-10-08T23:17:52+00:00",
+        "exitCode": 0,
+        "seconds": 1.3,
+        "logSha256": "1c1efc8c24b9db19c0efcf71b6db33e1fc71a4025e75d16b30e3abc64095a2c1"
+      },
+      {
+        "label": "dist-hashes-after",
+        "argv": [
+          "bash",
+          "-c",
+          "find dist -type f | sort | xargs sha256sum"
+        ],
+        "startUtc": "2026-10-08T23:17:51+00:00",
+        "endUtc": "2026-10-08T23:17:51+00:00",
+        "exitCode": 0,
+        "seconds": 0.0,
+        "logSha256": "57c909c503dead5823ae0474d31c7cc697fc694d7a4a98f0fc3c8f2c071f1c20"
+      },
+      {
+        "label": "dist-unchanged",
+        "argv": [
+          "cmp",
+          "docs/audits/AUD-015-evidence/dist-hashes-before.log",
+          "docs/audits/AUD-015-evidence/dist-hashes-after.log"
+        ],
+        "startUtc": "2026-10-08T23:17:51+00:00",
+        "endUtc": "2026-10-08T23:17:51+00:00",
+        "exitCode": 0,
+        "seconds": 0.0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "browser-package",
+        "argv": [
+          "node",
+          "scripts/verify-browser-package.mjs"
+        ],
+        "startUtc": "2026-10-08T23:17:52+00:00",
+        "endUtc": "2026-10-08T23:18:15+00:00",
+        "exitCode": 0,
+        "seconds": 22.5,
+        "logSha256": "9749492a2f812670d2a794727221c1ea5af2eb564cd94d976b9b1c6b33eaaec7"
+      },
+      {
+        "label": "r5-documented-options",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/documented_options.py",
+          "docs/audits/AUD-015-evidence/r5-help-texts.log"
+        ],
+        "startUtc": "2026-10-08T23:17:59+00:00",
+        "endUtc": "2026-10-08T23:17:59+00:00",
+        "exitCode": 0,
+        "seconds": 0.1,
+        "logSha256": "739d017d2f673b930ed4c0c910b2b5c1419fc05a3a065885389a7db293f505bb"
+      },
+      {
+        "label": "cli-browser-parity",
+        "argv": [
+          "node",
+          "scripts/verify-cli-browser-parity.mjs",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:18:15+00:00",
+        "endUtc": "2026-10-08T23:18:19+00:00",
+        "exitCode": 0,
+        "seconds": 4.0,
+        "logSha256": "7a1266f80265e74e72168c7e0ad4f1bf92dd4a55681b2b8b1d10fa42ed99eee3"
+      },
+      {
+        "label": "fast-mode-script",
+        "argv": [
+          "python3",
+          "scripts/verify-fast-mode-script.py"
+        ],
+        "startUtc": "2026-10-08T23:18:19+00:00",
+        "endUtc": "2026-10-08T23:18:20+00:00",
+        "exitCode": 0,
+        "seconds": 0.7,
+        "logSha256": "347012e128f26d83513d27a91d48082796299bd89055b938cb4395a3df713920"
+      },
+      {
+        "label": "prettier-docs",
+        "argv": [
+          "npx",
+          "prettier",
+          "--check",
+          "README.md",
+          "SECURITY.md",
+          "AGENTS.md",
+          "docs/API.md",
+          "docs/BROWSER-PACKAGE.md",
+          "docs/releases/v0.5.1.md"
+        ],
+        "startUtc": "2026-10-08T23:18:20+00:00",
+        "endUtc": "2026-10-08T23:18:21+00:00",
+        "exitCode": 0,
+        "seconds": 1.2,
+        "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      {
+        "label": "release-artifacts",
+        "argv": [
+          "scripts/check-release-artifacts.sh"
+        ],
+        "startUtc": "2026-10-08T23:18:20+00:00",
+        "endUtc": "2026-10-08T23:18:20+00:00",
+        "exitCode": 0,
+        "seconds": 0.2,
+        "logSha256": "f82c55b20b9761788587d30482b1d26a7df36882a5046bed82c0dc25910560c9"
+      },
+      {
+        "label": "r5-audit-redaction",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/audit_redaction_diff.py"
+        ],
+        "startUtc": "2026-10-08T23:20:43+00:00",
+        "endUtc": "2026-10-08T23:20:43+00:00",
+        "exitCode": 1,
+        "seconds": 0.3,
+        "logSha256": "3d84335cbf5fb9d25a1e873fbeb54705953323d64b085a91478f9ea07a9ebb9b"
+      },
+      {
+        "label": "r1-probe-build",
+        "argv": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_TARGET_DIR=/home/user/Documents/bip_tools/mhfe/target/aud015-r1",
+          "CARGO_NET_OFFLINE=true",
+          "cargo",
+          "build",
+          "--release",
+          "--offline",
+          "-j",
+          "2",
+          "--manifest-path",
+          "docs/audits/AUD-015-harnesses/r1-crypto/password-probe/Cargo.toml"
+        ],
+        "startUtc": "2026-10-08T23:22:02+00:00",
+        "endUtc": "2026-10-08T23:23:04+00:00",
+        "exitCode": 0,
+        "seconds": 62.3,
+        "logSha256": "6d8875acfba8b0d54fbd600d3ff5ad7648d5bec98f3de6c66542846e196ea7a2"
+      },
+      {
+        "label": "r5-typed-again-lists",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/typed_again_lists.py"
+        ],
+        "startUtc": "2026-10-08T23:22:53+00:00",
+        "endUtc": "2026-10-08T23:22:53+00:00",
+        "exitCode": 1,
+        "seconds": 0.2,
+        "logSha256": "f57ca378b9223838fa61c4da30fc17ebbec373bcd2c33d65a6e7a64800e8c5c8"
+      },
+      {
+        "label": "r5-documented-symbols",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/documented_symbols.py"
+        ],
+        "startUtc": "2026-10-08T23:24:19+00:00",
+        "endUtc": "2026-10-08T23:24:19+00:00",
+        "exitCode": 0,
+        "seconds": 0.2,
+        "logSha256": "7d06878775bcd78c2f78b47dc17daad5d1ac1564930ea5a1be18b34241e781cc"
+      },
+      {
+        "label": "r2-serve-checksum-name",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/serve_checksum_name.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:24:21+00:00",
+        "endUtc": "2026-10-08T23:24:23+00:00",
+        "exitCode": 1,
+        "seconds": 1.3,
+        "logSha256": "9b5e78d09c72f6941ca050ac750fd3eb6a675e33cd0c39f0512847ca2276572e"
+      },
+      {
+        "label": "r2-public-answer-echo",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/public_answer_echo.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:24:40+00:00",
+        "endUtc": "2026-10-08T23:24:41+00:00",
+        "exitCode": 1,
+        "seconds": 1.5,
+        "logSha256": "793303d973da6847cb61f00ccb3a13285e0e5adc493719fd1788702d2902ccc8"
+      },
+      {
+        "label": "r1-passwords-icu17",
+        "argv": [
+          "node",
+          "docs/audits/AUD-015-harnesses/r1-crypto/passwords.mjs",
+          "target/aud015-r1/release/aud015-r1-password-probe",
+          "../mhfe_spec/vectors/suite3/validation-cases.json"
+        ],
+        "startUtc": "2026-10-08T23:24:44+00:00",
+        "endUtc": "2026-10-08T23:24:47+00:00",
+        "exitCode": 0,
+        "seconds": 2.9,
+        "logSha256": "79efa01758eeaeb9e8ce7408cf148508d80e887404e4c4d38b8ca6358c203f01"
+      },
+      {
+        "label": "r2-made-password-dumb",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/made_password_dumb.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:25:03+00:00",
+        "endUtc": "2026-10-08T23:25:03+00:00",
+        "exitCode": 1,
+        "seconds": 0.7,
+        "logSha256": "3310aae563207775da6e933da7eda129ab33d8c7c30f124662f0fe2399a3ade5"
+      },
+      {
+        "label": "r2-hint-rows-narrow",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/hint_rows_narrow.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:25:22+00:00",
+        "endUtc": "2026-10-08T23:25:25+00:00",
+        "exitCode": 1,
+        "seconds": 3.3,
+        "logSha256": "2a1b02bdddf66070e079ef2f7b5166f07f306800de9c739139736f2bc502dd05"
+      },
+      {
+        "label": "r1-phrase-reading",
+        "argv": [
+          "bash",
+          "-c",
+          "set -euo pipefail; H=docs/audits/AUD-015-harnesses/r1-crypto; E=docs/audits/AUD-015-evidence; python3 $H/gen_phrases.py | target/aud015-r1/release/aud015-r1-password-probe phrases > $E/r1-phrase-reading.probe.txt; python3 $H/oracle.py phrases $E/r1-phrase-reading.probe.txt"
+        ],
+        "startUtc": "2026-10-08T23:25:35+00:00",
+        "endUtc": "2026-10-08T23:25:37+00:00",
+        "exitCode": 0,
+        "seconds": 1.4,
+        "logSha256": "122e8909f5c0075ba94acbfd1dac0870b43e025c92ee83ea2327a73d3132e18d"
+      },
+      {
+        "label": "r2-quit-key-private-screen",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/quit_key_private_screen.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:25:45+00:00",
+        "endUtc": "2026-10-08T23:25:46+00:00",
+        "exitCode": 1,
+        "seconds": 1.3,
+        "logSha256": "9722dcb27c5eed3cafb2a882071a77c6182926d3d4b98fae653010a5a4c5569f"
+      },
+      {
+        "label": "r2-public-answer-echo-2",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/public_answer_echo.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:37:48+00:00",
+        "endUtc": "2026-10-08T23:37:50+00:00",
+        "exitCode": 1,
+        "seconds": 1.5,
+        "logSha256": "396b2144a96adf27171feb1ab2caf2e57dfe8bc2aba3a67d973bcf052ef3b6af"
+      },
+      {
+        "label": "r1-wasm-probe",
+        "argv": [
+          "bash",
+          "-c",
+          "set -euo pipefail; H=docs/audits/AUD-015-harnesses/r1-crypto; E=docs/audits/AUD-015-evidence; prlimit --as=4000000000 node $H/wasm_probe.mjs $E/r1-wasm-cases.json && python3 $H/oracle.py batch $E/r1-wasm-cases.json"
+        ],
+        "startUtc": "2026-10-08T23:38:47+00:00",
+        "endUtc": "2026-10-08T23:38:52+00:00",
+        "exitCode": 0,
+        "seconds": 4.5,
+        "logSha256": "5c2befde39db0fe07d242582389463cc8a9fc646c35b6f5e14a3aa37d3ca6e5b"
+      },
+      {
+        "label": "r2-serve-live",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/serve_live.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:39:00+00:00",
+        "endUtc": "2026-10-08T23:39:01+00:00",
+        "exitCode": 1,
+        "seconds": 0.5,
+        "logSha256": "75556b1421569100e628458747c7b387c98aae9f10709d4a28bdec0879923ede"
+      },
+      {
+        "label": "r2-serve-live-2",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/serve_live.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:39:08+00:00",
+        "endUtc": "2026-10-08T23:39:20+00:00",
+        "exitCode": 0,
+        "seconds": 11.9,
+        "logSha256": "b8d500d83917b44081a6a98de3ec0c0407e182c7f939305fd3e84fa375d401ef"
+      },
+      {
+        "label": "r1-oracle-vectors",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r1-crypto/oracle.py",
+          "vectors",
+          "../mhfe_spec/vectors"
+        ],
+        "startUtc": "2026-10-08T23:39:15+00:00",
+        "endUtc": "2026-10-08T23:39:16+00:00",
+        "exitCode": 0,
+        "seconds": 0.1,
+        "logSha256": "5eb0cda4b507101ee4d7eb0284dc9e8c00f027eaf88f8efb961c581d57ca2ef7"
+      },
+      {
+        "label": "r1-oracle-profiles",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r1-crypto/oracle.py",
+          "profiles",
+          "../mhfe_spec"
+        ],
+        "startUtc": "2026-10-08T23:39:16+00:00",
+        "endUtc": "2026-10-08T23:39:16+00:00",
+        "exitCode": 0,
+        "seconds": 0.0,
+        "logSha256": "5adc7c3f0991617757dec739490f39ff63cebdd426db56a4f617700e0c1ce96e"
+      },
+      {
+        "label": "r1-oracle-reduced",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r1-crypto/oracle.py",
+          "reduced",
+          "."
+        ],
+        "startUtc": "2026-10-08T23:39:16+00:00",
+        "endUtc": "2026-10-08T23:39:16+00:00",
+        "exitCode": 0,
+        "seconds": 0.1,
+        "logSha256": "4b1147a350262b6003c91ae2863676818f66c6e8b0c0b5a14c3981ce61b05f47"
+      },
+      {
+        "label": "r2-search-reference-record",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/search_reference_record.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:40:19+00:00",
+        "endUtc": "2026-10-08T23:40:20+00:00",
+        "exitCode": 1,
+        "seconds": 0.9,
+        "logSha256": "eb284a28f0f728b7bc2f848e5bd0735106fcd5ef0c9fc8c0b78033ea80a7e2e1"
+      },
+      {
+        "label": "r1-profiles-probe",
+        "argv": [
+          "bash",
+          "-c",
+          "set -euo pipefail; H=docs/audits/AUD-015-harnesses/r1-crypto; E=docs/audits/AUD-015-evidence; prlimit --as=4000000000 node $H/profiles_probe.mjs $E/r1-profiles-cases.json && python3 $H/oracle.py profilecases $E/r1-profiles-cases.json"
+        ],
+        "startUtc": "2026-10-08T23:40:25+00:00",
+        "endUtc": "2026-10-08T23:40:27+00:00",
+        "exitCode": 0,
+        "seconds": 1.1,
+        "logSha256": "876f9ae5751c3a84d5193dca3af8db4981cd9e864823fb6162ec2bdfdcf4652b"
+      },
+      {
+        "label": "r2-search-reference-record-2",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/search_reference_record.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:40:43+00:00",
+        "endUtc": "2026-10-08T23:40:44+00:00",
+        "exitCode": 1,
+        "seconds": 1.3,
+        "logSha256": "d71fbba684fac43ad4f4c3332a16280d8572b833b3776820756c1c21c2522a11"
+      },
+      {
+        "label": "r1-provenance",
+        "argv": [
+          "bash",
+          "docs/audits/AUD-015-harnesses/r1-crypto/provenance.sh"
+        ],
+        "startUtc": "2026-10-08T23:41:31+00:00",
+        "endUtc": "2026-10-08T23:41:31+00:00",
+        "exitCode": 0,
+        "seconds": 0.3,
+        "logSha256": "cefa72d9fefd51f30a1fb598b7ab12f0bec0e8b7180bc9665e08881f62cce266"
+      },
+      {
+        "label": "r2-menu-isolation",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/menu_isolation.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:41:37+00:00",
+        "endUtc": "2026-10-08T23:41:58+00:00",
+        "exitCode": 1,
+        "seconds": 20.5,
+        "logSha256": "911534ba212d62e93fbbbb8cafbf2138daa54ab4c9633091789df7b8b8bd2f52"
+      },
+      {
+        "label": "r2-menu-isolation-2",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/menu_isolation.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:42:08+00:00",
+        "endUtc": "2026-10-08T23:42:10+00:00",
+        "exitCode": 1,
+        "seconds": 1.8,
+        "logSha256": "be879928c853c9d8f2b25c1c9355f51eb4a512ab9c8de4481be65d48a24553bc"
+      },
+      {
+        "label": "r2-menu-isolation-3",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r2-cli/menu_isolation.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-08T23:42:19+00:00",
+        "endUtc": "2026-10-08T23:42:21+00:00",
+        "exitCode": 0,
+        "seconds": 1.8,
+        "logSha256": "829ef0cb11761f27ef90c97193d9cfe0856e1ac47a5d29e79e1f51cc7dd1aab6"
+      },
+      {
+        "label": "r1-selfcheck-full",
+        "argv": [
+          "timeout",
+          "300",
+          "prlimit",
+          "--as=4000000000",
+          "node",
+          "docs/audits/AUD-015-harnesses/r1-crypto/selfcheck_probe.mjs"
+        ],
+        "startUtc": "2026-10-08T23:43:25+00:00",
+        "endUtc": "2026-10-08T23:43:26+00:00",
+        "exitCode": 0,
+        "seconds": 0.6,
+        "logSha256": "b7f1c6f5e3035eaa9e74c4ef11f645bac23f653631a02de24f1a6fcc50e6ebb9"
+      },
+      {
+        "label": "r3-api-probes",
+        "argv": [
+          "timeout",
+          "180",
+          "node",
+          "docs/audits/AUD-015-harnesses/r3-browser/api-probes.mjs"
+        ],
+        "startUtc": "2026-10-08T23:45:35+00:00",
+        "endUtc": "2026-10-08T23:45:35+00:00",
+        "exitCode": 1,
+        "seconds": 0.2,
+        "logSha256": "f3d95377b259e0e52b3b5af8fdafbef1a17f87c0ad0e9d9c3c0aac69f1ece858"
+      },
+      {
+        "label": "r3-static-scan",
+        "argv": [
+          "node",
+          "docs/audits/AUD-015-harnesses/r3-browser/static-scan.mjs"
+        ],
+        "startUtc": "2026-10-08T23:45:35+00:00",
+        "endUtc": "2026-10-08T23:45:35+00:00",
+        "exitCode": 1,
+        "seconds": 0.1,
+        "logSha256": "3942cc3fa00e2b9748957f8abe7866cb9dd7756e80930170c1fd2bb60c524eac"
+      },
+      {
+        "label": "r3-csp-chromium",
+        "argv": [
+          "timeout",
+          "180",
+          "node",
+          "docs/audits/AUD-015-harnesses/r3-browser/csp-page.mjs",
+          "chromium"
+        ],
+        "startUtc": "2026-10-08T23:46:11+00:00",
+        "endUtc": "2026-10-08T23:46:12+00:00",
+        "exitCode": 0,
+        "seconds": 1.5,
+        "logSha256": "d3e35227be48865ed0d7bdd79599e8b532ce905743184923a60aaa18bbfd7658"
+      },
+      {
+        "label": "r3-csp-firefox",
+        "argv": [
+          "timeout",
+          "180",
+          "node",
+          "docs/audits/AUD-015-harnesses/r3-browser/csp-page.mjs",
+          "firefox"
+        ],
+        "startUtc": "2026-10-08T23:46:18+00:00",
+        "endUtc": "2026-10-08T23:46:21+00:00",
+        "exitCode": 0,
+        "seconds": 3.9,
+        "logSha256": "cb53e03e3a874925763a03d8e96cea376b8ea3aca66ed6852e25af350a748b9a"
+      },
+      {
+        "label": "r3-aud014-gate-race-controlled",
+        "argv": [
+          "timeout",
+          "120",
+          "node",
+          "docs/audits/AUD-014-harnesses/integration/gate-race.mjs",
+          "--controlled"
+        ],
+        "startUtc": "2026-10-08T23:47:07+00:00",
+        "endUtc": "2026-10-08T23:47:07+00:00",
+        "exitCode": 0,
+        "seconds": 0.1,
+        "logSha256": "0852b8cb8e69a85d472756da42e224db9533ae7a6244168d8570f0701d27649a"
+      },
+      {
+        "label": "r3-aud014-gate-race-wasm",
+        "argv": [
+          "timeout",
+          "180",
+          "node",
+          "docs/audits/AUD-014-harnesses/integration/gate-race.mjs",
+          "--wasm"
+        ],
+        "startUtc": "2026-10-08T23:47:11+00:00",
+        "endUtc": "2026-10-08T23:47:12+00:00",
+        "exitCode": 0,
+        "seconds": 0.5,
+        "logSha256": "356389d8d803f47f516ac6e3b9b027f4c2e7455fae4ef2eca939513886490829"
+      },
+      {
+        "label": "r5-history-rewrite",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/history_rewrite_map.py",
+          "4c3a6909bced0f0907f61ae291b11bb6bb419689",
+          "ca0086acf545d07bfe008ae340554124a48442bf"
+        ],
+        "startUtc": "2026-10-08T23:50:36+00:00",
+        "endUtc": "2026-10-08T23:50:37+00:00",
+        "exitCode": 1,
+        "seconds": 1.7,
+        "logSha256": "71efdfdbb01c260e89ec1cd5ddc4521d69f5e2de13701e6d78fe0d5583f17d4c"
+      },
+      {
+        "label": "r5-record-commit-fields",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/record_commit_fields.py"
+        ],
+        "startUtc": "2026-10-08T23:51:57+00:00",
+        "endUtc": "2026-10-08T23:52:00+00:00",
+        "exitCode": 1,
+        "seconds": 2.4,
+        "logSha256": "e516873d618cd648113d3a5f2341f8ecf31de2c11a7d8d052e61fd5446bc43f2"
+      },
+      {
+        "label": "r5-audit-redaction-vs-original",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/audit_redaction_diff.py",
+          "4c3a6909bced0f0907f61ae291b11bb6bb419689",
+          "ca0086acf545d07bfe008ae340554124a48442bf"
+        ],
+        "startUtc": "2026-10-08T23:53:03+00:00",
+        "endUtc": "2026-10-08T23:53:04+00:00",
+        "exitCode": 1,
+        "seconds": 0.7,
+        "logSha256": "f29e0b4fd02231746c31d5109c13f7a2dfe41f11ef963d3c52c5661604d5e8ba"
+      },
+      {
+        "label": "r5-audit-redaction-noncommit",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/audit_redaction_diff.py",
+          "--ignore-commits",
+          "4c3a6909bced0f0907f61ae291b11bb6bb419689",
+          "ca0086acf545d07bfe008ae340554124a48442bf"
+        ],
+        "startUtc": "2026-10-08T23:53:22+00:00",
+        "endUtc": "2026-10-08T23:53:23+00:00",
+        "exitCode": 1,
+        "seconds": 0.9,
+        "logSha256": "ff4c1f018587f6df555a5fc48ebb81fb2f13156dedaf064a1259f384d9b98278"
+      },
+      {
+        "label": "r5-redaction-vs-saved",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/redaction_vs_saved_originals.py",
+          "docs/audits/AUD-015-evidence/snapshot-baseline-manifest.txt",
+          "docs/audits/AUD-015-evidence/snapshot-after-rewrite-manifest.txt",
+          "/home/user/Documents/bip_tools/tmp/privacy-history/current-report-originals"
+        ],
+        "startUtc": "2026-10-08T23:54:49+00:00",
+        "endUtc": "2026-10-08T23:54:50+00:00",
+        "exitCode": 1,
+        "seconds": 1.1,
+        "logSha256": "14aa6cec85761d006d657f37c49690cccc35c10de8654bc732d85b5af205a6ce"
+      },
+      {
+        "label": "r5-harness-bindings",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/harness_bindings.py"
+        ],
+        "startUtc": "2026-10-08T23:55:13+00:00",
+        "endUtc": "2026-10-08T23:55:13+00:00",
+        "exitCode": 1,
+        "seconds": 0.1,
+        "logSha256": "5afe967f481738fd6bfa2b0648ee9e8fb06ca786e418e62c2907fdcbf5e6c124"
+      },
+      {
+        "label": "r5-markdown-audit-index-after",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/markdown_links_lists.py",
+          "docs/audits/README.md",
+          "docs/audits/audit-01-2026-09-22.md",
+          "docs/audits/audit-02-2026-09-22.md",
+          "docs/audits/audit-03-2026-09-30.md",
+          "docs/audits/audit-04-2026-10-01.md",
+          "docs/audits/audit-05-2026-10-01.md",
+          "docs/audits/audit-06-2026-10-01.md",
+          "docs/audits/audit-07-2026-10-05.md",
+          "docs/audits/audit-08-2026-10-06.md",
+          "docs/audits/audit-09-2026-10-06.md",
+          "docs/audits/audit-10-2026-10-07.md",
+          "docs/audits/audit-11-2026-10-08.md",
+          "docs/audits/audit-12-2026-10-08.md",
+          "docs/audits/audit-13-2026-10-08.md",
+          "docs/audits/audit-14-2026-10-08.md",
+          "docs/audits/AUD-003-harnesses/README.md",
+          "docs/audits/AUD-004-harnesses/README.md",
+          "docs/audits/AUD-005-harnesses/README.md",
+          "docs/audits/AUD-006-harnesses/README.md",
+          "docs/audits/AUD-007-harnesses/README.md",
+          "docs/audits/AUD-008-harnesses/README.md",
+          "docs/audits/AUD-008-harnesses/architecture-independent-README.md",
+          "docs/audits/AUD-008-harnesses/browser-README.md",
+          "docs/audits/AUD-008-harnesses/browser-independent-README.md",
+          "docs/audits/AUD-008-harnesses/devops-README.md",
+          "docs/audits/AUD-008-harnesses/doc-README.md",
+          "docs/audits/AUD-008-harnesses/qa-README.md",
+          "docs/audits/AUD-008-harnesses/remediation-contract-README.md",
+          "docs/audits/AUD-008-harnesses/remediation-security-README.md",
+          "docs/audits/AUD-008-harnesses/research-README.md",
+          "docs/audits/AUD-008-harnesses/secrets-README.md",
+          "docs/audits/AUD-008-harnesses/ui-README.md",
+          "docs/audits/AUD-008-harnesses/wallet-challenge-README.md",
+          "docs/audits/AUD-009-harnesses/README.md",
+          "docs/audits/AUD-010-harnesses/README.md",
+          "docs/audits/AUD-011-harnesses/README.md",
+          "docs/audits/AUD-012-harnesses/README.md",
+          "docs/audits/AUD-013-harnesses/README.md",
+          "docs/audits/AUD-014-harnesses/README.md"
+        ],
+        "startUtc": "2026-10-08T23:56:01+00:00",
+        "endUtc": "2026-10-08T23:56:01+00:00",
+        "exitCode": 1,
+        "seconds": 0.1,
+        "logSha256": "e16d070ac9abd73093c86155aad171e40549e29c67d5780a3b2c034fdabaca27"
+      },
+      {
+        "label": "r5-aud013-clone-controls",
+        "argv": [
+          "node",
+          "--experimental-vm-modules",
+          "docs/audits/AUD-013-harnesses/quality/clone-controls.mjs"
+        ],
+        "startUtc": "2026-10-08T23:56:29+00:00",
+        "endUtc": "2026-10-08T23:56:29+00:00",
+        "exitCode": 0,
+        "seconds": 0.2,
+        "logSha256": "f9eb6a2ab8a29060abe6c7a77dc9bec78375e115ce2cbd52599c39fafb919e9f"
+      },
+      {
+        "label": "r5-aud012-clone-checker",
+        "argv": [
+          "node",
+          "docs/audits/AUD-012-harnesses/quality/clone-checker.mjs"
+        ],
+        "startUtc": "2026-10-08T23:56:33+00:00",
+        "endUtc": "2026-10-08T23:56:33+00:00",
+        "exitCode": 0,
+        "seconds": 0.1,
+        "logSha256": "454c3fc786c583beb9c89cbc48ae11bba59bcb136a72ffd2bc5f4c1e3987d77f"
+      },
+      {
+        "label": "r5-record-commit-fields-after-prune",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/record_commit_fields.py"
+        ],
+        "startUtc": "2026-10-08T23:57:03+00:00",
+        "endUtc": "2026-10-08T23:57:04+00:00",
+        "exitCode": 1,
+        "seconds": 1.2,
+        "logSha256": "72e53e1b4015f2f4cb17543f3321485969bc6ef121398dc8acf28406d2814053"
+      },
+      {
+        "label": "r4-probe-build",
+        "argv": [
+          "env",
+          "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_TARGET_DIR=/home/user/Documents/bip_tools/mhfe/target/aud015-r4",
+          "cargo",
+          "build",
+          "--release",
+          "--offline",
+          "--locked",
+          "-j",
+          "1",
+          "--manifest-path",
+          "docs/audits/AUD-015-harnesses/r4-wallet/rust-probe/Cargo.toml"
+        ],
+        "startUtc": "2026-10-08T23:57:14+00:00",
+        "endUtc": "2026-10-08T23:57:17+00:00",
+        "exitCode": 0,
+        "seconds": 3.0,
+        "logSha256": "c41932c796631b9a5636a657f1db77689764f9cd239678c2fdaca3a0166db3a1"
+      },
+      {
+        "label": "r4-address-oracle",
+        "argv": [
+          "node",
+          "docs/audits/AUD-015-harnesses/r4-wallet/address-oracle.mjs"
+        ],
+        "startUtc": "2026-10-08T23:57:20+00:00",
+        "endUtc": "2026-10-08T23:57:31+00:00",
+        "exitCode": 0,
+        "seconds": 10.5,
+        "logSha256": "d041d15d83dff324d5781892c26d9ddd2d2e444f5ed925673fab26b14965d753"
+      },
+      {
+        "label": "r4-wallet-check-oracle",
+        "argv": [
+          "node",
+          "docs/audits/AUD-015-harnesses/r4-wallet/wallet-check-oracle.mjs"
+        ],
+        "startUtc": "2026-10-08T23:57:31+00:00",
+        "endUtc": "2026-10-08T23:58:55+00:00",
+        "exitCode": 0,
+        "seconds": 83.7,
+        "logSha256": "77feade01ffc7e7367ca01308be44714dd3562a85416124a9ec273c1e857bfec"
+      },
+      {
+        "label": "r4-probe-addresses",
+        "argv": [
+          "target/aud015-r4/release/aud015-r4-probe",
+          "addresses"
+        ],
+        "startUtc": "2026-10-08T23:58:58+00:00",
+        "endUtc": "2026-10-09T00:00:47+00:00",
+        "exitCode": 0,
+        "seconds": 109.7,
+        "logSha256": "d4502ce58c9ca135b0137d907d348e73507f0a1a8484c737ada44d18a211aa9d"
+      },
+      {
+        "label": "r4-probe-hints",
+        "argv": [
+          "target/aud015-r4/release/aud015-r4-probe",
+          "hints"
+        ],
+        "startUtc": "2026-10-09T00:00:48+00:00",
+        "endUtc": "2026-10-09T00:01:03+00:00",
+        "exitCode": 1,
+        "seconds": 15.8,
+        "logSha256": "69f57263cd6ef1743574bfde843aba5ff2df3ed8a19dcd1c3baac7f13b1ac166"
+      },
+      {
+        "label": "r4-probe-wishes",
+        "argv": [
+          "target/aud015-r4/release/aud015-r4-probe",
+          "wishes"
+        ],
+        "startUtc": "2026-10-09T00:01:03+00:00",
+        "endUtc": "2026-10-09T00:01:09+00:00",
+        "exitCode": 0,
+        "seconds": 5.7,
+        "logSha256": "de8b104947cb80c3e9816fce67a42c8c60929a96a5211202672bf68edf21f29a"
+      },
+      {
+        "label": "r4-probe-wallet-check",
+        "argv": [
+          "target/aud015-r4/release/aud015-r4-probe",
+          "wallet-check"
+        ],
+        "startUtc": "2026-10-09T00:01:09+00:00",
+        "endUtc": "2026-10-09T00:01:11+00:00",
+        "exitCode": 0,
+        "seconds": 2.1,
+        "logSha256": "59cce37d28084c2444d3910c88bc832fdb91a9b41d6b50fb70fafc2bc95d7f17"
+      },
+      {
+        "label": "r4-wasm-parity",
+        "argv": [
+          "node",
+          "docs/audits/AUD-015-harnesses/r4-wallet/wasm-parity.mjs"
+        ],
+        "startUtc": "2026-10-09T00:01:16+00:00",
+        "endUtc": "2026-10-09T00:01:27+00:00",
+        "exitCode": 1,
+        "seconds": 11.5,
+        "logSha256": "be202d15bc4f92375634a916effbca9e6e006beec881394051e0e9771862f9fc"
+      },
+      {
+        "label": "r4-never-use-loop",
+        "argv": [
+          "python3",
+          "-B",
+          "docs/audits/AUD-015-harnesses/r4-wallet/never-use-loop.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-09T00:01:27+00:00",
+        "endUtc": "2026-10-09T00:01:29+00:00",
+        "exitCode": 1,
+        "seconds": 1.9,
+        "logSha256": "15c7be99e78ecd9205530afdc3a6a7f07128609013cf4ee896d384ea1f28c36a"
+      },
+      {
+        "label": "r4-never-use-check-warning",
+        "argv": [
+          "python3",
+          "-B",
+          "docs/audits/AUD-015-harnesses/r4-wallet/never-use-check-warning.py",
+          "target/release/mhfe"
+        ],
+        "startUtc": "2026-10-09T00:01:29+00:00",
+        "endUtc": "2026-10-09T00:01:31+00:00",
+        "exitCode": 1,
+        "seconds": 1.9,
+        "logSha256": "3d410b7610088f0b896178dac5a9119955867ef68cd88ff13169f2fad65e8e7a"
+      },
+      {
+        "label": "r4-never-use-odds-wasm",
+        "argv": [
+          "node",
+          "-e",
+          "const fs=require(\"fs\"),vm=require(\"vm\");vm.runInThisContext(fs.readFileSync(\"target/wasm-bindgen/mhfe.js\",\"utf8\"));const m=vm.runInThisContext(\"mhfe\");m.initSync({module:fs.readFileSync(\"dist/runtime/mhfe.wasm\")});for (const [w,p,n,c] of [[\"\",[],\"abandon\",true],[\"\",[],\"\",true],[\"happy\",[0],\"\",true]]) console.log(JSON.stringify({chosen:w?1:0,places:p,neverUse:n,walletCheck:c}), m.describeDraw(new TextEncoder().encode(w),Uint32Array.from(p),n,c));"
+        ],
+        "startUtc": "2026-10-09T00:02:43+00:00",
+        "endUtc": "2026-10-09T00:02:43+00:00",
+        "exitCode": 0,
+        "seconds": 0.1,
+        "logSha256": "a36497e6b858dce34522267f63169dfe10bc3503f03c0c6bf075448bc2828c74"
+      }
+    ],
+    "summary": "Coordinator baseline: 27 commands, all exit 0: vendored Argon2 hashes, notices, published rounds, cargo fmt, the copy check and its self-test, clippy native and WASM (all features and each browser module alone), cargo test (library 334 passed and 2 ignored, binary 114 and 2, suite 3 vectors 3 and 1, suite 4 vectors 2 and 1, doc tests 4), cargo doc with warnings denied, release build, mhfe self-test, the terminal suite, dist rebuilt byte for byte, the Argon2 WebAssembly check, the browser package check, the CLI/browser parity check, the fast-mode script check, the release-artifact check and Prettier on the documents."
+  },
+  "findings": [
+    {
+      "id": "AUD-015-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "The reference of a missing-word search records any typed text, a mistyped seed phrase included, in the main-screen summary",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "A secret typed into a public field by mistake reaches the scrollback; the fix is small.",
+      "affectedFiles": [
+        "src/bin/mhfe/check.rs:546",
+        "src/bin/mhfe/check.rs:779",
+        "SECURITY.md:13"
+      ],
+      "reproduction": "mhfe check --fingerprint --pim 0 with the public zero-12 container, word 24 as ?, repair words skipped, search by the container's own wallet; at 'Address or master key fingerprint:' type the public zero-12 seed phrase; Ctrl+C at the coin question (r2-cli/search_reference_record.py).",
+      "expected": "Nothing is recorded until the text has been read as a fingerprint or as an address of the chosen coin; a secret typed into a public field never reaches the main screen.",
+      "observed": "The parse closure accepts any text that is not eight hex digits as an address, so read_public records 'Reference <text>' at once; the summary on the main screen holds the whole phrase (and raw escape sequences when typed).",
+      "impact": "A pasted seed phrase or password stays in the terminal's scrollback and any log. Needs a user error; no Argon2 run.",
+      "evidence": [
+        "local-only: r2-search-reference-record-2.log (exit 1)",
+        "docs/audits/AUD-015-harnesses/r2-cli/search_reference_record.py"
+      ],
+      "recommendedFix": "Record the reference only after it is parsed (fingerprint, or Address::parse for the chosen coin), in its validated form; refuse text that reads as a BIP39 phrase.",
+      "requiredVerification": "search_reference_record.py exits 0; a unit test that an invalid address records nothing; the terminal suite's search cases pass.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-SEC002",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Control sequences from typed answers and from the fast-mode checksum file are written raw to the terminal",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "No secret is exposed.",
+      "affectedFiles": [
+        "src/wallet.rs:187",
+        "src/wallet.rs:687",
+        "src/bin/mhfe/serve.rs:171",
+        "src/bin/mhfe/menu.rs:148",
+        "src/bin/mhfe/style.rs:406"
+      ],
+      "reproduction": "A checksum file naming 'x<ESC>]0;TITLE<BEL><ESC>[2Jy.html' next to a page served by mhfe serve; a fingerprint answer holding ESC sequences, at a terminal and with --stdin (r2-cli/serve_checksum_name.py, public_answer_echo.py).",
+      "expected": "Untrusted text is shown with control characters neutralised, as the secret prompts promise (SECURITY.md:29).",
+      "observed": "Refusal messages quote the input verbatim and anstream passes the escapes through on a colour terminal; the checksum file's page name is printed verbatim.",
+      "impact": "A crafted answer or file can retitle the window or clear and overwrite lines, for example hide a warning.",
+      "evidence": [
+        "local-only: r2-serve-checksum-name.log (exit 1)",
+        "local-only: r2-public-answer-echo-2.log (exit 1)"
+      ],
+      "recommendedFix": "Replace C0/C1 control characters and DEL in user- or file-derived text in one display helper, or stop quoting raw input in library messages.",
+      "requiredVerification": "The two probes exit 0 in colour mode; a unit test of the helper.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-SEC003",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "A password made by --new-password is shown on the main screen where no private screen can be opened",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Needs an explicit made-password option on a terminal without the alternate screen.",
+      "affectedFiles": [
+        "src/bin/mhfe/encrypt.rs:419",
+        "src/bin/mhfe/made_password.rs:186",
+        "README.md:281"
+      ],
+      "reproduction": "TERM=dumb mhfe encrypt --pim 0 --new-password words in a pseudo-terminal, stopped before Argon2 (r2-cli/made_password_dumb.py).",
+      "expected": "README: a password the tool makes is shown once on a private screen; mhfe new refuses to start where it cannot show one.",
+      "observed": "The five words appear on the main screen, again after each empty type-back.",
+      "impact": "The new container password stays in the scrollback.",
+      "evidence": [
+        "local-only: r2-made-password-dumb.log (exit 1)"
+      ],
+      "recommendedFix": "Refuse a made kind where no private screen can be entered, as new and wallets do.",
+      "requiredVerification": "made_password_dumb.py exits 0; the terminal suite's made-password case passes.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-SEC004",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Ctrl+\\, Ctrl+Z or SIGTERM leave the private screen showing secrets and lose the summary",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Secrets stay on the alternate screen, not in the scrollback.",
+      "affectedFiles": [
+        "src/bin/mhfe/terminal.rs:310",
+        "src/bin/mhfe/hidden_input.rs:624",
+        "src/bin/mhfe/chosen_words.rs:135"
+      ],
+      "reproduction": "mhfe new --pim 0, choose a word, type 'zoo' on the private screen, Ctrl+\\ at the visible position prompt (r2-cli/quit_key_private_screen.py).",
+      "expected": "The private screen is cleared and left whenever the tool ends (SECURITY.md).",
+      "observed": "Only SIGINT has a handler; VQUIT/VSUSP are disabled only inside hidden prompts and lists. The process dies by SIGQUIT with the chosen word still shown.",
+      "impact": "Secrets remain displayed after the tool ended; no summary or 'NOT verified' alarm.",
+      "evidence": [
+        "local-only: r2-quit-key-private-screen.log (exit 1)"
+      ],
+      "recommendedFix": "Route SIGQUIT/SIGTERM/SIGHUP through the Ctrl+C restore path and disable VQUIT/VSUSP while a step flow or private screen is active.",
+      "requiredVerification": "quit_key_private_screen.py exits 0; a terminal test for Ctrl+\\ and SIGTERM.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-SEC005",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "An encryption shows the unverified container before its check when standard output is another terminal",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Needs output redirected to a second terminal.",
+      "affectedFiles": [
+        "src/bin/mhfe/encrypt.rs:218",
+        "src/bin/mhfe/terminal.rs:583",
+        "SECURITY.md:76"
+      ],
+      "reproduction": "Source trace: show_sealing decides from io::stdout().is_terminal(), not from terminal::output_on_screen(); reaching the callback needs full-cost Argon2.",
+      "expected": "Output that is not the person's screen gets the container only after its check (SECURITY.md:76-81; AUD-008-SEC004 treats another terminal as redirected).",
+      "observed": "The second terminal receives an unmarked container before rounds 13 to 24; the warning and the outcome go to standard error only.",
+      "impact": "A container copied there could be relied on although its check later failed.",
+      "evidence": [
+        "source lines cited (coordinator confirmed encrypt.rs:218)"
+      ],
+      "recommendedFix": "Use terminal::output_on_screen() (or can_show_privately) for person_reads_output.",
+      "requiredVerification": "A pseudo-terminal test with standard output on a second terminal.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-SEC006",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "The check-word repair offer keeps password words in ordinary, unwiped strings",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Bounded to the review at a terminal.",
+      "affectedFiles": [
+        "src/bin/mhfe/check_word.rs:188",
+        "src/bin/mhfe/choice.rs:379",
+        "SECURITY.md:34"
+      ],
+      "reproduction": "Source trace: the answer labels 'Word N: <word> instead of <typed>' and their drawn lines are plain Strings, rebuilt on each redraw.",
+      "expected": "Every buffer the program owns that holds a password is wiped when dropped (SECURITY.md:34-35).",
+      "observed": "The labels and drawn lines are freed without wiping and are not locked.",
+      "impact": "Copies of password words stay in freed heap memory.",
+      "evidence": [
+        "source lines cited"
+      ],
+      "recommendedFix": "Build these labels and lines in Zeroizing buffers.",
+      "requiredVerification": "A unit test that the review labels are wiped; check-word terminal cases pass.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-SEC007",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "The page dispatches worker messages named after Object.prototype members as page callbacks",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Only a worker that sends such names reaches it; the package's own worker never does.",
+      "affectedFiles": [
+        "web/runtime.js:237",
+        "web/runtime.js:259",
+        "web/worker-runtime.js:141"
+      ],
+      "reproduction": "With a stand-in worker, reply {type:'valueOf'} or ask with question 'toString' (r3-browser/api-probes.mjs P3).",
+      "expected": "An inherited name is handled like an unknown one, as the worker side does with Object.hasOwn.",
+      "observed": "valueOf/hasOwnProperty/__proto__ end the job with CALLBACK_FAILED; question 'toString' is answered.",
+      "impact": "Protocol inconsistency and misleading error codes; defense in depth.",
+      "evidence": [
+        "local-only: r3-api-probes.log (exit 1, P3)"
+      ],
+      "recommendedFix": "Look up handlers with Object.hasOwn or null-prototype maps; treat a missing handler as a protocol error.",
+      "requiredVerification": "api-probes.mjs P3 passes; a regression in verify-browser-package.mjs.",
+      "reviewer": "R3"
+    },
+    {
+      "id": "AUD-015-FUN001",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "A rekey with an automatically detected length is confirmed by the built-in check alone, although the specification requires the verifier at the word count the owner supplies",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Deviates from a MUST of the specification; the owner decided on 2026-10-09 to bring the library to the specification.",
+      "affectedFiles": [
+        "src/rehearsal.rs:409",
+        "src/rehearsal.rs:484",
+        "src/rekey.rs:137",
+        "src/wasm_api/core.rs:805",
+        "docs/API.md:264",
+        "docs/BROWSER-PACKAGE.md:174",
+        "mhfe_spec README.md:428"
+      ],
+      "reproduction": "Encrypt the spec's public 24-word fixture whose entropy packs a 21-word state, then RekeySession with words 0 and recover('builtInCheck') in the browser package at reduced cost (r1-crypto/wasm_probe.mjs part 3).",
+      "expected": "mhfe_spec Re-encryption: a short source MUST pass its verifier at the word count supplied by the owner. The CLI conforms: with --words auto it asks for an address, a fingerprint or the owner.",
+      "observed": "The detected 21-word reading is accepted as verified and sealed; the new container drops the word-count advice. The library's Confirmation::refuse_for allows it, and the self-check, tests and documents state it.",
+      "impact": "About once in 2^32 a wrong password or a misread 24-word original is sealed as a verified shorter phrase; discarding the old container would then lose the wallet.",
+      "evidence": [
+        "local-only: r1-wasm-probe.log (exit 0; part 3 asserts the observed behaviour)"
+      ],
+      "recommendedFix": "Refuse BuiltInCheck under ConfirmationNeeded::Detected in the library; in addition (owner, 2026-10-09) check every length's verifier when a length is stated and say which reading passes.",
+      "requiredVerification": "wasm_probe.mjs part 3 expects REFERENCE_REQUIRED; library unit test; RekeyCheck self-check case; verify-browser-package rekey section; parity test.",
+      "reviewer": "R1"
+    },
+    {
+      "id": "AUD-015-API001",
+      "category": "API",
+      "kind": "finding",
+      "title": "MhfeWallet.drawPhrase accepts a non-boolean walletCheck and an out-of-range workers when the phrase is not checked",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "The result reports walletCheck:false; no secret is exposed.",
+      "affectedFiles": [
+        "web/wallet.js:168",
+        "web/wallet.js:182",
+        "web/wallet.d.ts:93"
+      ],
+      "reproduction": "drawPhrase({walletCheck:'yes'}), ({walletCheck:1}), ({workers:0}), ({workers:'many'}), ({workers:1e9}) with a stand-in worker (r3-browser/api-probes.mjs P2).",
+      "expected": "A wrongly typed argument rejects with a TypeError (BROWSER-PACKAGE.md), as describeDraw does.",
+      "observed": "All calls resolve with one unchecked draw.",
+      "impact": "A page bug such as the string 'true' silently gives an unchecked phrase.",
+      "evidence": [
+        "local-only: r3-api-probes.log (exit 1, P2)"
+      ],
+      "recommendedFix": "Check walletCheck's type and the workers range whatever the passphrase.",
+      "requiredVerification": "api-probes.mjs P2 passes; cases in verify-browser-package.mjs.",
+      "reviewer": "R3"
+    },
+    {
+      "id": "AUD-015-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Rewritten, re-signed release tags break the source binding of the published v0.3.0 to v0.5.0 releases",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Blocks publishing the rewritten history until provenance stays checkable.",
+      "affectedFiles": [
+        "scripts/package-release.sh:65",
+        "README.md:845",
+        "docs/RELEASING.md:56"
+      ],
+      "reproduction": "git for-each-ref refs/tags: v0.5.0 points at 5a37293 (was 52b6b36), v0.4.0 at f42ed54, v0.3.0 at 00693dd; 52b6b36 and 4c3a690 no longer exist locally; refs/remotes/origin/main was moved to f4f7b01 although nothing was pushed.",
+      "expected": "A published archive's provenance and BUILD-INFO 'source:' name a commit a user can fetch (README:845, RELEASING.md:56).",
+      "observed": "If the rewritten tags and main are pushed, the commits the releases were built from leave the repository's refs.",
+      "impact": "Archive bytes stay verifiable by SHA256SUMS and its signature, but not their source commit.",
+      "evidence": [
+        "local-only: r5-history-rewrite.log",
+        "coordinator: git for-each-ref, git cat-file"
+      ],
+      "recommendedFix": "Before publishing the rewrite, keep the original tag commits reachable (archive refs) or publish a signed old-to-new map; restore refs/remotes by a fetch.",
+      "requiredVerification": "After publication, attestations and BUILD-INFO commits resolve, or the map explains each.",
+      "reviewer": "R5"
+    },
+    {
+      "id": "AUD-015-BLD002",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "The tag release path runs only part of scripts/check.sh, and the Dockerfile's 'same fast checks as CI' comment is no longer true",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "The person who signs the release is the remaining barrier.",
+      "affectedFiles": [
+        "packaging/Dockerfile.reproducible:91",
+        "scripts/check.sh:17",
+        ".github/workflows/release.yml:19"
+      ],
+      "reproduction": "Compare the verified stage's steps with check.sh; release.yml does not require CI on the tagged commit.",
+      "expected": "The release path cannot skip the mandatory checks (CHECK-BLD-005).",
+      "observed": "Missing: vendored Argon2 hashes, notices check, published-rounds check, copy check, WASM clippy per feature, doc warnings, the terminal suite and the parity script.",
+      "impact": "A tag on an unchecked commit still produces a draft release.",
+      "evidence": [
+        "static review of the cited lines"
+      ],
+      "recommendedFix": "Share one step list between check.sh and the verified stage, or require the CI job for the tagged commit; correct the comment.",
+      "requiredVerification": "Static diff; one canonical build at release.",
+      "reviewer": "R5"
+    },
+    {
+      "id": "AUD-015-UI001",
+      "category": "UI",
+      "kind": "finding",
+      "title": "Word hints wrap in 24- to 41-column terminals and the typed line is then drawn on the hint row",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Display only; the typed data is unaffected.",
+      "affectedFiles": [
+        "src/bin/mhfe/typed_line.rs:21",
+        "src/bin/mhfe/typed_line.rs:107"
+      ],
+      "reproduction": "mhfe check in a 32-column pseudo-terminal, 'a' then 'b' at the container prompt, replayed on a VT100 model (r2-cli/hint_rows_narrow.py).",
+      "expected": "Each hint row fits the terminal, so the cursor returns to the typed line.",
+      "observed": "The 40-column count hint wraps from 24 columns, and the next letter lands on the hint row.",
+      "impact": "A garbled private screen in narrow windows.",
+      "evidence": [
+        "local-only: r2-hint-rows-narrow.log (exit 1)"
+      ],
+      "recommendedFix": "Count the rows each hint takes, or raise the narrowest width above the longest fixed hint.",
+      "requiredVerification": "hint_rows_narrow.py exits 0; a LineScreen unit test at 30 columns.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-UI002",
+      "category": "UI",
+      "kind": "finding",
+      "title": "mhfe new asks the chosen-word question again and again when its --never-use value is refused",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "The person can only cancel.",
+      "affectedFiles": [
+        "src/bin/mhfe/chosen_words.rs:64",
+        "src/bin/mhfe/chosen_words.rs:95"
+      ],
+      "reproduction": "mhfe new --never-use notaword in a pseudo-terminal, 'Every word at random' three times (r4-wallet/never-use-loop.py).",
+      "expected": "A refused answer is asked again so that it can be corrected, or the option is refused at the start.",
+      "observed": "The option's word is reused on every loop; each answer is refused with the same message.",
+      "impact": "The command cannot go on after a typo in the option.",
+      "evidence": [
+        "local-only: r4-never-use-loop.log (exit 1)"
+      ],
+      "recommendedFix": "Check --never-use with the library rule at the start, or ask for the word again.",
+      "requiredVerification": "never-use-loop.py exits 0; a terminal test for an invalid --never-use.",
+      "reviewer": "R4"
+    },
+    {
+      "id": "AUD-015-UI003",
+      "category": "UI",
+      "kind": "finding",
+      "title": "A word never to use with the wallet check is rated 'Not recommended', with advice about where to put a chosen word",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "A misleading warning; no security effect.",
+      "affectedFiles": [
+        "src/word_wishes.rs:165",
+        "src/bin/mhfe/chosen_words.rs:182",
+        "README.md:501"
+      ],
+      "reproduction": "mhfe new --never-use abandon with passphrase TREZOR and the check, no chosen word (r4-wallet/never-use-check-warning.py); describeDraw('', [], 'abandon', true).",
+      "expected": "README: a word never to use tells too little to matter, and from 240 bits the phrase has far more than enough.",
+      "observed": "239.98 bits are rated 'Not recommended', and the 'anywhere vs fixed position' advice is shown although no word was chosen.",
+      "impact": "Users may be pushed away from the check or confused.",
+      "evidence": [
+        "local-only: r4-never-use-check-warning.log (exit 1)",
+        "local-only: r4-never-use-odds-wasm.log (exit 0)"
+      ],
+      "recommendedFix": "Rate by the chosen word only, or round; show the placement advice only for a word at a fixed position.",
+      "requiredVerification": "A unit test of odds(16) with a never-use word only; the probe exits 0.",
+      "reviewer": "R4"
+    },
+    {
+      "id": "AUD-015-UI004",
+      "category": "UI",
+      "kind": "finding",
+      "title": "Word hints stop saying that no word begins like this once the typed word is longer than nine letters",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "The phrase reader still refuses the word later.",
+      "affectedFiles": [
+        "src/word_hints.rs:156",
+        "README.md:239"
+      ],
+      "reproduction": "Every prefix of both lists and word+'xyz' compared with the documented rule (r4-wallet rust-probe hints; wasm-parity.mjs).",
+      "expected": "A word of letters that no list word begins with gives 'no word'.",
+      "observed": "A token longer than nine letters gives no hint at all.",
+      "impact": "Someone typing past a wrong word loses the warning.",
+      "evidence": [
+        "local-only: r4-probe-hints.log (exit 1)",
+        "local-only: r4-wasm-parity.log (exit 1)"
+      ],
+      "recommendedFix": "Treat a longer run of letters as a word with no match.",
+      "requiredVerification": "The probes exit 0; a unit test for 'abandonxyz'.",
+      "reviewer": "R4"
+    },
+    {
+      "id": "AUD-015-UI005",
+      "category": "UI",
+      "kind": "finding",
+      "title": "The SELF_CHECK_FAILED message has a double period in Chromium when WebAssembly is blocked",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Cosmetic.",
+      "affectedFiles": [
+        "web/runtime.js:840",
+        "web/runtime.js:937"
+      ],
+      "reproduction": "A page without 'wasm-unsafe-eval' in Chromium calls wallet.fingerprint() (r3-browser/csp-page.mjs).",
+      "expected": "One clean sentence a page can show as it is.",
+      "observed": "'...\".. Do not use this program on this computer'.",
+      "impact": "A fatal-error screen reads badly.",
+      "evidence": [
+        "local-only: r3-csp-chromium.log"
+      ],
+      "recommendedFix": "Strip a trailing period before appending the advice.",
+      "requiredVerification": "csp-page.mjs chromium.",
+      "reviewer": "R3"
+    },
+    {
+      "id": "AUD-015-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "Word-count lists are typed again in refusal messages instead of derived from their constants",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Maintenance rule; messages could state an old limit after a change.",
+      "affectedFiles": [
+        "src/repair.rs:266",
+        "web/client.js:967",
+        "web/repair.js:50",
+        "src/bin/mhfe/container_repair.rs:65",
+        "src/bin/mhfe/encrypt.rs:120"
+      ],
+      "reproduction": "r5-build-docs/typed_again_lists.py.",
+      "expected": "AGENTS.md rule 6: a value that follows from another is derived, never typed again (phrase::counts_text exists).",
+      "observed": "Five messages and one help text spell the lists by hand.",
+      "impact": "A changed limit would leave old numbers in messages.",
+      "evidence": [
+        "local-only: r5-typed-again-lists.log (exit 1)"
+      ],
+      "recommendedFix": "Build each message from its constant.",
+      "requiredVerification": "typed_again_lists.py exits 0; message assertions pass.",
+      "reviewer": "R5"
+    },
+    {
+      "id": "AUD-015-ARC002",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The 43-row wallet address table is kept twice, with no test keeping the copies in step",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Both copies are correct today.",
+      "affectedFiles": [
+        "src/wallet.rs:1258",
+        "src/wallet/known_answers.rs:412"
+      ],
+      "reproduction": "Compare the two ADDRESSES tables; no test compares them.",
+      "expected": "AGENTS.md rule 6: one source, or a stated copy with a test.",
+      "observed": "Two equal tables, maintained separately.",
+      "impact": "A correction to one copy can miss the other.",
+      "evidence": [
+        "local-only: r4-address-oracle.log (exit 0, the table reproduced)"
+      ],
+      "recommendedFix": "Let the unit test use known_answers::ADDRESSES.",
+      "requiredVerification": "cargo test wallet::.",
+      "reviewer": "R4"
+    },
+    {
+      "id": "AUD-015-ARC003",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "A stale exit-code comment says 'No, stop' at the first question of a rekey exits 130",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "No runtime effect.",
+      "affectedFiles": [
+        "src/bin/mhfe/exit.rs:18",
+        "src/bin/mhfe/rekey.rs:391",
+        "src/bin/mhfe/exit.rs:102"
+      ],
+      "reproduction": "Read the CANCELLED comment against the current rekey questions and exit mapping.",
+      "expected": "AGENTS.md: remove a comment when the code it describes changes.",
+      "observed": "The comment names a question removed in 0.5.1; the remaining 'No, stop' exits 3.",
+      "impact": "Misleads a maintainer.",
+      "evidence": [
+        "source lines cited"
+      ],
+      "recommendedFix": "Drop the clause.",
+      "requiredVerification": "Read the comment against exit.rs.",
+      "reviewer": "R5"
+    },
+    {
+      "id": "AUD-015-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The privacy history rewrite updated audit-record commit references only partly",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Blocks publishing the rewritten history: published records would cite commits that exist nowhere.",
+      "affectedFiles": [
+        "docs/audits/audit-03-2026-09-30.json",
+        "docs/audits/audit-07-2026-10-05.json",
+        "docs/audits/audit-10-2026-10-07.json",
+        "docs/audits/README.md:13",
+        "docs/audits/AUD-005-decisions.md"
+      ],
+      "reproduction": "r5-build-docs/record_commit_fields.py, before and after the redaction session pruned the old objects.",
+      "expected": "AGENTS.md: a commit an audit record names is rewritten only together with that record, whose hashes are then updated; Markdown and JSON agree.",
+      "observed": "66 structured fields were moved; 48 fixCommit/verificationCommit fields in audit-03..07 and 68 prose references still name replaced, now pruned commits; one record mixes old and new names for the same commit; the AUD-006 index row names old commits.",
+      "impact": "The remediation evidence of AUD-003..AUD-007 can no longer be traced to source.",
+      "evidence": [
+        "local-only: r5-history-rewrite.log",
+        "local-only: r5-record-commit-fields.log",
+        "local-only: r5-record-commit-fields-after-prune.log"
+      ],
+      "recommendedFix": "Map every remaining old hash with the redaction's old-to-new map and record the map in each privacyRedaction block.",
+      "requiredVerification": "record_commit_fields.py exits 0; a prose scan finds no pre-rewrite commit.",
+      "reviewer": "R5"
+    },
+    {
+      "id": "AUD-015-DOC002",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The privacy rewrite changed nine harness READMEs whose SHA-256 the audit records bind, without a binding",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "The files changed only in commit references.",
+      "affectedFiles": [
+        "docs/audits/audit-08-2026-10-06.json",
+        "docs/audits/audit-10-2026-10-07.json",
+        "docs/audits/audit-13-2026-10-08.json",
+        "docs/audits/audit-14-2026-10-08.json"
+      ],
+      "reproduction": "r5-build-docs/harness_bindings.py.",
+      "expected": "Each edited bound file gets a privacyRedaction.documentBindings entry.",
+      "observed": "106 bindings checked, 9 no longer match and carry no binding.",
+      "impact": "A reader verifying harness integrity sees unexplained changes.",
+      "evidence": [
+        "local-only: r5-harness-bindings.log (exit 1)"
+      ],
+      "recommendedFix": "Add the nine documentBindings entries.",
+      "requiredVerification": "harness_bindings.py exits 0.",
+      "reviewer": "R5"
+    },
+    {
+      "id": "AUD-015-DOC003",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The v0.5.1 notes claim conformance with published specification v0.5.0, while rekey no longer obtains a confirmation that v0.5.0 requires",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Resolved by publishing the revised specification or stating the deviation.",
+      "affectedFiles": [
+        "docs/releases/v0.5.1.md:1",
+        "docs/releases/v0.5.1.md:113",
+        "mhfe_spec README.md:441"
+      ],
+      "reproduction": "Compare mhfe_spec v0.5.0 README lines 440-447 with the notes and the uncommitted spec change.",
+      "expected": "The notes name the specification text the release follows.",
+      "observed": "The relaxed rule (owner decision, AUD-007-FUN002 addendum) exists only in an uncommitted mhfe_spec change; the notes still cite v0.5.0.",
+      "impact": "A conformance claim a reader can check and find false.",
+      "evidence": [
+        "git show v0.5.0:README.md in mhfe_spec (reviewer R5)"
+      ],
+      "recommendedFix": "Publish the spec revision and cite it, or state the deviation in the notes.",
+      "requiredVerification": "Notes and README cite a specification whose text matches rekey.",
+      "reviewer": "R5"
+    },
+    {
+      "id": "AUD-015-DOC004",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The v0.5.1 notes' Reviews section says AUD-010 audited the whole of this work and omits AUD-011 to AUD-015",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Documentation only.",
+      "affectedFiles": [
+        "docs/releases/v0.5.1.md:340"
+      ],
+      "reproduction": "Read lines 340-349 against the audit index.",
+      "expected": "The notes describe the reviews of the release accurately.",
+      "observed": "Only AUD-009 and AUD-010 are named.",
+      "impact": "Overstates AUD-010 and hides later records.",
+      "evidence": [
+        "source lines cited"
+      ],
+      "recommendedFix": "List AUD-011 to AUD-015 and drop 'the whole of this work'.",
+      "requiredVerification": "Read the notes against the index.",
+      "reviewer": "R5"
+    },
+    {
+      "id": "AUD-015-DOC005",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "docs/API.md omits the browser API of chosen words and word hints, and its WebAssembly export list is stale",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "BROWSER-PACKAGE.md and the .d.ts files are complete.",
+      "affectedFiles": [
+        "docs/API.md:704",
+        "docs/API.md:820",
+        "docs/API.md:844"
+      ],
+      "reproduction": "Compare API.md with the js_name exports of src/wasm_api and the glue's exports (r3-browser/static-scan.mjs S3).",
+      "expected": "API.md names every class method and export (workspace rule: API.md is part of a finished browser binding).",
+      "observed": "describeDraw, wordHints and the new parameters fields are missing; the export list names 'check' (the export is CheckSession) and omits searchCandidates, searchDecoy, searchWallet, inspectContainer, describeDraw and wordHints; the secrets sentence omits chosen words and typed lines.",
+      "impact": "An integrator gets a stale API description.",
+      "evidence": [
+        "local-only: r3-static-scan.log (exit 1, S3)"
+      ],
+      "recommendedFix": "Update the usage block and export list from the actual exports.",
+      "requiredVerification": "static-scan.mjs S3 passes.",
+      "reviewer": "R3, R4"
+    },
+    {
+      "id": "AUD-015-DOC006",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "SECURITY.md says only Backspace, Ctrl+U, Enter, Ctrl+D and Ctrl+C edit a secret's line, but Tab and Ctrl+W edit lines of words",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Documentation only.",
+      "affectedFiles": [
+        "SECURITY.md:26",
+        "src/bin/mhfe/hidden_input.rs:13"
+      ],
+      "reproduction": "Read SECURITY.md:26-29 against Content::Words handling.",
+      "expected": "SECURITY.md matches the keys of each kind of line.",
+      "observed": "Tab completes and Ctrl+W deletes a word in seed-phrase, container and chosen-word lines.",
+      "impact": "The security contract is stale.",
+      "evidence": [
+        "source lines cited; local-only: hidden-input.log"
+      ],
+      "recommendedFix": "State the word-line keys in SECURITY.md.",
+      "requiredVerification": "Documentation review.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-DOC007",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "SECURITY.md names the standard library's stdin buffer but not its stdout line buffer, which keeps the last secret line printed",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Best-effort claim inaccurate.",
+      "affectedFiles": [
+        "SECURITY.md:39",
+        "src/bin/mhfe/terminal.rs:430"
+      ],
+      "reproduction": "Source trace through anstream to std's LineWriter.",
+      "expected": "SECURITY.md lists the residual copies outside the program's control.",
+      "observed": "The stdout buffer is neither named nor wiped.",
+      "impact": "An extra unlocked plaintext copy for the life of the process.",
+      "evidence": [
+        "source lines cited"
+      ],
+      "recommendedFix": "Name the buffer, or write secret lines whole from a locked buffer.",
+      "requiredVerification": "Documentation review.",
+      "reviewer": "R2"
+    },
+    {
+      "id": "AUD-015-DOC008",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Documents say a cancelled operation stops its worker at once, but a worker still loading is kept until it loads",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "No exploitable effect.",
+      "affectedFiles": [
+        "docs/BROWSER-PACKAGE.md:866",
+        "web/client.js:734",
+        "web/client.d.ts:558",
+        "web/runtime.js:241"
+      ],
+      "reproduction": "r3-browser/api-probes.mjs P6; worker-runtime.js:113-126 against runtime.js:241-256.",
+      "expected": "Documents match the deferred termination and the order of the build check.",
+      "observed": "The promise rejects at once but the worker stays until 'ready'; the build check runs after the worker has started the operation.",
+      "impact": "Overstates how soon transferred secrets are released.",
+      "evidence": [
+        "local-only: r3-api-probes.log (P6)"
+      ],
+      "recommendedFix": "Reword the three places.",
+      "requiredVerification": "Documentation review.",
+      "reviewer": "R3"
+    },
+    {
+      "id": "AUD-015-DOC009",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "An orphaned MhfeErrorCode doc comment and a misplaced strength() JSDoc",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Editor tooltips only.",
+      "affectedFiles": [
+        "web/runtime.d.ts:102",
+        "web/passwords.js:84"
+      ],
+      "reproduction": "r3-browser/static-scan.mjs S1c.",
+      "expected": "Each doc comment precedes its code.",
+      "observed": "A comment of a removed code remains; strength()'s JSDoc sits on wordHints().",
+      "impact": "Wrong tooltips.",
+      "evidence": [
+        "local-only: r3-static-scan.log (S1c)"
+      ],
+      "recommendedFix": "Delete the orphan; move the JSDoc.",
+      "requiredVerification": "static-scan.mjs S1c passes.",
+      "reviewer": "R3"
+    }
+  ],
+  "observations": [],
+  "informationalObservations": [
+    "All 27 published MHFE transcripts (17 suite 3, 10 suite 4) were reproduced from the specification text by an independent oracle without Argon2; reduced-cost containers were recomputed with OpenSSL Argon2id; the Unicode 17 password rule agrees with ICU for every scalar value (R1).",
+    "All 43 wallet-table rows and 679 further cases of 12 coins agree with an independent derivation; a fresh public MHFE-WALLET-CHECK-SEED-1 vector with an NFKD passphrase was found and agrees in the library and the browser package (R4).",
+    "Rebuilding dist/ from the snapshot gave byte-identical files (dist-unchanged).",
+    "AUD-007-FUN002 (the rekey question about funds in other wallets) is superseded by an owner decision recorded in the AUD-007 Markdown addendum; the specification change it needs is uncommitted in mhfe_spec (see DOC003).",
+    "During the review another session rewrote the history of mhfe for an owner-authorized privacy redaction: HEAD 4c3a6909 became ca0086ac; against the baseline only docs/audits/* and docs/measurements/full-operation-2026-09-30.json changed in the working tree; no source file changed (snapshot-after-rewrite).",
+    "The parity script compares no wallet, password or word-hint operation; the R4 probes covered those against independent references.",
+    "The startup set takes about 246 ms in a release build, 201 ms of it the container-search part (coordinator, 2026-10-09).",
+    "Hypotheses not reproduced: the search by the original's own wallet check takes the first of about 8 candidates that pass 16 bits (about 1e-4 for a wrong one, R1); a hidden-wallet session cannot tell the main password for a 24-word original (R1); a panic in a secret flow leaves the terminal unrestored (R2); a transient WebAssembly compile failure closes a class for good (R3)."
+  ],
+  "remediation": [
+    {
+      "id": "AUD-011-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the reviewed working tree; regression in verify-browser-package.mjs."
+    },
+    {
+      "id": "AUD-011-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree (diceware.rs uses the library message; R2)."
+    },
+    {
+      "id": "AUD-011-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree: API.md no longer states a literal count."
+    },
+    {
+      "id": "AUD-012-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; worker count bounded before encoding (R3)."
+    },
+    {
+      "id": "AUD-012-SEC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree: RecoveredPhrase keeps a private LockedText."
+    },
+    {
+      "id": "AUD-012-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; r5-aud012-clone-checker exit 0."
+    },
+    {
+      "id": "AUD-012-ARC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; r5-aud012-clone-checker exit 0."
+    },
+    {
+      "id": "AUD-013-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; doctests 4 passed (cargo-test.log)."
+    },
+    {
+      "id": "AUD-013-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; secrets owned before decoding (R3)."
+    },
+    {
+      "id": "AUD-013-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree: address counts are u128."
+    },
+    {
+      "id": "AUD-013-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; r5-aud013-clone-controls 17/17."
+    },
+    {
+      "id": "AUD-013-ARC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; r5-aud013-clone-controls 17/17."
+    },
+    {
+      "id": "AUD-013-ARC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; r5-aud013-clone-controls 17/17."
+    },
+    {
+      "id": "AUD-014-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree; r3-aud014-gate-race-controlled and -wasm exit 0."
+    },
+    {
+      "id": "AUD-014-SEC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fix in the working tree: met_by reads words from Zeroizing bits; WordWishes is ZeroizeOnDrop with a redacting Debug."
+    },
+    {
+      "id": "AUD-015-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the search's reference field records nothing until the text is read as a fingerprint or an address of the coin asked, and refuses several words; terminal regression check_search_reference_is_recorded_once_read."
+    },
+    {
+      "id": "AUD-015-SEC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: library messages quote typed or file text with error::quoted, which escapes every control character; mhfe serve refuses a checksum page name with one; unit tests quoted_input_holds_no_control_character and the serve cases."
+    },
+    {
+      "id": "AUD-015-SEC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: made_password::refuse_kind refuses a made password where no private screen can be shown, at the start of encrypt and rekey; terminal regression with TERM=dumb."
+    },
+    {
+      "id": "AUD-015-SEC004",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: ctrlc's termination feature routes SIGTERM and SIGHUP, and protect::interrupt_on_quit_and_suspend routes Ctrl+\\ and Ctrl+Z, through the Ctrl+C restore path; terminal regression check_quit_keys_leave_the_private_screen."
+    },
+    {
+      "id": "AUD-015-SEC005",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: show_sealing decides with terminal::output_on_screen()."
+    },
+    {
+      "id": "AUD-015-SEC006",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: an answer's label and its drawn line are wiped when dropped (Zeroizing)."
+    },
+    {
+      "id": "AUD-015-SEC007",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the page passes only the worker news it knows to its own handlers; any other message or question ends the job with PACKAGE_MISMATCH; package regression, news-list check and api-probes P3."
+    },
+    {
+      "id": "AUD-015-FUN001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree under the owner's rule of 2026-10-09, now in the uncommitted mhfe_spec revision: the verifiers take precedence over a stated length in every recovery; a rekey whose check contradicts the stated length is refused under the built-in check alone (LENGTH_DIFFERS) and confirmed by an address or the fingerprint, which compares every reading; startup known answers in cipher-rounds and rekey, unit and package tests."
+    },
+    {
+      "id": "AUD-015-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: drawPhrase checks walletCheck's type and the workers range whatever the passphrase; package regression and api-probes P2."
+    },
+    {
+      "id": "AUD-015-BLD001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Partly addressed in the tree: docs/releases/history-rewrite-2026-10-09.md pairs the original commits of v0.3.0 to v0.5.0 with their rewritten ones, linked from the README; open until it is committed and published."
+    },
+    {
+      "id": "AUD-015-BLD002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: release.yml calls ci.yml for the tagged commit and publishes only after it; the Dockerfile comment is corrected."
+    },
+    {
+      "id": "AUD-015-UI001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: hint rows are cut to the room of the terminal; unit test a_hint_row_never_wraps and probe hint_rows_narrow."
+    },
+    {
+      "id": "AUD-015-UI002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: --never-use is checked with the library rule before the first question, exit code 2; terminal regression and probe never-use-loop."
+    },
+    {
+      "id": "AUD-015-UI003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the rating leaves out the never-use cost, and the placement advice comes only for a word at a fixed position (fixed_position, fixedPosition); unit and package tests, probe never-use-check-warning."
+    },
+    {
+      "id": "AUD-015-UI004",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: a run of letters longer than any list word gives NoWord; known answer zookeepers, unit and package tests."
+    },
+    {
+      "id": "AUD-015-UI005",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the library and the page strip a detail's trailing period before the advice."
+    },
+    {
+      "id": "AUD-015-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the lists are derived from their constants; probe typed_again_lists exits 0."
+    },
+    {
+      "id": "AUD-015-ARC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the unit test reads known_answers::ADDRESSES; the copy, found equal row for row, is removed."
+    },
+    {
+      "id": "AUD-015-ARC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the CANCELLED comment names what exits 130 now."
+    },
+    {
+      "id": "AUD-015-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree on the owner's instruction: the rewrite's old-to-new map rewrote the commit references of 16 historical documents, and each amended record keeps its map in privacyRedaction.amendments. Four structured fields still name two mhfe_spec commits, e87eb5cd and 28e50e04, which were already the rewrite's replacements but which mhfe_spec no longer contains; the mhfe_spec session was told."
+    },
+    {
+      "id": "AUD-015-DOC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree on the owner's instruction: 13 documentBindings bind the harness READMEs and measurements that the rewrite or the amendment changed; probe harness_bindings: 106 recorded hashes, none broken."
+    },
+    {
+      "id": "AUD-015-DOC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the v0.5.1 notes name the two rules of the unreleased specification revision."
+    },
+    {
+      "id": "AUD-015-DOC004",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the Reviews section lists AUD-011 to AUD-015."
+    },
+    {
+      "id": "AUD-015-DOC005",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: API.md's usage block, export list and secrets sentence; static-scan S3a and S3b pass."
+    },
+    {
+      "id": "AUD-015-DOC006",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: SECURITY.md names Tab and Ctrl+W of a line of words."
+    },
+    {
+      "id": "AUD-015-DOC007",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: SECURITY.md names the line buffer of standard output."
+    },
+    {
+      "id": "AUD-015-DOC008",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the cancel passages say when a loading worker ends."
+    },
+    {
+      "id": "AUD-015-DOC009",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed in the tree: the orphan comment is removed and strength()'s JSDoc moved; static-scan S1c passes."
+    }
+  ],
+  "remediationFollowUp": {
+    "dateUtc": "2026-10-09",
+    "sourceFingerprint": "6a25bf95ccf39666e43aa6b29fb5819caa57ab5f0273d66c7084cf7fcd43709c",
+    "files": 481,
+    "commit": "abb16671b641378c0fc3c4d855f8d126498e754b",
+    "commitWhenChecked": "ca0086acf545d07bfe008ae340554124a48442bf",
+    "checks": [
+      "cargo fmt --all -- --check and cargo clippy --locked --all-targets --all-features -- -D warnings: passed.",
+      "cargo test --locked --all-features: library 337 passed and 2 ignored, binary 115 and 2, suite 3 vectors 3 and 1, suite 4 vectors 2 and 1, doc tests 4; passed.",
+      "scripts/build-wasm.sh: dist build 3037145bb3f91f13; node scripts/verify-browser-package.mjs: passed; node scripts/verify-cli-browser-parity.mjs target/release/mhfe: passed.",
+      "python3 scripts/verify-hidden-input.py target/release/mhfe: passed, with the new terminal regressions for SEC001, SEC003, SEC004 and UI002.",
+      "npm run format:check: passed.",
+      "Probes of this audit rerun on the fixed tree: typed_again_lists, static-scan (14 of 14), api-probes, wasm-parity, hint_rows_narrow, quit_key_private_screen, serve_checksum_name, never-use-loop and never-use-check-warning exit 0. made_password_dumb, search_reference_record and public_answer_echo exit 1 because they script the old flow: the made password is now refused before the first question, a phrase typed as a reference is refused in its field, and the quoted fingerprint now wraps on two lines with its escapes shown as text; the regressions above check each defect instead. record_commit_fields and harness_bindings exit 0 after the amendment below; record_commit_fields leaves the four mhfe_spec fields of DOC001.",
+      "Owner-authorized documentation amendment of the same day, after these checks: DOC001 and DOC002 above, and privacy edits (audit-02 local times in UTC; PATH values of audit-03, 04 and 05 elided; a scratchpad path in audit-10; the interruption wording of audit-13 and 14 and of AUD-013's harness README; the AUD-005 decisions title; the time-of-day keys of c-engine-2026-09-29.json). Source fingerprint after it: 2d588cde2cb20d59675449657bb5b0eb2f4d2786a426de308fc0621320e39a10; no code changed.",
+      "Not run, by the owner's hold: verify-browsers.mjs, full-cost Argon2, the vector replays and the canonical build."
+    ]
+  },
+  "limitations": [
+    "Owner hold on long runs: no full browser suite (scripts/verify-browsers.mjs), no full-size vector replays (tests/suite3_vectors.rs ignored tests, mhfe self-test --vectors), no full-cost Argon2, no canonical Docker build.",
+    "The host froze at about 23:26 UTC under memory pressure while five reviewers ran; after the reboot reviewers ran two at a time without new Rust builds, so single-feature WASM runtime sampling (CHECK-BLD-002) is blocked.",
+    "Windows and macOS code paths were reviewed from source only; no network was used, so GitHub settings, upstream sources and the remote tags were not read.",
+    "Residual memory was not measured: the native tool is non-dumpable; findings about unwiped copies are source-traced.",
+    "This is a compact-team audit with automated probes and independent oracles; it is not a certification and does not show that no defect remains."
+  ],
+  "assessment": "28 findings: 4 medium and 24 low; no critical or high. Four are release blocking: FUN001 (a specification MUST in rekey), SEC001 (a mistyped secret can reach the scrollback), and BLD001 and DOC001, which block publishing the rewritten history rather than the code. The cipher, its formats and profiles, BIP39 reading, the wallet derivations and the browser package's secret handling agreed with independent references in every probed case."
+}

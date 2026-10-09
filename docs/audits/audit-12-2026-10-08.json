@@ -1,0 +1,1490 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-012",
+  "auditNumber": 12,
+  "date": "2026-10-08",
+  "title": "Full-scope audit after clone elimination, with independent code-quality and optimization review",
+  "reviewer": {
+    "name": "Codex coordinator, dedicated quality reviewer, browser reviewer, CLI/docs skeptic and narrow Rust ownership challenger",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "abb16671b641378c0fc3c4d855f8d126498e754b",
+    "commitComplete": false,
+    "workingTree": "Pre-existing uncommitted refactor and audit records retained; no production edits by this audit.",
+    "sourceFingerprint": "849a1b565c74a6e2a0e985af2509a5a3297fa94d6cf22ef80eb53827ff9de854",
+    "sourcePaths": 239,
+    "initialSourceFingerprint": "286771dca0142e76c5dc21881e75cc539030c4605579839d464a597d1e206417",
+    "concurrentChanges": [
+      "docs/API.md",
+      "docs/BROWSER-PACKAGE.md",
+      "scripts/verify-browser-package.mjs",
+      "scripts/verify-browsers.mjs",
+      "src/wasm_api/core.rs",
+      "web/client.d.ts",
+      "web/client.js"
+    ]
+  },
+  "scope": "Ordinary full-scope read-only MHFE audit with incomplete release-level execution. Explicit independent quality/OOP/DRY/optimization review; AUD-011 remediation verification; new lexical clone checker challenged with synthetic controls. Library/CLI/package/bindings/docs/build composition reviewed, specification consulted, external Deriver and full-size crypto/release acceptance excluded.",
+  "checks": [
+    {
+      "id": "CHECK-SEC-001",
+      "title": "Threat model and secret ownership",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Rust owner/drop/locking and JS request allocation trace; synthetic encoding refusal",
+      "outcome": "failed",
+      "evidence": "SEC001 draw setup residue; SEC002 safe public mutation compile witness/source guard trace. AUD-011 hidden-session regression passes.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-002",
+      "title": "CSP, sandbox and transport",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Source review of Blob worker CSP/transfer boundaries; real browser suite",
+      "outcome": "passed",
+      "evidence": "Standalone package harness, not the external Deriver or OS browser sandbox certification.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-003",
+      "title": "Network egress and secret guards",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Static package/network gates and browser CSP denied egress",
+      "outcome": "passed",
+      "evidence": "browser-package/browsers; no telemetry/new remote behavior introduced.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-004",
+      "title": "Randomness, encryption and authentication",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Rust known answers/refusals and module Argon2 KAT gates",
+      "outcome": "passed",
+      "evidence": "rust-tests, browser-package; full-size replay not run.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-005",
+      "title": "Secret lifecycle and exceptional paths",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Allocation/encoding/session close/drop/cancellation source traces and probe",
+      "outcome": "failed",
+      "evidence": "SEC001 draw setup residue; SEC002 safe public mutation compile witness/source guard trace. AUD-011 hidden-session regression passes.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-006",
+      "title": "Injection, persistence and sensitive APIs",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Source review of class bindings and CSP/worker paths",
+      "outcome": "passed",
+      "evidence": "No browser storage secret persistence found in reviewed package; host integration excluded.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-007",
+      "title": "Read-only guarantees and availability bounds",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Pre-work rejection, resource limits, cancellation and CLI boundary checks",
+      "outcome": "passed",
+      "evidence": "Current pre-work refusal/resource/PTY and browser tests; no full-cost availability proof.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-001",
+      "title": "BIP39, entropy and seed interpretation",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Published vectors, boundary/refusal and checksum fast-path equivalence tests",
+      "outcome": "passed",
+      "evidence": "rust-tests; full-size Argon2 not implied.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-002",
+      "title": "HD derivation and supported address profiles",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Address/reference known answers and native/browser self-check composition",
+      "outcome": "passed",
+      "evidence": "All included profiles in committed test inventory; no external wallet integration audit.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-003",
+      "title": "BIP85/BIP38/messages/Silent Payments",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Inventory review",
+      "outcome": "not-applicable",
+      "evidence": "Not implemented by MHFE.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-004",
+      "title": "Scripts/descriptors/Miniscript/multisig",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Inventory review",
+      "outcome": "not-applicable",
+      "evidence": "Not an implemented MHFE feature.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-005",
+      "title": "Transactions/PSBT/commitments",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Inventory review",
+      "outcome": "not-applicable",
+      "evidence": "No transaction construction/signing or PSBT interface.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-006",
+      "title": "Recovery and backup formats",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Repair/search/hidden wallet/rekey library and browser contract tests",
+      "outcome": "passed",
+      "evidence": "rust-tests/browser-package/browsers; reduced operational encryption cost.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-007",
+      "title": "Discovery/providers/proofs/accounting",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Inventory review",
+      "outcome": "not-applicable",
+      "evidence": "Offline candidate address search is covered by FUN002/FUN006; no online accounting/provider interface.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-API-001",
+      "title": "Dependency call contracts",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Argon2 implementations, exported traits/classes and feature bindings",
+      "outcome": "passed",
+      "evidence": "clippy, feature-clippy, package checks; no exhaustive upstream audit.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-API-002",
+      "title": "Async state/cancellation/revisions",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Sessions, workers, close/cancel/callback-error and single-operation state",
+      "outcome": "passed",
+      "evidence": "Browser package and real browser checks; secret construction gap separately SEC001.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-API-003",
+      "title": "Export schema and monetary fidelity",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Types, parameters, manifests and errors reviewed",
+      "outcome": "passed",
+      "evidence": "Package/export tests; monetary fields not applicable.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-API-004",
+      "title": "Encoding/import-export interoperability",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Repair/phrase/container/reference JSON and binary translations",
+      "outcome": "passed",
+      "evidence": "Native/browser repair/phrase/refusal contracts pass; setup residue is separate SEC001.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-BLD-001",
+      "title": "Manifest/flags/feature composition",
+      "scope": "MHFE current dirty snapshot",
+      "method": "All five browser flags compile and manifest stamps checked",
+      "outcome": "passed",
+      "evidence": "feature-clippy, browser-package, dist-freshness.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-BLD-002",
+      "title": "Matrix and runtime sampling",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Native tests, wasm feature compilation, Chromium/Firefox standard/fast",
+      "outcome": "passed",
+      "evidence": "Fresh ordinary native tests/CLI, all browser flags and Chromium/Firefox both modes; no Windows/macOS/full-cost acceptance.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-BLD-003",
+      "title": "Lockfiles/provenance/licenses",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Source review pinned Cargo/npm/vendor/notices/license generation",
+      "outcome": "passed",
+      "evidence": "Locked native compilation; no installation or current advisory lookup.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-BLD-004",
+      "title": "Canonical WASM and Docker bytes",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Existing artifact relationship inspection only",
+      "outcome": "not-run",
+      "evidence": "No fresh canonical Docker/WASM rebuild; freshness timestamps are not reproducibility proof.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-BLD-005",
+      "title": "Artifacts/CI/release workflows",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Static workflow/release gates review and local manifest verification",
+      "outcome": "passed",
+      "evidence": "No paid CI, signatures/archive acceptance or release publication performed.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-UI-001",
+      "title": "Real files and viewports",
+      "scope": "MHFE current dirty snapshot",
+      "method": "No end-user page belongs to this package",
+      "outcome": "not-applicable",
+      "evidence": "Real harness file/localhost pages tested under BLD002, not external Deriver visual QA.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-UI-002",
+      "title": "Navigation/input/state",
+      "scope": "MHFE current dirty snapshot",
+      "method": "CLI PTY input and browser class/session state",
+      "outcome": "passed",
+      "evidence": "Complete optimized current terminal suite including search/password boundaries passes; package class state tests; external Deriver excluded.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-UI-003",
+      "title": "Secret visibility/help/accessibility",
+      "scope": "MHFE current dirty snapshot",
+      "method": "CLI private-screen/input traces and PTY; safety/help descriptions",
+      "outcome": "passed",
+      "evidence": "No package QR/page UI; external host accessibility excluded.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-ARC-001",
+      "title": "Ownership/imports/composition",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Rust/CLI/WASM/JS library boundaries and all ten principles",
+      "outcome": "failed",
+      "evidence": "Dedicated cohesion/OOP review positive overall; SEC002 public locked-result mutation violates owned lifetime invariant.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-ARC-002",
+      "title": "Dead code/duplication/false positives",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Semantic six-group DRY review, source witnesses, clippy",
+      "outcome": "failed",
+      "evidence": "ARC001 parser false-negative and ARC002 threshold validation; current default gate passes 104 source files, not absence-of-duplication proof.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-ARC-003",
+      "title": "Comments/tests/production-path fidelity",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Source-to-dist equality and tests/probe execution path challenge",
+      "outcome": "failed",
+      "evidence": "Clone gate lacked parser/configuration negative controls; new audit synthetic controls fail meaningfully. Package/source relationship reviewed separately.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-DOC-001",
+      "title": "Capability and safety claims",
+      "scope": "MHFE current dirty snapshot",
+      "method": "API/browser/release docs compared to library/self-test composition",
+      "outcome": "passed",
+      "evidence": "API/native composition agree after stale count removal; safety ownership mismatch is SEC002 rather than duplicated DOC finding.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-DOC-002",
+      "title": "Commands/metadata/legal materials",
+      "scope": "MHFE current dirty snapshot",
+      "method": "README/API/browser package/release/notices/spec comparison",
+      "outcome": "passed",
+      "evidence": "No fresh upstream literature search or independent cryptographic certification.",
+      "owner": "coordinator and assigned scoped reviewers"
+    },
+    {
+      "id": "CHECK-DOC-003",
+      "title": "Audit records/evidence consistency",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Schema, IDs, procedure/source hashes and retained command logs",
+      "outcome": "passed",
+      "evidence": "Paired report schema/IDs/logs/hashes validated; concurrent snapshots separated; AUD-011 baseline preserved with appended follow-up.",
+      "owner": "coordinator and assigned scoped reviewers"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-012-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Phrase drawing setup failures bypass owned passphrase cleanup",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Bounded local API/tooling defect; no exploitable disclosure, wrong cryptographic output or mandatory release gate failure demonstrated.",
+      "affectedFiles": [
+        "web/wallet.js:127",
+        "web/wallet.js:138",
+        "web/wallet.js:161",
+        "web/wallet.js:195"
+      ],
+      "expected": "All package-owned passphrase copies are wiped on refused preparation; partial workers/slot ownership are cleaned on failure.",
+      "observed": "Positive safe integer 2**32 is accepted. Two passphrase copies are encoded, then new Array(count) immediately throws RangeError before normal-path fill(0).",
+      "impact": "Local owned-buffer residual lifetime on host-invalid options. No enormous allocation, worker creation, network disclosure, memory persistence beyond GC or theft demonstrated.",
+      "reproduction": "Call unchanged MhfeWallet.drawPhrase with synthetic matching passphrase, walletCheck:true and workers:2**32. Probe observes exactly two copies and asserts wipe after rejection.",
+      "evidence": "browser/draw-refusal.mjs exits 1; independently reproduced by browser reviewer and challenged by CLI/docs skeptic.",
+      "recommendedFix": "Bound worker-count inputs before encoding and protect all drawing setup allocations/copies/start calls with finally cleanup. On partial setup failure stop started workers and release the operation slot.",
+      "requiredVerification": "Invalid count, array allocation, first/second per-worker copy and worker-start failures wipe all owned copies, preserve caller buffers, stop partial jobs and permit subsequent drawing.",
+      "relatedFindings": [
+        "AUD-009-SEC001",
+        "AUD-011-SEC001"
+      ]
+    },
+    {
+      "id": "AUD-012-SEC002",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Recovered result exposes a relocatable secret buffer outside its lock owner",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Bounded local API/tooling defect; no exploitable disclosure, wrong cryptographic output or mandatory release gate failure demonstrated.",
+      "affectedFiles": [
+        "src/mhfe.rs:77",
+        "src/mhfe.rs:128",
+        "src/memory.rs:209",
+        "SECURITY.md:49"
+      ],
+      "expected": "The library-owned recovered text cannot grow or relocate while a private guard protects its original allocation.",
+      "observed": "RecoveredPhrase::phrase is a public mutable Zeroizing<String>. Its constructor splits LockedText into that string and a private LockedPages guard whose start/bytes never follow String growth or replacement. Safe external reserve/push_str compiles.",
+      "impact": "Unenforced API secret-lifetime invariant and possible unlocked replacement storage when a native caller mutates a recovered result. Current CLI/browser callers were not shown doing this. No runtime swap/freed-memory disclosure measured; relocation/free concerns follow from ownership source, not a captured secret.",
+      "reproduction": "Compile rust/public-mutation.rs against freshly checked libmhfe.rlib. Its safe external function reserves extra capacity and appends synthetic text through the public field; inspect the immutable guard range and no RecoveredPhrase mutation precondition.",
+      "evidence": "public-mutation-current compiles exit 0; coordinator source trace plus independent Rust ownership challenge. Compile-only witness, not actual recovery/swap test.",
+      "recommendedFix": "Keep the owned phrase as private LockedText and expose a read-only phrase accessor. Update front ends/types/docs consistently; consider read-only factual metadata to retain result invariants.",
+      "requiredVerification": "External compile-fail regression prevents grow/replace mutation, normal read/consume paths still work, and native lock/zeroize tests confirm locked allocation lifetime.",
+      "relatedFindings": [
+        "AUD-010-SEC002"
+      ]
+    },
+    {
+      "id": "AUD-012-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "Clone checker drops active exported function code as if it were an import",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Bounded local API/tooling defect; no exploitable disclosure, wrong cryptographic output or mandatory release gate failure demonstrated.",
+      "affectedFiles": [
+        "scripts/verify-no-copies.mjs:215"
+      ],
+      "expected": "Only actual import/re-export declarations are excluded; long identical active exported function bodies are compared.",
+      "observed": "Any export with a from identifier within 64 tokens is treated as a re-export; tokens are skipped through the first semicolon. Two exported functions with parameter from and a long identical arithmetic statement therefore pass default threshold.",
+      "impact": "False-negative coverage in the newly added lexical gate. No current production duplicate was established by this synthetic case, and semantic/short-fragment blindness is a separate acknowledged limitation.",
+      "reproduction": "Execute unchanged checker in a VM with virtual web/a.js and web/b.js. Ordinary 99-token duplicate fails control; identical exported functions sample(from) with >100-token body pass default 50-token gate.",
+      "evidence": "quality/clone-checker.mjs prints both controls and exits 1 on required detection assertion; independently challenged by package reviewer.",
+      "recommendedFix": "Recognize declaration syntax and distinguish export function/class from re-export forms; use an existing parser if proportionate, or narrowly tokenize declarations with tests.",
+      "requiredVerification": "Long exported functions/classes containing from must trigger clones; real import/re-export lists still excluded. Cover templates, dynamic import, multiline declarations and positive controls.",
+      "relatedFindings": []
+    },
+    {
+      "id": "AUD-012-ARC002",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "Invalid clone-token thresholds silently produce a passing empty check",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Bounded local API/tooling defect; no exploitable disclosure, wrong cryptographic output or mandatory release gate failure demonstrated.",
+      "affectedFiles": [
+        "scripts/verify-no-copies.mjs:54",
+        "scripts/verify-no-copies.mjs:224"
+      ],
+      "expected": "Malformed/nonfinite token threshold is rejected rather than reported as a clean source scan.",
+      "observed": "--tokens NaN is converted to NaN; all window-loop conditions are false, so zero windows are tested and process exits 0 with No copies of NaN tokens.",
+      "impact": "False-success for malformed manual/tool configuration. Normal check.sh uses default 50 and is not bypassed by this case.",
+      "reproduction": "Run virtual ordinary duplicate control with args --tokens NaN; the unchanged checker exits 0 though default control exits 1.",
+      "evidence": "quality/clone-checker.mjs retained result invalidThreshold.status=0 and No copies of NaN tokens; this is a distinct validation root cause.",
+      "recommendedFix": "Validate a finite positive safe-integer threshold and missing/duplicate option policy before scanning.",
+      "requiredVerification": "NaN, Infinity, zero, negatives, fractions, missing argument and oversized nonsafe integers refuse nonzero; legal thresholds detect controls.",
+      "relatedFindings": []
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-012-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "browser/draw-refusal.mjs exits 1; independently reproduced by browser reviewer and challenged by CLI/docs skeptic."
+    },
+    {
+      "id": "AUD-012-SEC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "public-mutation-current compiles exit 0; coordinator source trace plus independent Rust ownership challenge. Compile-only witness, not actual recovery/swap test."
+    },
+    {
+      "id": "AUD-012-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "quality/clone-checker.mjs prints both controls and exits 1 on required detection assertion; independently challenged by package reviewer."
+    },
+    {
+      "id": "AUD-012-ARC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "quality/clone-checker.mjs retained result invalidThreshold.status=0 and No copies of NaN tokens; this is a distinct validation root cause."
+    }
+  ],
+  "limitations": [
+    "No full-size Argon2 operational tests/vector replays, independent full-cost Python replays or ignored full-cost tests.",
+    "No canonical Docker/WASM rebuild, archive/signature/reproducibility acceptance, remote CI or Windows/macOS execution.",
+    "Existing browser artifacts are checked by manifests/stamps/source equality and dependency timestamps; those do not prove canonical reproducibility.",
+    "No exhaustive upstream dependency audit/current advisory search or independent cryptographic security certification.",
+    "External Deriver fields/workflows, cross-project handover and host accessibility are not tested end to end.",
+    "Mock lifecycle/draw probes isolate unchanged public preparation code; real browser run is separate evidence.",
+    "Rust public-mutation witness is compile-only. No consumer-induced runtime relocation, swap exposure, freed-memory capture or actual key disclosure was measured.",
+    "Clone probe uses virtual synthetic filesystem with unchanged production algorithm; its initial reviewer harness path error was corrected and is not a production failure.",
+    "Seven source/binding/docs/script files and browser artifacts changed concurrently. Baseline and later snapshots are retained; affected checks are rerun on the later snapshot, not merged silently.",
+    "Optimization recommendations are source-based hypotheses, not measured speedups. Cryptographic cost, zeroization and security gates must not be reduced.",
+    "Production code, dependencies, fixtures and workflows were not edited. No commit/push/tag/release authorized."
+  ],
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "qualityAssessment": "The refactor improves cohesion and reuse. Domain types retain focused responsibilities, frontend adapters reuse library rules, shared Feistel round application is reasonable, and a single shallow browser base composes one runtime. No further mandatory module split was established. A zero result from the 50-token clone heuristic is not proof of semantic DRY or absence of all copied code.",
+  "optimizations": [
+    {
+      "priority": "measure first",
+      "source": "src/search.rs:403-418",
+      "proposal": "Replace per-candidate Vec<Vec<u16>> inner allocations with fixed two-element records or flat storage when appropriate.",
+      "reason": "Two missing words in a 12-word container yield on the order of 262,144 checksum-valid candidates; each values.clone() allocates an inner vector.",
+      "verification": "Benchmark native and browser enumeration time, allocation count and peak RSS; preserve candidate ordering, count, match results and cancellation. No benchmark was executed."
+    },
+    {
+      "priority": "lower expected impact",
+      "source": "src/operation.rs:207-216; src/container.rs:187-191",
+      "proposal": "Reuse an internal validated/parsed original across facts, detection and encryption.",
+      "reason": "Several successive phrase parsing/normalization passes are visible; overhead is likely small relative to full Argon2.",
+      "verification": "Measure before introducing another owner; preserve locked/zeroizing storage and refusal order, do not retain extra secret copies."
+    },
+    {
+      "priority": "conditional tooling optimization",
+      "source": "scripts/verify-no-copies.mjs:239-249",
+      "proposal": "Consider rolling hashes plus exact collision comparison instead of a joined 50-token string for every window.",
+      "reason": "The current detector performs per-window slicing/joining and retains long string keys.",
+      "verification": "Only change after measuring checker time/RSS; retain positive/negative parser controls and exact-match verification."
+    },
+    {
+      "priority": "optional ownership cleanup",
+      "source": "src/search.rs:353-386",
+      "proposal": "Let Reference own address-limit adjustment instead of reconstructing its variants in decoy_reference.",
+      "reason": "Reduces caller coupling; no current wrong result demonstrated.",
+      "verification": "Reference variant and search-limit regression tests."
+    }
+  ],
+  "principles": [
+    [
+      "SRP",
+      "Library owns encryption, repair, password and wallet rules; front ends adapt. No further mandatory module split identified."
+    ],
+    [
+      "OCP",
+      "Variants/traits carry most changeable behavior; optional Reference limit-copy helper can reduce caller coupling."
+    ],
+    [
+      "LSP",
+      "Native/browser Argon2 and worker contracts checked by KATs and package parity; no proven contract violation."
+    ],
+    [
+      "ISP",
+      "Small engine/randomness/progress interfaces and four focused browser classes."
+    ],
+    [
+      "DIP",
+      "Host services injected via traits/callbacks; CLI is not the domain implementation."
+    ],
+    [
+      "DRY",
+      "Named CLI message copies from AUD-011 are gone. The new 50-token gate passes current files but has parser/argument defects (ARC001/ARC002) and cannot prove semantic DRY."
+    ],
+    [
+      "Encapsulation",
+      "Domain types generally keep private state; RecoveredPhrase exposes mutable locked text (SEC002), and draw preparation has an exceptional cleanup gap (SEC001)."
+    ],
+    [
+      "Composition",
+      "ModuleWorker/PackageCheck/OperationSlot/WorkerJob and Rust service composition avoid deep inheritance."
+    ],
+    [
+      "Interfaces",
+      "Engine/progress/worker boundaries are narrow and testable."
+    ],
+    [
+      "Delegation",
+      "ContainerFacts/Suite/Reference/LengthDetection answer their own capabilities rather than callers re-deciding word counts."
+    ]
+  ],
+  "commands": [
+    {
+      "label": "browser-package-current",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-browser-package.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:33:54.629Z",
+      "endedAt": "2026-10-08T16:34:09.708Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "9fa766029eda113a6f3fd7d82fcd014f686f2ff591552d1529c0933dd8de5092"
+    },
+    {
+      "label": "browser-package",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-browser-package.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:20:42.960Z",
+      "endedAt": "2026-10-08T16:20:54.150Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "44d80bc1231a31f5f329268b537c56c0ba73cebfc108b2571a4abd87d12fecef"
+    },
+    {
+      "label": "browsers",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-browsers.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:26:24.112Z",
+      "endedAt": "2026-10-08T16:31:49.751Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "ff0220c9dbc3c77cb13979c732960247e5640531e90f4c9187ca87ae840200ed"
+    },
+    {
+      "label": "cli-browser-parity-current",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-cli-browser-parity.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:34:26.611Z",
+      "endedAt": "2026-10-08T16:34:30.393Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "7a1266f80265e74e72168c7e0ad4f1bf92dd4a55681b2b8b1d10fa42ed99eee3"
+    },
+    {
+      "label": "cli-browser-parity",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-cli-browser-parity.mjs",
+        "target/release/mhfe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:24:31.031Z",
+      "endedAt": "2026-10-08T16:24:34.885Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "7a1266f80265e74e72168c7e0ad4f1bf92dd4a55681b2b8b1d10fa42ed99eee3"
+    },
+    {
+      "label": "cli-terminal",
+      "command": [
+        "python3",
+        "scripts/verify-hidden-input.py",
+        "target/release/mhfe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:24:59.768Z",
+      "endedAt": "2026-10-08T16:25:52.041Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "94418606d8246bd4a72214f84fb08868948978739420ee857848599b10ac0234"
+    },
+    {
+      "label": "clippy",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "clippy",
+        "--locked",
+        "-j",
+        "2",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:22:36.326Z",
+      "endedAt": "2026-10-08T16:22:39.977Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "0757eb3c31f504a1d7bbfb36e56f10a06762884963607a30ba1527dba78bb3bf"
+    },
+    {
+      "label": "clone-checker-probe",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-012-harnesses/quality/clone-checker.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:20:49.870Z",
+      "endedAt": "2026-10-08T16:20:49.911Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "2179b4acff5e3bbe862eec2163c67e69348429dbf2002168c05bb9f26eabc7f4"
+    },
+    {
+      "label": "dist-freshness-corrected",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-010-harnesses/docs-build-release/dist-freshness.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:34:46.340Z",
+      "endedAt": "2026-10-08T16:34:46.386Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "c695181c4cb817c07b76d785393999e3ed0b52a2fecad93b2bd1f000501eb746"
+    },
+    {
+      "label": "dist-freshness-current",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-010-harnesses/dist-freshness.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:34:10.700Z",
+      "endedAt": "2026-10-08T16:34:10.723Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "23efa05590230a32d9f473e54507571c998faafc0231e9bd606597ecf4b9a548"
+    },
+    {
+      "label": "dist-freshness",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-010-harnesses/docs-build-release/dist-freshness.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:23:04.328Z",
+      "endedAt": "2026-10-08T16:23:04.370Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "c695181c4cb817c07b76d785393999e3ed0b52a2fecad93b2bd1f000501eb746"
+    },
+    {
+      "label": "draw-refusal",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-012-harnesses/browser/draw-refusal.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:20:53.555Z",
+      "endedAt": "2026-10-08T16:20:53.592Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "71a1e40504ff5d7a50b2350eb601006aa0156f5cde4a29a1b2500b0eee2082b9"
+    },
+    {
+      "label": "environment",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "--version"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:27:34.467Z",
+      "endedAt": "2026-10-08T16:27:34.535Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "1f88eaf7fe1aaec83184752cf4c944cd22f00184136ff36a3e4c318cc60ef566"
+    },
+    {
+      "label": "feature-clippy-current",
+      "command": [
+        "bash",
+        "docs/audits/AUD-011-harnesses/feature-clippy.sh"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:34:08.102Z",
+      "endedAt": "2026-10-08T16:34:08.650Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "6c34ba94c7cba065bcfd50841cb426ec266d48705b2068def06905615aabec07"
+    },
+    {
+      "label": "feature-clippy",
+      "command": [
+        "bash",
+        "docs/audits/AUD-011-harnesses/feature-clippy.sh"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:23:25.753Z",
+      "endedAt": "2026-10-08T16:23:27.100Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "947e76be29b5dd26d371ffe4948309b52da401cb46d1cf4622ef5ee1fa0785af"
+    },
+    {
+      "label": "lifecycle-current",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-012-harnesses/browser/lifecycle.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:34:05.885Z",
+      "endedAt": "2026-10-08T16:34:05.934Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "a2504b14a818c7815437e1cc93e6c52588d579e1418d7ef39f4e16fd4e0b0191"
+    },
+    {
+      "label": "lifecycle",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-012-harnesses/browser/lifecycle.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:20:47.206Z",
+      "endedAt": "2026-10-08T16:20:47.250Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "a2504b14a818c7815437e1cc93e6c52588d579e1418d7ef39f4e16fd4e0b0191"
+    },
+    {
+      "label": "native-build",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-j",
+        "2"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:24:01.091Z",
+      "endedAt": "2026-10-08T16:24:01.247Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "85c8dbac64ed6a362d668bf3988686e26e947620bb15cfdbe2e999a0ff8261b2"
+    },
+    {
+      "label": "no-copies-current",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-no-copies.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:34:13.016Z",
+      "endedAt": "2026-10-08T16:34:13.619Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "7ae43b2627a1d72e8e8a95ae07b394f843960d102cdf82a21b5dc5a9a5793954"
+    },
+    {
+      "label": "no-copies",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-no-copies.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:21:44.911Z",
+      "endedAt": "2026-10-08T16:21:45.519Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "7ae43b2627a1d72e8e8a95ae07b394f843960d102cdf82a21b5dc5a9a5793954"
+    },
+    {
+      "label": "old-dry-probe",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-011-harnesses/dry-probe.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:26:30.987Z",
+      "endedAt": "2026-10-08T16:26:31.016Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "33473efc73f8820c05c99805125aee1fa4ef089c4939a38861ba49f8135ad017"
+    },
+    {
+      "label": "old-secret-probe",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-011-harnesses/browser/secret-refusals.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:26:27.797Z",
+      "endedAt": "2026-10-08T16:26:27.844Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "ca8a6d572f44bce7077f808e685fb5fb277d954f44961f37b425768d5ee879fc"
+    },
+    {
+      "label": "public-mutation-current",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition",
+        "2021",
+        "--crate-type",
+        "lib",
+        "docs/audits/AUD-012-harnesses/rust/public-mutation.rs",
+        "--extern",
+        "mhfe=target/release/libmhfe.rlib",
+        "-L",
+        "dependency=target/release/deps",
+        "-o",
+        "docs/audits/AUD-012-evidence/public-mutation.rlib"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:24:26.795Z",
+      "endedAt": "2026-10-08T16:24:26.847Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "public-mutation",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition",
+        "2021",
+        "--crate-type",
+        "lib",
+        "docs/audits/AUD-012-harnesses/rust/public-mutation.rs",
+        "--extern",
+        "mhfe=target/release/libmhfe.rlib",
+        "-L",
+        "dependency=target/release/deps",
+        "-o",
+        "docs/audits/AUD-012-evidence/public-mutation.rlib"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:22:31.155Z",
+      "endedAt": "2026-10-08T16:22:31.218Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "rust-format",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "fmt",
+        "--check"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:23:41.137Z",
+      "endedAt": "2026-10-08T16:23:41.448Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "rust-tests",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--release",
+        "-j",
+        "2",
+        "--",
+        "--test-threads=2"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:18:43.126Z",
+      "endedAt": "2026-10-08T16:19:46.503Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "3ed75ba7438d7e1e3b4198fa2234c41b84dabe98270af4c77c41adc54a14da67"
+    },
+    {
+      "label": "web-format-current",
+      "command": [
+        "/home/user/.local/bin/node",
+        "node_modules/prettier/bin/prettier.cjs",
+        "--check",
+        "web",
+        "scripts/verify-no-copies.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:34:22.693Z",
+      "endedAt": "2026-10-08T16:34:23.096Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "label": "web-format",
+      "command": [
+        "/home/user/.local/bin/npm",
+        "run",
+        "format:check"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T16:23:44.176Z",
+      "endedAt": "2026-10-08T16:23:46.223Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "51d89b2b80c5c022eae42e7644d36b1e0b623adaf1a4a16ded3fccb4ed39bf53"
+    }
+  ],
+  "sourceHashes": {
+    ".git-blame-ignore-revs": "3b6a79ba28fbdf5e5a3bdc94b36128233053ab3783ae4ac8233883ebf9095d2f",
+    ".gitattributes": "9194f2697ffccf6cdc853eb8b0b421b772f313d5c0d9183139d9f88efd8ffa8d",
+    ".github/dependabot.yml": "1e78870264c3a31cbcfc2432c954a52c8804e44b6640ef47c5d1a55e5a36685e",
+    ".github/workflows/audit.yml": "891f142fab2be1fc43cd13682202d24fcc58247cf25051f9a1a8c05a2642e18e",
+    ".github/workflows/ci.yml": "f7cc4231dab9095731bfc8777d3bf095bf1ec611e24cabf94273645a2cf7af40",
+    ".github/workflows/release.yml": "9bc753a0e7d9d78e69228ea79eca0c5bf3ba11cef116d2db3dea681c1eef4aef",
+    ".github/workflows/vectors.yml": "307a35510b170ccfef6ac25085b7ce56d6f7b721c9c77a1d17431bb1fa893a58",
+    ".gitignore": "05031c7f6c5dd003c9f615bcab3e8f173a2e9372e25d4c47067c3aea47ad38bc",
+    ".node-version": "10e4e07fe7b63d3da1d899ea0f9a7a3d78c116051fae44b9f245a53d6f665a41",
+    ".prettierignore": "28cc953ba42345279ba6137710f6e567cf6d7b07d04c48c443f685e5d8d6908c",
+    ".prettierrc.json": "5e9bfbd704ee9d71ffc436f95dc12ebfd7769dec48410b6663f14e41c4f3c65a",
+    "AGENTS.md": "119c272b14ea8c2428d830259f5be380d3d0ea0744cec6069433d8aabd9f9ad6",
+    "CITATION.cff": "780d08dbdcf152fe35f0a1143d155b0b3bd9e399d82bfe13ef36a12a32a59731",
+    "Cargo.lock": "c80fcc5f3bd5dfe967156dc4911980c6350975789ca84d36a1e09402e5efc60c",
+    "Cargo.toml": "790b5094e6e3314becdb854bca898c2c08aefb8760f743a64a048c353c12125f",
+    "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
+    "README.md": "5fe5f8099278dbe022bf8cf2371612b42e429e2af67706b8db66c77874218330",
+    "SECURITY.md": "45213508b601bd19310c3e19b8dc15892333226a25438b87a97ddaf97b698a94",
+    "THIRD_PARTY_NOTICES.md": "d609fcf06be8c7a02d1ade9f62e16b7dcc2fc6b8ee4b4461b9d04f36a6a0afc6",
+    "assets/mhfe-mascot.png": "627e949b252f553d702ff75cdc5894874f0c112520e6d66f3683b270384d3b28",
+    "build.rs": "c5e586f0f3307da5d818286b98348f4794f4f379ecd4388bd0c4f070e95efb15",
+    "docs/API.md": "c5f468eeaabf53131009bb03b3c3cdaefcef8d0c2a5118a89aba67cda19877cd",
+    "docs/BROWSER-PACKAGE.md": "d6cc256b9808f4eb5b63687f1940570f8e0d954b3c6a502cbde3ae865d49108b",
+    "docs/RELEASING.md": "65531f8c953d1fe4b4109d900dbf90394e2e48e91dc96201d873f47437148af9",
+    "docs/measurements/README.md": "fe340d2dedbd2e3db6078c7cac6aa269d339ea8069ad01c81a20307eeb71da10",
+    "docs/measurements/c-engine-2026-09-29.json": "1017997e8fcea18d674ed039846381a3fdc67381eca374ed6aa0f3177b0a9ad9",
+    "docs/measurements/full-operation-2026-09-30.json": "082818a6db92dc275f2252d34bcea82dfa38cf967a2e95b3b2245e49835ac727",
+    "docs/measurements/local-browser-pim-0.json": "30d01d5d43666fa6332273182baccb58a95a2c689716b5c02ec3935540442799",
+    "docs/measurements/local-pim-0.json": "b84d41710a24d3d975f440b41316779b14fa0d508f6577db3efe41dbdec580cc",
+    "docs/measurements/local-pim-1.json": "ad0cdb05642d5174e559699664a5ffc39ace01de1dcb20801f882fb76e066e1f",
+    "docs/releases/unreleased.md": "3ed25aca4d8ec1a401fd9750dda1e3e1942072c75bdc30bdec116c1215728345",
+    "docs/releases/v0.4.0.md": "7d2e5fc4a687a41875a179bbc96190710bab17b358e7f2d1526b14c99f46d0e4",
+    "docs/releases/v0.5.0.md": "ccdb786e08f245fdd65cf11811d27cff9ed16ed005257fd621f0591ed7f65cac",
+    "docs/releases/v0.5.1.md": "6bbe820241165cd6119403437003bd3f8d26861eb840a7704eea092f7195e2e7",
+    "package-lock.json": "f491c145fbf224b03c7fb3cb04e97ebbdd16a95f5f3558dca5a1507669a5b360",
+    "package.json": "d698c1b911ce932362f4c9db57fdfbb71a7a9284d1c639d1bab2d92b58a99e86",
+    "packaging/Dockerfile.reproducible": "09c65249dc1646b825478405a7f50cdeffc9c1ba94bf8a83861c1763a078499e",
+    "packaging/Dockerfile.reproducible.dockerignore": "39edca5569e65af93b10363a3a8347197b07914ad29a74347d5dd0f6b2625df7",
+    "packaging/mhfe-fast-mode.py": "400db463129314dbc57e81ca742de51bfe011fe4f9df25e6f4974683cfdc1a28",
+    "packaging/mhfe-launch.bat": "11699fac8fb3e5208c0d9e768d1a33b5f03e57b90d6d84c2b8db3ba7790bcd5c",
+    "packaging/mhfe-launch.command": "1692f3bf2fe093eebced285e89a0f907716701fc9c668712f2729ba0b0baa2b2",
+    "packaging/mhfe-launch.sh": "37fd96f625df1e5347a950a1b25ae0b074b0badd67470af09552f3e685d695e3",
+    "packaging/remap-builder-paths.sh": "f46eb32fb46d964769580c60fa021a18897cd90b193d284eea8b508e43c3340d",
+    "rust-toolchain.toml": "a74ab31610ff993abd88ec2eeda79ba62dfe6f3694c2328b2bdccca6760308cb",
+    "scripts/build-argon2-wasm.sh": "d83e0725574f1ea49e357ba4400834f06403786bf5f3bc48c846ed082f7f0675",
+    "scripts/build-browser-check.mjs": "191bb45919a5c8dd2cda218d654b7910b629e72a61331f835c8e21b1797e997b",
+    "scripts/build-reproducible.sh": "49b902e40c39eac5f8b4c0b838be9738a8d46ea4037248bf2a9ce431843f2944",
+    "scripts/build-wasm.sh": "37e562bddc7f8688aa5e30cf2dc0d19170f9f68f1f534b8c86cb3c7e8b5e1711",
+    "scripts/bundle-browser-classes.mjs": "5e4ef3d7243990a344cc779c5415ff495065a4fb515301fc9c2740cdecc88e4e",
+    "scripts/check-release-artifacts.sh": "e834248963487a61c80cf18c4d84fc2630a105cf7d993a51aafd1b766eae6645",
+    "scripts/check.sh": "2bf0942b1337c282a1cee4c690c38641605677c8dd1381dc43739da830607bd5",
+    "scripts/generate-published-rounds.py": "2c7f53723d9e852b80aab23f1fd9944b3ca6b5497e4eeab44fc15542a1506ea0",
+    "scripts/independent-suite3-requirements.txt": "92bdaf4642e0ed7dfcfc88ed091b0819a8d7b49a318de13b86b64854e6540049",
+    "scripts/independent-suite3.py": "bcc12b46f4cf91e94542627eb79c748f562814b64ed6cda5cf978eb6acb20c07",
+    "scripts/independent-suite4.py": "72a9b15b92d06da82e185417c8d23bc443f401110e543b1a972d777ccebc1cbd",
+    "scripts/package-release.sh": "8a4ae40e70d4a6e15adb1de1efe5f391c23323d029b3bacfe730cb91668f0ba8",
+    "scripts/public-test-data.mjs": "2279989d1dc517bac5e1d6fe271e39e7ea2563a8d64f40f7e76e5ad9ec4eac65",
+    "scripts/remove-network-code.mjs": "3a28d3f1c7d45912458a7e181400ba3052ccdd8daafe19c030b422ef8d6a8083",
+    "scripts/stamp-build-id.mjs": "841f713531c7f282eed39fd4641334726df1351848db68db4a46d6656ae6927e",
+    "scripts/third-party-licenses.py": "7c7b6ff369a12575c8b9e4fc58d885d5f999bc753e667d54929fc6f6acd66d4b",
+    "scripts/verify-argon2-wasm.mjs": "c1c75e906b7115c08ad70e481b306bd1c68910afab5e268d7fedc112223da20b",
+    "scripts/verify-browser-package.mjs": "2216682716009d605731b75b783f63cb4e143937118b90880c726496c07ebc04",
+    "scripts/verify-browsers.mjs": "8f5a6198883a79952ac4c8c3839257bbcc76e39eb9c0853c63cd919fc7830401",
+    "scripts/verify-cli-browser-parity.mjs": "bfb72c6a3aa5619a7fd7a96cd1a02c45254cc4df45cbeb740c73a767f0a94bf9",
+    "scripts/verify-fast-mode-script.py": "a90620304aa4d56c628660977a3720db1a17da4c5718996f94f8cad79fdbfa68",
+    "scripts/verify-hidden-input-windows-requirements.txt": "99ba185189b3f7b62d1f345dbe72068417ae061f51b3b4febe5673c92da66e78",
+    "scripts/verify-hidden-input-windows.py": "e969adfa3573cb2e8d319387243a090538694f20a489d249c722bde82c8c0d14",
+    "scripts/verify-hidden-input.py": "46790154bb5492c1d2e16659c2496e061e1aecfbb2c4e46f5a9550063d799522",
+    "scripts/verify-no-copies.mjs": "917971f3be00c8cc2790fa857a18a5a827262200f5e8c60bf63764ceae5f9344",
+    "scripts/write-package-manifest.mjs": "e663fede05b5c9d019ed9b3537f485a2dfb5e0e69387e8157e4dd4748998ea58",
+    "src/bin/mhfe/check.rs": "1fee9a7b915827ee424e71122eb622510b7cceab2808c2013a44908963b89c35",
+    "src/bin/mhfe/check_word.rs": "cf593122e10f51f0fb766f7a08f04712422eaad9c41e8acc52acfb9f5e6e47b9",
+    "src/bin/mhfe/choice.rs": "fe5fcf1d0012a6477797cde2feb7745460b5597b81011e013ed1fbe7da2e342c",
+    "src/bin/mhfe/container_repair.rs": "9ba62d23835fad52ca313fc7fe2e0fa59e16601d4c65417daf3adaa60aaf213b",
+    "src/bin/mhfe/container_search.rs": "79c8288e26543aec6877cc358f143f7f37ef3a8ec5a660be55f56e25a31754af",
+    "src/bin/mhfe/decrypt.rs": "49f08eae62c36b9a7b0e802422aa0712cb0e3900f5a3ed0f9366d9c49651b6de",
+    "src/bin/mhfe/diceware.rs": "5d4033962e2f3c86740552703575ab0fa4dad9317c61f02ce522df2b73e06c29",
+    "src/bin/mhfe/encrypt.rs": "fcea46dfd1d7f52d5066ecacda5cd1d25b0b2ac8a5bd15e40ccb9289758a1dad",
+    "src/bin/mhfe/exit.rs": "0f30f8064ce1bc8d0b4ba392b7bcd35c9ff62c3adb55c8373752701d63a8599c",
+    "src/bin/mhfe/flow.rs": "67965eb35211698756de33d8cb771d643c06e6adb74e3ab9d3d122acbaf6b636",
+    "src/bin/mhfe/hidden_input.rs": "8ef0fb8bad46624e9658945c67731968bfe51a60e45500ee87cd86174e2ccca7",
+    "src/bin/mhfe/length_choice.rs": "3d1f877ad28111a4a7bb1b0deee9c4f3b1994dede4e731ad5c29ae629bc6e2f3",
+    "src/bin/mhfe/made_password.rs": "5e21f8d1dc423049248ecd168183ee3bfb9faeebf83e65e1ec9d380ad01a07a9",
+    "src/bin/mhfe/main.rs": "9099a8dafee741d1c3f2f37b64b6a23341866659954d9129873ff7911f6395be",
+    "src/bin/mhfe/menu.rs": "19d6d0215eb951bff116d3ef352f17aba792b0f60588c7c96889134121bc0b96",
+    "src/bin/mhfe/new_wallet.rs": "fedad5803b6db447614400dc39b8e1edf79b4577dd261fd1d8f8eae7e755b19f",
+    "src/bin/mhfe/phrase_length.rs": "b296aaf55a42c674b7a4dc7c56aabab5fea60598219f02f03e138c96a5df41a1",
+    "src/bin/mhfe/plate_repair.rs": "deleted",
+    "src/bin/mhfe/protect.rs": "e46fab18143049e9f50831bbb0d62e2e1617452d125a745bcfa78d02839394cc",
+    "src/bin/mhfe/readme.rs": "c43f3487df94bfaab90051b164a0b9714d81f131c758c5a06090c065556c4143",
+    "src/bin/mhfe/rekey.rs": "a6eedfeedc8de05fb7e6ce202a636c890dc837cb60395cd7cf683a828fb1bd5a",
+    "src/bin/mhfe/self_test.rs": "21e810dbc848c6f2d8e25c47a84efdfacac1b2fe64436bb22071f882af0c609c",
+    "src/bin/mhfe/serve.rs": "93e51f09a58a0a3a0024441383648313cecfaf58c49d8b3b62878ae0483a6bcb",
+    "src/bin/mhfe/settings.rs": "4329ad1bfd5c38feff278e8ebde652eba3290ea274e1adbf7c7c9c54dd6593ed",
+    "src/bin/mhfe/startup.rs": "e4034ac09e8d7eeeeaed9de48136ff97284c4785e0481120c5ac7bbf5e31d162",
+    "src/bin/mhfe/style.rs": "1765a85ae1d6c7f854757ae96858ab4150e94d9542b4f6d319da4a2df54259b8",
+    "src/bin/mhfe/system_random.rs": "ece8027f4b847dcfca7f10c55bd488fb65df29bf7486e1d17631f632cdfb189c",
+    "src/bin/mhfe/terminal.rs": "31b1a58f001186b16f5a8ce8c440ee47aad08c66173d19f04785b2402b32d19f",
+    "src/bin/mhfe/test_tools.rs": "8c2a1e9e95383844f9983ff7d20d5c81254b4b4453f4970163193fec160b83d0",
+    "src/bin/mhfe/wallets.rs": "931cc2e3dd113566c8c724b1bec15174594966a9ad05cabed2e730f8dbb7523d",
+    "src/check_word.rs": "8f04d29df6ea5d96f472eafb5dee55df71a88dad1148ba43c05d50bd5a71126d",
+    "src/check_word/known_answers.rs": "8f58ceb5fdcc010e01c57fc529612018b5b3995f21b6ffabd26094e09a7e3095",
+    "src/container.rs": "d819cea35bf4b246d7457e1666a5e37516215e32b31c2f0dbc897a6c6640910a",
+    "src/container/known_answers.rs": "46907e43d0a416de273cbad5644e6b9dc57589600e755d0ffbc8c73d2f2a5c0b",
+    "src/detection.rs": "853b63d4b3397a55601ae44655b1be3497d5baf12c4a767694f5fc571134e7b4",
+    "src/eff.rs": "f80bc689a229d57f4b28baa460867d663aaa34c121bfd5a8ad8236c32622f1e5",
+    "src/engine/argon2_simd.c": "91881d234ac1668020ebaff3c4c81e3b941739aa9db503a4a0231f907c7fb3dc",
+    "src/engine/browser.rs": "299f355a9904a2946bb52147d5f7ea9913354be1b7674c528adb0290e6fbabf1",
+    "src/engine/cgroup.rs": "0b4a73a1d6c4eff4a836480c852a68fd7608bc6162e2455b25fbd3b1fcc481b2",
+    "src/engine/ffi.rs": "e6fd2de0e4146b0931425de44830e4c82c1996acb9daa9aad9b2870bb6839947",
+    "src/engine/known_answers.rs": "db8353c6cb1598f96c0c2a919b4c3b0e5cbdeced34fa2b9aa3a8193286951a94",
+    "src/engine/mod.rs": "d7b9d75953a81b863cd067f3342e2f4c73de143fb6383b2f8cee7727ac5dbc9e",
+    "src/engine/native.rs": "ee3627797674b948fbab390c91ae464ec79c0ca13566d0192030bd2cbf9c4599",
+    "src/error.rs": "bdc3f13cc963ad6764df172c99bb2c32e263018a7766cb43301a8ac90d9f2e5e",
+    "src/feistel.rs": "9eaaaedb82b318bc38cef059c648ac9ae7201a7d6cd50d280aad22d9673496b0",
+    "src/hidden.rs": "fde90fd2715a1bf9717c2e4bc453aaf1d0150e91204cde6f0eb4c25a8c33d45b",
+    "src/hidden/known_answers.rs": "575827a08ec0e1098293d47bed3fad61af6208eb26f962525668a95bafcaee27",
+    "src/lib.rs": "748355388f3e4058caedaab134ee530a248d1ddaac153cfa7276c74c08a6732d",
+    "src/memory.rs": "eccb907bebce2794109cc5a772554c461ece204fa2cfe4d27739595e1e2f1322",
+    "src/mhfe.rs": "56ff2612230505060265505e073908f0bde2fa2119efa34ee915d5a4c579dea6",
+    "src/mhfe/known_answers.rs": "474fc6f32c3d71c0227032cb41bcea7a0a7e486c7e54f202e4f2d69526150bc0",
+    "src/mhfe/published_rounds.rs": "e2d74b3d0f6ecc57c08b6c7f27832d48c7256cd019b472041c83f8a9a1b4b0a4",
+    "src/new_password.rs": "7768c637e0cfdbe90301d562fbc529c4e0868f20313ef71d6d8f460bfd9fc515",
+    "src/new_password/known_answers.rs": "e8c5584a8e0da07e2b7387748ebde854de5669da4e8192e34f8273796e212232",
+    "src/operation.rs": "fc55eb8fb9e1b3fb28769a2eef3fbce1a43e819997ce8d7fba06ccd40062a0d7",
+    "src/operation/known_answers.rs": "c98e5c991b45b221383c8b37d3e6f57b4ec7ee02a826e023297a52a6d8022074",
+    "src/packing.rs": "450215e144f6d4c316398742a05c76445ec5fed36c10ef5616f948a4792547aa",
+    "src/password.rs": "6c2b1bab6c6d4ae52ccc6479df7033785dca32f8bb6e23501dfa810d1dc51e45",
+    "src/password/known_answers.rs": "f31a59cc5288ca106edf9a9f163390f67946d3d34aaa33035906e0ecc1687308",
+    "src/phrase.rs": "c4fe57f1b26e9bf0f2c9c67109411ea8edb722d351095de21f90dca2f9a0bf90",
+    "src/phrase/known_answers.rs": "f06bc3c28ba129e0c46e0ea94cf5190653f55cbc7da1a7ae11414fe0cc0512d3",
+    "src/random.rs": "8be1c17cf73b92695314ceb3a84f56b141abf6f1a39fd92c007fdb39a84b2532",
+    "src/random/health.rs": "d44f8822979df70e70b9bca8e04b382fc7372bc2aa2fdcaec7b2c1efec448d92",
+    "src/rehearsal.rs": "343b26307d8fabd75769cca1eeb41eb3ea3925a5ac132f3bec8025eef23619c3",
+    "src/rehearsal/known_answers.rs": "622f59c5503d4cc801f02e2986b03c165e7cbde60549b6916356eff8b276463d",
+    "src/rekey.rs": "36a8387592e8000c1442f638cd900db4a55cd7f7bf1cfa2934411455e52559ec",
+    "src/rekey/known_answers.rs": "0aa5726e95d231696782006cd36e72808ba3425f6472c195d849f92a3e504035",
+    "src/repair.rs": "d45db4298352727a563bf2b36604473f7e33370084c483e22396fc20663ae112",
+    "src/repair/known_answers.rs": "5ba35b2365b9ba3baf10892c5645abc42148398b4f6fca64c3739b3d12357772",
+    "src/search.rs": "2483cdac61b3486455bc97e2a7f2d984274d4817e643db0ffb9f905fa95c9848",
+    "src/search/known_answers.rs": "6914011f6034d61d8b0ae452a61948bb04f9952cede94ec15bcb6e4d490908fc",
+    "src/self_check.rs": "0a6f0a44001a957cdf26d8638a2e4157da9fd5bdd253656609423655a607ddf4",
+    "src/self_check/sets.rs": "299e30924926fb650d7f1acf346738368ea8b546dd898dce973c2a29e5a64bde",
+    "src/self_test.rs": "abec46a1a3bb1871bcd5a84404cf34337d016e35e97cb1498436648f69fa5ad6",
+    "src/strength.rs": "546e69b1e209abd7f76fd08095dcb079e80593677ef7713ac81a83cfdd1aa6d6",
+    "src/suite.rs": "dbd4b65fe2b7395b33a13264ab2a12b9c137cd113aa94e5fc257cceb6d82dcb3",
+    "src/test_support.rs": "98044b9928505356f0342ed5229f68f8246781b56ae04686b96bd5b25f11ee79",
+    "src/validation_cases.rs": "bdb8941fc6f40db1065dd711dd6420411fc8275a042e80d8f4057d0fa9465c2a",
+    "src/validation_fixtures.rs": "06b42e2a3d91257be88d8ba116938902eb65a479cc3f6709ec01fc20f7c99309",
+    "src/vectors.rs": "fe1eb740f88762c92ab3f7698101895bfe7fec5147e634457224a02cb1f0dece",
+    "src/wallet.rs": "8b4f4664decd63c446c421987551263ba74c340fea90c21522976d231b2dd774",
+    "src/wallet/known_answers.rs": "43f63f7ccfdd7c9a88c544160606ff3c2889539f3a778f7467fc1bddbefcefaf",
+    "src/wallet_check.rs": "2aa38f058d9e0b97bc821fe89baff12329358b758dfa272ed2774effb28c5bbe",
+    "src/wallet_check/known_answers.rs": "1f8f4fd5b6153e2e5776635465f213796f6a39d5c2f6c89af7a02564e1817df7",
+    "src/wallet_check/threads.rs": "990ec65046257794c91d6b9a662f96dfe723b41a1e63c25583cd89db02ca2637",
+    "src/wasm_api/core.rs": "14ccb55ee39e108bf1e3dd8ded1d60a4df086f62149108e16764f5c538b7895d",
+    "src/wasm_api/mod.rs": "895891c82e6d768c47d8ace69577e9892c200735f737c13b73499997725adcd2",
+    "src/wasm_api/passwords.rs": "677084ee966c6cff0f5daf14e232dd98c977e9fa0da475c6cb6e573780996d30",
+    "src/wasm_api/repair.rs": "49226e298d48414cb431ab0e384fad011466ea11dc33efe411e947364bb81df8",
+    "src/wasm_api/wallet.rs": "88d6aba95c58f67576cb3f84c59eac452ca5b46d4117e6ba07cfbfe56b5f24e8",
+    "tests/fixtures/suite3-vectors/SHA256SUMS": "d69f6386d81ae1c6e44acef9fb8e4887b046f370731cd05637b59bf5f97e4be8",
+    "tests/fixtures/suite3-vectors/ambiguous-12-21.json": "25753ba121d3214a155937daf2fad4bd2c03c25e5b92a5775b7fa66bf2606db9",
+    "tests/fixtures/suite3-vectors/independent-verification.json": "9c0afe58c6f7f9f0682dbcff238e5e8f96abbc02cfd44921612d05f1b3df7cef",
+    "tests/fixtures/suite3-vectors/negative-cases.json": "e301f073b3c83c3fdc68d024d52e373077a812188e65f7d5dc51ed01051d5e4c",
+    "tests/fixtures/suite3-vectors/nonzero-12.json": "8f4b734576fa587b0d4d9501cd1b07b8b8da50da15b2b3fd566a616699dcf36e",
+    "tests/fixtures/suite3-vectors/nonzero-15.json": "873ba1bf7ea5ce6869bf033b419cacadcea72faf9ea499a423f3ff33d80d5029",
+    "tests/fixtures/suite3-vectors/nonzero-18.json": "1d205a0dee624f5d87e670e753ba000a6ff3b20d41234b8473f5d3bf9e40b644",
+    "tests/fixtures/suite3-vectors/nonzero-21.json": "e27709261d4a680555f71d0a1c6a08838cfdc676b408ab256c989da8b018435a",
+    "tests/fixtures/suite3-vectors/nonzero-24.json": "003d520febd74ef715a6e092aed138ff5b9a5fa0a889a7d15416c5f3195621d6",
+    "tests/fixtures/suite3-vectors/spaces-password.json": "211c46cbfcc3508ba7d0730276c11beeed969f722c64e9d4667cc4be9a02682d",
+    "tests/fixtures/suite3-vectors/unicode-password.json": "fb9580bd1d05f95718cacd861481fd1d976673089e3196b85f7d06a349172673",
+    "tests/fixtures/suite3-vectors/zero-12-memory-level-1.json": "6c8571515abffae035515d158a5ed54de4cdd392e13cb971f2293d6ac717be0c",
+    "tests/fixtures/suite3-vectors/zero-12-pim-1-memory-level-1.json": "08180cfc999c142b507a2fff397db01468b1fb350fccff389f2ad49c8f2af1e5",
+    "tests/fixtures/suite3-vectors/zero-12-pim-1.json": "1b1b386c1793fbcb1bcc7e2dddd88430eb748bdc65d12a9b8e3358905580a550",
+    "tests/fixtures/suite3-vectors/zero-12.json": "ae05b76a2f8baed5634206631a1ed015dcaaf029cee226f05147a3c650eb036c",
+    "tests/fixtures/suite3-vectors/zero-15.json": "e13d3e3ea6a7095c7e78368e1237cce3ef881597f72863e054a6177ba28e380a",
+    "tests/fixtures/suite3-vectors/zero-18.json": "3f4c45bf18994820d8382053e535be08e7fda79a275e70eaeaa5fe5006745cd8",
+    "tests/fixtures/suite3-vectors/zero-21.json": "eeb426372070570466c0342ebc533a9de39478dbf4952a11e5f54c6d9aaf8503",
+    "tests/fixtures/suite3-vectors/zero-24-pim-1-memory-level-1.json": "e7d4827d18a5d237aeebbbe23595848d8c121cab21cee73d44f7044df53b3134",
+    "tests/fixtures/suite3-vectors/zero-24.json": "00f592f3498c42643694e9051a0dde0a0b24c433f65698d5c5db52b724739c47",
+    "tests/fixtures/suite4-vectors/SHA256SUMS": "9433eff33a494436e6f4709e0d003472c3c9b53b528b0f770f9769ae47fd583e",
+    "tests/fixtures/suite4-vectors/independent-verification.json": "a0f0eb9b8f2ac7bc654c7530514e39d0e4b01695cf4b6ff9862a06113f2e7555",
+    "tests/fixtures/suite4-vectors/negative-cases.json": "b291ef696ac588aab677872738b863701af8322ce32c2a92e58d08863d825544",
+    "tests/fixtures/suite4-vectors/same-length-nonzero-12.json": "21d28c22dcc0e1e1707826ec97a11e45232cc077447c231dd8f72ea8429ae423",
+    "tests/fixtures/suite4-vectors/same-length-nonzero-21.json": "1e110c1f1f09cddb9ad63bbc050158a96dcff7e8d2f658ba777a95d1b233b8ec",
+    "tests/fixtures/suite4-vectors/same-length-unicode-password.json": "1d8f560773b21d4a6259913e7eace65baa02141acfd27ed7cc39b34e9354bb98",
+    "tests/fixtures/suite4-vectors/same-length-zero-12-memory-level-1.json": "30fa7aa8328bd994dbbd90ec5477a3c5cc0c840da5a82b3cd4e278cc73ed1fbd",
+    "tests/fixtures/suite4-vectors/same-length-zero-12-pim-1-memory-level-1.json": "8cb1a1c706069b89fb169b262a3f2e747d3d94cc2a5b48e6dfbeb3bb56dcf6c6",
+    "tests/fixtures/suite4-vectors/same-length-zero-12-pim-1.json": "40f0f50756a008fbb6f5eb7e322c683ec1ef75c27e44b834e3682a8aa0be4124",
+    "tests/fixtures/suite4-vectors/same-length-zero-12.json": "84f8666cad189ea5c60981e623fad1c1b24405f85520c8245169009db0bc1d7e",
+    "tests/fixtures/suite4-vectors/same-length-zero-15.json": "b5f380c90846ab2cf9d8ca076e075e87b038595d70e84ffd1587c3392f2d26e7",
+    "tests/fixtures/suite4-vectors/same-length-zero-18.json": "40696a57cb3cdc2ed3fce129d2448fe3e29512370f1a0f9974f22ea029926371",
+    "tests/fixtures/suite4-vectors/same-length-zero-21.json": "edb93d774b6b906d04b2884c89114a525e2621d36d243747028c7f62440c2d9f",
+    "tests/fixtures/suite4-vectors/validation-cases.json": "541826d453b845d7be51ed41dbf967814ea965b0e3127ae8b6ea57dc2f5e7e40",
+    "tests/fixtures/validation-cases.json": "92ced6ea44f3bcc912ff1aff50d1c5e1e249268678818a1e1f10a9178db0fecd",
+    "tests/suite3_vectors.rs": "a9848b1ea52a33baf61ed7fdcb4785777beac5ffa3836845c8a7023b9701828a",
+    "tests/suite4_vectors.rs": "ff19934fc6be1c40ed050106674737afd756325fe8a2673a774dc296c6c92183",
+    "vendor/eff-large-wordlist.md": "7bef082695a465836a7709fb049d67533486bff653107b796e1feaebb42d2f38",
+    "vendor/eff-large-wordlist/eff_large_wordlist.txt": "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e",
+    "vendor/phc-winner-argon2.md": "cff876ec2e397ace44e686658495ae6f8108ffd4205d6c2dee55816824bc3bac",
+    "vendor/phc-winner-argon2/LICENSE": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590",
+    "vendor/phc-winner-argon2/README.md": "1919b5242169e14eea169b00f0444d5a3185e2bd13883dac962d73754313b6d7",
+    "vendor/phc-winner-argon2/include/argon2.h": "25ed629feca91ca9d361441160c6fbc10318bb0fb3757555b418ed47b705b35b",
+    "vendor/phc-winner-argon2/src/argon2.c": "b1289ec7134e8502e9113396fdac89402bf2575ee1b35e33fb7410f2fb63bb6d",
+    "vendor/phc-winner-argon2/src/bench.c": "34f00696758d816cb7991d78b625343725dbb87282e0d6a63625d21263cc8bfb",
+    "vendor/phc-winner-argon2/src/blake2/blake2-impl.h": "ec9884fe834c30eb362f0cef3432a43a5c496b0d6d1d637a5a590a45bec4d79c",
+    "vendor/phc-winner-argon2/src/blake2/blake2.h": "196cd9adf0660474ea04cb686c122f3ca8c758445c5ff0806f438e6412ac8423",
+    "vendor/phc-winner-argon2/src/blake2/blake2b.c": "7eb2f3faac14c532fb75f645f518686f3ef0db4c7b9849a1ffc73d262b596281",
+    "vendor/phc-winner-argon2/src/blake2/blamka-round-opt.h": "38772a3fc29db218a1833b8fa326cb95f98fdc2cda1cbcbaede928a2d8d32b41",
+    "vendor/phc-winner-argon2/src/blake2/blamka-round-ref.h": "8d5fc886bbc0b55af10ac6f1e9a5995a4e8d4abace46642fb1832c84d38c3007",
+    "vendor/phc-winner-argon2/src/core.c": "d6ddc9e28c51d2c3b0d542c0c4678c4d9d788da048e4f557166030d0ef62618b",
+    "vendor/phc-winner-argon2/src/core.h": "32f6ab8c0c313d9336d2731a001426b68d246bba5b362fabeaf593c333da7d37",
+    "vendor/phc-winner-argon2/src/encoding.c": "7b9a0c019abc6fca7e6e0a9abd2f7b22a885f8831827cfbd4bfd4502dd9f7806",
+    "vendor/phc-winner-argon2/src/encoding.h": "a4e0681ef4b0eb229a35760b603b7a32e9019cfe98c31732f747f087e5e39828",
+    "vendor/phc-winner-argon2/src/genkat.c": "ff441d21a2f2191556ec2e1e147a5f40f9d1d4483c9fd07fb9d186c9297f5d65",
+    "vendor/phc-winner-argon2/src/genkat.h": "3023b7698a8b63d0b31dfd959504fb7a47161be10eb2d1b4fb73994e7d2dbc83",
+    "vendor/phc-winner-argon2/src/opt.c": "f8776e4a2f824beed34634f3024a95fdbdbaedc2d17a990b752a89a3f963227a",
+    "vendor/phc-winner-argon2/src/ref.c": "9ac347fd8dc737af69bbb93d56ac8b4ab5488152f606880c8d7fc4592e207647",
+    "vendor/phc-winner-argon2/src/run.c": "88e26b56a36d411e94a6605083d00dca9f54d0af34bd9a0f35109d07628c66eb",
+    "vendor/phc-winner-argon2/src/test.c": "ec518844e823fb6a1bd38f79f2b5d1bbddf23f490c0a343c450aa8e3f5af5988",
+    "vendor/phc-winner-argon2/src/thread.c": "af2ab481fcf5ef00f1b2deb346bda3642797b417fc0ed98bfb7ae80e716f90d1",
+    "vendor/phc-winner-argon2/src/thread.h": "650e713fb584de2e6aeb307e64228f95cef733ea667faa0bb111960aaace30ef",
+    "web/argon2-engine.js": "9b0f97e5c01bbed05aea5889f078987049ca36c749f6bc91148f165338e50a0b",
+    "web/client.d.ts": "9149825b578cd187094a2270af904c858b8f8c5b3eb68be5db1143671e1c8df6",
+    "web/client.js": "78b1f63669e81573ca239f8558e166145e0ff87955cff59b65173b77e0d3ef94",
+    "web/core-worker.js": "d89e5514c023136bca9c4c8cf0f0f400ac27fe5aaf24cc3a5f1a2e4b256c8725",
+    "web/passwords-worker.js": "b701150592eafbea7f7b59de11e2be1f5698d28241bca2b1eb2f328021a7aade",
+    "web/passwords.d.ts": "94472a705d456909cd51f7cfbb5fa29971b5b0135afb64f08554f9e3eb1a9184",
+    "web/passwords.js": "dc345fe0eae87ac1f8c51f51eccb28557e063dda805e51fc967e3f03ba9ae9bb",
+    "web/repair-worker.js": "d4086eaa0ddb2996259d34913fd018c2d6ba684a2aa5bc7e7da93cbfa65d5929",
+    "web/repair.d.ts": "b6e72947711806cff42a00fd60296f1eb9f4fab716a9d1e856e545a8473b54a6",
+    "web/repair.js": "de96da15209d49a86ce101c69f0513618b25258f7c3f261de7b90dea80afaa7f",
+    "web/runtime.d.ts": "fb6fbf6dfe4829ad5a180648a7aec457369e62df93b8a0cf6bde463568acc042",
+    "web/runtime.js": "a22e35d39a4422bb5585b2b5160e0cfb99c6dec4a0dd2743d39d97e15caedc4a",
+    "web/wallet-worker.js": "1b45b5bab97d0e530918c57b3b6b5145adb85068c76ca7c5eb7681e382cde0bc",
+    "web/wallet.d.ts": "898e7c451c017bc3eb85e6be1917c5cc1836b4b1a2d4a5d62a40ebe0187e0cbf",
+    "web/wallet.js": "50be7d70ed51ec1abf561f2ccb4cec241ff3dd0bfcbc0dbdd518e4e2042f7cb0",
+    "web/worker-runtime.js": "f253187d87c1ac54daaf46558523b6167ad4212b1cd980816dc99d369ec57e55",
+    "web/worker-start.js": "945db88d8fb51acafa8bab63eea8019d8713bdc7ceeb980cdb703822881bf794"
+  },
+  "environment": {
+    "node": "26.10.0",
+    "rust": "1.99.0",
+    "cargo": "1.99.0 (5f94df478 2026-08-27)",
+    "os": "Linux x86_64",
+    "verificationBudget": "Ordinary optimized tests and browser/CLI KATs, max 256 MiB per KAT; operational Argon2 reduced to 256 KiB/one pass by existing test policy. Heavy runtime suites run sequentially, no full-size work.",
+    "browserVersions": [
+      "Chromium 153.0.8010.12",
+      "Firefox 155 (installed harness browser)"
+    ]
+  },
+  "priorFindingVerification": [
+    {
+      "id": "AUD-011-SEC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "849a1b565c74a6e2a0e985af2509a5a3297fa94d6cf22ef80eb53827ff9de854",
+      "evidence": "Original secret-refusals witness passes; lifecycle seven preparation/allocation/send/caller-owned-buffer cases pass. Package and current real-browser regression evidence recorded separately.",
+      "scope": "JavaScript hidden-session preparation path. No claim of guaranteed JS string erasure."
+    },
+    {
+      "id": "AUD-011-ARC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "849a1b565c74a6e2a0e985af2509a5a3297fa94d6cf22ef80eb53827ff9de854",
+      "evidence": "Original dry-probe passes; current diceware preserves PasswordRecipe errors; complete optimized PTY passes size refusals and legal boundaries.",
+      "scope": "Library-owned word/character password-size messages."
+    },
+    {
+      "id": "AUD-011-DOC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "849a1b565c74a6e2a0e985af2509a5a3297fa94d6cf22ef80eb53827ff9de854",
+      "evidence": "Removed stale 23-parts literal; current API inventory reviewed against native composition; executed composition tests pass.",
+      "scope": "The old count-parsing witness is obsolete when the count is deliberately removed; it was not changed or claimed passed."
+    }
+  ],
+  "assessment": "AUD-011's three issues are verified within stated scopes. Current refactor direction and module cohesion are sound; further mechanical class/module splitting is not required. Four new Low findings remain (two lifecycle/ownership issues and two clone-gate defects). No Critical/High/Medium or release blocker was confirmed in this bounded review. Optimization ideas are optional and unbenchmarked; no release acceptance or proof of zero duplicates.",
+  "harnessHashes": {
+    "docs/audits/AUD-012-harnesses/README.md": "34b9b285bc05b3c272db5f26938aeb101abe785507a5ac5841a5baddd4ce833d",
+    "docs/audits/AUD-012-harnesses/browser/README.md": "7e7af8bdfb2a27bcbf5f86dbcad86b0d51c2d91670f50a57808ba7c4e8c07ef0",
+    "docs/audits/AUD-012-harnesses/browser/draw-refusal.mjs": "1666d080fab0ded1b958578c97ade71c82da33cc9bd7dff8d578284abe2d4ee1",
+    "docs/audits/AUD-012-harnesses/browser/lifecycle.mjs": "c664d00442865038a4685514469b7bef200719ef0c3ae648892f016f54133ace",
+    "docs/audits/AUD-012-harnesses/quality/README.md": "2864177e2e1caffdab7c16d96be5824160f5629c9f858397986f236eb3c1eb70",
+    "docs/audits/AUD-012-harnesses/quality/clone-checker.mjs": "4ecea569d0604cbc03d82a7a842c7cbe2e8d76d3c469d39901fceaa45df2ffaf",
+    "docs/audits/AUD-012-harnesses/record.mjs": "353b6d27d23b5c7b5b68b9541f228cf84eccc2de57ec87e7e1816e913922d7ff",
+    "docs/audits/AUD-012-harnesses/rust/README.md": "d450a8029774e93481b5e2a156d41f54f012797e57d11c6f5697ef505b909677",
+    "docs/audits/AUD-012-harnesses/rust/public-mutation.rs": "f3d8c347934cfe38b0397fbb55955411bc99212da49bc20c961bd5c8903716c9",
+    "docs/audits/AUD-012-harnesses/validate.py": "95302d99b848e8a971ba0bfc5810b9626fa8a75ec59086a5f9762035ccb69821"
+  },
+  "artifactHashes": {
+    "target/debug/mhfe": "9519a0a6ad0ed5a4f5cdf5c45dfa9a303dcfe2019906fb5c7b0c2ccfca44f294",
+    "target/release/mhfe": "4261a67c387e848c73b2be5718fe4a114b69c8346b82550caf09d40e19f82b33",
+    "dist/runtime/mhfe.wasm": "d7300616d91fd66fc6237b61d9d95a0e4d2c83879e08ea1f240c2508397f84f7",
+    "dist/modules.json": "4f3964f9273cae4819b6b55a44a40cd288cf9c5ae1d1cdbf5bf821c62fc1b272"
+  },
+  "browserBuild": "37e41c9e227dcf72",
+  "commandAttribution": {
+    "initial": "rust-tests and unchanged native/CLI code checks apply to both snapshots; initial package/format/feature checks superseded by current labels where applicable",
+    "current": "browsers, *-current successful checks and dist-freshness-corrected apply to 849a1b56...; seven changed source files rereviewed independently",
+    "harnessErrors": "dist-freshness-current failed MODULE_NOT_FOUND due to coordinator path typo; corrected path passes, retained as audit execution error not production finding"
+  },
+  "executionSummary": {
+    "library": "301 passed, 2 ignored",
+    "cli": "105 passed, 2 ignored",
+    "suite3": "3 passed, 1 ignored",
+    "suite4": "2 passed, 1 ignored",
+    "doc": "2 passed",
+    "browsers": "Chromium and Firefox standard/fast, passed",
+    "terminal": "Complete optimized PTY suite passed"
+  },
+  "followups": [
+    {
+      "date": "2026-10-08",
+      "auditId": "AUD-013",
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "verification": [
+        {
+          "id": "AUD-012-SEC001",
+          "status": "open",
+          "fixCommit": null,
+          "verificationCommit": null,
+          "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+          "scopedResult": "Partially fixed, narrowly incomplete. Invalid 2**32 worker count refuses before copying, and six setup/partial-start controls wipe owned arrays, stop partial jobs and allow slot reuse. One bounded injected failure remains: new Uint8Array(0) after the first encoded copy but before try at web/wallet.js:148 leaves one owned copy unwiped.",
+          "remainingFix": "Create the empty repetition before copying the first secret or place every later constructor under cleanup using an optional owner. Retain all six passing controls and the initial-empty-array failure regression.",
+          "evidence": [
+            {
+              "label": "draw-setup-coordinator",
+              "localPath": "docs/audits/AUD-013-evidence/draw-setup-coordinator.log",
+              "logSha256": "021234f43b4c62b2112b1c59d783a7538d9f8668a04e0ab325c11d5d363689d9",
+              "exitCode": 1,
+              "failure": null
+            }
+          ],
+          "limitations": "Synthetic constructor refusal only; no actual OOM, browser memory access or disclosure. Retains the original finding ID because all-setup cleanup is the same root."
+        },
+        {
+          "id": "AUD-012-SEC002",
+          "status": "verified",
+          "fixCommit": null,
+          "verificationCommit": null,
+          "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+          "scopedResult": "RecoveredPhrase fields are private; read accessors and into_phrase() move/read the lock-owning value. Positive read/consume witness compiles. Original safe public-mutation witness is refused with two E0616 diagnostics. Native memory ownership/locking tests pass.",
+          "evidence": [
+            {
+              "label": "read-consume-coordinator",
+              "localPath": "docs/audits/AUD-013-evidence/read-consume-coordinator.log",
+              "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "exitCode": 0,
+              "failure": null
+            },
+            {
+              "label": "mutation-refusal-coordinator",
+              "localPath": "docs/audits/AUD-013-evidence/mutation-refusal-coordinator.log",
+              "logSha256": "ebd4cb27028e9285603db604930bbf22988f63b2af6bfe52364904b508802172",
+              "exitCode": 1,
+              "failure": null
+            },
+            {
+              "label": "rust-tests",
+              "localPath": "docs/audits/AUD-013-evidence/rust-tests.log",
+              "logSha256": "667f21022002238c24fbf92016a46d8ea2d2194b72d8eed52ab03b0f3a047819",
+              "exitCode": 101,
+              "failure": null
+            }
+          ],
+          "limitations": "Compile witnesses prove API ownership boundaries, not runtime recovery, swap exposure, guaranteed erasure or mathematical secrecy. DOC001 separately records stale example adaptation."
+        },
+        {
+          "id": "AUD-012-ARC001",
+          "status": "verified",
+          "fixCommit": null,
+          "verificationCommit": null,
+          "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+          "scopedResult": "The original exported-function containing from is examined and its 133-token copy detected; legitimate declaration exclusions and production self-test work. Verification is scoped to the original classification root; the new ASI-boundary issue has a different root.",
+          "evidence": [
+            {
+              "label": "quality-controls-coordinator",
+              "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+              "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+              "exitCode": 1,
+              "failure": null
+            },
+            {
+              "label": "clones-self-test",
+              "localPath": "docs/audits/AUD-013-evidence/clones-self-test.log",
+              "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419",
+              "exitCode": 0,
+              "failure": null
+            }
+          ],
+          "limitations": "Does not imply correct complete ESM parsing or absence of other false negatives."
+        },
+        {
+          "id": "AUD-012-ARC002",
+          "status": "verified",
+          "fixCommit": null,
+          "verificationCommit": null,
+          "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+          "scopedResult": "NaN, Infinity, 0, -1, 1, 1.5 and an unsafe integer are refused with exit 2; production self-test passes; unknown/extra-argument refusal is also source-reviewed.",
+          "evidence": [
+            {
+              "label": "quality-controls-coordinator",
+              "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+              "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+              "exitCode": 1,
+              "failure": null
+            },
+            {
+              "label": "clones-self-test",
+              "localPath": "docs/audits/AUD-013-evidence/clones-self-test.log",
+              "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419",
+              "exitCode": 0,
+              "failure": null
+            }
+          ],
+          "limitations": "Original threshold defect verified; unrelated tokenizer/waiver defects remain separately open."
+        }
+      ]
+    }
+  ],
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "documentBindings": [
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-012-harnesses/quality/README.md"
+        ],
+        "document": "docs/audits/AUD-012-harnesses/quality/README.md",
+        "originalSha256": "2864177e2e1caffdab7c16d96be5824160f5629c9f858397986f236eb3c1eb70",
+        "redactedSha256": "56140430e6eb9cf50941fcf08a52e95b851a01f1602ef9a1d3e0293e8d71c504",
+        "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
+      },
+      {
+        "keyPath": [
+          "sourceHashes",
+          "docs/measurements/c-engine-2026-09-29.json"
+        ],
+        "document": "docs/measurements/c-engine-2026-09-29.json",
+        "originalSha256": "1017997e8fcea18d674ed039846381a3fdc67381eca374ed6aa0f3177b0a9ad9",
+        "redactedSha256": "bdc7bec25249ee4850ad83df01a890abc732fff5ce66ea15fb27b4e1273728e4",
+        "change": "owner-authorized amendment of 2026-10-09: time-of-day keys renamed series_1 and series_2; no measurement changed"
+      },
+      {
+        "keyPath": [
+          "sourceHashes",
+          "docs/measurements/full-operation-2026-09-30.json"
+        ],
+        "document": "docs/measurements/full-operation-2026-09-30.json",
+        "originalSha256": "082818a6db92dc275f2252d34bcea82dfa38cf967a2e95b3b2245e49835ac727",
+        "redactedSha256": "f274124b0beee5c9ef34d9dbde293fc7081d43daf2db9f074fc6ead294e92196",
+        "change": "its commit reference names the commit that replaced it in the history rewrite of 2026-10-09; no measurement changed; amended again on 2026-10-09"
+      },
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-012-harnesses/rust/README.md"
+        ],
+        "document": "docs/audits/AUD-012-harnesses/rust/README.md",
+        "originalSha256": "d450a8029774e93481b5e2a156d41f54f012797e57d11c6f5697ef505b909677",
+        "redactedSha256": "bc63468d1ff287f6d2521f01a0b9c9829f4a7238ab54059e13c8cd03e9c4464a",
+        "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun; amended again on 2026-10-09"
+      }
+    ],
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: ca0086acf545d07bfe008ae340554124a48442bf -> abb16671b641378c0fc3c4d855f8d126498e754b."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "ca0086acf545d07bfe008ae340554124a48442bf": "abb16671b641378c0fc3c4d855f8d126498e754b"
+        }
+      }
+    ]
+  }
+}

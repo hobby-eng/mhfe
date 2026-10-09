@@ -1,0 +1,939 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-011",
+  "auditNumber": 11,
+  "date": "2026-10-08",
+  "title": "Full-scope audit of the current MHFE OOP/DRY refactor",
+  "reviewer": {
+    "name": "Codex coordinator with three scoped reviewers; independent package-review challenge of browser finding",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "abb16671b641378c0fc3c4d855f8d126498e754b",
+    "commitComplete": false,
+    "workingTree": "Pre-existing dirty source/CLI/WASM/JS/docs/scripts refactor; older untracked audit material preserved. No production changes by this audit.",
+    "sourceFingerprint": "d2c8d31331d29670dce57ba14696ee84933c04189f693aad05bb1043638518e8",
+    "sourcePaths": 237,
+    "artifacts": {
+      "baselineDebugCli": "328cd372a80ff520a74da901aea144e7de2d5f39e772fcacdcfd68c47bf102fa",
+      "rebuiltDebugCli": "553ced1e47d89543d670f82de6d0ef54c76f6b55274b2372a80e55f8fdb71925",
+      "browserWasm": "6a8292bd597348242271885c32392a24bd1c1c3c0077c4e55f241384c1e0e85f",
+      "modulesManifest": "6f91daf2cfba920dce82f70c2d29b356483647df402051bd4527b188baa8e355",
+      "buildId": "930ca6ccf2fb45c6",
+      "baselineOptimizedCli": "461a2f4de1237cf6e78cce46b6aea1302e99b4437c997470306836bad9fbc831"
+    }
+  },
+  "scope": "Ordinary full-scope read-only security/correctness/API/build/UI/architecture/documentation audit of MHFE, with special scrutiny of the six reported duplication groups and ten OOP/DRY principles. No expanded major-release workflow or release acceptance. Specification consulted read-only.",
+  "checks": [
+    {
+      "id": "CHECK-SEC-001",
+      "title": "Threat model and secret ownership",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Rust owner/drop/locking and JS request allocation trace; synthetic encoding refusal",
+      "outcome": "failed",
+      "evidence": "SEC001; locked-buffer and browser package tests. No memory-erasure certification.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-002",
+      "title": "CSP, sandbox and transport",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Source review of Blob worker CSP/transfer boundaries; real browser suite",
+      "outcome": "passed",
+      "evidence": "Standalone package harness, not the external Deriver or OS browser sandbox certification.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-003",
+      "title": "Network egress and secret guards",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Static package/network gates and browser CSP denied egress",
+      "outcome": "passed",
+      "evidence": "browser-package/browsers; no telemetry/new remote behavior introduced.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-004",
+      "title": "Randomness, encryption and authentication",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Rust known answers/refusals and module Argon2 KAT gates",
+      "outcome": "passed",
+      "evidence": "rust-tests, browser-package; full-size replay not run.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-005",
+      "title": "Secret lifecycle and exceptional paths",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Allocation/encoding/session close/drop/cancellation source traces and probe",
+      "outcome": "failed",
+      "evidence": "SEC001; original passwords/wallet cleanup fixes remain distinct.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-006",
+      "title": "Injection, persistence and sensitive APIs",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Source review of class bindings and CSP/worker paths",
+      "outcome": "passed",
+      "evidence": "No browser storage secret persistence found in reviewed package; host integration excluded.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-SEC-007",
+      "title": "Read-only guarantees and availability bounds",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Pre-work rejection, resource limits, cancellation and CLI boundary checks",
+      "outcome": "passed",
+      "evidence": "Pre-work refusal/resource tests and scoped optimized PTY pass; original debug search timeout retained; not a responsiveness proof.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-001",
+      "title": "BIP39, entropy and seed interpretation",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Published vectors, boundary/refusal and checksum fast-path equivalence tests",
+      "outcome": "passed",
+      "evidence": "rust-tests; full-size Argon2 not implied.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-002",
+      "title": "HD derivation and supported address profiles",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Address/reference known answers and native/browser self-check composition",
+      "outcome": "passed",
+      "evidence": "All included profiles in committed test inventory; no external wallet integration audit.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-003",
+      "title": "BIP85/BIP38/messages/Silent Payments",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Inventory review",
+      "outcome": "not-applicable",
+      "evidence": "Not implemented by MHFE.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-004",
+      "title": "Scripts/descriptors/Miniscript/multisig",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Inventory review",
+      "outcome": "not-applicable",
+      "evidence": "Not an implemented MHFE feature.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-005",
+      "title": "Transactions/PSBT/commitments",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Inventory review",
+      "outcome": "not-applicable",
+      "evidence": "No transaction construction/signing or PSBT interface.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-006",
+      "title": "Recovery and backup formats",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Repair/search/hidden wallet/rekey library and browser contract tests",
+      "outcome": "passed",
+      "evidence": "rust-tests/browser-package/browsers; reduced operational encryption cost.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-FUN-007",
+      "title": "Discovery/providers/proofs/accounting",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Inventory review",
+      "outcome": "not-applicable",
+      "evidence": "Offline candidate address search is covered by FUN002/FUN006; no online accounting/provider interface.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-API-001",
+      "title": "Dependency call contracts",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Argon2 implementations, exported traits/classes and feature bindings",
+      "outcome": "passed",
+      "evidence": "clippy, feature-clippy, package checks; no exhaustive upstream audit.",
+      "owner": "coordinator and browser reviewer"
+    },
+    {
+      "id": "CHECK-API-002",
+      "title": "Async state/cancellation/revisions",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Sessions, workers, close/cancel/callback-error and single-operation state",
+      "outcome": "passed",
+      "evidence": "Browser package and real browser checks; secret construction gap separately SEC001.",
+      "owner": "coordinator and browser reviewer"
+    },
+    {
+      "id": "CHECK-API-003",
+      "title": "Export schema and monetary fidelity",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Types, parameters, manifests and errors reviewed",
+      "outcome": "passed",
+      "evidence": "Package/export tests; monetary fields not applicable.",
+      "owner": "coordinator and browser reviewer"
+    },
+    {
+      "id": "CHECK-API-004",
+      "title": "Encoding/import-export interoperability",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Repair/phrase/container/reference JSON and binary translations",
+      "outcome": "passed",
+      "evidence": "Native/browser contract checks; refusal-buffer ownership separately SEC001.",
+      "owner": "coordinator and browser reviewer"
+    },
+    {
+      "id": "CHECK-BLD-001",
+      "title": "Manifest/flags/feature composition",
+      "scope": "MHFE current dirty snapshot",
+      "method": "All five browser flags compile and manifest stamps checked",
+      "outcome": "passed",
+      "evidence": "feature-clippy, browser-package, dist-freshness.",
+      "owner": "coordinator and package reviewer"
+    },
+    {
+      "id": "CHECK-BLD-002",
+      "title": "Matrix and runtime sampling",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Native tests, wasm feature compilation, Chromium/Firefox standard/fast",
+      "outcome": "passed",
+      "evidence": "Linux only; standalone package, reduced encryption cost; Windows/macOS not run.",
+      "owner": "coordinator and package reviewer"
+    },
+    {
+      "id": "CHECK-BLD-003",
+      "title": "Lockfiles/provenance/licenses",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Source review pinned Cargo/npm/vendor/notices/license generation",
+      "outcome": "passed",
+      "evidence": "Locked native compilation; no installation or current advisory lookup.",
+      "owner": "coordinator and package reviewer"
+    },
+    {
+      "id": "CHECK-BLD-004",
+      "title": "Canonical WASM and Docker bytes",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Existing artifact relationship inspection only",
+      "outcome": "not-run",
+      "evidence": "No fresh canonical Docker/WASM rebuild; freshness timestamps are not reproducibility proof.",
+      "owner": "coordinator and package reviewer"
+    },
+    {
+      "id": "CHECK-BLD-005",
+      "title": "Artifacts/CI/release workflows",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Static workflow/release gates review and local manifest verification",
+      "outcome": "passed",
+      "evidence": "No paid CI, signatures/archive acceptance or release publication performed.",
+      "owner": "coordinator and package reviewer"
+    },
+    {
+      "id": "CHECK-UI-001",
+      "title": "Real files and viewports",
+      "scope": "MHFE current dirty snapshot",
+      "method": "No end-user page belongs to this package",
+      "outcome": "not-applicable",
+      "evidence": "Real harness file/localhost pages tested under BLD002, not external Deriver visual QA.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-UI-002",
+      "title": "Navigation/input/state",
+      "scope": "MHFE current dirty snapshot",
+      "method": "CLI PTY input and browser class/session state",
+      "outcome": "passed",
+      "evidence": "cli-terminal original debug timeout retained; cli-terminal-scoped passes exact search and remaining tail on optimized CLI; browser package state tests.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-UI-003",
+      "title": "Secret visibility/help/accessibility",
+      "scope": "MHFE current dirty snapshot",
+      "method": "CLI private-screen/input traces and PTY; safety/help descriptions",
+      "outcome": "passed",
+      "evidence": "No package QR/page UI; external host accessibility excluded.",
+      "owner": "coordinator and scoped reviewers"
+    },
+    {
+      "id": "CHECK-ARC-001",
+      "title": "Ownership/imports/composition",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Rust/CLI/WASM/JS library boundaries and all ten principles",
+      "outcome": "passed",
+      "evidence": "Six-group architecture review; cleanup/message exceptions recorded separately.",
+      "owner": "coordinator and Rust reviewer"
+    },
+    {
+      "id": "CHECK-ARC-002",
+      "title": "Dead code/duplication/false positives",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Semantic six-group DRY review, source witnesses, clippy",
+      "outcome": "failed",
+      "evidence": "ARC001 two message copies; protected fast paths/import constraints not mislabeled.",
+      "owner": "coordinator and Rust reviewer"
+    },
+    {
+      "id": "CHECK-ARC-003",
+      "title": "Comments/tests/production-path fidelity",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Source-to-dist equality and tests/probe execution path challenge",
+      "outcome": "passed",
+      "evidence": "Mock encoding probe isolates actual public method; lexical probe not exhaustive.",
+      "owner": "coordinator and Rust reviewer"
+    },
+    {
+      "id": "CHECK-DOC-001",
+      "title": "Capability and safety claims",
+      "scope": "MHFE current dirty snapshot",
+      "method": "API/browser/release docs compared to library/self-test composition",
+      "outcome": "failed",
+      "evidence": "DOC001 stale count; ARC001 qualifies absolute no-copy claim.",
+      "owner": "coordinator and package reviewer"
+    },
+    {
+      "id": "CHECK-DOC-002",
+      "title": "Commands/metadata/legal materials",
+      "scope": "MHFE current dirty snapshot",
+      "method": "README/API/browser package/release/notices/spec comparison",
+      "outcome": "passed",
+      "evidence": "No fresh upstream literature search or independent cryptographic certification.",
+      "owner": "coordinator and package reviewer"
+    },
+    {
+      "id": "CHECK-DOC-003",
+      "title": "Audit records/evidence consistency",
+      "scope": "MHFE current dirty snapshot",
+      "method": "Schema, IDs, procedure/source hashes and retained command logs",
+      "outcome": "passed",
+      "evidence": "AUD011 paired record validation; prior audits preserved, no commit identity for dirty changes.",
+      "owner": "coordinator and package reviewer"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-011-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Hidden-wallet repetition encoding leaves the first owned password copy unwiped on refusal",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "web/client.js:660",
+        "web/client.js:661",
+        "web/runtime.js:encodeSecret"
+      ],
+      "evidence": "AUD-011-harnesses/browser/secret-refusals.mjs; local secret-refusals.log exits 1 with first-copy wipe assertion.",
+      "reproduction": "Obtain an ordinary ready hidden-wallet session. Call session.open({password:'synthetic-test', passwordRepeat:'\\uD800'}). requireRepetition accepts both string types. The first encodeSecret allocates an owned Uint8Array; the second rejects malformed UTF-16 with INVALID_PASSWORD_TEXT. Instrument TextEncoder to retain that first array and observe nonzero bytes after rejection.",
+      "expected": "Every package-owned secret buffer is zeroed on all fallible request-construction paths, without changing caller-owned buffers.",
+      "observed": "Object-literal evaluation allocates the password before repetition encoding. The exception occurs before assignment of message and before sendRequest/wipeSecrets, so the first allocation has no cleanup owner.",
+      "impact": "Local residual-memory lifetime defect on malformed repeated input. No network disclosure, secret theft, access from another process, or guaranteed persistence beyond garbage collection was demonstrated. Caller-owned strings cannot be securely wiped by JavaScript regardless.",
+      "recommendedFix": "Construct the request incrementally inside a cleanup guard, using the same guarded secret-request pattern as other public operations. Wipe all already allocated buffers if any subsequent encoding fails.",
+      "requiredVerification": "Add public hidden-session regression for malformed repetition, second-buffer allocation failure and request-send failure; assert owned first copies are zeroed, caller buffers preserved, no worker request sent, and a subsequent valid open succeeds.",
+      "challenge": "Independent package reviewer accepted the unchanged public method reproduction. Mock worker/startup bypass only establish session readiness; they do not replace the encoding path or demonstrate real browser startup.",
+      "relatedFindings": [
+        "AUD-009-SEC001"
+      ],
+      "historicalContext": "AUD-009-SEC001 affected passwords.js and wallet.js and remains historically verified by AUD-010. This is a new hidden-session occurrence introduced by replacing equality-checking requireSamePassword with type-only requireRepetition."
+    },
+    {
+      "id": "AUD-011-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "CLI password-size refusals discard and duplicate library-owned error messages",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "src/bin/mhfe/diceware.rs:147",
+        "src/bin/mhfe/diceware.rs:218",
+        "src/new_password.rs:53",
+        "src/new_password.rs:72"
+      ],
+      "evidence": "AUD-011-harnesses/dry-probe.mjs; local dry-probe.log records both duplicates and exits 1. Exact source traces show map_err(|_|...) reconstruction.",
+      "reproduction": "Inspect PasswordRecipe::words/characters: both author InvalidPasswordSize text. CLI run/run_characters call these constructors but discard their errors and rebuild 'Choose between 1 and {MOST_*} words/characters'. The limits are imported, but the refusal wording has two owners.",
+      "expected": "The library owns the rule/refusal once; front ends preserve its error and only translate capitalization, punctuation and exit codes through the existing adapter.",
+      "observed": "Two CLI refusal branches independently format messages already returned by the library. This conflicts with the explicitly requested message-level DRY rule and qualifies the release note's absolute single-source claim.",
+      "impact": "Maintainability/documentation-contract defect, not an observed wrong bound or runtime security failure. Future error changes can diverge; present constants agree.",
+      "recommendedFix": "Use the existing MhfeError-to-Failure/refused adapter instead of rebuilding those messages; keep contextual CLI guidance separate from the shared error.",
+      "requiredVerification": "CLI out-of-range word and character counts retain the library message after normal display translation, return exit2 before generation, and valid boundary sizes still work. Rerun semantic source review; the lexical probe alone is not exhaustive.",
+      "challenge": "Coordinator verified the exact library/CLI traces. Generated-password display paths have distinct private-screen/confirmation lifetimes and are not an additional finding."
+    },
+    {
+      "id": "AUD-011-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "API documentation understates the native self-test component count",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "docs/API.md:396",
+        "src/self_check/sets.rs:146"
+      ],
+      "evidence": "AUD-011-harnesses/doc-count.mjs reproduces 23 versus 24 and exits 1; native composition assertions pass in rust-tests.",
+      "reproduction": "Compare the native(random) component count at docs/API.md:396 with NATIVE_IDS and native composition in src/self_check/sets.rs.",
+      "expected": "Published self-test inventory agrees with the executed composition.",
+      "observed": "The documentation says 23 parts; the native set contains 24 including ContainerSearchCheck.",
+      "impact": "Stale factual count only. No missing container-search coverage or wrong self-test result was demonstrated.",
+      "recommendedFix": "Correct or remove the fragile literal count; preferably check published inventory against composition metadata.",
+      "requiredVerification": "Verify documentation inventory and count against the native set, and keep the native composition tests passing.",
+      "challenge": "Independent package reviewer confirmed the discrepancy and its bounded non-security impact."
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-011-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "AUD-011-harnesses/browser/secret-refusals.mjs; local secret-refusals.log exits 1 with first-copy wipe assertion."
+    },
+    {
+      "id": "AUD-011-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "AUD-011-harnesses/dry-probe.mjs; local dry-probe.log records both duplicates and exits 1. Exact source traces show map_err(|_|...) reconstruction."
+    },
+    {
+      "id": "AUD-011-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "AUD-011-harnesses/doc-count.mjs reproduces 23 versus 24 and exits 1; native composition assertions pass in rust-tests."
+    }
+  ],
+  "architectureGroups": [
+    [
+      "A - check/password/eligibility rules",
+      "ContainerFacts/Suite own lengths and capabilities; Reference::identifies_wallet and rehearsal::refuse_impossible own reference applicability; PasswordReview and wallet_check repetition validators are shared.",
+      "src/container.rs; src/suite.rs; src/rehearsal.rs:179,279; src/check_word.rs; src/wallet_check.rs:126",
+      "JS early-refusal limits remain a documented guarded fast-path copy, not literally one source."
+    ],
+    [
+      "B - lengths and phrase reading",
+      "packing defines state/short lengths; WordCount/PhraseLength and phrase helpers own mappings/normalization; repair::ContainerReading reused by ContainerSearch; LengthDetection owns ambiguity decisions.",
+      "src/packing.rs; src/phrase.rs; src/repair.rs; src/search.rs:85; src/detection.rs:24",
+      "Search checksum packing is an explicit fast path with equivalence tests; independent known-answer constants must not be deduplicated into the implementation under test."
+    ],
+    [
+      "C - near-copy library operations",
+      "RecoveredForCheck::compare and shared recovery serve check callers; search wallet/own-check modes reuse recover_each; vector writer delegates encryption.",
+      "src/rehearsal.rs:201,262; src/search.rs:194; src/vectors.rs",
+      "Reference reconstruction to change address limits is an optional composition improvement, not a confirmed wrong result."
+    ],
+    [
+      "D - error/JSON/formatting helpers",
+      "SelfCheckReport/failure_message own failure text; shared fingerprint formatting/callback adapters and MhfeError supply normal output.",
+      "src/self_check.rs:205; src/wallet.rs; src/wasm_api/mod.rs; src/error.rs",
+      "Password-size text still duplicated: ARC001."
+    ],
+    [
+      "E - browser scaffolding",
+      "ModuleWorker, PackageCheck, OperationSlot and WorkerJob are composed by module classes; no deep inheritance or repeated worker lifecycle needed.",
+      "web/runtime.js; web/client.js; web/repair.js; web/passwords.js; web/wallet.js",
+      "Secret-field copies explain worker import constraints and have equality gates. Hidden-session special path still lacks cleanup: SEC001."
+    ],
+    [
+      "F - CLI questions/rendering/retry",
+      "phrase_length, choice, check::WalletReference, container_repair, encrypt/made_password, exit::refused and style::retry consolidate shared prompts and adapters.",
+      "src/bin/mhfe/phrase_length.rs; choice.rs; check.rs; container_repair.rs; made_password.rs; exit.rs; style.rs",
+      "Prompt-specific continuations and distinct output destinations are not automatically duplicate domain rules."
+    ]
+  ],
+  "limitations": [
+    "No full-size Argon2 vector replays or ignored full-size tests; metadata/vector hashes are not a full-cost replay.",
+    "No canonical Docker rebuild, fresh browser WASM rebuild, release archive generation/signature verification, paid GitHub Actions or current Windows/macOS execution.",
+    "Existing browser artifact relationship is supported by script/source equality, stamp/manifest checks and dep-info timestamps, not canonical reproducibility proof.",
+    "No exhaustive upstream dependency audit, fresh external advisory query or independent cryptographic certification.",
+    "No end-to-end integration audit of the surrounding Deriver: browser package is tested as a package, not the external page's field-level workflows.",
+    "The new secret-copy probe uses a mock ready worker and bypasses startup to isolate unchanged request encoding; real browser execution is separate evidence.",
+    "The DRY probe is an exact source witness of two named copies, not a generic clone detector or proof of absence of other duplicates.",
+    "Audit artifacts only were edited; generated target outputs may change when compiling. No commit/push/tag/release authorized.",
+    "Terminal self-test sections may overlap browser CPU-only phrase drawing; timings are not controlled performance measurements.",
+    "Original debug terminal suite timed out in two-word enumeration after 120 seconds. The unchanged scenario and remaining tail passed on the optimized build; the entire debug suite was not rerun."
+  ],
+  "sourceHashes": {
+    "web/client.js": "dcd1e9db07edea11250f5f9e3b90d5cdef7540b21f85bdeeda81df930ac4c69f",
+    "web/runtime.js": "6cc3737b2c61df7bdc63b03d4b3ac07849da5f0d95e2eaeacd27a9eae758a69f",
+    "src/bin/mhfe/diceware.rs": "dbff4eba6843b355e1da627ec13415ca1a36f46f1936c3817eb73de936d73c15",
+    "src/new_password.rs": "7768c637e0cfdbe90301d562fbc529c4e0868f20313ef71d6d8f460bfd9fc515"
+  },
+  "specificationHashes": {
+    "mhfe_spec/README.md": "547bbcc6799783cc3db8265adbe854d96592a51ad725f71d09cb79cc4f154de4",
+    "mhfe_spec/docs/DESIGN-NOTES.md": "63113c1a47de19a3cde20d30ff95147395153ff4a31d103c25f26b430dc0bb47"
+  },
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "principles": [
+    [
+      "SRP",
+      "Library owns encryption, repair, password and wallet rules; front ends adapt. No further mandatory module split identified."
+    ],
+    [
+      "OCP",
+      "Variants/traits carry most changeable behavior; optional Reference limit-copy helper can reduce caller coupling."
+    ],
+    [
+      "LSP",
+      "Native/browser Argon2 and worker contracts checked by KATs and package parity; no proven contract violation."
+    ],
+    [
+      "ISP",
+      "Small engine/randomness/progress interfaces and four focused browser classes."
+    ],
+    [
+      "DIP",
+      "Host services injected via traits/callbacks; CLI is not the domain implementation."
+    ],
+    [
+      "DRY",
+      "Two duplicated error message constructions remain (ARC001). Documented fast-path/import-boundary copies have equality checks."
+    ],
+    [
+      "Encapsulation",
+      "Rust private data/owned secret types and JS composition are appropriate; one exceptional allocation cleanup gap (SEC001)."
+    ],
+    [
+      "Composition",
+      "ModuleWorker/PackageCheck/OperationSlot/WorkerJob and Rust service composition avoid deep inheritance."
+    ],
+    [
+      "Interfaces",
+      "Engine/progress/worker boundaries are narrow and testable."
+    ],
+    [
+      "Delegation",
+      "ContainerFacts/Suite/Reference/LengthDetection answer their own capabilities rather than callers re-deciding word counts."
+    ]
+  ],
+  "recommendations": [
+    "Optional: let Reference own adjustment of address-search limits instead of reconstructing its variants in search::decoy_reference.",
+    "Optional: add explicit native/browser progress-callback timing parity tests if immediate first-candidate cancellation is a documented requirement. No such violated guarantee was established.",
+    "Do not mechanically wrap pure helper functions or independent test vectors in additional classes. Cohesion and ownership, not class count, are the audit criteria."
+  ],
+  "commands": [
+    {
+      "label": "browser-package",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-browser-package.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:18:33.339Z",
+      "endedAt": "2026-10-08T15:20:00.018Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "5d39cb3e019cdb7ce89337278a271c812776f6cd417248b1a970883915410c50"
+    },
+    {
+      "label": "browsers",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-browsers.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:20:30.671Z",
+      "endedAt": "2026-10-08T15:40:44.587Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "dfc38eb66da467845e4b0b1a3fd177310c17e06fbb5a45d8d127cc56469c0760"
+    },
+    {
+      "label": "cli-browser-parity",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-cli-browser-parity.mjs",
+        "target/debug/mhfe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:32:41.708Z",
+      "endedAt": "2026-10-08T15:34:27.609Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "7a1266f80265e74e72168c7e0ad4f1bf92dd4a55681b2b8b1d10fa42ed99eee3"
+    },
+    {
+      "label": "cli-terminal-scoped",
+      "command": [
+        "python3",
+        "docs/audits/AUD-011-harnesses/terminal-search.py",
+        "target/release/mhfe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:38:41.889Z",
+      "endedAt": "2026-10-08T15:39:33.683Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "897b220bb0da11f0ac832214703de4e0b02df6ca8e62a62d19f5d59279e05efa"
+    },
+    {
+      "label": "cli-terminal",
+      "command": [
+        "python3",
+        "scripts/verify-hidden-input.py",
+        "target/debug/mhfe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:29:07.027Z",
+      "endedAt": "2026-10-08T15:37:12.448Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "25c7fe2ef6b1a0dc9cc81b2dc534eba254bf0db2afb226e98fcbabc02bd88d44"
+    },
+    {
+      "label": "clippy",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "clippy",
+        "--locked",
+        "-j",
+        "2",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:16:58.615Z",
+      "endedAt": "2026-10-08T15:17:39.568Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "ad075695acd5d6bb12fe76139f82786237868730787ed1cc0f5ce34841cc2db0"
+    },
+    {
+      "label": "dist-freshness",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-010-harnesses/docs-build-release/dist-freshness.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:10:25.155Z",
+      "endedAt": "2026-10-08T15:10:25.258Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "4fbf64949ddbe18c0c13bd6b82c072389305a6273d5f892afd0cc556448cad9e"
+    },
+    {
+      "label": "doc-count",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-011-harnesses/doc-count.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:27:16.151Z",
+      "endedAt": "2026-10-08T15:27:16.485Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "346421406aa8068ec24f711b3506f2a762936d062a39a811513fa5c3e940456d"
+    },
+    {
+      "label": "dry-probe",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-011-harnesses/dry-probe.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:15:35.418Z",
+      "endedAt": "2026-10-08T15:15:35.709Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "fc95b0ff0141066624e7d0c9d4118ffba7957b5467b511eff953a180893b941f"
+    },
+    {
+      "label": "environment",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "--version"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:14:50.913Z",
+      "endedAt": "2026-10-08T15:14:51.137Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "1f88eaf7fe1aaec83184752cf4c944cd22f00184136ff36a3e4c318cc60ef566"
+    },
+    {
+      "label": "feature-clippy",
+      "command": [
+        "bash",
+        "docs/audits/AUD-011-harnesses/feature-clippy.sh"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:17:53.256Z",
+      "endedAt": "2026-10-08T15:17:57.052Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "b5c9bb26e5828a34f049247f1c801beb238288dbb92ddcb6378266ec7020b823"
+    },
+    {
+      "label": "native-build",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "build",
+        "--locked",
+        "-j",
+        "2"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:28:49.141Z",
+      "endedAt": "2026-10-08T15:28:49.971Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "520a2dfdec7786fd380c2ba4d4a0c5f0b1cb1b39a1783b8a6bbf09dd0c7a25da"
+    },
+    {
+      "label": "native-optimized-build",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-j",
+        "2"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:37:57.290Z",
+      "endedAt": "2026-10-08T15:37:58.995Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "5ddfd2fb4ca20a521ea6d6d297b2ce728cfad6e3760ca9acc18d023fd988b5dd"
+    },
+    {
+      "label": "rust-format",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "fmt",
+        "--check"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:12:41.556Z",
+      "endedAt": "2026-10-08T15:12:44.869Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "rust-tests",
+      "command": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--",
+        "--test-threads=2"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:09:58.687Z",
+      "endedAt": "2026-10-08T15:16:29.283Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "002b2d1852aaf433a288a8ac40b0b011ea996328a3d4543c27daf73a380c2155"
+    },
+    {
+      "label": "secret-refusals",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-011-harnesses/browser/secret-refusals.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:11:35.397Z",
+      "endedAt": "2026-10-08T15:11:35.868Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "16df9011cc97a25c58bf54ffd72e80d5b2905f17867da5181866825d32aec80e"
+    },
+    {
+      "label": "web-format",
+      "command": [
+        "/home/user/.local/bin/npm",
+        "run",
+        "format:check"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T15:12:45.139Z",
+      "endedAt": "2026-10-08T15:13:06.838Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "51d89b2b80c5c022eae42e7644d36b1e0b623adaf1a4a16ded3fccb4ed39bf53"
+    }
+  ],
+  "environment": {
+    "os": "Linux x86_64; Linux desktop host",
+    "node": "26.10.0",
+    "rust": "1.99.0",
+    "cargo": "1.99.0 (5f94df478 2026-08-27)",
+    "runtime": "Pinned Node path /home/user/.local/bin/node; workspace CARGO_HOME/RUSTUP_HOME.",
+    "argon2Budget": "No full-size operational encryption/replays. Browser package KAT memory up to 256 MiB; operational tests use 256 KiB/one pass. CLI terminal flows refuse before operational Argon2; its self-test portions run actual native KATs. Native build/PTY checks overlap the CPU-heavy browser phrase search, so timing is not a benchmark.",
+    "browsers": [
+      "Chromium 153.0.8010.12",
+      "Firefox 155.0"
+    ]
+  },
+  "assessment": "The refactor is structurally in the right direction: most reported rule copies are consolidated into domain owners and focused browser modules; adding more classes mechanically is not required. Three low, nonblocking confirmed findings remain. No critical/high/medium defect was confirmed by this bounded audit. This is not release acceptance or proof of absence of further defects.",
+  "reviewPhases": [
+    {
+      "role": "coordinator",
+      "model": null,
+      "reasoningEffort": null,
+      "scope": "Coverage/evidence coordination, production source and history comparison, finding challenge, test/build executions, reporting."
+    },
+    {
+      "role": "Rust reviewer",
+      "model": null,
+      "reasoningEffort": null,
+      "scope": "Static library ownership/security/DRY review; detection/container/suite/mhfe/rehearsal/rekey/operation/password/new_password/phrase/packing/search/hidden/wallet_check/threads/memory/random; targeted wallet keys/known answers and self-check composition. Adjacent tests read, not independently executed."
+    },
+    {
+      "role": "Browser reviewer",
+      "model": null,
+      "reasoningEffort": null,
+      "scope": "Browser classes/runtime/worker/WASM boundary contracts and secret lifetimes; retained synthetic public hidden-session encoding probe."
+    },
+    {
+      "role": "Package reviewer and skeptic",
+      "model": null,
+      "reasoningEffort": null,
+      "scope": "CLI/docs/build/package boundary review; independent challenge of SEC001 and DOC001. No repeated full-size checks."
+    }
+  ],
+  "harnessHashes": {
+    "docs/audits/AUD-011-harnesses/README.md": "76d9917452b667d3f95c45515a8d80b1c734c5b32deb91ffab87fa07ae47334c",
+    "docs/audits/AUD-011-harnesses/browser/README.md": "ce813f099c867436a0145fc3f71439f93571e89b16a2f71d539b28a0217ac393",
+    "docs/audits/AUD-011-harnesses/browser/secret-refusals.mjs": "506441b13928006c44dc6e34a9052e9295b704d076ecd065af97e0a4369d9f82",
+    "docs/audits/AUD-011-harnesses/doc-count.mjs": "307b314dc925c57ab00092fae0315f0bf3f8ee39ed00c0451bc4aa93ec2edd19",
+    "docs/audits/AUD-011-harnesses/dry-probe.mjs": "3135783ef6b41f217123b42179be5e8c5565b89553c1dc544d9a803c8d675ace",
+    "docs/audits/AUD-011-harnesses/feature-clippy.sh": "4d60121c41ae7ed875899fa078836d038476caf44523bf40f4e125765788dcb5",
+    "docs/audits/AUD-011-harnesses/record.mjs": "f54884c49c73f6c507c43edc7c1017fd251588e0d3a5a418880ad135975db35c",
+    "docs/audits/AUD-011-harnesses/validate.py": "df3426cdbe0e98839c89cac153ef13d38726eb8bb89cbb3f15e58171a2a1e78a",
+    "docs/audits/AUD-011-harnesses/terminal-search.py": "eafb31ea4038e8986b3f2b10956616539564debe0a3ed4cfc8ff048779220792"
+  },
+  "runtimeSummary": "CLI/browser parity passed. The original debug terminal run passed its input/private-screen/repair/refusal cases but stopped at the 120-second two-missing-word enumeration wait (exact assertion retained in local cli-terminal.log). A freshly checked optimized build passed that identical search scenario and the previously unreached usage/script/startup/self-test/fault-injection tail through terminal-search.py, with unchanged assertions/timeouts. No claim of an uninterrupted all-green debug terminal suite is made. The scoped pass supports a build-profile timing limitation, not a proven production UI defect. Real Chromium 153.0.8010.12 and Firefox 155.0 passed all four module classes in standard file and fast cross-origin-isolated localhost modes, with real Blob workers, transfer/cancel/error/session/startup tests and no stray requests. Operational encryption uses the declared reduced cost, not a full-size browser acceptance test.",
+  "followups": [
+    {
+      "date": "2026-10-08",
+      "auditId": "AUD-012",
+      "sourceFingerprint": "849a1b565c74a6e2a0e985af2509a5a3297fa94d6cf22ef80eb53827ff9de854",
+      "verification": [
+        {
+          "id": "AUD-011-SEC001",
+          "status": "verified",
+          "fixCommit": null,
+          "verificationCommit": null,
+          "sourceFingerprint": "849a1b565c74a6e2a0e985af2509a5a3297fa94d6cf22ef80eb53827ff9de854",
+          "evidence": "Original secret-refusals witness passes; lifecycle seven preparation/allocation/send/caller-owned-buffer cases pass. Package and current real-browser regression evidence recorded separately.",
+          "scope": "JavaScript hidden-session preparation path. No claim of guaranteed JS string erasure."
+        },
+        {
+          "id": "AUD-011-ARC001",
+          "status": "verified",
+          "fixCommit": null,
+          "verificationCommit": null,
+          "sourceFingerprint": "849a1b565c74a6e2a0e985af2509a5a3297fa94d6cf22ef80eb53827ff9de854",
+          "evidence": "Original dry-probe passes; current diceware preserves PasswordRecipe errors; complete optimized PTY passes size refusals and legal boundaries.",
+          "scope": "Library-owned word/character password-size messages."
+        },
+        {
+          "id": "AUD-011-DOC001",
+          "status": "verified",
+          "fixCommit": null,
+          "verificationCommit": null,
+          "sourceFingerprint": "849a1b565c74a6e2a0e985af2509a5a3297fa94d6cf22ef80eb53827ff9de854",
+          "evidence": "Removed stale 23-parts literal; current API inventory reviewed against native composition; executed composition tests pass.",
+          "scope": "The old count-parsing witness is obsolete when the count is deliberately removed; it was not changed or claimed passed."
+        }
+      ]
+    }
+  ],
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "documentBindings": [
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-011-harnesses/feature-clippy.sh"
+        ],
+        "document": "docs/audits/AUD-011-harnesses/feature-clippy.sh",
+        "originalSha256": "4d60121c41ae7ed875899fa078836d038476caf44523bf40f4e125765788dcb5",
+        "redactedSha256": "3d578091dde7b6d6c6c8996d00c6d4e34fc77c01b5e3981f6f3e9fe31bb8dfd6",
+        "change": "privacy-only runtime path portability; the original execution digest is retained; no audit checks were rerun"
+      },
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-011-harnesses/README.md"
+        ],
+        "document": "docs/audits/AUD-011-harnesses/README.md",
+        "originalSha256": "76d9917452b667d3f95c45515a8d80b1c734c5b32deb91ffab87fa07ae47334c",
+        "redactedSha256": "350917036382609a920174c648472308d4d3f272ca7085d07adf7774712c73c0",
+        "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun; amended again on 2026-10-09"
+      }
+    ],
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: ca0086acf545d07bfe008ae340554124a48442bf -> abb16671b641378c0fc3c4d855f8d126498e754b."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "ca0086acf545d07bfe008ae340554124a48442bf": "abb16671b641378c0fc3c4d855f8d126498e754b"
+        }
+      }
+    ]
+  }
+}

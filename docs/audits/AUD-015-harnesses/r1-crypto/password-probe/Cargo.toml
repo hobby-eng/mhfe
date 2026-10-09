@@ -1,0 +1,16 @@
+# AUD-015 R1 probe: drives the public API of the mhfe library under audit (path dependency on the
+# repository root) so that independent oracles can compare its outputs. Audit-only; not part of
+# the product. Build with CARGO_TARGET_DIR=<repo>/target/aud015-r1 and --offline.
+[package]
+name = "aud015-r1-password-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mhfe-experimental = { path = "../../../../.." }
+
+[workspace]
+
+[profile.release]
+opt-level = 3

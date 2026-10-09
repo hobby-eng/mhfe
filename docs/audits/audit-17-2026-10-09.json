@@ -1,0 +1,1223 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-017",
+  "auditNumber": 17,
+  "date": "2026-10-09",
+  "title": "mhfe compact audit of the 0.5.1 working tree, parallel to AUD-016",
+  "reviewer": {
+    "name": "Claude Code",
+    "model": "claude-opus-5-5",
+    "reasoningEffort": null,
+    "reasoningEffortSource": "not retained by the client"
+  },
+  "snapshot": {
+    "commit": "3c60594479302827fe40975b04fd07f9f6fd4b3b",
+    "commitComplete": false,
+    "workingTree": {
+      "status": [
+        " M .github/workflows/ci.yml",
+        " M .github/workflows/release.yml",
+        " M AGENTS.md",
+        " M Cargo.toml",
+        " M README.md",
+        " M SECURITY.md",
+        " M docs/API.md",
+        " M docs/BROWSER-PACKAGE.md",
+        " M docs/audits/README.md",
+        " M docs/releases/v0.5.1.md",
+        " M packaging/Dockerfile.reproducible",
+        " M scripts/build-wasm.sh",
+        " M scripts/check.sh",
+        " M scripts/independent-suite3.py",
+        " M scripts/verify-browser-package.mjs",
+        " M scripts/verify-browsers.mjs",
+        " M scripts/verify-hidden-input-windows.py",
+        " M scripts/verify-hidden-input.py",
+        " M src/bin/mhfe/check.rs",
+        " M src/bin/mhfe/check_word.rs",
+        " M src/bin/mhfe/choice.rs",
+        " M src/bin/mhfe/decrypt.rs",
+        " M src/bin/mhfe/diceware.rs",
+        " M src/bin/mhfe/encrypt.rs",
+        " M src/bin/mhfe/exit.rs",
+        " M src/bin/mhfe/hidden_input.rs",
+        " M src/bin/mhfe/length_choice.rs",
+        " M src/bin/mhfe/main.rs",
+        " M src/bin/mhfe/menu.rs",
+        " M src/bin/mhfe/new_wallet.rs",
+        " D src/bin/mhfe/plate_repair.rs",
+        " M src/bin/mhfe/protect.rs",
+        " M src/bin/mhfe/readme.rs",
+        " M src/bin/mhfe/rekey.rs",
+        " M src/bin/mhfe/self_test.rs",
+        " M src/bin/mhfe/serve.rs",
+        " M src/bin/mhfe/settings.rs",
+        " M src/bin/mhfe/startup.rs",
+        " M src/bin/mhfe/style.rs",
+        " M src/bin/mhfe/terminal.rs",
+        " M src/bin/mhfe/test_tools.rs",
+        " M src/bin/mhfe/wallets.rs",
+        " M src/check_word.rs",
+        " M src/check_word/known_answers.rs",
+        " M src/container.rs",
+        " M src/container/known_answers.rs",
+        " M src/engine/browser.rs",
+        " M src/engine/ffi.rs",
+        " M src/engine/known_answers.rs",
+        " M src/engine/mod.rs",
+        " M src/engine/native.rs",
+        " M src/error.rs",
+        " M src/feistel.rs",
+        " M src/hidden.rs",
+        " M src/hidden/known_answers.rs",
+        " M src/lib.rs",
+        " M src/memory.rs",
+        " M src/mhfe.rs",
+        " M src/mhfe/known_answers.rs",
+        " M src/new_password.rs",
+        " M src/operation.rs",
+        " M src/operation/known_answers.rs",
+        " M src/packing.rs",
+        " M src/phrase.rs",
+        " M src/phrase/known_answers.rs",
+        " M src/random.rs",
+        " M src/random/health.rs",
+        " M src/rehearsal.rs",
+        " M src/rekey.rs",
+        " M src/rekey/known_answers.rs",
+        " M src/repair.rs",
+        " M src/repair/known_answers.rs",
+        " M src/self_check.rs",
+        " M src/self_check/sets.rs",
+        " M src/self_test.rs",
+        " M src/suite.rs",
+        " M src/validation_cases.rs",
+        " M src/vectors.rs",
+        " M src/wallet.rs",
+        " M src/wallet/known_answers.rs",
+        " M src/wallet_check.rs",
+        " M src/wallet_check/threads.rs",
+        " M src/wasm_api/core.rs",
+        " M src/wasm_api/mod.rs",
+        " M src/wasm_api/passwords.rs",
+        " M src/wasm_api/repair.rs",
+        " M src/wasm_api/wallet.rs",
+        " M tests/fixtures/suite3-vectors/SHA256SUMS",
+        " M tests/fixtures/suite3-vectors/independent-verification.json",
+        " M tests/fixtures/suite3-vectors/negative-cases.json",
+        " M tests/suite3_vectors.rs",
+        " M tests/suite4_vectors.rs",
+        " M web/client.d.ts",
+        " M web/client.js",
+        " M web/core-worker.js",
+        " M web/passwords-worker.js",
+        " M web/passwords.d.ts",
+        " M web/passwords.js",
+        " M web/repair-worker.js",
+        " M web/repair.d.ts",
+        " M web/repair.js",
+        " M web/runtime.d.ts",
+        " M web/runtime.js",
+        " M web/wallet-worker.js",
+        " M web/wallet.d.ts",
+        " M web/wallet.js",
+        " M web/worker-runtime.js",
+        "?? docs/audits/AUD-009-harnesses/",
+        "?? docs/audits/AUD-010-harnesses/",
+        "?? docs/audits/AUD-011-harnesses/",
+        "?? docs/audits/AUD-012-harnesses/",
+        "?? docs/audits/AUD-013-harnesses/",
+        "?? docs/audits/AUD-014-harnesses/",
+        "?? docs/audits/AUD-015-harnesses/",
+        "?? docs/audits/AUD-016-harnesses/",
+        "?? docs/audits/AUD-017-harnesses/",
+        "?? docs/audits/audit-09-2026-10-06.json",
+        "?? docs/audits/audit-09-2026-10-06.md",
+        "?? docs/audits/audit-10-2026-10-07.json",
+        "?? docs/audits/audit-10-2026-10-07.md",
+        "?? docs/audits/audit-11-2026-10-08.json",
+        "?? docs/audits/audit-11-2026-10-08.md",
+        "?? docs/audits/audit-12-2026-10-08.json",
+        "?? docs/audits/audit-12-2026-10-08.md",
+        "?? docs/audits/audit-13-2026-10-08.json",
+        "?? docs/audits/audit-13-2026-10-08.md",
+        "?? docs/audits/audit-14-2026-10-08.json",
+        "?? docs/audits/audit-14-2026-10-08.md",
+        "?? docs/audits/audit-15-2026-10-09.json",
+        "?? docs/audits/audit-15-2026-10-09.md",
+        "?? scripts/public-test-data.mjs",
+        "?? scripts/verify-cli-browser-parity.mjs",
+        "?? scripts/verify-no-copies.mjs",
+        "?? src/bin/mhfe/chosen_words.rs",
+        "?? src/bin/mhfe/container_repair.rs",
+        "?? src/bin/mhfe/container_search.rs",
+        "?? src/bin/mhfe/made_password.rs",
+        "?? src/bin/mhfe/phrase_length.rs",
+        "?? src/bin/mhfe/typed_line.rs",
+        "?? src/detection.rs",
+        "?? src/search.rs",
+        "?? src/search/",
+        "?? src/test_support.rs",
+        "?? src/wasm_api/word_hints.rs",
+        "?? src/word_hints.rs",
+        "?? src/word_hints/",
+        "?? src/word_wishes.rs",
+        "?? src/word_wishes/"
+      ],
+      "files": 535
+    },
+    "sourceFingerprint": "b2addb366a3bda36ed23bb84f68a2c92550b0c0f7c533d366894a8664963cbc7",
+    "capturedUtc": "2026-10-09T11:17:11+00:00"
+  },
+  "procedureHashes": {
+    "docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "scope": "Uncommitted 0.5.1 working tree of mhfe: library, command line, WASM bindings, browser package, documents, workflows and audit records; read-only with small probes, builds left to the concurrent AUD-016.",
+  "checks": {
+    "coverage": [
+      {
+        "id": "CHECK-SEC-001",
+        "area": "SEC / Secret ownership",
+        "owner": "R2, R3",
+        "status": "failed",
+        "evidence": "Container-search words in unwiped strings (SEC001); the decrypt passphrase is hidden, locked and wiped in the CLI and transferred and wiped in the browser (r3-api-probes P7)."
+      },
+      {
+        "id": "CHECK-SEC-002",
+        "area": "SEC / Worker transport",
+        "owner": "R3",
+        "status": "passed",
+        "evidence": "Allowlists, Object.prototype names, duplicate and late replies, build checks (P3, P6, P8); CSP not run in a browser."
+      },
+      {
+        "id": "CHECK-SEC-003",
+        "area": "SEC / Egress",
+        "owner": "R2",
+        "status": "passed",
+        "evidence": "Per-command isolation unchanged; no new network path."
+      },
+      {
+        "id": "CHECK-SEC-004",
+        "area": "SEC / Randomness and encryption",
+        "owner": "R1",
+        "status": "passed",
+        "evidence": "Packing, verifiers, length detection and the wallet-check digest recomputed by the probe; no Argon2 or cipher replay in this audit (the full vector replay of the same tree passed before the audit)."
+      },
+      {
+        "id": "CHECK-SEC-005",
+        "area": "SEC / Lifecycle",
+        "owner": "R2, R3",
+        "status": "passed",
+        "evidence": "Signal exit paths, wipes in loops and on errors, cancel while loading."
+      },
+      {
+        "id": "CHECK-SEC-006",
+        "area": "SEC / Injection",
+        "owner": "R2, R3",
+        "status": "passed",
+        "evidence": "Quoted refusals, serve names, hidden-line filter; no DOM, storage or dynamic code in dist/."
+      },
+      {
+        "id": "CHECK-SEC-007",
+        "area": "SEC / Bounds",
+        "owner": "R2, R3",
+        "status": "passed",
+        "evidence": "Line capacity, scan-gap range, word positions, worker counts."
+      },
+      {
+        "id": "CHECK-FUN-001",
+        "area": "FUN / BIP39",
+        "owner": "R1",
+        "status": "passed",
+        "evidence": "Readings by entropy_to_phrase and the NFKD salt of the seed check agree with the probe."
+      },
+      {
+        "id": "CHECK-FUN-002",
+        "area": "FUN / HD derivation",
+        "owner": "R4",
+        "status": "passed",
+        "evidence": "Light static review; known answers present and able to fail. No new derivation code."
+      },
+      {
+        "id": "CHECK-FUN-003",
+        "area": "FUN / BIP85, BIP38, messages",
+        "owner": "-",
+        "status": "not-applicable",
+        "evidence": "mhfe has no BIP85, BIP38, message signing or Silent Payments."
+      },
+      {
+        "id": "CHECK-FUN-004",
+        "area": "FUN / Scripts and descriptors",
+        "owner": "-",
+        "status": "not-applicable",
+        "evidence": "mhfe only decodes addresses to compare them; it builds no scripts or descriptors."
+      },
+      {
+        "id": "CHECK-FUN-005",
+        "area": "FUN / Transactions",
+        "owner": "-",
+        "status": "not-applicable",
+        "evidence": "mhfe handles no transactions."
+      },
+      {
+        "id": "CHECK-FUN-006",
+        "area": "FUN / Recovery formats",
+        "owner": "R1, R3",
+        "status": "failed",
+        "evidence": "Every length-rule branch agrees with the specification (54 cases); rekey with a detected length still takes the built-in check alone in the library and browser (FUN001)."
+      },
+      {
+        "id": "CHECK-FUN-007",
+        "area": "FUN / Discovery and providers",
+        "owner": "-",
+        "status": "not-applicable",
+        "evidence": "mhfe contacts no provider; its searches are local."
+      },
+      {
+        "id": "CHECK-API-001",
+        "area": "API / Runtime contracts",
+        "owner": "R3",
+        "status": "failed",
+        "evidence": "The owner callback lacks the stated length (API001); d.ts and runtime JSON agree."
+      },
+      {
+        "id": "CHECK-API-002",
+        "area": "API / Async state",
+        "owner": "R3",
+        "status": "passed",
+        "evidence": "Self-check gate, BUSY, cancel, late results."
+      },
+      {
+        "id": "CHECK-API-003",
+        "area": "API / Outputs",
+        "owner": "R3",
+        "status": "passed",
+        "evidence": "Candidate fields walletCheck, statedWords, otherLengths at runtime (rekey-parity D)."
+      },
+      {
+        "id": "CHECK-API-004",
+        "area": "API / Encoding and parity",
+        "owner": "R3",
+        "status": "passed",
+        "evidence": "Passphrase UTF-8 and normalization; parity gaps recorded under FUN001 and API001."
+      },
+      {
+        "id": "CHECK-BLD-001",
+        "area": "BLD / Features",
+        "owner": "R3",
+        "status": "passed",
+        "evidence": "Static only: feature gates, stamps, modules.json; vectors.rs not referenced in the WASM."
+      },
+      {
+        "id": "CHECK-BLD-002",
+        "area": "BLD / Matrix sampling",
+        "owner": "-",
+        "status": "blocked",
+        "evidence": "Builds and browser suites belong to the concurrent AUD-016 by the owner's split."
+      },
+      {
+        "id": "CHECK-BLD-003",
+        "area": "BLD / Lockfiles and licenses",
+        "owner": "R4",
+        "status": "passed",
+        "evidence": "Version 0.5.1, exact pins, release profile, actions pinned by SHA."
+      },
+      {
+        "id": "CHECK-BLD-004",
+        "area": "BLD / Canonical bytes",
+        "owner": "R4",
+        "status": "blocked",
+        "evidence": "Needs Docker; static review found BLD002."
+      },
+      {
+        "id": "CHECK-BLD-005",
+        "area": "BLD / Artifacts and CI",
+        "owner": "R4, coordinator",
+        "status": "failed",
+        "evidence": "The copy gate of scripts/check.sh fails, and release now requires CI (BLD001)."
+      },
+      {
+        "id": "CHECK-ARC-001",
+        "area": "ARC / Ownership",
+        "owner": "R2, R4",
+        "status": "failed",
+        "evidence": "The rekey front end decides owner eligibility itself (ARC002)."
+      },
+      {
+        "id": "CHECK-ARC-002",
+        "area": "ARC / Duplication",
+        "owner": "R2, R4",
+        "status": "failed",
+        "evidence": "One message in five places (ARC001), a typed default (ARC003), copies in BLD001."
+      },
+      {
+        "id": "CHECK-ARC-003",
+        "area": "ARC / Comments and fidelity",
+        "owner": "R4",
+        "status": "passed",
+        "evidence": "rustfmt and Prettier pass; the earlier stale comment is fixed."
+      },
+      {
+        "id": "CHECK-UI-001",
+        "area": "UI / Real viewports",
+        "owner": "R2",
+        "status": "passed",
+        "evidence": "Hint rows fit; explanations tested."
+      },
+      {
+        "id": "CHECK-UI-002",
+        "area": "UI / Navigation and inputs",
+        "owner": "R2",
+        "status": "failed",
+        "evidence": "Answers without options (UI001); the rekey loop repeats the recovery (UI002)."
+      },
+      {
+        "id": "CHECK-UI-003",
+        "area": "UI / Secret visibility",
+        "owner": "R2",
+        "status": "passed",
+        "evidence": "The passphrase screen, made passwords, found words on the private screen."
+      },
+      {
+        "id": "CHECK-DOC-001",
+        "area": "DOC / Capability descriptions",
+        "owner": "R2, R3, R4",
+        "status": "failed",
+        "evidence": "decrypt --help omits the passphrase step (DOC001); the browser documents omit the 0.5.1 fields (DOC002)."
+      },
+      {
+        "id": "CHECK-DOC-002",
+        "area": "DOC / Commands and links",
+        "owner": "R4",
+        "status": "passed",
+        "evidence": "Documented options and symbols, links and list layout: 0 problems."
+      },
+      {
+        "id": "CHECK-DOC-003",
+        "area": "DOC / Records",
+        "owner": "R4",
+        "status": "passed",
+        "evidence": "AUD-009..015 records agree with their JSON; every harness folder has a README; the procedure reverse edit reproduces the pinned hash. Two historical specification commit names stay as recorded (see AUD-015 dispositions)."
+      }
+    ],
+    "commands": [
+      {
+        "label": "r2-static-cli-rules",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-017-harnesses/r2-cli/static_cli_rules.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:24:10+00:00",
+        "endUtc": "2026-10-09T11:24:10+00:00",
+        "seconds": 0.0,
+        "exitCode": 1,
+        "logSha256": "5de3f671da43b732d956b0a5c4f1155e664f9dfd53f7ae74194b42ea4201a926"
+      },
+      {
+        "label": "r3-api-probes-aud015",
+        "argv": [
+          "node",
+          "--max-old-space-size=1024",
+          "docs/audits/AUD-017-harnesses/r3-browser/api-probes.mjs"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:24:37+00:00",
+        "endUtc": "2026-10-09T11:24:37+00:00",
+        "seconds": 0.2,
+        "exitCode": 0,
+        "logSha256": "fa975ec9e670ddcf2445b1db30372b76eaa6695c5387ca400a28ead836f44fc0"
+      },
+      {
+        "label": "r3-static-scan-aud015",
+        "argv": [
+          "node",
+          "--max-old-space-size=1024",
+          "docs/audits/AUD-017-harnesses/r3-browser/static-scan.mjs"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:24:40+00:00",
+        "endUtc": "2026-10-09T11:24:40+00:00",
+        "seconds": 0.1,
+        "exitCode": 0,
+        "logSha256": "2d34e417f8c9fec9846579113ceb06e9ccb243d7df39b78f0f5d2d506cc29c28"
+      },
+      {
+        "label": "r4-aud015-documented_symbols",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/documented_symbols.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:26:28+00:00",
+        "endUtc": "2026-10-09T11:26:29+00:00",
+        "seconds": 0.4,
+        "exitCode": 0,
+        "logSha256": "7d06878775bcd78c2f78b47dc17daad5d1ac1564930ea5a1be18b34241e781cc"
+      },
+      {
+        "label": "r4-aud015-markdown_links_lists",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/markdown_links_lists.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:26:28+00:00",
+        "endUtc": "2026-10-09T11:26:28+00:00",
+        "seconds": 0.1,
+        "exitCode": 0,
+        "logSha256": "259fee9d5ec1915ee85d371a7eba15cf4048015d3b87568625ba82d44e63dff4"
+      },
+      {
+        "label": "r4-aud015-typed_again_lists",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/typed_again_lists.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:26:28+00:00",
+        "endUtc": "2026-10-09T11:26:28+00:00",
+        "seconds": 0.2,
+        "exitCode": 0,
+        "logSha256": "d8eb7985440ebe98a7e14b46265a06ff2e05080838574594bfea882d783cd636"
+      },
+      {
+        "label": "r4-aud015-record_commit_fields",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/record_commit_fields.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:26:29+00:00",
+        "endUtc": "2026-10-09T11:26:30+00:00",
+        "seconds": 0.9,
+        "exitCode": 1,
+        "logSha256": "5a27d37f053da4123a26891c1ec8c65f0d424d7f7616480d67094337c5dcadea"
+      },
+      {
+        "label": "r4-aud015-harness_bindings",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/harness_bindings.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:26:30+00:00",
+        "endUtc": "2026-10-09T11:26:30+00:00",
+        "seconds": 0.1,
+        "exitCode": 0,
+        "logSha256": "d0c712060ece47ccb3faae0719a1e33309df9d72b0a061aaf7cbdc7704d103ef"
+      },
+      {
+        "label": "r4-documented-options",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/documented_options.py",
+          "docs/audits/AUD-017-evidence/r4-help.log"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:26:41+00:00",
+        "endUtc": "2026-10-09T11:26:41+00:00",
+        "seconds": 0.1,
+        "exitCode": 0,
+        "logSha256": "739d017d2f673b930ed4c0c910b2b5c1419fc05a3a065885389a7db293f505bb"
+      },
+      {
+        "label": "r4-help",
+        "argv": [
+          "bash",
+          "docs/audits/AUD-015-harnesses/r5-build-docs/capture_help.sh",
+          "target/release/mhfe"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:26:41+00:00",
+        "endUtc": "2026-10-09T11:26:41+00:00",
+        "seconds": 0.1,
+        "exitCode": 0,
+        "logSha256": "508a2df7806d264e0d3223181690b11938af98cd9ca78c09c7b6e25538a50385"
+      },
+      {
+        "label": "r4-prettier",
+        "argv": [
+          "node_modules/.bin/prettier",
+          "--check",
+          "."
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:27:37+00:00",
+        "endUtc": "2026-10-09T11:27:42+00:00",
+        "seconds": 4.9,
+        "exitCode": 0,
+        "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      {
+        "label": "r4-rustfmt",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/rustup/toolchains/1.99.0-x86_64-unknown-linux-gnu/bin/rustfmt",
+          "--check",
+          "--edition",
+          "2021",
+          "src/lib.rs",
+          "src/bin/mhfe/main.rs",
+          "build.rs",
+          "tests/suite3_vectors.rs",
+          "tests/suite4_vectors.rs"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:27:49+00:00",
+        "endUtc": "2026-10-09T11:27:50+00:00",
+        "seconds": 0.7,
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "r4-no-copies-selftest",
+        "argv": [
+          "node",
+          "scripts/verify-no-copies.mjs",
+          "--self-test"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:28:39+00:00",
+        "endUtc": "2026-10-09T11:28:39+00:00",
+        "seconds": 0.1,
+        "exitCode": 0,
+        "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419"
+      },
+      {
+        "label": "r4-no-copies",
+        "argv": [
+          "node",
+          "scripts/verify-no-copies.mjs"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:28:39+00:00",
+        "endUtc": "2026-10-09T11:28:41+00:00",
+        "seconds": 1.6,
+        "exitCode": 1,
+        "logSha256": "e5736c7e8126ca191c7d6d0d38c283252abf2a79f02515915ddecd40e5e71318"
+      },
+      {
+        "label": "r3-api-probes",
+        "argv": [
+          "node",
+          "--max-old-space-size=1024",
+          "docs/audits/AUD-017-harnesses/r3-browser/api-probes.mjs"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:28:59+00:00",
+        "endUtc": "2026-10-09T11:28:59+00:00",
+        "seconds": 0.2,
+        "exitCode": 0,
+        "logSha256": "e136e2c53d1f8f70687ff20451f243c4e652c1b76bb3b24de3b047a029860498"
+      },
+      {
+        "label": "r4-records-md-json",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-017-harnesses/r4-build-docs/records_md_json.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:29:48+00:00",
+        "endUtc": "2026-10-09T11:29:48+00:00",
+        "seconds": 0.1,
+        "exitCode": 0,
+        "logSha256": "151647969f6441f506495af03fea13c5a2a3e06d48ab46449f57530a8a6542b2"
+      },
+      {
+        "label": "r3-rekey-parity",
+        "argv": [
+          "node",
+          "--max-old-space-size=1024",
+          "docs/audits/AUD-017-harnesses/r3-browser/rekey-parity.mjs"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:29:54+00:00",
+        "endUtc": "2026-10-09T11:29:55+00:00",
+        "seconds": 0.2,
+        "exitCode": 1,
+        "logSha256": "9acae4f6ad7b9fadfd1a1ca785101d3ef837d8c69bd708caa693956b3b669f6c"
+      },
+      {
+        "label": "r4-procedure-reverse-edit",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-017-harnesses/r4-build-docs/procedure_reverse_edit.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:29:59+00:00",
+        "endUtc": "2026-10-09T11:29:59+00:00",
+        "seconds": 0.0,
+        "exitCode": 0,
+        "logSha256": "ae826b13b3462daf7b9ec16fd4b32592b57fafa8695f16880812183ff27664ec"
+      },
+      {
+        "label": "r4-record-commit-prose",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-017-harnesses/r4-build-docs/record_commit_prose.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:31:09+00:00",
+        "endUtc": "2026-10-09T11:31:12+00:00",
+        "seconds": 2.6,
+        "exitCode": 1,
+        "logSha256": "5e03af58a73b0befb85873bca6fab5ad90406e0928d5e420581a36f3e2676b51"
+      },
+      {
+        "label": "r4-docker-vs-check",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-017-harnesses/r4-build-docs/docker_vs_check.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:32:14+00:00",
+        "endUtc": "2026-10-09T11:32:14+00:00",
+        "seconds": 0.0,
+        "exitCode": 1,
+        "logSha256": "97c82d0daaeb8b03739462328f4d68cb0055bf4622abb9a590c6f6e146625b36"
+      },
+      {
+        "label": "r4-api-md-decrypt",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-017-harnesses/r4-build-docs/api_md_decrypt.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:33:28+00:00",
+        "endUtc": "2026-10-09T11:33:28+00:00",
+        "seconds": 0.1,
+        "exitCode": 1,
+        "logSha256": "19ec46b8605305202c4a8f4248eda562234e41d011aecaf52a4652f942a59516"
+      },
+      {
+        "label": "r4-no-copies-gate",
+        "argv": [
+          "bash",
+          "docs/audits/AUD-017-harnesses/r4-build-docs/no_copies_gate.sh"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:33:28+00:00",
+        "endUtc": "2026-10-09T11:33:29+00:00",
+        "seconds": 1.3,
+        "exitCode": 1,
+        "logSha256": "434fa9f21a32f914e19f1b1f3423ad8915fdfe6a1b2dec3d21df53986527c656"
+      },
+      {
+        "label": "r4-typed-defaults",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-017-harnesses/r4-build-docs/typed_defaults.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:33:28+00:00",
+        "endUtc": "2026-10-09T11:33:28+00:00",
+        "seconds": 0.1,
+        "exitCode": 1,
+        "logSha256": "f5b33b32c4ee97f70a8256bb76c548f08989d7e4606a66c343d793677515255b"
+      },
+      {
+        "label": "r1-length-rule",
+        "argv": [
+          "python3",
+          "docs/audits/AUD-017-harnesses/r1-crypto/length_rule_probe.py"
+        ],
+        "cwd": "/home/user/Documents/bip_tools/mhfe",
+        "startUtc": "2026-10-09T11:34:51+00:00",
+        "endUtc": "2026-10-09T11:34:51+00:00",
+        "seconds": 0.0,
+        "exitCode": 0,
+        "logSha256": "b673737d8bb14e16a49428dccb7e8051c44942b185255ac87df2f3377fbc764d"
+      }
+    ],
+    "summary": "24 recorded commands; reviewers: Coordinator, R1 crypto core, R2 native CLI, R3 browser package, R4 build, docs, architecture."
+  },
+  "findings": [
+    {
+      "id": "AUD-017-FUN001",
+      "category": "FUN",
+      "severity": "medium",
+      "title": "A rekey with the length detected is confirmed by the built-in check alone in the library and the browser, while the command-line tool never offers it",
+      "affectedFiles": [
+        "src/rehearsal.rs:429",
+        "src/wasm_api/core.rs:918",
+        "src/bin/mhfe/rekey.rs:145-150",
+        "docs/BROWSER-PACKAGE.md:175-178",
+        "docs/API.md:276-278",
+        "scripts/verify-browser-package.mjs:729-735"
+      ],
+      "reproduction": "rekey({ words: 0, confirmation: { builtInCheck: true } }) on a container whose packed state passes one short verifier (r3-rekey-parity part A); `mhfe rekey` with the length detected asks only for an address, a fingerprint or the owner.",
+      "expected": "One rule for both front ends, decided by the library (AGENTS.md: the command line and the page offer the same operations).",
+      "observed": "refuse_for accepts BuiltInCheck under ConfirmationNeeded::Detected; the browser seals the reading; the CLI routes Detected to ask_how_to_confirm.",
+      "impact": "A 24-word original that creation flagged (otherLengths [21]) can be sealed again as its 21-word reading, another wallet, by the browser without a word-count note; its later rehearsal by the built-in check passes. A wrong old password reaches the same path through the 21-word layout about once in 2^32. Residue of AUD-015-FUN001, whose first recommended fix was not taken.",
+      "evidence": [
+        "r3-rekey-parity (exit 1, part A)",
+        "r1-length-rule (exit 0)",
+        "src/rehearsal.rs:429 read by the coordinator"
+      ],
+      "recommendedFix": "The owner chooses one rule; the library enforces it in refuse_for (refuse BuiltInCheck under Detected, or where other_detected_lengths is non-empty) or the CLI offers the same answer. Add a case to scripts/verify-cli-browser-parity.mjs.",
+      "reviewer": "R1, R3 (merged)",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Allowed by the current specification draft; the parity difference needs an owner decision before release.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-BLD001",
+      "category": "BLD",
+      "severity": "medium",
+      "title": "The copy gate of scripts/check.sh fails on this tree, so CI, and with it the release workflow, would fail",
+      "affectedFiles": [
+        "scripts/check.sh:32-33",
+        "src/rekey.rs:481-488",
+        "src/rekey.rs:505-512",
+        "src/rekey/known_answers.rs:145-176",
+        "src/rehearsal.rs:617-653",
+        ".github/workflows/release.yml:93-101"
+      ],
+      "reproduction": "node scripts/verify-no-copies.mjs",
+      "expected": "Exit 0, as on every earlier commit.",
+      "observed": "Three copies of 50 tokens or more, exit 1: src/rekey/known_answers.rs:145-156 = :165-176; src/rehearsal.rs:617-626 = :644-653; src/rekey.rs:481-488 = :505-512. All three came with the AUD-015 remediation, which did not run this gate.",
+      "impact": "Any push fails ci.yml, and release.yml now requires ci.yml, so a v0.5.1 tag would never reach the draft.",
+      "evidence": [
+        "r4-no-copies (exit 1)",
+        "r4-no-copies-selftest (exit 0)",
+        "coordinator rerun (exit 1, same three copies)"
+      ],
+      "recommendedFix": "Merge the test helpers detected/stated into one that takes a PhraseLength, and factor the known-answer and rehearsal blocks into helpers with parameters; rerun the gate.",
+      "reviewer": "R4",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "The release workflow cannot pass while the gate fails.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-SEC001",
+      "category": "SEC",
+      "severity": "low",
+      "title": "Container words found by a missing-word search are formatted into ordinary, unwiped strings",
+      "affectedFiles": [
+        "src/bin/mhfe/container_search.rs:493-498"
+      ],
+      "reproduction": "Read: `places` is a Vec<String> of \"word N: <word>\"; the library keeps Found.container in Zeroizing (src/search.rs:65).",
+      "expected": "Zeroizing buffers, as in the AUD-015-SEC006 fix.",
+      "observed": "Copies of container-phrase words remain in freed heap memory.",
+      "impact": "Bounded: the container also needs the password, and the process is not dumpable; still against SECURITY.md's statement on phrase text.",
+      "evidence": [
+        "src/bin/mhfe/container_search.rs:493-498 read by the coordinator"
+      ],
+      "recommendedFix": "Build the lines in Zeroizing<String>.",
+      "reviewer": "R2",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low, bounded.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-API001",
+      "category": "API",
+      "severity": "low",
+      "title": "The browser's owner check does not carry the stated length that the command-line tool warns about",
+      "affectedFiles": [
+        "src/wasm_api/core.rs:778-793",
+        "src/wasm_api/core.rs:945",
+        "web/client.d.ts:300",
+        "src/bin/mhfe/rekey.rs:238-245"
+      ],
+      "reproduction": "Rekey a zero-12 container with words 15 and the owner's check (r3-rekey-parity part B).",
+      "expected": "The page learns that the built-in check found 12 words, not the 15 given, as src/rekey.rs:107-109 tells callers to say.",
+      "observed": "The callback receives only { phrase, words, fingerprintWithoutPassphrase }.",
+      "impact": "A page must decide the rule itself (principle 10) or omits the warning.",
+      "evidence": [
+        "r3-rekey-parity (exit 1, part B)"
+      ],
+      "recommendedFix": "Add statedWords to PhraseJson, the d.ts and the documents.",
+      "reviewer": "R3",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-UI001",
+      "category": "UI",
+      "severity": "low",
+      "title": "New non-secret questions have no command-line option, and a script cannot give the passphrase of the 16-bit source check",
+      "affectedFiles": [
+        "src/bin/mhfe/decrypt.rs:199-202",
+        "src/bin/mhfe/container_repair.rs:580",
+        "src/bin/mhfe/rekey.rs:368",
+        "src/bin/mhfe/rekey.rs:398"
+      ],
+      "reproduction": "decrypt --help, rekey --help (r2-static-cli-rules S3, S4).",
+      "expected": "Every non-secret menu answer is also an option of its command (owner rule, 2026-10-07).",
+      "observed": "Whether a passphrase is used, the repair-word count, and how to confirm a rekey have no option; decrypt --stdin always checks with the empty passphrase and reports the outcome on standard error only.",
+      "impact": "A script user whose wallet was drawn with the check gets a 'does not pass' hint on almost every run; the browser's decrypt takes a passphrase.",
+      "evidence": [
+        "r2-static-cli-rules (exit 1, S3 and S4)"
+      ],
+      "recommendedFix": "Options such as --passphrase yes|no, --confirm address|fingerprint|show and --repair-words N; an optional script line for the passphrase; the check's outcome in the script output.",
+      "reviewer": "R2",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-UI002",
+      "category": "UI",
+      "severity": "low",
+      "title": "Each pass of the rekey confirmation loop runs the full recovery again, and one answer it offers is always refused",
+      "affectedFiles": [
+        "src/bin/mhfe/rekey.rs:160-216",
+        "src/rehearsal.rs:552-557"
+      ],
+      "reproduction": "Read: rekey.rs:175 calls rekey.recover on every pass.",
+      "expected": "The readings, once computed, are confirmed without a second recovery; only confirmable lengths are offered.",
+      "observed": "A stated 15 for a 12-word phrase costs a second recovery (hours at a high PIM or memory level); after AmbiguousLength with the owner, 24 is offered and refused each time.",
+      "impact": "Time and a confusing loop; no secret is lost.",
+      "evidence": [
+        "src/bin/mhfe/rekey.rs:160-216 read by the coordinator"
+      ],
+      "recommendedFix": "A library value that keeps the readings and is confirmed by a reference or the owner without recomputing; offer only lengths the library accepts.",
+      "reviewer": "R2",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-ARC001",
+      "category": "ARC",
+      "severity": "low",
+      "title": "The message 'The built-in check finds N words, not the M you gave' is written in five places",
+      "affectedFiles": [
+        "src/bin/mhfe/check.rs:345",
+        "src/bin/mhfe/decrypt.rs:294",
+        "src/bin/mhfe/decrypt.rs:323",
+        "src/bin/mhfe/rekey.rs:206",
+        "src/bin/mhfe/rekey.rs:241"
+      ],
+      "reproduction": "grep -rn \"words, not the\" src",
+      "expected": "One source for each message (AGENTS.md rule 6).",
+      "observed": "Five copies; the follow-up sentence about reliability is repeated too.",
+      "impact": "A wording or rule change reaches some places only.",
+      "evidence": [
+        "r2-static-cli-rules (exit 1, S1)",
+        "coordinator grep"
+      ],
+      "recommendedFix": "One function next to MhfeError::LengthDiffers or one CLI helper.",
+      "reviewer": "R2",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-ARC002",
+      "category": "ARC",
+      "severity": "low",
+      "title": "The rekey front end decides itself whether the owner may confirm after LENGTH_DIFFERS",
+      "affectedFiles": [
+        "src/bin/mhfe/rekey.rs:210",
+        "src/rehearsal.rs:509-559"
+      ],
+      "reproduction": "Read: rekey.rs:210 tests container.built_in_check_lengths().contains(&stated).",
+      "expected": "The library answers (principle 10, delegation).",
+      "observed": "The CLI mirrors the library's private rule in one_reading.",
+      "impact": "A library change leaves the CLI offering a refused answer or hiding an accepted one.",
+      "evidence": [
+        "r2-static-cli-rules (exit 1, S2)"
+      ],
+      "recommendedFix": "Carry the eligibility in LengthDiffers or a Rekey method.",
+      "reviewer": "R2",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-ARC003",
+      "category": "ARC",
+      "severity": "low",
+      "title": "The --scan-gap default 20 is typed in help texts, and the option is declared twice",
+      "affectedFiles": [
+        "src/bin/mhfe/container_repair.rs:29-35",
+        "src/bin/mhfe/container_repair.rs:160-198",
+        "src/search.rs:38"
+      ],
+      "reproduction": "python3 docs/audits/AUD-017-harnesses/r4-build-docs/typed_defaults.py",
+      "expected": "The help is built from search::DECOY_SCAN_GAP; one option struct.",
+      "observed": "'default 20' and '20 is the gap' typed by hand in two option structs.",
+      "impact": "A changed constant leaves the help stating the old default.",
+      "evidence": [
+        "r4-typed-defaults (exit 1)"
+      ],
+      "recommendedFix": "format! from the constant; one flattened ScanGapOption.",
+      "reviewer": "R4",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-BLD002",
+      "category": "BLD",
+      "severity": "low",
+      "title": "The Dockerfile says its canonical stage runs the checks of scripts/check.sh that need no terminal, browser or Node packages, but eight such steps are missing",
+      "affectedFiles": [
+        "packaging/Dockerfile.reproducible:90-92"
+      ],
+      "reproduction": "python3 docs/audits/AUD-017-harnesses/r4-build-docs/docker_vs_check.py",
+      "expected": "The comment matches the stage, or the stage runs the cheap offline checks.",
+      "observed": "Missing: vendored Argon2 hashes, licenses --check, published rounds, the copy gate, WASM clippy (all features and per module), cargo doc -D warnings, CLI/browser parity.",
+      "impact": "A reader trusts a local canonical build as a full gate; CI on the tag still covers these steps.",
+      "evidence": [
+        "r4-docker-vs-check (exit 1)"
+      ],
+      "recommendedFix": "Say 'some of the checks', or run the cheap offline ones in the stage.",
+      "reviewer": "R4",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-DOC001",
+      "category": "DOC",
+      "severity": "low",
+      "title": "decrypt --help and the README do not describe the new passphrase step of the 16-bit source check",
+      "affectedFiles": [
+        "src/bin/mhfe/decrypt.rs:56-61",
+        "src/bin/mhfe/decrypt.rs:109-119",
+        "README.md:248",
+        "src/bin/mhfe/decrypt.rs:220-223"
+      ],
+      "reproduction": "target/release/mhfe decrypt --help (r4-help).",
+      "expected": "'What it asks for' names the passphrase question; --stdin says the check runs without a passphrase.",
+      "observed": "Only Container and Password are listed; README.md:248 says decrypt does not know the passphrase; one message says 'its wallet check' where the other and the specification say 'the 16-bit check'.",
+      "impact": "A user is surprised by the question or misreads a script result.",
+      "evidence": [
+        "r4-help (exit 0)",
+        "src/bin/mhfe/decrypt.rs read by the coordinator"
+      ],
+      "recommendedFix": "Add the step and the script behaviour to the help; reword the README sentence and the failure hint.",
+      "reviewer": "R2",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    },
+    {
+      "id": "AUD-017-DOC002",
+      "category": "DOC",
+      "severity": "low",
+      "title": "The browser documents omit decrypt's passphrase and the 0.5.1 result fields",
+      "affectedFiles": [
+        "docs/API.md:660-661",
+        "docs/API.md:697",
+        "docs/API.md:718-721",
+        "docs/BROWSER-PACKAGE.md:157-168",
+        "docs/BROWSER-PACKAGE.md:182-183",
+        "web/client.d.ts:293-296"
+      ],
+      "reproduction": "python3 docs/audits/AUD-017-harnesses/r4-build-docs/api_md_decrypt.py; grep statedWords docs",
+      "expected": "decrypt({ passphrase }) and the candidates' walletCheck, statedWords and otherLengths, the rekey result's walletCheck and LENGTH_DIFFERS under the owner beside 24 words documented.",
+      "observed": "None of them in API.md or BROWSER-PACKAGE.md (statedWords only in client.d.ts and client.js); the search methods sit under the repair block of API.md.",
+      "impact": "An integrator never passes the passphrase and never shows the stated-length warning the release notes promise.",
+      "evidence": [
+        "r4-api-md-decrypt (exit 1)"
+      ],
+      "recommendedFix": "Update both usage blocks and the description of the confirmation type; move the search lines under core/client.js.",
+      "reviewer": "R3, R4 (merged)",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low.",
+      "kind": "finding",
+      "status": "open",
+      "requiredVerification": "The reproduction no longer reproduces; a test covers the case."
+    }
+  ],
+  "observations": [],
+  "informationalObservations": [
+    "The rehearsal computes the 16-bit source check only when not exactly one short reading passes (src/rehearsal.rs:335), although its comparison can match the 24-word reading.",
+    "RecoveryStatus::ReadAs24Chosen applies whenever the length was stated (src/mhfe.rs:156), also when a short length was stated.",
+    "STATED_READING_ONLY is kept by hand in src/vectors.rs:620 and scripts/independent-suite3.py without a test tying them; the oracle cannot fail selected-24-words on the length rule, as the vector README documents.",
+    "The applied specification says a stated short length that matches nothing gives no reading; an earlier intended wording allowed offering the 24-word reading. The code follows the applied text.",
+    "A 16-bit pass with the empty passphrase is chance only, since draws need a non-empty passphrase; the specification requires the check with the empty passphrase as well, so both front ends are consistent with it.",
+    "protect.rs:70 does not read back the result of sigaction for the quit and suspend routing, and no startup check reports it.",
+    "hidden_input.rs:494 hides C0/C1 controls but shows Cf characters such as U+202E on visible lines (the person's own input only).",
+    "typed_line.rs:166 slices bytes, safe only because every hint is ASCII.",
+    "scripts/verify-cli-browser-parity.mjs covers repair words, early refusals and the other-lengths warning, but no recovery result, rekey, search, new, password tool or self-test, so it could not catch FUN001 or API001.",
+    "ci.yml's canonical-build job (60-minute timeout) runs on every branch push; its duration was not measured against the rule on hour-long checks.",
+    "AGENTS.md does not list scripts/verify-no-copies.mjs and verify-cli-browser-parity.mjs among its commands.",
+    "src/vectors.rs is newer than the dist/ build, but nothing in the WASM references it; dist/ is current for every browser feature."
+  ],
+  "earlierFindings": [
+    {
+      "id": "AUD-015-FUN001",
+      "disposition": "partly fixed",
+      "evidence": "Detection always runs; LENGTH_DIFFERS and AMBIGUOUS_LENGTH refuse a contradicted or ambiguous length under the built-in check; the residue is AUD-017-FUN001."
+    },
+    {
+      "id": "AUD-015-SEC001 to SEC006",
+      "disposition": "fixed in the tree",
+      "evidence": "R2, file:line evidence in the R2 notes."
+    },
+    {
+      "id": "AUD-015-SEC007, API001",
+      "disposition": "fixed in the tree",
+      "evidence": "r3-api-probes P2 and P3."
+    },
+    {
+      "id": "AUD-015-UI001, UI002, UI005",
+      "disposition": "fixed in the tree",
+      "evidence": "UI005 in source; no browser rerun."
+    },
+    {
+      "id": "AUD-015-ARC001 to ARC003",
+      "disposition": "fixed in the tree",
+      "evidence": "r4-aud015-typed_again_lists exit 0."
+    },
+    {
+      "id": "AUD-015-BLD001",
+      "disposition": "fixed",
+      "evidence": "docs/releases/history-rewrite-2026-10-09.md, committed in 3c60594; the table matches the current tags."
+    },
+    {
+      "id": "AUD-015-BLD002",
+      "disposition": "fixed in effect",
+      "evidence": "release.yml runs ci.yml; the Dockerfile comment residue is AUD-017-BLD002."
+    },
+    {
+      "id": "AUD-015-DOC001",
+      "disposition": "partly fixed",
+      "evidence": "Every mhfe commit reference resolves; two mhfe_spec commits named by audit-02 and audit-08 no longer exist there and stay as historical bindings (r4-aud015-record_commit_fields)."
+    },
+    {
+      "id": "AUD-015-DOC002 to DOC009",
+      "disposition": "fixed in the tree",
+      "evidence": "r4-aud015-harness_bindings (106 hashes)."
+    }
+  ],
+  "remediation": [
+    {
+      "id": "AUD-017-FUN001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "The owner's choice of the stricter rule: with the length detected the built-in check alone is refused before any Argon2 work in the library (Confirmation::refuse_for; ConfirmationNeeded::Detected removed, confirmationFor[\"0\"] is \"walletOrOwner\"), so the CLI and the browser agree. Tests: rekey::tests::a_detected_length_needs_the_wallet_or_the_owner, the rekey self-check's REFERENCE_REQUIRED row, both browser suites; the probe rekey-parity exits 0."
+    },
+    {
+      "id": "AUD-017-BLD001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "The three test copies are one helper each (rekey_of, Refusal table, evidence_for); node scripts/verify-no-copies.mjs exits 0."
+    },
+    {
+      "id": "AUD-017-SEC001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "The found words are written into one Zeroizing buffer reserved at its final size (container_search.rs)."
+    },
+    {
+      "id": "AUD-017-API001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "The owner callback's PhraseJson carries statedWords where the check found another length; d.ts, documents and both browser suites updated; rekey-parity part B exits 0."
+    },
+    {
+      "id": "AUD-017-UI001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "--repair-words N (encrypt, new, rekey), --passphrase-used yes|no (decrypt, rekey) and --confirm check|address|fingerprint|show (rekey); a script gives decrypt the passphrase on a third line with --passphrase-used yes. static_cli_rules S3/S4 pass."
+    },
+    {
+      "id": "AUD-017-UI002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Rekey::recover_state recovers once into a RecoveredForRekey, and Rekey::confirm confirms it as often as a confirmation is refused; owner_can_confirm and lengths_the_owner_can_confirm tell the CLI which answers to offer. Test: a_refused_confirmation_is_followed_by_another_on_the_same_recovery."
+    },
+    {
+      "id": "AUD-017-ARC001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "phrase_length::check_finds and MORE_RELIABLE are the one wording; static_cli_rules S1 passes."
+    },
+    {
+      "id": "AUD-017-ARC002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "The CLI asks Rekey::owner_can_confirm; static_cli_rules S2 passes."
+    },
+    {
+      "id": "AUD-017-ARC003",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "One ScanGapOption, its help built from DECOY_SCAN_GAP; typed_defaults exits 0."
+    },
+    {
+      "id": "AUD-017-BLD002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "The Dockerfile says \"some of the checks\"; docker_vs_check exits 0."
+    },
+    {
+      "id": "AUD-017-DOC001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "decrypt --help lists the passphrase step and --stdin's third line; the README sentence and the failure hint name the 16-bit check."
+    },
+    {
+      "id": "AUD-017-DOC002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "API.md and BROWSER-PACKAGE.md describe decrypt's passphrase, the candidate fields, the rekey walletCheck and statedWords; api_md_decrypt exits 0."
+    }
+  ],
+  "remediationFollowUp": {
+    "dateUtc": "2026-10-09",
+    "sourceFingerprint": "a9dd0d88f13b0e66910eb62a085b29c4fce0b10f3e4f9723e47226bb89ed4f54",
+    "files": 554,
+    "commit": null,
+    "summary": "Every AUD-017 finding and every AUD-016 finding has a fix in the uncommitted tree, made by the owner's instruction; each stays open here until a commit records it. FUN001 took the stricter of the two rules: a detected length is confirmed by an address, the fingerprint or the owner in every front end. The same remediation fixed the AUD-016 findings (cancel inside an address search, the fingerprint error that repeated a pasted phrase, the memory-locking claim, wide characters, malformed worker replies, explicit null secrets, the stale browser suite) and the path-controls remnant of AUD-015-SEC002 that AUD-016's probe found. The informational observations on the rehearsal's source check, the 24-word status label, the two exempt-name lists, the signal read-back and invisible formatting characters are addressed too. Source fingerprint a9dd0d88...4f54 (554 files, AUD-016's harness files included); release binary SHA-256 73f17222...7c7d built with remapped paths; browser package build 817e72e40b707f90, on which the checks below ran. A doc comment re-wrapped after it moved line numbers that the binaries carry; AUD-018 rebuilt both from the same source, the package as build cc38bfadd2bfe9b2, equal to its canonical build.",
+    "checks": [
+      "The offline steps of scripts/check.sh, each exit 0: vendored Argon2 hashes, licenses, published rounds, cargo fmt, the copy gate and its self-test, clippy native, WASM and each of the four browser modules, cargo test (343 library and 118 CLI tests passed, 2 ignored each; the vector and doc targets pass), cargo doc -D warnings (after one fix of a private link), self-test, hidden input, Argon2 WASM, browser package, CLI/browser parity, fast-mode script, release artifacts (after a rebuild with remapped paths), Prettier.",
+      "scripts/verify-browsers.mjs in Chromium 153 and Firefox 155, standard and fast mode: 1934 assertions ok, exit 0, after one stale copy count was corrected (log SHA-256 6a11b971...2266, local evidence).",
+      "Every AUD-017 probe now exits 0: static_cli_rules, typed_defaults, api_md_decrypt, docker_vs_check, rekey-parity, api-probes, static-scan, length_rule_probe.",
+      "AUD-016's native probes fingerprint-redaction, unicode-cursor and path-controls exit 0; dumb-container still shows the container under TERM=dumb, which AUD-016 records as an observation (containers are public ciphertext). The low-memlock witness was not rebuilt; mhfe self-test under RLIMIT_MEMLOCK 4096 now reports that 8192 bytes could not be locked.",
+      "Not run: the full-size vector replays (they ran on this tree's vectors before the audit, and no vector or cipher code changed), the canonical Docker build."
+    ]
+  },
+  "limitations": [
+    "By the owner's split with the concurrent AUD-016, this audit ran no cargo build or test, no WASM build, no browser suite, no Docker build and no full-size Argon2; CHECK-BLD-002 and CHECK-BLD-004 are blocked. AUD-016 reviews the same source bytes (manifest equal but for its own harness files), so its build results apply to this snapshot.",
+    "The independent full replay of every suite 3 vector, including the new negative case, ran on the same tree just before this audit (scripts/independent-suite3.py, 18 files, all reproduced); its record is tests/fixtures/suite3-vectors/independent-verification.json.",
+    "The browser probes ran the built dist/ in Node at 256 KiB and one pass; the CSP and real browsers were not exercised.",
+    "Repair-word changes in src/repair.rs were only skimmed.",
+    "Model and reasoning effort are recorded as reported by the client."
+  ],
+  "assessment": "12 findings: 2 medium and 10 low; one release blocking (BLD001)."
+}

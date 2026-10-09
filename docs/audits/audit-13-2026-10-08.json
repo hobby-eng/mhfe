@@ -1,0 +1,3089 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-013",
+  "auditNumber": 13,
+  "date": "2026-10-08",
+  "title": "Fresh ultra review of MHFE after AUD-012 remediation",
+  "reviewer": {
+    "name": "Codex coordinator with three scoped reviewers",
+    "model": null,
+    "reasoningEffort": null,
+    "requestedModelFamily": "gpt-6.1",
+    "requestedReasoningEffort": "ultra",
+    "settingSource": "User-reported coordinator setting; exact client telemetry unavailable. Scoped reviewers explicitly configured below."
+  },
+  "reviewerPhases": [
+    {
+      "phase": "aborted preparation",
+      "verificationIncluded": false,
+      "model": null,
+      "reasoningEffort": null,
+      "reason": "User stopped preparation and requested a fresh ultra restart; none counted as AUD013 verification."
+    },
+    {
+      "phase": "fresh review",
+      "verificationIncluded": true,
+      "startedAt": "2026-10-08T17:07:24.843Z",
+      "reviewers": [
+        {
+          "name": "audit13_fresh_rust",
+          "model": "gpt-6.1-sol",
+          "reasoningEffort": "ultra",
+          "source": "Explicit spawn assignment"
+        },
+        {
+          "name": "audit13_fresh_browser",
+          "model": "gpt-6.1-sol",
+          "reasoningEffort": "ultra",
+          "source": "Explicit spawn assignment"
+        },
+        {
+          "name": "audit13_fresh_quality",
+          "model": "gpt-6.1-sol",
+          "reasoningEffort": "ultra",
+          "source": "Explicit spawn assignment"
+        }
+      ],
+      "interruption": "The session was interrupted (host out of memory); complete logs retained, empty/incomplete capture repeated, not counted as passes."
+    },
+    {
+      "phase": "resume on identical source",
+      "verificationIncluded": true,
+      "startedAt": "2026-10-08T17:15:59.814Z",
+      "reviewers": [
+        {
+          "name": "audit13_rust_resume",
+          "scope": "Rust protocol/crypto/recovery/locking/native contracts",
+          "model": "gpt-6.1-sol",
+          "reasoningEffort": "ultra",
+          "source": "Explicit spawn assignment"
+        },
+        {
+          "name": "audit13_browser_resume",
+          "scope": "WASM/browser secret copies/worker/session APIs",
+          "model": "gpt-6.1-sol",
+          "reasoningEffort": "ultra",
+          "source": "Explicit spawn assignment"
+        },
+        {
+          "name": "audit13_quality_resume",
+          "scope": "OOP/DRY/optimizations/docs/CLI/build claims and independent final challenge",
+          "model": "gpt-6.1-sol",
+          "reasoningEffort": "ultra",
+          "source": "Explicit spawn assignment"
+        }
+      ],
+      "coordinatorScope": "Snapshot/shared bounded execution/spec/docs/evidence reconciliation, clean independent finding reruns and report validation."
+    }
+  ],
+  "snapshot": {
+    "commit": "abb16671b641378c0fc3c4d855f8d126498e754b",
+    "commitComplete": true,
+    "branch": "main",
+    "workingTree": {
+      "description": "Pre-existing dirty modular/OOP refactor and retained audits, reviewed as present without restoring/reverting.",
+      "initialStatus": " M Cargo.toml\n M README.md\n M SECURITY.md\n M docs/API.md\n M docs/BROWSER-PACKAGE.md\n M docs/audits/README.md\n M docs/audits/audit-07-2026-10-05.md\n M docs/releases/v0.5.1.md\n M scripts/build-wasm.sh\n M scripts/check.sh\n M scripts/verify-browser-package.mjs\n M scripts/verify-browsers.mjs\n M scripts/verify-hidden-input-windows.py\n M scripts/verify-hidden-input.py\n M src/bin/mhfe/check.rs\n M src/bin/mhfe/check_word.rs\n M src/bin/mhfe/choice.rs\n M src/bin/mhfe/decrypt.rs\n M src/bin/mhfe/diceware.rs\n M src/bin/mhfe/encrypt.rs\n M src/bin/mhfe/exit.rs\n M src/bin/mhfe/hidden_input.rs\n M src/bin/mhfe/length_choice.rs\n M src/bin/mhfe/main.rs\n M src/bin/mhfe/menu.rs\n M src/bin/mhfe/new_wallet.rs\n D src/bin/mhfe/plate_repair.rs\n M src/bin/mhfe/readme.rs\n M src/bin/mhfe/rekey.rs\n M src/bin/mhfe/self_test.rs\n M src/bin/mhfe/serve.rs\n M src/bin/mhfe/settings.rs\n M src/bin/mhfe/startup.rs\n M src/bin/mhfe/style.rs\n M src/bin/mhfe/terminal.rs\n M src/bin/mhfe/test_tools.rs\n M src/bin/mhfe/wallets.rs\n M src/check_word.rs\n M src/check_word/known_answers.rs\n M src/container.rs\n M src/container/known_answers.rs\n M src/engine/browser.rs\n M src/engine/ffi.rs\n M src/engine/known_answers.rs\n M src/engine/mod.rs\n M src/engine/native.rs\n M src/error.rs\n M src/feistel.rs\n M src/hidden.rs\n M src/hidden/known_answers.rs\n M src/lib.rs\n M src/memory.rs\n M src/mhfe.rs\n M src/mhfe/known_answers.rs\n M src/new_password.rs\n M src/operation.rs\n M src/operation/known_answers.rs\n M src/packing.rs\n M src/phrase.rs\n M src/phrase/known_answers.rs\n M src/random.rs\n M src/random/health.rs\n M src/rehearsal.rs\n M src/rekey.rs\n M src/rekey/known_answers.rs\n M src/repair.rs\n M src/repair/known_answers.rs\n M src/self_check.rs\n M src/self_check/sets.rs\n M src/self_test.rs\n M src/suite.rs\n M src/validation_cases.rs\n M src/vectors.rs\n M src/wallet.rs\n M src/wallet/known_answers.rs\n M src/wallet_check.rs\n M src/wallet_check/threads.rs\n M src/wasm_api/core.rs\n M src/wasm_api/mod.rs\n M src/wasm_api/passwords.rs\n M src/wasm_api/repair.rs\n M src/wasm_api/wallet.rs\n M tests/suite3_vectors.rs\n M tests/suite4_vectors.rs\n M web/client.d.ts\n M web/client.js\n M web/core-worker.js\n M web/passwords.d.ts\n M web/passwords.js\n M web/repair-worker.js\n M web/repair.d.ts\n M web/repair.js\n M web/runtime.d.ts\n M web/runtime.js\n M web/wallet-worker.js\n M web/wallet.d.ts\n M web/wallet.js\n M web/worker-runtime.js\n?? docs/audits/AUD-009-harnesses/\n?? docs/audits/AUD-010-harnesses/\n?? docs/audits/AUD-011-harnesses/\n?? docs/audits/AUD-012-harnesses/\n?? docs/audits/AUD-013-harnesses/\n?? docs/audits/audit-09-2026-10-06.json\n?? docs/audits/audit-09-2026-10-06.md\n?? docs/audits/audit-10-2026-10-07.json\n?? docs/audits/audit-10-2026-10-07.md\n?? docs/audits/audit-11-2026-10-08.json\n?? docs/audits/audit-11-2026-10-08.md\n?? docs/audits/audit-12-2026-10-08.json\n?? docs/audits/audit-12-2026-10-08.md\n?? scripts/public-test-data.mjs\n?? scripts/verify-cli-browser-parity.mjs\n?? scripts/verify-no-copies.mjs\n?? src/bin/mhfe/container_repair.rs\n?? src/bin/mhfe/container_search.rs\n?? src/bin/mhfe/made_password.rs\n?? src/bin/mhfe/phrase_length.rs\n?? src/detection.rs\n?? src/search.rs\n?? src/search/\n?? src/test_support.rs\n",
+      "finalPreReportStatus": " M Cargo.toml\n M README.md\n M SECURITY.md\n M docs/API.md\n M docs/BROWSER-PACKAGE.md\n M docs/audits/README.md\n M docs/audits/audit-07-2026-10-05.md\n M docs/releases/v0.5.1.md\n M scripts/build-wasm.sh\n M scripts/check.sh\n M scripts/verify-browser-package.mjs\n M scripts/verify-browsers.mjs\n M scripts/verify-hidden-input-windows.py\n M scripts/verify-hidden-input.py\n M src/bin/mhfe/check.rs\n M src/bin/mhfe/check_word.rs\n M src/bin/mhfe/choice.rs\n M src/bin/mhfe/decrypt.rs\n M src/bin/mhfe/diceware.rs\n M src/bin/mhfe/encrypt.rs\n M src/bin/mhfe/exit.rs\n M src/bin/mhfe/hidden_input.rs\n M src/bin/mhfe/length_choice.rs\n M src/bin/mhfe/main.rs\n M src/bin/mhfe/menu.rs\n M src/bin/mhfe/new_wallet.rs\n D src/bin/mhfe/plate_repair.rs\n M src/bin/mhfe/readme.rs\n M src/bin/mhfe/rekey.rs\n M src/bin/mhfe/self_test.rs\n M src/bin/mhfe/serve.rs\n M src/bin/mhfe/settings.rs\n M src/bin/mhfe/startup.rs\n M src/bin/mhfe/style.rs\n M src/bin/mhfe/terminal.rs\n M src/bin/mhfe/test_tools.rs\n M src/bin/mhfe/wallets.rs\n M src/check_word.rs\n M src/check_word/known_answers.rs\n M src/container.rs\n M src/container/known_answers.rs\n M src/engine/browser.rs\n M src/engine/ffi.rs\n M src/engine/known_answers.rs\n M src/engine/mod.rs\n M src/engine/native.rs\n M src/error.rs\n M src/feistel.rs\n M src/hidden.rs\n M src/hidden/known_answers.rs\n M src/lib.rs\n M src/memory.rs\n M src/mhfe.rs\n M src/mhfe/known_answers.rs\n M src/new_password.rs\n M src/operation.rs\n M src/operation/known_answers.rs\n M src/packing.rs\n M src/phrase.rs\n M src/phrase/known_answers.rs\n M src/random.rs\n M src/random/health.rs\n M src/rehearsal.rs\n M src/rekey.rs\n M src/rekey/known_answers.rs\n M src/repair.rs\n M src/repair/known_answers.rs\n M src/self_check.rs\n M src/self_check/sets.rs\n M src/self_test.rs\n M src/suite.rs\n M src/validation_cases.rs\n M src/vectors.rs\n M src/wallet.rs\n M src/wallet/known_answers.rs\n M src/wallet_check.rs\n M src/wallet_check/threads.rs\n M src/wasm_api/core.rs\n M src/wasm_api/mod.rs\n M src/wasm_api/passwords.rs\n M src/wasm_api/repair.rs\n M src/wasm_api/wallet.rs\n M tests/suite3_vectors.rs\n M tests/suite4_vectors.rs\n M web/client.d.ts\n M web/client.js\n M web/core-worker.js\n M web/passwords.d.ts\n M web/passwords.js\n M web/repair-worker.js\n M web/repair.d.ts\n M web/repair.js\n M web/runtime.d.ts\n M web/runtime.js\n M web/wallet-worker.js\n M web/wallet.d.ts\n M web/wallet.js\n M web/worker-runtime.js\n?? docs/audits/AUD-009-harnesses/\n?? docs/audits/AUD-010-harnesses/\n?? docs/audits/AUD-011-harnesses/\n?? docs/audits/AUD-012-harnesses/\n?? docs/audits/AUD-013-harnesses/\n?? docs/audits/audit-09-2026-10-06.json\n?? docs/audits/audit-09-2026-10-06.md\n?? docs/audits/audit-10-2026-10-07.json\n?? docs/audits/audit-10-2026-10-07.md\n?? docs/audits/audit-11-2026-10-08.json\n?? docs/audits/audit-11-2026-10-08.md\n?? docs/audits/audit-12-2026-10-08.json\n?? docs/audits/audit-12-2026-10-08.md\n?? scripts/public-test-data.mjs\n?? scripts/verify-cli-browser-parity.mjs\n?? scripts/verify-no-copies.mjs\n?? src/bin/mhfe/container_repair.rs\n?? src/bin/mhfe/container_search.rs\n?? src/bin/mhfe/made_password.rs\n?? src/bin/mhfe/phrase_length.rs\n?? src/detection.rs\n?? src/search.rs\n?? src/search/\n?? src/test_support.rs\n"
+    },
+    "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+    "sourcePathCount": 239,
+    "fingerprintAlgorithm": "SHA256 of UTF-8 JSON.stringify(sorted [relative-path, SHA256(bytes) or deleted] pairs); tracked/nonignored paths excluding docs/audits.",
+    "initialCapturedAt": "2026-10-08T17:07:24.843Z",
+    "resumedCapturedAt": "2026-10-08T17:15:59.814Z",
+    "laterCapturedAt": "2026-10-08T17:27:04.627Z",
+    "finalCapturedAt": "2026-10-08T17:43:59.445Z",
+    "sourceUnchanged": true,
+    "sourceManifest": [
+      [
+        ".git-blame-ignore-revs",
+        "3b6a79ba28fbdf5e5a3bdc94b36128233053ab3783ae4ac8233883ebf9095d2f"
+      ],
+      [
+        ".gitattributes",
+        "9194f2697ffccf6cdc853eb8b0b421b772f313d5c0d9183139d9f88efd8ffa8d"
+      ],
+      [
+        ".github/dependabot.yml",
+        "1e78870264c3a31cbcfc2432c954a52c8804e44b6640ef47c5d1a55e5a36685e"
+      ],
+      [
+        ".github/workflows/audit.yml",
+        "891f142fab2be1fc43cd13682202d24fcc58247cf25051f9a1a8c05a2642e18e"
+      ],
+      [
+        ".github/workflows/ci.yml",
+        "f7cc4231dab9095731bfc8777d3bf095bf1ec611e24cabf94273645a2cf7af40"
+      ],
+      [
+        ".github/workflows/release.yml",
+        "9bc753a0e7d9d78e69228ea79eca0c5bf3ba11cef116d2db3dea681c1eef4aef"
+      ],
+      [
+        ".github/workflows/vectors.yml",
+        "307a35510b170ccfef6ac25085b7ce56d6f7b721c9c77a1d17431bb1fa893a58"
+      ],
+      [
+        ".gitignore",
+        "05031c7f6c5dd003c9f615bcab3e8f173a2e9372e25d4c47067c3aea47ad38bc"
+      ],
+      [
+        ".node-version",
+        "10e4e07fe7b63d3da1d899ea0f9a7a3d78c116051fae44b9f245a53d6f665a41"
+      ],
+      [
+        ".prettierignore",
+        "28cc953ba42345279ba6137710f6e567cf6d7b07d04c48c443f685e5d8d6908c"
+      ],
+      [
+        ".prettierrc.json",
+        "5e9bfbd704ee9d71ffc436f95dc12ebfd7769dec48410b6663f14e41c4f3c65a"
+      ],
+      [
+        "AGENTS.md",
+        "119c272b14ea8c2428d830259f5be380d3d0ea0744cec6069433d8aabd9f9ad6"
+      ],
+      [
+        "CITATION.cff",
+        "780d08dbdcf152fe35f0a1143d155b0b3bd9e399d82bfe13ef36a12a32a59731"
+      ],
+      [
+        "Cargo.lock",
+        "c80fcc5f3bd5dfe967156dc4911980c6350975789ca84d36a1e09402e5efc60c"
+      ],
+      [
+        "Cargo.toml",
+        "790b5094e6e3314becdb854bca898c2c08aefb8760f743a64a048c353c12125f"
+      ],
+      [
+        "LICENSE",
+        "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712"
+      ],
+      [
+        "README.md",
+        "5fe5f8099278dbe022bf8cf2371612b42e429e2af67706b8db66c77874218330"
+      ],
+      [
+        "SECURITY.md",
+        "45213508b601bd19310c3e19b8dc15892333226a25438b87a97ddaf97b698a94"
+      ],
+      [
+        "THIRD_PARTY_NOTICES.md",
+        "d609fcf06be8c7a02d1ade9f62e16b7dcc2fc6b8ee4b4461b9d04f36a6a0afc6"
+      ],
+      [
+        "assets/mhfe-mascot.png",
+        "627e949b252f553d702ff75cdc5894874f0c112520e6d66f3683b270384d3b28"
+      ],
+      [
+        "build.rs",
+        "c5e586f0f3307da5d818286b98348f4794f4f379ecd4388bd0c4f070e95efb15"
+      ],
+      [
+        "docs/API.md",
+        "97db59a5f7162bfc27f7653ce1e16161af92e83a1ba93d6991e0f61182d3ce22"
+      ],
+      [
+        "docs/BROWSER-PACKAGE.md",
+        "92e44aaafcf837c2cabdf5b29f776f7512e111475bc3ad8bf7062dc356350807"
+      ],
+      [
+        "docs/RELEASING.md",
+        "65531f8c953d1fe4b4109d900dbf90394e2e48e91dc96201d873f47437148af9"
+      ],
+      [
+        "docs/measurements/README.md",
+        "fe340d2dedbd2e3db6078c7cac6aa269d339ea8069ad01c81a20307eeb71da10"
+      ],
+      [
+        "docs/measurements/c-engine-2026-09-29.json",
+        "1017997e8fcea18d674ed039846381a3fdc67381eca374ed6aa0f3177b0a9ad9"
+      ],
+      [
+        "docs/measurements/full-operation-2026-09-30.json",
+        "082818a6db92dc275f2252d34bcea82dfa38cf967a2e95b3b2245e49835ac727"
+      ],
+      [
+        "docs/measurements/local-browser-pim-0.json",
+        "30d01d5d43666fa6332273182baccb58a95a2c689716b5c02ec3935540442799"
+      ],
+      [
+        "docs/measurements/local-pim-0.json",
+        "b84d41710a24d3d975f440b41316779b14fa0d508f6577db3efe41dbdec580cc"
+      ],
+      [
+        "docs/measurements/local-pim-1.json",
+        "ad0cdb05642d5174e559699664a5ffc39ace01de1dcb20801f882fb76e066e1f"
+      ],
+      [
+        "docs/releases/unreleased.md",
+        "3ed25aca4d8ec1a401fd9750dda1e3e1942072c75bdc30bdec116c1215728345"
+      ],
+      [
+        "docs/releases/v0.4.0.md",
+        "7d2e5fc4a687a41875a179bbc96190710bab17b358e7f2d1526b14c99f46d0e4"
+      ],
+      [
+        "docs/releases/v0.5.0.md",
+        "ccdb786e08f245fdd65cf11811d27cff9ed16ed005257fd621f0591ed7f65cac"
+      ],
+      [
+        "docs/releases/v0.5.1.md",
+        "321592caf1362b306aaa75373c899069f33ce4cbd39dc2bfa8dab6c517c1663c"
+      ],
+      [
+        "package-lock.json",
+        "f491c145fbf224b03c7fb3cb04e97ebbdd16a95f5f3558dca5a1507669a5b360"
+      ],
+      [
+        "package.json",
+        "d698c1b911ce932362f4c9db57fdfbb71a7a9284d1c639d1bab2d92b58a99e86"
+      ],
+      [
+        "packaging/Dockerfile.reproducible",
+        "09c65249dc1646b825478405a7f50cdeffc9c1ba94bf8a83861c1763a078499e"
+      ],
+      [
+        "packaging/Dockerfile.reproducible.dockerignore",
+        "39edca5569e65af93b10363a3a8347197b07914ad29a74347d5dd0f6b2625df7"
+      ],
+      [
+        "packaging/mhfe-fast-mode.py",
+        "400db463129314dbc57e81ca742de51bfe011fe4f9df25e6f4974683cfdc1a28"
+      ],
+      [
+        "packaging/mhfe-launch.bat",
+        "11699fac8fb3e5208c0d9e768d1a33b5f03e57b90d6d84c2b8db3ba7790bcd5c"
+      ],
+      [
+        "packaging/mhfe-launch.command",
+        "1692f3bf2fe093eebced285e89a0f907716701fc9c668712f2729ba0b0baa2b2"
+      ],
+      [
+        "packaging/mhfe-launch.sh",
+        "37fd96f625df1e5347a950a1b25ae0b074b0badd67470af09552f3e685d695e3"
+      ],
+      [
+        "packaging/remap-builder-paths.sh",
+        "f46eb32fb46d964769580c60fa021a18897cd90b193d284eea8b508e43c3340d"
+      ],
+      [
+        "rust-toolchain.toml",
+        "a74ab31610ff993abd88ec2eeda79ba62dfe6f3694c2328b2bdccca6760308cb"
+      ],
+      [
+        "scripts/build-argon2-wasm.sh",
+        "d83e0725574f1ea49e357ba4400834f06403786bf5f3bc48c846ed082f7f0675"
+      ],
+      [
+        "scripts/build-browser-check.mjs",
+        "191bb45919a5c8dd2cda218d654b7910b629e72a61331f835c8e21b1797e997b"
+      ],
+      [
+        "scripts/build-reproducible.sh",
+        "49b902e40c39eac5f8b4c0b838be9738a8d46ea4037248bf2a9ce431843f2944"
+      ],
+      [
+        "scripts/build-wasm.sh",
+        "37e562bddc7f8688aa5e30cf2dc0d19170f9f68f1f534b8c86cb3c7e8b5e1711"
+      ],
+      [
+        "scripts/bundle-browser-classes.mjs",
+        "5e4ef3d7243990a344cc779c5415ff495065a4fb515301fc9c2740cdecc88e4e"
+      ],
+      [
+        "scripts/check-release-artifacts.sh",
+        "e834248963487a61c80cf18c4d84fc2630a105cf7d993a51aafd1b766eae6645"
+      ],
+      [
+        "scripts/check.sh",
+        "5d09cbdcc5d84b0024b6dc7b233e4e9ca407e180427cb9d665ef7cd758dc92cd"
+      ],
+      [
+        "scripts/generate-published-rounds.py",
+        "2c7f53723d9e852b80aab23f1fd9944b3ca6b5497e4eeab44fc15542a1506ea0"
+      ],
+      [
+        "scripts/independent-suite3-requirements.txt",
+        "92bdaf4642e0ed7dfcfc88ed091b0819a8d7b49a318de13b86b64854e6540049"
+      ],
+      [
+        "scripts/independent-suite3.py",
+        "bcc12b46f4cf91e94542627eb79c748f562814b64ed6cda5cf978eb6acb20c07"
+      ],
+      [
+        "scripts/independent-suite4.py",
+        "72a9b15b92d06da82e185417c8d23bc443f401110e543b1a972d777ccebc1cbd"
+      ],
+      [
+        "scripts/package-release.sh",
+        "8a4ae40e70d4a6e15adb1de1efe5f391c23323d029b3bacfe730cb91668f0ba8"
+      ],
+      [
+        "scripts/public-test-data.mjs",
+        "2279989d1dc517bac5e1d6fe271e39e7ea2563a8d64f40f7e76e5ad9ec4eac65"
+      ],
+      [
+        "scripts/remove-network-code.mjs",
+        "3a28d3f1c7d45912458a7e181400ba3052ccdd8daafe19c030b422ef8d6a8083"
+      ],
+      [
+        "scripts/stamp-build-id.mjs",
+        "841f713531c7f282eed39fd4641334726df1351848db68db4a46d6656ae6927e"
+      ],
+      [
+        "scripts/third-party-licenses.py",
+        "7c7b6ff369a12575c8b9e4fc58d885d5f999bc753e667d54929fc6f6acd66d4b"
+      ],
+      [
+        "scripts/verify-argon2-wasm.mjs",
+        "c1c75e906b7115c08ad70e481b306bd1c68910afab5e268d7fedc112223da20b"
+      ],
+      [
+        "scripts/verify-browser-package.mjs",
+        "3eb26f852055ada35465f180e5b30c908f375159afa12ccab0e7d15ad4cf2712"
+      ],
+      [
+        "scripts/verify-browsers.mjs",
+        "b54adf661c34070049c877c930acb38263e477b5a3c9ce1ba5f8136c6f33753d"
+      ],
+      [
+        "scripts/verify-cli-browser-parity.mjs",
+        "bfb72c6a3aa5619a7fd7a96cd1a02c45254cc4df45cbeb740c73a767f0a94bf9"
+      ],
+      [
+        "scripts/verify-fast-mode-script.py",
+        "a90620304aa4d56c628660977a3720db1a17da4c5718996f94f8cad79fdbfa68"
+      ],
+      [
+        "scripts/verify-hidden-input-windows-requirements.txt",
+        "99ba185189b3f7b62d1f345dbe72068417ae061f51b3b4febe5673c92da66e78"
+      ],
+      [
+        "scripts/verify-hidden-input-windows.py",
+        "e969adfa3573cb2e8d319387243a090538694f20a489d249c722bde82c8c0d14"
+      ],
+      [
+        "scripts/verify-hidden-input.py",
+        "46790154bb5492c1d2e16659c2496e061e1aecfbb2c4e46f5a9550063d799522"
+      ],
+      [
+        "scripts/verify-no-copies.mjs",
+        "80a917f46512189876aa7e55c18de5baa705e44c23160725d82671bf2269191d"
+      ],
+      [
+        "scripts/write-package-manifest.mjs",
+        "e663fede05b5c9d019ed9b3537f485a2dfb5e0e69387e8157e4dd4748998ea58"
+      ],
+      [
+        "src/bin/mhfe/check.rs",
+        "1fee9a7b915827ee424e71122eb622510b7cceab2808c2013a44908963b89c35"
+      ],
+      [
+        "src/bin/mhfe/check_word.rs",
+        "cf593122e10f51f0fb766f7a08f04712422eaad9c41e8acc52acfb9f5e6e47b9"
+      ],
+      [
+        "src/bin/mhfe/choice.rs",
+        "fe5fcf1d0012a6477797cde2feb7745460b5597b81011e013ed1fbe7da2e342c"
+      ],
+      [
+        "src/bin/mhfe/container_repair.rs",
+        "9ba62d23835fad52ca313fc7fe2e0fa59e16601d4c65417daf3adaa60aaf213b"
+      ],
+      [
+        "src/bin/mhfe/container_search.rs",
+        "79c8288e26543aec6877cc358f143f7f37ef3a8ec5a660be55f56e25a31754af"
+      ],
+      [
+        "src/bin/mhfe/decrypt.rs",
+        "378780fa6208b08f34596016c5a5d8ee3b0fac4b40e2f9c2dc2e50fb27421605"
+      ],
+      [
+        "src/bin/mhfe/diceware.rs",
+        "5d4033962e2f3c86740552703575ab0fa4dad9317c61f02ce522df2b73e06c29"
+      ],
+      [
+        "src/bin/mhfe/encrypt.rs",
+        "fcea46dfd1d7f52d5066ecacda5cd1d25b0b2ac8a5bd15e40ccb9289758a1dad"
+      ],
+      [
+        "src/bin/mhfe/exit.rs",
+        "0f30f8064ce1bc8d0b4ba392b7bcd35c9ff62c3adb55c8373752701d63a8599c"
+      ],
+      [
+        "src/bin/mhfe/flow.rs",
+        "67965eb35211698756de33d8cb771d643c06e6adb74e3ab9d3d122acbaf6b636"
+      ],
+      [
+        "src/bin/mhfe/hidden_input.rs",
+        "8ef0fb8bad46624e9658945c67731968bfe51a60e45500ee87cd86174e2ccca7"
+      ],
+      [
+        "src/bin/mhfe/length_choice.rs",
+        "3d1f877ad28111a4a7bb1b0deee9c4f3b1994dede4e731ad5c29ae629bc6e2f3"
+      ],
+      [
+        "src/bin/mhfe/made_password.rs",
+        "5e21f8d1dc423049248ecd168183ee3bfb9faeebf83e65e1ec9d380ad01a07a9"
+      ],
+      [
+        "src/bin/mhfe/main.rs",
+        "9099a8dafee741d1c3f2f37b64b6a23341866659954d9129873ff7911f6395be"
+      ],
+      [
+        "src/bin/mhfe/menu.rs",
+        "19d6d0215eb951bff116d3ef352f17aba792b0f60588c7c96889134121bc0b96"
+      ],
+      [
+        "src/bin/mhfe/new_wallet.rs",
+        "fedad5803b6db447614400dc39b8e1edf79b4577dd261fd1d8f8eae7e755b19f"
+      ],
+      [
+        "src/bin/mhfe/phrase_length.rs",
+        "b296aaf55a42c674b7a4dc7c56aabab5fea60598219f02f03e138c96a5df41a1"
+      ],
+      [
+        "src/bin/mhfe/plate_repair.rs",
+        "deleted"
+      ],
+      [
+        "src/bin/mhfe/protect.rs",
+        "e46fab18143049e9f50831bbb0d62e2e1617452d125a745bcfa78d02839394cc"
+      ],
+      [
+        "src/bin/mhfe/readme.rs",
+        "c43f3487df94bfaab90051b164a0b9714d81f131c758c5a06090c065556c4143"
+      ],
+      [
+        "src/bin/mhfe/rekey.rs",
+        "ebcdb746ab67cea728ce696c06211326031d1b7a52743e411d7bb072992c5a93"
+      ],
+      [
+        "src/bin/mhfe/self_test.rs",
+        "21e810dbc848c6f2d8e25c47a84efdfacac1b2fe64436bb22071f882af0c609c"
+      ],
+      [
+        "src/bin/mhfe/serve.rs",
+        "93e51f09a58a0a3a0024441383648313cecfaf58c49d8b3b62878ae0483a6bcb"
+      ],
+      [
+        "src/bin/mhfe/settings.rs",
+        "4329ad1bfd5c38feff278e8ebde652eba3290ea274e1adbf7c7c9c54dd6593ed"
+      ],
+      [
+        "src/bin/mhfe/startup.rs",
+        "e4034ac09e8d7eeeeaed9de48136ff97284c4785e0481120c5ac7bbf5e31d162"
+      ],
+      [
+        "src/bin/mhfe/style.rs",
+        "1765a85ae1d6c7f854757ae96858ab4150e94d9542b4f6d319da4a2df54259b8"
+      ],
+      [
+        "src/bin/mhfe/system_random.rs",
+        "ece8027f4b847dcfca7f10c55bd488fb65df29bf7486e1d17631f632cdfb189c"
+      ],
+      [
+        "src/bin/mhfe/terminal.rs",
+        "31b1a58f001186b16f5a8ce8c440ee47aad08c66173d19f04785b2402b32d19f"
+      ],
+      [
+        "src/bin/mhfe/test_tools.rs",
+        "8c2a1e9e95383844f9983ff7d20d5c81254b4b4453f4970163193fec160b83d0"
+      ],
+      [
+        "src/bin/mhfe/wallets.rs",
+        "72359952f693aa944b72e5c68dce765b1cc198c0ce3e82ed4fb4bfb5b840f32b"
+      ],
+      [
+        "src/check_word.rs",
+        "8f04d29df6ea5d96f472eafb5dee55df71a88dad1148ba43c05d50bd5a71126d"
+      ],
+      [
+        "src/check_word/known_answers.rs",
+        "8f58ceb5fdcc010e01c57fc529612018b5b3995f21b6ffabd26094e09a7e3095"
+      ],
+      [
+        "src/container.rs",
+        "d819cea35bf4b246d7457e1666a5e37516215e32b31c2f0dbc897a6c6640910a"
+      ],
+      [
+        "src/container/known_answers.rs",
+        "46907e43d0a416de273cbad5644e6b9dc57589600e755d0ffbc8c73d2f2a5c0b"
+      ],
+      [
+        "src/detection.rs",
+        "853b63d4b3397a55601ae44655b1be3497d5baf12c4a767694f5fc571134e7b4"
+      ],
+      [
+        "src/eff.rs",
+        "f80bc689a229d57f4b28baa460867d663aaa34c121bfd5a8ad8236c32622f1e5"
+      ],
+      [
+        "src/engine/argon2_simd.c",
+        "91881d234ac1668020ebaff3c4c81e3b941739aa9db503a4a0231f907c7fb3dc"
+      ],
+      [
+        "src/engine/browser.rs",
+        "299f355a9904a2946bb52147d5f7ea9913354be1b7674c528adb0290e6fbabf1"
+      ],
+      [
+        "src/engine/cgroup.rs",
+        "0b4a73a1d6c4eff4a836480c852a68fd7608bc6162e2455b25fbd3b1fcc481b2"
+      ],
+      [
+        "src/engine/ffi.rs",
+        "e6fd2de0e4146b0931425de44830e4c82c1996acb9daa9aad9b2870bb6839947"
+      ],
+      [
+        "src/engine/known_answers.rs",
+        "db8353c6cb1598f96c0c2a919b4c3b0e5cbdeced34fa2b9aa3a8193286951a94"
+      ],
+      [
+        "src/engine/mod.rs",
+        "d7b9d75953a81b863cd067f3342e2f4c73de143fb6383b2f8cee7727ac5dbc9e"
+      ],
+      [
+        "src/engine/native.rs",
+        "ee3627797674b948fbab390c91ae464ec79c0ca13566d0192030bd2cbf9c4599"
+      ],
+      [
+        "src/error.rs",
+        "bdc3f13cc963ad6764df172c99bb2c32e263018a7766cb43301a8ac90d9f2e5e"
+      ],
+      [
+        "src/feistel.rs",
+        "9eaaaedb82b318bc38cef059c648ac9ae7201a7d6cd50d280aad22d9673496b0"
+      ],
+      [
+        "src/hidden.rs",
+        "d283c3f55a9f9d148655322067b7a83082e0ce21f8eb0950791154c2a42a9be2"
+      ],
+      [
+        "src/hidden/known_answers.rs",
+        "6078e3ba0d68afde0ba4623e8592204f4b11f83abd2c2ba732f89c199b6307d2"
+      ],
+      [
+        "src/lib.rs",
+        "748355388f3e4058caedaab134ee530a248d1ddaac153cfa7276c74c08a6732d"
+      ],
+      [
+        "src/memory.rs",
+        "aed46884e7a6550254f70475041870a58805b64b6662d2f527de17a5292298f7"
+      ],
+      [
+        "src/mhfe.rs",
+        "1936c5281e1aed6ee96dcbe5c4da3d9580e39212142559c78e1ba43630120d5f"
+      ],
+      [
+        "src/mhfe/known_answers.rs",
+        "474fc6f32c3d71c0227032cb41bcea7a0a7e486c7e54f202e4f2d69526150bc0"
+      ],
+      [
+        "src/mhfe/published_rounds.rs",
+        "e2d74b3d0f6ecc57c08b6c7f27832d48c7256cd019b472041c83f8a9a1b4b0a4"
+      ],
+      [
+        "src/new_password.rs",
+        "7768c637e0cfdbe90301d562fbc529c4e0868f20313ef71d6d8f460bfd9fc515"
+      ],
+      [
+        "src/new_password/known_answers.rs",
+        "e8c5584a8e0da07e2b7387748ebde854de5669da4e8192e34f8273796e212232"
+      ],
+      [
+        "src/operation.rs",
+        "fc55eb8fb9e1b3fb28769a2eef3fbce1a43e819997ce8d7fba06ccd40062a0d7"
+      ],
+      [
+        "src/operation/known_answers.rs",
+        "c98e5c991b45b221383c8b37d3e6f57b4ec7ee02a826e023297a52a6d8022074"
+      ],
+      [
+        "src/packing.rs",
+        "450215e144f6d4c316398742a05c76445ec5fed36c10ef5616f948a4792547aa"
+      ],
+      [
+        "src/password.rs",
+        "6c2b1bab6c6d4ae52ccc6479df7033785dca32f8bb6e23501dfa810d1dc51e45"
+      ],
+      [
+        "src/password/known_answers.rs",
+        "f31a59cc5288ca106edf9a9f163390f67946d3d34aaa33035906e0ecc1687308"
+      ],
+      [
+        "src/phrase.rs",
+        "c4fe57f1b26e9bf0f2c9c67109411ea8edb722d351095de21f90dca2f9a0bf90"
+      ],
+      [
+        "src/phrase/known_answers.rs",
+        "f06bc3c28ba129e0c46e0ea94cf5190653f55cbc7da1a7ae11414fe0cc0512d3"
+      ],
+      [
+        "src/random.rs",
+        "8be1c17cf73b92695314ceb3a84f56b141abf6f1a39fd92c007fdb39a84b2532"
+      ],
+      [
+        "src/random/health.rs",
+        "d44f8822979df70e70b9bca8e04b382fc7372bc2aa2fdcaec7b2c1efec448d92"
+      ],
+      [
+        "src/rehearsal.rs",
+        "4b04f59b9105ae1803fe0aba15354780513263bac2d98391b02d15177be2cda3"
+      ],
+      [
+        "src/rehearsal/known_answers.rs",
+        "622f59c5503d4cc801f02e2986b03c165e7cbde60549b6916356eff8b276463d"
+      ],
+      [
+        "src/rekey.rs",
+        "ba6f810dbf64b71f2fa4b257e4eddf7ef65396e8bb91b65c89105fb7d2d6e89c"
+      ],
+      [
+        "src/rekey/known_answers.rs",
+        "0aa5726e95d231696782006cd36e72808ba3425f6472c195d849f92a3e504035"
+      ],
+      [
+        "src/repair.rs",
+        "d45db4298352727a563bf2b36604473f7e33370084c483e22396fc20663ae112"
+      ],
+      [
+        "src/repair/known_answers.rs",
+        "5ba35b2365b9ba3baf10892c5645abc42148398b4f6fca64c3739b3d12357772"
+      ],
+      [
+        "src/search.rs",
+        "2483cdac61b3486455bc97e2a7f2d984274d4817e643db0ffb9f905fa95c9848"
+      ],
+      [
+        "src/search/known_answers.rs",
+        "6914011f6034d61d8b0ae452a61948bb04f9952cede94ec15bcb6e4d490908fc"
+      ],
+      [
+        "src/self_check.rs",
+        "0a6f0a44001a957cdf26d8638a2e4157da9fd5bdd253656609423655a607ddf4"
+      ],
+      [
+        "src/self_check/sets.rs",
+        "299e30924926fb650d7f1acf346738368ea8b546dd898dce973c2a29e5a64bde"
+      ],
+      [
+        "src/self_test.rs",
+        "ad955c50bdc10f4470157a781e504fbcd9e6c708cd3ced5a1def35556b9d6436"
+      ],
+      [
+        "src/strength.rs",
+        "546e69b1e209abd7f76fd08095dcb079e80593677ef7713ac81a83cfdd1aa6d6"
+      ],
+      [
+        "src/suite.rs",
+        "dbd4b65fe2b7395b33a13264ab2a12b9c137cd113aa94e5fc257cceb6d82dcb3"
+      ],
+      [
+        "src/test_support.rs",
+        "98044b9928505356f0342ed5229f68f8246781b56ae04686b96bd5b25f11ee79"
+      ],
+      [
+        "src/validation_cases.rs",
+        "bdb8941fc6f40db1065dd711dd6420411fc8275a042e80d8f4057d0fa9465c2a"
+      ],
+      [
+        "src/validation_fixtures.rs",
+        "06b42e2a3d91257be88d8ba116938902eb65a479cc3f6709ec01fc20f7c99309"
+      ],
+      [
+        "src/vectors.rs",
+        "c5c434dc750795c51c94cccf8d89a1779255e5a4860f14b3d9f51385fc230898"
+      ],
+      [
+        "src/wallet.rs",
+        "8b4f4664decd63c446c421987551263ba74c340fea90c21522976d231b2dd774"
+      ],
+      [
+        "src/wallet/known_answers.rs",
+        "43f63f7ccfdd7c9a88c544160606ff3c2889539f3a778f7467fc1bddbefcefaf"
+      ],
+      [
+        "src/wallet_check.rs",
+        "2aa38f058d9e0b97bc821fe89baff12329358b758dfa272ed2774effb28c5bbe"
+      ],
+      [
+        "src/wallet_check/known_answers.rs",
+        "1f8f4fd5b6153e2e5776635465f213796f6a39d5c2f6c89af7a02564e1817df7"
+      ],
+      [
+        "src/wallet_check/threads.rs",
+        "990ec65046257794c91d6b9a662f96dfe723b41a1e63c25583cd89db02ca2637"
+      ],
+      [
+        "src/wasm_api/core.rs",
+        "34722401f02be4bd9f16975f02957ac4d4c03fa2285d5ffa82ebae75a6fa847c"
+      ],
+      [
+        "src/wasm_api/mod.rs",
+        "895891c82e6d768c47d8ace69577e9892c200735f737c13b73499997725adcd2"
+      ],
+      [
+        "src/wasm_api/passwords.rs",
+        "677084ee966c6cff0f5daf14e232dd98c977e9fa0da475c6cb6e573780996d30"
+      ],
+      [
+        "src/wasm_api/repair.rs",
+        "49226e298d48414cb431ab0e384fad011466ea11dc33efe411e947364bb81df8"
+      ],
+      [
+        "src/wasm_api/wallet.rs",
+        "88d6aba95c58f67576cb3f84c59eac452ca5b46d4117e6ba07cfbfe56b5f24e8"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/SHA256SUMS",
+        "d69f6386d81ae1c6e44acef9fb8e4887b046f370731cd05637b59bf5f97e4be8"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/ambiguous-12-21.json",
+        "25753ba121d3214a155937daf2fad4bd2c03c25e5b92a5775b7fa66bf2606db9"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/independent-verification.json",
+        "9c0afe58c6f7f9f0682dbcff238e5e8f96abbc02cfd44921612d05f1b3df7cef"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/negative-cases.json",
+        "e301f073b3c83c3fdc68d024d52e373077a812188e65f7d5dc51ed01051d5e4c"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/nonzero-12.json",
+        "8f4b734576fa587b0d4d9501cd1b07b8b8da50da15b2b3fd566a616699dcf36e"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/nonzero-15.json",
+        "873ba1bf7ea5ce6869bf033b419cacadcea72faf9ea499a423f3ff33d80d5029"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/nonzero-18.json",
+        "1d205a0dee624f5d87e670e753ba000a6ff3b20d41234b8473f5d3bf9e40b644"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/nonzero-21.json",
+        "e27709261d4a680555f71d0a1c6a08838cfdc676b408ab256c989da8b018435a"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/nonzero-24.json",
+        "003d520febd74ef715a6e092aed138ff5b9a5fa0a889a7d15416c5f3195621d6"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/spaces-password.json",
+        "211c46cbfcc3508ba7d0730276c11beeed969f722c64e9d4667cc4be9a02682d"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/unicode-password.json",
+        "fb9580bd1d05f95718cacd861481fd1d976673089e3196b85f7d06a349172673"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-12-memory-level-1.json",
+        "6c8571515abffae035515d158a5ed54de4cdd392e13cb971f2293d6ac717be0c"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-12-pim-1-memory-level-1.json",
+        "08180cfc999c142b507a2fff397db01468b1fb350fccff389f2ad49c8f2af1e5"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-12-pim-1.json",
+        "1b1b386c1793fbcb1bcc7e2dddd88430eb748bdc65d12a9b8e3358905580a550"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-12.json",
+        "ae05b76a2f8baed5634206631a1ed015dcaaf029cee226f05147a3c650eb036c"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-15.json",
+        "e13d3e3ea6a7095c7e78368e1237cce3ef881597f72863e054a6177ba28e380a"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-18.json",
+        "3f4c45bf18994820d8382053e535be08e7fda79a275e70eaeaa5fe5006745cd8"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-21.json",
+        "eeb426372070570466c0342ebc533a9de39478dbf4952a11e5f54c6d9aaf8503"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-24-pim-1-memory-level-1.json",
+        "e7d4827d18a5d237aeebbbe23595848d8c121cab21cee73d44f7044df53b3134"
+      ],
+      [
+        "tests/fixtures/suite3-vectors/zero-24.json",
+        "00f592f3498c42643694e9051a0dde0a0b24c433f65698d5c5db52b724739c47"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/SHA256SUMS",
+        "9433eff33a494436e6f4709e0d003472c3c9b53b528b0f770f9769ae47fd583e"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/independent-verification.json",
+        "a0f0eb9b8f2ac7bc654c7530514e39d0e4b01695cf4b6ff9862a06113f2e7555"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/negative-cases.json",
+        "b291ef696ac588aab677872738b863701af8322ce32c2a92e58d08863d825544"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-nonzero-12.json",
+        "21d28c22dcc0e1e1707826ec97a11e45232cc077447c231dd8f72ea8429ae423"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-nonzero-21.json",
+        "1e110c1f1f09cddb9ad63bbc050158a96dcff7e8d2f658ba777a95d1b233b8ec"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-unicode-password.json",
+        "1d8f560773b21d4a6259913e7eace65baa02141acfd27ed7cc39b34e9354bb98"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-zero-12-memory-level-1.json",
+        "30fa7aa8328bd994dbbd90ec5477a3c5cc0c840da5a82b3cd4e278cc73ed1fbd"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-zero-12-pim-1-memory-level-1.json",
+        "8cb1a1c706069b89fb169b262a3f2e747d3d94cc2a5b48e6dfbeb3bb56dcf6c6"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-zero-12-pim-1.json",
+        "40f0f50756a008fbb6f5eb7e322c683ec1ef75c27e44b834e3682a8aa0be4124"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-zero-12.json",
+        "84f8666cad189ea5c60981e623fad1c1b24405f85520c8245169009db0bc1d7e"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-zero-15.json",
+        "b5f380c90846ab2cf9d8ca076e075e87b038595d70e84ffd1587c3392f2d26e7"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-zero-18.json",
+        "40696a57cb3cdc2ed3fce129d2448fe3e29512370f1a0f9974f22ea029926371"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/same-length-zero-21.json",
+        "edb93d774b6b906d04b2884c89114a525e2621d36d243747028c7f62440c2d9f"
+      ],
+      [
+        "tests/fixtures/suite4-vectors/validation-cases.json",
+        "541826d453b845d7be51ed41dbf967814ea965b0e3127ae8b6ea57dc2f5e7e40"
+      ],
+      [
+        "tests/fixtures/validation-cases.json",
+        "92ced6ea44f3bcc912ff1aff50d1c5e1e249268678818a1e1f10a9178db0fecd"
+      ],
+      [
+        "tests/suite3_vectors.rs",
+        "a9848b1ea52a33baf61ed7fdcb4785777beac5ffa3836845c8a7023b9701828a"
+      ],
+      [
+        "tests/suite4_vectors.rs",
+        "ff19934fc6be1c40ed050106674737afd756325fe8a2673a774dc296c6c92183"
+      ],
+      [
+        "vendor/eff-large-wordlist.md",
+        "7bef082695a465836a7709fb049d67533486bff653107b796e1feaebb42d2f38"
+      ],
+      [
+        "vendor/eff-large-wordlist/eff_large_wordlist.txt",
+        "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e"
+      ],
+      [
+        "vendor/phc-winner-argon2.md",
+        "cff876ec2e397ace44e686658495ae6f8108ffd4205d6c2dee55816824bc3bac"
+      ],
+      [
+        "vendor/phc-winner-argon2/LICENSE",
+        "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590"
+      ],
+      [
+        "vendor/phc-winner-argon2/README.md",
+        "1919b5242169e14eea169b00f0444d5a3185e2bd13883dac962d73754313b6d7"
+      ],
+      [
+        "vendor/phc-winner-argon2/include/argon2.h",
+        "25ed629feca91ca9d361441160c6fbc10318bb0fb3757555b418ed47b705b35b"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/argon2.c",
+        "b1289ec7134e8502e9113396fdac89402bf2575ee1b35e33fb7410f2fb63bb6d"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/bench.c",
+        "34f00696758d816cb7991d78b625343725dbb87282e0d6a63625d21263cc8bfb"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/blake2/blake2-impl.h",
+        "ec9884fe834c30eb362f0cef3432a43a5c496b0d6d1d637a5a590a45bec4d79c"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/blake2/blake2.h",
+        "196cd9adf0660474ea04cb686c122f3ca8c758445c5ff0806f438e6412ac8423"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/blake2/blake2b.c",
+        "7eb2f3faac14c532fb75f645f518686f3ef0db4c7b9849a1ffc73d262b596281"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/blake2/blamka-round-opt.h",
+        "38772a3fc29db218a1833b8fa326cb95f98fdc2cda1cbcbaede928a2d8d32b41"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/blake2/blamka-round-ref.h",
+        "8d5fc886bbc0b55af10ac6f1e9a5995a4e8d4abace46642fb1832c84d38c3007"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/core.c",
+        "d6ddc9e28c51d2c3b0d542c0c4678c4d9d788da048e4f557166030d0ef62618b"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/core.h",
+        "32f6ab8c0c313d9336d2731a001426b68d246bba5b362fabeaf593c333da7d37"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/encoding.c",
+        "7b9a0c019abc6fca7e6e0a9abd2f7b22a885f8831827cfbd4bfd4502dd9f7806"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/encoding.h",
+        "a4e0681ef4b0eb229a35760b603b7a32e9019cfe98c31732f747f087e5e39828"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/genkat.c",
+        "ff441d21a2f2191556ec2e1e147a5f40f9d1d4483c9fd07fb9d186c9297f5d65"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/genkat.h",
+        "3023b7698a8b63d0b31dfd959504fb7a47161be10eb2d1b4fb73994e7d2dbc83"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/opt.c",
+        "f8776e4a2f824beed34634f3024a95fdbdbaedc2d17a990b752a89a3f963227a"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/ref.c",
+        "9ac347fd8dc737af69bbb93d56ac8b4ab5488152f606880c8d7fc4592e207647"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/run.c",
+        "88e26b56a36d411e94a6605083d00dca9f54d0af34bd9a0f35109d07628c66eb"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/test.c",
+        "ec518844e823fb6a1bd38f79f2b5d1bbddf23f490c0a343c450aa8e3f5af5988"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/thread.c",
+        "af2ab481fcf5ef00f1b2deb346bda3642797b417fc0ed98bfb7ae80e716f90d1"
+      ],
+      [
+        "vendor/phc-winner-argon2/src/thread.h",
+        "650e713fb584de2e6aeb307e64228f95cef733ea667faa0bb111960aaace30ef"
+      ],
+      [
+        "web/argon2-engine.js",
+        "9b0f97e5c01bbed05aea5889f078987049ca36c749f6bc91148f165338e50a0b"
+      ],
+      [
+        "web/client.d.ts",
+        "9149825b578cd187094a2270af904c858b8f8c5b3eb68be5db1143671e1c8df6"
+      ],
+      [
+        "web/client.js",
+        "78b1f63669e81573ca239f8558e166145e0ff87955cff59b65173b77e0d3ef94"
+      ],
+      [
+        "web/core-worker.js",
+        "d89e5514c023136bca9c4c8cf0f0f400ac27fe5aaf24cc3a5f1a2e4b256c8725"
+      ],
+      [
+        "web/passwords-worker.js",
+        "b701150592eafbea7f7b59de11e2be1f5698d28241bca2b1eb2f328021a7aade"
+      ],
+      [
+        "web/passwords.d.ts",
+        "94472a705d456909cd51f7cfbb5fa29971b5b0135afb64f08554f9e3eb1a9184"
+      ],
+      [
+        "web/passwords.js",
+        "dc345fe0eae87ac1f8c51f51eccb28557e063dda805e51fc967e3f03ba9ae9bb"
+      ],
+      [
+        "web/repair-worker.js",
+        "d4086eaa0ddb2996259d34913fd018c2d6ba684a2aa5bc7e7da93cbfa65d5929"
+      ],
+      [
+        "web/repair.d.ts",
+        "b6e72947711806cff42a00fd60296f1eb9f4fab716a9d1e856e545a8473b54a6"
+      ],
+      [
+        "web/repair.js",
+        "de96da15209d49a86ce101c69f0513618b25258f7c3f261de7b90dea80afaa7f"
+      ],
+      [
+        "web/runtime.d.ts",
+        "fb6fbf6dfe4829ad5a180648a7aec457369e62df93b8a0cf6bde463568acc042"
+      ],
+      [
+        "web/runtime.js",
+        "a22e35d39a4422bb5585b2b5160e0cfb99c6dec4a0dd2743d39d97e15caedc4a"
+      ],
+      [
+        "web/wallet-worker.js",
+        "1b45b5bab97d0e530918c57b3b6b5145adb85068c76ca7c5eb7681e382cde0bc"
+      ],
+      [
+        "web/wallet.d.ts",
+        "866b837ffae8f362755c6a42a0bd792bb9269ee65af5db3fd58a373ee8d01f84"
+      ],
+      [
+        "web/wallet.js",
+        "69cc7cfd9fba527455e8a8f95519dc44c4456bc0e0c266c9a7e7b2abefaf2cfc"
+      ],
+      [
+        "web/worker-runtime.js",
+        "f253187d87c1ac54daaf46558523b6167ad4212b1cd980816dc99d369ec57e55"
+      ],
+      [
+        "web/worker-start.js",
+        "945db88d8fb51acafa8bab63eea8019d8713bdc7ceeb980cdb703822881bf794"
+      ]
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "target/debug/mhfe",
+      "sha256": "e8cbffbd70dd17cbc57bc17d2e8d3fec0b22f7b2962b4435677e1085b4f7ad4b",
+      "relationship": "Existing debug binary fingerprinted; final complete PTY suite uses the fresh optimized executable"
+    },
+    {
+      "path": "target/release/mhfe",
+      "sha256": "3d29cf3df0fc9f18aa346561eb2210e4b25e30ea45d72e33b482444239e79d72",
+      "relationship": "Fresh locked release build on unchanged reviewed source"
+    },
+    {
+      "path": "dist/runtime/mhfe.wasm",
+      "sha256": "fb57141b4ddb1f3d9f81ddc7126566f2d24ef4ad7fd772030c4318624e73cc5f",
+      "relationship": "Existing fingerprinted artifact; dist source/stamp/hash/freshness checked, not canonical reproduction"
+    },
+    {
+      "path": "dist/modules.json",
+      "sha256": "540bbaea0e59398deaab325ea6f7e823cbcfcbdc45bf017f240e70f5180bc06c",
+      "relationship": "Existing fingerprinted artifact; dist source/stamp/hash/freshness checked, not canonical reproduction"
+    },
+    {
+      "path": "target/release/libmhfe.rlib",
+      "sha256": "6b61536ccc2773767c0ed717f24d27a5eea2a708cb06dfc495a5ab110d527d13",
+      "relationship": "Fresh root locked native build; public compile/runtime probes use this library"
+    }
+  ],
+  "browserBuild": "87b59adf1581d771",
+  "scope": {
+    "repository": "mhfe",
+    "included": [
+      "Rust library, memory owners, cryptography, RNG, validation, packing, Feistel and suites 3/4",
+      "Repair/search/recovery/password/reference/wallet/hidden/check/rekey/self-test modules",
+      "CLI input/output/delegation, native API and all five browser compilation flags",
+      "Four public core/repair/passwords/wallet classes, shared runtime/actual WASM/workers/sessions",
+      "All ten OOP principles, semantic DRY/lexical-gate controls and separate optional optimizations",
+      "README/API/browser/security/release/license/spec and static build/workflow claims, local artifacts",
+      "Fresh 32-check common procedure and dated follow-up of all four AUD012 findings"
+    ],
+    "depth": "Full-scope ordinary compact-team audit with bounded/security-sensitive execution; not release acceptance",
+    "publicInputsOnly": true
+  },
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "harnessHashes": {
+    "docs/audits/AUD-013-harnesses/README.md": "00ab53d01fd65cb567c8ca13823662cb98cbf2a8e89351df7b7ec71a35bffd1c",
+    "docs/audits/AUD-013-harnesses/browser/README.md": "f48c34ac2d87ade79987a15856cc7f24dfd15cdbedc47224e5c5da80d5ebaf20",
+    "docs/audits/AUD-013-harnesses/browser/draw-setup.mjs": "5021563e452b360abd36d66b6bccd75fd6699019d349725610c5e597d7fde3ba",
+    "docs/audits/AUD-013-harnesses/browser/draw-utf8.mjs": "263116e8acdbc61df31cccbfad5b72a17844c3d662bc13ab987f37445385c342",
+    "docs/audits/AUD-013-harnesses/memory-guard.py": "ecc77d6f0919e7518b312596a8aa01a82bbb3c4d7899055f2dbb5e244538d8e7",
+    "docs/audits/AUD-013-harnesses/quality/README.md": "ccbc1a57986f3a0476e50ac943518c8139da815cd9feff53a501c572de40e99d",
+    "docs/audits/AUD-013-harnesses/quality/clone-controls.mjs": "8ed7113a7850034a768cbe42c4751ba5c625f69193a0b58b7e6ccfcbdbd10c4f",
+    "docs/audits/AUD-013-harnesses/record.mjs": "3924dcfa8ec65a32959458f0fec059e3af29cc43ba282e8b4f231f347fd8d4b1",
+    "docs/audits/AUD-013-harnesses/rust/README.md": "3ecf925e092292696b4bd97bbd02af0d63b144a2d1451a98b1696a0bc2baa459",
+    "docs/audits/AUD-013-harnesses/rust/address-search-boundary.rs": "c9cbb24edc5575b841354e1140ad4a49399c52f7c7531858121e5b1a5226fc2c",
+    "docs/audits/AUD-013-harnesses/rust/recovered-read-consume.rs": "5a64cbda6aa66eb55f19f5dba7d803f80766a48a4fa71a289bf0bdb982e33327",
+    "docs/audits/AUD-013-harnesses/validate.py": "df46b95186c1b94ffeacf54d020aec9dd8b14fe2c784cf61b8e2798294d27ebf",
+    "docs/audits/AUD-010-harnesses/docs-build-release/dist-freshness.mjs": "f3ca076488660be524984f48603e8814e9daeb3546aa423662046841e3916035",
+    "docs/audits/AUD-011-harnesses/feature-clippy.sh": "4d60121c41ae7ed875899fa078836d038476caf44523bf40f4e125765788dcb5",
+    "docs/audits/AUD-012-harnesses/rust/public-mutation.rs": "f3d8c347934cfe38b0397fbb55955411bc99212da49bc20c961bd5c8903716c9"
+  },
+  "referenceSources": {
+    "repository": "mhfe_spec",
+    "commit": "2cd5e4c96a2bf2cc177f8b99b81fa7427bdf1b86",
+    "workingTree": "Dirty specification documents plus unrelated retained audits; no edits made.",
+    "hashCapture": "Closure reference files, not a before/after source stability proof",
+    "hashes": {
+      "../mhfe_spec/README.md": "547bbcc6799783cc3db8265adbe854d96592a51ad725f71d09cb79cc4f154de4",
+      "../mhfe_spec/docs/DESIGN-NOTES.md": "63113c1a47de19a3cde20d30ff95147395153ff4a31d103c25f26b430dc0bb47",
+      "../mhfe_spec/CHANGELOG.md": "8fdf606afa634e24198320adeab9dc67ef97fb910babb571fe83c143f13c35fb",
+      "../mhfe_spec/vectors/suite3/README.md": "4f3212a4ca64d12898a52bf9a8057bc3d210296144da55c5ffa0e871dd484621",
+      "../mhfe_spec/vectors/suite4/README.md": "f84862fd08db48c05776ebe22cdfaf78cdc520cd6423bf750821b63f5ea2a268"
+    }
+  },
+  "environment": {
+    "node": "26.10.0",
+    "nodeEntry": "/home/user/.local/bin/node",
+    "rust": "1.99.0 (b940084d7 2026-09-28)",
+    "cargoHome": "/home/user/Documents/bip_tools/workingspace/cargo",
+    "rustupHome": "/home/user/Documents/bip_tools/workingspace/rustup",
+    "rustPinSource": "repo rust-toolchain.toml overrides stale workspace summary",
+    "wasmBindgenPin": "0.2.129",
+    "emscriptenPin": "6.0.10; build not executed",
+    "prettier": "3.9.9",
+    "playwright": "1.63.0",
+    "chromium": "153.0.8010.12",
+    "firefox": "155.0",
+    "os": "Linux",
+    "arch": "x64",
+    "totalRamBytes": 15819022336,
+    "network": "No new remote resources/installations/CI; loopback browser harness only"
+  },
+  "checks": [
+    {
+      "id": "CHECK-SEC-001",
+      "title": "Threat model and secret ownership",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Trace Rust/JS owners and caller versus binding buffers",
+      "evidence": "New Rust repeat owner gap and continued JS setup gap; RecoveredPhrase mutation refused.",
+      "owner": "Rust/browser reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-SEC-002",
+      "title": "CSP, sandbox and transport",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Inspect worker CSP/allowlists/startup/transfer and real browser transport",
+      "evidence": "Package/browsers pass; no Scanner iframe vault here; external Deriver excluded.",
+      "owner": "Rust/browser reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-SEC-003",
+      "title": "Network egress and secret guards",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Inspect offline graph/network/storage gates and denied egress",
+      "evidence": "Package/browsers pass; no provider/broadcast API; not host-wide certification.",
+      "owner": "Rust/browser reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-SEC-004",
+      "title": "Randomness, encryption and authentication",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "RNG refusals, known answers, suite geometry/packing/Feistel and engine KAT traces",
+      "evidence": "Native/package bounded checks pass; no full-cost replay or cryptographic proof.",
+      "owner": "Rust/browser reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-SEC-005",
+      "title": "Secret lifecycle and exceptional paths",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Bounded UTF-8/allocation/session/callback/cancel/stale-reply probes and traces",
+      "evidence": "New SEC001 and continued AUD012SEC001; reverse/review/six setup controls pass.",
+      "owner": "Rust/browser reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-SEC-006",
+      "title": "Injection, persistence and sensitive APIs",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Review binding/runtime logging/storage/dynamic-code and DOM sinks",
+      "evidence": "No further package persistence/injection defect; host DOM excluded.",
+      "owner": "Rust/browser reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-SEC-007",
+      "title": "Read-only guarantees and availability bounds",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Early refusal/resource/cancel and metadata-only accepted-maximum counts",
+      "evidence": "Normal checks pass but API001 aggregate overflow remains; no huge search.",
+      "owner": "Rust/browser reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-FUN-001",
+      "title": "BIP39, entropy and seed interpretation",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "BIP39/checksum/refusal known answers and suite source/spec trace",
+      "evidence": "301 library tests and package self-checks pass; full-cost fixture replay excluded.",
+      "owner": "Rust reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-FUN-002",
+      "title": "HD derivation and supported address profiles",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Included address/reference profile roots/chains/paths/encoding known answers",
+      "evidence": "Ordinary derivation tests pass; API001 concerns extreme metadata, not wrong keys.",
+      "owner": "Rust reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-FUN-003",
+      "title": "BIP85/BIP38/messages/Silent Payments",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "not-applicable",
+      "method": "Supported surface inventory",
+      "evidence": "No MHFE BIP85/BIP38/messages/Silent Payments operations.",
+      "owner": "Rust reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-FUN-004",
+      "title": "Scripts/descriptors/Miniscript/multisig",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "not-applicable",
+      "method": "Supported surface inventory",
+      "evidence": "No script/descriptor/Miniscript/multisig construction interface.",
+      "owner": "Rust reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-FUN-005",
+      "title": "Transactions/PSBT/commitments",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "not-applicable",
+      "method": "Supported surface inventory",
+      "evidence": "No transaction construction/signing or PSBT interface.",
+      "owner": "Rust reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-FUN-006",
+      "title": "Recovery and backup formats",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Repair/search/detection/rehearsal/rekey/hidden-wallet owners and CLI/browser contracts",
+      "evidence": "Native/package/browsers/parity/complete PTY pass at bounded operational cost.",
+      "owner": "Rust reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-FUN-007",
+      "title": "Discovery/providers/proofs/accounting",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "not-applicable",
+      "method": "Supported surface inventory",
+      "evidence": "No online providers/proof/accounting; offline search covered elsewhere.",
+      "owner": "Rust reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-API-001",
+      "title": "Dependency call contracts",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Engine ABI, callbacks/traits/classes and all-feature compilation",
+      "evidence": "Clippy and engine KATs pass; upstream internals not exhaustively audited.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-API-002",
+      "title": "Async state/cancellation/revisions",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Slot/partial startup/cancel/close/callback/stale reply/session transitions",
+      "evidence": "Package/browsers pass; construction cleanup failures under SEC005.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-API-003",
+      "title": "Export schema and monetary fidelity",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Native/JSON/types/errors/manifests and search-count representation",
+      "evidence": "API001 two-root maximum reports zero; normal exports/parity pass; monetary fields inapplicable.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-API-004",
+      "title": "Encoding/import-export interoperability",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Phrase/container/reference/repair encoding and malformed-byte ownership",
+      "evidence": "Invalid UTF-8 refused but draw repeat wiping fails SEC001; other conversion tests pass.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-BLD-001",
+      "title": "Manifest/flags/feature composition",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "core/repair/passwords/wallet/wasm flags, shared manifest/version hashes",
+      "evidence": "Five wasm32 feature Clippy gates and package/freshness checks pass.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-BLD-002",
+      "title": "Matrix and runtime sampling",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Native ordinary tests, wasm compile, Chromium/Firefox both modes and CLI",
+      "evidence": "Units pass; cargo test exits 101 due to DOC001; doctests: 3 pass, 1 fail. Browser/PTY pass; no cross-OS/fullcost acceptance.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-BLD-003",
+      "title": "Lockfiles/provenance/licenses",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Locked build and manifest/vendor/license/provenance source review",
+      "evidence": "Build/licenses/published-round check pass; no install or live advisory lookup.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-BLD-004",
+      "title": "Canonical WASM and Docker bytes",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "not-run",
+      "method": "Existing artifact hashes/stamps/source equality/dependency freshness",
+      "evidence": "No fresh canonical Docker/WASM rebuild; freshness is not reproducibility proof.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-BLD-005",
+      "title": "Artifacts/CI/release workflows",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Static workflow/check/release/vector gates and artifact relationships",
+      "evidence": "Mandatory ordinary cargo-test gate fails DOC001; no paid CI/archive/signature/release acceptance.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-UI-001",
+      "title": "Real files and viewports",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "not-applicable",
+      "method": "Package/library/CLI inventory",
+      "evidence": "No end-user page; real file/localhost harness under BLD002; external visual QA excluded.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-UI-002",
+      "title": "Navigation/input/state",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Complete optimized terminal PTY and four class/session state contracts",
+      "evidence": "Terminal/package/browsers pass; consuming host workflows excluded.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-UI-003",
+      "title": "Secret visibility/help/accessibility",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Terminal hidden/private input/cancel/help/safety and package warnings",
+      "evidence": "Complete PTY pass; no card/QR page UI or host accessibility acceptance.",
+      "owner": "Scoped reviewers and coordinator"
+    },
+    {
+      "id": "CHECK-ARC-001",
+      "title": "Ownership/imports/composition",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "All ten OOP principles, owner boundaries and lifetime invariants",
+      "evidence": "Cohesion/delegation sound and RecoveredPhrase fixed; exceptional ownership gaps remain; no broad extraction needed.",
+      "owner": "Quality reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-ARC-002",
+      "title": "Dead code/duplication/false positives",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Semantic DRY review plus unchanged lexical gate and valid ESM controls",
+      "evidence": "Default scan of 104 files passes; 17 controls: 13 pass, 4 misses covering 3 roots; no additional hidden production clone proved.",
+      "owner": "Quality reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-ARC-003",
+      "title": "Comments/tests/production-path fidelity",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Comment/waiver/anchor and actual public/WASM/source-dist path controls",
+      "evidence": "ARC001/002/003 misses confirmed; harness and EPERM errors separately retained.",
+      "owner": "Quality reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-DOC-001",
+      "title": "Capability and safety claims",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Crate/API/browser/README/security/spec/release claim comparison",
+      "evidence": "DOC001 stale direct-field example/comment; no broader new capability defect confirmed.",
+      "owner": "Quality reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-DOC-002",
+      "title": "Commands/metadata/legal materials",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "failed",
+      "method": "Documentation commands/toolchains/metadata/notices vs code and gates",
+      "evidence": "DOC001 fails doctest although cargo doc passes; other license/metadata checks pass.",
+      "owner": "Quality reviewer and coordinator"
+    },
+    {
+      "id": "CHECK-DOC-003",
+      "title": "Audit records/evidence consistency",
+      "scope": "Current MHFE dirty source snapshot",
+      "outcome": "passed",
+      "method": "Schema/keys/IDs/32-check/hash/link validation and baseline follow-up preservation",
+      "evidence": "Validator checks current source/procedure/harness/logs/matching AUD012 follow-up and ignored evidence.",
+      "owner": "Quality reviewer and coordinator"
+    }
+  ],
+  "commands": [
+    {
+      "label": "boundary-coordinator",
+      "command": [
+        "docs/audits/AUD-013-evidence/address-search-boundary-release"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:42:40.011Z",
+      "endedAt": "2026-10-08T17:42:40.014Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "5eaa0a5b68aa3865f879a1e9d3992196a584c1af4f32ddd208f9a76702aaceba",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "browser-draw-setup-corrected",
+      "command": [
+        "/home/user/.local/share/nodejs/node-v26.10.0-linux-x64/bin/node",
+        "/home/user/Documents/bip_tools/mhfe/docs/audits/AUD-013-harnesses/browser/draw-setup.mjs",
+        "--evidence"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:33:34.501Z",
+      "endedAt": "2026-10-08T17:33:34.512Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "021234f43b4c62b2112b1c59d783a7538d9f8668a04e0ab325c11d5d363689d9",
+      "capture": "Harness-owned diagnostic stdout",
+      "verificationRole": "Retained scoped/initial probe; final coordinator witness supersedes where applicable"
+    },
+    {
+      "label": "browser-draw-setup",
+      "command": [
+        "/home/user/.local/share/nodejs/node-v26.10.0-linux-x64/bin/node",
+        "/home/user/Documents/bip_tools/mhfe/docs/audits/AUD-013-harnesses/browser/draw-setup.mjs",
+        "--evidence"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:32:56.709Z",
+      "endedAt": "2026-10-08T17:32:56.725Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "7c88601b7ed95d664790e5adab833a06215fe3c9e2c364d095f06305307c824c",
+      "capture": "Harness-owned diagnostic stdout",
+      "verificationRole": "Retained scoped/initial probe; final coordinator witness supersedes where applicable"
+    },
+    {
+      "label": "browser-draw-utf8-corrected",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-013-harnesses/browser/draw-utf8.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:47.059Z",
+      "endedAt": "2026-10-08T17:26:47.440Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": "spawnSync /home/user/.local/bin/node EPERM",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "browser-draw-utf8-direct",
+      "command": [
+        "/home/user/.local/share/nodejs/node-v26.10.0-linux-x64/bin/node",
+        "/home/user/Documents/bip_tools/mhfe/docs/audits/AUD-013-harnesses/browser/draw-utf8.mjs",
+        "--evidence"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:28:50.608Z",
+      "endedAt": "2026-10-08T17:28:51.001Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "6655d184f329567c14ff328f8f301f517ea2a914125cddae22597b20d8cbbd2f",
+      "capture": "Harness-owned diagnostic stdout; Node's module-type warning is in tool output",
+      "verificationRole": "Retained scoped/initial probe; final coordinator witness supersedes where applicable"
+    },
+    {
+      "label": "browser-draw-utf8",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-013-harnesses/browser/draw-utf8.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:10.681Z",
+      "endedAt": "2026-10-08T17:26:10.808Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": "spawnSync /home/user/.local/bin/node EPERM",
+      "logSha256": "19532ebe14207ab80946c3f7a0c5b2b2bbc8a3069709fe5fbf308ba3a52d6f27",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "browser-package",
+      "command": [
+        "python3",
+        "docs/audits/AUD-013-harnesses/memory-guard.py",
+        "browser-package",
+        "/home/user/.local/bin/node",
+        "scripts/verify-browser-package.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:25:30.824Z",
+      "endedAt": "2026-10-08T17:25:49.052Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "aa072b66f8bbf7b781010787135597a3ecc1514e827cad4ae194e3ab1b24c7b5",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "browsers",
+      "command": [
+        "python3",
+        "docs/audits/AUD-013-harnesses/memory-guard.py",
+        "browsers",
+        "/home/user/.local/bin/node",
+        "scripts/verify-browsers.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:16.210Z",
+      "endedAt": "2026-10-08T17:32:57.719Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "35a53a1acd4f41b39d7886c2c75370cdb430db4a3550b9d0dccc7e532d1aacbb",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "cli-browser-parity",
+      "command": [
+        "python3",
+        "docs/audits/AUD-013-harnesses/memory-guard.py",
+        "cli-browser-parity",
+        "/home/user/.local/bin/node",
+        "scripts/verify-cli-browser-parity.mjs",
+        "target/release/mhfe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:42:55.218Z",
+      "endedAt": "2026-10-08T17:42:59.298Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "d9945dfe392d5b18786477be9385a4195843ce3a8a1f1b847850d76e32e436b1",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "cli-terminal",
+      "command": [
+        "python3",
+        "docs/audits/AUD-013-harnesses/memory-guard.py",
+        "cli-terminal",
+        "python3",
+        "scripts/verify-hidden-input.py",
+        "target/release/mhfe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:43:22.016Z",
+      "endedAt": "2026-10-08T17:44:13.844Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "f6cba95e54e7488882b984ea2d80f62f1e60c4a739d8b86df7a7c188dd0b20f5",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "clippy-resumed",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "clippy",
+        "--locked",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:16:40.208Z",
+      "endedAt": "2026-10-08T17:16:40.570Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "732186322402325172940531d8d6d7cfac85dc902585b2bef6715ad6839dacfd",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "clones-self-test",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-no-copies.mjs",
+        "--self-test"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:08:38.539Z",
+      "endedAt": "2026-10-08T17:08:38.634Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "clones",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-no-copies.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:08:35.000Z",
+      "endedAt": "2026-10-08T17:08:36.390Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "7ae43b2627a1d72e8e8a95ae07b394f843960d102cdf82a21b5dc5a9a5793954",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "dist-freshness",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-010-harnesses/docs-build-release/dist-freshness.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:08:41.712Z",
+      "endedAt": "2026-10-08T17:08:41.809Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "c354f45c140b2e1e25864b883afebf6187b7297b1b1e3355545bfa682fb15968",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "docs-build",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "doc",
+        "--locked",
+        "--no-deps"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:16:55.151Z",
+      "endedAt": "2026-10-08T17:16:56.049Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "79dcb9c62888d5e9c1906ac8688ec1e180974c19bbf33f210c4d1e85b20f0793",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "draw-setup-coordinator",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-013-harnesses/browser/draw-setup.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:42:37.436Z",
+      "endedAt": "2026-10-08T17:42:37.478Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "021234f43b4c62b2112b1c59d783a7538d9f8668a04e0ab325c11d5d363689d9",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "draw-utf8-coordinator",
+      "command": [
+        "/home/user/.local/bin/node",
+        "docs/audits/AUD-013-harnesses/browser/draw-utf8.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:42:35.318Z",
+      "endedAt": "2026-10-08T17:42:35.489Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "9d3a15316e07e92c54bb1496e74e682b135b5403c53c6dca04fddd6ebbed87af",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "environment",
+      "command": [
+        "/home/user/.local/bin/node",
+        "--input-type=module",
+        "-e",
+        "import os from \"node:os\";import fs from \"node:fs\"; console.log(JSON.stringify({node:process.version,nodePath:process.execPath,os:os.type(),release:os.release(),arch:os.arch(),totalRam:os.totalmem(),meminfo:fs.readFileSync(\"/proc/meminfo\",\"utf8\"),rustToolchain:fs.readFileSync(\"rust-toolchain.toml\",\"utf8\"),package:JSON.parse(fs.readFileSync(\"package.json\"))},null,2))"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:43:24.945Z",
+      "endedAt": "2026-10-08T17:43:24.972Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "486427ba070de8ada5464955543cc4abe3aba498ecac1d98e542e77f52b00caf",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "feature-clippy-resumed",
+      "command": [
+        "bash",
+        "docs/audits/AUD-011-harnesses/feature-clippy.sh"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:16:50.721Z",
+      "endedAt": "2026-10-08T17:16:51.216Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "7a0d348b55e46ac8e6d21cbc3d3ac4ac6404da11e6f7b759219b95cdc1ec387c",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "format",
+      "command": [
+        "/home/user/.local/bin/node",
+        "node_modules/prettier/bin/prettier.cjs",
+        "--check",
+        "."
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:16:58.800Z",
+      "endedAt": "2026-10-08T17:17:00.717Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "licenses",
+      "command": [
+        "python3",
+        "scripts/third-party-licenses.py",
+        "--check"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:21.956Z",
+      "endedAt": "2026-10-08T17:26:22.869Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "ffb95df2c8006b3836b6bf8b62a766f3514337e8f65876b68dbb78fd73a6ea8f",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "mutation-refusal-coordinator",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition=2021",
+        "--crate-type=lib",
+        "docs/audits/AUD-012-harnesses/rust/public-mutation.rs",
+        "--extern",
+        "mhfe=target/release/libmhfe.rlib",
+        "-L",
+        "dependency=target/release/deps",
+        "-o",
+        "docs/audits/AUD-013-evidence/mutation-refusal-coordinator.rlib"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:42:44.099Z",
+      "endedAt": "2026-10-08T17:42:44.147Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "ebd4cb27028e9285603db604930bbf22988f63b2af6bfe52364904b508802172",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "native-build",
+      "command": [
+        "python3",
+        "docs/audits/AUD-013-harnesses/memory-guard.py",
+        "native-build",
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-j",
+        "1"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:25:14.333Z",
+      "endedAt": "2026-10-08T17:25:15.372Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "943d8d219549194d6b0fca256ecc6d62f24935389bfd1ac507517621633f8760",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "published-rounds",
+      "command": [
+        "python3",
+        "scripts/generate-published-rounds.py",
+        "--check"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:19.531Z",
+      "endedAt": "2026-10-08T17:26:19.564Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "quality-clone-controls-corrected",
+      "command": [
+        "/home/user/.local/bin/node",
+        "--experimental-vm-modules",
+        "docs/audits/AUD-013-harnesses/quality/clone-controls.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:08:31.072Z",
+      "endedAt": "2026-10-08T17:08:31.257Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": "spawnSync /home/user/.local/bin/node EPERM",
+      "logSha256": "da6768576b794b054fb7d2f9b0f31a25ffdb6cf19ad68883746fcf9e8ca5e6fb",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "quality-clone-controls-resumed-direct",
+      "command": [
+        "/home/user/.local/share/nodejs/node-v26.10.0-linux-x64/bin/node",
+        "--experimental-vm-modules",
+        "/home/user/Documents/bip_tools/mhfe/docs/audits/AUD-013-harnesses/quality/clone-controls.mjs",
+        "quality-clone-controls-resumed-direct"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:24:50.428Z",
+      "endedAt": "2026-10-08T17:24:50.461Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "07a23f8fdaa3979460ed3786c1106b4ae76eb87419f6cb223242d670f659bedf",
+      "selfRecorded": true,
+      "checkerSha256": "80a917f46512189876aa7e55c18de5baa705e44c23160725d82671bf2269191d",
+      "harnessSha256": "d44239191dbcb9d1b3cc8b69822a9652fd07516b1825bbec15a92e8614de85aa",
+      "verificationRole": "Retained scoped/initial probe; final coordinator witness supersedes where applicable"
+    },
+    {
+      "label": "quality-clone-controls-resumed-extended",
+      "command": [
+        "/home/user/.local/share/nodejs/node-v26.10.0-linux-x64/bin/node",
+        "--experimental-vm-modules",
+        "/home/user/Documents/bip_tools/mhfe/docs/audits/AUD-013-harnesses/quality/clone-controls.mjs",
+        "quality-clone-controls-resumed-extended"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:56.883Z",
+      "endedAt": "2026-10-08T17:26:57.009Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "fb3d9b4614e2a3016758b14b643d8094b646ecdcc1c664764b3389ed34655f0c",
+      "selfRecorded": true,
+      "checkerSha256": "80a917f46512189876aa7e55c18de5baa705e44c23160725d82671bf2269191d",
+      "harnessSha256": "8ed7113a7850034a768cbe42c4751ba5c625f69193a0b58b7e6ccfcbdbd10c4f",
+      "logScope": "Probe JSON and its failure message; Node experimental warnings are not retained.",
+      "verificationRole": "Retained scoped/initial probe; final coordinator witness supersedes where applicable"
+    },
+    {
+      "label": "quality-clone-controls-resumed",
+      "command": [
+        "/home/user/.local/bin/node",
+        "--experimental-vm-modules",
+        "docs/audits/AUD-013-harnesses/quality/clone-controls.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:16:46.903Z",
+      "endedAt": "2026-10-08T17:16:46.977Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": "spawnSync /home/user/.local/bin/node EPERM",
+      "logSha256": "da6768576b794b054fb7d2f9b0f31a25ffdb6cf19ad68883746fcf9e8ca5e6fb",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "quality-clone-controls",
+      "command": [
+        "/home/user/.local/bin/node",
+        "--experimental-vm-modules",
+        "docs/audits/AUD-013-harnesses/quality/clone-controls.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:08:26.531Z",
+      "endedAt": "2026-10-08T17:08:26.598Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": "spawnSync /home/user/.local/bin/node EPERM",
+      "logSha256": "836d7d4d648d00639dfee36614133885768e045e20fd4437344b6dbadb0f0aaf",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "quality-controls-coordinator",
+      "command": [
+        "/home/user/.local/bin/node",
+        "--experimental-vm-modules",
+        "docs/audits/AUD-013-harnesses/quality/clone-controls.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:30:54.139Z",
+      "endedAt": "2026-10-08T17:30:54.337Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": null,
+      "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "read-consume-coordinator",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition=2021",
+        "--crate-type=lib",
+        "docs/audits/AUD-013-harnesses/rust/recovered-read-consume.rs",
+        "--extern",
+        "mhfe=target/release/libmhfe.rlib",
+        "-L",
+        "dependency=target/release/deps",
+        "-o",
+        "docs/audits/AUD-013-evidence/read-consume-coordinator.rlib"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:42:41.815Z",
+      "endedAt": "2026-10-08T17:42:41.856Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "rust-boundary-compile",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition=2021",
+        "-C",
+        "panic=abort",
+        "docs/audits/AUD-013-harnesses/rust/address-search-boundary.rs",
+        "--extern",
+        "mhfe=target/release/libmhfe.rlib",
+        "-L",
+        "dependency=target/release/deps",
+        "-o",
+        "docs/audits/AUD-013-evidence/address-search-boundary-release"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:01.205Z",
+      "endedAt": "2026-10-08T17:26:02.127Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": "spawnSync /home/user/Documents/bip_tools/workingspace/cargo/bin/rustc EPERM",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "rust-boundary-runtime",
+      "command": [
+        "docs/audits/AUD-013-evidence/address-search-boundary-release"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:22.093Z",
+      "endedAt": "2026-10-08T17:26:22.097Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": "spawnSync docs/audits/AUD-013-evidence/address-search-boundary-release EPERM",
+      "logSha256": "5eaa0a5b68aa3865f879a1e9d3992196a584c1af4f32ddd208f9a76702aaceba",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "rust-format",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "fmt",
+        "--check"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:16:52.875Z",
+      "endedAt": "2026-10-08T17:16:53.252Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "rust-public-mutation-compile",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition=2021",
+        "--crate-type=lib",
+        "-C",
+        "panic=abort",
+        "docs/audits/AUD-012-harnesses/rust/public-mutation.rs",
+        "--extern",
+        "mhfe=target/release/libmhfe.rlib",
+        "-L",
+        "dependency=target/release/deps",
+        "-o",
+        "docs/audits/AUD-013-evidence/public-mutation.rlib"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:22.395Z",
+      "endedAt": "2026-10-08T17:26:22.487Z",
+      "exitCode": 1,
+      "signal": null,
+      "failure": "spawnSync /home/user/Documents/bip_tools/workingspace/cargo/bin/rustc EPERM",
+      "logSha256": "ebd4cb27028e9285603db604930bbf22988f63b2af6bfe52364904b508802172",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "rust-read-consume-compile",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--edition=2021",
+        "--crate-type=lib",
+        "-C",
+        "panic=abort",
+        "docs/audits/AUD-013-harnesses/rust/recovered-read-consume.rs",
+        "--extern",
+        "mhfe=target/release/libmhfe.rlib",
+        "-L",
+        "dependency=target/release/deps",
+        "-o",
+        "docs/audits/AUD-013-evidence/recovered-read-consume.rlib"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:26:22.207Z",
+      "endedAt": "2026-10-08T17:26:22.291Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": "spawnSync /home/user/Documents/bip_tools/workingspace/cargo/bin/rustc EPERM",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Retained infrastructure warning; not independent pass"
+    },
+    {
+      "label": "rust-tests",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "test",
+        "--locked",
+        "--release",
+        "-j",
+        "2",
+        "--",
+        "--test-threads=2"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:07:26.906Z",
+      "endedAt": "2026-10-08T17:08:36.468Z",
+      "exitCode": 101,
+      "signal": null,
+      "failure": null,
+      "logSha256": "667f21022002238c24fbf92016a46d8ea2d2194b72d8eed52ab03b0f3a047819",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    },
+    {
+      "label": "rust-version",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/rustc",
+        "--version"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "startedAt": "2026-10-08T17:43:57.170Z",
+      "endedAt": "2026-10-08T17:43:57.280Z",
+      "exitCode": 0,
+      "signal": null,
+      "failure": null,
+      "logSha256": "8dc912acd5bfeafc70b01b1d2a2afb0844afa02f5dba2f1ae8d5c212d005afb6",
+      "toolchainEnvironment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "verificationRole": "Primary clean coordinator evidence"
+    }
+  ],
+  "incompleteEvidence": [
+    {
+      "path": "clippy.command.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Incomplete command record retained after interruption: Unexpected end of JSON input"
+    },
+    {
+      "path": "feature-clippy.command.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Incomplete command record retained after interruption: Unexpected end of JSON input"
+    },
+    {
+      "path": "clippy.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Incomplete capture retained after the interruption (host out of memory); scoped resumed command is the valid verification"
+    },
+    {
+      "path": "feature-clippy.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Incomplete capture retained after the interruption (host out of memory); scoped resumed command is the valid verification"
+    }
+  ],
+  "memoryEvidence": [
+    {
+      "path": "docs/audits/AUD-013-evidence/browser-package.memory.json",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-browser-package.mjs"
+      ],
+      "maxAggregateRssBytes": 3221225472,
+      "minimumAvailableBytes": 2147483648,
+      "initialAvailableBytes": 6577815552,
+      "peakRssBytes": 742346752,
+      "lowestAvailableBytes": 5968056320,
+      "samples": 18,
+      "limitations": "Sampled RSS sums may count shared pages twice; no hard allocation cap or OS diagnosis.",
+      "exitCode": 0,
+      "stoppedReason": null
+    },
+    {
+      "path": "docs/audits/AUD-013-evidence/browsers.memory.json",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-browsers.mjs"
+      ],
+      "maxAggregateRssBytes": 3221225472,
+      "minimumAvailableBytes": 2147483648,
+      "initialAvailableBytes": 6561095680,
+      "peakRssBytes": 1279123456,
+      "lowestAvailableBytes": 5204623360,
+      "samples": 389,
+      "limitations": "Sampled RSS sums may count shared pages twice; no hard allocation cap or OS diagnosis.",
+      "exitCode": 0,
+      "stoppedReason": null
+    },
+    {
+      "path": "docs/audits/AUD-013-evidence/cli-browser-parity.memory.json",
+      "command": [
+        "/home/user/.local/bin/node",
+        "scripts/verify-cli-browser-parity.mjs",
+        "target/release/mhfe"
+      ],
+      "maxAggregateRssBytes": 3221225472,
+      "minimumAvailableBytes": 2147483648,
+      "initialAvailableBytes": 5899247616,
+      "peakRssBytes": 70385664,
+      "lowestAvailableBytes": 5851496448,
+      "samples": 4,
+      "limitations": "Sampled RSS sums may count shared pages twice; no hard allocation cap or OS diagnosis.",
+      "exitCode": 0,
+      "stoppedReason": null
+    },
+    {
+      "path": "docs/audits/AUD-013-evidence/cli-terminal.memory.json",
+      "command": [
+        "python3",
+        "scripts/verify-hidden-input.py",
+        "target/release/mhfe"
+      ],
+      "maxAggregateRssBytes": 3221225472,
+      "minimumAvailableBytes": 2147483648,
+      "initialAvailableBytes": 5905620992,
+      "peakRssBytes": 293294080,
+      "lowestAvailableBytes": 5422153728,
+      "samples": 51,
+      "limitations": "Sampled RSS sums may count shared pages twice; no hard allocation cap or OS diagnosis.",
+      "exitCode": 0,
+      "stoppedReason": null
+    },
+    {
+      "path": "docs/audits/AUD-013-evidence/native-build.memory.json",
+      "command": [
+        "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-j",
+        "1"
+      ],
+      "maxAggregateRssBytes": 3221225472,
+      "minimumAvailableBytes": 2147483648,
+      "initialAvailableBytes": 6625615872,
+      "peakRssBytes": 20230144,
+      "lowestAvailableBytes": 6617653248,
+      "samples": 1,
+      "limitations": "Sampled RSS sums may count shared pages twice; no hard allocation cap or OS diagnosis.",
+      "exitCode": 0,
+      "stoppedReason": null
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-013-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Crate example still accesses private recovered-result fields",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": true,
+      "affectedFiles": [
+        {
+          "path": "src/lib.rs",
+          "line": 27,
+          "sha256": "748355388f3e4058caedaab134ee530a248d1ddaac153cfa7276c74c08a6732d"
+        },
+        {
+          "path": "docs/API.md",
+          "line": 24,
+          "sha256": "97db59a5f7162bfc27f7653ce1e16161af92e83a1ba93d6991e0f61182d3ce22"
+        }
+      ],
+      "reproduction": "Run cargo test --locked --release -j 2 -- --test-threads=2. The crate-level no_run example still calls assert_eq!(*phrase.phrase, original); after RecoveredPhrase fields became private. The API example comment also describes direct .words/.verified/.phrase/.suite fields.",
+      "expected": "All supported examples compile against the current accessors, and the ordinary cargo test gate succeeds without a filtered doctest subset.",
+      "observed": "Library 301/CLI 105 tests pass, plus 3 suite-3 and 2 suite-4 nonignored tests. Doctests: 3 passed, 1 failed; E0616 private phrase field; overall exit 101. Warning-denied cargo doc passes, which does not compile no_run examples.",
+      "impact": "Limited documentation adaptation defect; no runtime encryption failure. It blocks the mandatory ordinary cargo-test/check.sh/CI gate and therefore release readiness, independently of Low severity.",
+      "recommendedFix": "Use phrase.phrase() without dereferencing a private field; update the API example comment to words(), verified(), phrase() and suite().",
+      "requiredVerification": "Run the entire cargo test --locked --doc suite and the normal native test/check gate, not only the two newly added ownership doctests.",
+      "evidence": [
+        {
+          "label": "rust-tests",
+          "localPath": "docs/audits/AUD-013-evidence/rust-tests.log",
+          "logSha256": "667f21022002238c24fbf92016a46d8ea2d2194b72d8eed52ab03b0f3a047819",
+          "exitCode": 101,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Drawing rejects invalid first UTF-8 before guarding its repeat allocation",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        {
+          "path": "src/wasm_api/wallet.rs",
+          "line": 139,
+          "sha256": "88d6aba95c58f67576cb3f84c59eac452ca5b46d4117e6ba07cfbfe56b5f24e8"
+        },
+        {
+          "path": "web/wallet.js",
+          "line": 148,
+          "sha256": "69cc7cfd9fba527455e8a8f95519dc44c4456bc0e0c266c9a7e7b2abefaf2cfc"
+        }
+      ],
+      "reproduction": "Run the retained draw-utf8.mjs against the recorded dist. Direct draw binding: invalid first UTF-8 with a synthetic marker repetition. Public MhfeWallet: identical Uint8Array values consisting of 0xff followed by the public marker text; byte equality passes preparation. Neither case runs drawing or Argon2. Retain the terminated VM solely for diagnostic inspection.",
+      "expected": "Wrap both already-owned Rust byte vectors in SecretText before either fallible text conversion. Refusal must wipe both binding-owned allocations while preserving caller-owned buffers.",
+      "observed": "The first text(...)? precedes SecretText::new(repeat). Refusal drops the unguarded repeat Vec unwiped. Marker-pattern occurrences in actual WASM memory: 10 in the direct case, 11 in the unchanged public class/actual worker-source case; reverse-input and reviewPassword controls: zero. Caller buffers survive; worker JS copies are wiped; worker is terminated. Counts are pattern occurrences, not counts of separate allocations.",
+      "impact": "Limited exceptional-path failure of best-effort owned-secret cleanup. Node VM instrumentation deliberately retains otherwise terminated memory; no access to a terminated real browser worker, persistence, swap exposure, key disclosure or exfiltration was demonstrated. JS cleanup cannot wipe wasm-bindgen's separately owned Rust vector.",
+      "recommendedFix": "Construct SecretText owners for both arguments before decoding either. Search other multi-secret bindings for the same ownership-before-fallibility invariant.",
+      "requiredVerification": "Run the retained malformed-first/public-identical probes and reverse/review controls with zero owned repeat-marker residuals; preserve caller bytes, JS wiping and termination. Add a production regression for this sequencing.",
+      "evidence": [
+        {
+          "label": "draw-utf8-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/draw-utf8-coordinator.log",
+          "logSha256": "9d3a15316e07e92c54bb1496e74e682b135b5403c53c6dca04fddd6ebbed87af",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-API001",
+      "category": "API",
+      "kind": "finding",
+      "title": "Accepted maximum two-root search scopes overflow reported address count",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        {
+          "path": "src/wallet.rs",
+          "line": 743,
+          "sha256": "8b4f4664decd63c446c421987551263ba74c340fea90c21522976d231b2dd774"
+        },
+        {
+          "path": "src/wallet.rs",
+          "line": 821,
+          "sha256": "8b4f4664decd63c446c421987551263ba74c340fea90c21522976d231b2dd774"
+        }
+      ],
+      "reproduction": "Compile and run address-search-boundary.rs against the freshly built release libmhfe.rlib. SearchLimits::new(2147483648, 2147483648), public Bitcoin Cash legacy or Ethereum Classic address, AddressSearch::new(&address, None, limits), then read the description count. No key derivation, candidate search or KDF is executed.",
+      "expected": "Either report the exact aggregate or clearly refuse an unrepresentable aggregate after individually valid limits; never report an authoritative zero.",
+      "observed": "The u64 roots * 2 chains * accounts * indexes multiplication wraps 2^64 to zero for both two-root profiles. Expected 18446744073709551616, observed 0. The one-root maximum returns 9223372036854775808 correctly; the two adjacent two-root cases return 18446744065119617024 correctly. Debug source implies an overflow panic, but no debug runtime probe was run.",
+      "impact": "Incorrect native public API metadata at explicitly accepted extreme counts. Default and browser-produced scopes are smaller; no astronomical search, wrong derived key or secret disclosure was demonstrated.",
+      "recommendedFix": "Use checked arithmetic with a clear aggregate-limit refusal, or an exact wider representation throughout the API. Do not silently saturate or redefine individual accepted limits without documentation.",
+      "requiredVerification": "Add metadata-only max/adjacent/invalid-count and explicit-path-one regressions for one-root and two-root profiles, in debug and release. Preserve all normal derivation vectors.",
+      "evidence": [
+        {
+          "label": "boundary-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/boundary-coordinator.log",
+          "logSha256": "5eaa0a5b68aa3865f879a1e9d3992196a584c1af4f32ddd208f9a76702aaceba",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "Semicolon-free module declarations hide following active code from the clone gate",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        {
+          "path": "scripts/verify-no-copies.mjs",
+          "line": 247,
+          "sha256": "80a917f46512189876aa7e55c18de5baa705e44c23160725d82671bf2269191d"
+        }
+      ],
+      "reproduction": "Run clone-controls.mjs: independently valid ESM ASI import and ASI re-export fixtures precede matching 126-token active function bodies. Compare the explicit-semicolon import control.",
+      "expected": "The declaration exclusion ends at the actual import/re-export boundary; following active code remains eligible regardless of valid semicolon style.",
+      "observed": "Both semicolon-free cases return no copies / exit 0; explicit-semicolon control detects the body / exit 1. The scanner advances until the next literal semicolon, swallowing active body tokens.",
+      "impact": "Limited assurance gap in the maintenance gate. The normal formatter inserts semicolons, reducing current practical exposure. No currently hidden production clone was established. This is distinct from AUD-012-ARC001's export-function/from classification root.",
+      "recommendedFix": "Recognize complete declaration boundaries with a suitable parser or a safe bounded tokenizer; do not skip through an unrelated body semicolon.",
+      "requiredVerification": "Keep independently parsed ASI import/re-export controls, semicolon control, exported functions/classes, dynamic import/import.meta and legitimate declaration exclusions.",
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-ARC002",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "A string literal is accepted as a deliberate-copy comment waiver",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        {
+          "path": "scripts/verify-no-copies.mjs",
+          "line": 254,
+          "sha256": "80a917f46512189876aa7e55c18de5baa705e44c23160725d82671bf2269191d"
+        }
+      ],
+      "reproduction": "Run clone-controls.mjs's noncomment-marker case: nearby const explanation = \"deliberate copy\"; precedes a matching 133-token block. The legitimate comment waiver is a separate passing control.",
+      "expected": "Only an actual documented comment with the required waiver marker/reason may suppress a clone, not ordinary executable string content.",
+      "observed": "Raw line matching recognizes the string as the waiver and returns exit 0 for the matching block. Ordinary unmarked positive control detects the same 133-token body.",
+      "impact": "Limited maintenance-gate false negative; no present production clone or security bypass was established.",
+      "recommendedFix": "Record lexical comment spans and apply waiver matching only to eligible comments, validating the intended documented reason.",
+      "requiredVerification": "Add ordinary strings, escaped/template strings and real-comment positive/negative controls; keep existing legitimate deliberate-copy behavior.",
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-ARC003",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "A marked first occurrence suppresses comparisons between later unmarked clones",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        {
+          "path": "scripts/verify-no-copies.mjs",
+          "line": 284,
+          "sha256": "80a917f46512189876aa7e55c18de5baa705e44c23160725d82671bf2269191d"
+        },
+        {
+          "path": "scripts/verify-no-copies.mjs",
+          "line": 312,
+          "sha256": "80a917f46512189876aa7e55c18de5baa705e44c23160725d82671bf2269191d"
+        }
+      ],
+      "reproduction": "Run clone-controls.mjs: three equal 133-token blocks with A deliberately marked, B/C unmarked. Reverse enumeration so an unmarked block is first as the matched control.",
+      "expected": "Exempting A does not exempt the B/C pair; the result is independent of file enumeration order.",
+      "observed": "Every equal window is compared only with the first anchor. A-marked-first returns exit 0 because each pair includes A and is suppressed; unmarked-first detects the unmarked pair / exit 1.",
+      "impact": "Limited maintenance-gate false negative and enumeration-order sensitivity; no current hidden production copy was proved. Independent of the marker-not-comment root.",
+      "recommendedFix": "Exclude permitted occurrences before choosing an anchor, or choose an unmarked anchor so unmarked peers are still compared.",
+      "requiredVerification": "Add marked-first/middle/last, reordered multi-file and same-file groups, and legitimate marked-only controls without quadratic redundant reporting.",
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    }
+  ],
+  "observations": [],
+  "informationalRecommendations": [
+    {
+      "title": "Keep current owner boundaries",
+      "type": "architecture assessment",
+      "locations": [
+        "src/container.rs",
+        "src/operation.rs",
+        "src/rekey.rs",
+        "src/mhfe.rs",
+        "src/wasm_api/",
+        "web/runtime.js"
+      ],
+      "detail": "ContainerFacts/OriginalFacts/Encryption/Rekey/RecoveryStatus own rules; CLI/WASM delegate. Four browser classes compose shared runtime/one WASM. Private state and narrow engine/RNG/progress/host interfaces generally follow all ten principles. Do not wrap pure helpers in classes or split files by size. Cleanup gaps do not require broad redesign."
+    },
+    {
+      "title": "Avoid repeated curve-point calculation",
+      "type": "optional unbenchmarked optimization",
+      "locations": [
+        "src/wallet.rs:980"
+      ],
+      "detail": "program_for computes a compressed key before branching; Taproot/Keccak compute the point again. Compute only the required representation or reuse the point. Parent-public-key reuse across child indexes is another profiling candidate. Preserve address vectors and secret wiping."
+    },
+    {
+      "title": "Reduce candidate-check allocations",
+      "type": "optional unbenchmarked optimization",
+      "locations": [
+        "src/search.rs:403"
+      ],
+      "detail": "Inner Vec<Vec<u16>> could use fixed two-record/flat storage if profiling shows benefit. Benchmark enumeration/allocations/RSS, preserving order, cancellation and matches."
+    },
+    {
+      "title": "Reuse parsed phrase owners conservatively",
+      "type": "optional unbenchmarked optimization",
+      "locations": [
+        "src/operation.rs:207",
+        "src/container.rs:187"
+      ],
+      "detail": "Some paths parse a phrase again. Internal parsed-owner reuse could help if measured, likely little versus Argon2. Avoid retained secrets, weakened locks or reordered refusals."
+    },
+    {
+      "title": "Profile clone gate after correcting misses",
+      "type": "optional unbenchmarked optimization",
+      "locations": [
+        "scripts/verify-no-copies.mjs:273"
+      ],
+      "detail": "Per-window slice/join string keys cost O(N*K). Rolling hash with exact collision checks is only warranted if profiling finds meaningful cost; fix correctness first."
+    },
+    {
+      "title": "Delegate address-limit adjustment",
+      "type": "optional maintainability improvement",
+      "locations": [
+        "src/search.rs:353"
+      ],
+      "detail": "Reference-owner operation may reduce reconstruction coupling if useful. No additional confirmed rule copy or mandatory module extraction found."
+    },
+    {
+      "title": "Origin-bind rekey confirmation as explicit hardening",
+      "type": "optional API hardening, not a confirmed finding",
+      "locations": [
+        "src/rekey.rs"
+      ],
+      "detail": "Native callers can mix ConfirmedPhrase objects, but active CLI keeps the pair together and BrowserRekey owns its result. Caller affirmation is trusted; no supported-workflow corruption found. Replacement rehearsal intentionally belongs to caller workflow before destroying the old backup."
+    }
+  ],
+  "priorFindingVerification": [
+    {
+      "id": "AUD-012-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "scopedResult": "Partially fixed, narrowly incomplete. Invalid 2**32 worker count refuses before copying, and six setup/partial-start controls wipe owned arrays, stop partial jobs and allow slot reuse. One bounded injected failure remains: new Uint8Array(0) after the first encoded copy but before try at web/wallet.js:148 leaves one owned copy unwiped.",
+      "remainingFix": "Create the empty repetition before copying the first secret or place every later constructor under cleanup using an optional owner. Retain all six passing controls and the initial-empty-array failure regression.",
+      "evidence": [
+        {
+          "label": "draw-setup-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/draw-setup-coordinator.log",
+          "logSha256": "021234f43b4c62b2112b1c59d783a7538d9f8668a04e0ab325c11d5d363689d9",
+          "exitCode": 1,
+          "failure": null
+        }
+      ],
+      "limitations": "Synthetic constructor refusal only; no actual OOM, browser memory access or disclosure. Retains the original finding ID because all-setup cleanup is the same root."
+    },
+    {
+      "id": "AUD-012-SEC002",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "scopedResult": "RecoveredPhrase fields are private; read accessors and into_phrase() move/read the lock-owning value. Positive read/consume witness compiles. Original safe public-mutation witness is refused with two E0616 diagnostics. Native memory ownership/locking tests pass.",
+      "evidence": [
+        {
+          "label": "read-consume-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/read-consume-coordinator.log",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "exitCode": 0,
+          "failure": null
+        },
+        {
+          "label": "mutation-refusal-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/mutation-refusal-coordinator.log",
+          "logSha256": "ebd4cb27028e9285603db604930bbf22988f63b2af6bfe52364904b508802172",
+          "exitCode": 1,
+          "failure": null
+        },
+        {
+          "label": "rust-tests",
+          "localPath": "docs/audits/AUD-013-evidence/rust-tests.log",
+          "logSha256": "667f21022002238c24fbf92016a46d8ea2d2194b72d8eed52ab03b0f3a047819",
+          "exitCode": 101,
+          "failure": null
+        }
+      ],
+      "limitations": "Compile witnesses prove API ownership boundaries, not runtime recovery, swap exposure, guaranteed erasure or mathematical secrecy. DOC001 separately records stale example adaptation."
+    },
+    {
+      "id": "AUD-012-ARC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "scopedResult": "The original exported-function containing from is examined and its 133-token copy detected; legitimate declaration exclusions and production self-test work. Verification is scoped to the original classification root; the new ASI-boundary issue has a different root.",
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        },
+        {
+          "label": "clones-self-test",
+          "localPath": "docs/audits/AUD-013-evidence/clones-self-test.log",
+          "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419",
+          "exitCode": 0,
+          "failure": null
+        }
+      ],
+      "limitations": "Does not imply correct complete ESM parsing or absence of other false negatives."
+    },
+    {
+      "id": "AUD-012-ARC002",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "scopedResult": "NaN, Infinity, 0, -1, 1, 1.5 and an unsafe integer are refused with exit 2; production self-test passes; unknown/extra-argument refusal is also source-reviewed.",
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        },
+        {
+          "label": "clones-self-test",
+          "localPath": "docs/audits/AUD-013-evidence/clones-self-test.log",
+          "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419",
+          "exitCode": 0,
+          "failure": null
+        }
+      ],
+      "limitations": "Original threshold defect verified; unrelated tokenizer/waiver defects remain separately open."
+    }
+  ],
+  "priorBaselineCanonicalSha256": "404254f62d7fa34d575b6362e0db38255e854c8b6787d009674b4d90518ad263",
+  "remediation": [
+    {
+      "id": "AUD-013-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": [
+        {
+          "label": "rust-tests",
+          "localPath": "docs/audits/AUD-013-evidence/rust-tests.log",
+          "logSha256": "667f21022002238c24fbf92016a46d8ea2d2194b72d8eed52ab03b0f3a047819",
+          "exitCode": 101,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": [
+        {
+          "label": "draw-utf8-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/draw-utf8-coordinator.log",
+          "logSha256": "9d3a15316e07e92c54bb1496e74e682b135b5403c53c6dca04fddd6ebbed87af",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": [
+        {
+          "label": "boundary-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/boundary-coordinator.log",
+          "logSha256": "5eaa0a5b68aa3865f879a1e9d3992196a584c1af4f32ddd208f9a76702aaceba",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-ARC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-013-ARC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-012-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "evidence": [
+        {
+          "label": "draw-setup-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/draw-setup-coordinator.log",
+          "logSha256": "021234f43b4c62b2112b1c59d783a7538d9f8668a04e0ab325c11d5d363689d9",
+          "exitCode": 1,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-012-SEC002",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "evidence": [
+        {
+          "label": "read-consume-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/read-consume-coordinator.log",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "exitCode": 0,
+          "failure": null
+        },
+        {
+          "label": "mutation-refusal-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/mutation-refusal-coordinator.log",
+          "logSha256": "ebd4cb27028e9285603db604930bbf22988f63b2af6bfe52364904b508802172",
+          "exitCode": 1,
+          "failure": null
+        },
+        {
+          "label": "rust-tests",
+          "localPath": "docs/audits/AUD-013-evidence/rust-tests.log",
+          "logSha256": "667f21022002238c24fbf92016a46d8ea2d2194b72d8eed52ab03b0f3a047819",
+          "exitCode": 101,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-012-ARC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        },
+        {
+          "label": "clones-self-test",
+          "localPath": "docs/audits/AUD-013-evidence/clones-self-test.log",
+          "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419",
+          "exitCode": 0,
+          "failure": null
+        }
+      ]
+    },
+    {
+      "id": "AUD-012-ARC002",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "5648456b3e3068bb8810255e75869bbd5fc3c5ba79acc0bf64889821071c7844",
+      "evidence": [
+        {
+          "label": "quality-controls-coordinator",
+          "localPath": "docs/audits/AUD-013-evidence/quality-controls-coordinator.log",
+          "logSha256": "6127f83e5b3d0213e347563a50bd818641d06c8d99fe0f3f9b7c6b374a544e0f",
+          "exitCode": 1,
+          "failure": null
+        },
+        {
+          "label": "clones-self-test",
+          "localPath": "docs/audits/AUD-013-evidence/clones-self-test.log",
+          "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419",
+          "exitCode": 0,
+          "failure": null
+        }
+      ]
+    }
+  ],
+  "executionSummary": {
+    "startedAt": "2026-10-08T17:07:24.843Z",
+    "lastRuntimeCheckEndedAt": "2026-10-08T17:44:13.844Z",
+    "library": "301 passed, 2 ignored",
+    "cli": "105 passed, 2 ignored",
+    "suite3": "3 passed, 1 ignored",
+    "suite4": "2 passed, 1 ignored",
+    "doc": "3 passed, 1 failed; ordinary cargo test exit 101",
+    "browsers": "Chromium/Firefox standard/fast passed",
+    "terminal": "Complete optimized PTY passed",
+    "highestGuardedPeakRssBytes": 1279123456,
+    "minimumSystemAvailableBytes": 5204623360,
+    "releaseAcceptance": false
+  },
+  "assessment": "Module/class direction and library delegation are sound; no broad extraction or extra classes required by confirmed evidence. Six new Low findings plus one narrowly incomplete continued Low AUD012 finding remain. Three other AUD012 findings verified in their original scopes. DOC001 blocks mandatory ordinary cargo-test gate, although it is a limited documentation defect. No Critical/High/Medium or key disclosure confirmed. No proof of complete erasure, zero duplication or cryptographic security. Optional optimizations unbenchmarked; no release acceptance.",
+  "limitations": [
+    "No full-size Argon2 operations, ignored full-cost tests, complete suite-3/suite-4 or independent Python vector replay. Known-answer tests include up to 256 MiB; real-browser operations use the existing reduced 256 KiB/one-pass configuration, not altered production parameters.",
+    "No >13 GB workload and no full card generation. After the user memory constraint, runtime suites were sequential, monitored at 3 GiB aggregate RSS with a 2 GiB available-memory reserve and a 3 GiB startup minimum. Earlier ordinary Rust run predates monitoring; no measured-memory claim for that run.",
+    "RSS is sampled once per second, may double-count shared pages, is not a hard allocation cap, does not diagnose the interruption or control unrelated sessions. Highest guarded peak 1279123456 bytes (~1.19 GiB); lowest available memory 5204623360 bytes (~4.85 GiB); no guard termination.",
+    "No canonical Docker/fresh WASM rebuild, final archive/signature/reproducibility acceptance, paid CI, release publication or Windows/macOS runtime. Existing package stamps/source equality/freshness are not canonical reproducibility.",
+    "No external Deriver end-to-end fields/workflow/handover, desktop/mobile visual or host accessibility acceptance. Standalone package classes/harness pages are separate evidence.",
+    "No exhaustive upstream internals audit/current dependency advisory or literature search. First-party integration and pinned manifests/licenses were reviewed, without new network/install behavior.",
+    "WASM marker inspection deliberately retains terminated Node VM memory. It is not access to terminated real-browser workers, swap exposure, persistence, exfiltration or guaranteed OS erasure. Pattern counts are not counts of logical allocations.",
+    "Setup failures are bounded synthetic constructor/copy/start injections. Actual OOM or zero-length allocation exhaustion was not induced. Real browsers and other lifecycle controls are separate evidence.",
+    "RecoveredPhrase witnesses are compile-only. Address-count probe is metadata-only against fresh release rlib; debug overflow is source inference, not executed panic. No astronomical search or real wallet material.",
+    "Clone controls use virtual synthetic files/unchanged production algorithm and independently parse ESM. Misses are not evidence of a currently hidden production clone or proof of all semantic DRY.",
+    "Aborted pre-ultra preparation excluded. Fresh explicit-ultra review and the resume after the interruption use identical source bytes. Empty interrupted records, initial harness mistakes and restricted EPERM captures are preserved, not claimed as passes.",
+    "Coordinator GPT-6.1/ultra setting is user-reported; exact client model/service identifier and actual coordinator effort telemetry unavailable, so canonical values are null. Review agents explicitly assigned gpt-6.1-sol / ultra; collaboration is not independent specialist certification.",
+    "Source/spec comparisons and known answers are not mathematical cryptographic proof. The separate specification has dirty documents; closure reference hashes identify cited files, not a clean release or proof of cross-session stability.",
+    "Only audit report/index/follow-up/harness/local evidence edits. No production/test/fixture/dependency/vendor/workflow edits, repository copies/worktrees, commits, pushes, tags or releases."
+  ],
+  "designPrinciples": [
+    {
+      "principle": "SRP",
+      "assessment": "Operation/facts types own one cohesive concern; CLI reading/printing stays separate."
+    },
+    {
+      "principle": "OCP",
+      "assessment": "Suite/reference/check variants centralize behavior; no new scattered dispatch defect confirmed."
+    },
+    {
+      "principle": "LSP",
+      "assessment": "Native/browser Argon2 engines keep the shared callback/result contract; corresponding known answers pass."
+    },
+    {
+      "principle": "ISP",
+      "assessment": "Engine, RNG and progress interfaces are narrow; four browser classes expose their own module surface."
+    },
+    {
+      "principle": "DIP",
+      "assessment": "Engine/RNG/progress/host behavior is supplied through traits or small callbacks, rather than terminal-only library code."
+    },
+    {
+      "principle": "DRY",
+      "assessment": "Container/reference/length/password rules generally delegate to owners; documented early JS refusals have library/runtime parity checks. Lexical assurance defects are separately tracked."
+    },
+    {
+      "principle": "Encapsulation",
+      "assessment": "RecoveredPhrase accessors now preserve the owned locked value; exceptional guard gaps remain in the SEC findings."
+    },
+    {
+      "principle": "Composition",
+      "assessment": "Browser classes use shared runtime/module/slot helpers and one WASM without a deep class hierarchy."
+    },
+    {
+      "principle": "Interfaces",
+      "assessment": "Different native/browser engines and supplied callbacks use shared contracts; no confirmed need for a new abstraction layer."
+    },
+    {
+      "principle": "Delegation",
+      "assessment": "ContainerFacts, OriginalFacts, Encryption, Rekey and RecoveryStatus answer their own questions; no further mandatory module extraction confirmed."
+    }
+  ],
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "documentBindings": [
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-013-harnesses/browser/README.md"
+        ],
+        "document": "docs/audits/AUD-013-harnesses/browser/README.md",
+        "originalSha256": "f48c34ac2d87ade79987a15856cc7f24dfd15cdbedc47224e5c5da80d5ebaf20",
+        "redactedSha256": "2b8259887f8cd5f1850b5a7d13c6e553f048cc3f79d5e7db9e76bd83e11e3729",
+        "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
+      },
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-013-harnesses/quality/README.md"
+        ],
+        "document": "docs/audits/AUD-013-harnesses/quality/README.md",
+        "originalSha256": "ccbc1a57986f3a0476e50ac943518c8139da815cd9feff53a501c572de40e99d",
+        "redactedSha256": "9b88b46c7950cb4138ff29b128cd66d05b0d399d68a207e486f2975cbf22648e",
+        "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
+      },
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-013-harnesses/rust/README.md"
+        ],
+        "document": "docs/audits/AUD-013-harnesses/rust/README.md",
+        "originalSha256": "3ecf925e092292696b4bd97bbd02af0d63b144a2d1451a98b1696a0bc2baa459",
+        "redactedSha256": "27e4e6cd82b560b79ff4827d2771dab10356daa8f655a84b0fc87f4afc3b8ec9",
+        "change": "privacy-only harness documentation; no executable or audit rerun"
+      },
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-011-harnesses/feature-clippy.sh"
+        ],
+        "document": "docs/audits/AUD-011-harnesses/feature-clippy.sh",
+        "originalSha256": "4d60121c41ae7ed875899fa078836d038476caf44523bf40f4e125765788dcb5",
+        "redactedSha256": "3d578091dde7b6d6c6c8996d00c6d4e34fc77c01b5e3981f6f3e9fe31bb8dfd6",
+        "change": "privacy-only runtime path portability; the original execution digest is retained; no audit checks were rerun"
+      },
+      {
+        "keyPath": [
+          "harnessHashes",
+          "docs/audits/AUD-013-harnesses/README.md"
+        ],
+        "document": "docs/audits/AUD-013-harnesses/README.md",
+        "originalSha256": "00ab53d01fd65cb567c8ca13823662cb98cbf2a8e89351df7b7ec71a35bffd1c",
+        "redactedSha256": "6b5a172cffcc33e2ca0ce4c9e15c8c9dae0dd949de1b017dff235115a2bcda08",
+        "change": "privacy-only harness documentation (history rewrite and amendment of 2026-10-09); no executable or audit rerun; amended again on 2026-10-09"
+      }
+    ],
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "The interruption described as the session interrupted (host out of memory)."
+        ],
+        "note": "Documentation-only edit; no check was rerun."
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: ca0086acf545d07bfe008ae340554124a48442bf -> abb16671b641378c0fc3c4d855f8d126498e754b."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "ca0086acf545d07bfe008ae340554124a48442bf": "abb16671b641378c0fc3c4d855f8d126498e754b"
+        }
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Documentation update of 2026-10-09: the specification commit b2395276bba3c593c518714caa29409b69f45961 is no longer on mhfe_spec main; the reference names 2cd5e4c96a2bf2cc177f8b99b81fa7427bdf1b86, whose specification text is the same (only documentation and audit-record wording differ)."
+        ],
+        "commitMap": {
+          "b2395276bba3c593c518714caa29409b69f45961": "2cd5e4c96a2bf2cc177f8b99b81fa7427bdf1b86"
+        },
+        "note": "Documentation-only edit; no check was rerun."
+      }
+    ]
+  }
+}

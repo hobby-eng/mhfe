@@ -1,0 +1,2653 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-018",
+  "auditNumber": 18,
+  "date": "2026-10-09",
+  "title": "MHFE 0.5.1 pre-release verification and remediation follow-up",
+  "completedUtc": "2026-10-09T14:02:31+00:00",
+  "reviewer": {
+    "name": "Codex coordinator and three scoped reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "reviewerPhases": [
+    {
+      "name": "coordinator",
+      "model": null,
+      "reasoningEffort": null,
+      "scope": "Build/release evidence, dependency provenance, final ledger and source binding"
+    },
+    {
+      "name": "core",
+      "model": null,
+      "reasoningEffort": null,
+      "scope": "Core correctness/spec/docs, independent skeptic, closure matrix and tooling shims"
+    },
+    {
+      "name": "native",
+      "model": null,
+      "reasoningEffort": null,
+      "scope": "Native/CLI source, fresh public PTY boundaries and malicious native-code trace"
+    },
+    {
+      "name": "browser",
+      "model": null,
+      "reasoningEffort": null,
+      "scope": "WASM/JS API protocols, package/host handover and malicious browser-code trace"
+    }
+  ],
+  "metadataNote": "Exact service model and actual reasoning setting are unavailable; prior user request for ultra is not substituted for measured phase metadata.",
+  "snapshot": {
+    "commit": "3c60594479302827fe40975b04fd07f9f6fd4b3b",
+    "commitComplete": false,
+    "workingTree": [
+      " M .github/workflows/ci.yml",
+      " M .github/workflows/release.yml",
+      " M AGENTS.md",
+      " M Cargo.toml",
+      " M README.md",
+      " M SECURITY.md",
+      " M docs/API.md",
+      " M docs/BROWSER-PACKAGE.md",
+      " M docs/audits/README.md",
+      " M docs/releases/v0.5.1.md",
+      " M packaging/Dockerfile.reproducible",
+      " M scripts/build-wasm.sh",
+      " M scripts/check.sh",
+      " M scripts/independent-suite3.py",
+      " M scripts/verify-browser-package.mjs",
+      " M scripts/verify-browsers.mjs",
+      " M scripts/verify-hidden-input-windows.py",
+      " M scripts/verify-hidden-input.py",
+      " M src/bin/mhfe/check.rs",
+      " M src/bin/mhfe/check_word.rs",
+      " M src/bin/mhfe/choice.rs",
+      " M src/bin/mhfe/decrypt.rs",
+      " M src/bin/mhfe/diceware.rs",
+      " M src/bin/mhfe/encrypt.rs",
+      " M src/bin/mhfe/exit.rs",
+      " M src/bin/mhfe/hidden_input.rs",
+      " M src/bin/mhfe/length_choice.rs",
+      " M src/bin/mhfe/main.rs",
+      " M src/bin/mhfe/menu.rs",
+      " M src/bin/mhfe/new_wallet.rs",
+      " D src/bin/mhfe/plate_repair.rs",
+      " M src/bin/mhfe/protect.rs",
+      " M src/bin/mhfe/readme.rs",
+      " M src/bin/mhfe/rekey.rs",
+      " M src/bin/mhfe/self_test.rs",
+      " M src/bin/mhfe/serve.rs",
+      " M src/bin/mhfe/settings.rs",
+      " M src/bin/mhfe/startup.rs",
+      " M src/bin/mhfe/style.rs",
+      " M src/bin/mhfe/terminal.rs",
+      " M src/bin/mhfe/test_tools.rs",
+      " M src/bin/mhfe/wallets.rs",
+      " M src/check_word.rs",
+      " M src/check_word/known_answers.rs",
+      " M src/container.rs",
+      " M src/container/known_answers.rs",
+      " M src/engine/browser.rs",
+      " M src/engine/ffi.rs",
+      " M src/engine/known_answers.rs",
+      " M src/engine/mod.rs",
+      " M src/engine/native.rs",
+      " M src/error.rs",
+      " M src/feistel.rs",
+      " M src/hidden.rs",
+      " M src/hidden/known_answers.rs",
+      " M src/lib.rs",
+      " M src/memory.rs",
+      " M src/mhfe.rs",
+      " M src/mhfe/known_answers.rs",
+      " M src/new_password.rs",
+      " M src/operation.rs",
+      " M src/operation/known_answers.rs",
+      " M src/packing.rs",
+      " M src/phrase.rs",
+      " M src/phrase/known_answers.rs",
+      " M src/random.rs",
+      " M src/random/health.rs",
+      " M src/rehearsal.rs",
+      " M src/rekey.rs",
+      " M src/rekey/known_answers.rs",
+      " M src/repair.rs",
+      " M src/repair/known_answers.rs",
+      " M src/self_check.rs",
+      " M src/self_check/sets.rs",
+      " M src/self_test.rs",
+      " M src/suite.rs",
+      " M src/validation_cases.rs",
+      " M src/vectors.rs",
+      " M src/wallet.rs",
+      " M src/wallet/known_answers.rs",
+      " M src/wallet_check.rs",
+      " M src/wallet_check/threads.rs",
+      " M src/wasm_api/core.rs",
+      " M src/wasm_api/mod.rs",
+      " M src/wasm_api/passwords.rs",
+      " M src/wasm_api/repair.rs",
+      " M src/wasm_api/wallet.rs",
+      " M tests/fixtures/suite3-vectors/SHA256SUMS",
+      " M tests/fixtures/suite3-vectors/independent-verification.json",
+      " M tests/fixtures/suite3-vectors/negative-cases.json",
+      " M tests/suite3_vectors.rs",
+      " M tests/suite4_vectors.rs",
+      " M web/client.d.ts",
+      " M web/client.js",
+      " M web/core-worker.js",
+      " M web/passwords-worker.js",
+      " M web/passwords.d.ts",
+      " M web/passwords.js",
+      " M web/repair-worker.js",
+      " M web/repair.d.ts",
+      " M web/repair.js",
+      " M web/runtime.d.ts",
+      " M web/runtime.js",
+      " M web/wallet-worker.js",
+      " M web/wallet.d.ts",
+      " M web/wallet.js",
+      " M web/worker-runtime.js",
+      "?? docs/audits/AUD-009-harnesses/",
+      "?? docs/audits/AUD-010-harnesses/",
+      "?? docs/audits/AUD-011-harnesses/",
+      "?? docs/audits/AUD-012-harnesses/",
+      "?? docs/audits/AUD-013-harnesses/",
+      "?? docs/audits/AUD-014-harnesses/",
+      "?? docs/audits/AUD-015-harnesses/",
+      "?? docs/audits/AUD-016-harnesses/",
+      "?? docs/audits/AUD-017-harnesses/",
+      "?? docs/audits/AUD-018-harnesses/",
+      "?? docs/audits/audit-09-2026-10-06.json",
+      "?? docs/audits/audit-09-2026-10-06.md",
+      "?? docs/audits/audit-10-2026-10-07.json",
+      "?? docs/audits/audit-10-2026-10-07.md",
+      "?? docs/audits/audit-11-2026-10-08.json",
+      "?? docs/audits/audit-11-2026-10-08.md",
+      "?? docs/audits/audit-12-2026-10-08.json",
+      "?? docs/audits/audit-12-2026-10-08.md",
+      "?? docs/audits/audit-13-2026-10-08.json",
+      "?? docs/audits/audit-13-2026-10-08.md",
+      "?? docs/audits/audit-14-2026-10-08.json",
+      "?? docs/audits/audit-14-2026-10-08.md",
+      "?? docs/audits/audit-15-2026-10-09.json",
+      "?? docs/audits/audit-15-2026-10-09.md",
+      "?? docs/audits/audit-16-2026-10-09.json",
+      "?? docs/audits/audit-16-2026-10-09.md",
+      "?? docs/audits/audit-17-2026-10-09.json",
+      "?? docs/audits/audit-17-2026-10-09.md",
+      "?? scripts/public-test-data.mjs",
+      "?? scripts/verify-cli-browser-parity.mjs",
+      "?? scripts/verify-no-copies.mjs",
+      "?? src/bin/mhfe/chosen_words.rs",
+      "?? src/bin/mhfe/container_repair.rs",
+      "?? src/bin/mhfe/container_search.rs",
+      "?? src/bin/mhfe/made_password.rs",
+      "?? src/bin/mhfe/phrase_length.rs",
+      "?? src/bin/mhfe/typed_line.rs",
+      "?? src/detection.rs",
+      "?? src/search.rs",
+      "?? src/search/",
+      "?? src/test_support.rs",
+      "?? src/wasm_api/word_hints.rs",
+      "?? src/word_hints.rs",
+      "?? src/word_hints/",
+      "?? src/word_wishes.rs",
+      "?? src/word_wishes/"
+    ],
+    "sourceFingerprint": "334bef226b6dd9c638b91d90298fff3ff60b17abcbfdb0633289798af9dccd58",
+    "nonAuditSourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3",
+    "companionSpecification": {
+      "capturedUtc": "2026-10-09T12:57:36+00:00",
+      "head": "2cd5e4c96a2bf2cc177f8b99b81fa7427bdf1b86",
+      "branch": "main",
+      "status": [
+        " M CHANGELOG.md",
+        " M README.md",
+        " M docs/DESIGN-NOTES.md",
+        " M docs/audits/AUD-004-publication.json",
+        " M docs/audits/AUD-005-publication.json",
+        " M vectors/profiles/README.md",
+        " M vectors/suite3/README.md",
+        " M vectors/suite4/README.md",
+        "?? AGENTS.md",
+        "?? docs/drafts/"
+      ],
+      "files": 101,
+      "sourceFingerprint": "8c7645dde8479a463c5912ed6807b411a54302c13d71fa3e3237e939f2fd2c80",
+      "codeFingerprint": "741baa99527ce090b2124d6244ec755304427b1ad284534e95cbbd324d79c5c9"
+    },
+    "finalSnapshotLabel": "closeout-final",
+    "initialUtc": "2026-10-09T12:57:36+00:00",
+    "finalUtc": "2026-10-09T14:01:46+00:00",
+    "nonAuditSourceUnchanged": true,
+    "finalFullFingerprint": "81f03b68f73ec7ae3da06bacdd00b0e4833d7d902766f54e604f15086549bec3",
+    "fullManifestChangeReason": "Only the audit index changed outside the excluded own AUD-018 paths; non-audit code bytes are identical."
+  },
+  "scope": {
+    "request": "Explicit pre-release verification after remediation, plus requested parallel malicious-code/tampering review.",
+    "tools": "MHFE library, CLI, WASM and browser package; companion MHFE specification; MHFE-specific multi-chain host handover read-only.",
+    "ownerExclusions": {
+      "recordedUtc": "2026-10-09T12:57:36.776198+00:00",
+      "request": "Pre-release verification after remediation, with no repeated vector replays.",
+      "excludedByOwner": [
+        "full-size Argon2/MHFE vector replays",
+        "independent full-cost vector replays"
+      ],
+      "basis": "Owner states vectors were just checked; not represented as newly executed evidence.",
+      "reservation": "AUD-018",
+      "memoryBudgetBytes": 4294967296,
+      "concurrency": "One heavy check/build at a time. Reviewers source and bounded small probes only."
+    },
+    "verificationLevel": "Release-level checks except explicitly owner-excluded full-cost replays; compact scoped review, no expanded major-release claim."
+  },
+  "planningNote": "Initial coverage-plan imported the prior ledger and retained its old fingerprint/proposed evidence labels. Its original bytes are preserved; this final checks array records current AUD-018 identities, actual methods, evidence and outcomes.",
+  "checks": [
+    {
+      "id": "CHECK-SEC-001",
+      "category": "SEC",
+      "logicalGroup": "Threat model and secret ownership",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Public wrong-field redaction, representative input locks and secret ownership; no forensic erasure claim.",
+      "outcome": "passed",
+      "evidenceOrGap": "Public wrong-field redaction, representative input locks and secret ownership; no forensic erasure claim.",
+      "expectedEvidence": [
+        "native-fingerprint",
+        "native-low-memlock-final",
+        "native malicious review"
+      ],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-SEC-002",
+      "category": "SEC",
+      "logicalGroup": "Secret Vault, CSP, sandbox, and transport",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Rust process/server boundaries pass, but Python fallback retains original terminal-control diagnostic injection (AUD-015-SEC002).",
+      "outcome": "failed",
+      "evidenceOrGap": "Rust process/server boundaries pass, but Python fallback retains original terminal-control diagnostic injection (AUD-015-SEC002).",
+      "expectedEvidence": ["native-path-controls", "native-python-controls.json", "release-check"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-SEC-003",
+      "category": "SEC",
+      "logicalGroup": "Network egress and secret guards",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Trace all scoped network/command sinks; expected local serving and build downloads classified.",
+      "outcome": "passed",
+      "evidenceOrGap": "Trace all scoped network/command sinks; expected local serving and build downloads classified.",
+      "expectedEvidence": [
+        "native-malicious-review.json",
+        "browser-malicious-review.json",
+        "supply-chain review"
+      ],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-SEC-004",
+      "category": "SEC",
+      "logicalGroup": "Randomness, encryption, and authentication",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Engine KATs and reduced-cost checks passed; 12 core crypto/dependency files unchanged; full-cost replay owner-excluded.",
+      "outcome": "passed",
+      "evidenceOrGap": "Engine KATs and reduced-cost checks passed; 12 core crypto/dependency files unchanged; full-cost replay owner-excluded.",
+      "expectedEvidence": ["release-check", "core-source-identity", "core-review.json"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-SEC-005",
+      "category": "SEC",
+      "logicalGroup": "Secret lifecycle and exceptional paths",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Cleanup and exceptional ownership paths covered; JavaScript GC and physical allocator/swap erasure not certified.",
+      "outcome": "passed",
+      "evidenceOrGap": "Cleanup and exceptional ownership paths covered; JavaScript GC and physical allocator/swap erasure not certified.",
+      "expectedEvidence": ["browser-worker-cleanup-bounded", "native-cli-static", "native review"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-SEC-006",
+      "category": "SEC",
+      "logicalGroup": "Browser injection, persistence, and sensitive APIs",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Malformed replies and explicit-null refusal/cleanup passed; no confirmed hidden persistence or exfiltration found in reviewed source.",
+      "outcome": "passed",
+      "evidenceOrGap": "Malformed replies and explicit-null refusal/cleanup passed; no confirmed hidden persistence or exfiltration found in reviewed source.",
+      "expectedEvidence": [
+        "browser-page-protocol-bounded",
+        "release-check",
+        "browser malicious review"
+      ],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-SEC-007",
+      "category": "SEC",
+      "logicalGroup": "Read-only guarantees and availability bounds",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Huge-scope native cancellation returns within 2s; kernel heavy-work limits enforced, no cryptographic parameter reductions.",
+      "outcome": "passed",
+      "evidenceOrGap": "Huge-scope native cancellation returns within 2s; kernel heavy-work limits enforced, no cryptographic parameter reductions.",
+      "expectedEvidence": ["core-native-cancel", "release-check", "cgroup witness"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-FUN-001",
+      "category": "FUN",
+      "logicalGroup": "BIP39, entropy, and seed interpretation",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Current BIP39/packing known-answer, metadata and negative tests; full-cost suite replay excluded by owner.",
+      "outcome": "passed",
+      "evidenceOrGap": "Current BIP39/packing known-answer, metadata and negative tests; full-cost suite replay excluded by owner.",
+      "expectedEvidence": ["release-check", "core-source-identity"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-FUN-002",
+      "category": "FUN",
+      "logicalGroup": "HD derivation and every coin/profile",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Current wallet known answers and CLI/browser parity pass; earlier independent oracle retained, not rerun or claimed fresh.",
+      "outcome": "passed",
+      "evidenceOrGap": "Current wallet known answers and CLI/browser parity pass; earlier independent oracle retained, not rerun or claimed fresh.",
+      "expectedEvidence": ["release-check", "core-review.json"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-FUN-003",
+      "category": "FUN",
+      "logicalGroup": "BIP85, BIP38, messages, and Silent Payments",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "MHFE has no BIP85, BIP38, message-signing or Silent Payments feature.",
+      "outcome": "not-applicable",
+      "evidenceOrGap": "MHFE has no BIP85, BIP38, message-signing or Silent Payments feature.",
+      "expectedEvidence": ["Source/API inventory"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-FUN-004",
+      "category": "FUN",
+      "logicalGroup": "Scripts, descriptors, Miniscript, and multisig",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "MHFE has no descriptor/Miniscript/multisig feature; supported address encodings belong to FUN002.",
+      "outcome": "not-applicable",
+      "evidenceOrGap": "MHFE has no descriptor/Miniscript/multisig feature; supported address encodings belong to FUN002.",
+      "expectedEvidence": ["Source/API inventory"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-FUN-005",
+      "category": "FUN",
+      "logicalGroup": "Transactions, PSBT version context, and commitments",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "MHFE has no transaction/PSBT parsing or signing feature.",
+      "outcome": "not-applicable",
+      "evidenceOrGap": "MHFE has no transaction/PSBT parsing or signing feature.",
+      "expectedEvidence": ["Source/API inventory"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-FUN-006",
+      "category": "FUN",
+      "logicalGroup": "Recovery and backup formats",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Rekey recovery-state reuse, length/refusal rules, repair/search and browser owner schema covered in current MHFE package; host handover tracked separately.",
+      "outcome": "passed",
+      "evidenceOrGap": "Rekey recovery-state reuse, length/refusal rules, repair/search and browser owner schema covered in current MHFE package; host handover tracked separately.",
+      "expectedEvidence": ["release-check", "real-browsers", "core/browser/native reviews"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-FUN-007",
+      "category": "FUN",
+      "logicalGroup": "Discovery, providers, proofs, and accounting",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "MHFE has no network provider/discovery/balance/history feature; offline address search is covered separately.",
+      "outcome": "not-applicable",
+      "evidenceOrGap": "MHFE has no network provider/discovery/balance/history feature; offline address search is covered separately.",
+      "expectedEvidence": ["Source/API inventory"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-API-001",
+      "category": "API",
+      "logicalGroup": "Actual dependency call contracts",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "browser",
+      "method": "Actual rebuilt WASM/Argon2 bindings and strict optional-secret contracts; synthetic transport probe complements real browsers.",
+      "outcome": "passed",
+      "evidenceOrGap": "Actual rebuilt WASM/Argon2 bindings and strict optional-secret contracts; synthetic transport probe complements real browsers.",
+      "expectedEvidence": ["release-check", "real-browsers", "browser-page-protocol-bounded"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-API-002",
+      "category": "API",
+      "logicalGroup": "Async state, cancellation, and revisions",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "browser",
+      "method": "Cancellation, callbacks, malformed envelopes, late-message and operation-slot cleanup; no single-derivation preemption claim.",
+      "outcome": "passed",
+      "evidenceOrGap": "Cancellation, callbacks, malformed envelopes, late-message and operation-slot cleanup; no single-derivation preemption claim.",
+      "expectedEvidence": [
+        "core-native-cancel",
+        "browser-page-protocol-bounded",
+        "browser-worker-cleanup-bounded"
+      ],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-API-003",
+      "category": "API",
+      "logicalGroup": "Public export schema and monetary fidelity",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "browser",
+      "method": "Current walletCheck/statedWords/otherLengths declarations and serialization agree with tested upstream contracts; host gap has its own finding.",
+      "outcome": "passed",
+      "evidenceOrGap": "Current walletCheck/statedWords/otherLengths declarations and serialization agree with tested upstream contracts; host gap has its own finding.",
+      "expectedEvidence": ["release-check", "real-browsers", "browser-review.json"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-API-004",
+      "category": "API",
+      "logicalGroup": "Encoding and import/export interoperability",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "browser",
+      "method": "Caller byte ownership, UTF-8 refusals, repair and wallet output known answers/interop; full-size vectors excluded.",
+      "outcome": "passed",
+      "evidenceOrGap": "Caller byte ownership, UTF-8 refusals, repair and wallet output known answers/interop; full-size vectors excluded.",
+      "expectedEvidence": ["release-check", "real-browsers"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-BLD-001",
+      "category": "BLD",
+      "logicalGroup": "Manifest, flags, and feature composition",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "coordinator",
+      "method": "Exact pins, native/WASM/four-module clippy and actual copy gate pass; checker was not weakened.",
+      "outcome": "passed",
+      "evidenceOrGap": "Exact pins, native/WASM/four-module clippy and actual copy gate pass; checker was not weakened.",
+      "expectedEvidence": ["release-check", "format-check", "core source review"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-BLD-002",
+      "category": "BLD",
+      "logicalGroup": "Matrix depth and runtime sampling",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "coordinator",
+      "method": "Upstream both-engine/both-mode matrix passes; required HTML handover remains stale (AUD-018-BLD001). Cross-target compilation is not target runtime acceptance.",
+      "outcome": "failed",
+      "evidenceOrGap": "Upstream both-engine/both-mode matrix passes; required HTML handover remains stale (AUD-018-BLD001). Cross-target compilation is not target runtime acceptance.",
+      "expectedEvidence": ["real-browsers", "canonical-build", "browser/skeptic source traces"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-BLD-003",
+      "category": "BLD",
+      "logicalGroup": "Lockfiles, source provenance, and licenses",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "coordinator",
+      "method": "22 vendored files, 25 pins, 108 Cargo archives/4075 unpacked files match; current RustSec clean; npm archive bytes match with generated shims separately reviewed.",
+      "outcome": "passed",
+      "evidenceOrGap": "22 vendored files, 25 pins, 108 Cargo archives/4075 unpacked files match; current RustSec clean; npm archive bytes match with generated shims separately reviewed.",
+      "expectedEvidence": ["provenance", "rustsec-current", "supply-chain", "shim-review.json"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-BLD-004",
+      "category": "BLD",
+      "logicalGroup": "Canonical WASM and Docker bytes",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "coordinator",
+      "method": "Prescribed cached and REPRODUCIBLE_NO_CACHE=1 canonical builds, per-file checksum/license/source checks and exact archive byte comparison.",
+      "outcome": "passed",
+      "evidenceOrGap": "All four canonical archives and checksum files match between the two builds.",
+      "expectedEvidence": [
+        "canonical-build",
+        "canonical-uncached-final",
+        "canonical-artifacts",
+        "canonical-compare"
+      ],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-BLD-005",
+      "category": "BLD",
+      "logicalGroup": "Artifacts, CI, and release workflows",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "coordinator",
+      "method": "CI release dependency now covers all tagged checks; local map/annotated-tag identities match. Dirty fixes lack signed release commit; historical external assets/signature trust unexecuted.",
+      "outcome": "passed",
+      "evidenceOrGap": "CI release dependency now covers all tagged checks; local map/annotated-tag identities match. Dirty fixes lack signed release commit; historical external assets/signature trust unexecuted.",
+      "expectedEvidence": ["canonical-artifacts", "core-review.json", "closure-matrix.json"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-UI-001",
+      "category": "UI",
+      "logicalGroup": "Real files and representative viewports",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "native",
+      "method": "Original CJK cursor passes; rocket cursor remains one column short (AUD-016-UI001). Browser fixture is functional, not full host visual acceptance.",
+      "outcome": "failed",
+      "evidenceOrGap": "Original CJK cursor passes; rocket cursor remains one column short (AUD-016-UI001). Browser fixture is functional, not full host visual acceptance.",
+      "expectedEvidence": ["native-unicode-original", "native-unicode-rocket", "real-browsers"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-UI-002",
+      "category": "UI",
+      "logicalGroup": "Navigation, inputs, and state preservation",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "native",
+      "method": "CLI options/refusals and recovery-state reuse covered; no complete host navigation sweep.",
+      "outcome": "passed",
+      "evidenceOrGap": "CLI options/refusals and recovery-state reuse covered; no complete host navigation sweep.",
+      "expectedEvidence": [
+        "release-check",
+        "native-cli-options",
+        "native-cli-static",
+        "browser protocol"
+      ],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-UI-003",
+      "category": "UI",
+      "logicalGroup": "Secret visibility, help, QR, and accessibility",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "native",
+      "method": "Actual lock warnings/redaction/help verified in available PTY; full screen-reader/terminal matrix not run.",
+      "outcome": "passed",
+      "evidenceOrGap": "Actual lock warnings/redaction/help verified in available PTY; full screen-reader/terminal matrix not run.",
+      "expectedEvidence": ["native-fingerprint", "native-low-memlock-final", "release-check"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-ARC-001",
+      "category": "ARC",
+      "logicalGroup": "Ownership, imports, and composition seams",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Independent library modules and narrow interfaces build; CLI policy delegates to library. Host artifact handover separately failed.",
+      "outcome": "passed",
+      "evidenceOrGap": "Independent library modules and narrow interfaces build; CLI policy delegates to library. Host artifact handover separately failed.",
+      "expectedEvidence": ["release-check", "native-cli-static", "core/browser source reviews"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-ARC-002",
+      "category": "ARC",
+      "logicalGroup": "Dead code, duplication, and false positives",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Actual copy gate/clippy and shared message/scan-gap definitions pass; no assertion removal to obtain green.",
+      "outcome": "passed",
+      "evidenceOrGap": "Actual copy gate/clippy and shared message/scan-gap definitions pass; no assertion removal to obtain green.",
+      "expectedEvidence": ["release-check", "native-cli-static", "native-scan-gap-static"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-ARC-003",
+      "category": "ARC",
+      "logicalGroup": "Comments, tests, and production-path fidelity",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Negative assertions retained/expanded; original probes reviewed and false positives classified; round trips alone not treated as independent proof.",
+      "outcome": "passed",
+      "evidenceOrGap": "Negative assertions retained/expanded; original probes reviewed and false positives classified; round trips alone not treated as independent proof.",
+      "expectedEvidence": ["real-browsers", "core-native-cancel", "skeptic-review.json"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-DOC-001",
+      "category": "DOC",
+      "logicalGroup": "User-facing capability and safety descriptions",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Current MHFE source-check, rekey, lock and browser result wording trace agrees; host corrected-length presentation remains BLD001.",
+      "outcome": "passed",
+      "evidenceOrGap": "Current MHFE source-check, rekey, lock and browser result wording trace agrees; host corrected-length presentation remains BLD001.",
+      "expectedEvidence": ["core-review.json", "closure-matrix.json", "browser/native reviews"],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-DOC-002",
+      "category": "DOC",
+      "logicalGroup": "Commands, metadata, links, and legal materials",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "15 Markdown files/0 link-list failures, 0 unknown documented symbols; Rustdoc/license/help and archive legal bytes pass.",
+      "outcome": "passed",
+      "evidenceOrGap": "15 Markdown files/0 link-list failures, 0 unknown documented symbols; Rustdoc/license/help and archive legal bytes pass.",
+      "expectedEvidence": [
+        "core-doc-links",
+        "core-doc-symbols",
+        "release-check",
+        "canonical-artifacts"
+      ],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    },
+    {
+      "id": "CHECK-DOC-003",
+      "category": "DOC",
+      "logicalGroup": "Audit records and evidence consistency",
+      "scope": "Current MHFE 0.5.1 source and specification; MHFE-specific HTML host handover",
+      "primaryOwner": "core",
+      "method": "Four historical specification source bindings still unresolved (AUD-015-DOC001); external/hash scan false positives classified; new report pair validated separately.",
+      "outcome": "failed",
+      "evidenceOrGap": "Four historical specification source bindings still unresolved (AUD-015-DOC001); external/hash scan false positives classified; new report pair validated separately.",
+      "expectedEvidence": [
+        "core-record-fields",
+        "core-record-prose",
+        "skeptic-review.json",
+        "report validation"
+      ],
+      "sourceFingerprint": "3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-018-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "The browser host still carries the older MHFE package and recovery schema",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Workspace policy requires current library/browser behavior and completed handover to multi-chain before release.",
+      "affectedFiles": [
+        "../multi-chain-wallet-tools/packages/recovery-mhfe-wasm/generated/modules.json",
+        "../multi-chain-wallet-tools/packages/recovery-mhfe-wasm/generated/core/client.d.ts",
+        "../multi-chain-wallet-tools/packages/recovery-mhfe-wasm/generated/runtime/runtime.js",
+        "../multi-chain-wallet-tools/apps/key-derivation/src/ui/recovery-mhfe-decode.ts",
+        "../multi-chain-wallet-tools/apps/key-derivation/src/ui/recovery-mhfe-owner-check.ts"
+      ],
+      "evidence": [
+        "local-only: browser-review.json hostHandover",
+        "local-only: skeptic-review.json decisions",
+        "local-only: metadata-final.json and artifacts.json"
+      ],
+      "reproduction": "Compare generated/modules.json and current dist/modules.json; trace host decode and owner callbacks against current web/client.d.ts and runtime helpers. No host rebuild is needed to observe these source differences.",
+      "expected": "The host consumes the current package/result schema, passes the recovery source-check passphrase, reports walletCheck, and explains the stated-versus-recovered word count to the owner.",
+      "observed": "Both packages are unreleased 0.5.1, but the host pins build 6a91d106c1b87634 (base abb16671b641378c0fc3c4d855f8d126498e754b; manifest SHA-256 304993d69a983d232545185fc0e43f447db24403d9c030cc473f07188dbf0913). Fresh host and canonical upstream build is cc38bfadd2bfe9b2. Host decode still reads passesWalletCheckWithoutPassphrase and omits the new recovery passphrase; the owner page has no statedWords handling. Its generated runtime lacks current malformed-envelope/null remediation helpers.",
+      "impact": "The workspace release handover is incomplete. The host README declares its package unreleased and its provenance gate refuses that state. A different build ID alone is not a versioning defect. Host rekey auto-selects BuiltInCheck only for builtInCheck, so the old detected kind does not establish exposure of the AUD-017-FUN001 bypass in this HTML. No published vulnerable host, wrong cryptographic output, or failed host build is demonstrated.",
+      "recommendedFix": "Hand over the current verified package with its provenance, update the host fields and source-check passphrase forwarding, and show statedWords where a recovered length differs.",
+      "requiredVerification": "Run the host provenance/schema checks and MHFE browser regressions in both editions and both engines where present, including owner refusal, contradictory lengths, passphrase-aware source-check outcomes and malformed input cleanup.",
+      "relatedFindings": ["AUD-017-API001", "AUD-017-DOC002", "AUD-016-API002", "AUD-016-API003"],
+      "newInThisAudit": true
+    },
+    {
+      "id": "AUD-015-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "The privacy history rewrite updated audit-record commit references only partly",
+      "severity": "medium",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Publishing the rewritten historical audit records with unresolved ordinary source bindings, per the original finding; not a current cryptographic-output failure.",
+      "affectedFiles": [
+        "docs/audits/audit-02-2026-09-22.json",
+        "docs/audits/audit-08-2026-10-06.json"
+      ],
+      "reproduction": "Run the retained record_commit_fields.py and resolve the reported historical specification commits in both authoritative repositories. Classify foreign database/compiler commits separately.",
+      "expected": "AGENTS.md: a commit an audit record names is rewritten only together with that record, whose hashes are then updated; Markdown and JSON agree.",
+      "observed": "Exactly four historical specification fields remain unresolved: AUD-002 /snapshot/companionSpecification/commit is e87eb5cdbd02b41c15aa512cd32055d56d3bd760; AUD-008 /snapshot/specificationCommit, /researchOpportunities/snapshot/specificationCommit and /remediationVerification/snapshot/specification/commit are 28e50e049d48cf1d5a8a529380192b6371458a57. Existing privacy maps do not explain these specification identities. The fifth raw structured failure is an external RustSec database identity, not another source-binding defect.",
+      "impact": "These four companion-specification source bindings in AUD-002/AUD-008 cannot be resolved in the authoritative checkouts or explained by their retained privacy mappings. This limits reproducibility of those historical reviewed-source identities; it does not invalidate every audit or demonstrate a current encryption-output defect.",
+      "evidence": [
+        "local-only: core-record-fields.log",
+        "local-only: core-record-prose.log",
+        "local-only: skeptic-review.json"
+      ],
+      "recommendedFix": "Recover a trustworthy old-to-new specification mapping or explicitly annotate unavailable historical source identities and their evidence limits. Update their structured and prose bindings consistently; do not invent replacement commits.",
+      "requiredVerification": "Resolve or explicitly classify all repository source-commit fields, validate the Markdown/JSON pairs and retained hash bindings, and retain external/history explanations without pretending checks were rerun.",
+      "reviewer": "R5",
+      "newInThisAudit": false
+    },
+    {
+      "id": "AUD-015-SEC002",
+      "category": "SEC",
+      "kind": "finding",
+      "title": "Control sequences from typed answers and from the fast-mode checksum file are written raw to the terminal",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Low public-metadata diagnostic defect. Tested refusals occur before listener creation; no secret was handled or disclosure observed. The repaired Rust variant is recorded separately.",
+      "affectedFiles": [
+        "packaging/mhfe-fast-mode.py:208",
+        "packaging/mhfe-fast-mode.py:247",
+        "packaging/mhfe-fast-mode.py:293",
+        "dist/core/mhfe-fast-mode.py",
+        "scripts/build-wasm.sh:99"
+      ],
+      "reproduction": "python3 docs/audits/AUD-018-harnesses/run.py native-python-path-controls-final python3 docs/audits/AUD-018-harnesses/native/verify-python-path-controls.py native-python-path-controls-final",
+      "expected": "Untrusted text is shown with control characters neutralised, as the secret prompts promise (SECURITY.md:29).",
+      "observed": "All four cases exit 2 with zero stdout and exactly one unescaped synthetic OSC 52 sequence in stderr. Refused is handled before listener construction; no server/browser/KDF ran.",
+      "impact": "Terminal-control injection from attacker-controlled public path/checksum metadata in the fallback helper. This is incomplete remediation of the existing finding, not evidence of intentionally malicious code.",
+      "evidence": [
+        "local-only: native-python-controls.json",
+        "local-only: native-path-controls.log",
+        "packaging/mhfe-fast-mode.py"
+      ],
+      "recommendedFix": "Apply the same control escaping and checksum-name validation to the Python fallback, with one source of each rule and a targeted negative regression.",
+      "requiredVerification": "Test public parent-path and checksum-name control sequences in both Rust and Python serving helpers, capture raw diagnostics safely, and ensure invalid paths are refused before serving.",
+      "reviewer": "R2",
+      "newInThisAudit": false
+    },
+    {
+      "id": "AUD-016-UI001",
+      "category": "UI",
+      "kind": "finding",
+      "title": "Wide Unicode password characters receive incorrect terminal cursor positions",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "The observed error affects visual editing; the probe did not show different password bytes reaching the KDF or incorrect cryptographic output.",
+      "affectedFiles": ["src/bin/mhfe/typed_line.rs:78", "src/bin/mhfe/typed_line.rs:210"],
+      "checks": ["CHECK-UI-001", "CHECK-UI-002", "CHECK-UI-003"],
+      "evidence": [
+        "local-only: native-unicode-original.log",
+        "local-only: native-unicode-rocket.log",
+        "src/bin/mhfe/typed_line.rs:210"
+      ],
+      "reproduction": "Run the retained native verify-boundaries.py unicode-original and unicode-rocket probes against the fresh binary in a bounded Linux PTY. Both cancel without completing a KDF.",
+      "expected": "Visible password editing places the cursor at column 23 after the wide character in the tested line.",
+      "observed": "Original U+754C passes. U+1F680 is absent from the manual wide-character table: expected column 23, observed 22; host wcwidth is 2. Terminal settings are restored on cancellation.",
+      "impact": "Incorrect display/cursor editing for omitted wide characters. No changed password/KDF bytes, truncation, ciphertext defect or secret disclosure was observed.",
+      "recommendedFix": "Use a complete maintained width policy for supported terminal conventions and cover omitted wide characters, combining marks and wrapping.",
+      "requiredVerification": "Retain the original CJK case and add the rocket and broader wide/combining/wrap regressions on the supported terminal platforms.",
+      "confidence": "confirmed emitted cursor sequence; no full visual terminal emulator or Unicode matrix executed",
+      "newInThisAudit": false
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-016-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in fresh bounded native reproduction",
+      "evidence": ["local-only: core-review.json"],
+      "workingTreeVerification": "Native abort is distinct from match-stop. The callback error raises abort, running comparisons receive its predicate, and find_address_until checks it before every derived address. Main progress is suppressed after abort while workers end. Bounded BIP39/master-key/path setup is still synchronous; this does not claim cancellation inside PBKDF2 or a single derivation.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-016-BLD002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in fresh upstream package and completed native browser matrix",
+      "evidence": [
+        "local-only: release-check.log",
+        "local-only: real-browsers.log",
+        "local-only: browser-review.json"
+      ],
+      "workingTreeVerification": "Exact candidate/key-set comparisons remain; expected rekey objects explicitly add walletCheck from independently checked cases. Added wrong-password VERIFIER_MISMATCH and no-match assertions preserve negative length coverage. Owner24 callback cannot run, even when ready to answer true. LENGTH_DIFFERS must follow exactly12 recovery rounds and precede sealing; early refusals use a distinct zero-round accumulator. TypeError now compares the exact current whole-number message.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-016-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in assigned source/runtime scope",
+      "evidence": ["local-only: docs/audits/AUD-018-evidence/native-fingerprint.log"],
+      "workingTreeVerification": "Fresh script binary emits neither full public mnemonic nor synthetic wrong-field password; CLI exits 2 with zero stdout. Runtime plus source trace verifies the original trigger.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-016-API002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in fresh upstream package and completed native browser matrix",
+      "evidence": [
+        "local-only: release-check.log",
+        "local-only: real-browsers.log",
+        "local-only: browser-review.json"
+      ],
+      "workingTreeVerification": "isReadableReply refuses non-object/missing-type/invalid-ready/invalid-error envelopes, stop settles PACKAGE_MISMATCH and terminates the worker. unknownMessage avoids coercing arbitrary worker objects. Package regressions assert no event-handler throw, worker terminated, and next operation slot reusable for eleven malformed shapes after ready.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-016-API003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in fresh upstream package and completed native browser matrix",
+      "evidence": [
+        "local-only: release-check.log",
+        "local-only: real-browsers.log",
+        "local-only: browser-review.json"
+      ],
+      "workingTreeVerification": "secretOrEmpty defaults only undefined; explicitly supplied null must satisfy requireSecret. All original review/walletCheck/draw repetition paths apply it before ready or secret copying; omitted-value semantics retained in targeted regressions. Native browser wipe assertion now distinguishes early wrong-type rejection from surrogate rejection after the first byte copy.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-016-BLD001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent",
+      "evidence": ["local-only: release-check.log"],
+      "workingTreeVerification": "Actual 50-token copy gate passes; all three diagnosed duplicate test blocks are refactored; no checker relaxation.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-016-SEC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in assigned source/runtime scope",
+      "evidence": ["local-only: docs/audits/AUD-018-evidence/native-low-memlock-final.log"],
+      "workingTreeVerification": "Final low-quota probe passes: no positive claim before input or in final summary; final summary says not locked/may reach swap; actual accepted line warns; VmLck 0 kB. Warning timing and best-effort future allocations remain explicit limits.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-016-UI001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "present; incomplete remediation",
+      "evidence": [
+        "local-only: native-unicode-original.log",
+        "local-only: native-unicode-rocket.log",
+        "src/bin/mhfe/typed_line.rs:210"
+      ],
+      "workingTreeVerification": "Original U+754C passes. U+1F680 is absent from the manual wide-character table: expected column 23, observed 22; host wcwidth is 2. Terminal settings are restored on cancellation.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-FUN001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in fresh upstream package and completed native browser matrix",
+      "evidence": [
+        "local-only: release-check.log",
+        "local-only: real-browsers.log",
+        "local-only: browser-review.json"
+      ],
+      "workingTreeVerification": "Detect on a 24-word container now requires WalletOrOwner through the library facts. BuiltInCheck is refused with REFERENCE_REQUIRED before recovery, matching the CLI. Tests retain detected address/fingerprint/owner success, typed short built-in success, and early detected built-in refusal.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-BLD001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent",
+      "evidence": ["local-only: release-check.log"],
+      "workingTreeVerification": "Actual 50-token copy gate passes; all three diagnosed duplicate test blocks are refactored; no checker relaxation.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in assigned source/runtime scope",
+      "evidence": [
+        "src/bin/mhfe/container_search.rs:502",
+        "local-only: docs/audits/AUD-018-evidence/release-check.log"
+      ],
+      "workingTreeVerification": "Source lifetime verified: found words are written into final-capacity Zeroizing<String>, no formatted secret-bearing Vec<String> remains. Coordinator full terminal suite and library checks pass; physical allocator erasure was not measured.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in fresh upstream package and completed native browser matrix",
+      "evidence": [
+        "local-only: release-check.log",
+        "local-only: real-browsers.log",
+        "local-only: browser-review.json"
+      ],
+      "workingTreeVerification": "PhraseJson serializes recovered.stated_words as optional statedWords, omitted when None. The declaration and guide instruct the page to show the mismatch. Native regression expects words12/statedWords15 in the owner payload and owner no refusal; owner24 is separately rejected without callback.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-UI001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in assigned source/runtime scope",
+      "evidence": [
+        "local-only: docs/audits/AUD-018-evidence/native-cli-options.log",
+        "local-only: docs/audits/AUD-018-evidence/native-cli-static.log"
+      ],
+      "workingTreeVerification": "Fresh help exposes all requested non-secret options; invalid repair count, passphrase-used choice and confirm choice refuse with exit2 before secrets/KDF. Source traces third-line passphrase forwarding. Coordinator full checks pass. This reviewer did not execute a complete passphrase-bearing 24-word recovery; source-check outcome remains on documented stderr.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-UI002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in assigned source/runtime scope",
+      "evidence": [
+        "src/bin/mhfe/rekey.rs:192",
+        "src/bin/mhfe/rekey.rs:227",
+        "src/rekey.rs:715",
+        "local-only: docs/audits/AUD-018-evidence/release-check.log"
+      ],
+      "workingTreeVerification": "Source traces one recover_state before the loop and library filtering of owner choices. Coordinator regression a_refused_confirmation_is_followed_by_another_on_the_same_recovery passes, covering ambiguous readings and contradictory length; no full-size replay by this reviewer.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-ARC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in assigned source/runtime scope",
+      "evidence": ["local-only: docs/audits/AUD-018-evidence/native-cli-static.log"],
+      "workingTreeVerification": "Original static reproduction now passes; current source delegation and shared helper traces inspected independently.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-ARC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in assigned source/runtime scope",
+      "evidence": ["local-only: docs/audits/AUD-018-evidence/native-cli-static.log"],
+      "workingTreeVerification": "Original static reproduction now passes; current source delegation and shared helper traces inspected independently.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-ARC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in assigned source/runtime scope",
+      "evidence": ["local-only: docs/audits/AUD-018-evidence/native-scan-gap-static.log"],
+      "workingTreeVerification": "Original static reproduction now passes; current source delegation and shared helper traces inspected independently.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-BLD002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in the documented claim",
+      "evidence": ["local-only: closure-matrix.json", "packaging/Dockerfile.reproducible:91"],
+      "workingTreeVerification": "The comment now accurately says some checks; this does not claim that the container gained all omitted gates. Release publishing depends on the full called CI workflow.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in documentation source",
+      "evidence": ["local-only: core-review.json"],
+      "workingTreeVerification": "Help names the conditional BIP39 passphrase step and --stdin third line with --passphrase-used yes, and says absent option means no passphrase. README distinguishes the empty-passphrase fingerprint from decrypt source checking.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-017-DOC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "absent in fresh upstream package and completed native browser matrix",
+      "evidence": [
+        "local-only: release-check.log",
+        "local-only: real-browsers.log",
+        "local-only: browser-review.json"
+      ],
+      "workingTreeVerification": "Both JS usage guides now name decrypt passphrase, candidate walletCheck/statedWords/otherLengths, additional rekey walletCheck, and owner24 LENGTH_DIFFERS. Owner callback docs explain optional statedWords. Search operations are now placed under core before the repair module block.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-015-SEC002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "present; incomplete remediation",
+      "evidence": [
+        "local-only: native-python-controls.json",
+        "local-only: native-path-controls.log",
+        "packaging/mhfe-fast-mode.py"
+      ],
+      "workingTreeVerification": "All four cases exit 2 with zero stdout and exactly one unescaped synthetic OSC 52 sequence in stderr. Refused is handled before listener construction; no server/browser/KDF ran.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-015-DOC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "present; incomplete remediation",
+      "evidence": [
+        "local-only: core-record-fields.log",
+        "local-only: core-record-prose.log",
+        "local-only: skeptic-review.json"
+      ],
+      "workingTreeVerification": "Exactly four historical specification fields remain unresolved: AUD-002 /snapshot/companionSpecification/commit is e87eb5cdbd02b41c15aa512cd32055d56d3bd760; AUD-008 /snapshot/specificationCommit, /researchOpportunities/snapshot/specificationCommit and /remediationVerification/snapshot/specification/commit are 28e50e049d48cf1d5a8a529380192b6371458a57. Existing privacy maps do not explain these specification identities. The fifth raw structured failure is an external RustSec database identity, not another source-binding defect.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    },
+    {
+      "id": "AUD-015-BLD001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "currentTriggerStatus": "locally addressed; external published-asset provenance residual unverified",
+      "evidence": ["local-only: core-review.json"],
+      "workingTreeVerification": "docs/releases/history-rewrite-2026-10-09.md is in signed HEAD and pairs all three original releases with current local tag targets and tag objects. The targets match. This review neither re-verifies published v0.3.0-v0.5.0 archives/attestations nor newly demonstrates broken current artifact bytes.",
+      "formalCommitClosure": "Not closed at a recorded signed fix/verification commit; dirty-tree source/runtime evidence is recorded separately."
+    }
+  ],
+  "limitations": [
+    "Full-cost suite 3/4 and independent Argon2 vector replays excluded explicitly by the owner, who states they were just checked; no fresh replay result or independence claim.",
+    "The documented cached/uncached archive comparison is recorded separately. Host/container WASM and manifest are equal, native binaries differ; the precise host-versus-container native byte difference was not localized. Successful canonical equality does not require a host native compiler to produce canonical bytes.",
+    "Windows/aarch64 cross-target builds and clippy passed in the container, but Windows/macOS/aarch64 native runtime and macOS archive builds were not executed locally. No paid CI dispatched.",
+    "The current fixes are dirty source, not a clean signed/tagged release commit. HEAD alone does not identify checked bytes. No commit, push, tag, release, signature or publication created.",
+    "Host integration inspected read-only; no host build, browser regression matrix, accessibility or full visual terminal acceptance performed.",
+    "Security source review and package byte comparisons found no confirmed malicious insertion in their recorded scope; they cannot certify the existing OS, firmware, browser/toolchain executables, account state or absence of a physical/local compromise.",
+    "No pre-incident independent trusted backup was supplied. Local Git/lock/test baselines can share a compromised origin. Upstream pinned packages are not each fully audited for deliberate upstream malice.",
+    "No physical heap/swap/allocator erasure or timing-side-channel proof; JavaScript garbage collection prevents deterministic complete secret erasure.",
+    "Old external v0.3.0-v0.5.0 release asset attestations, trusted signature identity, publication of the history map and original-to-rewritten byte equivalence not independently reverified.",
+    "Bounded native cancellation does not promise interruption inside PBKDF2 or a single key/address derivation. Memory locking remains best effort, warning after actual accepted input; no swap write measured."
+  ],
+  "releaseAssessment": {
+    "verdict": "FAIL",
+    "currentProductHandoverBlockers": ["AUD-018-BLD001"],
+    "historicalRecordPublicationBlockers": ["AUD-015-DOC001"],
+    "nonblockingResiduals": ["AUD-015-SEC002", "AUD-016-UI001"],
+    "mandatoryMhfeChecksPassed": true,
+    "canonicalArchivesVerified": 4,
+    "documentedLocalReproducibilityComparisonPassed": true,
+    "signedCandidateCommitPresent": false
+  },
+  "resources": {
+    "heavyConcurrency": 1,
+    "kernelMemoryMaxBytes": 4294967296,
+    "kernelMemorySwapMaxBytes": 0,
+    "canonicalRuntimeLimitSeconds": 1080,
+    "browserRuntimeLimitSeconds": 1080,
+    "browserCgroupMemoryPeakBytes": 816226304,
+    "canonicalCgroupMemoryPeakBytes": 3910725632,
+    "uncachedCanonicalCgroupMemoryPeakBytes": 3800637440,
+    "processGroupRssInterpretation": "systemd-run sampled client process group only; not the workload peak. Kernel cgroup readback and unit stop hooks identify actual enforced limits/peaks."
+  },
+  "tools": [
+    {
+      "argv": ["rustc", "-Vv"],
+      "exitCode": 0,
+      "output": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1"
+    },
+    {
+      "argv": ["cargo", "--version"],
+      "exitCode": 0,
+      "output": "cargo 1.99.0 (5f94df478 2026-08-27)"
+    },
+    {
+      "argv": ["wasm-bindgen", "--version"],
+      "exitCode": 0,
+      "output": "wasm-bindgen 0.2.129"
+    },
+    {
+      "argv": ["node", "--version"],
+      "exitCode": 0,
+      "output": "v26.10.0"
+    },
+    {
+      "argv": ["python3", "--version"],
+      "exitCode": 0,
+      "output": "Python 3.14.4"
+    },
+    {
+      "argv": ["target/release/mhfe", "--version"],
+      "exitCode": 0,
+      "output": "mhfe 0.5.1"
+    },
+    {
+      "argv": [
+        "node",
+        "-e",
+        "for (const p of ['playwright','prettier']) console.log(p,require(p+'/package.json').version)"
+      ],
+      "exitCode": 0,
+      "output": "playwright 1.63.0\nprettier 3.9.9"
+    }
+  ],
+  "buildEnvironment": {
+    "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+    "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+    "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/bin:/usr/bin:/bin",
+    "CARGO_BUILD_JOBS": "1",
+    "RUST_TEST_THREADS": "2"
+  },
+  "advisoryDatabase": {
+    "tool": "cargo-audit 0.22.2",
+    "commit": "7eebec69c352c7191b1f13eb95dd510eeca5d1de",
+    "lastUpdatedUtc": "2026-10-09T08:12:02Z",
+    "advisories": 1296,
+    "lockDependencies": 109,
+    "vulnerabilities": 0,
+    "warnings": 0,
+    "yankedStatusChecked": false
+  },
+  "commands": [
+    {
+      "label": "browser-loader-source-binding",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/browser/loader-source-bindings.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:42:41+00:00",
+      "endUtc": "2026-10-09T13:42:41+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 1384448,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "6d0e7612f4305e65893aa0ada765334ca1f77155000ecd75c2bb90af384e389b",
+      "recordSha256": "922e48d119631a7b1e309d264eeacae21cf3d6f8e0d3c4fa8b9e108aea0d12df",
+      "classification": "passed"
+    },
+    {
+      "label": "browser-malicious-static-final",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/browser/static-malicious-scan.py",
+        "browser-malicious-static-final"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:41:18+00:00",
+      "endUtc": "2026-10-09T13:41:18+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 29540352,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "3db2d419fee6fdb74b0fe4f24940ebca1fcedf4895a91e2a19e04ca6b7a8b549",
+      "recordSha256": "24d39896bd72105f44595b7bea60968acf9bcf4e41147b77b5aaabd2133776ab",
+      "classification": "passed"
+    },
+    {
+      "label": "browser-malicious-static",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/browser/static-malicious-scan.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:37:32+00:00",
+      "endUtc": "2026-10-09T13:37:32+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 21909504,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "20ac69da771bc147fde1a45dccdfc6eb426a42279d560f9a9fa6ef2db20c5682",
+      "recordSha256": "ce9a13782bf050c9de0f8861c997cab2eb2e85900a2c7da81d4043e60915dbe5",
+      "classification": "passed"
+    },
+    {
+      "label": "browser-page-protocol-bounded",
+      "argv": [
+        "systemd-run",
+        "--user",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--unit=mhfe-aud018-protocol",
+        "--property=MemoryMax=512M",
+        "--property=MemorySwapMax=0",
+        "--setenv=MHFE_BROWSER_AUDIT_UNIT=mhfe-aud018-protocol",
+        "--working-directory=/home/user/Documents/bip_tools/mhfe",
+        "bash",
+        "docs/audits/AUD-018-harnesses/browser/bounded.sh",
+        "/home/user/.local/bin/node",
+        "--max-old-space-size=128",
+        "docs/audits/AUD-016-harnesses/browser/page-protocol.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:12:40+00:00",
+      "endUtc": "2026-10-09T13:12:41+00:00",
+      "seconds": 0.53,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 7708672,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "28fe3c073ba21bd988a8fd360ba4e2d70f167b0f2f1ed3932647c07a74b83f39",
+      "recordSha256": "cc568eb739fb822c3f64c73438d5a2e3663c674d70246ead6ca4c8b1689a37f1",
+      "classification": "passed"
+    },
+    {
+      "label": "browser-page-protocol",
+      "argv": [
+        "systemd-run",
+        "--user",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--unit=mhfe-aud018-protocol",
+        "--property=MemoryMax=512M",
+        "--property=MemorySwapMax=0",
+        "--setenv=MHFE_BROWSER_AUDIT_UNIT=mhfe-aud018-protocol",
+        "--working-directory=/home/user/Documents/bip_tools/mhfe",
+        "bash",
+        "docs/audits/AUD-018-harnesses/browser/bounded.sh",
+        "/home/user/.local/bin/node",
+        "--max-old-space-size=128",
+        "docs/audits/AUD-016-harnesses/browser/page-protocol.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:07:12+00:00",
+      "endUtc": "2026-10-09T13:07:13+00:00",
+      "seconds": 0.25,
+      "exitCode": 1,
+      "processGroupPeakRssBytes": 1290240,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "249c30ab38704202c3a1fb5a281ad542faa0ae5b844fc5d8ad365b5bd7324a95",
+      "recordSha256": "4e77630aaa1b62f937eceb16d04ffedb7cad7e3299f65fcb1e526b008180e20b",
+      "classification": "environment-refusal-no-product-probe"
+    },
+    {
+      "label": "browser-worker-cleanup-bounded",
+      "argv": [
+        "systemd-run",
+        "--user",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--unit=mhfe-aud018-cleanup",
+        "--property=MemoryMax=512M",
+        "--property=MemorySwapMax=0",
+        "--setenv=MHFE_BROWSER_AUDIT_UNIT=mhfe-aud018-cleanup",
+        "--working-directory=/home/user/Documents/bip_tools/mhfe",
+        "bash",
+        "docs/audits/AUD-018-harnesses/browser/bounded.sh",
+        "/home/user/.local/bin/node",
+        "--max-old-space-size=128",
+        "docs/audits/AUD-016-harnesses/browser/worker-cleanup.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:12:49+00:00",
+      "endUtc": "2026-10-09T13:12:49+00:00",
+      "seconds": 0.29,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 7712768,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "61be58a2ded52f0a87210d3e55904167886570e6a35f980cf6e07763ab356cd6",
+      "recordSha256": "22ab4434d1c457d884b393c7a77a1ce9385fada9504e9ce91ab9bbc6884b973f",
+      "classification": "passed"
+    },
+    {
+      "label": "canonical-artifacts",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/artifacts.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:30:10+00:00",
+      "endUtc": "2026-10-09T13:30:11+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 27451392,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "17eea0cbed9a8d31a769ce2b7a46c7b553f466e38124596954f60c6e660f9dd0",
+      "recordSha256": "38fd19cfbeea14c7328e831a485d861bb4a738d97e85b9693436c922a47c1245",
+      "classification": "passed"
+    },
+    {
+      "label": "canonical-build",
+      "argv": [
+        "systemd-run",
+        "--user",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--quiet",
+        "--unit=mhfe-aud018-canonical",
+        "--property=MemoryMax=4G",
+        "--property=MemorySwapMax=0",
+        "--property=OOMPolicy=stop",
+        "--property=RuntimeMaxSec=18min",
+        "--property=ExecStopPost=/usr/bin/systemctl --user show mhfe-aud018-canonical.service --property=MemoryPeak --property=Result",
+        "--working-directory=/home/user/Documents/bip_tools/mhfe",
+        "--setenv=MHFE_AUDIT_UNIT=mhfe-aud018-canonical.service",
+        "--setenv=PATH=/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "bash",
+        "docs/audits/AUD-018-harnesses/bounded.sh",
+        "bash",
+        "docs/audits/AUD-018-harnesses/canonical.sh"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:14:37+00:00",
+      "endUtc": "2026-10-09T13:29:29+00:00",
+      "seconds": 892.57,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 7634944,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "2caa7e10195f00699c5d5e088e3b4d4a0cdb44b00c0a14b2070c41960ec65d38",
+      "recordSha256": "81e297eb100ee2c3dd702c6a49dd0162a54f7d4102cc07bb87f7a60a20ca69be",
+      "classification": "passed"
+    },
+    {
+      "label": "canonical-compare",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/compare-canonical.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T14:00:33+00:00",
+      "endUtc": "2026-10-09T14:00:34+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 794624,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "8422ea1cb3108dee9683227a84c0c624f02c477bfaec1b01fdd3ae814f434579",
+      "recordSha256": "ac52e0b6b3f528af67974d959bca3880429aa3b4bb2b7113ca1acf30956f1bad",
+      "classification": "passed"
+    },
+    {
+      "label": "canonical-uncached-final",
+      "argv": [
+        "systemd-run",
+        "--user",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--quiet",
+        "--unit=mhfe-aud018-uncached-final",
+        "--property=MemoryMax=4G",
+        "--property=MemorySwapMax=0",
+        "--property=OOMPolicy=stop",
+        "--property=RuntimeMaxSec=18min",
+        "--property=ExecStopPost=/usr/bin/systemctl --user show mhfe-aud018-uncached-final.service --property=MemoryPeak --property=Result",
+        "--working-directory=/home/user/Documents/bip_tools/mhfe",
+        "--setenv=MHFE_AUDIT_UNIT=mhfe-aud018-uncached-final.service",
+        "--setenv=PATH=/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "--setenv=REPRODUCIBLE_NO_CACHE=1",
+        "bash",
+        "docs/audits/AUD-018-harnesses/bounded.sh",
+        "bash",
+        "docs/audits/AUD-018-harnesses/canonical.sh",
+        "canonical-output-aud018_uncached"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:49:35+00:00",
+      "endUtc": "2026-10-09T14:00:09+00:00",
+      "seconds": 633.81,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 7663616,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "291e7f3f606b4a12bcd31dad8955fcc4a1dd8a9882280b0bf8867d91d8ecf505",
+      "recordSha256": "75f4202df85436f8943af383d8de1c12cbb50ff65670ae7f1f8bf4945a4099b5",
+      "classification": "passed"
+    },
+    {
+      "label": "canonical-uncached",
+      "argv": [
+        "systemd-run",
+        "--user",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--quiet",
+        "--unit=mhfe-aud018-uncached",
+        "--property=MemoryMax=4G",
+        "--property=MemorySwapMax=0",
+        "--property=OOMPolicy=stop",
+        "--property=RuntimeMaxSec=18min",
+        "--property=ExecStopPost=/usr/bin/systemctl --user show mhfe-aud018-uncached.service --property=MemoryPeak --property=Result",
+        "--working-directory=/home/user/Documents/bip_tools/mhfe",
+        "--setenv=MHFE_AUDIT_UNIT=mhfe-aud018-uncached.service",
+        "--setenv=PATH=/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "--setenv=REPRODUCIBLE_NO_CACHE=1",
+        "bash",
+        "docs/audits/AUD-018-harnesses/bounded.sh",
+        "bash",
+        "docs/audits/AUD-018-harnesses/canonical.sh",
+        "canonical-output-aud018-uncached"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:49:21+00:00",
+      "endUtc": "2026-10-09T13:49:21+00:00",
+      "seconds": 0.26,
+      "exitCode": 2,
+      "processGroupPeakRssBytes": 7589888,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "0f2503fa397ab313dba33f9f09f84ca093f5f76ffb4f9643ac5aa4a734db16bd",
+      "recordSha256": "6ac6cd92f546370ea5724284fbca518f96ef553f2ae3370dcddd391c5a88eac3",
+      "classification": "harness-output-name-refused-before-Docker"
+    },
+    {
+      "label": "core-doc-links",
+      "argv": ["python3", "docs/audits/AUD-015-harnesses/r5-build-docs/markdown_links_lists.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T12:58:26+00:00",
+      "endUtc": "2026-10-09T12:58:27+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 2150400,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "259fee9d5ec1915ee85d371a7eba15cf4048015d3b87568625ba82d44e63dff4",
+      "recordSha256": "4dfe58a0b7b49fd1e6bfa5616abcb70bdd91a40ef0060bdcd67966a76eaa1bd4",
+      "classification": "passed"
+    },
+    {
+      "label": "core-doc-symbols",
+      "argv": ["python3", "docs/audits/AUD-015-harnesses/r5-build-docs/documented_symbols.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T12:58:26+00:00",
+      "endUtc": "2026-10-09T12:58:27+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 13373440,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "7d06878775bcd78c2f78b47dc17daad5d1ac1564930ea5a1be18b34241e781cc",
+      "recordSha256": "85193df192ea45bde48e58f13c0be46a7dcb5d0f387533dc8b8f6969790842ee",
+      "classification": "passed"
+    },
+    {
+      "label": "core-native-cancel",
+      "argv": [
+        "prlimit",
+        "--as=536870912",
+        "--",
+        "timeout",
+        "50s",
+        "python3",
+        "docs/audits/AUD-016-harnesses/core/cancel_watchdog.py",
+        "target/aud018-core-public-probe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:04:10+00:00",
+      "endUtc": "2026-10-09T13:04:31+00:00",
+      "seconds": 20.86,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 25780224,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "306f6b4614e6acbfaae2f7f8fb08f6c9f2ba961d393c8990dbf2ca1011d59630",
+      "recordSha256": "df38f8e37a9044d92d8712b99a1fe6602dc0d0525838c8d831dece39d8f193d5",
+      "classification": "passed"
+    },
+    {
+      "label": "core-probe-compile",
+      "argv": [
+        "bash",
+        "-c",
+        "probe_library=$(ls -t target/debug/deps/libmhfe-*.rlib | head -1)\nrustc --edition=2021 docs/audits/AUD-016-harnesses/core/public_probe.rs --extern mhfe=\"$probe_library\" -L dependency=target/debug/deps -o target/aud018-core-public-probe"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:03:33+00:00",
+      "endUtc": "2026-10-09T13:03:33+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 225464320,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recordSha256": "ff7d497ca175a43e18bbfad2574b698cb913136579e5991656e74ad3f78edabe",
+      "classification": "passed"
+    },
+    {
+      "label": "core-record-fields",
+      "argv": ["python3", "docs/audits/AUD-015-harnesses/r5-build-docs/record_commit_fields.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T12:58:26+00:00",
+      "endUtc": "2026-10-09T12:58:28+00:00",
+      "seconds": 1.51,
+      "exitCode": 1,
+      "processGroupPeakRssBytes": 19333120,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "404ea88615ce7947c91ba4439eba0f5627f089805d1b3dc0bcec426ec14cf72f",
+      "recordSha256": "a8222d7227adc2a75cd6474074e74bab73bed6b9e5094157a74a4e5a923ab7f5",
+      "classification": "confirmed-original-AUD-015-DOC001-plus-one-external-false-positive"
+    },
+    {
+      "label": "core-record-prose",
+      "argv": ["python3", "docs/audits/AUD-017-harnesses/r4-build-docs/record_commit_prose.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T12:58:26+00:00",
+      "endUtc": "2026-10-09T12:58:29+00:00",
+      "seconds": 3.02,
+      "exitCode": 1,
+      "processGroupPeakRssBytes": 20144128,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "66dcb987bd7a3e0acaaaf9748142ee99ed1d031bcd54837aaf8a50df8a624fc2",
+      "recordSha256": "b293f4975a72387a80ed53a6a6a57525e9d5f631d860665e97e44081f00d318a",
+      "classification": "historical-and-external-hash-candidates-classified"
+    },
+    {
+      "label": "core-source-identity",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/core/source_identity.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:00:55+00:00",
+      "endUtc": "2026-10-09T13:00:55+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 1765376,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "68d35297f8eb0106674f897bb69cabcba6d693187a75ba212ef97922312bb400",
+      "recordSha256": "159ef4aec5aa9fcea351507aa47a48f5316504b12c708441a700e1fb12b66c44",
+      "classification": "passed"
+    },
+    {
+      "label": "docker-cgroup-host-witness",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/docker-cgroup.py",
+        "/user.slice/user-1000.slice/user@1000.service/app.slice/mhfe-aud018-check.service"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:03:07+00:00",
+      "endUtc": "2026-10-09T13:03:14+00:00",
+      "seconds": 7.14,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 97705984,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "eba6d00e8b63569b4ba58b63232729f2484f6056df242bd4201acf4da9369440",
+      "recordSha256": "d4a49afeb092e2b75e3e9b58dff238c339a85a9cddb0266d5225deac408e76b8",
+      "classification": "passed"
+    },
+    {
+      "label": "docker-cgroup-probe",
+      "argv": [
+        "bash",
+        "-c",
+        "docker buildx build --no-cache --progress=plain --cgroup-parent=/user.slice/user-1000.slice/user@1000.service/app.slice/mhfe-aud018-check.service - <<\"DOCKERFILE\"\nFROM alpine:3.20\nRUN cat /sys/fs/cgroup/memory.max && cat /sys/fs/cgroup/memory.swap.max\nDOCKERFILE"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:01:08+00:00",
+      "endUtc": "2026-10-09T13:01:09+00:00",
+      "seconds": 1.35,
+      "exitCode": 1,
+      "processGroupPeakRssBytes": 87273472,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "30196e0f04ac32377bff8960178c787e6cb4304f90bff3adbfa099e2ac015a7b",
+      "recordSha256": "983f6c066129457655bc6cbbe2b50b8383b4ad68505dc69cc48bf2da0b44ba90",
+      "classification": "harness-environment-cgroup-files-hidden"
+    },
+    {
+      "label": "format-check",
+      "argv": ["npm", "run", "format:check"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1"
+      },
+      "startUtc": "2026-10-09T13:00:06+00:00",
+      "endUtc": "2026-10-09T13:00:11+00:00",
+      "seconds": 4.79,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 375062528,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "51d89b2b80c5c022eae42e7644d36b1e0b623adaf1a4a16ded3fccb4ed39bf53",
+      "recordSha256": "7715047fb6a821b66a8cf2422dd506a71b240b8fa56933c28b66cc7b4b65e21f",
+      "classification": "passed"
+    },
+    {
+      "label": "git-object-integrity",
+      "argv": ["git", "fsck", "--full", "--no-dangling"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:34:19+00:00",
+      "endUtc": "2026-10-09T13:34:19+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 1282048,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recordSha256": "c35d0a6a81cf354436acd02361055ebbee1ebbb34f998386e332d17fc5654bae",
+      "classification": "passed"
+    },
+    {
+      "label": "metadata-before-canonical",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/metadata.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1"
+      },
+      "startUtc": "2026-10-09T13:17:19+00:00",
+      "endUtc": "2026-10-09T13:17:20+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 19615744,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "4ebd99d98e5fefeb284f8e38f884ed9d7f8dff77f58496c1b6884982cee4c51f",
+      "recordSha256": "c7f5d1bc01ee6fe59b559ed429da1969d8a3813d0bdd1a76d6745d23eb35f92d",
+      "classification": "passed"
+    },
+    {
+      "label": "metadata-final",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/metadata.py", "metadata-final"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1"
+      },
+      "startUtc": "2026-10-09T13:30:11+00:00",
+      "endUtc": "2026-10-09T13:30:12+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 47005696,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "3d07dc61d27e084b74965605921c141aee04e121c5aced6fa1310bfd81174b22",
+      "recordSha256": "6f30ad17f6adb8890abbb87aad5d772d7ca9f4743dbfd967771c2e1303f97c78",
+      "classification": "passed"
+    },
+    {
+      "label": "native-cli-options",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-boundaries.py",
+        "cli-options"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:04:18+00:00",
+      "endUtc": "2026-10-09T13:04:19+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 29052928,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "fc54b17b1d79ee567e891f39403a406bfad36276329e462467f340ed2b327b5a",
+      "recordSha256": "389bf3e55590339082846669e6917de1584fe3e37cff0511fc0b851989e2d073",
+      "classification": "passed"
+    },
+    {
+      "label": "native-cli-static",
+      "argv": ["python3", "docs/audits/AUD-017-harnesses/r2-cli/static_cli_rules.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T12:58:41+00:00",
+      "endUtc": "2026-10-09T12:58:41+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 782336,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "265f69e2279533ef98b02e9c6d2292620ab6611362cf2fc37507d93a49e4d7cf",
+      "recordSha256": "f67b185b1ee626b8c03a3d3e7fd3889e3dd54c46956c2d578bd0a8758e623e7f",
+      "classification": "passed"
+    },
+    {
+      "label": "native-fingerprint",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-boundaries.py",
+        "fingerprint"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:04:05+00:00",
+      "endUtc": "2026-10-09T13:04:05+00:00",
+      "seconds": 0.75,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 29114368,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "62c41167051962d96722a9d1bdc71420ad55014274e907629d8067b8c8a1abba",
+      "recordSha256": "f7ee8a00d340195e39499e438c9e3b200c89f0fb4de7db76867d169746fe4b5a",
+      "classification": "passed"
+    },
+    {
+      "label": "native-low-memlock-final",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-boundaries.py",
+        "low-memlock"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:05:41+00:00",
+      "endUtc": "2026-10-09T13:05:42+00:00",
+      "seconds": 1.01,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 23343104,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "6a54c6cbf4e13e2c01ddc2fc6a46cf622667635e2c251ae5d3ac43c22ccd190e",
+      "recordSha256": "828cfc8bef28178fd547085e412ee662778e04bbaaeda2fdafe34e39269dd5b0",
+      "classification": "passed"
+    },
+    {
+      "label": "native-low-memlock-rerun",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-boundaries.py",
+        "low-memlock"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:05:01+00:00",
+      "endUtc": "2026-10-09T13:05:02+00:00",
+      "seconds": 1.01,
+      "exitCode": 1,
+      "processGroupPeakRssBytes": 23306240,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "8daf43ec451e8ea1881b28ffad4a01bfcb1f64860fd7ca35b6444bc66c11cc2f",
+      "recordSha256": "522b1dce84aaeb75ad09021a40306d2a468b086b98517c64efe7df84ae957a76",
+      "classification": "harness-summary-timing-expectation-error-corrected-retained"
+    },
+    {
+      "label": "native-low-memlock",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-boundaries.py",
+        "low-memlock"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:04:09+00:00",
+      "endUtc": "2026-10-09T13:04:18+00:00",
+      "seconds": 9.05,
+      "exitCode": 1,
+      "processGroupPeakRssBytes": 23318528,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "15fb1555707b5837cd13e8ee609872a5d0c21649513e07a9e5f06b53076a5fb1",
+      "recordSha256": "2befcaf5983b9b3ce38d5ec4715dd559adca6226773a16068d59e040b989eddb",
+      "classification": "harness-input-option-error-corrected-retained"
+    },
+    {
+      "label": "native-malicious-format",
+      "argv": [
+        "node",
+        "node_modules/prettier/bin/prettier.cjs",
+        "--write",
+        "docs/audits/AUD-018-harnesses/native/README.md",
+        "docs/audits/AUD-018-evidence/native-python-controls.json",
+        "docs/audits/AUD-018-evidence/native-review.json"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:43:44+00:00",
+      "endUtc": "2026-10-09T13:43:44+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 909312,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recordSha256": "c6f0f46f8e478b04671d1df4c661acd04a09837d2410ec04d965150d73dee7af",
+      "classification": "passed"
+    },
+    {
+      "label": "native-path-controls",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-boundaries.py",
+        "path-controls"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:04:06+00:00",
+      "endUtc": "2026-10-09T13:04:06+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 23330816,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "fdea64f7b21539e96030d4ccb2265361be82dfde3701c5fcfd61c15365bae941",
+      "recordSha256": "30616ae0273b31f6142fd70fbee16a6d53ca691179498bcf164e086f901da7f3",
+      "classification": "passed"
+    },
+    {
+      "label": "native-python-path-controls-final",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-python-path-controls.py",
+        "native-python-path-controls-final"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:39:48+00:00",
+      "endUtc": "2026-10-09T13:39:48+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 2940928,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "e0dd767d9359054c616098cd2de380c56ba565c495124cf3db031ece3ac02f46",
+      "recordSha256": "1e1f799e4e6c536544ce040a78e6754510462fbc11eb7af0e60a32766c6959ff",
+      "classification": "passed"
+    },
+    {
+      "label": "native-python-path-controls",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/native/verify-python-path-controls.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:38:26+00:00",
+      "endUtc": "2026-10-09T13:38:26+00:00",
+      "seconds": 0.5,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 40935424,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "2f1d46148b13c6a9f1671acebae1f195549a1e2535893b5cbba843d31d3d5fb0",
+      "recordSha256": "81b3e0fa3f3d0ed7e5b72ba86ff0bc22c8452db3c04e6e9f7bd9b632b3137838",
+      "classification": "passed"
+    },
+    {
+      "label": "native-readme-final-format",
+      "argv": [
+        "node",
+        "node_modules/prettier/bin/prettier.cjs",
+        "--write",
+        "docs/audits/AUD-018-harnesses/native/README.md"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:07:19+00:00",
+      "endUtc": "2026-10-09T13:07:20+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 937984,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recordSha256": "322eeb42f0f670d5ca19ae8915be9555672f2193ce9a87f5c0999c7e6e52f1aa",
+      "classification": "passed"
+    },
+    {
+      "label": "native-readme-format",
+      "argv": [
+        "node",
+        "node_modules/prettier/bin/prettier.cjs",
+        "--write",
+        "docs/audits/AUD-018-harnesses/native/README.md"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:00:12+00:00",
+      "endUtc": "2026-10-09T13:00:12+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 2605056,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recordSha256": "2ec96834ec02fdd63a5e3073bb89f5ca6f74d7001162ed2836d03b1afbbb61cc",
+      "classification": "passed"
+    },
+    {
+      "label": "native-scan-gap-static",
+      "argv": ["python3", "docs/audits/AUD-017-harnesses/r4-build-docs/typed_defaults.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T12:58:41+00:00",
+      "endUtc": "2026-10-09T12:58:41+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 745472,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "9a0560718ee55b6c58ebb389482bbb0d7e911d9109aafe569ae05ceb397e7719",
+      "recordSha256": "e9b44ecfd66179969e156682eff9deba606c91977a5d7f65002b4522bb52d46f",
+      "classification": "passed"
+    },
+    {
+      "label": "native-unicode-original",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-boundaries.py",
+        "unicode-original"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:04:06+00:00",
+      "endUtc": "2026-10-09T13:04:07+00:00",
+      "seconds": 1.0,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 23265280,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "e9604797ba82825989a965a510a34dec90241eaedf0b856fcc635c1b9de7c71e",
+      "recordSha256": "d6944aa8ea9f5fe0aac523d8ef300d2a1eb9a30e77b8d69cd2f02970eb15a2fc",
+      "classification": "passed"
+    },
+    {
+      "label": "native-unicode-rocket",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-018-harnesses/native/verify-boundaries.py",
+        "unicode-rocket"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:04:08+00:00",
+      "endUtc": "2026-10-09T13:04:09+00:00",
+      "seconds": 1.26,
+      "exitCode": 1,
+      "processGroupPeakRssBytes": 25341952,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "0f3313193b8da634e7831b6bd4f82e076b96f03f0181ff01233de9894b3776d3",
+      "recordSha256": "f4b3da966e8abc43d11bd316d9ba4675268a4cda2d946d153d71f2615f46c93a",
+      "classification": "confirmed-original-AUD-016-UI001-residual"
+    },
+    {
+      "label": "native-version",
+      "argv": ["target/release/mhfe", "--version"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/.codex/tmp/arg0/codex-arg0Ns8C14:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/home/user/.local/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/usr/lib/chatgpt/resources:/home/user/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:03:59+00:00",
+      "endUtc": "2026-10-09T13:03:59+00:00",
+      "seconds": 0.25,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 753664,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "aace1dd92811e75d29bf0d501e3265aeac548c50978a274a933533243f9936ad",
+      "recordSha256": "2f3b4f3e1bf1f43d7aba6381669cc83a317a34eaa816eb19b2dbc004f496d2de",
+      "classification": "passed"
+    },
+    {
+      "label": "provenance",
+      "argv": ["python3", "docs/audits/AUD-016-harnesses/provenance.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:04:59+00:00",
+      "endUtc": "2026-10-09T13:05:02+00:00",
+      "seconds": 2.76,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 22446080,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "bf0ad3832e359a7d740fedbaf3b9c18417c11e9301faa8a63aa39cf6434ce360",
+      "recordSha256": "40700de54cda4e6273f6a5c5ce45ff997fab776bca37a1b1f43353669b3eba9c",
+      "classification": "passed"
+    },
+    {
+      "label": "real-browsers",
+      "argv": [
+        "systemd-run",
+        "--user",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--quiet",
+        "--unit=mhfe-aud018-browser",
+        "--property=MemoryMax=4G",
+        "--property=MemorySwapMax=0",
+        "--property=OOMPolicy=stop",
+        "--property=RuntimeMaxSec=18min",
+        "--property=ExecStopPost=/usr/bin/systemctl --user show mhfe-aud018-browser.service --property=MemoryPeak --property=Result",
+        "--working-directory=/home/user/Documents/bip_tools/mhfe",
+        "--setenv=MHFE_AUDIT_UNIT=mhfe-aud018-browser.service",
+        "--setenv=PATH=/home/user/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "bash",
+        "docs/audits/AUD-018-harnesses/bounded.sh",
+        "node",
+        "scripts/verify-browsers.mjs"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:06:06+00:00",
+      "endUtc": "2026-10-09T13:13:07+00:00",
+      "seconds": 421.24,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 7659520,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "da125f104d8b67a13052a3d254e02c6bc936b0660b5c2fdad468783ef5b50c3b",
+      "recordSha256": "8a4b4881ed4ce46e1352fb205c7b1c9a645a3e8b924f7d8b5331a844e8014d0d",
+      "classification": "passed"
+    },
+    {
+      "label": "release-check",
+      "argv": [
+        "systemd-run",
+        "--user",
+        "--wait",
+        "--pipe",
+        "--collect",
+        "--quiet",
+        "--unit=mhfe-aud018-check",
+        "--property=MemoryMax=4G",
+        "--property=MemorySwapMax=0",
+        "--property=OOMPolicy=stop",
+        "--working-directory=/home/user/Documents/bip_tools/mhfe",
+        "--setenv=MHFE_AUDIT_UNIT=mhfe-aud018-check.service",
+        "--setenv=CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "--setenv=RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "--setenv=CARGO_BUILD_JOBS=1",
+        "--setenv=RUST_TEST_THREADS=2",
+        "--setenv=EMCC_CORES=1",
+        "--setenv=PATH=/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "bash",
+        "docs/audits/AUD-018-harnesses/bounded.sh",
+        "bash",
+        "-c",
+        "source ../workingspace/emsdk/emsdk_env.sh >/dev/null 2>&1\nexec scripts/check.sh"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1"
+      },
+      "startUtc": "2026-10-09T12:58:26+00:00",
+      "endUtc": "2026-10-09T13:04:45+00:00",
+      "seconds": 379.1,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 7671808,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "1aeaf0aa374edfb1a41e7e429a11343ebf7e8842393f6b5394c126568aeea49e",
+      "recordSha256": "051ae6f6bd6bba2457e35cd0425d7f59db6f90addc37af6de67c4d96b8065262",
+      "classification": "passed"
+    },
+    {
+      "label": "rustsec-current",
+      "argv": [
+        "cargo",
+        "audit",
+        "--db",
+        "/home/user/Documents/bip_tools/workingspace/cargo/advisory-db",
+        "--no-yanked",
+        "--json"
+      ],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:14:01+00:00",
+      "endUtc": "2026-10-09T13:14:02+00:00",
+      "seconds": 1.63,
+      "exitCode": 0,
+      "processGroupPeakRssBytes": 25616384,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "786131e1c8a7c9e369657f2204e76b78d33bb6a928b519d74b2478a39321e2bd",
+      "recordSha256": "f972b41b83bedaa4316350c55a45b509f26f8676ca77e606109335466143c639",
+      "classification": "passed"
+    },
+    {
+      "label": "supply-chain",
+      "argv": ["python3", "docs/audits/AUD-018-harnesses/supply-chain.py"],
+      "cwd": "/home/user/Documents/bip_tools/mhfe",
+      "environment": {
+        "PATH": "/home/user/.local/bin:/home/user/Documents/bip_tools/workingspace/cargo/bin:/usr/local/bin:/usr/bin:/bin",
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+      },
+      "startUtc": "2026-10-09T13:31:59+00:00",
+      "endUtc": "2026-10-09T13:32:03+00:00",
+      "seconds": 4.67,
+      "exitCode": 1,
+      "processGroupPeakRssBytes": 34836480,
+      "rssLimitBytes": 3221225472,
+      "guardStopped": null,
+      "logSha256": "b4a3bd1d917c6a0e66e65d291600b6afe3e6e709e00f5b4efe1502703afb613a",
+      "recordSha256": "bb28dfc408653d8f8c9bb1f1b97be19d386f44e3cf6f9f1e68b60764f396cb17",
+      "classification": "strict-inventory-extra-generated-shims-classified-by-independent-review"
+    }
+  ],
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "harnessBindings": {
+    "docs/audits/AUD-018-harnesses/README.md": "c453c380f58ab42c35f80c491276c27489c59311886ea0b0d8b7ab296def7a77",
+    "docs/audits/AUD-018-harnesses/artifacts.py": "56bcdf4d4355e081ec34317b740689fe5ff23b8f0ccc2d969c22ec8270a3e31f",
+    "docs/audits/AUD-018-harnesses/assemble.py": "f458d2b771d20d0ee61abca4627a54b4ceaba223b396430e097ab1b1a5ae6230",
+    "docs/audits/AUD-018-harnesses/bounded.sh": "567d03dd6c804fc4840232df5a6f4e6aac57e0e84190b4e4e08b384e317b0b19",
+    "docs/audits/AUD-018-harnesses/browser/README.md": "f62edf0a5b0a51875f3ec2a2983ecc890aac622598bd6bc634a0a5a76dfebe26",
+    "docs/audits/AUD-018-harnesses/browser/bounded.sh": "4b925546ebd2ad9e2ce61b87aa09e6032078ad6b82b90c3d2c6058845fc91bf0",
+    "docs/audits/AUD-018-harnesses/browser/loader-source-bindings.py": "0e7866b7e07aa1aaa09496e755b3a968eb4b689cc7c8bcecd675493dfc74b56d",
+    "docs/audits/AUD-018-harnesses/browser/static-malicious-scan.py": "25f57ac980c31439108ca25c4dd1d059abade5ae235bde4f1383ba2811912241",
+    "docs/audits/AUD-018-harnesses/canonical.sh": "06a1ea3a1a5c98290448ed35ab72a5c645cf240af90e3e3322348490fd89a3ba",
+    "docs/audits/AUD-018-harnesses/compare-canonical.py": "47883ded7be82287f904019204ed780ef35869d8a13b8aac8ef3ea5a77fed4a5",
+    "docs/audits/AUD-018-harnesses/core/README.md": "6d64f04836263840adba69ae9028abd1a0f4c47f4f50aa016d4c62120bcfaddb",
+    "docs/audits/AUD-018-harnesses/core/source_identity.py": "f537c69fac133422257af3e9da7d83a5283ddc03ff65fdb8e399fb1523399a88",
+    "docs/audits/AUD-018-harnesses/docker-cgroup.py": "20a0e76d9038f348b6c8c55998eb3c21c75e6bbf78bb4e5a0530dc29117ca544",
+    "docs/audits/AUD-018-harnesses/metadata.py": "ae2b1a93b87a8366c2ebe5aef29b4bfa7325962bebb67aae2ef74d250efe4027",
+    "docs/audits/AUD-018-harnesses/native/README.md": "85142978469b9d326f16c726f7f23171ce25d2be8b92e08a817e3e58894691c7",
+    "docs/audits/AUD-018-harnesses/native/verify-boundaries.py": "d1487eb5cfb7e1f45bc9f53e932354da321193005a5c35fede1c4bbd3e24b9d4",
+    "docs/audits/AUD-018-harnesses/native/verify-python-path-controls.py": "b896e9c411736743ca4119cabefcd1b0dc8f96034f4803016afe72ba1cc3f23b",
+    "docs/audits/AUD-018-harnesses/run.py": "89cee6f71ba06fcf516f4334a424d6f8a51306c70815e5b2955f963d3925f485",
+    "docs/audits/AUD-018-harnesses/supply-chain.py": "99ecf99237598630f10630abefca79762434ab76357c4a2459445f5e01e34c52",
+    "docs/audits/AUD-018-harnesses/validate.py": "6aa603cd3b67fb917e012192474fa55b14cd8c772b016ba3064d5380b098fa17"
+  },
+  "reusedHarnessBindings": {
+    "docs/audits/AUD-016-harnesses/run.py": "d070b83f6c186ccb830d96b152dafa2bb772552116b0710870a166dbf64bf408",
+    "docs/audits/AUD-016-harnesses/provenance.py": "155e4be4113afff6423f54a28c8784c4134fac7f214c3672041ffa18bfeac8f9",
+    "docs/audits/AUD-016-harnesses/core/public_probe.rs": "6cf69e3a00fbc8ec3c729ba645d44e1e0cfd7c6fa125f3f40119478756d4f71d",
+    "docs/audits/AUD-016-harnesses/core/cancel_watchdog.py": "cb5b1f3713ad0ea8ddd3e0ab8cbc4584850689cb2bdc293643992255d00de6e3",
+    "docs/audits/AUD-016-harnesses/browser/page-protocol.mjs": "b393e9f7bdbb14efae0bfd0317df91f7412e0019d1992da708a8216a4e850b32",
+    "docs/audits/AUD-016-harnesses/browser/worker-cleanup.mjs": "f1897b6b800f8e93b582cb5087f0b68009ccb34213784c859260a29c79d04f94",
+    "docs/audits/AUD-015-harnesses/r5-build-docs/record_commit_fields.py": "80b429f8d91fe14aa0417742161604bf122eeec020d69952d5b53702a86d5c8b",
+    "docs/audits/AUD-015-harnesses/r5-build-docs/documented_symbols.py": "dc8be27fba7f3723068412c979a8c3a56240517d88caf1df3394a978c01dc9f1",
+    "docs/audits/AUD-015-harnesses/r5-build-docs/markdown_links_lists.py": "7d04efcaaa80d345054a020b5b51227701b74762011c78d3409a1b4dc1d0ee26",
+    "docs/audits/AUD-017-harnesses/r4-build-docs/record_commit_prose.py": "969371daf4e6f9655833dcd35b75398d5206b272e582cbcb0493977599b6dc05"
+  },
+  "reviewEvidenceBindings": {
+    "native-malicious-review.json": "cc70bf55545cdc7c7b5549f070e16b6c7a7c7018b80674b9f7cbf3d100b3080b",
+    "browser-malicious-review.json": "bea20114c39180008d76176ce52533eb37b7619e4f95e1291e2a516a84099018",
+    "shim-review.json": "50e12f2ef003eae24a758f3c3e99ab168680eeb99ee8cfc43530698c7ad048f1",
+    "supply-chain-review.json": "64d4a2c18d79b6628f6f2a87e816b01ba18e40d6b7b6a4dae262e085b90907e7",
+    "snapshot.json": "b91b995c2f26587edbba733b0bd47b5ffdeb46a09fa07cff15371d4f62d92611",
+    "final.json": "5c32608111fd1598610279a560d525fe2cfd573cb9773e3b945e1f9fc1b0c0fd",
+    "closeout.json": "e4ad5716614d95435e82d6fe8e32f88093c08dff6466e65cbe7a11503d3839b4",
+    "closeout-final.json": "93389cb7cc2aee234c9c31d6874236b19468173c7e83050ae3bf9bd4d70aee44",
+    "owner-scope.json": "eafafcba61e1ad0b6d4cc84af54818f2312390af20ba0363325b7a2f5fc5e749",
+    "procedure-hashes.json": "03a15bcca5209bc9cd7a1b311030a181de86ae18a6af4108ddddfbf29e0b200a",
+    "coverage-plan.json": "30412cc7a4d3e08a136a72c816a3f4475a52a8744d157528fef9e58586bd069d",
+    "metadata.json": "4d50430cbd2b875b0f111b58d39d53bd4d21be3045f3c667d5ea6ef85b83780a",
+    "metadata-final.json": "b7b9d7a1f7e54a25a3adb57bd561ff5a8d45b8fdd16ca3db39502c5380bb554b",
+    "artifacts.json": "f120842533ef77afa15b905de58c3c5d4878e4833bfdf4884bd2badd915916a3",
+    "core-review.json": "db960fd364908218862e41bb179ebe834f0ca662db312fd065abe819e19e7244",
+    "browser-review.json": "a1285f6739ab17522c9e78298d27d2edc1f174a6f5fb1a4d4fcbe6d2842f437e",
+    "native-review.json": "01ebe325daa070e41f32bb38d372b4930824fd0f78879775a80e6f8a5f9dc7cf",
+    "native-review-before-malicious.json": "8d71359c0814d6e209f504eb3d2721cafb5a49a1e474ce3d70e8a1ca4e8ecc0b",
+    "skeptic-review.json": "3bbfa7e77699e5d89db72b851676adb841ff494c39368d8fa5593125b771f4cd",
+    "closure-matrix.json": "1e29eadea578ac392fbf0140dddc648cbf0d3ca61e1ccf1fa0efec803fc594d5",
+    "supply-chain.json": "d60cdbe27a0e0e2018571c68f6a0c41b0888fcfdcbc9e9a97568a3c528426045",
+    "build-environment-boundary.json": "53b891ab308c4a92226730abd762818e2d9cfca9bd7ce62f5facd1a16e351bbc",
+    "native-python-controls.json": "5e087a0b6ca85f14179270847d84b694d048b3c964cd34f590eb675096b46cdc",
+    "canonical-wrapper-cached.txt": "f23837c6d2d41dbb69a787b1c2916dc3460ac9d7022d8bda4a02799e7f22c8de",
+    "canonical-comparison.json": "c509c123f3313bc722598c9bbd060af3577ee4a0f00b2b61a369cb5f5ad6f64a",
+    "final-skeptic.json": "15d98de9b058319a85b34f9717b5b1b42cdc02430c8575a62de52e3b18749345"
+  },
+  "artifacts": {
+    "hostBuildId": "cc38bfadd2bfe9b2",
+    "canonical": {
+      "archives": [
+        {
+          "name": "mhfe-v0.5.1-browser.tar.gz",
+          "bytes": 656461,
+          "sha256": "03c6fc11b06258a7178bbfbdafd9cdf1438176de75c21314c396a3b5542b7f60",
+          "licenseBytesMatch": true,
+          "buildInfo": "mhfe v0.5.1\nsource: 3c60594479302827fe40975b04fd07f9f6fd4b3b (modified)\nrustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\nEmscripten 6.0.10\n"
+        },
+        {
+          "name": "mhfe-v0.5.1-linux-aarch64.tar.gz",
+          "bytes": 1187764,
+          "sha256": "54e2503f30afb3d2636a49db29760e7f2185e12043cedfab505e7bcdfaf5cf7b",
+          "licenseBytesMatch": true,
+          "buildInfo": "mhfe v0.5.1\nsource: 3c60594479302827fe40975b04fd07f9f6fd4b3b (modified)\nrustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n"
+        },
+        {
+          "name": "mhfe-v0.5.1-linux-x86_64.tar.gz",
+          "bytes": 1263668,
+          "sha256": "206e5f8854ade4d4ce3bce83919d18dd2fdfb30af996cbe35f923c1d861e9839",
+          "licenseBytesMatch": true,
+          "buildInfo": "mhfe v0.5.1\nsource: 3c60594479302827fe40975b04fd07f9f6fd4b3b (modified)\nrustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n"
+        },
+        {
+          "name": "mhfe-v0.5.1-windows-x86_64.zip",
+          "bytes": 1226587,
+          "sha256": "2578ba5b02aacc167ba671ef54773da24dbd3f6af2e23496aae93e1c3795a2ba",
+          "licenseBytesMatch": true,
+          "buildInfo": "mhfe v0.5.1\nsource: 3c60594479302827fe40975b04fd07f9f6fd4b3b (modified)\nrustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n"
+        }
+      ],
+      "comparisons": {
+        "wasm": {
+          "hostSha256": "68659291712d48c62cf0571fd1921f82d8f2acf34b1c9a7cbd00f75eecae68a5",
+          "canonicalSha256": "68659291712d48c62cf0571fd1921f82d8f2acf34b1c9a7cbd00f75eecae68a5",
+          "equal": true
+        },
+        "browserManifest": {
+          "hostSha256": "7bc9f612b5b741dc94f7d6f66a1afd9cdf0efa864a73b4c43d0d7c7457ab42fe",
+          "canonicalSha256": "7bc9f612b5b741dc94f7d6f66a1afd9cdf0efa864a73b4c43d0d7c7457ab42fe",
+          "equal": true
+        },
+        "canonicalBrowserBuildId": "cc38bfadd2bfe9b2",
+        "browserInternalChecksumsVerified": 15,
+        "native": {
+          "hostSha256": "3db809ef6e2c0972ef323079bea1aa7fea9b1969edfdf22d26927d3e8110a316",
+          "canonicalSha256": "73cd06bc3527b4c2b2b12f70fec83f7b6346a947fe35e6ff1d4ad232ef5b38a6",
+          "equal": false
+        }
+      },
+      "interpretation": "A host/container difference is not a failed canonical rebuild: host native compilers differ. No independent second uncached container build was performed; do not claim bit-for-bit reproducibility from this inspection alone."
+    },
+    "artifactHashes": {
+      "target/release/mhfe": "3db809ef6e2c0972ef323079bea1aa7fea9b1969edfdf22d26927d3e8110a316",
+      "dist/README.md": "2491da6c3efee622bdf4d2115c7ddf2aef8defdc1ae854ba894c32184286e816",
+      "dist/core/argon2-mt.js": "f038d3fbc7f8a4b8106a3f255acf5ade54302eb3fd36d3339e01c7f43bdfea8f",
+      "dist/core/argon2-st.js": "686cc4136571bd0ed33d769480cda374452b9b16bcdabbb99038e3da402ac97c",
+      "dist/core/client.d.ts": "cd6abc30761e8f98a4ce95ac552d0ccc475fd4bc54995420c044dcbe84568265",
+      "dist/core/client.js": "719e9703a40f2b500687fd72d57db5912b61c6afa2205e1d82abf3432ed14d5e",
+      "dist/core/mhfe-fast-mode.py": "400db463129314dbc57e81ca742de51bfe011fe4f9df25e6f4974683cfdc1a28",
+      "dist/modules.json": "7bc9f612b5b741dc94f7d6f66a1afd9cdf0efa864a73b4c43d0d7c7457ab42fe",
+      "dist/passwords/passwords.d.ts": "9b492df3e5645e99b0216217451469076aa7e1d3737ce9c8b2fb4c0b38e48c6b",
+      "dist/passwords/passwords.js": "79c513d33c0a2f3ce1600a1eb097ae48e3c19ba1f85a89139e8f78228f6f10a1",
+      "dist/repair/repair.d.ts": "b6e72947711806cff42a00fd60296f1eb9f4fab716a9d1e856e545a8473b54a6",
+      "dist/repair/repair.js": "9f0e975ba7514f56f4f49d0b26234d616963118744b33e6412a5c024649bdbb3",
+      "dist/runtime/mhfe.wasm": "68659291712d48c62cf0571fd1921f82d8f2acf34b1c9a7cbd00f75eecae68a5",
+      "dist/runtime/runtime.d.ts": "52ff8002297f7b6422323eb3fd4dbf5908887aaeceaaa384ee740cd8167b6f58",
+      "dist/runtime/runtime.js": "659571a3125f0bfeb2dfbbbd193917b3dbd24425ae1d28e135d56252ffa1a0c5",
+      "dist/runtime/worker.js": "1ec0b717b81cc765317930445872d4f443dbcad61b265c2cb0e7ac54e4ed47da",
+      "dist/wallet/wallet.d.ts": "d4d882e7e0f8d8dce7bb8b2eaad5b0ae4981acf2cb951739da7a2e13e419505b",
+      "dist/wallet/wallet.js": "6302d178cb48767eeb6585f0b4d1e36713172d83dec0efd9fd87eb014c01d43a",
+      "canonical-output-aud018/release/SHA256SUMS": "5e136e569c2a327e837273c250b9193870dff3dacc8c85f0dcbd2e290bf1d146",
+      "canonical-output-aud018/release/mhfe-v0.5.1-browser.tar.gz": "03c6fc11b06258a7178bbfbdafd9cdf1438176de75c21314c396a3b5542b7f60",
+      "canonical-output-aud018/release/mhfe-v0.5.1-linux-aarch64.tar.gz": "54e2503f30afb3d2636a49db29760e7f2185e12043cedfab505e7bcdfaf5cf7b",
+      "canonical-output-aud018/release/mhfe-v0.5.1-linux-x86_64.tar.gz": "206e5f8854ade4d4ce3bce83919d18dd2fdfb30af996cbe35f923c1d861e9839",
+      "canonical-output-aud018/release/mhfe-v0.5.1-windows-x86_64.zip": "2578ba5b02aacc167ba671ef54773da24dbd3f6af2e23496aae93e1c3795a2ba",
+      "canonical-output-aud018_uncached/release/mhfe-v0.5.1-browser.tar.gz": "03c6fc11b06258a7178bbfbdafd9cdf1438176de75c21314c396a3b5542b7f60",
+      "canonical-output-aud018_uncached/release/mhfe-v0.5.1-linux-aarch64.tar.gz": "54e2503f30afb3d2636a49db29760e7f2185e12043cedfab505e7bcdfaf5cf7b",
+      "canonical-output-aud018_uncached/release/mhfe-v0.5.1-linux-x86_64.tar.gz": "206e5f8854ade4d4ce3bce83919d18dd2fdfb30af996cbe35f923c1d861e9839",
+      "canonical-output-aud018_uncached/release/mhfe-v0.5.1-windows-x86_64.zip": "2578ba5b02aacc167ba671ef54773da24dbd3f6af2e23496aae93e1c3795a2ba"
+    },
+    "cachedUncachedComparison": {
+      "auditId": "AUD-018",
+      "checkedUtc": "2026-10-09T14:00:33+00:00",
+      "cachedDirectory": "/home/user/Documents/bip_tools/mhfe/canonical-output-aud018/release",
+      "uncachedDirectory": "/home/user/Documents/bip_tools/mhfe/canonical-output-aud018_uncached/release",
+      "archives": [
+        {
+          "name": "mhfe-v0.5.1-browser.tar.gz",
+          "cached": {
+            "sha256": "03c6fc11b06258a7178bbfbdafd9cdf1438176de75c21314c396a3b5542b7f60",
+            "bytes": 656461
+          },
+          "uncached": {
+            "sha256": "03c6fc11b06258a7178bbfbdafd9cdf1438176de75c21314c396a3b5542b7f60",
+            "bytes": 656461
+          },
+          "equal": true
+        },
+        {
+          "name": "mhfe-v0.5.1-linux-aarch64.tar.gz",
+          "cached": {
+            "sha256": "54e2503f30afb3d2636a49db29760e7f2185e12043cedfab505e7bcdfaf5cf7b",
+            "bytes": 1187764
+          },
+          "uncached": {
+            "sha256": "54e2503f30afb3d2636a49db29760e7f2185e12043cedfab505e7bcdfaf5cf7b",
+            "bytes": 1187764
+          },
+          "equal": true
+        },
+        {
+          "name": "mhfe-v0.5.1-linux-x86_64.tar.gz",
+          "cached": {
+            "sha256": "206e5f8854ade4d4ce3bce83919d18dd2fdfb30af996cbe35f923c1d861e9839",
+            "bytes": 1263668
+          },
+          "uncached": {
+            "sha256": "206e5f8854ade4d4ce3bce83919d18dd2fdfb30af996cbe35f923c1d861e9839",
+            "bytes": 1263668
+          },
+          "equal": true
+        },
+        {
+          "name": "mhfe-v0.5.1-windows-x86_64.zip",
+          "cached": {
+            "sha256": "2578ba5b02aacc167ba671ef54773da24dbd3f6af2e23496aae93e1c3795a2ba",
+            "bytes": 1226587
+          },
+          "uncached": {
+            "sha256": "2578ba5b02aacc167ba671ef54773da24dbd3f6af2e23496aae93e1c3795a2ba",
+            "bytes": 1226587
+          },
+          "equal": true
+        }
+      ],
+      "checksumFilesEqual": true,
+      "passed": true,
+      "meaning": "These exact canonical cached/REPRODUCIBLE_NO_CACHE=1 builds on this machine produced equal archives only if every equal flag is true. This is the documented local reproducibility comparison, not platform execution, upstream authenticity or a whole-machine compromise certificate."
+    },
+    "nativeComparisonLimit": "Native host/canonical byte difference not localized; compiler/build environment differences are possible, not proven cause."
+  },
+  "maliciousCodeReview": {
+    "result": "No confirmed malicious insertion or secret-exfiltration path found in the scoped reviewed source and package comparisons.",
+    "evidence": [
+      "native-malicious-review.json",
+      "browser-malicious-review.json",
+      "shim-review.json",
+      "supply-chain-review.json"
+    ],
+    "supplyChain": {
+      "auditId": "AUD-018",
+      "reviewedUtc": "2026-10-09T13:42:18+00:00",
+      "reviewer": {
+        "name": "Coordinator build/dependency security review",
+        "model": null,
+        "reasoningEffort": null
+      },
+      "result": "No confirmed malicious build/dependency insertion found in the reviewed configuration and exact package comparisons.",
+      "npm": {
+        "packages": 3,
+        "archiveFilesMatching": 232,
+        "archiveContentMismatches": 0,
+        "installedFilesIncludingGeneratedWrappers": 235,
+        "extraEntries": [
+          {
+            "package": "node_modules/playwright",
+            "mismatches": ["node_modules/.bin/playwright", "node_modules/.bin/playwright-core"]
+          },
+          {
+            "package": "node_modules/prettier",
+            "mismatches": ["node_modules/.bin/prettier"]
+          }
+        ],
+        "classification": "No injected execution or unexplained payload was identified in these six entries. The three extra archive-inventory entries are consistent with package-manager-generated bin wrappers, rather than modified package archive files.",
+        "strictInventoryCommandExit": 1,
+        "interpretation": "The strict entire-directory inventory retained three extra generated wrappers. Archive-origin files match. Independent full-wrapper source/target/generator review classified extras without deleting them or relaxing archive comparisons.",
+        "shimReviewSha256": "50e12f2ef003eae24a758f3c3e99ab168680eeb99ee8cfc43530698c7ad048f1"
+      },
+      "cargo": {
+        "lockfileUnchangedFromHead": true,
+        "nonRegistryPackages": [],
+        "manifestPatchReplaceWorkspaceOverrides": [],
+        "configurationFiles": [],
+        "exactCargoArchiveComparisons": 108,
+        "exactUnpackedSourceComparisons": 4075,
+        "vendorFilesMatching": 22,
+        "provenanceLogSha256": "bf0ad3832e359a7d740fedbaf3b9c18417c11e9301faa8a63aa39cf6434ce360"
+      },
+      "git": {
+        "activeHooks": [],
+        "replacementRefs": "",
+        "executableConfigNames": [
+          {
+            "argv": [
+              "git",
+              "config",
+              "--name-only",
+              "--get-regexp",
+              "^core\\.(hooksPath|fsmonitor|sshCommand)$"
+            ],
+            "exitCode": 1,
+            "output": ""
+          },
+          {
+            "argv": ["git", "config", "--name-only", "--get-regexp", "^filter\\."],
+            "exitCode": 1,
+            "output": ""
+          },
+          {
+            "argv": ["git", "config", "--name-only", "--get-regexp", "^include"],
+            "exitCode": 1,
+            "output": ""
+          },
+          {
+            "argv": ["git", "config", "--name-only", "--get-regexp", "^url\\..*\\.insteadOf$"],
+            "exitCode": 1,
+            "output": ""
+          }
+        ],
+        "fsckExit": 0
+      },
+      "buildReview": {
+        "fileHashes": {
+          "build.rs": "c5e586f0f3307da5d818286b98348f4794f4f379ecd4388bd0c4f070e95efb15",
+          "Cargo.toml": "c484ef408592209c77bd3e93f1a9def0291ddb394e317dd987f8aacc4db29c3a",
+          "Cargo.lock": "c80fcc5f3bd5dfe967156dc4911980c6350975789ca84d36a1e09402e5efc60c",
+          "package.json": "d698c1b911ce932362f4c9db57fdfbb71a7a9284d1c639d1bab2d92b58a99e86",
+          "package-lock.json": "f491c145fbf224b03c7fb3cb04e97ebbdd16a95f5f3558dca5a1507669a5b360",
+          "rust-toolchain.toml": "a74ab31610ff993abd88ec2eeda79ba62dfe6f3694c2328b2bdccca6760308cb",
+          "packaging/mhfe-launch.bat": "11699fac8fb3e5208c0d9e768d1a33b5f03e57b90d6d84c2b8db3ba7790bcd5c",
+          "packaging/remap-builder-paths.sh": "f46eb32fb46d964769580c60fa021a18897cd90b193d284eea8b508e43c3340d",
+          "packaging/Dockerfile.reproducible.dockerignore": "39edca5569e65af93b10363a3a8347197b07914ad29a74347d5dd0f6b2625df7",
+          "packaging/mhfe-launch.command": "1692f3bf2fe093eebced285e89a0f907716701fc9c668712f2729ba0b0baa2b2",
+          "packaging/mhfe-launch.sh": "37fd96f625df1e5347a950a1b25ae0b074b0badd67470af09552f3e685d695e3",
+          "packaging/mhfe-fast-mode.py": "400db463129314dbc57e81ca742de51bfe011fe4f9df25e6f4974683cfdc1a28",
+          "packaging/Dockerfile.reproducible": "24695273e93443d374030d85f6e35ecba74bb4cd5e1569553f75372bd1fec439",
+          "packaging/__pycache__/mhfe-fast-mode.cpython-314.pyc": "f54fe82d489b3eb98c54bff31a6a808ef993fe83a394d3bda4cdefcfe354e9a0",
+          ".github/dependabot.yml": "1e78870264c3a31cbcfc2432c954a52c8804e44b6640ef47c5d1a55e5a36685e",
+          ".github/workflows/audit.yml": "891f142fab2be1fc43cd13682202d24fcc58247cf25051f9a1a8c05a2642e18e",
+          ".github/workflows/vectors.yml": "307a35510b170ccfef6ac25085b7ce56d6f7b721c9c77a1d17431bb1fa893a58",
+          ".github/workflows/release.yml": "e970380e5eeceb03c055e3c7b7f6785a5e41b28a9de206005380cc431b16dd5c",
+          ".github/workflows/ci.yml": "955e29f23f2ccc7f0626d0d948deb327e2ec05aa640535bdd888cf6c998fa10b",
+          "scripts/build-wasm.sh": "37e562bddc7f8688aa5e30cf2dc0d19170f9f68f1f534b8c86cb3c7e8b5e1711",
+          "scripts/check-release-artifacts.sh": "e834248963487a61c80cf18c4d84fc2630a105cf7d993a51aafd1b766eae6645",
+          "scripts/package-release.sh": "8a4ae40e70d4a6e15adb1de1efe5f391c23323d029b3bacfe730cb91668f0ba8",
+          "scripts/check.sh": "5d09cbdcc5d84b0024b6dc7b233e4e9ca407e180427cb9d665ef7cd758dc92cd",
+          "scripts/build-argon2-wasm.sh": "d83e0725574f1ea49e357ba4400834f06403786bf5f3bc48c846ed082f7f0675",
+          "scripts/build-reproducible.sh": "49b902e40c39eac5f8b4c0b838be9738a8d46ea4037248bf2a9ce431843f2944"
+        },
+        "networkSources": [
+          "Pinned Docker base image digests",
+          "Ubuntu dated snapshot via HTTPS/apt authentication",
+          "nodejs.org archive with pinned SHA256",
+          "static.rust-lang.org rustup-init with pinned SHA256",
+          "locked crates.io",
+          "Pinned official GitHub Actions/emsdk build-time dependencies"
+        ],
+        "dataFlow": "Downloads occur in toolchain/dependency setup; verified Docker source stage uses --network=none/CARGO_NET_OFFLINE. Runtime secret processing is reviewed separately. Release workflows upload generated public-test release assets after checks, not wallet input. No new foreign endpoints, credential harvesting, compile wrapper, Cargo patch, hidden lifecycle script or weakened gate identified in this delta.",
+        "evalClassification": "The path-remapping helper uses fixed enumerated target names and expansion-time shell indirection; source contains no arbitrary remote payload evaluation.",
+        "dirtyDelta": "Cargo only adds ctrlc termination signals and a wording comment; Cargo.lock, package.json/lock, build.rs, pinned Docker download digests and launchers are unchanged from HEAD. Release/CI changes add called checks and accurately describe the partial canonical gate."
+      },
+      "environmentBoundaryEvidence": "build-environment-boundary.json",
+      "selectedInjectionVariables": [],
+      "limits": [
+        "Registry equality is pinned-package integrity, not a complete upstream code audit.",
+        "The existing OS, toolchain binaries, browser executables, firmware and account state are not certified.",
+        "Local source/lock hashes can share a compromised trust origin; no pre-incident independent backup was provided.",
+        "This is a code-tamper inspection of the named package wrappers and targets, not a whole-OS compromise investigation.",
+        "Inherited caller PATH/NODE_PATH and platform helpers remain normal execution inputs; these wrapper sources do not prove their external contents trustworthy. Coordinator separately reviewed relevant environment/config overrides.",
+        "The pnpm template prefix is byte-identical locally; the remaining normalized wrapper structure was fully inspected and compared across five wrappers, not independently generated by executing pnpm.",
+        "No wrapper runtime, Windows/MSYS/WSL execution or alternative shell test was performed.",
+        "Exact listed hashes bind the inspected bytes; this cannot rule out a later change or tampering elsewhere outside the assigned scope."
+      ],
+      "mutations": "Only audit-owned harness/docs/evidence and ignored build artifacts. No dependency reinstall or project source change."
+    },
+    "systemForensicsPerformed": false,
+    "preIncidentTrustedBaselineProvided": false
+  },
+  "normalization": {
+    "homePaths": "/home/user",
+    "times": "UTC",
+    "localOriginalEvidencePreserved": true
+  }
+}

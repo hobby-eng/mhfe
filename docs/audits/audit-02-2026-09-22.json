@@ -370,6 +370,29 @@
           "01d8558a8dc66d86b2300871dae4efeebbd23fb9": "5ac08b2812a6519831b1981c101a24340c7bb11a",
           "cdf7123e737dee49a9a5710a5b6ef67f35855e41": "dad721673a7a4a44eb31b59c165a92a6dd938c71"
         }
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "The companion specification commit e87eb5cdbd02b41c15aa512cd32055d56d3bd760 is not in mhfe_spec. The reviewed commit was 4e7d03a1e1cbf68b407c3affd93c786884cd6ed1. On 2026-09-22 it was amended and force-pushed off main (its successor b3f64306563d15832c846601d16fd20236a0ea75), so it was on no branch when the history rewrite of 2026-10-09 rewrote it into e87eb5cd, with the same tree 29cd36e076f9e4826ef6f724ef46663848700cb4. No branch or tag ever pointed to e87eb5cd, and it was removed when unreachable objects were pruned. The amended successor became 61033431380c7d5e8ad58f493ebc22a4ff8e69b4 (tag v0.3.0), whose tree differs from the reviewed one in 6 paths, SPECIFICATION-PLAIN.md among them. No commit of the current mhfe_spec history has the reviewed tree or the reviewed SPECIFICATION-PLAIN.md SHA-256 d5e241135d32a3ccd62bc9ebc00f0e6773e1cccfc67afa3882209d3ae2b44812. The reference stays as recorded; the file SHA-256 is the binding of the review."
+        ],
+        "note": "Documentation-only edit; no check was rerun (AUD-015-DOC001; AUD-018 recorded the four fields as unresolved).",
+        "unavailableCommits": {
+          "e87eb5cdbd02b41c15aa512cd32055d56d3bd760": {
+            "fields": [
+              "/snapshot/companionSpecification/commit"
+            ],
+            "sameTreeInCurrentHistory": false,
+            "reviewedCommit": "4e7d03a1e1cbf68b407c3affd93c786884cd6ed1",
+            "lineage": [
+              "4e7d03a1e1cbf68b407c3affd93c786884cd6ed1",
+              "e87eb5cdbd02b41c15aa512cd32055d56d3bd760"
+            ],
+            "nearestCurrentCommit": "61033431380c7d5e8ad58f493ebc22a4ff8e69b4",
+            "nearestHasReviewedTree": false
+          }
+        }
       }
     ]
   }

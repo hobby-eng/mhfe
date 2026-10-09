@@ -4271,6 +4271,31 @@
           "f3d3279f9e97c2a17ee6aca04d399de44f5d4672": "717265c5ad9eef7466d1260dee6db2f8d15b5458",
           "fd40905b7cb187a94dff52d25bc49c07e6ee3ff8": "a64e39432e3437361ef5b14d045113ca519ef2c7"
         }
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "The counterpart specification commit 28e50e049d48cf1d5a8a529380192b6371458a57 is not in mhfe_spec. The reviewed commit was 70b7405ac83434407f765645db1b1f963b87328b, tree 29f2cba5461a64bf99e36918e6a53963198facd5, the tree that the file SHA-256 values under remediationVerification/snapshot/specification/files describe. On 2026-10-06 it was replaced on main by an amended commit (0ec9eb3822c910d4575b8f94474c1e33b2bfcc0a), so it was on no branch when the history rewrite of 2026-10-09 rewrote it into 28e50e04, whose tree 8679327041e712e16135c708ccbb08e5b36b0278 differs from the reviewed one. No branch or tag ever pointed to 28e50e04, and it was removed when unreachable objects were pruned. The amended successor became aa610218785de6da181cb2b2b1daea6bb4794f1a (tag v0.5.0), whose tree differs: 56 of the 61 recorded SHA-256 values match it (58 match its parent bbc1320f2da9eef1c377b20d3fcbf141ab523bb7). No commit of the current mhfe_spec history has tree 29f2cba5 or 86793270. The reference stays as recorded in its three fields; the specification fingerprint and the file SHA-256 values are the binding of the review."
+        ],
+        "note": "Documentation-only edit; no check was rerun (AUD-015-DOC001; AUD-018 recorded the four fields as unresolved).",
+        "unavailableCommits": {
+          "28e50e049d48cf1d5a8a529380192b6371458a57": {
+            "fields": [
+              "/snapshot/specificationCommit",
+              "/researchOpportunities/snapshot/specificationCommit",
+              "/remediationVerification/snapshot/specification/commit"
+            ],
+            "sameTreeInCurrentHistory": false,
+            "reviewedCommit": "70b7405ac83434407f765645db1b1f963b87328b",
+            "lineage": [
+              "70b7405ac83434407f765645db1b1f963b87328b",
+              "28e50e049d48cf1d5a8a529380192b6371458a57"
+            ],
+            "nearestCurrentCommit": "aa610218785de6da181cb2b2b1daea6bb4794f1a",
+            "nearestHasReviewedTree": false
+          }
+        }
       }
     ]
   }

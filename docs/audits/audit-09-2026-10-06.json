@@ -1,0 +1,416 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-009",
+  "auditNumber": 9,
+  "date": "2026-10-06",
+  "title": "Single-WASM modular API refactor review",
+  "reviewer": {
+    "name": "Codex coordinator with three scoped reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0",
+    "commitComplete": true,
+    "workingTree": "Dirty tracked and untracked implementation; no production edits by reviewers.",
+    "sourceFingerprint": "4e150a8549ca51464b9064ddc566515ac3ae0087dd7f0b829ac3d904043351f6",
+    "fingerprintMethod": "SHA256(JSON.stringify(sorted [path,SHA256(bytes)] records from git ls-files -c -o --exclude-standard; missing tracked files marked deleted; docs/audits excluded)); 204 paths.",
+    "capturedAt": "2026-10-06T17:43:54.510Z",
+    "artifactRelationship": "Existing local artifacts; source JS/declaration equality checked, Rust-to-WASM freshness not independently established."
+  },
+  "scope": "Audit of current MHFE refactor across Rust library/CLI, single-WASM bindings, browser API/workers, packaging and documentation. Full-scope refactor review with incomplete runtime execution; not full project or release acceptance.",
+  "procedureHashes": {
+    "FULL_AUDIT_GUIDE.md": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+    "AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "audit-report.schema.json": "d47df01252ad6fb11d8cad00b7d9e6dde62b3ee3331c3bfbef9a7b99adda30f7"
+  },
+  "checks": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "outcome": "passed",
+      "method": "Source trace of secret ownership in new Rust types and workers; immutable JS string limitations retained."
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "outcome": "not-applicable",
+      "method": "The package is a library, not an iframe/vault application; host CSP integration not executed."
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "outcome": "passed",
+      "method": "Existing package script network scan passed; no new provider transport in refactor."
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "outcome": "passed",
+      "method": "Argon2 known tags and reduced-cost container checks passed; full-size replay and security proof not run."
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "outcome": "failed",
+      "method": "SEC001 and API001 reproduce exceptional-path cleanup failures."
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "outcome": "passed",
+      "method": "Inspected changed browser modules introduce no storage or DOM insertion; real host acceptance not run."
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "outcome": "not-run",
+      "method": "No broad resource-exhaustion or host read-only acceptance exercise."
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "outcome": "passed",
+      "method": "Existing package public phrase checks passed; complete vector replay not run."
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "outcome": "passed",
+      "method": "New address-search description reviewed and package wallet checks passed; not all coin/path combinations executed."
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "outcome": "not-applicable",
+      "method": "No signing/BIP85/BIP38/Silent Payments changes or advertised implementation in this refactor."
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "outcome": "not-applicable",
+      "method": "No scripts/PSBT/Miniscript/multisig operations in this refactor."
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "outcome": "not-applicable",
+      "method": "No transaction/PSBT operations."
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "outcome": "passed",
+      "method": "Reduced-cost encryption/recovery and repair package checks passed; no full-cost replay."
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "outcome": "not-applicable",
+      "method": "Offline package has no providers/discovery/history accounting."
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "outcome": "failed",
+      "method": "API004/API005 source traces establish library invariant failures."
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "outcome": "failed",
+      "method": "API001/API002 reproduced in in-memory production-source probes."
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "outcome": "failed",
+      "method": "API003 proves declaration/runtime value-export mismatch."
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "outcome": "passed",
+      "method": "Existing package import/repair/public-vector checks passed; external interoperability not run."
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "outcome": "passed",
+      "method": "Single-WASM builder, Cargo flag grouping and bundled class syntax inspected/checked."
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "outcome": "not-run",
+      "method": "No fresh compilation of feature combinations; prior reported clippy runs not independently credited."
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "outcome": "passed",
+      "method": "No dependency/lockfile changes in diff; EFF inclusion and notice changes inspected, no upstream internals review."
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "outcome": "not-run",
+      "method": "No canonical Docker rebuild or proof of Rust-to-WASM source freshness."
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "outcome": "not-run",
+      "method": "No fresh archive/release/CI execution; existing local manifest hashes checked only."
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "outcome": "not-run",
+      "method": "No fresh Chromium/Firefox page run."
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "outcome": "not-run",
+      "method": "No private-screen terminal or Deriver navigation acceptance."
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "outcome": "not-run",
+      "method": "No visual/accessibility/QR acceptance."
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "outcome": "passed",
+      "method": "Independent module ownership, host randomness injection and CLI translation paths inspected."
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "outcome": "passed",
+      "method": "CLI encryption/new/rekey use common Encryption; source duplication inspected."
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "outcome": "passed",
+      "method": "Production-source probes supplement existing checks; stale WASM module comment noted."
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "outcome": "passed",
+      "method": "Browser/API docs inspected; callback guarantee violations recorded as API findings."
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "outcome": "passed",
+      "method": "Shared package docs/build filenames inspected; stale wasm_api module comment noted separately."
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "outcome": "passed",
+      "method": "New record uses common procedure and schema; exact validation described in command evidence."
+    }
+  ],
+  "commands": [
+    {
+      "command": "node scripts/verify-browser-package.mjs",
+      "exitCode": 0,
+      "result": "Both reduced-cost Argon2 modes, repair/password/wallet checks, manifest/network checks and stand-in-worker classes passed."
+    },
+    {
+      "command": "node scripts/verify-argon2-wasm.mjs",
+      "exitCode": 0,
+      "result": "Both builds matched all three expected Argon2id tags."
+    },
+    {
+      "command": "cargo fmt --check",
+      "exitCode": 0,
+      "result": "Passed."
+    },
+    {
+      "command": "Initial Node snapshot capture using execFileSync(git)",
+      "exitCode": 1,
+      "result": "spawnSync git EPERM; replaced with shell git ls-files pipeline. Not treated as a source failure."
+    },
+    {
+      "command": "node docs/audits/AUD-009-harnesses/browser-boundaries.mjs",
+      "exitCode": 0,
+      "result": "Four confirmed baseline defects reproduced; intentionally not a passing acceptance test."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-009-API001",
+      "category": "API",
+      "kind": "finding",
+      "severity": "medium",
+      "title": "Worker creation failure leaves the operation pending",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Supported browser API contract failure should be fixed before publishing this refactor.",
+      "affected": "web/runtime.js:91",
+      "evidence": "In-memory synthetic Node probe; browser-boundaries harness or module namespace inspection.",
+      "reproduction": "Make URL.createObjectURL throw a synthetic error, then run WorkerJob with a valid compiled module and synthetic password bytes.",
+      "expected": "Reject with WORKER_FAILED, release the operation slot and wipe owned byte copies.",
+      "observed": "The run promise remains pending, ended is false, an unhandled rejection occurs and the bytes remain nonzero.",
+      "impact": "A browser refusing Blob URLs can leave a long-operation slot permanently busy and retain its byte copies.",
+      "recommendedFix": "Wrap Blob creation, URL creation and startup in one failure boundary; stop and wipe on every exception.",
+      "requiredVerification": "Inject Blob/URL/Worker failures and assert settled rejection, released slot and zeroed client copies."
+    },
+    {
+      "id": "AUD-009-API002",
+      "category": "API",
+      "kind": "finding",
+      "severity": "medium",
+      "title": "Wallet progress drops asynchronous callback failures",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Supported browser API contract failure should be fixed before publishing this refactor.",
+      "affected": "web/wallet.js:145",
+      "evidence": "In-memory synthetic Node probe; browser-boundaries harness or module namespace inspection.",
+      "reproduction": "Emit a draws message while onProgress returns a rejected Promise.",
+      "expected": "Reject the drawing operation with CALLBACK_FAILED and terminate its workers.",
+      "observed": "The wrapper does not return the callback Promise; rejection is unhandled and the drawing operation and worker continue.",
+      "impact": "The documented callback-failure contract fails during checked phrase generation.",
+      "recommendedFix": "Return the callback result so WorkerJob.callPage observes its rejection.",
+      "requiredVerification": "Assert asynchronous rejection cancels all drawing workers and rejects with CALLBACK_FAILED."
+    },
+    {
+      "id": "AUD-009-API003",
+      "category": "API",
+      "kind": "finding",
+      "severity": "medium",
+      "title": "Declaration error exports are missing from runtime modules",
+      "status": "open",
+      "releaseBlocking": true,
+      "releaseBlockingReason": "Supported browser API contract failure should be fixed before publishing this refactor.",
+      "affected": "web/passwords.d.ts:2; web/repair.d.ts:2; web/wallet.d.ts:2",
+      "evidence": "In-memory synthetic Node probe; browser-boundaries harness or module namespace inspection.",
+      "reproduction": "Import MhfeError from passwords.js or repair.js, or either error class from wallet.js.",
+      "expected": "Named value exports promised by declarations exist in the JavaScript modules.",
+      "observed": "Actual module namespaces contain only their main class; the named imports fail module linking.",
+      "impact": "TypeScript-valid consumers fail at runtime before calling any operation.",
+      "recommendedFix": "Add matching JavaScript value reexports or remove the unsupported declaration exports.",
+      "requiredVerification": "Compare declaration value exports with actual ES-module namespaces and exercise named imports."
+    },
+    {
+      "id": "AUD-009-API004",
+      "category": "API",
+      "kind": "finding",
+      "severity": "medium",
+      "title": "Word-index generation accepts a character recipe and returns an empty password",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Bounded native API or lifecycle defect; no current frontend compromise demonstrated.",
+      "affected": "src/new_password.rs:139",
+      "evidence": "Direct source trace, not an executed native reproduction.",
+      "reproduction": "PasswordRecipe::characters(16).unwrap().make_from_indexes(&mut |_| Ok(0)).unwrap().",
+      "expected": "Reject a character recipe at this word-generation entry point.",
+      "observed": "Source trace: drawn_words is zero, no callback runs, and success returns empty text with a 93328-millibit recipe marked not weak.",
+      "impact": "Native library consumers can receive an empty password accompanied by strong-generation metadata. Current CLI/WASM dispatch does not call this invalid combination.",
+      "recommendedFix": "Reject character recipes here, as make_from_rolls already does, or separate word-recipe types.",
+      "requiredVerification": "Run a negative public-API regression asserting character recipes cannot produce successful empty text."
+    },
+    {
+      "id": "AUD-009-API005",
+      "category": "API",
+      "kind": "finding",
+      "severity": "medium",
+      "title": "Rekey guards declared settings while encrypting with independent engine settings",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Bounded native API or lifecycle defect; no current frontend compromise demonstrated.",
+      "affected": "src/rekey.rs:132",
+      "evidence": "Direct source trace, not an executed native reproduction.",
+      "reproduction": "Recover an old container at settings A/password P; seal with an Mhfe configured at A and password P but declare new_work B different from A.",
+      "expected": "Reject settings mismatch or use the engine's authoritative settings; unchanged rekey must be refused.",
+      "observed": "Source trace: check_new compares B with stored A, while Encryption runs at the supplied engine's A; deterministic output is the old container.",
+      "impact": "Native consumers can bypass the unchanged guard and attach recovery instructions for settings different from those used. CLI/WASM construct matching engines in reviewed paths.",
+      "recommendedFix": "Use mhfe.work_factor() as authoritative or reject mismatches in recover/seal before work.",
+      "requiredVerification": "Exercise old and new engine/declaration mismatches and unchanged-output prevention with a reduced-cost test engine."
+    },
+    {
+      "id": "AUD-009-SEC001",
+      "category": "SEC",
+      "kind": "finding",
+      "severity": "low",
+      "title": "Invalid repetition arguments leave earlier secret byte copies unwiped",
+      "status": "open",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Bounded native API or lifecycle defect; no current frontend compromise demonstrated.",
+      "affected": "web/passwords.js:59; web/wallet.js:122",
+      "evidence": "In-memory synthetic Node probe; browser-boundaries harness or module namespace inspection.",
+      "reproduction": "Use a synthetic nonempty first password/passphrase and an invalid repetition argument (number or lone surrogate); instrument TextEncoder to observe owned arrays without printing contents.",
+      "expected": "Every client-owned temporary secret buffer is wiped when validation rejects.",
+      "observed": "The first encodeSecret succeeds; the repetition encoder throws before any cleanup guard, leaving the first array nonzero.",
+      "impact": "Bounded secret-lifetime regression on invalid-input paths; no persistence, network exfiltration or user-secret compromise demonstrated.",
+      "recommendedFix": "Use cleanup guards around staged secret encoding, following the core client's existing pattern.",
+      "requiredVerification": "Assert rejection wipes all allocated temporary arrays for invalid repeat types/text while preserving caller arrays."
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-009-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review only; no production changes."
+    },
+    {
+      "id": "AUD-009-API002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review only; no production changes."
+    },
+    {
+      "id": "AUD-009-API003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review only; no production changes."
+    },
+    {
+      "id": "AUD-009-API004",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review only; no production changes."
+    },
+    {
+      "id": "AUD-009-API005",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review only; no production changes."
+    },
+    {
+      "id": "AUD-009-SEC001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review only; no production changes."
+    }
+  ],
+  "limitations": [
+    "Native Rust defects established by direct source trace, not fresh compiled reproduction.",
+    "No fresh Rust tests, clippy, browser runs, full-cost vectors, private-screen CLI scenarios or canonical/release builds.",
+    "Reported 179 library and 63 CLI tests and Chromium/Firefox results are owner-supplied context, not independently rerun evidence.",
+    "Existing package execution does not prove Rust source-to-WASM freshness.",
+    "Deriver handover remains unverified; existing integration uses the older package.",
+    "No upstream dependency internals or independent cryptographic security proof.",
+    "Sandbox commands printed 'Failed to create stream fd: Operation not permitted'; successful exit/results retained separately.",
+    "No signed commit, push, tag, release or production modification authorized/performed."
+  ],
+  "artifactHashes": {
+    "dist/runtime/mhfe.wasm": "8fbc2c86d52b1db5a87e2223ffe6082f089a0baf2f7ab8a3fe94171aca60e95a",
+    "dist/runtime/worker.js": "3891e923fb11ecfb1e0cd96fdfda7a6fd9895137af0eba3e6d7589192b3dda02",
+    "dist/modules.json": "9edd8187628a01fced8168862b5e037a2dad16d0cf7e28f866f8015d2c729ed2"
+  },
+  "sourceHashes": {
+    "src/new_password.rs": "cabe5a9c88bbe1719cbac1c61c996d9b559956ad88af405417e52366dcfbaabb",
+    "src/rekey.rs": "58c160e3bf8d6735ac3c182cc4dacf0563624149da4c09570893001bc89de46a",
+    "web/passwords.js": "1662564d58e99b51e42470ef353fa4241dd2c8e3be8af2c592b10aa49d44ec27",
+    "web/runtime.js": "70e28a8aba74ad11ce42537019a357bf1a145dbdddb1120f33c2a77598d4ff65",
+    "web/wallet.js": "b1015c326abc923925f92e2dfad94ae524828d48d1a5a84d861c23e66280b14b"
+  },
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: f4f7b017d21cbda51283f9eaa973a0cc161b95d6 -> d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "f4f7b017d21cbda51283f9eaa973a0cc161b95d6": "d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0"
+        }
+      }
+    ]
+  }
+}
