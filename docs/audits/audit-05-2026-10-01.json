@@ -10,7 +10,7 @@
     "reasoningEffort": null
   },
   "snapshot": {
-    "commit": "d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124",
+    "commit": "5eed93c06b6e2c9107e20290dc318d9efbcbe829",
     "commitComplete": true,
     "branch": "main",
     "tag": "v0.4.0",
@@ -57,7 +57,7 @@
       "checkId": "CHECK-SEC-001",
       "category": "SEC",
       "logicalGroup": "Secret ownership",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "failed",
       "method": "Source trace of password, phrase, entropy, states, salts, keys, masks, passphrase and BIP32 keys through library, CLI, FFI, WASM and worker; allocator probe of the phrase text.",
       "evidence": "AUD-005-SEC001; native-tests; phrase-copies"
@@ -66,7 +66,7 @@
       "checkId": "CHECK-SEC-002",
       "category": "SEC",
       "logicalGroup": "CSP and worker transport",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Real Blob workers under default-src 'none' CSP in Chromium and Firefox, file and isolated loopback modes; secrets transferred and wiped; no iframe vault is part of this library.",
       "evidence": "real-browsers; browser-build"
@@ -75,7 +75,7 @@
       "checkId": "CHECK-SEC-003",
       "category": "SEC",
       "logicalGroup": "Offline boundary",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Network-code gate (fetch, XMLHttpRequest, WebSocket, EventSource, importScripts searched in dist); request captures show only the page and blob URLs; the only listener is the 127.0.0.1 launcher.",
       "evidence": "browser-build; real-browsers"
@@ -84,7 +84,7 @@
       "checkId": "CHECK-SEC-004",
       "category": "SEC",
       "logicalGroup": "Randomness and cryptography",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "getrandom with unbiased 7776-word rejection sampling; suite 3 formulas re-derived from the specification and matched to src/feistel.rs, src/packing.rs, src/suite.rs; RFC 9106 vector and 160 C/RustCrypto differential cases; 17 transcripts by the independent script.",
       "evidence": "native-tests; recorded-transcripts"
@@ -93,7 +93,7 @@
       "checkId": "CHECK-SEC-005",
       "category": "SEC",
       "logicalGroup": "Exceptional cleanup",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "failed",
       "method": "C work area wiped on success and failure, cancellation at every round, worker termination, Ctrl+C with terminal restore; practical zeroization gap in phrase text.",
       "evidence": "AUD-005-SEC001; native-tests; real-browsers; hidden-input"
@@ -102,7 +102,7 @@
       "checkId": "CHECK-SEC-006",
       "category": "SEC",
       "logicalGroup": "Injection and persistence",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "No storage or telemetry in client or worker; test pages escape script terminators; launcher routes, Host check and headers reviewed; error messages carry no secrets.",
       "evidence": "browser-build; source review"
@@ -111,7 +111,7 @@
       "checkId": "CHECK-SEC-007",
       "category": "SEC",
       "logicalGroup": "Availability bounds",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "8192-byte input lines, 16-connection cap and total deadlines, memory pre-check before secrets, allocation failure under an address-space limit refused with exit 4 before Argon2. The hint defect is recorded under UI.",
       "evidence": "cli-probes-2; native-tests"
@@ -120,7 +120,7 @@
       "checkId": "CHECK-FUN-001",
       "category": "FUN",
       "logicalGroup": "BIP39 and normalized input",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "All five lengths, exact match before four-letter prefix, checksum, word and count refusals, NFKD with Unicode 17, control/unassigned/private-use rules and byte limits; validation-cases.json equals the specification.",
       "evidence": "native-tests; metadata"
@@ -129,7 +129,7 @@
       "checkId": "CHECK-FUN-002",
       "category": "FUN",
       "logicalGroup": "Wallet derivation",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "BIP32 master and child keys, BIP39 passphrase normalization, BIP44/49/84/86 mainnet and testnet vectors, uppercase SegWit, rare invalid keys.",
       "evidence": "native-tests"
@@ -138,7 +138,7 @@
       "checkId": "CHECK-FUN-003",
       "category": "FUN",
       "logicalGroup": "BIP85, BIP38, signing, Silent Payments",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "not-applicable",
       "method": "None of these exists in MHFE.",
       "evidence": "source inventory"
@@ -147,7 +147,7 @@
       "checkId": "CHECK-FUN-004",
       "category": "FUN",
       "logicalGroup": "Descriptors and multisig",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "not-applicable",
       "method": "No descriptor, Miniscript or multisig interface; single-key address encodings are covered by FUN-002.",
       "evidence": "src/wallet.rs"
@@ -156,7 +156,7 @@
       "checkId": "CHECK-FUN-005",
       "category": "FUN",
       "logicalGroup": "Transactions and PSBT",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "not-applicable",
       "method": "MHFE neither reads nor signs transactions.",
       "evidence": "source inventory"
@@ -165,7 +165,7 @@
       "checkId": "CHECK-FUN-006",
       "category": "FUN",
       "logicalGroup": "Recovery and container format",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Both directions at reduced real Argon2 cost for all lengths, detection, ambiguity, manual 24 words, fixed point, fault check, decoy consistency; recorded-key transcript replay; the full-size replay is excluded by instruction.",
       "evidence": "native-tests; recorded-transcripts"
@@ -174,7 +174,7 @@
       "checkId": "CHECK-FUN-007",
       "category": "FUN",
       "logicalGroup": "Providers and discovery",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "not-applicable",
       "method": "No provider or discovery; the local address search is FUN-002.",
       "evidence": "source inventory"
@@ -183,7 +183,7 @@
       "checkId": "CHECK-API-001",
       "category": "API",
       "logicalGroup": "Rust, C and JavaScript contracts",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "FFI layout assertions and field reach; WASM number validation; client argument checks. The synchronous-throw contract is recorded as an observation.",
       "evidence": "native-tests; browser-build; native-32bit-guard"
@@ -192,7 +192,7 @@
       "checkId": "CHECK-API-002",
       "category": "API",
       "logicalGroup": "Async lifecycle",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Busy state, transfers, cancellation before start and inside round 2, restart; worker termination after each operation.",
       "evidence": "real-browsers; browser-build"
@@ -201,7 +201,7 @@
       "checkId": "CHECK-API-003",
       "category": "API",
       "logicalGroup": "Financial exports",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "not-applicable",
       "method": "No monetary exports; vector JSON and CLI output are API-004.",
       "evidence": "API.md"
@@ -210,7 +210,7 @@
       "checkId": "CHECK-API-004",
       "category": "API",
       "logicalGroup": "Serialization and interoperability",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Corpus and fast cases equal the specification bytes; text and binary checksum lines in both launchers; concurrent checksum refresh; address encodings.",
       "evidence": "metadata; cli-regressions; browser-build"
@@ -219,7 +219,7 @@
       "checkId": "CHECK-BLD-001",
       "category": "BLD",
       "logicalGroup": "Feature composition",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "SSE2 and SSSE3 native builds, wasm feature build, both Emscripten builds; test-only engine absent from release artifacts.",
       "evidence": "static-checks; browser-build; native-ssse3"
@@ -228,7 +228,7 @@
       "checkId": "CHECK-BLD-002",
       "category": "BLD",
       "logicalGroup": "Platform matrix",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Local Linux x86-64 (SSE2, SSSE3), 32-bit guard, two browser engines in two modes; Windows and macOS from exact-commit CI (external evidence).",
       "evidence": "native-tests; native-ssse3; native-32bit-guard; upstream-ci-jobs"
@@ -237,7 +237,7 @@
       "checkId": "CHECK-BLD-003",
       "category": "BLD",
       "logicalGroup": "Dependencies, provenance, licences",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "RustSec 0 of 106; 22 vendored files equal upstream blobs and recorded hashes; THIRD_PARTY_LICENSES.md matches Cargo.lock; local archives carry the licence files.",
       "evidence": "dependency-audit; upstream; metadata; licenses-check; packaging"
@@ -246,7 +246,7 @@
       "checkId": "CHECK-BLD-004",
       "category": "BLD",
       "logicalGroup": "Canonical reproducibility",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "skipped",
       "method": "Docker and the reproducible build were excluded by instruction (the host's Docker was in use). Exact-commit CI canonical-build and release canonical jobs succeeded (external evidence, not a local byte comparison).",
       "evidence": "upstream-ci-jobs"
@@ -255,7 +255,7 @@
       "checkId": "CHECK-BLD-005",
       "category": "BLD",
       "logicalGroup": "Packaging, CI and release",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Three local archives packed with the archive licence gate; workflow pins, permissions, tag/version check and vector gate reviewed; hardening notes are observations.",
       "evidence": "packaging; upstream-ci-jobs; workflow review"
@@ -264,7 +264,7 @@
       "checkId": "CHECK-UI-001",
       "category": "UI",
       "logicalGroup": "Responsive layout",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "not-applicable",
       "method": "The repository ships a CLI and an integration library, not an end-user page; the browser-check page is diagnostic.",
       "evidence": "web/README.md"
@@ -273,7 +273,7 @@
       "checkId": "CHECK-UI-002",
       "category": "UI",
       "logicalGroup": "Input and workflow state",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Hidden and visible prompts, retries, confirmation, explicit length, refusals before computation, unverified versus verified output in terminal and script modes.",
       "evidence": "hidden-input; cli-regressions; cli-probes-2"
@@ -282,7 +282,7 @@
       "checkId": "CHECK-UI-003",
       "category": "UI",
       "logicalGroup": "Visibility, help and messages",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "failed",
       "method": "Colour rules (NO_COLOR, CLICOLOR, CLICOLOR_FORCE, TERM=dumb, pipes), help sections, password advice and resource messages.",
       "evidence": "AUD-005-FUN001; AUD-005-UI001; cli-probes-2"
@@ -291,7 +291,7 @@
       "checkId": "CHECK-ARC-001",
       "category": "ARC",
       "logicalGroup": "Module ownership",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Unsafe code confined to src/engine/ffi.rs and src/bin/mhfe/hidden_input.rs; core/engine separation; test engine only under cfg(test).",
       "evidence": "source review; static-checks"
@@ -300,7 +300,7 @@
       "checkId": "CHECK-ARC-002",
       "category": "ARC",
       "logicalGroup": "Duplication and dead paths",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "passed",
       "method": "Rust and Python launchers duplicate the same rules by design and share one test suite; no dead production path found.",
       "evidence": "browser-build; source review"
@@ -309,7 +309,7 @@
       "checkId": "CHECK-ARC-003",
       "category": "ARC",
       "logicalGroup": "Comments and test fidelity",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "failed",
       "method": "Tests use the real C engine at reduced cost and literal expected values; one declaration carries two doc comments.",
       "evidence": "AUD-005-ARC001; native-tests"
@@ -318,7 +318,7 @@
       "checkId": "CHECK-DOC-001",
       "category": "DOC",
       "logicalGroup": "Capabilities and safety language",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "failed",
       "method": "README, API, SECURITY and web/README compared with the code and the specification; API.md omits a password refusal.",
       "evidence": "AUD-005-DOC002; source comparison"
@@ -327,7 +327,7 @@
       "checkId": "CHECK-DOC-002",
       "category": "DOC",
       "logicalGroup": "Commands, metadata and legal",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "failed",
       "method": "Commands and pins checked; private reporting enabled; licence files current; README omits the check --stdin requirement.",
       "evidence": "AUD-005-DOC003; upstream; licenses-check"
@@ -336,7 +336,7 @@
       "checkId": "CHECK-DOC-003",
       "category": "DOC",
       "logicalGroup": "Audit record integrity",
-      "scope": "mhfe at df70ca5",
+      "scope": "mhfe at 5eed93c",
       "outcome": "failed",
       "method": "32-task ledger, paired records, procedure hashes and ignored evidence validated for AUD-005; AUD-004 names no commit for its BLD001 bundle.",
       "evidence": "AUD-005-DOC001; validate_report.py"
@@ -433,13 +433,13 @@
         "docs/audits/audit-04-2026-10-01.md:338 and :344",
         "docs/audits/audit-04-2026-10-01.json (remediation AUD-004-BLD001, remediationUpdate.committed)"
       ],
-      "reproduction": "Read the AUD-004 remediation table at df70ca5 and compare with git log.",
+      "reproduction": "Read the AUD-004 remediation table at 5eed93c and compare with git log.",
       "expected": "AUDIT_STANDARD: remediation tables give the fix commit and the verification commit of every finding.",
-      "observed": "The Markdown fix commit reads \"11f2b4e999678b63b03c5e0e743c48f8658366cd (bech32 notice); this commit (generated bundle)\", the JSON \"the commit that adds this remediation update (generated bundle)\", and the JSON remediationUpdate says \"the BLD001 bundle is uncommitted\". The bundle is in d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124, which also holds the record, so neither text resolves to a commit and the last statement is false at that commit.",
+      "observed": "The Markdown fix commit reads \"2547a26e3605f7e983274f2a4b8ac99b63b06acf (bech32 notice); this commit (generated bundle)\", the JSON \"the commit that adds this remediation update (generated bundle)\", and the JSON remediationUpdate says \"the BLD001 bundle is uncommitted\". The bundle is in 5eed93c06b6e2c9107e20290dc318d9efbcbe829, which also holds the record, so neither text resolves to a commit and the last statement is false at that commit.",
       "impact": "A reader cannot tell from the record which commit holds the remediation it describes.",
-      "recommendedFix": "Name df70ca5 in both AUD-004 records, and record as a dated follow-up the verification evidence that now exists for AUD-004-FUN001 and AUD-004-BLD001.",
-      "requiredVerification": "Both AUD-004 records name df70ca5, agree with each other, still validate against the schema, and keep their original findings and evidence.",
-      "evidence": "git show df70ca5 --stat; docs/audits/audit-04-2026-10-01.md",
+      "recommendedFix": "Name 5eed93c in both AUD-004 records, and record as a dated follow-up the verification evidence that now exists for AUD-004-FUN001 and AUD-004-BLD001.",
+      "requiredVerification": "Both AUD-004 records name 5eed93c, agree with each other, still validate against the schema, and keep their original findings and evidence.",
+      "evidence": "git show 5eed93c --stat; docs/audits/audit-04-2026-10-01.md",
       "logicalGroup": "Audit records",
       "procedureChecks": [
         "CHECK-DOC-003"
@@ -534,50 +534,50 @@
     {
       "id": "AUD-005-SEC001",
       "status": "verified",
-      "fixCommit": "19b8f25",
-      "verificationCommit": "19b8f25",
-      "evidence": "New `phrase::phrase_text` writes the words into a `Zeroizing<String>` reserved at nine bytes per word; `read_phrase` and `phrase_from_entropy` use it, so recovery, the rehearsal check and encryption no longer leave growth copies. Unit test `phrase::tests::phrase_text_never_outgrows_its_buffer` (5 lengths x 64 public phrases: same text as `to_string`, capacity never grown). The probe now reports 0 copies (`remediation-sec001-probe`, log `36649a27e1b4d948ef672f2502d7749747dce53ca93da149dd61966a009f19ca`); fmt, both clippy runs and all tests with all features passed (`remediation-sec001-tests`, `ac897948acfc6ade1d7f4cb6780115fb56b69a7488e76585ffa3dc8072ac8974`); the rebuilt WebAssembly core gives the native container in both Emscripten builds (`remediation-sec001-browser`, `2ad5f6ee7a19a96fb8a3bf896398661dcd86634d577bf096f96198c13e1d1eb0`). Rechecked at 94a7e7c."
+      "fixCommit": "64e38cb",
+      "verificationCommit": "64e38cb",
+      "evidence": "New `phrase::phrase_text` writes the words into a `Zeroizing<String>` reserved at nine bytes per word; `read_phrase` and `phrase_from_entropy` use it, so recovery, the rehearsal check and encryption no longer leave growth copies. Unit test `phrase::tests::phrase_text_never_outgrows_its_buffer` (5 lengths x 64 public phrases: same text as `to_string`, capacity never grown). The probe now reports 0 copies (`remediation-sec001-probe`, log `36649a27e1b4d948ef672f2502d7749747dce53ca93da149dd61966a009f19ca`); fmt, both clippy runs and all tests with all features passed (`remediation-sec001-tests`, `ac897948acfc6ade1d7f4cb6780115fb56b69a7488e76585ffa3dc8072ac8974`); the rebuilt WebAssembly core gives the native container in both Emscripten builds (`remediation-sec001-browser`, `2ad5f6ee7a19a96fb8a3bf896398661dcd86634d577bf096f96198c13e1d1eb0`). Rechecked at 4c0144c."
     },
     {
       "id": "AUD-005-FUN001",
       "status": "verified",
-      "fixCommit": "cbd2a19",
-      "verificationCommit": "cbd2a19",
-      "evidence": "`different_dice_words` counts the different EFF words of a password made only of such words, compares tokens in place with ASCII case folding and keeps the list positions in a wiped buffer reserved at full size; the warning reads \"not four or more words from the EFF dice list, all different\", and README says \"different\". Unit test `diceware::tests::a_repeated_dice_word_counts_once`. CLI tests and clippy passed (`remediation-fun001-tests`, `de73c531abf7269ba690a177a12578f13dc028a71feebd34c9e6dbefd10da4a1`); the probe's three password expectations pass, while its UI001 expectation still failed at that commit, so the run exits 1 (`remediation-fun001-probe`, `da780d284174ece808ad60a721faea1f5072c65b708c2df2a1351f013c3549dc`). Every expectation passes at 4ace03e21ba10f17fd34196dc1368cdbd87e9e33."
+      "fixCommit": "ef74795",
+      "verificationCommit": "ef74795",
+      "evidence": "`different_dice_words` counts the different EFF words of a password made only of such words, compares tokens in place with ASCII case folding and keeps the list positions in a wiped buffer reserved at full size; the warning reads \"not four or more words from the EFF dice list, all different\", and README says \"different\". Unit test `diceware::tests::a_repeated_dice_word_counts_once`. CLI tests and clippy passed (`remediation-fun001-tests`, `de73c531abf7269ba690a177a12578f13dc028a71feebd34c9e6dbefd10da4a1`); the probe's three password expectations pass, while its UI001 expectation still failed at that commit, so the run exits 1 (`remediation-fun001-probe`, `da780d284174ece808ad60a721faea1f5072c65b708c2df2a1351f013c3549dc`). Every expectation passes at 4c0144c86841b8667cf217279a58ea25ed9b4b8a."
     },
     {
       "id": "AUD-005-UI001",
       "status": "verified",
-      "fixCommit": "6953856",
-      "verificationCommit": "6953856",
+      "fixCommit": "0a1fa16",
+      "verificationCommit": "0a1fa16",
       "evidence": "`with_level_hint` adds the level sentence only to `NotEnoughMemory`. Unit test `settings::tests::only_a_free_memory_refusal_suggests_a_level` covers allocation, processor and free-memory refusals. CLI tests and clippy passed (`remediation-ui001-tests`, `1060f8bd14283e1b859576968ae45c2186aef4dba58249412ce77de7739550b9`); every probe expectation holds (`remediation-ui001-probe`, `6e674a5f5fcba348baee66580d3853529538b149b6bd461cd8ebaeb495309cc6`). The processor case is verified by the unit test, not on a processor without SSSE3."
     },
     {
       "id": "AUD-005-DOC001",
       "status": "verified",
-      "fixCommit": "94a7e7c",
-      "verificationCommit": "94a7e7c",
-      "evidence": "Both AUD-004 records and the index name `df70ca5` for the BLD001 bundle. A dated follow-up in both records moves AUD-004-FUN001 and AUD-004-BLD001 to verified at `df70ca5` with the CI evidence listed under previous findings; original findings and evidence are unchanged, and the AUD-004 JSON validates against the shared schema. The historical Markdown was edited in place, not reformatted."
+      "fixCommit": "4c0144c",
+      "verificationCommit": "4c0144c",
+      "evidence": "Both AUD-004 records and the index name `5eed93c` for the BLD001 bundle. A dated follow-up in both records moves AUD-004-FUN001 and AUD-004-BLD001 to verified at `5eed93c` with the CI evidence listed under previous findings; original findings and evidence are unchanged, and the AUD-004 JSON validates against the shared schema. The historical Markdown was edited in place, not reformatted."
     },
     {
       "id": "AUD-005-DOC002",
       "status": "verified",
-      "fixCommit": "59635bf",
-      "verificationCommit": "59635bf",
+      "fixCommit": "6856df1",
+      "verificationCommit": "6856df1",
       "evidence": "The `Password::new` bullet of API.md now names the control-character, U+2028/U+2029, unassigned, empty and length refusals, matching `src/password.rs`."
     },
     {
       "id": "AUD-005-DOC003",
       "status": "verified",
-      "fixCommit": "59635bf",
-      "verificationCommit": "59635bf",
+      "fixCommit": "6856df1",
+      "verificationCommit": "6856df1",
       "evidence": "README's script section gives the answers of encrypt, decrypt and check separately and says that `check --stdin` needs `--address`, `--fingerprint` or `--words N`, matching the clap group and `check --help` (`remediation-docs-browser`, `af8f53075c0a4d393bbb52dd4f0c92d218a2e7705e9232300d970fd01994fc41`, prints the help line)."
     },
     {
       "id": "AUD-005-ARC001",
       "status": "verified",
-      "fixCommit": "59635bf",
-      "verificationCommit": "59635bf",
+      "fixCommit": "6856df1",
+      "verificationCommit": "6856df1",
       "evidence": "One doc comment precedes `readPhrase` in `web/client.d.ts`; the rebuilt package copies it unchanged and `verify-browser-package.mjs` passes (`remediation-docs-browser`)."
     }
   ],
@@ -893,7 +893,7 @@
         "--repo",
         "hobby-eng/mhfe",
         "--commit",
-        "d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124",
+        "5eed93c06b6e2c9107e20290dc318d9efbcbe829",
         "--limit",
         "20",
         "--json",
@@ -910,7 +910,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Runs for df70ca5: CI and RustSec successful; Release and Test vectors in progress when read."
+      "summary": "Runs for 5eed93c: CI and RustSec successful; Release and Test vectors in progress when read."
     },
     {
       "label": "upstream-ci-jobs",
@@ -1087,7 +1087,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Remediation (19b8f25): the phrase-copy probe reports 0 copies."
+      "summary": "Remediation (64e38cb): the phrase-copy probe reports 0 copies."
     },
     {
       "label": "remediation-sec001-tests",
@@ -1107,7 +1107,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Remediation (19b8f25): fmt, native and wasm32 clippy, all tests with all features (80 + 36 + 2 + 1)."
+      "summary": "Remediation (64e38cb): fmt, native and wasm32 clippy, all tests with all features (80 + 36 + 2 + 1)."
     },
     {
       "label": "remediation-sec001-browser",
@@ -1127,7 +1127,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Remediation (19b8f25): rebuilt browser package; native container in both builds."
+      "summary": "Remediation (64e38cb): rebuilt browser package; native container in both builds."
     },
     {
       "label": "remediation-fun001-tests",
@@ -1147,7 +1147,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Remediation (cbd2a19): fmt, clippy, 37 CLI tests, release build."
+      "summary": "Remediation (ef74795): fmt, clippy, 37 CLI tests, release build."
     },
     {
       "label": "remediation-fun001-probe",
@@ -1166,7 +1166,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Remediation (ba8c3a1949e9cb2e1264799e2164b391b46288d9): the three password expectations pass; the UI001 expectation still fails at this commit."
+      "summary": "Remediation (ef74795ceb6ae473f0491b73515b4b7cd01417d1): the three password expectations pass; the UI001 expectation still fails at this commit."
     },
     {
       "label": "remediation-ui001-tests",
@@ -1186,7 +1186,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Remediation (6953856): fmt, clippy, 38 CLI tests, release build."
+      "summary": "Remediation (0a1fa16): fmt, clippy, 38 CLI tests, release build."
     },
     {
       "label": "remediation-ui001-probe",
@@ -1205,7 +1205,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Remediation (6953856): every CLI probe expectation holds."
+      "summary": "Remediation (0a1fa16): every CLI probe expectation holds."
     },
     {
       "label": "remediation-docs-browser",
@@ -1225,7 +1225,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Remediation (59635bf): rebuilt package, client.d.ts copied unchanged, check --help line."
+      "summary": "Remediation (6856df1): rebuilt package, client.d.ts copied unchanged, check --help line."
     },
     {
       "label": "final-source-checks",
@@ -1245,7 +1245,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Final (94a7e7c): fmt, both clippy runs, rustdoc, all tests with all features and with SSSE3 (80 + 38 + 2 + 1 each), release builds, PTY check, 14 launcher tests, marker and licence checks."
+      "summary": "Final (4c0144c): fmt, both clippy runs, rustdoc, all tests with all features and with SSSE3 (80 + 38 + 2 + 1 each), release builds, PTY check, 14 launcher tests, marker and licence checks."
     },
     {
       "label": "final-browser",
@@ -1265,7 +1265,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Final (94a7e7c): rebuilt package, Argon2 tags, native container, Chromium and Firefox in both modes (4 of 4 passed)."
+      "summary": "Final (4c0144c): rebuilt package, Argon2 tags, native container, Chromium and Firefox in both modes (4 of 4 passed)."
     },
     {
       "label": "final-probes",
@@ -1285,7 +1285,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "summary": "Final (94a7e7c): 0 phrase copies, every CLI probe expectation, CLI regressions."
+      "summary": "Final (4c0144c): 0 phrase copies, every CLI probe expectation, CLI regressions."
     }
   ],
   "procedureHashes": {
@@ -1316,15 +1316,15 @@
   "previousFindingReview": [
     {
       "id": "AUD-004-FUN001",
-      "result": "Fixed in d54ab95; the macOS CI job of df70ca5 (run 36823878285) passed engine::ffi::tests::mach_estimate_does_not_count_speculative_pages_twice and engine::native::tests::refuses_more_memory_than_the_computer_reports natively. That was the missing verification."
+      "result": "Fixed in 2547a26; the macOS CI job of 5eed93c (run 36823878285) passed engine::ffi::tests::mach_estimate_does_not_count_speculative_pages_twice and engine::native::tests::refuses_more_memory_than_the_computer_reports natively. That was the missing verification."
     },
     {
       "id": "AUD-004-FUN002",
-      "result": "Verified in d54ab95; the 14 launcher tests and the native serve tests pass again here."
+      "result": "Verified in 2547a26; the 14 launcher tests and the native serve tests pass again here."
     },
     {
       "id": "AUD-004-BLD001",
-      "result": "Bundle committed in d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124. Locally the generator --check passes and three archives carry the licence files; the exact-commit canonical build (CI and release) and the three macOS packaging jobs, which run the same archive gate, succeeded. The record naming is AUD-005-DOC001."
+      "result": "Bundle committed in 5eed93c06b6e2c9107e20290dc318d9efbcbe829. Locally the generator --check passes and three archives carry the licence files; the exact-commit canonical build (CI and release) and the three macOS packaging jobs, which run the same archive gate, succeeded. The record naming is AUD-005-DOC001."
     },
     {
       "id": "AUD-003 (all)",
@@ -1333,20 +1333,70 @@
   ],
   "remediationUpdate": {
     "date": "2026-10-01",
-    "baseCommit": "d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124",
+    "baseCommit": "5eed93c06b6e2c9107e20290dc318d9efbcbe829",
     "fixCommits": [
-      "19b8f25",
-      "cbd2a19",
-      "6953856",
-      "59635bf",
-      "94a7e7c"
+      "64e38cb",
+      "ef74795",
+      "0a1fa16",
+      "6856df1",
+      "4c0144c"
     ],
-    "finalVerificationCommit": "94a7e7c",
+    "finalVerificationCommit": "4c0144c",
     "remediator": {
       "name": "Claude Code, wallet-tools-maintainer subagent",
       "model": "claude-opus-5-5",
       "reasoningEffort": null
     },
     "pushed": false
+  },
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "33 PATH values of recorded command environments replaced by <elided>: they named local tools and session directories.",
+          "Commit references of the history replaced by the privacy rewrite of 2026-10-09 now name the commits that replaced them (AUD-015-DOC001): 19b8f25 -> 64e38cb, 59635bf -> 6856df1, 6953856 -> 0a1fa16, 94a7e7c -> 4c0144c, cbd2a19 -> ef74795, d54ab95 -> 2547a26, df70ca5 -> 5eed93c."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "19b8f25": "64e38cb",
+          "59635bf": "6856df1",
+          "6953856": "0a1fa16",
+          "94a7e7c": "4c0144c",
+          "cbd2a19": "ef74795",
+          "d54ab95": "2547a26",
+          "df70ca5": "5eed93c"
+        }
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 11f2b4e -> 2547a26, 11f2b4e999678b63b03c5e0e743c48f8658366cd -> 2547a26e3605f7e983274f2a4b8ac99b63b06acf, 47c3bab -> 64e38cb, 4ace03e -> 4c0144c, 4ace03e21ba10f17fd34196dc1368cdbd87e9e33 -> 4c0144c86841b8667cf217279a58ea25ed9b4b8a, 652b4f0 -> 0a1fa16, ba8c3a1 -> ef74795, ba8c3a1949e9cb2e1264799e2164b391b46288d9 -> ef74795ceb6ae473f0491b73515b4b7cd01417d1, cefa041 -> 6856df1, d4de5e8 -> 5eed93c, d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124 -> 5eed93c06b6e2c9107e20290dc318d9efbcbe829."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "11f2b4e": "2547a26",
+          "11f2b4e999678b63b03c5e0e743c48f8658366cd": "2547a26e3605f7e983274f2a4b8ac99b63b06acf",
+          "47c3bab": "64e38cb",
+          "4ace03e": "4c0144c",
+          "4ace03e21ba10f17fd34196dc1368cdbd87e9e33": "4c0144c86841b8667cf217279a58ea25ed9b4b8a",
+          "652b4f0": "0a1fa16",
+          "ba8c3a1": "ef74795",
+          "ba8c3a1949e9cb2e1264799e2164b391b46288d9": "ef74795ceb6ae473f0491b73515b4b7cd01417d1",
+          "cefa041": "6856df1",
+          "d4de5e8": "5eed93c",
+          "d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124": "5eed93c06b6e2c9107e20290dc318d9efbcbe829"
+        }
+      }
+    ]
   }
 }

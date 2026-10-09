@@ -53,9 +53,9 @@ reasonable, this file says what was chosen and why. The report is
 ## Left for you
 
 1. **Release — pushed, release pending (2026-10-01).** The fixes are on `main` after `v0.4.0` and
-   pushed; CI passes. The local full vector replay passed at 9588ec0; later commits change no
+   pushed; CI passes. The local full vector replay passed at fefb616; later commits change no
    suite 3 output, and the vectors workflow replays them on GitHub. The canonical archives are
-   rebuilt from the pushed `main`. The `v0.4.0` tag and release still name df70ca5 until the owner
+   rebuilt from the pushed `main`. The `v0.4.0` tag and release still name 5eed93c until the owner
    has checked the new archives.
 2. **Promise-returning client methods that throw — resolved (owner's decision, 2026-10-01).** Every
    `MhfeClient` operation is now `async`: every error rejects its promise, argument checks included,
@@ -68,7 +68,7 @@ reasonable, this file says what was chosen and why. The report is
    stopped worker can no longer end a later operation.
 4. **Prettier in this repository — resolved (owner's decision).** Prettier 3.9.9 with double quotes
    and 100 columns, the style of every workspace repository; the repository was reformatted once in
-   ff8365c, which `.git-blame-ignore-revs` lists, and CI checks the formatting.
+   f606731, which `.git-blame-ignore-revs` lists, and CI checks the formatting.
 5. **Independent verifier and Unicode 17 — resolved (owner's decision).** The verifier takes the
    Unicode 17.0.0 database from `unicodedata2` (hash-pinned in
    `scripts/independent-suite3-requirements.txt`), refuses to run on any other version, applies the
@@ -89,3 +89,7 @@ reasonable, this file says what was chosen and why. The report is
    quoted in the report. Since then (2026-10-01) the canonical build has run several times, the
    full vector replay has passed locally, and CI runs the Windows and macOS checks; full-size
    Argon2 in a browser and native runs on Windows, macOS or ARM64 remain CI-only.
+
+Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the privacy rewrite now name the commits that replaced them (AUD-015-DOC001): 9588ec0 -> fefb616, df70ca5 -> 5eed93c, ff8365c -> f606731. The title said "overnight"; it now names the unattended run.
+
+Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 1980ab4 -> f606731, 80d2472 -> fefb616, d4de5e8 -> 5eed93c.

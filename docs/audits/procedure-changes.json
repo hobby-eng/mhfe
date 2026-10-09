@@ -1,0 +1,16 @@
+{
+  "description": "Edits of the workspace audit procedure files (kept in multi-chain-wallet-tools) made after mhfe's audit records pinned their SHA-256. Each change gives the exact reverse edit, so that a reader recovers the bytes an audit used from the current file; the records keep the pinned hashes.",
+  "changes": [
+    {
+      "date": "2026-10-09",
+      "file": "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md",
+      "reason": "Owner's decision: the operator timezone is no longer recorded, so that the guide matches the 'Report privacy' rule of the workspace instructions. No other procedure rule changed.",
+      "auditedSha256": "30fa6a1675892e2a3059bdbd6e97737f2959a74aca98a0a90e4f655ae12854a6",
+      "currentSha256": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+      "reverseEdit": {
+        "current": "- UTC start and completion timestamps.\n",
+        "audited": "- UTC start and completion timestamps; operator timezone separately if useful.\n"
+      }
+    }
+  ]
+}

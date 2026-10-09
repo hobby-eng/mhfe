@@ -11,7 +11,7 @@
     "metadataNote": "Reasoning-effort setting was not exposed by the client; null means unrecorded."
   },
   "snapshot": {
-    "commit": "01d8558a8dc66d86b2300871dae4efeebbd23fb9",
+    "commit": "5ac08b2812a6519831b1981c101a24340c7bb11a",
     "commitComplete": true,
     "workingTree": "Evidence capture began on an uncommitted tree (15 untracked paths); the commit was created and pushed during the review (author date 2026-09-22T15:51:03Z, GitHub HEAD identical). Recomputed source fingerprint after the commit is unchanged. Working tree clean apart from this audit record.",
     "sourceFingerprint": "7fee380ec0cc977dc82a38201f29fdb9c9f5b20be24ac1991d3161cf4b6c0236",
@@ -297,22 +297,22 @@
     {
       "id": "AUD-002-API001",
       "status": "verified",
-      "fixCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
-      "verificationCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "fixCommit": "dad721673a7a4a44eb31b59c165a92a6dd938c71",
+      "verificationCommit": "dad721673a7a4a44eb31b59c165a92a6dd938c71",
       "evidence": "Rebuilt WASM Node probes reject oversized and fractional PIM values and wrapped source lengths; Worker-client boundary test passed."
     },
     {
       "id": "AUD-002-BLD001",
       "status": "verified",
-      "fixCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
-      "verificationCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "fixCommit": "dad721673a7a4a44eb31b59c165a92a6dd938c71",
+      "verificationCommit": "dad721673a7a4a44eb31b59c165a92a6dd938c71",
       "evidence": "GitHub CI run 35757633265 rebuilt WASM and passed the published-vector encryptJson/decryptAutoJson round trip."
     },
     {
       "id": "AUD-002-DOC001",
       "status": "verified",
-      "fixCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
-      "verificationCommit": "cdf7123e737dee49a9a5710a5b6ef67f35855e41",
+      "fixCommit": "dad721673a7a4a44eb31b59c165a92a6dd938c71",
+      "verificationCommit": "dad721673a7a4a44eb31b59c165a92a6dd938c71",
       "evidence": "GitHub API returned enabled true for both repositories; existing specification links were rechecked."
     }
   ],
@@ -324,7 +324,7 @@
     "Node.js probes used the pre-existing stale WASM binary; the distribution was not rebuilt.",
     "Host out-of-memory behaviour was not induced.",
     "No side-channel measurement, cross-platform build, reproducible-build comparison, or cryptanalysis was performed.",
-    "Evidence capture started before the initial commit existed; all evidence was re-attributed to commit 01d8558a8dc66d86b2300871dae4efeebbd23fb9 after verifying the tree fingerprint is unchanged."
+    "Evidence capture started before the initial commit existed; all evidence was re-attributed to commit 5ac08b2812a6519831b1981c101a24340c7bb11a after verifying the tree fingerprint is unchanged."
   ],
   "environment": {
     "os": "Linux 7.0.0-31-generic x86_64",
@@ -341,5 +341,36 @@
   "evidenceCaptureWindowUtc": {
     "start": "2026-09-22T15:25:00Z",
     "end": "2026-09-22T16:10:00Z"
+  },
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Local clock times replaced by UTC (11:27, 13:24 and 10:32 UTC)."
+        ],
+        "note": "Documentation-only edit; no check was rerun."
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 01d8558a8dc66d86b2300871dae4efeebbd23fb9 -> 5ac08b2812a6519831b1981c101a24340c7bb11a, cdf7123e737dee49a9a5710a5b6ef67f35855e41 -> dad721673a7a4a44eb31b59c165a92a6dd938c71."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "01d8558a8dc66d86b2300871dae4efeebbd23fb9": "5ac08b2812a6519831b1981c101a24340c7bb11a",
+          "cdf7123e737dee49a9a5710a5b6ef67f35855e41": "dad721673a7a4a44eb31b59c165a92a6dd938c71"
+        }
+      }
+    ]
   }
 }

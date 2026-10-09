@@ -15,7 +15,7 @@
         "reasoningEffort": null
       },
       {
-        "scope": "Independent remediation recheck of 2a5e727; no new agent delegation",
+        "scope": "Independent remediation recheck of 9b2dab6; no new agent delegation",
         "model": null,
         "reasoningEffort": null
       },
@@ -27,7 +27,7 @@
     ]
   },
   "snapshot": {
-    "commit": "d1cf47d0960a5023e6e503310802e5e2da438568",
+    "commit": "882e897df72b80b68ebfdddd2f042af4eb43e1a5",
     "commitComplete": true,
     "workingTree": "?? docs/audits/AUD-007-harnesses/\n",
     "sourceFingerprint": "2909e61a8afcfa97c35dfea4e7d1d72a806ea479d556f306b2040cca31aadb12",
@@ -60,7 +60,7 @@
       "method": "Native secret ownership and private-display traces; terminal-display probe.",
       "outcome": "failed",
       "evidence": "AUD-007-SEC001; SEC003; SEC004; SEC005",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-SEC-002",
@@ -70,7 +70,7 @@
       "method": "Source review of worker transfer boundary, offline loader and loopback server; bounded CLI isolation/server tests. No real-browser CSP acceptance claimed.",
       "outcome": "passed",
       "evidence": "cli-tests-loopback; source review",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-SEC-003",
@@ -80,7 +80,7 @@
       "method": "Source graph review: no public blockchain provider/telemetry paths; fixed loopback-only bundled server.",
       "outcome": "passed",
       "evidence": "Source review; cli-tests-loopback",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-SEC-004",
@@ -90,7 +90,7 @@
       "method": "Suite 3/4 Feistel, domain separation, settings, salts/masks, state widths and RNG review plus reduced-cost tests; no proof of attack-cost lower bounds.",
       "outcome": "passed",
       "evidence": "bounded-tests; integration-tests; seed-check",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-SEC-005",
@@ -100,7 +100,7 @@
       "method": "Native page-lock/zeroization lifetime traces and distinct-Password overlap probe; C work-area cleanup and worker disposal source review.",
       "outcome": "failed",
       "evidence": "AUD-007-SEC002; SEC003; SEC004; memory-lock",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-SEC-006",
@@ -110,7 +110,7 @@
       "method": "Worker/client source review for storage, dynamic-code/logging and network behavior. Runtime browser/artifact inspection not performed.",
       "outcome": "passed",
       "evidence": "Source review; WASM compilation",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-SEC-007",
@@ -120,7 +120,7 @@
       "method": "Bounded input/work settings and loopback server concurrency/deadline/isolation tests; no provider/spending API.",
       "outcome": "passed",
       "evidence": "cli-tests-loopback; bounded-tests",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-FUN-001",
@@ -130,7 +130,7 @@
       "method": "English BIP39 length/checksum/normalization, BIP39 seed and seed-check predicate review; independent public seed-check fixture.",
       "outcome": "failed",
       "evidence": "AUD-007-DOC001; DOC002; bounded-tests; seed-check",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-FUN-002",
@@ -140,7 +140,7 @@
       "method": "Supported wallet-reference derivation paths and literal vectors; Bech32 account checksum-variant probe.",
       "outcome": "failed",
       "evidence": "AUD-007-FUN001; bounded-tests; wallet-bech32-variant",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-FUN-003",
@@ -150,7 +150,7 @@
       "method": "MHFE exposes no BIP85, BIP38, message signing or Silent Payments feature.",
       "outcome": "not-applicable",
       "evidence": "Not applicable to this project.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-FUN-004",
@@ -160,7 +160,7 @@
       "method": "MHFE exposes no descriptor/Miniscript/multisig scripting interface. Its fixed wallet-reference derivations are covered by FUN-002.",
       "outcome": "not-applicable",
       "evidence": "Not applicable to this project.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-FUN-005",
@@ -170,7 +170,7 @@
       "method": "MHFE does not parse, create, sign or broadcast PSBTs/transactions.",
       "outcome": "not-applicable",
       "evidence": "Not applicable to this project.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-FUN-006",
@@ -180,7 +180,7 @@
       "method": "Suite 3/4 pack/unpack, fixed-point refusal, recovery validation and rehearsal/rekey workflow review; reduced-cost unit tests and retained vector structure tests.",
       "outcome": "failed",
       "evidence": "AUD-007-FUN002; bounded-tests; integration-tests; transcript-reconstruction (27 transcripts/648 round records, retained K_i)",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-FUN-007",
@@ -190,7 +190,7 @@
       "method": "MHFE performs no connected discovery, provider proof/history or balance accounting.",
       "outcome": "not-applicable",
       "evidence": "Not applicable to this project.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-API-001",
@@ -200,7 +200,7 @@
       "method": "Rust/C Argon2 context, BLAKE2 digest size, public/FFI/WASM contracts and validation source review; native/WASM Clippy and bounded tests.",
       "outcome": "passed",
       "evidence": "clippy-native; clippy-wasm; bounded-tests",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-API-002",
@@ -210,7 +210,7 @@
       "method": "Worker cancellation/ownership source review completed, but async browser ordering, late replies and real WASM traps were not executed.",
       "outcome": "not-run",
       "evidence": "Real browser/runtime execution gap.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-API-003",
@@ -220,7 +220,7 @@
       "method": "No CSV/JSON/XLSX public monetary export contract; mnemonic-output safety is covered by SEC-001/UI-003.",
       "outcome": "not-applicable",
       "evidence": "Not applicable to this project.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-API-004",
@@ -230,7 +230,7 @@
       "method": "BIP39 canonical-word and address encoding checks, including checksum variants.",
       "outcome": "failed",
       "evidence": "AUD-007-FUN001; wallet-bech32-variant; bounded-tests",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-BLD-001",
@@ -240,7 +240,7 @@
       "method": "Native all-target/all-feature checks and WASM library compilation; Cargo feature/target source inspection.",
       "outcome": "passed",
       "evidence": "clippy-native; clippy-wasm; bounded-tests",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-BLD-002",
@@ -250,7 +250,7 @@
       "method": "Representative native/WASM compilation ran; full Linux/macOS/Windows/ARM target matrix and runtime sampling did not.",
       "outcome": "not-run",
       "evidence": "Cross-platform execution gap.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-BLD-003",
@@ -260,7 +260,7 @@
       "method": "Local RustSec scan used a retained advisory database (no fetch); source provenance/manifests/licenses inspected, but complete upstream/license-integrity execution did not run.",
       "outcome": "not-run",
       "evidence": "rustsec-local; rustsec-db; exhaustive upstream/license execution gap.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-BLD-004",
@@ -270,7 +270,7 @@
       "method": "Canonical Docker/WASM build scripts reviewed only; no fresh reproducible build or generated-byte comparison.",
       "outcome": "not-run",
       "evidence": "Excluded release-level rebuild.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-BLD-005",
@@ -280,7 +280,7 @@
       "method": "CI/action pins, permissions and release prerequisites source-reviewed. No release asset, attestation, current remote CI or publisher-state verification.",
       "outcome": "not-run",
       "evidence": "Release assets/remote execution excluded.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-UI-001",
@@ -290,7 +290,7 @@
       "method": "No generated final browser files were opened in pinned Chromium/Firefox or screenshot/viewports inspected.",
       "outcome": "not-run",
       "evidence": "Real browser/viewport execution gap.",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-UI-002",
@@ -300,7 +300,7 @@
       "method": "CLI choice/input/menu/retry unit tests and actual prompt-path source traces; not a browser navigation acceptance result.",
       "outcome": "passed",
       "evidence": "cli-tests-loopback; source review",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-UI-003",
@@ -310,7 +310,7 @@
       "method": "Private phrase visibility and rekey confirmation traced; redirected-output production display probe.",
       "outcome": "failed",
       "evidence": "AUD-007-SEC001; FUN002; terminal-display",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-ARC-001",
@@ -320,7 +320,7 @@
       "method": "Native engine/FFI, core packing/password/suite modules, CLI operation boundaries and browser worker ownership inspected.",
       "outcome": "passed",
       "evidence": "Source review; clippy-native; clippy-wasm",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-ARC-002",
@@ -330,7 +330,7 @@
       "method": "First-party module/API consumers and selected stale names reviewed; no generic refactor recommendation substituted for demonstrated defects.",
       "outcome": "passed",
       "evidence": "Source inspection; DOC004",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-ARC-003",
@@ -340,7 +340,7 @@
       "method": "Comments and test paths compared with actual behavior; blanket seed-check and wiping statements overstate guarantees.",
       "outcome": "failed",
       "evidence": "AUD-007-DOC002; SEC004",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-DOC-001",
@@ -350,7 +350,7 @@
       "method": "Specification/README/supplement/code guidance compared, including check-vs-identity, passphrase composition and deniability.",
       "outcome": "failed",
       "evidence": "AUD-007-DOC001; DOC002; DOC003",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-DOC-002",
@@ -360,7 +360,7 @@
       "method": "API names and documentation/link/reference checks inspected; seed-check byte description and current exported API disagree.",
       "outcome": "failed",
       "evidence": "AUD-007-DOC001; DOC004; specification documents 15 PASS",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     },
     {
       "checkId": "CHECK-DOC-003",
@@ -370,7 +370,7 @@
       "method": "Audit snapshot, procedure hashes and publication record validation checked; AUD-007 pairing/schema validation is separate from stale spec publication records.",
       "outcome": "failed",
       "evidence": "AUD-007-DOC005; report validator",
-      "snapshot": "d1cf47d0960a5023e6e503310802e5e2da438568"
+      "snapshot": "882e897df72b80b68ebfdddd2f042af4eb43e1a5"
     }
   ],
   "commands": [
@@ -1111,7 +1111,7 @@
       "severity": "info",
       "status": "verified",
       "releaseBlocking": false,
-      "evidence": "src/bin/mhfe/hidden_input.rs:498 at 2a5e727; full Windows platform module source review.",
+      "evidence": "src/bin/mhfe/hidden_input.rs:498 at 9b2dab6; full Windows platform module source review.",
       "reproduction": "Inspect the cfg(windows) platform module and all of its function signatures: none uses its imported LockedText.",
       "expected": "Platform-specific source should have no unused imports.",
       "observed": "The Windows-only module has an unused LockedText import. Linux/WASM Clippy skip that branch. The Windows workflow does not promote warnings to errors. No Windows target is installed locally, so this is a source observation, not an executed cross-platform compile result.",
@@ -1127,10 +1127,10 @@
       "severity": "info",
       "status": "fixed",
       "releaseBlocking": false,
-      "evidence": "Local only: AUD-007-evidence/binding-release-build-log.log and AUD-007-evidence/bld002-ci-windows-log.log; src/bin/mhfe/hidden_input.rs:521, src/bin/mhfe/protect.rs:184, src/memory.rs:123 and build.rs at 52b6b36.",
-      "reproduction": "Read the canonical job log of release run 37432125420 and the portable (windows-2025) job log of CI run 37431286142, both for 52b6b36, or run cargo clippy -D warnings for aarch64-unknown-linux-gnu and x86_64-pc-windows-gnu in the canonical toolchain container (docs/audits/AUD-007-harnesses/cross_clippy.sh).",
+      "evidence": "Local only: AUD-007-evidence/binding-release-build-log.log and AUD-007-evidence/bld002-ci-windows-log.log; src/bin/mhfe/hidden_input.rs:521, src/bin/mhfe/protect.rs:184, src/memory.rs:123 and build.rs at dd43975.",
+      "reproduction": "Read the canonical job log of release run 37432125420 and the portable (windows-2025) job log of CI run 37431286142, both for dd43975, or run cargo clippy -D warnings for aarch64-unknown-linux-gnu and x86_64-pc-windows-gnu in the canonical toolchain container (docs/audits/AUD-007-harnesses/cross_clippy.sh).",
       "expected": "Every target compiles without warnings, as the native Clippy run with -D warnings does, and every C compiler receives only options it understands.",
-      "observed": "The Windows input module keeps an unused `use std::io;`, already unused at 2a5e727; the BLD001 review named only LockedText. The aarch64 build warns that `tests` in forbid_sockets need not be mutable, since only x86_64 inserts into it. Windows test builds warn that the test helper holders_of is never used: only Unix tests call it. Microsoft's cl, used by the native Windows CI job, ignores -msse2 and -mssse3 (warning D9002) and never defines __SSSE3__, so the SSSE3 copy of opt.c in that build is SSE2 code. Native Clippy sees none of this, and no build for another target denied warnings.",
+      "observed": "The Windows input module keeps an unused `use std::io;`, already unused at 9b2dab6; the BLD001 review named only LockedText. The aarch64 build warns that `tests` in forbid_sockets need not be mutable, since only x86_64 inserts into it. Windows test builds warn that the test helper holders_of is never used: only Unix tests call it. Microsoft's cl, used by the native Windows CI job, ignores -msse2 and -mssse3 (warning D9002) and never defines __SSSE3__, so the SSSE3 copy of opt.c in that build is SSE2 code. Native Clippy sees none of this, and no build for another target denied warnings.",
       "impact": "Source cleanliness, plus a slower Argon2 core in builds made with Microsoft's cl, which only CI and source builders use: their results stay correct. The released Windows archive is built with MinGW and has the real SSSE3 copy.",
       "recommendedFix": "Remove the unused import and the unneeded mutation, limit holders_of to Unix tests, give cl the __SSSE3__ macro instead of -m options, and deny warnings in the builds for other targets.",
       "requiredVerification": "Cross-target Clippy with -D warnings in the canonical toolchain container fails on the old source and passes on the fix; the native Windows CI job builds and tests without warnings."
@@ -1140,50 +1140,50 @@
     {
       "id": "AUD-007-SEC001",
       "status": "verified",
-      "fixCommit": "e558924",
-      "verificationCommit": "ba75301b91e2cb2715c8c442a3f7907d6881d81e",
+      "fixCommit": "847b410",
+      "verificationCommit": "d592406338de37ec6a4941bcadac585b622e6496",
       "evidence": "remediation-terminal-regressions: new and wallets refuse with standard output in a pipe and with TERM=dumb before any question, exit code 2, nothing in the pipe; new goes on at a terminal; rekey offers the phrase for comparison at a terminal only. No export choice exists, so no export path needs consent."
     },
     {
       "id": "AUD-007-SEC002",
       "status": "verified",
-      "fixCommit": "e558924",
-      "verificationCommit": "ba75301b91e2cb2715c8c442a3f7907d6881d81e",
+      "fixCommit": "847b410",
+      "verificationCommit": "d592406338de37ec6a4941bcadac585b622e6496",
       "evidence": "remediation-tests: a shared page stays locked until its last guard drops in either order (kernel VmFlags lo), a refused mlock holds nothing, and 8 threads x 500 guards on one page keep exact counts. remediation-memory-lock: the retained probe now reports after_first_drop_kib=12 and fails its reproduction assertion."
     },
     {
       "id": "AUD-007-SEC003",
       "status": "verified",
-      "fixCommit": "e558924",
-      "verificationCommit": "ba75301b91e2cb2715c8c442a3f7907d6881d81e",
+      "fixCommit": "847b410",
+      "verificationCommit": "d592406338de37ec6a4941bcadac585b622e6496",
       "evidence": "remediation-tests: a line returned by the raw line editor is still locked; LockedText owns the text and its lock until both drop, and the --stdin reader and passphrase readers return it. Error paths return no text."
     },
     {
       "id": "AUD-007-SEC004",
       "status": "fixed",
-      "fixCommit": "e558924",
+      "fixCommit": "847b410",
       "verificationCommit": null,
       "evidence": "Every private-scalar binding of the BIP32 and Taproot code is Zeroizing; docs/API.md and the wallet module say which compiler and dependency copies remain. Source review only: no runtime zeroization regression, which could not observe register or stack copies."
     },
     {
       "id": "AUD-007-SEC005",
       "status": "verified",
-      "fixCommit": "e558924",
-      "verificationCommit": "ba75301b91e2cb2715c8c442a3f7907d6881d81e",
+      "fixCommit": "847b410",
+      "verificationCommit": "d592406338de37ec6a4941bcadac585b622e6496",
       "evidence": "remediation-wallets-private-session (full cost): the I29 refusal stays readable, and the main screen outside the alternate screen shows no wallet, no wallet number and no question; decrypt gives the shown wallet, unverified."
     },
     {
       "id": "AUD-007-FUN001",
       "status": "verified",
-      "fixCommit": "3280178",
-      "verificationCommit": "ba75301b91e2cb2715c8c442a3f7907d6881d81e",
+      "fixCommit": "1080c5d",
+      "verificationCommit": "d592406338de37ec6a4941bcadac585b622e6496",
       "evidence": "remediation-tests: Bech32m forms of the Cosmos and Injective vectors are refused, their Bech32 forms read, another chain's prefix and 19, 21 and 32-byte data are refused; the existing case, segwit, Taproot and Dash Platform tests pass. remediation-wallet-bech32-variant: the retained probe now fails at the refused Bech32m address."
     },
     {
       "id": "AUD-007-FUN002",
       "status": "verified",
-      "fixCommit": "3280178",
-      "verificationCommit": "ba75301b91e2cb2715c8c442a3f7907d6881d81e",
+      "fixCommit": "1080c5d",
+      "verificationCommit": "d592406338de37ec6a4941bcadac585b622e6496",
       "evidence": "remediation-terminal-regressions through the actual command: Yes goes on to the container, No and Escape stop with exit code 130 before anything is typed, and no password or wallet is asked first. The result keeps the Old plate line."
     },
     {
@@ -1191,27 +1191,27 @@
       "status": "fixed",
       "fixCommit": "mhfe_spec bbc1320f2da9eef1c377b20d3fcbf141ab523bb7 (specification v0.5.0, tag commit aa610218785de6da181cb2b2b1daea6bb4794f1a)",
       "verificationCommit": null,
-      "evidence": "Current supplement includes the domain bytes, BE32(ENT), raw seed and public fixture; the working bytes bound by remedy-final-source.json were committed with later edits. Committed in mhfe_spec 739bd71, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
+      "evidence": "Current supplement includes the domain bytes, BE32(ENT), raw seed and public fixture; the working bytes bound by remedy-final-source.json were committed with later edits. Committed in mhfe_spec bbc1320, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
     },
     {
       "id": "AUD-007-DOC002",
       "status": "fixed",
       "fixCommit": "mhfe_spec bbc1320f2da9eef1c377b20d3fcbf141ab523bb7 (specification v0.5.0, tag commit aa610218785de6da181cb2b2b1daea6bb4794f1a)",
       "verificationCommit": null,
-      "evidence": "Qualified entropy, filtering and decoy discussion retained in current supplement; the working bytes bound by remedy-final-source.json were committed with later edits. Committed in mhfe_spec 739bd71, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
+      "evidence": "Qualified entropy, filtering and decoy discussion retained in current supplement; the working bytes bound by remedy-final-source.json were committed with later edits. Committed in mhfe_spec bbc1320, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
     },
     {
       "id": "AUD-007-DOC003",
       "status": "fixed",
       "fixCommit": "mhfe_spec bbc1320f2da9eef1c377b20d3fcbf141ab523bb7 (specification v0.5.0, tag commit aa610218785de6da181cb2b2b1daea6bb4794f1a)",
       "verificationCommit": null,
-      "evidence": "Corollary now explicitly grants base real-wallet record-oracle access, forwards unrelated queries and restricts programming to fresh synthetic records. It does not construct the oracle from the container or overwrite earlier query answers. Bound first by remedy-final-source.json, then committed with later edits. Committed in mhfe_spec 739bd71, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
+      "evidence": "Corollary now explicitly grants base real-wallet record-oracle access, forwards unrelated queries and restricts programming to fresh synthetic records. It does not construct the oracle from the container or overwrite earlier query answers. Bound first by remedy-final-source.json, then committed with later edits. Committed in mhfe_spec bbc1320, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
     },
     {
       "id": "AUD-007-DOC004",
       "status": "verified",
-      "fixCommit": "7369c71",
-      "verificationCommit": "ba75301b91e2cb2715c8c442a3f7907d6881d81e",
+      "fixCommit": "d592406",
+      "verificationCommit": "d592406338de37ec6a4941bcadac585b622e6496",
       "evidence": "remediation-doc-tests: the compiled example in the wallet module uses Address, Coin, find_address and master_fingerprint; docs/API.md names only current exports."
     },
     {
@@ -1219,28 +1219,28 @@
       "status": "fixed",
       "fixCommit": "mhfe_spec bbc1320f2da9eef1c377b20d3fcbf141ab523bb7 (specification v0.5.0, tag commit aa610218785de6da181cb2b2b1daea6bb4794f1a)",
       "verificationCommit": null,
-      "evidence": "Published document hashes and reverse patches refreshed. The added signing instruction is recovered to the original audited hash by a verified reverse patch. remedy-spec-publication passes without altering historical audit hashes. Bound first by remedy-final-source.json, then committed with later edits. Committed in mhfe_spec 739bd71, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
+      "evidence": "Published document hashes and reverse patches refreshed. The added signing instruction is recovered to the original audited hash by a verified reverse patch. remedy-spec-publication passes without altering historical audit hashes. Bound first by remedy-final-source.json, then committed with later edits. Committed in mhfe_spec bbc1320, which names this finding and is part of the released specification v0.5.0; its publication checks belong to the specification repository and were not rerun here."
     },
     {
       "id": "AUD-007-FUN003",
       "status": "verified",
-      "fixCommit": "b864f5a",
-      "verificationCommit": "5a3729385ca2d6c6677a84e9618b8875564cc7f6",
-      "evidence": "Exactly 32 groups required before byte conversion. remedy-wallet-tests: 19 passed, including four malformed references in both cases. The retained finding probe now reports accepted=false and fails as expected. Committed in b864f5a. binding-wallet-tests at 52b6b36: 19 passed, including cosmos_accounts_refuse_redundant_data_groups."
+      "fixCommit": "d87723d",
+      "verificationCommit": "dd439751ca992535e726b7c1d5d77b410371d673",
+      "evidence": "Exactly 32 groups required before byte conversion. remedy-wallet-tests: 19 passed, including four malformed references in both cases. The retained finding probe now reports accepted=false and fails as expected. Committed in d87723d. binding-wallet-tests at dd43975: 19 passed, including cosmos_accounts_refuse_redundant_data_groups."
     },
     {
       "id": "AUD-007-BLD001",
       "status": "verified",
-      "fixCommit": "082ac0b",
-      "verificationCommit": "5a3729385ca2d6c6677a84e9618b8875564cc7f6",
-      "evidence": "Removed the Windows-only unused LockedText import; the top-level import remains. Committed in 082ac0b. binding-release-build-log: the canonical release job of 52b6b36 cross-compiled x86_64-pc-windows-gnu with no LockedText warning. Its remaining warnings are recorded as AUD-007-BLD002."
+      "fixCommit": "1c9c572",
+      "verificationCommit": "dd439751ca992535e726b7c1d5d77b410371d673",
+      "evidence": "Removed the Windows-only unused LockedText import; the top-level import remains. Committed in 1c9c572. binding-release-build-log: the canonical release job of dd43975 cross-compiled x86_64-pc-windows-gnu with no LockedText warning. Its remaining warnings are recorded as AUD-007-BLD002."
     },
     {
       "id": "AUD-007-BLD002",
       "status": "fixed",
-      "fixCommit": "40f1193",
+      "fixCommit": "de258e9",
       "verificationCommit": null,
-      "evidence": "bld002-cross-clippy-before fails on 5a3729385ca2d6c6677a84e9618b8875564cc7f6 with the aarch64 and Windows warnings; bld002-cross-clippy-after passes on the fix commit. The fix adds cross-target Clippy to the canonical build and RUSTFLAGS=-D warnings to the Windows and macOS CI job. The Microsoft cl part awaits the first Windows CI run of the fix."
+      "evidence": "bld002-cross-clippy-before fails on dd439751ca992535e726b7c1d5d77b410371d673 with the aarch64 and Windows warnings; bld002-cross-clippy-after passes on the fix commit. The fix adds cross-target Clippy to the canonical build and RUSTFLAGS=-D warnings to the Windows and macOS CI job. The Microsoft cl part awaits the first Windows CI run of the fix."
     }
   ],
   "limitations": [
@@ -1302,11 +1302,11 @@
   "remediationUpdate": {
     "date": "2026-10-05",
     "fixCommits": {
-      "FUN": "3280178",
-      "SEC": "e558924",
-      "DOC": "7369c71"
+      "FUN": "1080c5d",
+      "SEC": "847b410",
+      "DOC": "d592406"
     },
-    "verificationCommit": "ba75301b91e2cb2715c8c442a3f7907d6881d81e",
+    "verificationCommit": "d592406338de37ec6a4941bcadac585b622e6496",
     "commands": [
       {
         "label": "remediation-tests",
@@ -1355,7 +1355,7 @@
   },
   "independentRecheck": {
     "date": "2026-10-05",
-    "commit": "447c2bd22c91ac25bb4d4e442b6d4a82ee794307",
+    "commit": "9b2dab67294fba76241d55aa830b014be492b0ad",
     "workingTreeAtStart": "",
     "snapshotEvidenceSha256": "4311d21965c70787a30c515983eb07d990c60d868fdfec547c5d7796fa9ecd7c",
     "specificationFiles": {
@@ -1654,7 +1654,7 @@
   "ownerAuthorizedRemediation": {
     "date": "2026-10-05",
     "authorization": "User: fix it yourself",
-    "baseCommit": "447c2bd22c91ac25bb4d4e442b6d4a82ee794307",
+    "baseCommit": "9b2dab67294fba76241d55aa830b014be492b0ad",
     "state": "Uncommitted working trees; no fix commit invented",
     "sourceManifestSha256": "4ccd851f802611b93e04a96e234d0dd500554710090f415d42296df6bd917b36",
     "sourceFingerprint": "236d682490146b1fed9209eeac134e747e36d12718cb663c16aebcc3162f2b29",
@@ -1881,14 +1881,14 @@
     "commits": [
       {
         "repository": "mhfe",
-        "commit": "db56fdd4028f27012ae2c10cdafb672139645a5a",
+        "commit": "d87723d8e9d8767b3236342c44aff5f42fd5130b",
         "findings": [
           "AUD-007-FUN003"
         ]
       },
       {
         "repository": "mhfe",
-        "commit": "711c8f596a7f5548270288de4f07c5011c5784cb",
+        "commit": "1c9c572c902e2be1dc7143de4d43c2d9d56f9d17",
         "findings": [
           "AUD-007-BLD001"
         ]
@@ -1905,13 +1905,13 @@
       },
       {
         "repository": "mhfe",
-        "commit": "be40555e70e5dc9f843deb3831949ea91dd9e2e1",
+        "commit": "de258e91370d181e815e554edb52bbee4158695d",
         "findings": [
           "AUD-007-BLD002"
         ]
       }
     ],
-    "verificationCommit": "5a3729385ca2d6c6677a84e9618b8875564cc7f6",
+    "verificationCommit": "dd439751ca992535e726b7c1d5d77b410371d673",
     "commands": [
       {
         "label": "binding-wallet-tests",
@@ -1979,7 +1979,7 @@
         "command": [
           "bash",
           "-c",
-          "git archive 52b6b36 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
+          "git archive dd43975 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
         ],
         "cwd": "/home/user/Documents/bip_tools/mhfe",
         "startedAt": "2026-10-06T08:27:30.728988Z",
@@ -1988,14 +1988,14 @@
         "logSha256": "c491c72e5e2c3f4f5c45b7d0edbd894b8163e14105c2bf4d77715b8cfee395b0",
         "evidence": "Local only: docs/audits/AUD-007-evidence/bld002-cross-clippy-before.log",
         "commandRecordSha256": "239f818fdb6c2d0992069dc7d67b64449b81e7e4575f4924f0fb2707aec65e70",
-        "expected": "Fails: Clippy reports the aarch64 and Windows warnings of 52b6b36's source."
+        "expected": "Fails: Clippy reports the aarch64 and Windows warnings of dd43975's source."
       },
       {
         "label": "bld002-cross-clippy-after",
         "command": [
           "bash",
           "-c",
-          "git archive 40f1193 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
+          "git archive de258e9 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
         ],
         "cwd": "/home/user/Documents/bip_tools/mhfe",
         "startedAt": "2026-10-06T08:33:54.743904Z",
@@ -2014,6 +2014,63 @@
       "No native Windows or aarch64 execution; both targets were cross-compiled in the canonical container.",
       "The specification fixes are bound to their commit; the specification's publication checks were not rerun here.",
       "The Microsoft cl part of BLD002 is not executed locally; the native Windows CI job checks it."
+    ]
+  },
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the privacy rewrite of 2026-10-09 now name the commits that replaced them (AUD-015-DOC001): 082ac0b -> 1c9c572, 2a5e727 -> 9b2dab6, 3280178 -> 1080c5d, 3c2793d -> 9eef2ff, 40f1193 -> de258e9, 52b6b36 -> dd43975, 7369c71 -> d592406, 739bd71 -> bbc1320, b864f5a -> d87723d, e558924 -> 847b410."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "082ac0b": "1c9c572",
+          "2a5e727": "9b2dab6",
+          "3280178": "1080c5d",
+          "3c2793d": "9eef2ff",
+          "40f1193": "de258e9",
+          "52b6b36": "dd43975",
+          "7369c71": "d592406",
+          "739bd71": "bbc1320",
+          "b864f5a": "d87723d",
+          "e558924": "847b410"
+        }
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 447c2bd -> 9b2dab6, 447c2bd22c91ac25bb4d4e442b6d4a82ee794307 -> 9b2dab67294fba76241d55aa830b014be492b0ad, 4f1ccc4 -> 9eef2ff, 5a37293 -> dd43975, 5a3729385ca2d6c6677a84e9618b8875564cc7f6 -> dd439751ca992535e726b7c1d5d77b410371d673, 6ac82a4 -> 847b410, 711c8f5 -> 1c9c572, 711c8f596a7f5548270288de4f07c5011c5784cb -> 1c9c572c902e2be1dc7143de4d43c2d9d56f9d17, ba75301 -> d592406, ba75301b91e2cb2715c8c442a3f7907d6881d81e -> d592406338de37ec6a4941bcadac585b622e6496, be40555 -> de258e9, be40555e70e5dc9f843deb3831949ea91dd9e2e1 -> de258e91370d181e815e554edb52bbee4158695d, cce0cd6 -> 1080c5d, d1cf47d0960a5023e6e503310802e5e2da438568 -> 882e897df72b80b68ebfdddd2f042af4eb43e1a5, db56fdd -> d87723d, db56fdd4028f27012ae2c10cdafb672139645a5a -> d87723d8e9d8767b3236342c44aff5f42fd5130b."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "447c2bd": "9b2dab6",
+          "447c2bd22c91ac25bb4d4e442b6d4a82ee794307": "9b2dab67294fba76241d55aa830b014be492b0ad",
+          "4f1ccc4": "9eef2ff",
+          "5a37293": "dd43975",
+          "5a3729385ca2d6c6677a84e9618b8875564cc7f6": "dd439751ca992535e726b7c1d5d77b410371d673",
+          "6ac82a4": "847b410",
+          "711c8f5": "1c9c572",
+          "711c8f596a7f5548270288de4f07c5011c5784cb": "1c9c572c902e2be1dc7143de4d43c2d9d56f9d17",
+          "ba75301": "d592406",
+          "ba75301b91e2cb2715c8c442a3f7907d6881d81e": "d592406338de37ec6a4941bcadac585b622e6496",
+          "be40555": "de258e9",
+          "be40555e70e5dc9f843deb3831949ea91dd9e2e1": "de258e91370d181e815e554edb52bbee4158695d",
+          "cce0cd6": "1080c5d",
+          "d1cf47d0960a5023e6e503310802e5e2da438568": "882e897df72b80b68ebfdddd2f042af4eb43e1a5",
+          "db56fdd": "d87723d",
+          "db56fdd4028f27012ae2c10cdafb672139645a5a": "d87723d8e9d8767b3236342c44aff5f42fd5130b"
+        }
+      }
     ]
   }
 }

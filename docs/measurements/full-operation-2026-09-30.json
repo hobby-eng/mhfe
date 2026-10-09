@@ -8,7 +8,7 @@
     "system": "Ubuntu Linux, kernel 7.0.0-34-generic, x86-64"
   },
   "method": [
-    "Command line: `mhfe test-benchmark` of the release builds of commit 92d62e5, the default one and the one built with --features ssse3.",
+    "Command line: `mhfe test-benchmark` of the release builds of commit ac195e8373df24fb11a1b0b241a324575ea09b03, the default one and the one built with --features ssse3.",
     "Browser: headless Chromium through Playwright, driving the MHFE panel of the Wallet Key Derivation Tool (MHFE 0.4.0 browser package) twice: served by its executable version with COOP/COEP (fast mode, four threads) and opened as a file (standard mode, one thread). A fresh browser for each run.",
     "Each run was followed by a 90-second pause. The main series ran twice, with the two command-line builds in swapped order in the second round; the first series was stopped after one round to add the SSSE3 build and is kept as an extra sample."
   ],

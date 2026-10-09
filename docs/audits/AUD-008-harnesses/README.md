@@ -1,7 +1,7 @@
 # AUD-008 — MHFE pre-release audit harnesses
 
 These scripts reproduce scoped checks from the eleven-reviewer audit of MHFE 0.5.0 at
-`b6993bb1c11834a01847d1812b31a24145ab1f18`, including the captured dirty source bytes.
+`632af98b6ce06a73dd2e27ed606e0a4212daed09`, including the captured dirty source bytes.
 The product fingerprint is
 `9e5357c0b085c7f68ec3c30b6940147b2aaaf89bb8f6dcbf9ea0d2d6593c790a`.
 The read-only counterpart specification is at
@@ -88,19 +88,19 @@ the 34-case mainnet/testnet challenge and its expected failure interpretation.
 
 ## Specialist probes
 
-| Scope | Entry point / guide | Baseline interpretation |
-| --- | --- | --- |
-| Native isolation, moving allocator, retained locks | [secrets-README.md](secrets-README.md) | Exit 1 reproduces the current product defect; exit 2 is a blocked diagnostic. |
-| Actual JS lifecycle with stand-ins | [browser-README.md](browser-README.md) | Scoped lifecycle assertions; not full-cost crypto or complete memory erasure. |
-| Fresh WASM callback seams and inactive stack copies | [browser-independent-README.md](browser-independent-README.md) | Clarified diagnostic passes; original overstrict failure retained. |
-| CLI rekey dispatch and hidden input | [qa-README.md](qa-README.md) | Six length-guard failures with four controls; unchanged capable-terminal gate separately passes. |
-| Documentation and relocated links | [doc-README.md](doc-README.md) | Current prose/link defects yield nonzero; no algorithm modification. |
-| Independent architecture seams | [architecture-independent-README.md](architecture-independent-README.md) | Source/export/constant checks pass; existing formatter defect is not duplicated. |
-| Wallet reference and recovery challenge | [wallet-challenge-README.md](wallet-challenge-README.md) | Ten padding failures are one root cause; 24 controls pass. |
-| Terminal colors, narrow width and split TTY | `ui-terminal-probe.py` | 29/33 final assertions pass; four failures represent two causes. Original cleanup race retained separately. |
-| Artifact inventory/provenance | `devops-artifacts.py`, `devops-static.py` | Cached/uncached byte checks pass; signing-policy preparation gap remains explicit. |
-| Ranked optional research | `research-static.py`, [research-README.md](research-README.md) | Citation/source bindings pass; seven proposals are not implemented protections. |
-| Skeptic challenge | `skeptic-snapshot.py`, `skeptic-devops-static.py` | Exact-source bindings and scoped challenge; final dispositions in local final-skeptic-review.json. |
+| Scope                                               | Entry point / guide                                                      | Baseline interpretation                                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Native isolation, moving allocator, retained locks  | [secrets-README.md](secrets-README.md)                                   | Exit 1 reproduces the current product defect; exit 2 is a blocked diagnostic.                               |
+| Actual JS lifecycle with stand-ins                  | [browser-README.md](browser-README.md)                                   | Scoped lifecycle assertions; not full-cost crypto or complete memory erasure.                               |
+| Fresh WASM callback seams and inactive stack copies | [browser-independent-README.md](browser-independent-README.md)           | Clarified diagnostic passes; original overstrict failure retained.                                          |
+| CLI rekey dispatch and hidden input                 | [qa-README.md](qa-README.md)                                             | Six length-guard failures with four controls; unchanged capable-terminal gate separately passes.            |
+| Documentation and relocated links                   | [doc-README.md](doc-README.md)                                           | Current prose/link defects yield nonzero; no algorithm modification.                                        |
+| Independent architecture seams                      | [architecture-independent-README.md](architecture-independent-README.md) | Source/export/constant checks pass; existing formatter defect is not duplicated.                            |
+| Wallet reference and recovery challenge             | [wallet-challenge-README.md](wallet-challenge-README.md)                 | Ten padding failures are one root cause; 24 controls pass.                                                  |
+| Terminal colors, narrow width and split TTY         | `ui-terminal-probe.py`                                                   | 29/33 final assertions pass; four failures represent two causes. Original cleanup race retained separately. |
+| Artifact inventory/provenance                       | `devops-artifacts.py`, `devops-static.py`                                | Cached/uncached byte checks pass; signing-policy preparation gap remains explicit.                          |
+| Ranked optional research                            | `research-static.py`, [research-README.md](research-README.md)           | Citation/source bindings pass; seven proposals are not implemented protections.                             |
+| Skeptic challenge                                   | `skeptic-snapshot.py`, `skeptic-devops-static.py`                        | Exact-source bindings and scoped challenge; final dispositions in local final-skeptic-review.json.          |
 
 The UI probe uses fresh `target/release/mhfe`, public repair data, PTYs and bounded terminal
 grids; it generates no real wallet and runs no Argon2. The early `new` split-terminal check
@@ -168,3 +168,5 @@ must reject twelve deliberate in-memory corruptions. The current validator write
 `remediation-report-validation.json`; the original `report-validation.json` is not replaced.
 This follow-up is not a new full audit or final release approval. Full-cost vector replays,
 canonical archive rebuilds and non-Linux native acceptance were not repeated.
+
+Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: b6993bb1c11834a01847d1812b31a24145ab1f18 -> 632af98b6ce06a73dd2e27ed606e0a4212daed09.

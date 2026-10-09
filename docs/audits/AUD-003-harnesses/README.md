@@ -1,7 +1,7 @@
 # AUD-003 implementation audit harnesses
 
 These scripts belong to the review of MHFE branch `suite-3-c-engine`, implementation commit
-`7d20ec769af535d878841f4f4efe35dd2ca24723`, against specification commit
+`cc91b0bab58f51c08a3562a5ef441e7faab726b4`, against specification commit
 `7bda5b3d0be275578434411c587fb9e7532a89d1`. They use public test data only.
 
 During the review the specification advanced to `40f2a56b7ffa447b0ef6f01fd4a91c4f74dec40a`.
@@ -112,3 +112,5 @@ C compiler writes empty objects for the vendored Argon2 C code, so no 32-bit C h
 AUD-003-DOC002 is verified by the unit tests in `src/bin/mhfe/encrypt.rs`
 (`cargo test --locked --bin mhfe encrypt::`): the advice after an encryption for a short phrase at
 the defaults, a phrase that length detection would misread, a 24-word phrase, and changed settings.
+
+Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 7d20ec769af535d878841f4f4efe35dd2ca24723 -> cc91b0bab58f51c08a3562a5ef441e7faab726b4.

@@ -13,7 +13,7 @@
   "completedAt": "2026-09-30T17:27:18.810702Z",
   "snapshot": {
     "capturedAt": "2026-09-30T17:27:18.551716Z",
-    "commit": "7d20ec769af535d878841f4f4efe35dd2ca24723",
+    "commit": "cc91b0bab58f51c08a3562a5ef441e7faab726b4",
     "commitComplete": false,
     "workingTree": " M README.md\n M docs/audits/README.md\n M src/bin/mhfe/encrypt.rs\n M src/bin/mhfe/settings.rs\n M web/README.md\n?? AGENTS.md\n?? docs/audits/AUD-003-harnesses/\n?? docs/audits/audit-03-2026-09-30.json\n?? docs/audits/audit-03-2026-09-30.md\n",
     "changedFiles": [
@@ -88,7 +88,7 @@
       "method": "Source ownership trace and public consumer",
       "outcome": "failed",
       "evidence": "API001; SEC002; normal operations retain only required outputs.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-SEC-002",
@@ -98,7 +98,7 @@
       "method": "Fresh build; Chromium/Firefox standard and isolated fast modes",
       "outcome": "passed",
       "evidence": "real-browser; normal browser sandbox and strict CSP; no Scanner vault architecture exists here.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-SEC-003",
@@ -108,7 +108,7 @@
       "method": "Generated-code scan, request observation, route tests",
       "outcome": "passed",
       "evidence": "browser-package, real-browser, python-launcher; only local page/blob loads observed; no provider features.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-SEC-004",
@@ -118,7 +118,7 @@
       "method": "Formula/source review; RFC and differential small-cost tests",
       "outcome": "failed",
       "evidence": "FUN001 at terminal adapter; core unit tests and bounded browser round trips pass. No claim of construction security.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-SEC-005",
@@ -128,7 +128,7 @@
       "method": "Failure-path units; cancellation/restart; source review",
       "outcome": "passed",
       "evidence": "tests, ssse3-engine, browser-package, real-browser; SEC002 records dependency-buffer limitations.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-SEC-006",
@@ -138,7 +138,7 @@
       "method": "Source sinks, CSP execution, errors",
       "outcome": "passed",
       "evidence": "No application storage, clipboard or remote fetch path; test page uses escaped literals and textContent.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-SEC-007",
@@ -148,7 +148,7 @@
       "method": "Bounded input tests; real large-response timeout probe",
       "outcome": "failed",
       "evidence": "SEC001; API002. No OOM or full-size work-area allocation was induced.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-FUN-001",
@@ -158,7 +158,7 @@
       "method": "Units; fast fixture; real PTY and browser probes",
       "outcome": "failed",
       "evidence": "FUN001. Wordlist, checksums, prefix resolution, NFKD and length bounds otherwise pass reviewed checks.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-FUN-002",
@@ -168,7 +168,7 @@
       "method": "Public BIP-derived unit values and address consumer",
       "outcome": "failed",
       "evidence": "FUN002; FUN003 optional rare-key hardening. Other chains are not offered by the rehearsal helper.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-FUN-003",
@@ -178,7 +178,7 @@
       "method": "Inventory",
       "outcome": "not-applicable",
       "evidence": "No such operations in this library, CLI or browser package.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-FUN-004",
@@ -188,7 +188,7 @@
       "method": "Source and existing public address tests",
       "outcome": "passed",
       "evidence": "P2PKH, nested P2WPKH, P2WPKH and BIP86 programs reviewed; no descriptors, Miniscript or multisig API.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-FUN-005",
@@ -198,7 +198,7 @@
       "method": "Inventory",
       "outcome": "not-applicable",
       "evidence": "MHFE does not create, inspect, sign or broadcast transactions/PSBTs.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-FUN-006",
@@ -208,7 +208,7 @@
       "method": "Core tests; browser round trips; corpus byte identity",
       "outcome": "passed",
       "evidence": "All five lengths, ambiguity, fixed-point/self-check, manual mode and unverified 24-word output reviewed. Full-cost replay skipped by request.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-FUN-007",
@@ -218,7 +218,7 @@
       "method": "Inventory",
       "outcome": "not-applicable",
       "evidence": "Offline bounded address derivation is not a public-data discovery or balance service.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-API-001",
@@ -228,7 +228,7 @@
       "method": "Source boundaries and targeted consumers",
       "outcome": "failed",
       "evidence": "FUN001, FUN002 and API002; FFI field offsets and 160 C/RustCrypto cases pass.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-API-002",
@@ -238,7 +238,7 @@
       "method": "Stand-in worker checks and real browser cancel/restart",
       "outcome": "passed",
       "evidence": "browser-package and real-browser; full-cost mid-round cancellation not repeated.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-API-003",
@@ -248,7 +248,7 @@
       "method": "Mutation probe; source and serialization tests",
       "outcome": "failed",
       "evidence": "API001; normal recovery flags/ambiguity remain explicit; no monetary exports exist.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-API-004",
@@ -258,7 +258,7 @@
       "method": "Source/fixtures and adapter probes",
       "outcome": "failed",
       "evidence": "FUN001/FUN002; fixed-endian suite fields and browser numeric bounds pass.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-BLD-001",
@@ -268,7 +268,7 @@
       "method": "Locked build, fmt and both clippy targets",
       "outcome": "passed",
       "evidence": "fmt, clippy-native, clippy-wasm, browser-build; reduced engine is cfg(test), not a production runtime option.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-BLD-002",
@@ -278,7 +278,7 @@
       "method": "Native/SSSE3 units; four browser/mode runs; workflow review",
       "outcome": "failed",
       "evidence": "API002 contradicts native 32-bit support. Windows/macOS/ARM64 runtime and cross-builds not executed.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-BLD-003",
@@ -288,7 +288,7 @@
       "method": "Fresh RustSec query, SHA-256 and upstream Git blob checks",
       "outcome": "passed",
       "evidence": "107 dependencies: no RustSec advisories/warnings; all 22 Argon2 files match pinned upstream. No comprehensive dependency-internal audit.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-BLD-004",
@@ -298,7 +298,7 @@
       "method": "Static Docker/pinning review; local WASM build",
       "outcome": "not-run",
       "evidence": "No Docker rebuild or independent byte-for-byte reproduction in this audit; not a release-level execution request.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-BLD-005",
@@ -308,7 +308,7 @@
       "method": "Source review and actual check-page startup",
       "outcome": "failed",
       "evidence": "BLD001. Release waits for vector replay and emits checksums/attestations; no release was created and no remote CI run certified.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-UI-001",
@@ -318,7 +318,7 @@
       "method": "Fresh bounded page on Chromium/Firefox; both modes",
       "outcome": "passed",
       "evidence": "real-browser; package has no standalone end-user GUI. No responsive-layout or screen-reader acceptance claimed.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-UI-002",
@@ -328,7 +328,7 @@
       "method": "PTY, validation, cancel/restart",
       "outcome": "failed",
       "evidence": "FUN001; browser adapter cancellation/restart passes.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-UI-003",
@@ -338,7 +338,7 @@
       "method": "Source UI trace and refusal prompts",
       "outcome": "failed",
       "evidence": "Hidden input, unverified labeling and stdout-after-self-check inspected. Embedding-page UI/accessibility belongs to consumers. Late four-file review adds DOC002.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-ARC-001",
@@ -348,7 +348,7 @@
       "method": "Source review",
       "outcome": "passed",
       "evidence": "Crypto logic shared; unsafe code localized; vector-boundary exception separately recorded as API001.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-ARC-002",
@@ -358,7 +358,7 @@
       "method": "Clippy, build graph and source search",
       "outcome": "passed",
       "evidence": "No additional actionable dead-code defect; duplicated launcher contracts have tests.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-ARC-003",
@@ -368,7 +368,7 @@
       "method": "Check coverage versus production paths",
       "outcome": "failed",
       "evidence": "FUN001/FUN002/SEC001 escaped current tests; BLD001 prevents documented browser helper launch. Reduced tests are explicit.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-DOC-001",
@@ -378,7 +378,7 @@
       "method": "Source and specification comparison",
       "outcome": "failed",
       "evidence": "API002, SEC001 and DOC001; experimental status and forced-termination limits are stated. Late four-file review adds DOC002.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-DOC-002",
@@ -388,7 +388,7 @@
       "method": "Actual helper command and upstream metadata",
       "outcome": "failed",
       "evidence": "BLD001; version 0.4.0 consistent; private reporting enabled; notices and pinned source reviewed. Late four-file review adds DOC002.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     },
     {
       "checkId": "CHECK-DOC-003",
@@ -398,7 +398,7 @@
       "method": "Original IDs, dispositions, schema and hashes",
       "outcome": "passed",
       "evidence": "Prior findings reconciled below; all checks tied to source identity, final report validation retained locally.",
-      "snapshot": "7d20ec769af535d878841f4f4efe35dd2ca24723"
+      "snapshot": "cc91b0bab58f51c08a3562a5ef441e7faab726b4"
     }
   ],
   "conformance": [
@@ -1477,78 +1477,78 @@
     {
       "id": "AUD-003-FUN001",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723); Windows console: 9884816968e852598e15891cac4800f14d06afd5",
-      "verificationCommit": "bc51499 (CI run 36785412602)",
-      "evidence": "rpassword replaced by src/bin/mhfe/hidden_input.rs. On Unix the terminal line mode is off and the tool edits the line itself, so only Backspace, Ctrl+U, Enter, Ctrl+D on an empty line and Ctrl+C keep a meaning. On Linux, terminal_input.py passes, and scripts/verify-hidden-input.py passed 11 runs in a pseudo-terminal: TAB, NUL, U+0085, Ctrl+S/Q/V/W/R/O/\\, Ctrl+Z and Ctrl+D inside the line refused; 1024 x U+1D400 (4096 bytes) accepted; Backspace and Ctrl+U edit; Ctrl+C exits 130; terminal settings restored. A follow-up review found that the first version still dropped Ctrl+Q, Ctrl+V and Ctrl+D inside a line and cut lines at 4095 bytes; all of this is fixed in this commit. Windows: the console is read without line mode and echo (commit 9884816968e852598e15891cac4800f14d06afd5), and the tool edits the line itself as on Unix. Verified in CI run 36785412602 at commit e727f50cb632b984acb62760858c620022827be2: on windows-2025, scripts/verify-hidden-input-windows.py in a pseudo-console refused TAB and Ctrl+S/Q/V/W/Z/\\, accepted a Unicode password and 1024 x U+1D400, edited with Backspace and Ctrl+U, and exited 130 on Ctrl+C (U+0085 cannot be sent through a pseudo-console and is covered by the Unix run and the library tests); on macos-15, all 16 checks of scripts/verify-hidden-input.py passed."
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4); Windows console: a8d82844fe4b2a9fe10a2a127fed9bc8ee6cd15f",
+      "verificationCommit": "b6401c8 (CI run 36785412602)",
+      "evidence": "rpassword replaced by src/bin/mhfe/hidden_input.rs. On Unix the terminal line mode is off and the tool edits the line itself, so only Backspace, Ctrl+U, Enter, Ctrl+D on an empty line and Ctrl+C keep a meaning. On Linux, terminal_input.py passes, and scripts/verify-hidden-input.py passed 11 runs in a pseudo-terminal: TAB, NUL, U+0085, Ctrl+S/Q/V/W/R/O/\\, Ctrl+Z and Ctrl+D inside the line refused; 1024 x U+1D400 (4096 bytes) accepted; Backspace and Ctrl+U edit; Ctrl+C exits 130; terminal settings restored. A follow-up review found that the first version still dropped Ctrl+Q, Ctrl+V and Ctrl+D inside a line and cut lines at 4095 bytes; all of this is fixed in this commit. Windows: the console is read without line mode and echo (commit a8d82844fe4b2a9fe10a2a127fed9bc8ee6cd15f), and the tool edits the line itself as on Unix. Verified in CI run 36785412602 at commit b6401c893a321ff6b0fc53a08b99b3dbce66b7a3: on windows-2025, scripts/verify-hidden-input-windows.py in a pseudo-console refused TAB and Ctrl+S/Q/V/W/Z/\\, accepted a Unicode password and 1024 x U+1D400, edited with Backspace and Ctrl+U, and exited 130 on Ctrl+C (U+0085 cannot be sent through a pseudo-console and is covered by the Unix run and the library tests); on macos-15, all 16 checks of scripts/verify-hidden-input.py passed."
     },
     {
       "id": "AUD-003-FUN002",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
       "evidence": "Case-insensitive HRP after decoding; unit test segwit_addresses_are_accepted_in_either_case (P2WPKH, P2TR, testnet; mixed case refused)."
     },
     {
       "id": "AUD-003-API001",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
       "evidence": "Private fields with read-only accessors; generate and negative_case refuse inputs outside PUBLIC_INPUTS/NEGATIVE_INPUTS or at other settings. public_api.rs now fails to compile (E0616, private field); unit test checks the refusal."
     },
     {
       "id": "AUD-003-API002",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "ea263ec",
-      "evidence": "Native builds require a 64-bit target through compile_error!; API.md and README updated. No 32-bit native target was built to observe the error. Follow-up (ea263ec): docs/audits/AUD-003-harnesses/refuse32.sh checks a native i686-unknown-linux-gnu build with a stand-in C compiler; it stops with 'the native MHFE engine needs a 64-bit target' at src/engine/native.rs:12 and no other error. The browser build is unchanged and still checked by clippy for wasm32 in CI."
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "e0e7b62",
+      "evidence": "Native builds require a 64-bit target through compile_error!; API.md and README updated. No 32-bit native target was built to observe the error. Follow-up (e0e7b62): docs/audits/AUD-003-harnesses/refuse32.sh checks a native i686-unknown-linux-gnu build with a stand-in C compiler; it stops with 'the native MHFE engine needs a 64-bit target' at src/engine/native.rs:12 and no other error. The browser build is unchanged and still checked by clippy for wasm32 in CI."
     },
     {
       "id": "AUD-003-SEC001",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
       "evidence": "write_until applies one absolute deadline to the whole response; server_deadline.py passes (2 threads after 13 s) and unit test a_client_that_does_not_read_is_dropped_at_the_response_deadline passes. The Python launcher already had a total sendall timeout; comment and name aligned."
     },
     {
       "id": "AUD-003-BLD001",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
       "evidence": "build-browser-check.mjs writes mhfe-fast-mode.sha256; mhfe serve starts on a fresh page and refuses it after one byte is appended."
     },
     {
       "id": "AUD-003-DOC002",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "ea263ec",
-      "evidence": "Advice depends on the settings and on other_detected_lengths: nothing else with the defaults, remember changed PIM/memory level, remember the word count for a phrase detection would misread. Matches mhfe-spec 61c928e (settings wording approved by the owner). The CLI output for the ambiguous case was not run at full cost. Follow-up (ea263ec): what_to_remember returns the advice as data, and unit tests check it for a short phrase at the defaults ('Nothing else needs to be kept'), a phrase that length detection would misread (word count and mhfe decrypt --words), a 24-word phrase (why recovery shows it unverified) and changed settings (PIM and memory level to remember). No full Argon2 run was needed, as the finding states."
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "e0e7b62",
+      "evidence": "Advice depends on the settings and on other_detected_lengths: nothing else with the defaults, remember changed PIM/memory level, remember the word count for a phrase detection would misread. Matches mhfe-spec 63dd042 (settings wording approved by the owner). The CLI output for the ambiguous case was not run at full cost. Follow-up (e0e7b62): what_to_remember returns the advice as data, and unit tests check it for a short phrase at the defaults ('Nothing else needs to be kept'), a phrase that length detection would misread (word count and mhfe decrypt --words), a 24-word phrase (why recovery shows it unverified) and changed settings (PIM and memory level to remember). No full Argon2 run was needed, as the finding states."
     },
     {
       "id": "AUD-003-SEC002",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
       "evidence": "BIP39 passphrase normalized into a pre-sized Zeroizing buffer and passed to to_seed_normalized; unit test the_passphrase_is_normalized_as_bip39_does; API.md and SECURITY.md scoped to owned buffers."
     },
     {
       "id": "AUD-003-FUN003",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
       "evidence": "Invalid master scalar, invalid child key and Taproot point at infinity return errors; public_key no longer panics. Unit test invalid_bip32_keys_are_errors; published BIP32/BIP84/BIP86 tests unchanged."
     },
     {
       "id": "AUD-003-BLD002",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
       "evidence": "SHA256SUMS is scanned and rewritten in place under an exclusive file lock. A rebuild without Argon2 reproduced the committed SHA256SUMS byte for byte, and a follow-up review confirmed the lock with four concurrent processes, without vector generation."
     },
     {
       "id": "AUD-003-DOC001",
       "status": "verified",
-      "fixCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
-      "verificationCommit": "the commit that adds this record (parent 7d20ec769af535d878841f4f4efe35dd2ca24723)",
+      "fixCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
+      "verificationCommit": "the commit that adds this record (parent cc91b0bab58f51c08a3562a5ef441e7faab726b4)",
       "evidence": "Stale NUL comment removed, otherLengths/otherDetectedLengths documented, error text names the refused categories, README introduction qualified."
     }
   ],
@@ -1573,7 +1573,7 @@
   ],
   "baselineSnapshot": {
     "capturedAt": "2026-09-30T16:56:30.567827Z",
-    "commit": "7d20ec769af535d878841f4f4efe35dd2ca24723",
+    "commit": "cc91b0bab58f51c08a3562a5ef441e7faab726b4",
     "commitComplete": true,
     "branch": "suite-3-c-engine",
     "workingTree": "?? AGENTS.md\n?? docs/audits/AUD-003-harnesses/",
@@ -1589,13 +1589,13 @@
   "phases": [
     {
       "name": "Committed baseline",
-      "commit": "7d20ec769af535d878841f4f4efe35dd2ca24723",
+      "commit": "cc91b0bab58f51c08a3562a5ef441e7faab726b4",
       "sourceFingerprint": "5095b6f3f329aa9c7babe4f221e3443bca877aeb1bd742cbfa9535649451980f",
       "scope": "Complete implementation audit, bounded runtime checks and six baseline findings."
     },
     {
       "name": "Concurrent working-tree update",
-      "commit": "7d20ec769af535d878841f4f4efe35dd2ca24723",
+      "commit": "cc91b0bab58f51c08a3562a5ef441e7faab726b4",
       "sourceFingerprint": "98f84df66037203adaa5ae51992f7f2b3e0df5478545311a9eebed3bd49bc201",
       "changedFiles": [
         "README.md",
@@ -1624,5 +1624,46 @@
   "snapshotTransitions": {
     "intermediateFingerprint": "de68db0ce12a835ef5fbb4b288cfd734b9eff1dbc56cb62ae502e7557e15951b",
     "finalWordingEdit": "Only the displayed sentence lost the words for recovery. No control flow changed. The later CLI build includes it."
+  },
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "34 PATH values of recorded command environments replaced by <elided>: they named local tools and session directories.",
+          "Commit references of the history replaced by the privacy rewrite of 2026-10-09 now name the commits that replaced them (AUD-015-DOC001): 61c928e -> 63dd042, bc51499 -> b6401c8, ea263ec -> e0e7b62."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "61c928e": "63dd042",
+          "bc51499": "b6401c8",
+          "ea263ec": "e0e7b62"
+        }
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 7d20ec769af535d878841f4f4efe35dd2ca24723 -> cc91b0bab58f51c08a3562a5ef441e7faab726b4, 9884816968e852598e15891cac4800f14d06afd5 -> a8d82844fe4b2a9fe10a2a127fed9bc8ee6cd15f, e727f50 -> b6401c8, e727f50cb632b984acb62760858c620022827be2 -> b6401c893a321ff6b0fc53a08b99b3dbce66b7a3, fcf3876 -> e0e7b62, fcf38769706c371a08077b859a65ce7526fac990 -> e0e7b622f4c29835bcf3e655db230d674fba7ecf."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "7d20ec769af535d878841f4f4efe35dd2ca24723": "cc91b0bab58f51c08a3562a5ef441e7faab726b4",
+          "9884816968e852598e15891cac4800f14d06afd5": "a8d82844fe4b2a9fe10a2a127fed9bc8ee6cd15f",
+          "e727f50": "b6401c8",
+          "e727f50cb632b984acb62760858c620022827be2": "b6401c893a321ff6b0fc53a08b99b3dbce66b7a3",
+          "fcf3876": "e0e7b62",
+          "fcf38769706c371a08077b859a65ce7526fac990": "e0e7b622f4c29835bcf3e655db230d674fba7ecf"
+        }
+      }
+    ]
   }
 }

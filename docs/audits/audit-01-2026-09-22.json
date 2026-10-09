@@ -15,7 +15,7 @@
     "commitComplete": false,
     "workingTree": "No initial commit; all implementation files were untracked. Audit files are excluded from the fingerprint.",
     "sourceFingerprint": "7952ef4c8ed8388980d2bf0ac5884046fb8d41b377d840176c60da4e7a86415a",
-    "firstPublishedCommit": "01d8558a8dc66d86b2300871dae4efeebbd23fb9",
+    "firstPublishedCommit": "5ac08b2812a6519831b1981c101a24340c7bb11a",
     "publicationRelationship": "First immutable commit containing all seven verified AUD-001 remediations. AUD-002 independently confirmed their presence there; this does not replace the original pre-commit audit snapshot."
   },
   "scope": {
@@ -304,5 +304,27 @@
       "client": "12dc4f93fc5111f5c00a942479b7fbf085be89cbba0da6649cf830862a872c0a",
       "worker": "ef4699d1f0b1c0ddfae7eddfe0a9c3cea0a52ffbb4199c88f4fe5f3ed4711b95"
     }
+  },
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 01d8558a8dc66d86b2300871dae4efeebbd23fb9 -> 5ac08b2812a6519831b1981c101a24340c7bb11a."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "01d8558a8dc66d86b2300871dae4efeebbd23fb9": "5ac08b2812a6519831b1981c101a24340c7bb11a"
+        }
+      }
+    ]
   }
 }

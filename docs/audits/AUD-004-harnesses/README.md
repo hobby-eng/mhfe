@@ -1,7 +1,7 @@
 # AUD-004 reproduction harnesses
 
 These scripts accompany [AUD-004](../audit-04-2026-10-01.md), reviewing MHFE
-`3d2fcd0e6fd95247cb353055e7244eb61c2af8fc` against released suite 3. They
+`da417285ba94ff1ff2fec552dce8669e88b4323e` against released suite 3. They
 exercise only public fixtures or synthetic data. They do not replay full-cost
 Argon2 vectors. None accepts private wallet data.
 
@@ -114,3 +114,5 @@ source/specification identity and relative document links, and confirms local
 evidence is ignored and unstaged. It writes local `report-validation.json` and
 regenerates the local evidence `SHA256SUMS`. The original evidence is needed for
 this historical-record validation; the defect probes above do not need its logs.
+
+Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 3d2fcd0e6fd95247cb353055e7244eb61c2af8fc -> da417285ba94ff1ff2fec552dce8669e88b4323e.

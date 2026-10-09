@@ -11,7 +11,7 @@
   },
   "snapshot": {
     "capturedAt": "2026-10-01T13:03:21.026014Z",
-    "commit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+    "commit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
     "commitComplete": true,
     "branch": "main",
     "workingTree": "?? docs/audits/AUD-006-harnesses/",
@@ -36,7 +36,7 @@
       "method": "Review of password/phrase/entropy ownership, native C work-area cleanup, WASM transfers and documented dependency/JS limits; fixed-capacity phrase conversion allocator probe.",
       "outcome": "passed",
       "evidence": "full-check; old-regressions; canonical-browser",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-SEC-002",
@@ -46,7 +46,7 @@
       "method": "Canonical browser archive executed with normal CSP/sandbox in Chromium and Firefox, file and isolated loopback modes.",
       "outcome": "passed",
       "evidence": "canonical-browser",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-SEC-003",
@@ -56,7 +56,7 @@
       "method": "Bundled loader removal and offline graph inspected; no external requests in four browser runs; generated package network gate passes.",
       "outcome": "passed",
       "evidence": "full-check; canonical-browser",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-SEC-004",
@@ -66,7 +66,7 @@
       "method": "Suite constants, integer settings, salt/mask domains, packing and inverse reviewed; C/RustCrypto differential tests and three expected Argon2 tags per browser engine.",
       "outcome": "passed",
       "evidence": "full-check; conformance",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-SEC-005",
@@ -76,7 +76,7 @@
       "method": "Exceptional FFI wipe, secret-copy cleanup, native cancellation and worker termination reviewed; active cancel and throwing page callbacks followed by restart tested. Async callback promises are explicitly outside the demonstrated throw-handling guarantee.",
       "outcome": "passed",
       "evidence": "full-check; old-regressions; canonical-browser; async-callback-scope",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-SEC-006",
@@ -86,7 +86,7 @@
       "method": "Worker request/result handling, generated-script escaping, absence of storage/telemetry, and launcher integrity/host routing inspected.",
       "outcome": "passed",
       "evidence": "full-check; canonical-browser",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-SEC-007",
@@ -96,7 +96,7 @@
       "method": "Bounded CLI input, resource-error paths, corrected macOS counter sum, server deadlines/concurrency and early refusals tested. Host-memory estimates are not cgroup admission guarantees.",
       "outcome": "passed",
       "evidence": "full-check; old-regressions",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-FUN-001",
@@ -106,7 +106,7 @@
       "method": "All BIP39 lengths, checksums/prefixes, Unicode 17 stabilization, forbidden characters and byte bounds; independent Python replay of 33 password cases.",
       "outcome": "passed",
       "evidence": "full-check; conformance; unicode-version-guard",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-FUN-002",
@@ -116,7 +116,7 @@
       "method": "BIP32/44/49/84/86 derivation, network/address parsing, BIP39 passphrase, rare invalid-key errors and address/fingerprint rehearsal reviewed and existing literal vectors run.",
       "outcome": "passed",
       "evidence": "full-check; canonical-browser",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-FUN-003",
@@ -126,7 +126,7 @@
       "method": "None of these capabilities is implemented in MHFE.",
       "outcome": "not-applicable",
       "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-FUN-004",
@@ -136,7 +136,7 @@
       "method": "No descriptor, Miniscript or multisig interface; single-key address encoding belongs to FUN-002.",
       "outcome": "not-applicable",
       "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-FUN-005",
@@ -146,7 +146,7 @@
       "method": "MHFE neither reads nor signs transactions or PSBTs.",
       "outcome": "not-applicable",
       "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-FUN-006",
@@ -156,7 +156,7 @@
       "method": "All recovery lengths, ambiguity/manual 24 words, fixed-point refusal, inverse creation check and decoy round-trip tested at reduced cost; 17 full transcripts replayed with recorded keys; corpus byte-equal to released specification.",
       "outcome": "passed",
       "evidence": "full-check; conformance",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-FUN-007",
@@ -166,7 +166,7 @@
       "method": "No blockchain provider, balance aggregation or discovery scanner. Bounded local address search is covered by FUN-002.",
       "outcome": "not-applicable",
       "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-API-001",
@@ -176,7 +176,7 @@
       "method": "Validated work-factor/password types, public-vector input restrictions, FFI layout/lifetimes, WASM numeric/type validation and client Promise/error changes reviewed.",
       "outcome": "passed",
       "evidence": "full-check; canonical-browser",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-API-002",
@@ -186,7 +186,7 @@
       "method": "Busy state, late worker events, active cancellation, synchronous page-callback failures and subsequent restart tested. Async callbacks characterized as an integration caveat.",
       "outcome": "passed",
       "evidence": "full-check; canonical-browser; async-callback-scope",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-API-003",
@@ -196,7 +196,7 @@
       "method": "No CSV/XLSX monetary exports. Public vector JSON and CLI result formats are reviewed under API-004.",
       "outcome": "not-applicable",
       "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-API-004",
@@ -206,7 +206,7 @@
       "method": "GNU binary/text checksum formats both accepted, malformed/tampered input refused, public JSON corpus and four simultaneous checksum refreshes checked.",
       "outcome": "passed",
       "evidence": "full-check; old-regressions; conformance",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-BLD-001",
@@ -216,7 +216,7 @@
       "method": "Native SSE2/SSSE3, Rust WASM and both Argon2 browser builds pass; reduced-cost marker excluded from all six supplied archives.",
       "outcome": "passed",
       "evidence": "full-check; artifacts",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-BLD-002",
@@ -226,7 +226,7 @@
       "method": "Local Linux variants and two real browsers; exact-head CI portable Windows/macOS jobs succeeded. ARM64/Windows archives inspected, not executed locally.",
       "outcome": "passed",
       "evidence": "remote-ci; artifacts; canonical-browser",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-BLD-003",
@@ -236,7 +236,7 @@
       "method": "Lockfile changes, vendored 22-file SHA manifest, generated dependency-license union and packaged notices checked; cached RustSec 106 dependencies/1278 advisories has no findings. Online database refresh failed; same-lockfile remote RustSec succeeded.",
       "outcome": "passed",
       "evidence": "full-check; conformance; artifacts; rustsec; rustsec-cached; remote-ci",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-BLD-004",
@@ -246,7 +246,7 @@
       "method": "Six supplied canonical archives equal the checksums printed by independent exact-head GitHub canonical-build. No additional local uncached Docker rebuild was requested or run.",
       "outcome": "passed",
       "evidence": "independent-ci-artifacts; artifacts",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-BLD-005",
@@ -256,7 +256,7 @@
       "method": "Builder-to-publisher checksum coverage, immutable action pins, checkout credentials, release vector dependency, archive source metadata and current tag mismatch reviewed. Publication acceptance remains incomplete pending current full replay.",
       "outcome": "passed",
       "evidence": "artifacts; independent-ci-artifacts; vector-ci-status",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-UI-001",
@@ -266,7 +266,7 @@
       "method": "This repository ships a CLI and browser integration library, not an end-user wallet page. The generated browser-check page is a diagnostic artifact; deriver UI is outside this audit.",
       "outcome": "not-applicable",
       "evidence": "Current supported API/source inventory; feature is absent from MHFE.",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-UI-002",
@@ -276,7 +276,7 @@
       "method": "CLI argument/input/output boundaries, explicit settings, ambiguous recovery and early-unverified versus checked output reviewed.",
       "outcome": "passed",
       "evidence": "full-check; old-regressions",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-UI-003",
@@ -286,7 +286,7 @@
       "method": "Unix PTY editing/control refusal, long Unicode input, Ctrl+C restoration and color behavior tested. Native Windows/macOS PTY evidence is exact-head CI.",
       "outcome": "passed",
       "evidence": "full-check; old-regressions; remote-ci",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-ARC-001",
@@ -296,7 +296,7 @@
       "method": "Core/engine/FFI/CLI/worker responsibilities and private validated state reviewed. No class hierarchy or broad module rewrite is warranted.",
       "outcome": "passed",
       "evidence": "Source review: src/lib.rs, src/engine, src/mhfe.rs, src/bin/mhfe, web",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-ARC-002",
@@ -306,7 +306,7 @@
       "method": "Public API consumers, vector interfaces, shared checksum semantics and duplicated boundary constants reviewed. Eight changed JS/TS files in formatting commit normalize identically.",
       "outcome": "passed",
       "evidence": "formatting-identity-unrestricted; source review",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-ARC-003",
@@ -316,7 +316,7 @@
       "method": "Production-path test seams, test-only engine fencing, callback stubs versus real archive execution, comments and naming reviewed. Small wording/encapsulation recommendations recorded separately.",
       "outcome": "passed",
       "evidence": "full-check; canonical-browser; architecture recommendations",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-DOC-001",
@@ -326,7 +326,7 @@
       "method": "README/API/SECURITY claims compared with current source and released suite; experiment and best-effort erasure limits retained. No core protocol mismatch found.",
       "outcome": "passed",
       "evidence": "conformance; source/document review",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-DOC-002",
@@ -336,7 +336,7 @@
       "method": "One low documentation defect: blanket Promise-return claim includes three synchronous client methods. Archive legal files and build/source metadata pass.",
       "outcome": "failed",
       "evidence": "AUD-006-DOC001; api-contract; artifacts",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     },
     {
       "checkId": "CHECK-DOC-003",
@@ -346,7 +346,7 @@
       "method": "New paired record, 32-ID coverage, original failures and environmental limits, command/log/source hashes and ignored evidence validated. Prior findings retain their IDs.",
       "outcome": "passed",
       "evidence": "validate_report.py; local report-validation.json",
-      "snapshot": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4"
+      "snapshot": "bda39d7f3098dba04f36f3b188998267d6e2d115"
     }
   ],
   "findings": [
@@ -382,89 +382,89 @@
     {
       "id": "AUD-004-FUN001",
       "status": "verified",
-      "fixCommit": "d54ab95",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "2547a26",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. Counter regression passed locally; exact-head macOS CI passed, no local native macOS execution."
     },
     {
       "id": "AUD-004-FUN002",
       "status": "verified",
-      "fixCommit": "d54ab95",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "2547a26",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. "
     },
     {
       "id": "AUD-004-BLD001",
       "status": "verified",
-      "fixCommit": "d54ab95 (bech32 notice); df70ca5 (generated bundle)",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "2547a26 (bech32 notice); 5eed93c (generated bundle)",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. All six canonical archives contain exact current license documents; generated union check passed."
     },
     {
       "id": "AUD-005-SEC001",
       "status": "verified",
-      "fixCommit": "19b8f25",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "64e38cb",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. Existing allocator probe reports zero unwiped public phrase copies."
     },
     {
       "id": "AUD-005-FUN001",
       "status": "verified",
-      "fixCommit": "cbd2a19",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "ef74795",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. "
     },
     {
       "id": "AUD-005-UI001",
       "status": "verified",
-      "fixCommit": "6953856",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "0a1fa16",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. "
     },
     {
       "id": "AUD-005-DOC001",
       "status": "verified",
-      "fixCommit": "94a7e7c",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "4c0144c",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. Corrected passages/types and dated prior-audit dispositions read directly; no old report modified."
     },
     {
       "id": "AUD-005-DOC002",
       "status": "verified",
-      "fixCommit": "59635bf",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "6856df1",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. Corrected passages/types and dated prior-audit dispositions read directly; no old report modified."
     },
     {
       "id": "AUD-005-DOC003",
       "status": "verified",
-      "fixCommit": "59635bf",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "6856df1",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. Corrected passages/types and dated prior-audit dispositions read directly; no old report modified."
     },
     {
       "id": "AUD-005-ARC001",
       "status": "verified",
-      "fixCommit": "59635bf",
-      "verificationCommit": "fe1823051c74ae4d7883e5f123fe77a20c6f92d4",
+      "fixCommit": "6856df1",
+      "verificationCommit": "bda39d7f3098dba04f36f3b188998267d6e2d115",
       "evidence": "Current source/document review plus full-check and old-regressions. Corrected passages/types and dated prior-audit dispositions read directly; no old report modified."
     },
     {
       "id": "AUD-006-DOC001",
       "status": "verified",
-      "fixCommit": "a3b44c3",
-      "verificationCommit": "ff5072f1ae1db8729e2c3844b03e02f8db679a9d",
+      "fixCommit": "d343789",
+      "verificationCommit": "a8358a753815e0c656f5caafd7b2abc39810ee76",
       "evidence": "api-contract.mjs exits 0 at the verification commit: API.md, web/README.md, web/client.js and web/client.d.ts name the five operations that return a promise and call mode(), maxSupportedMemLevel() and cancel() synchronous."
     }
   ],
   "limitations": [
     "No full-cost Argon2 computation or local full-vector replay was executed. The user reported a completed local run; this report does not promote that statement into independently executed evidence.",
-    "At 2026-10-01 13:09 UTC, run 36863839542 on 65b56f3 was still executing native replay and its independent OpenSSL step was pending. 6b349ce differs only in AGENTS.md, but pending results are not passes.",
+    "At 2026-10-01 13:09 UTC, run 36863839542 on b6e65fb was still executing native replay and its independent OpenSSL step was pending. bda39d7 differs only in AGENTS.md, but pending results are not passes.",
     "No additional local uncached Docker build was run. Six supplied archives match an independent exact-commit CI build byte for byte; macOS archives were not supplied or locally verified.",
     "Windows/macOS runtime evidence comes from exact-head CI; local runtime tests were Linux x86-64 and Chromium/Firefox. ARM64 and Windows archive bytes/metadata were checked without local execution.",
     "RustSec database refresh failed due to network access; the cached database scan passed (106 dependencies, 1278 advisories) and same-lockfile remote RustSec passed. The cached database response omitted its revision/date.",
     "Independent specialist cryptanalysis, formal proof checking, hostile-host/side-channel resistance and exhaustive transitive dependency source auditing were not performed.",
-    "Version remains 0.4.0 by user choice. Tag v0.4.0 still identifies d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124, while supplied replacement archives identify fe1823051c74ae4d7883e5f123fe77a20c6f92d4. Publication must reconcile tag/source/download identity and disclose changed bytes; no tag, release, asset, push or commit was changed here."
+    "Version remains 0.4.0 by user choice. Tag v0.4.0 still identifies 5eed93c06b6e2c9107e20290dc318d9efbcbe829, while supplied replacement archives identify bda39d7f3098dba04f36f3b188998267d6e2d115. Publication must reconcile tag/source/download identity and disclose changed bytes; no tag, release, asset, push or commit was changed here."
   ],
   "commands": [
     {
@@ -521,7 +521,7 @@
         "CARGO_BUILD_JOBS": "1",
         "PATH": "<elided>"
       },
-      "stdin": "import json,subprocess\nfrom pathlib import Path\nroot=Path.cwd();out=root/'docs/audits/AUD-006-evidence'\nfor revision in ['fe1823051c74ae4d7883e5f123fe77a20c6f92d4','f2b0d38e34c5ba18178f5f31a358799630101d43','d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124']:\n sha=subprocess.check_output(['git','rev-parse',revision],text=True).strip()\n d=json.loads(subprocess.check_output(['gh','api',f'repos/hobby-eng/mhfe/actions/runs?head_sha={sha}&per_page=30'],text=True))\n (out/f'ci-{revision}.json').write_text(json.dumps(d,indent=2)+'\\n')\n for r in d['workflow_runs']:\n  print(revision,r['id'],r['name'],r['status'],r['conclusion'],r['html_url'])\n  if revision=='fe1823051c74ae4d7883e5f123fe77a20c6f92d4':\n   j=json.loads(subprocess.check_output(['gh','api',f\"repos/hobby-eng/mhfe/actions/runs/{r['id']}/jobs?per_page=100\"],text=True))\n   (out/f\"jobs-{r['id']}.json\").write_text(json.dumps(j,indent=2)+'\\n')\n   for v in j['jobs']: print('job',v['name'],v['status'],v['conclusion'])\n",
+      "stdin": "import json,subprocess\nfrom pathlib import Path\nroot=Path.cwd();out=root/'docs/audits/AUD-006-evidence'\nfor revision in ['bda39d7f3098dba04f36f3b188998267d6e2d115','b6e65fb9fadc81eae813e6f4aa1137a189a17c92','5eed93c06b6e2c9107e20290dc318d9efbcbe829']:\n sha=subprocess.check_output(['git','rev-parse',revision],text=True).strip()\n d=json.loads(subprocess.check_output(['gh','api',f'repos/hobby-eng/mhfe/actions/runs?head_sha={sha}&per_page=30'],text=True))\n (out/f'ci-{revision}.json').write_text(json.dumps(d,indent=2)+'\\n')\n for r in d['workflow_runs']:\n  print(revision,r['id'],r['name'],r['status'],r['conclusion'],r['html_url'])\n  if revision=='bda39d7f3098dba04f36f3b188998267d6e2d115':\n   j=json.loads(subprocess.check_output(['gh','api',f\"repos/hobby-eng/mhfe/actions/runs/{r['id']}/jobs?per_page=100\"],text=True))\n   (out/f\"jobs-{r['id']}.json\").write_text(json.dumps(j,indent=2)+'\\n')\n   for v in j['jobs']: print('job',v['name'],v['status'],v['conclusion'])\n",
       "label": "remote-ci"
     },
     {
@@ -796,7 +796,7 @@
       "command": [
         "python3",
         "-c",
-        "import pathlib,json,hashlib,subprocess; r=pathlib.Path.cwd(); e=r/\"docs/audits/AUD-006-evidence\"; s=json.loads((e/\"snapshot.json\").read_text()); bad=[n for n,h in s[\"sourceFiles\"].items() if n!=\"docs/audits/README.md\" and hashlib.sha256((r/n).read_bytes()).hexdigest()!=h]; assert not bad,bad; print(\"All reviewed tracked source files are unchanged\"); print(subprocess.check_output([\"git\",\"diff\",\"--name-only\",\"f2b0d38e34c5ba18178f5f31a358799630101d43\",\"HEAD\"],text=True)); print(subprocess.check_output([\"git\",\"status\",\"--short\"],text=True))"
+        "import pathlib,json,hashlib,subprocess; r=pathlib.Path.cwd(); e=r/\"docs/audits/AUD-006-evidence\"; s=json.loads((e/\"snapshot.json\").read_text()); bad=[n for n,h in s[\"sourceFiles\"].items() if n!=\"docs/audits/README.md\" and hashlib.sha256((r/n).read_bytes()).hexdigest()!=h]; assert not bad,bad; print(\"All reviewed tracked source files are unchanged\"); print(subprocess.check_output([\"git\",\"diff\",\"--name-only\",\"b6e65fb9fadc81eae813e6f4aa1137a189a17c92\",\"HEAD\"],text=True)); print(subprocess.check_output([\"git\",\"status\",\"--short\"],text=True))"
       ],
       "cwd": "/home/user/Documents/bip_tools/mhfe",
       "startedAt": "2026-10-01T13:10:27.304455Z",
@@ -826,7 +826,7 @@
     {
       "name": "mhfe-v0.4.0-browser.tar.gz",
       "sha256": "b0ae63601825676086ec28cfb65e7dde5a4ef581dba0fb2e0839d63b4e7c04ea",
-      "buildInfo": "mhfe v0.4.0\nsource: fe1823051c74ae4d7883e5f123fe77a20c6f92d4 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\nEmscripten 6.0.10\n",
+      "buildInfo": "mhfe v0.4.0\nsource: bda39d7f3098dba04f36f3b188998267d6e2d115 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\nEmscripten 6.0.10\n",
       "members": {
         "BUILD-INFO.txt": "19a254efc9b0e987d46ed652ced9a56b79c78df0abae924a073fab82caad032c",
         "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
@@ -848,7 +848,7 @@
     {
       "name": "mhfe-v0.4.0-linux-aarch64.tar.gz",
       "sha256": "dc72c2ad27ef2c61ee65264acdf8505b93771e3bee6aedc3f0c5321b8a2046fb",
-      "buildInfo": "mhfe v0.4.0\nsource: fe1823051c74ae4d7883e5f123fe77a20c6f92d4 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "buildInfo": "mhfe v0.4.0\nsource: bda39d7f3098dba04f36f3b188998267d6e2d115 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
       "members": {
         "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
         "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
@@ -864,7 +864,7 @@
     {
       "name": "mhfe-v0.4.0-linux-x86_64-ssse3.tar.gz",
       "sha256": "05a595b757edfd0117da3daefb2c1d265fa7042c7556801273dc6633f9c0a719",
-      "buildInfo": "mhfe v0.4.0\nsource: fe1823051c74ae4d7883e5f123fe77a20c6f92d4 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "buildInfo": "mhfe v0.4.0\nsource: bda39d7f3098dba04f36f3b188998267d6e2d115 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
       "members": {
         "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
         "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
@@ -880,7 +880,7 @@
     {
       "name": "mhfe-v0.4.0-linux-x86_64.tar.gz",
       "sha256": "49654f62605a6832b6df628164241951a55d725cdfe8e2dec973dd6b36d1172f",
-      "buildInfo": "mhfe v0.4.0\nsource: fe1823051c74ae4d7883e5f123fe77a20c6f92d4 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "buildInfo": "mhfe v0.4.0\nsource: bda39d7f3098dba04f36f3b188998267d6e2d115 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
       "members": {
         "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
         "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
@@ -896,7 +896,7 @@
     {
       "name": "mhfe-v0.4.0-windows-x86_64-ssse3.zip",
       "sha256": "4f4dc45d35d121e5570d762a0db56811ec51ee298d78a971f0b2aa601b085846",
-      "buildInfo": "mhfe v0.4.0\nsource: fe1823051c74ae4d7883e5f123fe77a20c6f92d4 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "buildInfo": "mhfe v0.4.0\nsource: bda39d7f3098dba04f36f3b188998267d6e2d115 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
       "members": {
         "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
         "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
@@ -912,7 +912,7 @@
     {
       "name": "mhfe-v0.4.0-windows-x86_64.zip",
       "sha256": "5e5c2fb6fe900082ac6c909081851b98f814b92dd5d7a4808f67b7d511e3adfe",
-      "buildInfo": "mhfe v0.4.0\nsource: fe1823051c74ae4d7883e5f123fe77a20c6f92d4 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+      "buildInfo": "mhfe v0.4.0\nsource: bda39d7f3098dba04f36f3b188998267d6e2d115 (clean)\nrustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
       "members": {
         "BUILD-INFO.txt": "b0f60eb19c4adbfd5c5ecaabe03c65d523db156a651315e793129a2cb261fa29",
         "LICENSE": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
@@ -935,7 +935,7 @@
         "docs/audits/AUD-006-harnesses/browser.mjs"
       ],
       "text": "Promote a self-contained reduced-cost Chromium/Firefox smoke suite into routine CI. Current CI exercises Emscripten under Node and a stand-in client worker; this audit adds actual Blob workers, CSP, transfer, cancellation and callback handling from the canonical archive. Avoid depending on a sibling checkout in the permanent CI version.",
-      "disposition": "Done in 7375a03: scripts/verify-browsers.mjs runs dist/ in Chromium and Firefox with Playwright 1.63.0, as a file and from an isolated loopback server, at the reduced cost of REDUCED_COST_CONTAINER, without a sibling checkout; the CI check job runs it after check.sh."
+      "disposition": "Done in 7f5e8fb: scripts/verify-browsers.mjs runs dist/ in Chromium and Firefox with Playwright 1.63.0, as a file and from an isolated loopback server, at the reduced cost of REDUCED_COST_CONTAINER, without a sibling checkout; the CI check job runs it after check.sh."
     },
     {
       "priority": "normal",
@@ -945,7 +945,7 @@
         "web/client.d.ts:37"
       ],
       "text": "Explicitly say page callbacks must be synchronous, or deliberately implement and test Promise rejection handling. An async callback that rejects currently produces an unhandled rejection while the operation continues and can resolve. Existing wording promises handling when a callback throws, so this is recorded as a scope clarification, not a failure of the tested synchronous contract.",
-      "disposition": "Implemented in a3b44c3: an async onProgress or onUnverified whose promise rejects while the operation runs stops it with CALLBACK_FAILED; a later rejection stays the page's unhandled one. Tested with the stand-in worker and in both real browsers. The async-callback.mjs probe, which recorded the earlier behaviour, now fails by design."
+      "disposition": "Implemented in d343789: an async onProgress or onUnverified whose promise rejects while the operation runs stops it with CALLBACK_FAILED; a later rejection stays the page's unhandled one. Tested with the stand-in worker and in both real browsers. The async-callback.mjs probe, which recorded the earlier behaviour, now fails by design."
     },
     {
       "priority": "normal",
@@ -955,7 +955,7 @@
         "src/engine/native.rs:77"
       ],
       "text": "Consider container-aware Linux limits (cgroup v2/v1) and configurable headroom; /proc/meminfo is a host estimate and a concurrent workload can invalidate it. Keep allocation failure explicit and never silently lower the work factor. Release the Mach host send right if memory estimation will be called repeatedly in long-lived integrations. No OOM or real macOS port-exhaustion experiment was performed.",
-      "disposition": "Done: 8700a29be118bd30a8f94bd093840745518ec094 lowers the Linux figure to the room left in the process's cgroup v2 or v1 group and its parents (checked with systemd-run -p MemoryMax=1G and docker run -m 1g); the same commit releases the Mach host send right after each query. The work factor is never lowered."
+      "disposition": "Done: 079a30081f568ab147baeae37a6957b0c8852fed lowers the Linux figure to the room left in the process's cgroup v2 or v1 group and its parents (checked with systemd-run -p MemoryMax=1G and docker run -m 1g); the same commit releases the Mach host send right after each query. The work factor is never lowered."
     },
     {
       "priority": "deferred",
@@ -966,7 +966,7 @@
         "src/wallet.rs:215"
       ],
       "text": "For a future API revision, consider a validated mnemonic-length enum and constructors/getters for address network/type and search limits. They would make invalid combinations harder to construct; current operational paths validate lengths before KDF and use small search defaults. Avoid a breaking refactor solely for OOP style.",
-      "disposition": "Done: 55f57898aebc8a3c620bc7df85d84a13a3a66b42 adds WordCount (12, 15, 18, 21 or 24) for PhraseLength::Words and Reference::BuiltInCheck; the same commit makes the network and address type of a BitcoinAddress read-only and SearchLimits::new refuse counts outside 1 to 2^31."
+      "disposition": "Done: 0205a0a122491482461b5854e1dfc6ea280ffac7 adds WordCount (12, 15, 18, 21 or 24) for PhraseLength::Words and Reference::BuiltInCheck; the same commit makes the network and address type of a BitcoinAddress read-only and SearchLimits::new refuse counts outside 1 to 2^31."
     },
     {
       "priority": "deferred",
@@ -977,7 +977,7 @@
         "src/engine/browser.rs:18"
       ],
       "text": "Describe the verifier as an internal consistency check, not password authentication; distinguish the 1024 normalized-byte password bound from longer valid pre-normalization input; update the argon2Engine cross-reference to web/argon2-engine.js. These are small clarity edits, not new algorithm findings.",
-      "disposition": "Done: a3b44c3 (verifier as a consistency check; argon2Engine in web/argon2-engine.js) and 4895169 (both password bounds at LINE_CAPACITY)."
+      "disposition": "Done: d343789 (verifier as a consistency check; argon2Engine in web/argon2-engine.js) and 17c45ad (both password bounds at LINE_CAPACITY)."
     },
     {
       "priority": "deferred",
@@ -995,5 +995,69 @@
     "implementation": "No new medium/high/critical defects or core suite mismatch identified; one low documentation finding.",
     "suppliedArtifacts": "PASS: six checksums, source metadata, notices and independent CI byte identity verified.",
     "publicationReadiness": "INCOMPLETE: current full-cost CI remains pending and existing tag identifies older source."
+  },
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the privacy rewrite of 2026-10-09 now name the commits that replaced them (AUD-015-DOC001): 19b8f25 -> 64e38cb, 4895169 -> 17c45ad, 59635bf -> 6856df1, 65b56f3 -> b6e65fb, 6953856 -> 0a1fa16, 6b349ce -> bda39d7, 7375a03 -> 7f5e8fb, 94a7e7c -> 4c0144c, a3b44c3 -> d343789, cbd2a19 -> ef74795, d54ab95 -> 2547a26, df70ca5 -> 5eed93c."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "19b8f25": "64e38cb",
+          "4895169": "17c45ad",
+          "59635bf": "6856df1",
+          "65b56f3": "b6e65fb",
+          "6953856": "0a1fa16",
+          "6b349ce": "bda39d7",
+          "7375a03": "7f5e8fb",
+          "94a7e7c": "4c0144c",
+          "a3b44c3": "d343789",
+          "cbd2a19": "ef74795",
+          "d54ab95": "2547a26",
+          "df70ca5": "5eed93c"
+        }
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "18 PATH values of recorded command environments replaced by <elided>: they named local tools and session directories.",
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 11f2b4e -> 2547a26, 11f2b4e999678b63b03c5e0e743c48f8658366cd -> 2547a26e3605f7e983274f2a4b8ac99b63b06acf, 1980ab4c541261920db5ecc963a6f27c65387cf8 -> f6067310e5acae95b02b5bc96d78007426c8d15a, 4074932 -> 17c45ad, 47c3bab -> 64e38cb, 4ace03e -> 4c0144c, 55f57898aebc8a3c620bc7df85d84a13a3a66b42 -> 0205a0a122491482461b5854e1dfc6ea280ffac7, 652b4f0 -> 0a1fa16, 8700a29be118bd30a8f94bd093840745518ec094 -> 079a30081f568ab147baeae37a6957b0c8852fed, ba8c3a1 -> ef74795, cefa041 -> 6856df1, d4de5e8 -> 5eed93c, d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124 -> 5eed93c06b6e2c9107e20290dc318d9efbcbe829, dd3d0e5 -> d343789, edf8bd0 -> 7f5e8fb, f2b0d38 -> b6e65fb, f2b0d38e34c5ba18178f5f31a358799630101d43 -> b6e65fb9fadc81eae813e6f4aa1137a189a17c92, fe18230 -> bda39d7, fe1823051c74ae4d7883e5f123fe77a20c6f92d4 -> bda39d7f3098dba04f36f3b188998267d6e2d115, ff5072f1ae1db8729e2c3844b03e02f8db679a9d -> a8358a753815e0c656f5caafd7b2abc39810ee76."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "11f2b4e": "2547a26",
+          "11f2b4e999678b63b03c5e0e743c48f8658366cd": "2547a26e3605f7e983274f2a4b8ac99b63b06acf",
+          "1980ab4c541261920db5ecc963a6f27c65387cf8": "f6067310e5acae95b02b5bc96d78007426c8d15a",
+          "4074932": "17c45ad",
+          "47c3bab": "64e38cb",
+          "4ace03e": "4c0144c",
+          "55f57898aebc8a3c620bc7df85d84a13a3a66b42": "0205a0a122491482461b5854e1dfc6ea280ffac7",
+          "652b4f0": "0a1fa16",
+          "8700a29be118bd30a8f94bd093840745518ec094": "079a30081f568ab147baeae37a6957b0c8852fed",
+          "ba8c3a1": "ef74795",
+          "cefa041": "6856df1",
+          "d4de5e8": "5eed93c",
+          "d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124": "5eed93c06b6e2c9107e20290dc318d9efbcbe829",
+          "dd3d0e5": "d343789",
+          "edf8bd0": "7f5e8fb",
+          "f2b0d38": "b6e65fb",
+          "f2b0d38e34c5ba18178f5f31a358799630101d43": "b6e65fb9fadc81eae813e6f4aa1137a189a17c92",
+          "fe18230": "bda39d7",
+          "fe1823051c74ae4d7883e5f123fe77a20c6f92d4": "bda39d7f3098dba04f36f3b188998267d6e2d115",
+          "ff5072f1ae1db8729e2c3844b03e02f8db679a9d": "a8358a753815e0c656f5caafd7b2abc39810ee76"
+        }
+      }
+    ]
   }
 }

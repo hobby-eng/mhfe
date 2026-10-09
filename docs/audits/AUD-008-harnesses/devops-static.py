@@ -11,7 +11,7 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[3]
 EVIDENCE = ROOT / "docs/audits/AUD-008-evidence"
-PUBLIC_KEY = Path((str(__import__("pathlib").Path.home()) + "/.ssh/hobby-eng_signing.pub"))
+PUBLIC_KEY = Path.home() / ".ssh/hobby-eng_signing.pub"
 BASELINE_TAG = "v0.4.0"
 
 

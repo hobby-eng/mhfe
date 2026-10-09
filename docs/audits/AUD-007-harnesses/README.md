@@ -3,7 +3,7 @@
 ## Independent remediation recheck
 
 The follow-up of 2026-10-05 reviewed the initially clean commit
-`447c2bd22c91ac25bb4d4e442b6d4a82ee794307`. New command records use `recheck-` labels;
+`9b2dab67294fba76241d55aa830b014be492b0ad`. New command records use `recheck-` labels;
 the original snapshot and command ledger are retained. Neither harness below uses Argon2,
 network access or real wallet material.
 
@@ -23,8 +23,8 @@ to the production suite when the parser is repaired. The executable and its inpu
 in ignored local evidence; no source checkout is copied.
 
 `recheck_evidence.py` verifies the seven recorded remediation logs and their exit codes,
-confirms that the original audit command register and snapshot equal those in `3c2793d`,
-and verifies the five commits through `2a5e727` against `~/.ssh/hobby-eng_signing.pub`.
+confirms that the original audit command register and snapshot equal those in `9eef2ff`,
+and verifies the five commits through `9b2dab6` against `~/.ssh/hobby-eng_signing.pub`.
 It requires local AUD-007 evidence and that public key; it never accesses a private key or
 changes Git configuration. Its allowed-signers file is local ignored evidence. Run:
 
@@ -60,8 +60,8 @@ assertion requires. No full-cost Argon2 replay or Windows runtime check is impli
 
 The fixes were later committed together with other work, so no commit holds the manifest's exact
 bytes. The `commitBinding` record of 2026-10-06 names the signed commits that carry them (mhfe
-`db56fdd4028f27012ae2c10cdafb672139645a5a` and `711c8f596a7f5548270288de4f07c5011c5784cb`, mhfe_spec `bbc1320f2da9eef1c377b20d3fcbf141ab523bb7`) and verifies the MHFE fixes on the released commit
-`5a3729385ca2d6c6677a84e9618b8875564cc7f6`. `validate_report.py` checks that each named commit is
+`d87723d8e9d8767b3236342c44aff5f42fd5130b` and `1c9c572c902e2be1dc7143de4d43c2d9d56f9d17`, mhfe_spec `bbc1320f2da9eef1c377b20d3fcbf141ab523bb7`) and verifies the MHFE fixes on the released commit
+`dd439751ca992535e726b7c1d5d77b410371d673`. `validate_report.py` checks that each named commit is
 signed, is part of the checked-out history of its repository, and covers every owner-authorized fix.
 Its commands use `binding-` labels; to rerun them at that commit, from the repository root:
 
@@ -82,15 +82,15 @@ reviewed commit and on the fix:
 
 ```sh
 docker build --target dependencies -f packaging/Dockerfile.reproducible -t mhfe-deps:local .
-python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- bash -c "git archive 52b6b36 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
-python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- bash -c "git archive 40f1193 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
+python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- bash -c "git archive dd43975 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
+python3 docs/audits/AUD-007-harnesses/run.py run YOUR-UNUSED-LABEL -- bash -c "git archive de258e9 | docs/audits/AUD-007-harnesses/cross_clippy.sh"
 ```
 
 The first fails with exit code 101 on the BLD002 warnings; the second passes for both targets.
 
 ## Original baseline harnesses
 
-These scripts retain the implementation review of commit `d1cf47d0960a5023e6e503310802e5e2da438568`
+These scripts retain the implementation review of commit `882e897df72b80b68ebfdddd2f042af4eb43e1a5`
 and the contemporaneous, modified specification. They use only public fixtures. They are audit
 tools, not tools for real wallets. No full-cost Argon2 replay or release rebuild is required.
 
@@ -127,7 +127,7 @@ The expected output has one line for each coin with `bech32m_reference_accepted=
 `invalid_reference_matches=true`. This retained finding probe exits zero when the reviewed bug is
 reproduced and fails its assertions after the parser is repaired. Its source was reviewed against
 the audit's retained implementation state; the reproduction on
-`d1cf47d0960a5023e6e503310802e5e2da438568` uses the same affected wallet parser.
+`882e897df72b80b68ebfdddd2f042af4eb43e1a5` uses the same affected wallet parser.
 
 The chain-format requirement is independently documented by the
 [Cosmos SDK address codec](https://github.com/cosmos/cosmos-sdk/blob/main/types/bech32/bech32.go)
@@ -144,7 +144,7 @@ and every Feistel state transition. The recorded Argon2 keys are inputs: this do
 execute the production code, or establish full-cost vector replay. Its fixture-normalization check
 uses Python's reported Unicode version; it does not verify Unicode 17 character acceptance. This
 reconstruction belongs to the AUD-007 core review at
-`d1cf47d0960a5023e6e503310802e5e2da438568`, whose core source hashes are retained in the audit.
+`882e897df72b80b68ebfdddd2f042af4eb43e1a5`, whose core source hashes are retained in the audit.
 
 ```sh
 python3 docs/audits/AUD-007-harnesses/run.py run transcript-reconstruction -- python3 docs/audits/AUD-007-harnesses/transcript_reconstruction.py
@@ -163,7 +163,7 @@ the pipe. `memory_lock_probe.py` compiles `memory_lock_probe.rs` against the cur
 It first locks one zero-filled allocation twice, then finds two public test `Password` allocations
 on the same page. It reproduces one guard's drop unlocking the page beneath the remaining live
 guard and password. These probes belong to the AUD-007 CLI and secret-memory review of
-`d1cf47d0960a5023e6e503310802e5e2da438568`.
+`882e897df72b80b68ebfdddd2f042af4eb43e1a5`.
 
 ```sh
 python3 docs/audits/AUD-007-harnesses/terminal_display_probe.py
@@ -182,8 +182,8 @@ the reviewed bugs are reproduced and fail after the corresponding behavior is re
 overwrite their own evidence labels, so preserve the existing records before rerunning.
 
 `wallets_private_session.py` belongs to the remediation update of 2026-10-05, not to the review
-of `d1cf47d0960a5023e6e503310802e5e2da438568`. It verifies AUD-007-SEC005 at commit
-`ba75301b91e2cb2715c8c442a3f7907d6881d81e` with one real `mhfe wallets` session at full cost on
+of `882e897df72b80b68ebfdddd2f042af4eb43e1a5`. It verifies AUD-007-SEC005 at commit
+`d592406338de37ec6a4941bcadac585b622e6496` with one real `mhfe wallets` session at full cost on
 the public zero-12 suite 3 container: the container's own public password is refused by rule I29
 and its message stays readable, a synthetic password opens a 24-word wallet, and the main screen,
 everything outside the terminal's alternate screen, shows no wallet, no wallet number and no
@@ -217,3 +217,7 @@ verification commit must exist in this repository. Expected output is passing va
 assertion or schema error exits nonzero. It writes only local `report-validation.json` and
 `SHA256SUMS` in the ignored evidence folder; it does not update publication records or production
 source.
+
+Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the privacy rewrite now name the commits that replaced them (AUD-015-DOC001): 2a5e727 -> 9b2dab6, 3c2793d -> 9eef2ff, 40f1193 -> de258e9, 52b6b36 -> dd43975.
+
+Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 447c2bd -> 9b2dab6, 447c2bd22c91ac25bb4d4e442b6d4a82ee794307 -> 9b2dab67294fba76241d55aa830b014be492b0ad, 4f1ccc4 -> 9eef2ff, 5a37293 -> dd43975, 5a3729385ca2d6c6677a84e9618b8875564cc7f6 -> dd439751ca992535e726b7c1d5d77b410371d673, 711c8f596a7f5548270288de4f07c5011c5784cb -> 1c9c572c902e2be1dc7143de4d43c2d9d56f9d17, ba75301b91e2cb2715c8c442a3f7907d6881d81e -> d592406338de37ec6a4941bcadac585b622e6496, be40555 -> de258e9, d1cf47d0960a5023e6e503310802e5e2da438568 -> 882e897df72b80b68ebfdddd2f042af4eb43e1a5, db56fdd4028f27012ae2c10cdafb672139645a5a -> d87723d8e9d8767b3236342c44aff5f42fd5130b.

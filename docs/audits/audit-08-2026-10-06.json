@@ -106,7 +106,7 @@
     "disposition": "Ten findings accepted with explicit limits; one high isolation blocker, nine low. Earlier BLD candidates reconciled as observations."
   },
   "snapshot": {
-    "commit": "b6993bb1c11834a01847d1812b31a24145ab1f18",
+    "commit": "632af98b6ce06a73dd2e27ed606e0a4212daed09",
     "commitComplete": false,
     "workingTree": " M docs/audits/AUD-007-harnesses/README.md\n M docs/audits/AUD-007-harnesses/validate_report.py\n M docs/audits/README.md\n M docs/audits/audit-07-2026-10-05.json\n M docs/audits/audit-07-2026-10-05.md\n M docs/releases/unreleased.md\n M src/bin/mhfe/hidden_input.rs\n M src/wallet.rs\n?? docs/audits/AUD-007-harnesses/recheck_bech32_padding.py\n?? docs/audits/AUD-007-harnesses/recheck_bech32_padding.rs\n?? docs/audits/AUD-007-harnesses/recheck_evidence.py\n?? docs/audits/AUD-008-harnesses/\n",
     "sourceFingerprint": "9e5357c0b085c7f68ec3c30b6940147b2aaaf89bb8f6dcbf9ea0d2d6593c790a",
@@ -2101,7 +2101,7 @@
       "id": "AUD-008-SEC001",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "711c8f596a7f5548270288de4f07c5011c5784cb",
+      "fixCommit": "1c9c572c902e2be1dc7143de4d43c2d9d56f9d17",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2123,7 +2123,7 @@
       "id": "AUD-008-DOC001",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "e6c95379c8e1eec2db21d4d0b780a8c45023c937",
+      "fixCommit": "83a5af00d266c63e668ef5e0ce573c1d984e3450",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2141,7 +2141,7 @@
       "id": "AUD-008-DOC002",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "e6c95379c8e1eec2db21d4d0b780a8c45023c937",
+      "fixCommit": "83a5af00d266c63e668ef5e0ce573c1d984e3450",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2159,7 +2159,7 @@
       "id": "AUD-008-DOC003",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "e6c95379c8e1eec2db21d4d0b780a8c45023c937",
+      "fixCommit": "83a5af00d266c63e668ef5e0ce573c1d984e3450",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2181,7 +2181,7 @@
       "id": "AUD-008-FUN001",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "db56fdd4028f27012ae2c10cdafb672139645a5a",
+      "fixCommit": "d87723d8e9d8767b3236342c44aff5f42fd5130b",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2199,7 +2199,7 @@
       "id": "AUD-008-FUN002",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "db56fdd4028f27012ae2c10cdafb672139645a5a",
+      "fixCommit": "d87723d8e9d8767b3236342c44aff5f42fd5130b",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2217,7 +2217,7 @@
       "id": "AUD-008-SEC002",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "711c8f596a7f5548270288de4f07c5011c5784cb",
+      "fixCommit": "1c9c572c902e2be1dc7143de4d43c2d9d56f9d17",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2233,7 +2233,7 @@
       "id": "AUD-008-SEC003",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "711c8f596a7f5548270288de4f07c5011c5784cb",
+      "fixCommit": "1c9c572c902e2be1dc7143de4d43c2d9d56f9d17",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2249,7 +2249,7 @@
       "id": "AUD-008-SEC004",
       "status": "verified",
       "originalStatus": "open",
-      "fixCommit": "711c8f596a7f5548270288de4f07c5011c5784cb",
+      "fixCommit": "1c9c572c902e2be1dc7143de4d43c2d9d56f9d17",
       "verificationCommit": null,
       "sourceFingerprint": "69c4b7d0092e374186103dd6529975ffb679dbe11e4d75c44d26ab4a8e61502b",
       "verifiedAt": "2026-10-06T03:17:32.304749Z",
@@ -2282,7 +2282,7 @@
         "local-only: docs/audits/AUD-008-evidence/remediation-cli-tests-final.command.json",
         "local-only: docs/audits/AUD-008-evidence/remediation-terminal-final.command.json"
       ],
-      "earlierFixCommit": "e6c95379c8e1eec2db21d4d0b780a8c45023c937"
+      "earlierFixCommit": "83a5af00d266c63e668ef5e0ce573c1d984e3450"
     }
   ],
   "artifacts": {
@@ -2317,7 +2317,7 @@
       }
     ],
     "count": 4,
-    "sourceCommit": "b6993bb1c11834a01847d1812b31a24145ab1f18",
+    "sourceCommit": "632af98b6ce06a73dd2e27ed606e0a4212daed09",
     "sourceState": "modified",
     "sourceFingerprint": "9e5357c0b085c7f68ec3c30b6940147b2aaaf89bb8f6dcbf9ea0d2d6593c790a",
     "cachedAndUncachedMatch": true
@@ -2358,7 +2358,7 @@
       "role": "Distinct reviewer 11; focused compatible improvements and research opportunities."
     },
     "snapshot": {
-      "commit": "b6993bb1c11834a01847d1812b31a24145ab1f18",
+      "commit": "632af98b6ce06a73dd2e27ed606e0a4212daed09",
       "sourceFingerprint": "9e5357c0b085c7f68ec3c30b6940147b2aaaf89bb8f6dcbf9ea0d2d6593c790a",
       "fingerprintAuthority": "Coordinator-provided aggregate baseline; selected cited file hashes independently compared with its local snapshot.json.",
       "workingTree": "Authoritative dirty checkout includes existing wallet.rs and hidden_input.rs owner fixes and audit/release record edits. Preserved without change.",
@@ -3035,13 +3035,13 @@
       "publicationPrerequisite": true,
       "expected": "Workspace policy requires signed commits and signed annotated tags, and checking every new commit signature before a push.",
       "observed": [
-        "77f36754638a2ee81722801de791432dd570c8ed",
-        "de2dfeda70df919859f8aa7803f41de4c6c0f1a2",
-        "fd40905b7cb187a94dff52d25bc49c07e6ee3ff8",
-        "00e4d1072b56d56293e11d8ad3204626b8f93dc7",
-        "c0dd93e3548dcc7e683b4c8a2c77eac454a87b52",
-        "18ebc8345cfe5134761947d40eaa11e268434e11",
-        "f3d3279f9e97c2a17ee6aca04d399de44f5d4672"
+        "aedd4cee4301c794af3693b64017083386115adc",
+        "e251dff83bac79bb8b08025174bf736ceed20920",
+        "a64e39432e3437361ef5b14d045113ca519ef2c7",
+        "9106eba9f40b69d68d3a2d22b06c95b23e8b2cc0",
+        "7e6adb13ae82a67ca66ce6238ef18987cb49438e",
+        "c8d6c9a465c6710481cbe185af6f53150686d98b",
+        "717265c5ad9eef7466d1260dee6db2f8d15b5458"
       ],
       "impact": "Signing-policy conformance before a future release push/tag needs resolution. This does not invalidate the verified canonical archive bytes or establish a runtime vulnerability; no future v0.5 tag or release exists.",
       "recommendedFix": "Coordinator/owner must decide authorized history handling before release publication, updating any affected audit commit references together. Audit does not authorize rewriting history.",
@@ -3085,7 +3085,7 @@
       "reasoningEffort": null
     },
     "snapshot": {
-      "commit": "50044269f5fb02aaa901c8ff7d20b7b1b975e95c",
+      "commit": "161e1a7b866e7f0960a29e5f0c7e5a682d82040e",
       "files": {
         ".git-blame-ignore-revs": "3b6a79ba28fbdf5e5a3bdc94b36128233053ab3783ae4ac8233883ebf9095d2f",
         ".gitattributes": "9194f2697ffccf6cdc853eb8b0b421b772f313d5c0d9183139d9f88efd8ffa8d",
@@ -3417,9 +3417,9 @@
       "format.log": "51d89b2b80c5c022eae42e7644d36b1e0b623adaf1a4a16ded3fccb4ed39bf53",
       "interface-review.json": "a82c0def7c73853a523747b032d1edffce7ed24c81067f3f91c48f206f43755f",
       "mhfe-initial.patch": "03ff5e7d692e7c06340138be13032a8992e0d999dfab4f83eca0d0eeaaa7bb0d",
-      "namespace-e854d6e-inherited-socket.command.json": "12760d9f4ce64ad8b67558107ca5f1741b5dfb4a5c2312f413f0ed43a9b030d5",
-      "namespace-e854d6e-inherited-socket.log": "7483927a3d07ac055c4cd9f97a4ad1b66a0b5430efc35029b43ee8076b629a50",
-      "namespace-e854d6e-targeted-review.json": "255194bc05927900259ce32493a286db7a45b445a45ef0bc02497f9b0cd41dca",
+      "namespace-161e1a7-inherited-socket.command.json": "12760d9f4ce64ad8b67558107ca5f1741b5dfb4a5c2312f413f0ed43a9b030d5",
+      "namespace-161e1a7-inherited-socket.log": "7483927a3d07ac055c4cd9f97a4ad1b66a0b5430efc35029b43ee8076b629a50",
+      "namespace-161e1a7-targeted-review.json": "255194bc05927900259ce32493a286db7a45b445a45ef0bc02497f9b0cd41dca",
       "npm-audit-host.command.json": "ce6d8253148e72ee2f091be5cc1530c1f1467c43d7ef7e492fefffef341993c5",
       "npm-audit-host.log": "f9a031af1fd5991a41d6dbf8c4fcafa5b596b094a7d17ad5dea052518cd16fb7",
       "npm-audit.command.json": "9d80dc6da1ab7b06b65a243237985d8863ae27a3348a2fff4cebeb59f13fd256",
@@ -4161,6 +4161,117 @@
       "Allocator and lock observations do not prove physical erasure, register wiping or elimination of compiler copies. Unix TTY checks and reconstructed terminal grids do not establish every operating system or terminal emulator.",
       "The complete working source was hashed before the authorized signed commit. Fixes verified on those bytes have verificationCommit null; the follow-up validator accepts later commits only while the exact product manifest remains unchanged.",
       "One probe compilation initially used a private module and failed; a corrected public API probe passed. The initial terminal-resize probe reproduced a remaining product bug, subsequently fixed. Both failed attempts are retained separately."
+    ]
+  },
+  "privacyRedaction": {
+    "kind": "privacy-only-metadata-redaction",
+    "homePath": "/home/user",
+    "locationAnnotations": "omitted",
+    "timestampsUTC": true,
+    "reviewedSourceHashesUnchanged": true,
+    "findingsAndOutcomesUnchanged": true,
+    "newAudit": false,
+    "documentBindings": [
+      {
+        "keyPath": [
+          "remediationVerification",
+          "harnessHashes",
+          "docs/audits/AUD-008-harnesses/README.md"
+        ],
+        "document": "docs/audits/AUD-008-harnesses/README.md",
+        "originalSha256": "c620587041f62750ea0b9a997ff4c65a5814610dd57bc4e20cf2010027f4385c",
+        "redactedSha256": "e48f44a255be7840d092ace31a856ffd998912ea14833597ccdaa7e798adaf52",
+        "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
+      },
+      {
+        "keyPath": [
+          "remediationVerification",
+          "snapshot",
+          "files",
+          "docs/measurements/c-engine-2026-09-29.json"
+        ],
+        "document": "docs/measurements/c-engine-2026-09-29.json",
+        "originalSha256": "1017997e8fcea18d674ed039846381a3fdc67381eca374ed6aa0f3177b0a9ad9",
+        "redactedSha256": "bdc7bec25249ee4850ad83df01a890abc732fff5ce66ea15fb27b4e1273728e4",
+        "change": "owner-authorized amendment of 2026-10-09: time-of-day keys renamed series_1 and series_2; no measurement changed"
+      },
+      {
+        "keyPath": [
+          "remediationVerification",
+          "snapshot",
+          "files",
+          "docs/measurements/full-operation-2026-09-30.json"
+        ],
+        "document": "docs/measurements/full-operation-2026-09-30.json",
+        "originalSha256": "082818a6db92dc275f2252d34bcea82dfa38cf967a2e95b3b2245e49835ac727",
+        "redactedSha256": "f274124b0beee5c9ef34d9dbde293fc7081d43daf2db9f074fc6ead294e92196",
+        "change": "its commit reference names the commit that replaced it in the history rewrite of 2026-10-09; no measurement changed; amended again on 2026-10-09"
+      },
+      {
+        "keyPath": [
+          "remediationVerification",
+          "harnessHashes",
+          "docs/audits/AUD-008-harnesses/remediation-contract-README.md"
+        ],
+        "document": "docs/audits/AUD-008-harnesses/remediation-contract-README.md",
+        "originalSha256": "22a5bdb2ac10c50df85c0f4515388d1190805fb2c7afb265bf66a5b8842b49b4",
+        "redactedSha256": "2a795d1ca78617c33f94bfec902aed5f0f9fd3ddb6ca6175fbdb2f36a59a01db",
+        "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun"
+      },
+      {
+        "keyPath": [
+          "remediationVerification",
+          "harnessHashes",
+          "docs/audits/AUD-008-harnesses/remediation-security-README.md"
+        ],
+        "document": "docs/audits/AUD-008-harnesses/remediation-security-README.md",
+        "originalSha256": "28e020639d72396b8165e9d8182321c67454a7e93c19a85b0c3ac236df7efcc0",
+        "redactedSha256": "9bde6454cd17bbb974078bd62ab7985cdff19844c5f65bbae28aeb10dac6b0c3",
+        "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun"
+      }
+    ],
+    "amendments": [
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "Commit references of the history replaced by the privacy rewrite of 2026-10-09 now name the commits that replaced them (AUD-015-DOC001): 082ac0b -> 1c9c572, b864f5a -> d87723d, bc45df2 -> 83a5af0, e854d6e -> 161e1a7."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "082ac0b": "1c9c572",
+          "b864f5a": "d87723d",
+          "bc45df2": "83a5af0",
+          "e854d6e": "161e1a7"
+        }
+      },
+      {
+        "dateUtc": "2026-10-09",
+        "authorizedBy": "repository owner",
+        "changes": [
+          "78 PATH values of recorded command environments replaced by <elided>: they named local tools and session directories.",
+          "Commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 00e4d1072b56d56293e11d8ad3204626b8f93dc7 -> 9106eba9f40b69d68d3a2d22b06c95b23e8b2cc0, 18ebc8345cfe5134761947d40eaa11e268434e11 -> c8d6c9a465c6710481cbe185af6f53150686d98b, 5004426 -> 161e1a7, 50044269f5fb02aaa901c8ff7d20b7b1b975e95c -> 161e1a7b866e7f0960a29e5f0c7e5a682d82040e, 711c8f5 -> 1c9c572, 711c8f596a7f5548270288de4f07c5011c5784cb -> 1c9c572c902e2be1dc7143de4d43c2d9d56f9d17, 77f36754638a2ee81722801de791432dd570c8ed -> aedd4cee4301c794af3693b64017083386115adc, b6993bb1c11834a01847d1812b31a24145ab1f18 -> 632af98b6ce06a73dd2e27ed606e0a4212daed09, c0dd93e3548dcc7e683b4c8a2c77eac454a87b52 -> 7e6adb13ae82a67ca66ce6238ef18987cb49438e, db56fdd -> d87723d, db56fdd4028f27012ae2c10cdafb672139645a5a -> d87723d8e9d8767b3236342c44aff5f42fd5130b, de2dfeda70df919859f8aa7803f41de4c6c0f1a2 -> e251dff83bac79bb8b08025174bf736ceed20920, e6c9537 -> 83a5af0, e6c95379c8e1eec2db21d4d0b780a8c45023c937 -> 83a5af00d266c63e668ef5e0ce573c1d984e3450, f3d3279f9e97c2a17ee6aca04d399de44f5d4672 -> 717265c5ad9eef7466d1260dee6db2f8d15b5458, fd40905b7cb187a94dff52d25bc49c07e6ee3ff8 -> a64e39432e3437361ef5b14d045113ca519ef2c7."
+        ],
+        "note": "Documentation-only edit; no check was rerun.",
+        "commitMap": {
+          "00e4d1072b56d56293e11d8ad3204626b8f93dc7": "9106eba9f40b69d68d3a2d22b06c95b23e8b2cc0",
+          "18ebc8345cfe5134761947d40eaa11e268434e11": "c8d6c9a465c6710481cbe185af6f53150686d98b",
+          "5004426": "161e1a7",
+          "50044269f5fb02aaa901c8ff7d20b7b1b975e95c": "161e1a7b866e7f0960a29e5f0c7e5a682d82040e",
+          "711c8f5": "1c9c572",
+          "711c8f596a7f5548270288de4f07c5011c5784cb": "1c9c572c902e2be1dc7143de4d43c2d9d56f9d17",
+          "77f36754638a2ee81722801de791432dd570c8ed": "aedd4cee4301c794af3693b64017083386115adc",
+          "b6993bb1c11834a01847d1812b31a24145ab1f18": "632af98b6ce06a73dd2e27ed606e0a4212daed09",
+          "c0dd93e3548dcc7e683b4c8a2c77eac454a87b52": "7e6adb13ae82a67ca66ce6238ef18987cb49438e",
+          "db56fdd": "d87723d",
+          "db56fdd4028f27012ae2c10cdafb672139645a5a": "d87723d8e9d8767b3236342c44aff5f42fd5130b",
+          "de2dfeda70df919859f8aa7803f41de4c6c0f1a2": "e251dff83bac79bb8b08025174bf736ceed20920",
+          "e6c9537": "83a5af0",
+          "e6c95379c8e1eec2db21d4d0b780a8c45023c937": "83a5af00d266c63e668ef5e0ce573c1d984e3450",
+          "f3d3279f9e97c2a17ee6aca04d399de44f5d4672": "717265c5ad9eef7466d1260dee6db2f8d15b5458",
+          "fd40905b7cb187a94dff52d25bc49c07e6ee3ff8": "a64e39432e3437361ef5b14d045113ca519ef2c7"
+        }
+      }
     ]
   }
 }

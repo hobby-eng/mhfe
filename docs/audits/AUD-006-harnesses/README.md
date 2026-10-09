@@ -1,7 +1,7 @@
 # AUD-006 reproduction harnesses
 
 These scripts belong to the final MHFE code, suite 3 conformance and prepared 0.4.0
-artifact review of commit `fe1823051c74ae4d7883e5f123fe77a20c6f92d4`.
+artifact review of commit `bda39d7f3098dba04f36f3b188998267d6e2d115`.
 See the [report](../audit-06-2026-10-01.md) for exact executed commands, outcomes,
 limitations and hashes. All inputs are public fixtures or synthetic values.
 No script in this folder runs full-cost Argon2 or changes production files.
@@ -55,7 +55,7 @@ node docs/audits/AUD-006-harnesses/async-callback.mjs
   256 KiB/one pass at the Argon2 call boundary; archive bytes are unchanged.
   Expected: 13 assertions in each context, no external requests, exit 0.
 - `formatting.mjs` compares canonical Prettier output for eight JS/TS files
-  changed by 1980ab4c541261920db5ecc963a6f27c65387cf8. It does not claim the whole commit is whitespace-only.
+  changed by f6067310e5acae95b02b5bc96d78007426c8d15a. It does not claim the whole commit is whitespace-only.
   Expected: identical normalized outputs, exit 0. It needs child-process access.
 - `ci-artifacts.py` compares local archive hashes with exact-head canonical CI
   job logs (run 36865294492); it saves those logs locally. Expected: all six
@@ -98,3 +98,5 @@ hashes, local links and ignored-evidence status, then writes report-validation.j
 and SHA256SUMS locally. Expected: all assertions pass, exit 0. This validates the
 retained evidence, not a replacement for executing the code probes. After any
 report edit, rerun it to refresh report hashes.
+
+Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the second privacy rewrite of 2026-10-09 now name the commits that replaced them: 1980ab4c541261920db5ecc963a6f27c65387cf8 -> f6067310e5acae95b02b5bc96d78007426c8d15a, fe1823051c74ae4d7883e5f123fe77a20c6f92d4 -> bda39d7f3098dba04f36f3b188998267d6e2d115.
