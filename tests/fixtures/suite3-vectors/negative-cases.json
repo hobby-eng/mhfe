@@ -136,5 +136,34 @@
       }
     ],
     "error_code": null
+  },
+  {
+    "schema": "mhfe-suite-3-negative-case-v2",
+    "suite_id": "MHFE-BIP39-256-EXPERIMENTAL-3",
+    "name": "stated-24-words",
+    "generator": {
+      "program": "mhfe test-vectors",
+      "version": "0.6.0",
+      "argon2": "reference C implementation, P-H-C/phc-winner-argon2 commit f57e61e19229e23c4445b85494dbf7c07de721cb"
+    },
+    "container": "donate stove tower picnic iron rescue trick shrimp roof rib home cigar bag pledge also nerve cycle famous provide heart ahead chunk caution peace",
+    "password": "public test password",
+    "password_nfkd_utf8_hex": "7075626c696320746573742070617373776f7264",
+    "pim": 0,
+    "memory_level": 0,
+    "words": 24,
+    "recovery": [
+      {
+        "words": 12,
+        "verified": true,
+        "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+      },
+      {
+        "words": 24,
+        "verified": false,
+        "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about inner love zone until oven protect tray movie front reopen emerge bachelor"
+      }
+    ],
+    "error_code": null
   }
 ]

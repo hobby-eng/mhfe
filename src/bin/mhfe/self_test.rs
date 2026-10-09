@@ -82,7 +82,6 @@ pub fn help() -> String {
 /// What the published vectors cost: "about 2 to 4 minutes, 2 GiB", for the help, the report and
 /// the menu.
 pub fn vectors_cost() -> String {
-    const GIB: u64 = 1 << 30;
     const MINUTE: u64 = 60;
     /// An encryption of 12 rounds and a recovery of 12, each estimated as one operation.
     const OPERATIONS: u64 = 2;
@@ -90,10 +89,10 @@ pub fn vectors_cost() -> String {
     let work = WorkFactor::default();
     let (low, high) = work.estimated_seconds();
     format!(
-        "about {} to {} minutes, {} GiB",
+        "about {} to {} minutes, {}",
         (OPERATIONS * low).div_ceil(MINUTE),
         (OPERATIONS * high).div_ceil(MINUTE),
-        work.memory_bytes() / GIB
+        work.memory_text()
     )
 }
 
@@ -344,19 +343,7 @@ mod tests {
     use super::*;
     use clap::Parser;
 
-    fn plain(line: &str) -> String {
-        let mut text = String::new();
-        let mut in_code = false;
-        for character in line.chars() {
-            match character {
-                '\u{1b}' => in_code = true,
-                'm' if in_code => in_code = false,
-                _ if in_code => {}
-                _ => text.push(character),
-            }
-        }
-        text
-    }
+    use crate::style::plain;
 
     /// The full self-test passes on this computer, every part once, and fits the text width. It
     /// scans every Unicode scalar value and runs Argon2 at 256 MiB, about two seconds in a release

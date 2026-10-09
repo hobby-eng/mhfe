@@ -6,15 +6,15 @@ use std::io::IsTerminal;
 
 use anstream::{eprintln, println};
 use clap::Args;
-use mhfe::eff::index_of_rolls;
 use mhfe::new_password::{
-    bits_text, PasswordRecipe, DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS, RECOMMENDED_CHARACTERS,
-    RECOMMENDED_WORDS,
+    character_bits, word_bits, word_index_of_rolls, PasswordRecipe, CHARACTERS, DEFAULT_CHARACTERS,
+    DEFAULT_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
 };
 use zeroize::Zeroizing;
 
-use crate::exit::{Failure, SUCCESS};
+use crate::exit::{self, Failure, SUCCESS};
 use crate::flow::{self, Flow};
+use crate::made_password;
 use crate::style::{self, STRONG};
 use crate::system_random::SystemRandom;
 use crate::terminal::{self, Input};
@@ -44,19 +44,28 @@ pub struct Options {
         long,
         value_name = "N",
         num_args = 0..=1,
-        // --chars alone means sixteen characters.
-        default_missing_value = "16",
+        default_missing_value = CHARS_ALONE,
         conflicts_with_all = ["words", "dice"],
         long_help = chars_help()
     )]
     chars: Option<usize>,
 }
 
+/// What --chars alone means, DEFAULT_CHARACTERS as clap takes it: text written out here, which a
+/// test keeps equal to the library's number.
+const CHARS_ALONE: &str = "16";
+
 fn words_help() -> String {
     style::option_help(&[
         "Number of words, 1 to 32 (default 5; fewer than 4 are weak).",
-        "Each word adds about 12.9 bits: four words give about 51.7 bits, five about 64.6, six \
-         about 77.5. Fewer than four get a warning.",
+        &format!(
+            "Each word adds about {} bits: four words give about {} bits, five about {}, six \
+             about {}. Fewer than four get a warning.",
+            word_bits(1),
+            word_bits(4),
+            word_bits(5),
+            word_bits(6)
+        ),
     ])
 }
 
@@ -65,17 +74,22 @@ fn check_word_help() -> String {
         "Five words and a check word that repairs one mistyped word.",
         "The sixth word is computed from the five before it (MHFE-PASSWORD-CHECK-1). When the \
          password is typed, it restores one word that is missing or misspelt and notices one \
-         wrong word, before the long wait. It adds no strength: the password keeps about 64.6 \
-         bits, and the check word must stay as secret as the rest.",
+         wrong word, before the long wait. It adds no strength: the password keeps about the \
+         bits of its five words, and the check word must stay as secret as the rest.",
     ])
 }
 
 fn chars_help() -> String {
     style::option_help(&[
         "Random characters instead of words, N of them, 1 to 64 (default 16).",
-        "Digits and letters without those easily confused, such as 0 and O or 1 and l: 57 \
-         characters, about 5.8 bits each. Sixteen give about 93.3 bits, but words are easier to \
-         type correctly years later.",
+        &format!(
+            "Digits and letters without those easily confused, such as 0 and O or 1 and l: {} \
+             characters, about {} bits each. Sixteen give about {} bits, but words are easier to \
+             type correctly years later.",
+            CHARACTERS.len(),
+            character_bits(1),
+            character_bits(DEFAULT_CHARACTERS)
+        ),
     ])
 }
 
@@ -90,7 +104,7 @@ fn dice_help() -> String {
 /// The top of `mhfe password --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Make a strong password of words or random characters",
+        "Make a strong password of words or characters",
         "Each word is drawn from the EFF large word list of 7,776 words, the same list that \
          five dice select from. Every word is equally likely.",
     ])
@@ -98,28 +112,27 @@ pub fn about() -> String {
 
 /// The end of `mhfe password -h` and `--help`.
 pub fn help() -> String {
-    let examples = style::help_section(
-        "Examples:",
+    let five = format!("Five random words, about {} bits", word_bits(5));
+    let six = format!("Six words, about {} bits", word_bits(6));
+    let checked = format!("Five words and a check word, about {} bits", word_bits(5));
+    let characters = format!(
+        "Sixteen random characters, about {} bits",
+        character_bits(DEFAULT_CHARACTERS)
+    );
+    style::examples_with_note(
         &[
-            ("mhfe password", "Five random words, about 64.6 bits"),
-            ("mhfe password --words 6", "Six words, about 77.5 bits"),
+            ("mhfe password", &five),
+            ("mhfe password --words 6", &six),
             (
                 "mhfe password --dice",
                 "Roll real dice instead of using the computer",
             ),
             ("mhfe password --dice --words 6", "Six words from real dice"),
-            (
-                "mhfe password --check-word",
-                "Five words and a check word, about 64.6 bits",
-            ),
-            (
-                "mhfe password --chars",
-                "Sixteen random characters, about 93.3 bits",
-            ),
+            ("mhfe password --check-word", &checked),
+            ("mhfe password --chars", &characters),
         ],
-    );
-    let note = style::help_note("The password is shown once and never stored.");
-    format!("{examples}\n{note}")
+        "The password is shown once and never stored.",
+    )
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
@@ -129,23 +142,11 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let recipe = if options.check_word {
         PasswordRecipe::check_word()
     } else {
-        PasswordRecipe::words(options.words).map_err(|_| {
-            Failure::invalid_input(format!("Choose between 1 and {MOST_WORDS} words."))
-        })?
+        // The library's refusal, in its words (AUD-011-ARC001).
+        PasswordRecipe::words(options.words)?
     };
     let mut input = Input::terminal_only();
-    // At a terminal the password has a step of its own, cleared once it is written down; the
-    // summary says only how strong it is.
-    let flow = Flow::start(&input, TITLE);
-    style::title(TITLE);
-    eprintln!();
-    if recipe.is_weak() {
-        style::warn(
-            &format!("Fewer than {RECOMMENDED_WORDS} words is weak."),
-            "Four words give about 51.7 bits, five about 64.6.",
-        );
-        eprintln!();
-    }
+    let flow = start(&input, &recipe);
     let password = if options.dice {
         // The rolls are typed on a step of their own.
         flow::step();
@@ -154,24 +155,49 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     } else {
         recipe.make(&mut SystemRandom)?
     };
-    let strength = bits_text(recipe.millibits());
-    if !recipe.has_check_word() {
-        return show(
-            password.text(),
-            &format!(
-                "{} words from the EFF list, about {strength} bits.",
-                recipe.drawn_words()
-            ),
-            &[],
-            flow,
-        );
-    }
+    let notes: &[&str] = if recipe.has_check_word() {
+        &[made_password::CHECK_WORD_NOTE]
+    } else {
+        &[]
+    };
     show(
         password.text(),
-        &format!("5 words from the EFF list and a check word, about {strength} bits."),
-        &["The last word is the check word; it adds no strength and is just as secret."],
+        &format!("{}.", recipe.summary()),
+        notes,
         flow,
     )
+}
+
+/// Starts `mhfe password` with its title and, over a weak `recipe`, a warning that names the
+/// recommended and the default size with their strength. At a terminal the password has a step of
+/// its own, cleared once it is written down; the summary says only how strong it is.
+fn start(input: &Input, recipe: &PasswordRecipe) -> Flow {
+    let flow = Flow::start(input, TITLE);
+    style::title(TITLE);
+    eprintln!();
+    if recipe.is_weak() {
+        let (unit, recommended, default, bits): (_, _, _, fn(usize) -> String) =
+            if recipe.is_characters() {
+                (
+                    "characters",
+                    RECOMMENDED_CHARACTERS,
+                    DEFAULT_CHARACTERS,
+                    character_bits,
+                )
+            } else {
+                ("words", RECOMMENDED_WORDS, DEFAULT_WORDS, word_bits)
+            };
+        style::warn(
+            &format!("Fewer than {recommended} {unit} is weak."),
+            &format!(
+                "{recommended} {unit} give about {} bits, {default} about {}.",
+                bits(recommended),
+                bits(default)
+            ),
+        );
+        eprintln!();
+    }
+    flow
 }
 
 /// The title of `mhfe password`.
@@ -192,7 +218,7 @@ fn show(password: &str, strength: &str, notes: &[&str], flow: Flow) -> Result<i3
     for note in notes {
         style::hint(note);
     }
-    style::hint("Shown only once and not stored: write it down, apart from the container.");
+    style::hint(made_password::SHOWN_ONCE_NOTE);
     if flow::is_active() {
         terminal::wait_to_leave()?;
     }
@@ -202,29 +228,13 @@ fn show(password: &str, strength: &str, notes: &[&str], flow: Flow) -> Result<i3
 
 /// `mhfe password --chars N`: N characters drawn evenly from the library's character set.
 fn run_characters(count: usize) -> Result<i32, Failure> {
-    let recipe = PasswordRecipe::characters(count).map_err(|_| {
-        Failure::invalid_input(format!(
-            "Choose between 1 and {MOST_CHARACTERS} characters."
-        ))
-    })?;
+    let recipe = PasswordRecipe::characters(count)?;
     let input = Input::terminal_only();
-    let flow = Flow::start(&input, TITLE);
-    style::title(TITLE);
-    eprintln!();
-    if recipe.is_weak() {
-        style::warn(
-            &format!("Fewer than {RECOMMENDED_CHARACTERS} characters is weak."),
-            "Twelve characters give about 70.0 bits, sixteen about 93.3.",
-        );
-        eprintln!();
-    }
+    let flow = start(&input, &recipe);
     let password = recipe.make(&mut SystemRandom)?;
     show(
         password.text(),
-        &format!(
-            "{count} random characters, about {} bits.",
-            bits_text(recipe.millibits())
-        ),
+        &format!("{}.", recipe.summary()),
         &[],
         flow,
     )
@@ -246,11 +256,21 @@ fn index_from_dice(input: &mut Input, number: usize) -> Result<usize, Failure> {
         let typed = input.secret(&format!(
             "Word {number}: roll five dice and type the five digits"
         ))?;
-        match index_of_rolls(&typed) {
-            Some(index) => return Ok(index),
-            None => {
-                style::retry("Type exactly five digits, each from 1 to 6, for example 35142.");
+        match word_index_of_rolls(number, &typed) {
+            Ok(index) => return Ok(index),
+            Err(error) => {
+                style::retry(exit::refused(&error, "Type them again, for example 35142."));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chars_alone_means_the_default() {
+        assert_eq!(CHARS_ALONE.parse::<usize>(), Ok(DEFAULT_CHARACTERS));
     }
 }

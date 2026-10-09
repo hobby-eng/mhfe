@@ -16,9 +16,12 @@ use anstream::eprintln;
 use clap::{CommandFactory, Parser};
 
 use crate::choice::{self, draw_entries, redraw_from, write_control, Answer, Question};
+use crate::container_repair;
 use crate::exit::{Failure, SUCCESS};
 use crate::hidden_input::{self, Key};
+use crate::made_password::PasswordKind;
 use crate::readme;
+use crate::settings::Operation;
 use crate::style;
 use crate::{protect, self_test, serve, show_failure, startup, terminal, Cli};
 
@@ -30,7 +33,7 @@ enum Action {
     Help,
     /// Makes passwords until the person returns to the menu.
     Password,
-    /// Repairs a plate, or makes repair words for one, as the person chooses.
+    /// Repairs a container phrase, or makes repair words for one, as the person chooses.
     Repair,
     /// Tests every part, with the published vectors or without, as the person chooses.
     SelfTest,
@@ -103,30 +106,18 @@ fn run() -> Result<i32, Failure> {
                 Ok(()) => continue,
                 Err(failure) => show_failure(&failure),
             },
-            Action::Repair => match repair_or_make_words() {
-                Ok(Some(arguments)) => {
-                    if let Err(failure) = run_command(&arguments) {
-                        show_failure(&failure);
-                    }
-                }
-                // Escape at the question returns to the menu.
-                Ok(None) => continue,
-                Err(failure) => show_failure(&failure),
-            },
-            Action::SelfTest => match which_self_test() {
-                Ok(Some(arguments)) => {
-                    if let Err(failure) = run_command(&arguments) {
-                        show_failure(&failure);
-                    }
-                }
-                Ok(None) => continue,
-                Err(failure) => show_failure(&failure),
-            },
-            Action::Run(arguments) => {
-                if let Err(failure) = run_command(arguments) {
-                    show_failure(&failure);
+            // Escape at the question of either returns to the menu.
+            Action::Repair => {
+                if !run_asked(repair_or_make_words()) {
+                    continue;
                 }
             }
+            Action::SelfTest => {
+                if !run_asked(which_self_test()) {
+                    continue;
+                }
+            }
+            Action::Run(arguments) => run_shown(arguments),
         }
         eprintln!();
         let wait = "Press Enter to return to the menu (Esc quits).";
@@ -169,7 +160,7 @@ fn entries() -> Vec<Entry> {
     }
     // Both repair commands under one entry, which asks which (repair_or_make_words).
     entries.push(Entry {
-        label: "Repair a plate, or make its repair words".to_owned(),
+        label: "Repair a container phrase, or make its repair words".to_owned(),
         command: "mhfe repair".to_owned(),
         action: Action::Repair,
     });
@@ -260,6 +251,24 @@ fn draw(entries: &[Entry], selected: usize) -> usize {
 
 /// Runs a command in a thread of its own, isolated as a command started directly would be: the
 /// isolation cannot be undone, and the menu must stay free to start the fast mode later.
+/// Runs the command a question of the menu chose, or shows why it could not ask; false when the
+/// person went back with Escape and no command runs.
+fn run_asked(asked: Result<Option<Vec<OsString>>, Failure>) -> bool {
+    match asked {
+        Ok(Some(arguments)) => run_shown(&arguments),
+        Ok(None) => return false,
+        Err(failure) => show_failure(&failure),
+    }
+    true
+}
+
+/// Runs a command of the menu and shows its failure, after which the menu comes back.
+fn run_shown(arguments: &[OsString]) {
+    if let Err(failure) = run_command(arguments) {
+        show_failure(&failure);
+    }
+}
+
 fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
     let typed = std::iter::once(OsString::from("mhfe")).chain(arguments.iter().cloned());
     let cli = Cli::try_parse_from(typed)
@@ -289,29 +298,17 @@ fn make_passwords() -> Result<(), Failure> {
         more: Some(readme::PASSWORD),
         record: None,
     };
-    // The answers with the options of mhfe password they choose.
-    let kinds: [(Answer, Option<&str>); 3] = [
-        (Answer::new("Five dice words", "easy to say and type"), None),
-        (
-            Answer::new(
-                "Five words and a check word",
-                "one mistyped word is repaired",
-            ),
-            Some("--check-word"),
-        ),
-        // --chars alone means sixteen characters.
-        (
-            Answer::new("Sixteen random characters", "letters and digits"),
-            Some("--chars"),
-        ),
-    ];
-    let (answers, options): (Vec<Answer>, Vec<Option<&str>>) = kinds.into_iter().unzip();
+    let answers = PasswordKind::MADE.map(PasswordKind::answer);
     // Escape here returns to the menu too.
-    let Some(kind) = choice::choose(&question, &answers, None)? else {
+    let Some(chosen) = choice::choose(&question, &answers, None)? else {
         return Ok(());
     };
     let mut arguments = vec![OsString::from("password")];
-    arguments.extend(options[kind].map(OsString::from));
+    arguments.extend(
+        PasswordKind::MADE[chosen]
+            .password_option()
+            .map(OsString::from),
+    );
     let input = terminal::Input::terminal_only();
     let screen = terminal::PrivateScreen::enter_to_show(&input);
     loop {
@@ -324,21 +321,21 @@ fn make_passwords() -> Result<(), Failure> {
     }
 }
 
-/// Asks whether to repair a plate or to make repair words for one; the arguments of the command,
-/// or `None` on Escape.
+/// Asks whether to repair a container phrase or to make repair words for one; the arguments of the
+/// command, or `None` on Escape.
 fn repair_or_make_words() -> Result<Option<Vec<OsString>>, Failure> {
     let question = Question {
-        text: "Repair a plate, or make repair words for one?",
+        text: "Repair a container phrase, or make repair words for one?",
         explanation: &[],
         more: Some(readme::REPAIR),
         record: None,
     };
     let answers = [
         Answer::new(
-            "Repair a plate",
+            Operation::Repair.title(),
             "with its repair words, without the password",
         ),
-        Answer::new("Make repair words", "for a container you have"),
+        Answer::new(container_repair::WORDS_TITLE, "for a container you have"),
     ];
     let command = match choice::choose(&question, &answers, None)? {
         Some(0) => "repair",
@@ -439,9 +436,13 @@ mod tests {
     fn every_menu_line_fits_the_width() {
         let entries = entries();
         let label_width = entries.iter().map(|entry| entry.label.len()).max().unwrap();
+        // The fast mode's entry, shown when a browser tool lies next to the program, with the
+        // name of the package's tool page.
+        let fast_mode = "mhfe serve tool.html".len();
         let longest_command = entries
             .iter()
             .map(|entry| entry.command.len())
+            .chain([fast_mode])
             .max()
             .unwrap();
         assert!(5 + label_width + 2 + longest_command <= LINE_WIDTH);

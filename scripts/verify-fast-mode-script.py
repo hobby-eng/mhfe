@@ -241,10 +241,60 @@ class ChecksumFile(unittest.TestCase):
             "{} *../tool.html\n".format(self.digest),
             "{}  tool.html\n".format(self.digest[:63]),
             "{}g *tool.html\n".format(self.digest[:63]),
+            # The control-character cases of serve.rs, so that both launchers refuse them alike.
+            "{}  x\x1b]0;TITLE\x07\x1b[2Jy.html\n".format(self.digest),
+            "{}  x\x9b2Jy.html\n".format(self.digest),
+            "{}  x\x7fy.html\n".format(self.digest),
+            "{}  tool.html\x1f\n".format(self.digest),
         ]:
             self.write_checksum_file(malformed)
             self.assertIn("must hold exactly one line", self.refusal(), repr(malformed))
         self.assertIn("nothing was served", self.refusal())
+
+    def test_no_message_carries_a_control_sequence(self):
+        # AUD-015-SEC002, found again in this script by AUD-018: a folder name with an OSC 52
+        # sequence, which would set the clipboard, is shown escaped, and a checksum file that names
+        # a page with a control character is malformed.
+        folder = os.path.join(self.folder, "x\x1b]52;c;QUFB\x07y")
+        os.mkdir(folder)
+        self.page = os.path.join(folder, "tool.html")
+        refusal = self.refusal()
+        self.assertIn("There is no readable", refusal)
+        # C0, DEL and C1 alike: a test that ignored one could not fail on it.
+        self.assertFalse(any(ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F for c in refusal), repr(refusal))
+        self.assertIn("x\\u{1b}]52;c;QUFB\\u{7}y", refusal)
+        self.page = os.path.join(self.folder, "tool.html")
+        self.write_checksum_file("{}  to\x1bol.html\n".format(self.digest))
+        self.assertIn("must hold exactly one line", self.refusal())
+
+    def test_a_checksum_file_that_is_not_utf8_is_refused(self):
+        with open(os.path.join(self.folder, fast_mode.CHECKSUM_FILE), "wb") as file:
+            file.write(b"\xff\xfe  tool.html\n")
+        self.assertIn("There is no readable", self.refusal())
+
+    def test_a_mistyped_argument_is_shown_escaped(self):
+        # argparse repeats an unknown argument; its control characters reach no terminal.
+        import contextlib
+        import io
+
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error), self.assertRaises(SystemExit) as caught:
+            fast_mode.main(["--x\x1b]52;c;QUFB\x07", "--\x9b2J"])
+        self.assertEqual(caught.exception.code, fast_mode.INVALID_INPUT)
+        text = error.getvalue()
+        self.assertFalse(any(ord(c) < 0x20 and c != "\n" or 0x7F <= ord(c) <= 0x9F for c in text),
+                         repr(text))
+        self.assertIn("\\u{1b}]52;c;QUFB\\u{7}", text)
+
+    def test_names_are_escaped_as_the_rust_launcher_escapes_them(self):
+        # The same input and the same expected text as serve.rs's a_shown_path_holds_no_control_
+        # character, so that both launchers show a name alike.
+        path = "/tmp/x\u001b]0;TITLE\u0007y/tool.html"
+        expected = "/tmp/x\\u{1b}]0;TITLE\\u{7}y/tool.html"
+        self.assertEqual(fast_mode.shown(path), expected)
+        with open(os.path.join(os.path.dirname(SCRIPT), "..", "src", "bin", "mhfe", "serve.rs"),
+                  encoding="utf-8") as source:
+            self.assertIn(expected.replace("\\", "\\\\"), source.read())
 
     def test_without_arguments_the_page_next_to_the_script_is_served(self):
         original = fast_mode.__file__

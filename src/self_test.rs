@@ -117,8 +117,7 @@ impl SelfTest {
             PhraseLength::Detect,
             &mut |round, _| rounds.report(Stage::Recover, round, &mut *progress),
         )?;
-        let suite_4 =
-            matches!(&recovered, Recovery::Phrase(phrase) if *phrase.phrase == self.suite_4.phrase);
+        let suite_4 = matches!(&recovered, Recovery::Phrase(phrase) if *phrase.phrase() == self.suite_4.phrase);
         Ok((suite_3, suite_4))
     }
 

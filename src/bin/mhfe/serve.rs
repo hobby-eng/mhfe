@@ -123,14 +123,14 @@ fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
         Failure::invalid_input(format!(
             "There is no readable {CHECKSUM_FILE} in {}: {error}. The fast mode serves a page \
              only when its checksum file lies next to it; nothing was served.",
-            directory.display()
+            style::shown_path(directory)
         ))
     })?;
     let malformed = || {
         Failure::invalid_input(format!(
             "{} must hold exactly one line, \"<SHA-256>  <page>.html\" or \"<SHA-256> \
              *<page>.html\"; nothing was served.",
-            path.display()
+            style::shown_path(&path)
         ))
     };
     let mut lines = text.lines().filter(|line| !line.trim().is_empty());
@@ -139,8 +139,12 @@ fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
     };
     let (digest, name) = split_checksum_line(line).ok_or_else(malformed)?;
     let name = name.trim_end();
-    // The name is a plain file name next to the checksum file, never a path.
-    let is_plain_name = !name.contains(['/', '\\']) && name != ".." && name != ".";
+    // The name is a plain file name next to the checksum file, never a path, and holds no control
+    // character, which a terminal would carry out where the name is shown (AUD-015-SEC002).
+    let is_plain_name = !name.contains(['/', '\\'])
+        && name != ".."
+        && name != "."
+        && !name.chars().any(char::is_control);
     if !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
         || !name.ends_with(".html")
         || !is_plain_name
@@ -177,7 +181,7 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
     let page = fs::read(file).map_err(|error| {
         Failure::invalid_input(format!(
             "Cannot read {}: {error}; nothing was served.",
-            file.display()
+            style::shown_path(file)
         ))
     })?;
     let digest = hex::encode(Sha256::digest(&page));
@@ -193,8 +197,7 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
 
 /// The end of `mhfe serve -h` and `--help`.
 pub fn help() -> String {
-    let examples = style::help_section(
-        "Examples:",
+    style::examples_with_note(
         &[
             (
                 "mhfe serve tool.html",
@@ -205,13 +208,12 @@ pub fn help() -> String {
                 "Serve the page and print its address to open by hand",
             ),
         ],
-    );
-    let note = style::help_note(&format!(
-        "The page is served only when {CHECKSUM_FILE} lies next to it and holds its SHA-256, and \
-         only to this computer (127.0.0.1). It sees none of your secrets: all the work happens in \
-         the page."
-    ));
-    format!("{examples}\n{note}")
+        &format!(
+            "The page is served only when {CHECKSUM_FILE} lies next to it and holds its SHA-256, \
+             and only to this computer (127.0.0.1). It sees none of your secrets: all the work \
+             happens in the page."
+        ),
+    )
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
@@ -262,10 +264,11 @@ fn serve(listener: TcpListener, host: String, page: Vec<u8>, deadline: Duration)
     }
 }
 
+/// The file name of `path` as a message or the menu shows it, control characters escaped.
 pub fn file_name(path: &Path) -> String {
     path.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string())
+        .map(|name| style::escaped(&name.to_string_lossy()))
+        .unwrap_or_else(|| style::shown_path(path))
 }
 
 /// Opens the default browser; the address holds no secret.
@@ -659,6 +662,20 @@ mod tests {
         }
     }
 
+    /// A folder or file name in a message carries no control sequence a terminal would carry out
+    /// (AUD-015-SEC002, through the parent folder's name: AUD-016).
+    #[test]
+    fn a_shown_path_holds_no_control_character() {
+        let path = std::path::Path::new("/tmp/x\u{1b}]0;TITLE\u{7}y/tool.html");
+        for shown in [style::shown_path(path), file_name(path)] {
+            assert!(!shown.chars().any(char::is_control), "{shown}");
+        }
+        assert_eq!(
+            style::shown_path(path),
+            "/tmp/x\\u{1b}]0;TITLE\\u{7}y/tool.html"
+        );
+    }
+
     #[test]
     fn refuses_without_a_matching_checksum_file() {
         let digest = hex::encode(Sha256::digest(PAGE));
@@ -681,6 +698,12 @@ mod tests {
             format!("{digest}  tool.txt\n"),
             format!("{digest}  ../tool.html\n"),
             format!("{digest} *../tool.html\n"),
+            // A name a terminal would carry out where it is shown (AUD-015-SEC002).
+            format!("{digest}  x\u{1b}]0;TITLE\u{7}\u{1b}[2Jy.html\n"),
+            format!("{digest}  x\u{9b}2Jy.html\n"),
+            format!("{digest}  x\u{7f}y.html\n"),
+            // A control character at the end is not white space, so it stays in the name.
+            format!("{digest}  tool.html\u{1f}\n"),
             format!("{}  tool.html\n", &digest[..63]),
             format!("{}g *tool.html\n", &digest[..63]),
         ] {

@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const EMBEDDED = "MHFE loads no files: its WebAssembly is embedded";
 
-/** The minified Emscripten 6.0.10 loaders of a worker build. */
+/** The minified Emscripten 6.0.12 loaders of a worker build. */
 const ARGON2_REPLACEMENTS = [
   [
     'readBinary=url=>{var xhr=new XMLHttpRequest;xhr.open("GET",url,false);xhr.responseType="arraybuffer";xhr.send(null);return new Uint8Array(xhr.response)}',

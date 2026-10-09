@@ -27,6 +27,7 @@ import socket
 import sys
 import threading
 import time
+import unicodedata
 import webbrowser
 
 # The same limits as `mhfe serve` (src/bin/mhfe/serve.rs).
@@ -72,6 +73,34 @@ INVALID_INPUT = 2
 
 class Refused(Exception):
     """The file cannot be served; the message says why."""
+
+
+# The characters Rust's str::trim takes off (Unicode White_Space), so that a checksum line reads
+# here as `mhfe serve` reads it (src/bin/mhfe/serve.rs); Python's own strip() also takes U+001C to
+# U+001F, which are control characters there.
+RUST_WHITESPACE = (
+    "\t\n\x0b\x0c\r \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009"
+    "\u200a\u2028\u2029\u202f\u205f\u3000"
+)
+
+
+class Parser(argparse.ArgumentParser):
+    """argparse, with its error messages shown as every other message is: a mistyped argument may
+    hold control characters (AUD-018)."""
+
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        self.exit(INVALID_INPUT, "{}: error: {}\n".format(self.prog, shown(message)))
+
+
+def shown(text):
+    """`text` as a message shows it, every control character escaped as \\u{1b}, so that a terminal
+    shows a folder or file name instead of carrying it out (AUD-015-SEC002): style::escaped in
+    src/bin/mhfe/style.rs, which this script cannot import, and verify-fast-mode-script.py keeps
+    the two alike."""
+    return "".join(
+        "\\u{{{:x}}}".format(ord(c)) if unicodedata.category(c) == "Cc" else c for c in str(text)
+    )
 
 
 def response(status, reason, body, content_type="text/plain; charset=utf-8", head_only=False):
@@ -198,27 +227,36 @@ def read_checksum_file(directory):
     try:
         with open(path, encoding="utf-8") as file:
             text = file.read()
-    except OSError as error:
+    # A file that is not UTF-8 is refused as `mhfe serve` refuses it, not with a traceback.
+    except (OSError, UnicodeDecodeError) as error:
         raise Refused(
             "There is no readable {} in {}: {}. The fast mode serves a page only when its checksum "
             "file lies next to it; nothing was served.".format(
-                CHECKSUM_FILE, directory, error.strerror or error
+                CHECKSUM_FILE, shown(directory), shown(getattr(error, "strerror", None) or error)
             )
         )
     malformed = Refused(
         '{} must hold exactly one line, "<SHA-256>  <page>.html" or "<SHA-256> *<page>.html"; '
-        "nothing was served.".format(path)
+        "nothing was served.".format(shown(path))
     )
-    lines = [line for line in text.splitlines() if line.strip()]
+    # Lines as Rust's str::lines splits them: at "\n", without a "\r" before it.
+    lines = [line[:-1] if line.endswith("\r") else line for line in text.split("\n")]
+    lines = [line for line in lines if line.strip(RUST_WHITESPACE)]
     if len(lines) != 1:
         raise malformed
     parts = split_checksum_line(lines[0])
     if parts is None:
         raise malformed
     digest, name = parts
-    name = name.rstrip()
-    # The name is a plain file name next to the checksum file, never a path.
-    plain_name = "/" not in name and "\\" not in name and name not in (".", "..")
+    name = name.rstrip(RUST_WHITESPACE)
+    # The name is a plain file name next to the checksum file, never a path, and holds no control
+    # character, which a terminal would carry out where the name is shown (AUD-015-SEC002).
+    plain_name = (
+        "/" not in name
+        and "\\" not in name
+        and name not in (".", "..")
+        and not any(unicodedata.category(c) == "Cc" for c in name)
+    )
     hexadecimal = all(c in "0123456789abcdefABCDEF" for c in digest)
     if not (hexadecimal and name.endswith(".html") and plain_name):
         raise malformed
@@ -245,25 +283,29 @@ def load_checked_page(path):
     if listed_name != os.path.basename(path):
         raise Refused(
             "{} names {}, not {}; nothing was served.".format(
-                CHECKSUM_FILE, listed_name, os.path.basename(path)
+                CHECKSUM_FILE, listed_name, shown(os.path.basename(path))
             )
         )
     try:
         with open(path, "rb") as file:
             page = file.read()
     except OSError as error:
-        raise Refused("Cannot read {}: {}; nothing was served.".format(path, error.strerror or error))
+        raise Refused(
+            "Cannot read {}: {}; nothing was served.".format(shown(path), shown(error.strerror or error))
+        )
     digest = sha256_of(page)
     if digest != expected:
         raise Refused(
             "The SHA-256 of {} is {}, but {} expects {}. The page has changed or is not the one "
-            "released; nothing was served.".format(os.path.basename(path), digest, CHECKSUM_FILE, expected)
+            "released; nothing was served.".format(
+                shown(os.path.basename(path)), digest, CHECKSUM_FILE, expected
+            )
         )
     return page, digest
 
 
 def main(arguments):
-    parser = argparse.ArgumentParser(
+    parser = Parser(
         prog="mhfe-fast-mode.py",
         description="Serve an MHFE browser tool on this computer (127.0.0.1) in fast mode.",
     )
@@ -292,7 +334,9 @@ def main(arguments):
     except Refused as refusal:
         print("Error: {}".format(refusal), file=sys.stderr)
         return INVALID_INPUT
-    print("SHA-256 of {} verified: {}".format(os.path.basename(path), digest), file=sys.stderr)
+    print(
+        "SHA-256 of {} verified: {}".format(shown(os.path.basename(path)), digest), file=sys.stderr
+    )
 
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))

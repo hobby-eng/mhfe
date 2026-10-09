@@ -15,27 +15,53 @@ use crate::MhfeError;
 
 pub const STATE_BYTES: usize = 32;
 pub type State = [u8; STATE_BYTES];
+/// The words of a phrase that fills the whole state, three for every four bytes (BIP39): a suite 3
+/// container, and the longest original seed phrase, which has no room left for a built-in check.
+pub const STATE_WORDS: usize = words_of_entropy(STATE_BYTES);
+
+/// The words of a BIP39 phrase of `bytes` bytes of entropy: three for every four bytes, as BIP39
+/// adds one checksum bit for every 32 bits of entropy and each word carries 11 bits.
+pub const fn words_of_entropy(bytes: usize) -> usize {
+    bytes / 4 * 3
+}
 
 /// Short phrase lengths, in the order automatic detection tests them.
 pub const SHORT_WORD_COUNTS: [usize; 4] = [12, 15, 18, 21];
 
+/// The entropy bytes of a BIP39 phrase of `words` words, four for every three: the inverse of
+/// [`words_of_entropy`].
+pub const fn entropy_of_words(words: usize) -> usize {
+    words / 3 * 4
+}
+
+/// The checksum bits of a BIP39 phrase of `words` words: one for every three words, 4 for 12 words
+/// and 8 for 24 (BIP39: CS = ENT / 32 and words = (ENT + CS) / 11).
+pub const fn checksum_bits(words: usize) -> usize {
+    words / 3
+}
+
+/// The bits a 24-word phrase's words read: its entropy and, in the byte after it, its BIP39
+/// checksum, the first byte of the entropy's SHA-256.
+pub(crate) fn with_checksum(entropy: &State) -> [u8; STATE_BYTES + 1] {
+    let mut bits = [0u8; STATE_BYTES + 1];
+    bits[..STATE_BYTES].copy_from_slice(entropy);
+    bits[STATE_BYTES] = sha256(entropy)[0];
+    bits
+}
+
 /// Entropy size `ENT / 8` of a phrase with `words` words.
 pub fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
-    match words {
-        12 => Ok(16),
-        15 => Ok(20),
-        18 => Ok(24),
-        21 => Ok(28),
-        24 => Ok(32),
-        other => Err(MhfeError::InvalidWordCount(other)),
+    if !crate::phrase::WORD_COUNTS.contains(&words) {
+        return Err(MhfeError::InvalidWordCount(words));
     }
+    Ok(entropy_of_words(words))
 }
 
 /// Packs the entropy `E` of a phrase into `X`, which is the phrase in all but form: it is written
 /// into a buffer locked first, which the caller holds through the rounds.
 pub fn pack(entropy: &[u8]) -> Result<LockedBytes, MhfeError> {
     let length = entropy.len();
-    if !matches!(length, 16 | 20 | 24 | 28 | 32) {
+    if entropy_bytes(words_of_entropy(length)) != Ok(length) {
         return Err(MhfeError::Internal(format!(
             "BIP39 entropy of {length} bytes cannot be packed"
         )));
@@ -71,14 +97,6 @@ pub fn unpack(state: &State, words: usize) -> Result<&[u8], MhfeError> {
     Ok(entropy)
 }
 
-/// Every short length whose verifier matches `X`, in ascending order.
-pub fn matching_short_lengths(state: &State) -> Vec<usize> {
-    SHORT_WORD_COUNTS
-        .into_iter()
-        .filter(|&words| unpack(state, words).is_ok())
-        .collect()
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -105,19 +123,13 @@ pub(crate) mod tests {
         hex::decode(text).unwrap().try_into().unwrap()
     }
 
-    /// A packed state as the fixed array that `unpack` reads.
-    fn state_of(packed: &LockedBytes) -> &State {
+    /// A packed state as the fixed array that `unpack` and detection read.
+    pub(crate) fn state_of(packed: &LockedBytes) -> &State {
         packed[..].try_into().unwrap()
     }
 
-    #[test]
-    fn the_known_ambiguous_states_match_exactly_two_lengths() {
-        for (text, lengths) in AMBIGUOUS_STATES {
-            assert_eq!(matching_short_lengths(&state_from_hex(text)), lengths);
-        }
-    }
-
-    fn entropy(length: usize) -> Vec<u8> {
+    /// Public test entropy of `length` bytes, every byte different.
+    pub(crate) fn entropy(length: usize) -> Vec<u8> {
         (0..length)
             .map(|index| (index as u8).wrapping_mul(17).wrapping_add(3))
             .collect()
@@ -174,15 +186,6 @@ pub(crate) mod tests {
                 );
             }
         }
-    }
-
-    #[test]
-    fn detection_finds_the_packed_length() {
-        for (length, words) in [(16, 12), (20, 15), (24, 18), (28, 21)] {
-            let state = pack(&entropy(length)).unwrap();
-            assert_eq!(matching_short_lengths(state_of(&state)), vec![words]);
-        }
-        assert!(matching_short_lengths(state_of(&pack(&entropy(32)).unwrap())).is_empty());
     }
 
     #[test]

@@ -1,8 +1,8 @@
 //! Replays the suite 3 test vectors in tests/fixtures/suite3-vectors/ at full size and compares
 //! every recorded value. They are written with `mhfe test-vectors --output
-//! tests/fixtures/suite3-vectors` (`--only NAME` writes one vector, `--only negative-cases` the
-//! negative cases) and checked independently, with the result recorded next to them, with
-//! `python3 scripts/independent-suite3.py vector --record
+//! tests/fixtures/suite3-vectors` (`--only TEXT` writes the vectors whose names contain TEXT,
+//! `--only negative-cases` the negative cases) and checked independently, with the result
+//! recorded next to them, with `python3 scripts/independent-suite3.py vector --record
 //! tests/fixtures/suite3-vectors/independent-verification.json <files>`.
 //!
 //! Expensive, about an hour for the whole set: run on request with
@@ -15,9 +15,11 @@ use blake2::digest::consts::U32;
 use blake2::Blake2b;
 use hmac::{Hmac, KeyInit, Mac};
 use mhfe::vectors::{self, NEGATIVE_INPUTS, PUBLIC_INPUTS};
-use mhfe::{Mhfe, WorkFactor, SUITE_ID};
+use mhfe::{Mhfe, SUITE_ID};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+mod vector_share;
 
 const FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/suite3-vectors");
 
@@ -38,23 +40,6 @@ fn with_recorded_writer(mut written: Value, recorded: &Value) -> Value {
         now["version"] = then["version"].clone();
     }
     written
-}
-
-/// [`with_recorded_writer`] for a list of negative cases, each with a writer of its own.
-fn cases_with_recorded_writer(written: Value, recorded: &Value) -> Value {
-    let (written, recorded) = (written.as_array().unwrap(), recorded.as_array().unwrap());
-    assert_eq!(
-        written.len(),
-        recorded.len(),
-        "the number of negative cases"
-    );
-    Value::Array(
-        written
-            .iter()
-            .zip(recorded)
-            .map(|(case, recorded)| with_recorded_writer(case.clone(), recorded))
-            .collect(),
-    )
 }
 
 /// Fast: every vector file is present, unchanged since it was written, and made from the public
@@ -79,10 +64,14 @@ fn the_vector_files_are_complete_and_unchanged() {
         let vector = recorded(&name);
         assert_eq!(vector["inputs"]["phrase"], input.phrase(), "{name}");
         assert_eq!(vector["inputs"]["password"], input.password(), "{name}");
-        assert_eq!(vector["inputs"]["pim"], input.pim(), "{name}");
+        assert_eq!(
+            vector["inputs"]["pim"],
+            input.work().unwrap().pim(),
+            "{name}"
+        );
         assert_eq!(
             vector["inputs"]["memory_level"],
-            input.memory_level(),
+            input.work().unwrap().memory_level(),
             "{name}"
         );
     }
@@ -170,9 +159,14 @@ fn only_the_writer_version_is_set_aside() {
 #[test]
 #[ignore = "full-size Argon2: about an hour for the whole set"]
 fn every_vector_is_reproduced_exactly() {
-    let mut containers = std::collections::HashMap::new();
-    for input in &PUBLIC_INPUTS {
-        let work = WorkFactor::new(input.pim(), input.memory_level()).unwrap();
+    // The vectors, then the negative cases, in one count, of which this process takes its share
+    // (MHFE_VECTOR_SHARE, tests/vector_share). A negative case reads the container of its vector
+    // from the recorded file, which the replay of that vector compares with what it gives.
+    for (index, input) in PUBLIC_INPUTS.iter().enumerate() {
+        if !vector_share::mine(index) {
+            continue;
+        }
+        let work = input.work().unwrap();
         let mut mhfe = Mhfe::new(work).unwrap();
         let vector = vectors::generate(&mut mhfe, input).unwrap();
         let expected = recorded(&format!("{}.json", input.name()));
@@ -182,23 +176,33 @@ fn every_vector_is_reproduced_exactly() {
             "{}",
             input.name()
         );
-        containers.insert(input.name(), vector.container.clone());
         println!("{}: reproduced", input.name());
     }
 
     let expected = recorded("negative-cases.json");
-    let mut cases = Vec::new();
-    for input in &NEGATIVE_INPUTS {
-        let work = WorkFactor::new(input.pim(), input.memory_level()).unwrap();
+    let expected = expected.as_array().unwrap();
+    assert_eq!(
+        expected.len(),
+        NEGATIVE_INPUTS.len(),
+        "the number of negative cases"
+    );
+    for (offset, (input, expected)) in NEGATIVE_INPUTS.iter().zip(expected).enumerate() {
+        if !vector_share::mine(PUBLIC_INPUTS.len() + offset) {
+            continue;
+        }
+        let work = input.work().unwrap();
         let mut mhfe = Mhfe::new(work).unwrap();
-        cases.push(
-            vectors::negative_case(&mut mhfe, input, &containers[input.container_of()]).unwrap(),
+        let container = recorded(&format!("{}.json", input.container_of()))["container"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let case = vectors::negative_case(&mut mhfe, input, &container).unwrap();
+        assert_eq!(
+            with_recorded_writer(serde_json::to_value(&case).unwrap(), expected),
+            *expected,
+            "{}",
+            input.name()
         );
         println!("{}: reproduced", input.name());
     }
-    assert_eq!(
-        cases_with_recorded_writer(serde_json::to_value(&cases).unwrap(), &expected),
-        expected,
-        "negative cases"
-    );
 }

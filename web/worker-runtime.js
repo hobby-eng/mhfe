@@ -16,16 +16,22 @@ const BUILD_SECTION = "mhfe-build";
 /** The detail of a part in which the WebAssembly stopped: a Rust panic or a fault of the computer. */
 const STOPPED_DETAIL = "the WebAssembly stopped";
 
-/** The fields of a request or an answer that hold secrets; the worker wipes its copies. */
+/**
+ * The fields of a request or an answer that hold secrets; the worker wipes its copies. The page's
+ * runtime lists the same fields (web/runtime.js), as a worker script imports nothing.
+ */
 const SECRET_FIELDS = [
   "phrase",
   "password",
   "passwordRepeat",
   "passphrase",
+  "passphraseRepeat",
+  "chosenWords",
   "newPassword",
   "newPasswordRepeat",
   "mainPassphrase",
   "rolls",
+  "typed",
 ];
 
 /**
@@ -150,11 +156,20 @@ function requireSameBuild(compiled) {
       ? "development"
       : sections.map((bytes) => new TextDecoder().decode(bytes)).join("+");
   if (build !== WORKER_BUILD_ID) {
-    throw new Error(
-      `PACKAGE_MISMATCH: the file runtime/mhfe.wasm is of build ${build} and runtime/worker.js ` +
-        `of build ${WORKER_BUILD_ID}: take every file of the package from one build.`,
+    throw packageMismatch(
+      `the file runtime/mhfe.wasm is of build ${build} and runtime/worker.js of build ` +
+        WORKER_BUILD_ID,
     );
   }
+}
+
+/**
+ * Parts of the package that come from different builds: `what` says which, and the advice follows,
+ * in the words of the page's runtime (packageMismatch() in web/runtime.js). It starts with a word,
+ * not a file's path, which the page's sentence() would capitalize.
+ */
+function packageMismatch(what) {
+  return new Error(`PACKAGE_MISMATCH: ${what}: take every file of the package from one build.`);
 }
 
 /** The Rust core has its own copies, which it wipes; these are the copies in this worker. */

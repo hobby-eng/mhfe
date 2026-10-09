@@ -8,9 +8,13 @@
 // terminal's echo off, and in protect.rs, which forbid core dumps.
 #![deny(unsafe_code)]
 
+mod cell_widths;
 mod check;
 mod check_word;
 mod choice;
+mod chosen_words;
+mod container_repair;
+mod container_search;
 mod decrypt;
 mod diceware;
 mod encrypt;
@@ -18,9 +22,10 @@ mod exit;
 mod flow;
 mod hidden_input;
 mod length_choice;
+mod made_password;
 mod menu;
 mod new_wallet;
-mod plate_repair;
+mod phrase_length;
 mod protect;
 mod readme;
 mod rekey;
@@ -32,6 +37,7 @@ mod style;
 mod system_random;
 mod terminal;
 mod test_tools;
+mod typed_line;
 mod wallets;
 
 use clap::{Parser, Subcommand};
@@ -49,7 +55,8 @@ use crate::exit::Failure;
     about = "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics\n\n\
              Encrypts an English BIP39 seed phrase of 12 to 24 words into a password-\n\
              protected container that is itself a valid BIP39 phrase: 24 words, or as many\n\
-             as a 12- to 21-word original if you choose so. Recovers the original from it.\n\
+             as a 12- to 21-word original seed phrase if you choose so. Recovers the\n\
+             original seed phrase from it.\n\
              Suites MHFE-BIP39-256-EXPERIMENTAL-3 and MHFE-BIP39-LP-EXPERIMENTAL-4.",
     after_help = main_help(),
     // Without a terminal for the menu, `mhfe` alone prints this help.
@@ -72,7 +79,7 @@ enum Command {
         after_long_help = encrypt::long_help()
     )]
     Encrypt(encrypt::Options),
-    /// Recover the original phrase from a container
+    /// Recover the original seed phrase from a container
     #[command(
         long_about = decrypt::about(),
         after_help = decrypt::help(),
@@ -89,22 +96,22 @@ enum Command {
     /// Change the password or settings of a container
     #[command(long_about = rekey::about(), after_help = rekey::help())]
     Rekey(rekey::Options),
-    /// Open hidden wallets on a container with other passwords
+    /// Open hidden wallets with other passwords
     #[command(long_about = wallets::about(), after_help = wallets::help())]
     Wallets(wallets::Options),
-    /// Repair a plate with its repair words
+    /// Repair a container phrase with its repair words
     #[command(
-        long_about = plate_repair::repair_about(),
-        after_help = plate_repair::repair_help()
+        long_about = container_repair::repair_about(),
+        after_help = container_repair::repair_help()
     )]
-    Repair(plate_repair::RepairOptions),
-    /// Make repair words for a plate
+    Repair(container_repair::RepairOptions),
+    /// Make repair words for a container phrase
     #[command(
-        long_about = plate_repair::words_about(),
-        after_help = plate_repair::words_help()
+        long_about = container_repair::words_about(),
+        after_help = container_repair::words_help()
     )]
-    RepairWords(plate_repair::WordsOptions),
-    /// Make a strong password of words or random characters
+    RepairWords(container_repair::WordsOptions),
+    /// Make a strong password of words or characters
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
     /// Test every part of this program
@@ -151,10 +158,13 @@ fn main_help() -> String {
                 "Change the password or settings of a container",
             ),
             ("mhfe wallets", "Open hidden wallets with other passwords"),
-            ("mhfe repair", "Repair a plate with its repair words"),
+            (
+                "mhfe repair",
+                "Repair a container phrase with its repair words",
+            ),
             (
                 "mhfe repair-words --count 4",
-                "Make four repair words for a plate",
+                "Make four repair words for a container phrase",
             ),
             ("mhfe password", "Make a strong password of five dice words"),
             (
@@ -176,11 +186,33 @@ fn main_help() -> String {
             ),
         ],
     );
+    // Commands too long for the two columns above, each with its explanation below it.
+    let full = style::help_section(
+        "Examples with every option:",
+        &[
+            (
+                "mhfe encrypt --pim 3 --mem 2 --same-length --new-password check-word",
+                "PIM 3 and 4 GiB, a container as long as a 12- to 21-word phrase, and a password \
+                 that MHFE makes: five words and a check word",
+            ),
+            (
+                "mhfe decrypt --pim 3 --mem 2 --words auto --repair --scan-gap 100",
+                "Those settings, the length detected, the repair words asked right after the \
+                 container, and without them a search for two missing words over the first 100 \
+                 addresses",
+            ),
+            (
+                "mhfe rekey --pim 3 --mem 2 --new-pim 1 --new-mem 0 --new-password words",
+                "From PIM 3 and 4 GiB to PIM 1 and 2 GiB, under five dice words that MHFE \
+                 makes; --words, --repair and --scan-gap as for decrypt",
+            ),
+        ],
+    );
     let note = "Secrets are typed on a private screen, never passed as arguments. Use MHFE on a \
                 trusted computer without a network connection. -h gives a short summary of a \
                 command, --help the full explanation.";
     format!(
-        "{examples}\n{}\n{}",
+        "{examples}\n{full}\n{}\n{}",
         style::help_note(note),
         style::paint(
             style::WARNING,
@@ -312,8 +344,8 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::New(options) => new_wallet::run(options),
         Command::Rekey(options) => rekey::run(options),
         Command::Wallets(options) => wallets::run(options),
-        Command::Repair(options) => plate_repair::run_repair(options),
-        Command::RepairWords(options) => plate_repair::run_words(options),
+        Command::Repair(options) => container_repair::run_repair(options),
+        Command::RepairWords(options) => container_repair::run_words(options),
         Command::Password(options) => diceware::run(options),
         Command::SelfTest(options) => self_test::run(options),
         Command::Serve(options) => serve::run(options),

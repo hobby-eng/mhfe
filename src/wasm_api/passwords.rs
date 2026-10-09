@@ -15,7 +15,7 @@ use crate::new_password::{
 };
 use crate::self_check::sets;
 use crate::strength::{Strength, WEAK_BELOW_BITS};
-use crate::{MhfeError, Password};
+use crate::MhfeError;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,12 +84,8 @@ pub fn review_password(
     let password = SecretText::new(password_utf8);
     let repeat = SecretText::new(repeat_utf8);
     let typed = password.text(MhfeError::InvalidPasswordUtf8)?;
-    // The checks of a password come first, as the command-line tool makes them.
-    Password::new(typed).map_err(js_error)?;
     let repeat = repeat.text(MhfeError::InvalidPasswordUtf8)?;
-    if repeated && repeat != typed {
-        return Err(js_error(MhfeError::PasswordsDiffer));
-    }
+    check_word::check_typed_twice(typed, repeated.then_some(repeat)).map_err(js_error)?;
     let review = PasswordReview::of(typed);
     let restorable = review.reading() == Reading::Restorable;
     secret_json(&ReviewJson {
@@ -138,8 +134,8 @@ pub fn password_strength(
 ) -> Result<String, JsError> {
     let password = SecretText::new(password_utf8);
     let typed = password.text(MhfeError::InvalidPasswordUtf8)?;
-    let chosen = check_word::chosen_password(typed, None, review_choice(choice, position)?)
-        .map_err(js_error)?;
+    let chosen =
+        check_word::chosen_password(typed, review_choice(choice, position)?).map_err(js_error)?;
     let strength = Strength::of(&chosen);
     json(&StrengthJson {
         bits: strength.bits(),

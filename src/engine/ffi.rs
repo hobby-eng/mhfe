@@ -486,9 +486,9 @@ pub(super) fn available_memory_bytes() -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::known_answers::{rfc_9106, NativeArgon2};
     use crate::engine::native::processor_has_ssse3;
 
-    const RFC_TAG: &str = "0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659";
     /// Smallest Argon2 memory for `lanes` lanes: two blocks per slice and four slices per lane.
     fn minimum_memory_kib(lanes: u32) -> u32 {
         8 * lanes
@@ -545,54 +545,26 @@ mod tests {
         output
     }
 
+    /// RFC 9106, section 5.3: every input differs, and the secret and associated data are set, so
+    /// every field of the context takes part. The inputs and the tag are the startup check's.
     #[test]
     fn matches_the_rfc_9106_argon2id_test_vector() {
-        // RFC 9106, section 5.3: every input differs, and the secret and associated data are
-        // set, so every field of the context takes part.
-        let password = [0x01; 32];
-        let salt = [0x02; 16];
-        let secret = [0x03; 8];
-        let associated_data = [0x04; 12];
-        let rfc = Argon2Inputs {
-            password: &password,
-            salt: &salt,
-            secret: &secret,
-            associated_data: &associated_data,
-            passes: 3,
-            memory_kib: 32,
-            lanes: 4,
-            threads: 4,
-            version: ARGON2_VERSION_13,
-            ssse3: false,
-        };
-        assert_eq!(hex::encode(c_tag(&rfc, 32).unwrap()), RFC_TAG);
-        assert_eq!(hex::encode(rustcrypto_tag(&rfc, 32)), RFC_TAG);
+        let rfc = NativeArgon2::rfc_inputs(false);
+        assert_eq!(c_tag(&rfc, 32).unwrap(), rfc_9106::TAG);
+        assert_eq!(rustcrypto_tag(&rfc, 32), rfc_9106::TAG);
     }
 
     #[test]
     fn both_copies_of_the_argon2_core_give_the_rfc_9106_tag() {
-        let password = [0x01; 32];
-        let salt = [0x02; 16];
-        let secret = [0x03; 8];
-        let associated_data = [0x04; 12];
-        let mut rfc = Argon2Inputs {
-            password: &password,
-            salt: &salt,
-            secret: &secret,
-            associated_data: &associated_data,
-            passes: 3,
-            memory_kib: 32,
-            lanes: 4,
-            threads: 4,
-            version: ARGON2_VERSION_13,
-            ssse3: false,
-        };
-        assert_eq!(hex::encode(c_tag(&rfc, 32).unwrap()), RFC_TAG);
+        assert_eq!(
+            c_tag(&NativeArgon2::rfc_inputs(false), 32).unwrap(),
+            rfc_9106::TAG
+        );
         // Only x86-64 has the SSSE3 copy, and only a processor with SSSE3 may run it; every
         // GitHub runner and the development laptops have it.
         if processor_has_ssse3() {
-            rfc.ssse3 = true;
-            assert_eq!(hex::encode(c_tag(&rfc, 32).unwrap()), RFC_TAG);
+            let rfc = NativeArgon2::rfc_inputs(true);
+            assert_eq!(c_tag(&rfc, 32).unwrap(), rfc_9106::TAG);
         }
     }
 

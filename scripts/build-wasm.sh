@@ -7,7 +7,7 @@
 #               mhfe.wasm (the library) and worker.js (the worker that runs it)
 #   core/       MhfeClient: encryption, recovery, check, rekey, hidden wallets, self-test, with
 #               Argon2: client.js, client.d.ts, argon2-mt.js, argon2-st.js, mhfe-fast-mode.py
-#   repair/     MhfeRepair: repair words and plate repair: repair.js, repair.d.ts
+#   repair/     MhfeRepair: repair words and container phrase repair: repair.js, repair.d.ts
 #   passwords/  MhfePasswords: check word, strength, generator: passwords.js, passwords.d.ts
 #   wallet/     MhfeWallet: wallet check, fingerprints, address searches, new phrases: wallet.js,
 #               wallet.d.ts
@@ -27,7 +27,7 @@
 # one file, and a page that uses several classes would load and compile that shared code several
 # times. worker.js is the wasm-bindgen glue, the Argon2 bridge, web/worker-runtime.js, each
 # module's operations and web/worker-start.js, one script, as a worker under the tools' CSP may
-# load no other. Needs wasm-bindgen 0.2.129 and Emscripten 6.0.10 (see
+# load no other. Needs wasm-bindgen 0.2.129 and Emscripten 6.0.12 (see
 # scripts/build-argon2-wasm.sh), unless PREBUILT_ARGON2_DIR names a folder with argon2-mt.js and
 # argon2-st.js built by that script.
 set -euo pipefail

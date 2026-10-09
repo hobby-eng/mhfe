@@ -68,12 +68,6 @@ impl LockedText {
     pub fn capacity(&self) -> usize {
         self.text.capacity()
     }
-
-    /// The text and the guard of its pages, for a holder of its own that keeps both, declaring
-    /// the guard after the text, as [`crate::RecoveredPhrase`] does.
-    pub(crate) fn into_parts(self) -> (Zeroizing<String>, LockedPages) {
-        (self.text, self.locked)
-    }
 }
 
 impl Deref for LockedText {
@@ -167,11 +161,35 @@ impl DerefMut for LockedBytes {
     }
 }
 
+/// The buffer a front end reads one typed line into, a secret possibly, reserved and locked at
+/// this size so that it never moves: 8 KiB. Every valid answer is far shorter: a password has at
+/// most 1024 bytes after NFKD normalization and at most 4096 as typed, since NFKD never shortens a
+/// character count and a character takes at most four bytes.
+pub const TYPED_LINE_BYTES: usize = 8192;
+
 /// The self-check `memory-locking`: whether this process can keep a secret out of swap, tried on
-/// one small buffer as every typed secret is. It only warns: a refusal, such as a low
-/// RLIMIT_MEMLOCK, leaves secrets working but able to reach swap. Where nothing is locked at all,
-/// it says why.
-pub struct LockProbe;
+/// a buffer of the size a front end locks for each typed line ([`TYPED_LINE_BYTES`]), so that a
+/// pass says that buffer is locked, not only a smaller one (AUD-016-SEC002). It only warns: a
+/// refusal, such as a low RLIMIT_MEMLOCK, leaves secrets working but able to reach swap. Where
+/// nothing is locked at all, it says why. Each buffer is locked as it is made, and
+/// [`LockedText::is_locked`] tells whether that one was.
+pub struct LockProbe {
+    bytes: usize,
+}
+
+impl LockProbe {
+    /// The probe of a buffer of `bytes` bytes.
+    pub const fn of(bytes: usize) -> Self {
+        Self { bytes }
+    }
+}
+
+impl Default for LockProbe {
+    /// The probe of one typed line's buffer.
+    fn default() -> Self {
+        Self::of(TYPED_LINE_BYTES)
+    }
+}
 
 impl crate::self_check::ComponentCheck for LockProbe {
     fn id(&self) -> &'static str {
@@ -194,14 +212,15 @@ impl crate::self_check::ComponentCheck for LockProbe {
                 "this build locks no memory on this system".to_owned(),
             );
         }
-        // Public text, as long as a typical password.
-        let probe = LockedText::copy_of("public probe of memory locking");
+        // Nothing is written into it: only its pages matter.
+        let Ok(probe) = LockedBytes::build::<Infallible>(self.bytes, |_| Ok(()));
         if probe.is_locked() {
             ComponentOutcome::Passed
         } else {
-            ComponentOutcome::Warning(
-                "the system refused to lock memory, so typed secrets may reach swap".to_owned(),
-            )
+            ComponentOutcome::Warning(format!(
+                "the system refused to lock {} bytes of memory, so typed secrets may reach swap",
+                self.bytes
+            ))
         }
     }
 }
@@ -345,15 +364,16 @@ mod tests {
     #[test]
     fn the_lock_probe_tells_whether_memory_is_locked() {
         use crate::self_check::{ComponentCheck, Tier};
-        let outcome = LockProbe.run(Tier::Startup);
-        let locked = LockedText::copy_of("public probe").is_locked();
+        let outcome = LockProbe::default().run(Tier::Startup);
+        let Ok(buffer) = LockedBytes::build::<Infallible>(TYPED_LINE_BYTES, |_| Ok(()));
+        let locked = buffer.is_locked();
         let expected = match (cfg!(unix), locked) {
             (true, true) => "passed",
             (true, false) => "warning",
             (false, _) => "notAvailable",
         };
         assert_eq!(outcome.name(), expected);
-        assert!(!LockProbe.run(Tier::Full).is_failure());
+        assert!(!LockProbe::default().run(Tier::Full).is_failure());
     }
 
     /// A small buffer fits any usual RLIMIT_MEMLOCK (64 KiB or more) on Unix.
@@ -425,15 +445,23 @@ mod tests {
         assert_eq!(pages::holders_of(page), 0, "the pages were not released");
     }
 
+    /// A whole page inside a buffer of the calling test alone, so that no other test's guard can
+    /// hold it: the buffer, which must outlive the page's use, the page's address and its size.
+    #[cfg(unix)]
+    fn page_of_this_test() -> (Vec<u8>, usize, usize) {
+        let size = crate::engine::page_size().expect("a Unix system reports its page size");
+        let area: Vec<u8> = Vec::with_capacity(3 * size);
+        let page = (area.as_ptr() as usize).next_multiple_of(size);
+        (area, page, size)
+    }
+
     /// Two secrets on one page, as the allocator often places small buffers: dropping the guard
     /// of one, in either order, must not unlock the other (AUD-007-SEC002). The page lies inside
     /// a buffer of this test alone, so no other test's guard can hold it too.
     #[cfg(unix)]
     #[test]
     fn a_shared_page_stays_locked_until_its_last_guard_is_dropped() {
-        let size = crate::engine::page_size().expect("a Unix system reports its page size");
-        let area: Vec<u8> = Vec::with_capacity(3 * size);
-        let page = (area.as_ptr() as usize).next_multiple_of(size);
+        let (area, page, size) = page_of_this_test();
         let (first, second) = (page, page + size / 2);
         for first_dropped_first in [true, false] {
             let a = LockedPages::lock(first as *const u8, 64);
@@ -491,9 +519,7 @@ mod tests {
     fn guards_on_one_page_from_several_threads_keep_exact_counts() {
         const THREADS: usize = 8;
         const ROUNDS: usize = 500;
-        let size = crate::engine::page_size().expect("a Unix system reports its page size");
-        let area: Vec<u8> = Vec::with_capacity(3 * size);
-        let page = (area.as_ptr() as usize).next_multiple_of(size);
+        let (area, page, _) = page_of_this_test();
         // Kept by this thread throughout, so the page must stay locked whatever the others do.
         let kept = LockedPages::lock(page as *const u8, 16);
         if !kept.is_locked() {

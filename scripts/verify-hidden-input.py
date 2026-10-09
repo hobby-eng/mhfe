@@ -39,10 +39,10 @@ terminal settings are restored either way. The `mhfe password` entry shows each 
 private screen, which it clears for the next one on Enter and when Escape or q returns to the menu;
 the help entry returns on Enter. Neither needs secret input.
 
-It answers the first question of `mhfe rekey`, which every user gets: whether the funds of other
-wallets on the container are moved or backed up another way (AUD-007-FUN002). Yes goes on to the
-container, No stops with exit code 130 before anything is typed, and so does Escape; the question
-never asks for another wallet or its password.
+`mhfe rekey` asks nothing about other wallets on the container: every user gets a warning at the
+top of the container prompt that they do not move to the new container and that the old one and its
+passwords are kept until their funds are moved (the owner's decision of 2026-10-08, in place of
+AUD-007-FUN002's question). No password is asked before it.
 
 A rekey asks whether the wallet has a BIP39 passphrase (multi-chain-wallet-tools AUD-022-API004)
 once, as soon as the kind of confirmation is known, for every kind: the next screen after the
@@ -62,23 +62,28 @@ before Argon2 runs, with exit code 4. The summary then holds exactly one "Passph
 answer, after the choice of the confirmation and before the reference. Other systems do not enforce
 that limit, so there every run stops with Escape at the question, after the arrow.
 
+The same question at a terminal that cannot redraw a list (TERM=dumb), after the hidden old
+password of a 12-word phrase, has numbered answers, prompted as "Choice: " without a default: an
+empty line, or a number out of range, gets "Type a number from 1 to 2." and the prompt again. On
+Linux the capped run then takes 2 and stops at the memory reservation with exit code 4; elsewhere
+Ctrl+C at the prompt ends the tool with exit code 130.
+
 Last, it answers the questions of `mhfe encrypt` up to the password, so again without Argon2: its
 own settings, PIM 1 after a mistyped one; the phrase, refused once for its checksum and then taken
 without a question; the length question on a cleared screen, where ? explains both lengths and the
-arrows and Enter keep 24 words; whether the wallet has a BIP39 passphrase, on a cleared screen with
-both answers, none marked, and the link to the README section of the command, where Enter alone
-does nothing and ↑ marks the last answer for Enter, as the hint then says; no repair words; Ctrl+C
-at the repeated password ends the tool. The summary then records the settings, the phrase's length,
-the container's, the passphrase and the repair choice, in the order they were asked, and holds none
-of the questions.
-Escape at a list cancels with exit code 130. The phrase is the public zero-12 test phrase and the
-password a synthetic one, which never reaches the main screen. A script, `mhfe encrypt --stdin`, is
-not asked about the passphrase: it gives the phrase and two passwords that differ, which end the
-tool with exit code 2 before Argon2. A terminal that cannot redraw a list (TERM=dumb) gets the
-question of `mhfe encrypt --pim 0` with numbered answers after the hidden phrase, prompted as
-"Choice: " without a default: an empty line, or a number out of range, gets "Type a number from 1
-to 2." and the prompt again, and 2 goes on to the hidden password, where Ctrl+C ends the tool. The
-phrase is never shown there.
+arrows and Enter keep 24 words; then at once the question about repair words: `mhfe encrypt` asks
+nothing about a BIP39 passphrase, and its list of what to keep names any passphrase of the wallet
+instead; no repair words; Ctrl+C at the repeated password ends the tool. The summary then records
+the settings, the phrase's length, the container's and the repair choice, in the order they were
+asked, has no Passphrase record and holds none of the questions. Escape at a list cancels with exit
+code 130. The phrase is the public zero-12 test phrase and the password a synthetic one, which never
+reaches the main screen. `mhfe encrypt --help` lists no BIP39 passphrase among what it asks for. A
+script, `mhfe encrypt --stdin`, is not asked about the passphrase either: it gives the phrase and
+two passwords that differ, which end the tool with exit code 2 before Argon2. A terminal that cannot
+redraw a list (TERM=dumb) gets the hidden password of `mhfe encrypt --pim 0` right after the hidden
+phrase, with no question between them, and Ctrl+C there ends the tool. The phrase is never shown
+there. The Keep line itself appears only after the encryption's Argon2 at 2 GiB, which this script
+never runs; its wording is checked by the unit tests of src/bin/mhfe/encrypt.rs.
 
 Finally it checks that a phrase the person did not ask to export is shown only on a private screen
 (AUD-007-SEC001): `mhfe new` and `mhfe wallets` refuse to start, before anything is asked and with
@@ -173,7 +178,8 @@ SELF_TEST_ENTRY = PASSWORD_ENTRY + 1
 # the tenth, past the number keys, so it is reached with the arrows from the password entry.
 HELP_FROM_PASSWORD = 2
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
-MENU_SHOWN, PASSWORD_MADE = b"Esc quits", b"bits"
+# A password made ends its summary with "bits."; the answers of its kind name bits without the stop.
+MENU_SHOWN, PASSWORD_MADE = b"Esc quits", b"bits."
 BACK_TO_MENU = b"Press Enter to return to the menu (Esc quits)."
 PASSWORD_AGAIN = b"Press Enter for another password (Esc returns to the menu)."
 # The question of the password entry: five dice words, five words and a check word, or sixteen
@@ -183,14 +189,16 @@ PASSWORD_KIND = b"What kind of password?"
 # that records the chosen container length.
 LIST_SHOWN, EXPLAINED = b"Esc cancels", b"8-character code"
 LENGTH_RECORDED = b"Container  24 words (recommended)"
-# The question about repair words for the plate, and the record of "No repair words".
-REPAIR_ASKED, REPAIR_RECORDED = b"Repair words for the plate?", b"Repair     No repair words"
+# The question about repair words for the container, and the record of "No repair words".
+REPAIR_ASKED = b"Repair words for the container phrase?"
+REPAIR_RECORDED = b"Repair     No repair words"
 PHRASE_RECORDED = b"Phrase     12 words, valid"
 # Valid words whose checksum fails: the phrase is refused and asked again.
 BAD_CHECKSUM = b" ".join([b"abandon"] * 12)
 SETTINGS_ASKED, OWN_SETTINGS = b"#settings-pim-and-memory-level", b"PIM 1 \xc2\xb7 memory level 0"
-# The question of `mhfe encrypt` and `mhfe rekey` about the wallet's BIP39 passphrase, for the keep
-# list at the end; its two answers, neither of them a default; and the record of each.
+# The question of `mhfe rekey` about the wallet's BIP39 passphrase, for the keep list at the end,
+# which `mhfe encrypt` does not ask; its two answers, neither of them a default; and the record of
+# each.
 PASSPHRASE_ASKED = b"Does the wallet of this phrase have a BIP39 passphrase?"
 PASSPHRASE_ANSWERS = (b"1  No BIP39 passphrase", b"2  It has a BIP39 passphrase")
 NO_PASSPHRASE_RECORDED = b"Passphrase No BIP39 passphrase"
@@ -285,6 +293,7 @@ SELF_TEST_PARTS = (
     ("Passwords (Unicode 17)", "as published"),
     ("BIP39 words", "as published"),
     ("Repair words (MHFE-REPAIR-1)", "as published"),
+    ("Search for missing words", "as published"),
     ("Password check word (MHFE-PASSWORD-CHECK-1)", "as published"),
     ("Wallet hashes", "as published"),
     ("BIP39 seeds", "as published"),
@@ -296,8 +305,10 @@ SELF_TEST_PARTS = (
     ("Rehearsal", "as published"),
     ("Argon2id at 64 and 256 MiB", "as published"),
     ("Password generator", "as published"),
+    ("Word hints", "as published"),
     ("Random source", "healthy"),
     ("Address search", "as published"),
+    ("Chosen word of a new phrase", "as published"),
     ("Locked memory", "works"),
     ("Core dumps", "off"),
     ("Isolation", ISOLATED),
@@ -347,6 +358,17 @@ CHECK_UNMARKED_HINT = ("↑ ↓ choose · 1 or 2 at once · ? explains both\r\n"
                        "Enter selects once one is marked · Esc cancels").encode()
 CHECK_MARKED_HINT = ("↑ ↓ choose · Enter selects · 1 or 2 at once · ? explains both · "
                      "Esc cancels").encode()
+# The question of `mhfe new` about a chosen word (chosen_words.rs in the tool), what it asks on its
+# private screen, the refusal of a position the library does not take, the warnings before the draw
+# and the record of the wishes, which names no word.
+CHOSEN_ASKED = b"Do you want to choose a word of the new phrase?"
+CHOSEN_WORD_ASKED = b"Chosen word, or Enter for none"
+PLACE_ASKED = b"or Enter for anywhere: "
+NEVER_USE_ASKED = b"Word never to use, or Enter for none: "
+PLACE_REFUSED = b"the chosen word needs a"
+RECOGNISABLE = b"If someone learns or guesses your chosen word, it lets them rule out almost"
+AMPLE = b"The phrase keeps about 244 of its 256 random bits: still far more than"
+CHOSEN_RECORDED = b"Chosen     1 word, 1 never to use; about 244 random bits"
 # The question of `mhfe check` about the reference, the place of "The phrase + passphrase check"
 # for a 24-word container whose original may be shorter, and what an empty passphrase gets there.
 COMPARE_ASKED = b"What should the recovered seed phrase be compared with?"
@@ -515,7 +537,7 @@ class Session:
         return True
 
     def at_password_prompt(self):
-        self.wait_for(b"original: ")
+        self.wait_for(b"original seed phrase: ")
         # The container is read on its own private screen and taken at once.
         self.answer(CONTAINER.encode() + b"\r", b"Container password: ")
 
@@ -527,6 +549,63 @@ def shown_privately(label, output, secret):
     left = output.find(LEAVE_PRIVATE, entered)
     assert left >= 0, f"{label}: the private screen was not left"
     assert secret not in output[left:], f"{label}: the password reached the main screen"
+
+
+# The hints below a line of words or a password (typed_line.rs in the tool): how many words begin
+# with one letter, the words that begin with two, and a word that no list has.
+COUNT_HINT = b"136 BIP39 words begin with this letter"
+WORDS_HINT = b"abandon   ability   able"
+NO_WORD_HINT = b"No BIP39 word begins like this."
+CLEAR_BELOW = b"\x1b[J"
+
+
+def check_word_hints():
+    """Below the container phrase, the words of the BIP39 list are hinted as they are typed: one
+    letter gives how many begin with it, two the words. Tab completes a word, Ctrl+W deletes the
+    last one, and a word no list has is said. The container typed with four letters of each word
+    and Tab is the container. At the password, words of the EFF list are hinted, and Tab stays a
+    character of the password. No hint is left on the main screen."""
+    session = Session()
+    session.wait_for(b"original seed phrase: ")
+    session.answer(b"a", COUNT_HINT)
+    session.answer(b"b", WORDS_HINT)
+    session.answer(b"ou\t", b"about ")
+    session.answer(b"xq", NO_WORD_HINT)
+    session.answer(b"\x17\x17", CLEAR_BELOW)
+    start = len(session.output)
+    # Four letters of each longer word, then Tab: the whole word and a space. A shorter word may
+    # begin a longer one, as "rib" begins "ribbon", so it is typed whole with its space.
+    shortened = b"".join(word[:4] + b"\t" if len(word) >= 4 else word + b" "
+                         for word in CONTAINER.encode().split())
+    session.answer(shortened + b"\r", b"Container password: ")
+    assert CONTAINER.encode() + b" " in typed_echo(session.output[start:]), (
+        "hints: Tab did not complete the container")
+    session.answer(b"jov", b"jovial")
+    session.answer(b"\t", CLEAR_BELOW)
+    code, settings = session.close()
+    assert settings == session.original, "hints: the terminal settings were not restored"
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    for hint in (COUNT_HINT, b"jovial", NO_WORD_HINT):
+        assert hint not in summary, f"hints: {hint!r} reached the main screen"
+    print("hints: a count after one letter, the words after two, a word no list has said")
+    print("hints: Tab completes the container from four letters a word; Ctrl+W deletes a word")
+    print("hints: EFF words below the password, where Tab stays part of the password")
+
+
+# The rows of a hint below a line being typed (typed_line.rs in the tool): each written after the
+# line's "clear below" on a row of its own, in colour or not, before the cursor moves back up.
+HINT_ROWS = re.compile(rb"(?<=\x1b\[J)(?:\r?\r\n(?:[^\x1b]|\x1b\[[0-9;]*m)*)+(?=\x1b\[\d+A)")
+
+
+def without_hints(output):
+    """`output` without the rows of hints, and nothing else taken out."""
+    return HINT_ROWS.sub(b"", output)
+
+
+def typed_echo(output):
+    """The characters a line showed as they were typed: without the hint rows below it, the space
+    and backspace that move the cursor to the next row, and the control sequences."""
+    return re.sub(CONTROL_SEQUENCE, b"", without_hints(output).replace(b" \x08", b""))
 
 
 def check_password(label, password, expected, not_shown=None):
@@ -695,29 +774,48 @@ def check_menu():
     print("menu: Ctrl+C, exit code 130, terminal restored")
 
 
-def check_rekey_asks_about_other_wallets():
-    question = b"backed up another way?"
-    for label, key, expected in (("Yes", b"1", (b"original: ",)),
-                                 ("No", b"2", (b"Move the funds", b"Cancelled")),
-                                 ("Escape", ESCAPE, (b"Cancelled",))):
-        session = Session(("rekey", "--pim", "0", "--words", "24"))
-        session.wait_for(question)
-        session.answer(key, *expected)
+# The warning of `mhfe rekey` about other wallets on the old container (src/bin/mhfe/rekey.rs).
+OTHER_WALLETS_WARNING = (b"Wallets that other passwords open on the old container do not move to "
+                         b"the new one: keep the old container and its passwords until you have "
+                         b"moved their funds.",)
+CONTAINER_ASKED = b"original seed phrase: "
+
+
+def check_rekey_warns_about_other_wallets():
+    # A PIM that is not the default is named among what to keep; the default settings are not.
+    for pim, warning in (("0", OTHER_WALLETS_WARNING),
+                         ("2", (b"keep the old container, its passwords and PIM 2 until you have "
+                                b"moved their funds.",))):
+        label = f"rekey --pim {pim}"
+        session = Session(("rekey", "--pim", pim, "--mem", "0", "--words", "24"))
+        session.wait_for(CONTAINER_ASKED)
         code, settings = session.close()
-        assert code == CANCELLED, f"rekey, {label}: exit code {code}"
-        assert settings == session.original, f"rekey, {label}: terminal settings changed"
-        asked = session.output[: session.output.find(question)]
-        assert b"Password" not in asked, f"rekey, {label}: a password was asked first"
-        if label != "Yes":
-            assert b"original: " not in session.output, f"rekey, {label}: went on to the container"
-        result = "goes on to the container" if label == "Yes" else "stops, exit code 130"
-        print(f"rekey: {label} at the question about other wallets {result}")
+        assert code == CANCELLED, f"{label}: exit code {code}"
+        assert settings == session.original, f"{label}: terminal settings changed"
+        before = re.sub(CONTROL_SEQUENCE, b"", session.output[: session.output.find(CONTAINER_ASKED)])
+        # Each wrapped line of a warning starts with its "!": compare the words.
+        words = re.sub(rb"\s+", b" ", re.sub(rb"(?m)^! ", b"", before.replace(b"\r", b"")))
+        for line in warning:
+            assert line in words, f"{label}: {line!r} is not shown above the container prompt"
+        assert b"backed up another way?" not in session.output, f"{label}: the old question was asked"
+        assert b"Password" not in before, f"{label}: a password was asked first"
+        print(f"{label}: the warning about other wallets heads the container prompt, nothing is asked")
 
 
-def passphrase_question(command):
-    """The question about the wallet's passphrase as a terminal shows it, with the link to the
-    README section of `command` on the next line, as part of the question."""
-    return PASSPHRASE_ASKED + b"\r\n  More: https://github.com/hobby-eng/mhfe#mhfe-" + command
+# Why a rekey asks about the passphrase, the lines under the question (ASKS_WHY in
+# src/bin/mhfe/rekey.rs).
+PASSPHRASE_WHY = (b"Asked only so that the list of what to keep at the end is complete:",
+                  b"MHFE stores no passphrase and asks for one only to compare it with an",
+                  b"address or a fingerprint.")
+# The record of any answer about the passphrase, at the start of its line of the summary.
+ANY_PASSPHRASE_RECORDED = rb"(?m)^  Passphrase "
+
+
+def passphrase_question():
+    """The question about the wallet's passphrase as a terminal shows it: the reason it is asked,
+    indented, then after a blank line the link to the README section of `mhfe rekey`."""
+    why = b"".join(b"\r\n  " + line for line in PASSPHRASE_WHY)
+    return PASSPHRASE_ASKED + why + b"\r\n\r\n  More: https://github.com/hobby-eng/mhfe#mhfe-rekey"
 
 
 def check_no_default(label, session):
@@ -738,8 +836,7 @@ def rekey_at_old_password(words, capped):
     """Starts `mhfe rekey` for a phrase of `words` words, with the address space capped when
     `capped`, and answers up to the old container password."""
     session = Session(("rekey", "--pim", "0", "--words", words), capped=capped)
-    session.wait_for(b"backed up another way?")
-    session.answer(b"1", b"original: ")
+    session.wait_for(CONTAINER_ASKED)
     session.answer(CONTAINER.encode() + b"\r", b"container password: ")
     return session
 
@@ -750,7 +847,7 @@ def asked_next(label, session, since, typed=b""):
     come in between. No reference of the wallet, passphrase or memory for the long work was asked
     for before it."""
     question = session.output.find(PASSPHRASE_ASKED, since)
-    between = re.sub(CONTROL_SEQUENCE, b"", session.output[since:question])
+    between = re.sub(CONTROL_SEQUENCE, b"", without_hints(session.output[since:question]))
     between = between.replace(typed, b"").replace(REKEY_TITLE, b"")
     assert between.strip() == b"", f"rekey, {label}: {between!r} before the passphrase question"
     for prompt in (COIN_ASKED, ADDRESS_ASKED, FINGERPRINT_ASKED, ANY_PASSPHRASE_ASKED,
@@ -804,7 +901,7 @@ def check_rekey_asks_about_the_passphrase():
     and only with an address or the fingerprint; it may not be empty there."""
     capped = sys.platform == "linux"
     # On a screen of its own, as every step.
-    asked = (CLEAR, passphrase_question(b"rekey"), *PASSPHRASE_ANSWERS, LIST_SHOWN)
+    asked = (CLEAR, passphrase_question(), *PASSPHRASE_ANSWERS, LIST_SHOWN)
     for kind, words, confirmation, mark, select, has_one in (
         # A 12-word phrase has a built-in check: nothing is chosen after the password. ↓ marks the
         # first answer, which Enter then takes.
@@ -851,7 +948,7 @@ def check_rekey_asks_about_the_passphrase():
             assert ANY_PASSPHRASE_ASKED not in session.output, (
                 f"rekey, {label}: asked for a passphrase")
         assert record in summary, f"rekey, {label}: the summary lacks {record!r}"
-        records = re.findall(rb"(?m)^  Passphrase ", summary)
+        records = re.findall(ANY_PASSPHRASE_RECORDED, summary)
         assert len(records) == 1, f"rekey, {label}: {len(records)} Passphrase records, not one"
         assert PASSPHRASE_ASKED not in summary, f"rekey, {label}: the question reached the summary"
         # Recorded where it was asked: after the choice of the confirmation, before the reference.
@@ -881,14 +978,12 @@ def check_encrypt_lists():
     # A valid phrase is taken at once, without a question; the next step clears the screen.
     session.answer(PHRASE.encode() + b"\r", CLEAR, b"How long should", LIST_SHOWN)
     session.answer(b"?", EXPLAINED, LIST_SHOWN)
-    session.answer(IGNORED_KEY + DOWN + UP + ENTER, CLEAR, passphrase_question(b"encrypt"),
-                   *PASSPHRASE_ANSWERS, LIST_SHOWN)
-    check_no_default("encrypt", session)
-    # ↑ with nothing marked marks the last answer, and the hint then offers Enter, which takes it.
-    session.answer(UP, HIGHLIGHT + b" " + PASSPHRASE_ANSWERS[1], MARKED_HINT)
-    session.answer(ENTER, CLEAR, REPAIR_ASKED, LIST_SHOWN)
+    # Nothing is asked about a passphrase: the length is followed by the repair words.
+    session.answer(IGNORED_KEY + DOWN + UP + ENTER, CLEAR, REPAIR_ASKED, LIST_SHOWN)
     # No repair words: they would appear only after the encryption, which this test never reaches.
-    session.answer(b"5", b"Container password: ")
+    session.answer(b"5", PASSWORD_KIND_ASKED, LIST_SHOWN)
+    # The person's own password, the first answer.
+    session.answer(b"1", b"Container password: ")
     session.answer(SECRET + b"\r", b"Repeat the container password: ")
     session.answer(SECRET + CTRL_C, b"Cancelled")
     assert session.drain_until_exit(10), "encrypt: Ctrl+C did not end the tool"
@@ -899,18 +994,17 @@ def check_encrypt_lists():
     assert IGNORED_KEY not in session.output, "encrypt: a key was shown"
     # The steps stayed on the alternate screen; the main screen got the summary when it ended.
     summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
-    records = (OWN_SETTINGS, PHRASE_RECORDED, LENGTH_RECORDED, PASSPHRASE_RECORDED,
-               REPAIR_RECORDED)
+    records = (OWN_SETTINGS, PHRASE_RECORDED, LENGTH_RECORDED, REPAIR_RECORDED)
     for record in records:
         assert record in summary, f"encrypt: the summary lacks {record!r}"
-    # The passphrase is asked after the container's length and before the repair words.
     places = [summary.find(record) for record in records]
     assert places == sorted(places), "encrypt: the summary is not in the order of the questions"
-    for step in (b"How long should", b"seed phrase: ", EXPLAINED, PASSPHRASE_ASKED):
+    for step in (b"How long should", b"seed phrase: ", EXPLAINED):
         assert step not in summary, f"encrypt: {step!r} reached the main screen"
+    assert PASSPHRASE_ASKED not in session.output, "encrypt: asked about the passphrase"
+    assert not re.search(ANY_PASSPHRASE_RECORDED, summary), "encrypt: a Passphrase record"
     print("encrypt: own settings; phrase refused once, then taken at once; ? and the arrows")
-    print("encrypt: asks about the passphrase after the length, with its link; records the answer")
-    print("encrypt: the passphrase question has no default; Enter alone does nothing, ↑ then Enter")
+    print("encrypt: nothing asked about a passphrase; the summary has no Passphrase record")
     print("encrypt: password shown only on the alternate screen; Ctrl+C leaves it, exit code 130")
     print("encrypt: every step on a cleared screen; only the summary on the main screen")
 
@@ -926,41 +1020,133 @@ def check_encrypt_lists():
 
 def check_encrypt_script():
     """A script gives the phrase and the password twice, one per line, and is not asked about the
-    wallet's passphrase: the two lines after the phrase are taken as the passwords. They differ,
-    which ends the tool before Argon2. A question would show its text and take the first password
-    line as its answer instead."""
+    wallet's passphrase, as no one is: the two lines after the phrase are taken as the passwords.
+    They differ, which ends the tool before Argon2. A question would show its text and take the
+    first password line as its answer instead. The help lists no passphrase among what encrypt asks
+    for."""
     lines = b"\n".join((PHRASE.encode(), SECRET, SECRET + b"x")) + b"\n"
     result = subprocess.run([PROGRAM, "encrypt", "--stdin"], input=lines, capture_output=True,
                             env=dict(os.environ, NO_COLOR="1"), timeout=30)
     assert result.returncode == INVALID_INPUT, f"encrypt --stdin: exit code {result.returncode}"
-    assert b"The two passwords differ" in result.stderr, f"encrypt --stdin: {result.stderr!r}"
+    assert b"The password and its repetition differ" in result.stderr, (
+        f"encrypt --stdin: {result.stderr!r}"
+    )
     assert PASSPHRASE_ASKED not in result.stderr, "encrypt --stdin: asked about the passphrase"
     assert NUMBERED_PROMPT not in result.stderr, "encrypt --stdin: asked to choose"
     assert result.stdout == b"", "encrypt --stdin: wrote to standard output"
     print("encrypt --stdin: not asked about the passphrase; two different passwords end it, code 2")
+    text = run_plainly(("encrypt", "--help")).stdout
+    asks = text[text.index(b"What it asks for:"):text.index(b"Examples:")]
+    assert b"Original seed phrase" in asks and b"Password" in asks, f"encrypt --help: {asks!r}"
+    assert b"passphrase" not in asks.lower(), f"encrypt --help: asks for a passphrase: {asks!r}"
+    print("encrypt --help: no passphrase among what it asks for")
+
+
+# The question of `mhfe encrypt`, `mhfe new` and `mhfe rekey` before a new password
+# (made_password.rs in the tool), and what a password made asks and records.
+PASSWORD_KIND_ASKED = b"The container password: type your own, or let MHFE make one?"
+MADE_SHOWN = re.compile(rb"\r\n  ([a-z-]+(?: [a-z-]+){4})\r\n")
+TYPED_BACK_ASKED = b"Password as you wrote it down: "
+NOT_AS_SHOWN = b"That is not the password shown: correct your copy from the screen."
+MADE_RECORDED = b"Password   made by MHFE: 5 words from the EFF list, about 64.6 bits."
+
+
+def check_made_password():
+    """`mhfe encrypt` offers a password made by MHFE: five dice words are shown once on a private
+    screen, then typed back from the copy; a wrong copy shows the password again, the right one
+    goes on. The summary records the kind and strength, never the words. On Linux the capped run
+    then stops at the memory reservation, before Argon2; elsewhere Ctrl+C ends it at the
+    reservation's place."""
+    capped = sys.platform == "linux"
+    session = Session(("encrypt", "--pim", "0"), capped=capped)
+    session.wait_for(b"seed phrase: ")
+    session.answer(PHRASE.encode() + b"\r", b"How long should", LIST_SHOWN)
+    session.answer(ENTER, REPAIR_ASKED, LIST_SHOWN)
+    session.answer(b"5", PASSWORD_KIND_ASKED, LIST_SHOWN)
+    start = len(session.output)
+    session.answer(b"2", b"Write it down now")
+    shown = MADE_SHOWN.search(session.output[start:])
+    assert shown, f"made password: none shown in {session.output[start:]!r}"
+    made = shown.group(1)
+    session.answer(ENTER, TYPED_BACK_ASKED)
+    session.answer(made + b"x\r", NOT_AS_SHOWN, b"Write it down now")
+    session.answer(ENTER, TYPED_BACK_ASKED)
+    if capped:
+        session.answer(made + b"\r", MEMORY_REFUSED)
+        assert session.drain_until_exit(10), "made password: the refusal did not end the tool"
+    else:
+        session.answer(made + b"\r", b"Encrypting")
+        session.answer(CTRL_C, b"Cancelled")
+        assert session.drain_until_exit(10), "made password: Ctrl+C did not end the tool"
+    code, settings = session.close()
+    assert code == (NOT_ENOUGH_RESOURCES if capped else CANCELLED), f"made password: code {code}"
+    assert settings == session.original, "made password: the terminal settings changed"
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    assert MADE_RECORDED in summary, "made password: no record of it"
+    assert made not in summary, "made password: the words reached the main screen"
+    print("made password: shown once, typed back, a wrong copy shows it again; recorded by kind")
 
 
 def check_encrypt_numbered():
-    """A terminal that cannot redraw a list gets the question about the passphrase with numbered
-    answers and a prompt without a default; an empty line is refused and the prompt asked again.
-    The settings are given, so the hidden phrase is the first answer; the container keeps 24 words
-    and no repair words are asked, as neither can be a list there."""
+    """A terminal that cannot redraw a list gets no question between the hidden phrase and the
+    hidden password: nothing is asked about the passphrase. The settings are given, so the hidden
+    phrase is the first answer; the container keeps 24 words and no repair words are asked, as
+    neither can be a list there."""
     session = Session(("encrypt", "--pim", "0"), term="dumb")
     session.wait_for(b"Original seed phrase (hidden): ")
-    session.answer(PHRASE.encode() + b"\r", PASSPHRASE_ASKED, *NUMBERED_ANSWERS, NUMBERED_PROMPT)
-    shown = session.output[session.output.rfind(PASSPHRASE_ASKED):]
-    assert b"[1]" not in shown, "encrypt, TERM=dumb: the prompt offers a default"
-    for typed in (b"", b"3"):
-        session.answer(typed + b"\r", NUMBERED_REFUSED, NUMBERED_PROMPT)
-    session.answer(b"2\r", b"Container password (hidden): ")
+    start = len(session.output)
+    session.answer(PHRASE.encode() + b"\r", b"Container password (hidden): ")
+    between = session.output[start:]
+    for asked in (PASSPHRASE_ASKED, NUMBERED_PROMPT):
+        assert asked not in between, f"encrypt, TERM=dumb: {asked!r} before the password"
     session.answer(CTRL_C, b"Cancelled")
     assert session.drain_until_exit(10), "encrypt, TERM=dumb: Ctrl+C did not end the tool"
     code, settings = session.close()
     assert code == CANCELLED, f"encrypt, TERM=dumb: Ctrl+C gave exit code {code}"
     assert settings == session.original, "encrypt, TERM=dumb: the terminal settings changed"
     assert PHRASE.encode() not in session.output, "encrypt, TERM=dumb: the phrase was shown"
-    print("encrypt, TERM=dumb: numbered answers, \"Choice: \" without a default, the phrase hidden")
-    print("encrypt, TERM=dumb: an empty line and a number out of range refused, then 2 taken")
+    print("encrypt, TERM=dumb: the hidden password right after the hidden phrase, the phrase hidden")
+    # A password made by MHFE needs a private screen, which TERM=dumb has none of: refused before
+    # anything is asked (AUD-015-SEC003).
+    for command in (("encrypt", "--pim", "0"), ("rekey", "--pim", "0")):
+        session = Session((*command, "--new-password", "words"), term="dumb")
+        session.wait_for(b"shown only on a private screen")
+        assert session.drain_until_exit(10), f"{command[0]}, TERM=dumb: the refusal did not end"
+        code, settings = session.close()
+        assert code == INVALID_INPUT, f"{command[0]} --new-password words, TERM=dumb: exit {code}"
+        assert settings == session.original, f"{command[0]}, TERM=dumb: terminal settings changed"
+        assert b"Original seed phrase" not in session.output, f"{command[0]}: asked first"
+    print("encrypt and rekey, TERM=dumb: a made password is refused before anything is asked")
+
+
+def check_rekey_numbered():
+    """A terminal that cannot redraw a list gets the question about the passphrase of `mhfe rekey`
+    with numbered answers and a prompt without a default; an empty line, or a number out of range,
+    is refused and the prompt asked again. A 12-word phrase has a built-in check, so the question
+    follows the hidden old password. On Linux the capped run takes 2 and stops at the memory
+    reservation, before Argon2; elsewhere Ctrl+C at the prompt ends it."""
+    capped = sys.platform == "linux"
+    session = Session(("rekey", "--pim", "0", "--words", "12"), term="dumb", capped=capped)
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(CONTAINER.encode() + b"\r", b"Old container password (hidden): ")
+    session.answer(SECRET + b"\r", PASSPHRASE_ASKED, *NUMBERED_ANSWERS, NUMBERED_PROMPT)
+    shown = session.output[session.output.rfind(PASSPHRASE_ASKED):]
+    assert b"[1]" not in shown, "rekey, TERM=dumb: the prompt offers a default"
+    for typed in (b"", b"3"):
+        session.answer(typed + b"\r", NUMBERED_REFUSED, NUMBERED_PROMPT)
+    if capped:
+        session.answer(b"2\r", MEMORY_REFUSED)
+        expected, ending = NOT_ENOUGH_RESOURCES, "2 taken, stopped at the memory reservation"
+    else:
+        session.answer(CTRL_C, b"Cancelled")
+        expected, ending = CANCELLED, "Ctrl+C at the prompt ends it"
+    assert session.drain_until_exit(10), "rekey, TERM=dumb: the tool did not end"
+    code, settings = session.close()
+    assert code == expected, f"rekey, TERM=dumb: exit code {code}"
+    assert settings == session.original, "rekey, TERM=dumb: the terminal settings changed"
+    assert SECRET not in session.output, "rekey, TERM=dumb: the password was shown"
+    print("rekey, TERM=dumb: numbered answers, \"Choice: \" without a default, the password hidden")
+    print(f"rekey, TERM=dumb: an empty line and a number out of range refused; {ending}")
 
 
 def run_with_output(arguments, redirected=False, term=None):
@@ -1036,12 +1222,10 @@ def check_private_reveals():
 
     for redirected in (False, True):
         session, reader = run_with_output(("rekey", "--pim", "0", "--words", "24"), redirected)
-        # Everyone confirms that other wallets' funds are safe (AUD-007-FUN002).
-        session.wait_for(b"backed up another way?")
-        session.answer(b"1", b"original: ")
+        session.wait_for(CONTAINER_ASKED)
         session.answer(CONTAINER.encode() + b"\r", b"container password: ")
         session.answer(SECRET + b"\r", b"confirmed?", LIST_SHOWN)
-        offered = b"Show me the phrase" in session.output
+        offered = b"show me the phrase" in session.output
         code, _ = session.close()
         assert code == CANCELLED, f"rekey: exit code {code}"
         label = "with standard output in a pipe" if redirected else "at a terminal"
@@ -1087,11 +1271,84 @@ def check_new_check_question():
     print("new: ? explains both answers, ↓ marks the first; Escape cancels, exit code 130")
 
 
+def check_new_chosen_words():
+    """`mhfe new` asks for one chosen word on a private screen: a position the library refuses is
+    named without the word and asked again from the question; a word at the last position and a
+    word never to use keep about 244 random bits, said before the draw with the warning that the
+    word gives the wallet away. Escape at the next question cancels before anything is drawn. The
+    summary records how many words were chosen and the bits kept, never the word."""
+    session = Session(("new", "--pim", "0"))
+    session.wait_for(b"passphrase of the new wallet")
+    # No passphrase: no wallet check, so the question about a word comes next.
+    session.answer(b"\r", CHOSEN_ASKED, LIST_SHOWN)
+    session.answer(b"2", CHOSEN_WORD_ASKED)
+    session.answer(b"zoo\r", PLACE_ASKED)
+    # One word only: the words never to use come next.
+    session.answer(b"25\r", NEVER_USE_ASKED)
+    start = len(session.output)
+    session.answer(b"\r", PLACE_REFUSED, CHOSEN_ASKED, LIST_SHOWN)
+    assert b"zoo" not in session.output[start:], "new: the refusal named the word"
+    session.answer(b"2", CHOSEN_WORD_ASKED)
+    # The chosen word is hinted from the BIP39 list as it is typed.
+    session.answer(b"zo", b"zone  zoo")
+    session.answer(b"o\r", PLACE_ASKED)
+    session.answer(b"24\r", NEVER_USE_ASKED)
+    session.answer(b"abandon\r", RECOGNISABLE, AMPLE, REPAIR_ASKED, LIST_SHOWN)
+    session.answer(ESCAPE, b"Cancelled")
+    assert session.drain_until_exit(10), "new, chosen word: Escape did not end the tool"
+    code, settings = session.close()
+    assert code == CANCELLED, f"new, chosen word: Escape gave exit code {code}"
+    assert settings == session.original, "new, chosen word: terminal settings changed"
+    shown_privately("new, chosen word", session.output, b"zoo")
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    assert CHOSEN_RECORDED in summary, "new, chosen word: the wishes were not recorded"
+    assert b"zoo" not in summary, "new, chosen word: the word reached the summary"
+    print("new: one chosen word is typed privately; a wrong position is refused and asked again")
+    print("new: the bits kept and the warning are said before the draw; no word in the summary")
+
+
+def check_quit_keys_leave_the_private_screen():
+    """Ctrl+\\ and Ctrl+Z at a visible prompt on a private screen, and SIGTERM, end `mhfe new` as
+    Ctrl+C does: the private screen with the chosen word on it is left, the terminal restored and
+    the exit code 130 (AUD-015-SEC004)."""
+    for name, stop in (("Ctrl+\\", b"\x1c"), ("Ctrl+Z", b"\x1a"), ("SIGTERM", None)):
+        session = Session(("new", "--pim", "0"))
+        session.wait_for(b"passphrase of the new wallet")
+        session.answer(b"\r", CHOSEN_ASKED, LIST_SHOWN)
+        session.answer(b"2", CHOSEN_WORD_ASKED)
+        session.answer(b"zoo\r", PLACE_ASKED)
+        if stop is None:
+            session.process.send_signal(signal.SIGTERM)
+        else:
+            session.type(stop)
+        assert session.drain_until_exit(10), f"new, {name}: the tool did not end"
+        code, settings = session.close()
+        assert code == CANCELLED, f"new, {name}: exit code {code}"
+        assert settings == session.original, f"new, {name}: terminal settings changed"
+        shown_privately(f"new, {name}", session.output, b"zoo")
+        assert session.output.rfind(LEAVE_PRIVATE) > session.output.rfind(b"zoo"), name
+    print("new: Ctrl+\\, Ctrl+Z and SIGTERM leave the private screen and end as Ctrl+C does")
+
+
+def check_never_use_is_refused_at_start():
+    """A --never-use word the library refuses whatever word is chosen is refused before the first
+    question, with exit code 2, instead of the chosen-word question coming back again and again
+    (AUD-015-UI002)."""
+    for word in ("notaword", "abandon,zoo"):
+        result = run_plainly(("new", "--never-use", word))
+        assert result.returncode == INVALID_INPUT, f"new --never-use {word}: {result.returncode}"
+        error = result.stderr.decode()
+        assert "wishes for the new phrase cannot be used" in error, error
+        assert word.split(",")[0] not in error, f"new --never-use: the refusal named {word}"
+        assert b"Do you want to choose" not in result.stderr, "new --never-use: a question came"
+    print("new: a --never-use word the library refuses ends the tool before any question")
+
+
 def check_wallet_check_needs_a_passphrase():
     """`mhfe check` takes the phrase + passphrase check only with a passphrase (AUD-010)."""
     capped = sys.platform == "linux"
     session = Session(("check", "--pim", "0"), capped=capped)
-    session.wait_for(b"original: ")
+    session.wait_for(b"original seed phrase: ")
     session.answer(CONTAINER.encode() + b"\r", b"Container password: ")
     session.answer(SECRET + b"\r", COMPARE_ASKED, LIST_SHOWN)
     session.answer(WALLET_CHECK_ENTRY, KNOWN_PASSPHRASE_ASKED)
@@ -1115,6 +1372,306 @@ def check_wallet_check_needs_a_passphrase():
     print("check: the phrase + passphrase check refuses an empty passphrase, then takes one")
 
 
+# The repair of a container phrase where it is read (container_repair::review in the tool): the
+# card asked for, the repaired container phrase shown, and the question before it is used. The
+# card is the published four-word card of zero-12's container phrase (vectors/profiles).
+CARD_HINT = b"Type the repair words as written on the card; ? for a word you cannot read."
+CARD_ASKED = b"Repair words: "
+ZERO_12_CARD = b"shaft pupil patient jewel"
+REPAIRED_HEADING = b"Repaired container phrase, 24 words"
+REPAIRED_SHOWN = b"Repaired words 3 and 17 of the container phrase."
+USE_ASKED = b"Use the repaired container phrase?"
+REPAIR_OFFERED = b"Type the container phrase again, or repair it?"
+REPAIRED_RECORDED = b"Repaired   words 3 and 17 of the container phrase, with its repair words"
+CONTAINER_ASKED = b"original seed phrase: "
+
+
+def container_with(changes):
+    """Zero-12's container phrase with the words at the positions given, from 1, replaced."""
+    words = CONTAINER.split(" ")
+    for position, word in changes.items():
+        words[position - 1] = word
+    return " ".join(words).encode()
+
+
+def check_container_repair():
+    """A container phrase with words typed as ? asks for its repair words at once; the repaired
+    container phrase and every repaired word are shown on the private screen, and only "Use it"
+    goes on, to the password, with "Repaired" in the summary and none of the words. Words that
+    are not a container ask whether to type them again or repair them; Enter alone at the repair
+    words goes back to the container phrase. A script gives the card on the line after the
+    container phrase with --repair and is told on standard error what was repaired. All stop
+    before Argon2: at the password, or at a fingerprint that is not one."""
+    session = Session(("check", "--fingerprint", "--pim", "0"))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({3: "?", 17: "?"}) + b"\r", CARD_HINT, CARD_ASKED)
+    session.answer(ZERO_12_CARD + b"\r", REPAIRED_HEADING, REPAIRED_SHOWN, USE_ASKED, LIST_SHOWN)
+    session.answer(b"1", b"Container password: ")
+    session.answer(CTRL_C, b"Cancelled")
+    assert session.drain_until_exit(10), "repair: Ctrl+C did not end the tool"
+    code, settings = session.close()
+    assert code == CANCELLED, f"repair: Ctrl+C gave exit code {code}"
+    assert settings == session.original, "repair: the terminal settings changed"
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    assert b"Container  24 words, valid" in summary, "repair: no Container record"
+    assert REPAIRED_RECORDED in summary, "repair: no Repaired record"
+    for words in (ZERO_12_CARD, CONTAINER.split(" ")[2].encode(), USE_ASKED):
+        assert words not in summary, f"repair: {words!r} reached the main screen"
+    print("repair: ? asks for the card, shows the repaired words, uses them on \"Use it\"")
+
+    session = Session(("check", "--fingerprint", "--pim", "0"))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({9: "towr"}) + b"\r", b"word 9 is not in the", REPAIR_OFFERED,
+                   LIST_SHOWN)
+    session.answer(b"1", CONTAINER_ASKED)
+    session.answer(container_with({9: "towr"}) + b"\r", REPAIR_OFFERED, LIST_SHOWN)
+    session.answer(b"2", CARD_ASKED)
+    start = len(session.output)
+    session.answer(b"\r", CONTAINER_ASKED)
+    assert REPAIRED_HEADING not in session.output[start:], "repair: Enter alone repaired"
+    session.answer(CONTAINER.encode() + b"\r", b"Container password: ")
+    session.answer(CTRL_C, b"Cancelled")
+    assert session.drain_until_exit(10), "repair, typo: Ctrl+C did not end the tool"
+    code, settings = session.close()
+    assert code == CANCELLED, f"repair, typo: Ctrl+C gave exit code {code}"
+    assert settings == session.original, "repair, typo: the terminal settings changed"
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    assert b"Repaired" not in summary, "repair, typo: a repair was recorded"
+    print("repair: a typo offers \"Type it again\" or the card; Enter alone at the card goes back")
+
+    lines = b"\n".join((container_with({3: "?", 17: "?"}), ZERO_12_CARD, SECRET, b"zz", b"")) + b"\n"
+    result = run_plainly(("check", "--stdin", "--repair", "--fingerprint"), lines,
+                         capped=sys.platform == "linux")
+    assert result.returncode == INVALID_INPUT, f"repair, script: exit code {result.returncode}"
+    assert REPAIRED_SHOWN in result.stderr, f"repair, script: {result.stderr!r}"
+    assert result.stdout == b"", "repair, script: wrote to standard output"
+    print("repair, script: --repair reads the card after the container phrase, says what it repaired")
+
+
+# `mhfe repair` reads and repairs a container phrase as every command does (container_repair and
+# container_search in the tool), then shows the repaired container phrase on a private screen.
+REPAIR_RESULT = b"Repaired container, 24 words"
+WRITE_IT_DOWN = b"Write it down now: Enter or Escape clears this screen."
+
+
+def check_repair_command():
+    """`mhfe repair` repairs a container phrase with its card and shows it after "Use it"; Enter
+    alone at the card searches for a word typed as ?, here by the decoy fingerprint without a
+    password, and the found container phrase is shown the same way. A script gives the container
+    phrase and the card, one per line, and gets the repaired container phrase on standard output."""
+    session = Session(("repair",))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({3: "?", 17: "?"}) + b"\r", CARD_HINT, CARD_ASKED)
+    session.answer(ZERO_12_CARD + b"\r", REPAIRED_HEADING, REPAIRED_SHOWN, USE_ASKED, LIST_SHOWN)
+    session.answer(b"1", REPAIR_RESULT, WRITE_IT_DOWN)
+    session.answer(b"\r", b"Next")
+    assert session.drain_until_exit(10), "repair command: it did not end"
+    code, settings = session.close()
+    assert code == 0, f"repair command: exit code {code}"
+    assert settings == session.original, "repair command: the terminal settings changed"
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    assert REPAIRED_RECORDED in summary, "repair command: no Repaired record"
+    print("repair command: the card repairs the container phrase, shown after \"Use it\"")
+
+    session = Session(("repair",))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({24: "?"}) + b"\r", CARD_ASKED)
+    session.answer(b"\r", SEARCH_ASKED, b"1 to 5 at once")
+    session.answer(b"1", REFERENCE_ASKED)
+    session.answer(ZERO_12_DECOY_FINGERPRINT + b"\r", CONTAINER_PASSPHRASE_ASKED, LIST_SHOWN)
+    session.answer(b"1", FOUND_SHOWN, FOUND_USE_ASKED, LIST_SHOWN)
+    session.answer(b"1", REPAIR_RESULT, WRITE_IT_DOWN)
+    session.answer(b"\r", b"Next")
+    assert session.drain_until_exit(10), "repair command, search: it did not end"
+    code, _ = session.close()
+    assert code == 0, f"repair command, search: exit code {code}"
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    assert FOUND_RECORDED in summary, "repair command, search: no record of the search"
+    assert b"peace" not in summary, "repair command, search: the found word reached the summary"
+    print("repair command: without the card, the decoy fingerprint finds the missing word")
+
+    lines = b"\n".join((container_with({3: "?", 17: "?"}), ZERO_12_CARD)) + b"\n"
+    result = run_plainly(("repair", "--stdin"), lines)
+    assert result.returncode == 0, f"repair command, script: exit code {result.returncode}"
+    assert result.stdout.strip() == CONTAINER.encode(), f"repair, script: {result.stdout!r}"
+    assert REPAIRED_SHOWN in result.stderr, f"repair command, script: {result.stderr!r}"
+    print("repair command, script: the repaired container phrase on standard output")
+
+
+# The length of the original seed phrase detected (src/detection.rs in the library): the last
+# answer of the question about the length, in check and rekey.
+LENGTH_ASKED = b"How many words does your original seed phrase have?"
+DETECT_OFFERED = b"Detect automatically"
+ORIGINAL_PASSPHRASE_ASKED = b"Is a BIP39 passphrase used with the original seed phrase?"
+CONFIRM_ASKED = b"How should the recovered seed phrase be confirmed?"
+
+
+def check_length_detection():
+    """The question about the length offers detection last. In check, under the built-in check,
+    it asks next whether a BIP39 passphrase is used with the original seed phrase, before the
+    work; in rekey it asks how a 24-word phrase is confirmed, as for 24 words. On Linux the capped
+    check stops at the memory reservation, before Argon2; Ctrl+C ends the rest."""
+    capped = sys.platform == "linux"
+    session = Session(("check", "--pim", "0"), capped=capped)
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(CONTAINER.encode() + b"\r", b"Container password: ")
+    session.answer(SECRET + b"\r", b"The container's built-in check", LIST_SHOWN)
+    session.answer(b"3", LENGTH_ASKED, DETECT_OFFERED, LIST_SHOWN)
+    session.answer(b"5", ORIGINAL_PASSPHRASE_ASKED, LIST_SHOWN)
+    if capped:
+        session.answer(b"1", MEMORY_REFUSED)
+        assert session.drain_until_exit(10), "check, detected: it did not end"
+    else:
+        session.answer(CTRL_C, b"Cancelled")
+    session.close()
+    print("check: the built-in check offers detection, then asks about the passphrase")
+
+    session = Session(("rekey", "--pim", "0", "--mem", "0"))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(CONTAINER.encode() + b"\r", LENGTH_ASKED, DETECT_OFFERED, LIST_SHOWN)
+    session.answer(b"6", b"Old container password")
+    session.answer(SECRET + b"\r", CONFIRM_ASKED, LIST_SHOWN)
+    session.answer(CTRL_C, b"Cancelled")
+    assert session.drain_until_exit(10), "rekey, detected: Ctrl+C did not end the tool"
+    code, _ = session.close()
+    assert code == CANCELLED, f"rekey, detected: exit code {code}"
+    print("rekey: detection asks how a 24-word phrase is confirmed")
+
+
+# The search for missing words without the repair words (container_search.rs in the tool). The
+# decoy fingerprint of zero-12's container phrase, computed by an independent Python
+# implementation (src/search/known_answers.rs), finds its last word in seconds.
+SEARCH_ASKED = b"No repair words: what do you know?"
+REFERENCE_ASKED = b"Address or master key fingerprint: "
+CONTAINER_PASSPHRASE_ASKED = b"Is a BIP39 passphrase used with the container phrase?"
+CONTAINER_PASSPHRASE_TYPED = b"BIP39 passphrase of the container phrase: "
+NOT_IN_CONTAINER_WALLET = b"The container's own wallet does not match"
+ZERO_12_DECOY_FINGERPRINT = b"487a156e"
+FOUND_SHOWN = b"Found word 24: peace, with the container's own wallet."
+FOUND_USE_ASKED = b"Use the found container phrase?"
+FOUND_RECORDED = b"Repaired   word 24 of the container phrase, found by a search"
+LONG_SEARCH_WARNED = b"8 candidates, each a full recovery: about 8 to 16 minutes at these"
+TWO_EXPLAINED = b"Two words are missing: only a fingerprint or an address of the"
+# A nested SegWit address of zero-12's container phrase as a wallet, at m/49'/0'/0'/0/9, derived
+# by an independent Python implementation of BIP32 and P2SH-P2WPKH.
+ZERO_12_DECOY_ADDRESS = b"3FWJwUxDaXoGrxZQHT4EHBDZCZw7iHUaRn"
+GAP_ASKED = b"How far does the wallet go?"
+TWO_FOUND = b"Found word 5: iron, word 16: nerve, with the container's own wallet."
+
+
+def check_search_reference_is_recorded_once_read():
+    """The one field of a search's reference records nothing on the main screen before the text is
+    read as a fingerprint or an address of the coin asked: a seed phrase typed there is refused as
+    several words, and a word with control characters that is no address is never recorded
+    (AUD-015-SEC001)."""
+    session = Session(("check", "--fingerprint", "--pim", "0"))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({24: "?"}) + b"\r", CARD_ASKED)
+    session.answer(b"\r", SEARCH_ASKED)
+    session.answer(b"1", REFERENCE_ASKED)
+    session.answer(PHRASE.encode() + b"\r", b"without spaces", REFERENCE_ASKED)
+    marked = b"bc1\x1b]0;AUD015\x07zz"
+    session.answer(marked + b"\r", COIN_ASKED, LIST_SHOWN)
+    session.answer(CTRL_C, b"Cancelled")
+    assert session.drain_until_exit(10), "search reference: Ctrl+C did not end the tool"
+    code, settings = session.close()
+    assert code == CANCELLED, f"search reference: Ctrl+C gave exit code {code}"
+    assert settings == session.original, "search reference: the terminal settings changed"
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    assert PHRASE.encode() not in summary, "search reference: the phrase reached the main screen"
+    assert b"AUD015" not in summary, "search reference: the typed text reached the main screen"
+    assert b"Reference" not in summary, "search reference: recorded before it was read"
+    print("search: the reference field records nothing until it is read; a phrase is refused")
+
+
+def check_container_search():
+    """Enter alone at the repair words of a container phrase with a word typed as ? asks what is
+    known: an address or fingerprint of the container's own wallet, read in one field, its BIP39
+    passphrase only after "Is a BIP39 passphrase used with the container phrase?". zero-12's decoy
+    fingerprint finds its last word without a password, shown with the found container phrase,
+    used only after "Use it"; the password follows, and the summary records the search, never the
+    word. A passphrase the container phrase does not have finds nothing, and the question comes
+    again. Two missing words offer only the container's own wallet: its address, at the gap
+    chosen, finds both; a gap of one's own is typed. "Not now" before a long search asks again;
+    on Linux the capped run then takes the password and stops at the memory reservation."""
+    session = Session(("check", "--fingerprint", "--pim", "0"))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({24: "?"}) + b"\r", CARD_ASKED)
+    session.answer(b"\r", SEARCH_ASKED, b"1 to 5 at once")
+    # A passphrase the container phrase is not used with: nothing matches, the question comes
+    # again.
+    session.answer(b"1", REFERENCE_ASKED)
+    session.answer(ZERO_12_DECOY_FINGERPRINT + b"\r", CONTAINER_PASSPHRASE_ASKED, LIST_SHOWN)
+    session.answer(b"2", CONTAINER_PASSPHRASE_TYPED)
+    session.answer(PUBLIC_PASSPHRASE + b"\r", NOT_IN_CONTAINER_WALLET, SEARCH_ASKED)
+    session.answer(b"1", REFERENCE_ASKED)
+    session.answer(ZERO_12_DECOY_FINGERPRINT + b"\r", CONTAINER_PASSPHRASE_ASKED, LIST_SHOWN)
+    session.answer(b"1", b"Found container phrase, 24 words", FOUND_SHOWN, FOUND_USE_ASKED,
+                   LIST_SHOWN)
+    session.answer(b"1", b"Container password: ")
+    session.answer(CTRL_C, b"Cancelled")
+    assert session.drain_until_exit(10), "search: Ctrl+C did not end the tool"
+    code, settings = session.close()
+    assert code == CANCELLED, f"search: Ctrl+C gave exit code {code}"
+    assert settings == session.original, "search: the terminal settings changed"
+    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
+    assert FOUND_RECORDED in summary, "search: no record of the search"
+    assert b"peace" not in summary, "search: the found word reached the main screen"
+    print("search: the decoy fingerprint finds the missing word; a wrong passphrase asks again")
+
+    # Two missing words: only the container's own wallet; its address among the first 20.
+    session = Session(("check", "--fingerprint", "--pim", "0"))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({5: "?", 16: "?"}) + b"\r", CARD_ASKED)
+    # Two missing words make about 4 million combinations to list first: seconds in a release
+    # build, longer in a debug one.
+    session.answer(b"\r", SEARCH_ASKED, TWO_EXPLAINED, b"1 or 2 at once", limit=120)
+    session.answer(b"1", REFERENCE_ASKED)
+    session.answer(ZERO_12_DECOY_ADDRESS + b"\r", COIN_ASKED, LIST_SHOWN)
+    session.answer(b"\r", GAP_ASKED, LIST_SHOWN)
+    session.answer(b"1", b"0-1/0-19, 40 addresses", CONTAINER_PASSPHRASE_ASKED, LIST_SHOWN)
+    session.answer(b"1", TWO_FOUND, FOUND_USE_ASKED, limit=600)
+    session.close()
+    print("search: two words found by an address of the container's own wallet")
+
+    # A gap of the person's own: a number that is not one is asked again, and the scope stated
+    # follows the number taken.
+    session = Session(("check", "--fingerprint", "--pim", "0"))
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({5: "?", 16: "?"}) + b"\r", CARD_ASKED)
+    session.answer(b"\r", SEARCH_ASKED, TWO_EXPLAINED, limit=120)
+    session.answer(b"1", REFERENCE_ASKED)
+    session.answer(ZERO_12_DECOY_ADDRESS + b"\r", COIN_ASKED, LIST_SHOWN)
+    session.answer(b"\r", GAP_ASKED, LIST_SHOWN)
+    session.answer(b"4", b"Addresses of each chain: ")
+    session.answer(b"0\r", b"Type a whole number of addresses", b"Addresses of each chain: ")
+    session.answer(b"30\r", b"0-1/0-29, 60 addresses", CONTAINER_PASSPHRASE_ASKED)
+    session.close()
+    print("search: a gap of one's own is typed, refused when it is not a number of addresses")
+
+    capped = sys.platform == "linux"
+    session = Session(("check", "--fingerprint", "--pim", "0"), capped=capped)
+    session.wait_for(CONTAINER_ASKED)
+    session.answer(container_with({24: "?"}) + b"\r", CARD_ASKED)
+    session.answer(b"\r", SEARCH_ASKED, b"1 to 5 at once")
+    # "Not now" goes back to the question, not to the container phrase.
+    session.answer(b"4", LONG_SEARCH_WARNED, b"Start the search?", LIST_SHOWN)
+    session.answer(b"2", SEARCH_ASKED, b"1 to 5 at once")
+    session.answer(b"4", LONG_SEARCH_WARNED, b"Start the search?", LIST_SHOWN)
+    if not capped:
+        code, settings = session.close()
+        assert settings == session.original, "search, nothing known: terminal settings changed"
+        print("search: nothing known says how long it takes; \"Not now\" asks again")
+        return
+    session.answer(b"1", b"Container password: ")
+    session.answer(SECRET + b"\r", MEMORY_REFUSED)
+    assert session.drain_until_exit(10), "search, nothing known: the refusal did not end the tool"
+    code, settings = session.close()
+    assert code == NOT_ENOUGH_RESOURCES, f"search, nothing known: exit code {code}"
+    assert settings == session.original, "search, nothing known: terminal settings changed"
+    print("search: nothing known says how long it takes; \"Not now\" asks again")
+
+
 def run_plainly(arguments, data=b"", colour=False, capped=False):
     """Runs the tool with `data` on standard input and both outputs in pipes, without a terminal;
     `colour` forces colour on, and `capped` limits the address space as for a Session."""
@@ -1127,6 +1684,26 @@ def run_plainly(arguments, data=b"", colour=False, capped=False):
             resource.setrlimit(resource.RLIMIT_AS, (ADDRESS_SPACE_CAP, ADDRESS_SPACE_CAP))
     return subprocess.run([PROGRAM, *arguments], input=data, capture_output=True, env=environment,
                           timeout=30, preexec_fn=limit)
+
+
+def check_password_sizes():
+    """A password size out of range is refused before anything is made, in the library's words
+    (AUD-011-ARC001), with exit code 2; the sizes at the limits are made."""
+    for arguments, message in (
+        (("password", "--words", "33"), "Choose between 1 and 32 words"),
+        (("password", "--words", "0"), "Choose between 1 and 32 words"),
+        (("password", "--chars", "65"), "Choose between 1 and 64 characters"),
+    ):
+        label = " ".join(arguments)
+        result = run_plainly(arguments)
+        assert result.returncode == INVALID_INPUT, f"{label}: exit code {result.returncode}"
+        assert result.stdout == b"", f"{label}: a password was made"
+        assert (ERROR_MARK + message).encode() in result.stderr, f"{label}: {result.stderr!r}"
+    for arguments in (("password", "--words", "1"), ("password", "--words", "32"),
+                      ("password", "--chars", "64")):
+        result = run_plainly(arguments)
+        assert result.returncode == 0 and result.stdout.strip(), " ".join(arguments)
+    print("password sizes: out of range refused in the library's words, the limits made")
 
 
 def check_usage_errors_and_help():
@@ -1381,12 +1958,12 @@ def check_quiet_start():
     print("menu: the checks at start pass unseen; its title comes first")
 
 
-# Known answers that the checks at start compare, each held once in the program, with the part
-# that compares it and what that part reports once a bit of the text is flipped, at start and in
-# the full self-test: the six repair words of the plate of the suite 3 vector zero-12
+# Known answers that the checks at start compare, each held once in the program, with the part that
+# compares it and what that part reports once a bit of the text is flipped, at start and in the full
+# self-test: the six repair words of the container phrase of the suite 3 vector zero-12
 # (MHFE-REPAIR-1), and the third vector of MHFE-PASSWORD-CHECK-1, both public vectors of the
-# specification (vectors/profiles/README.md). At start only zero-12's plate gets its cards; the
-# full self-test makes the cards of four plates.
+# specification (vectors/profiles/README.md). At start only zero-12's container phrase gets its
+# cards; the full self-test makes the cards of four container phrases.
 DAMAGED_VECTORS = (
     (b"credit buzz orbit tired sail coffee", "Repair words (MHFE-REPAIR-1)",
      "card 1 of 1 gives other words", "card 1 of 4 gives other words"),
@@ -1496,16 +2073,28 @@ def main():
     print("cancelled: Ctrl+C at the password, exit code 130, private screen left, terminal restored")
 
     check_check_word()
+    check_word_hints()
     check_empty_network()
     check_menu()
-    check_rekey_asks_about_other_wallets()
+    check_rekey_warns_about_other_wallets()
     check_rekey_asks_about_the_passphrase()
     check_encrypt_lists()
     check_encrypt_script()
     check_encrypt_numbered()
+    check_made_password()
+    check_rekey_numbered()
     check_private_reveals()
     check_new_check_question()
+    check_new_chosen_words()
+    check_never_use_is_refused_at_start()
+    check_quit_keys_leave_the_private_screen()
     check_wallet_check_needs_a_passphrase()
+    check_container_repair()
+    check_repair_command()
+    check_length_detection()
+    check_search_reference_is_recorded_once_read()
+    check_container_search()
+    check_password_sizes()
     check_usage_errors_and_help()
     check_script_messages()
     check_quiet_start()

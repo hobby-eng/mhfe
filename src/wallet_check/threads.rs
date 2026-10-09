@@ -30,15 +30,12 @@ pub(super) struct ThreadedDraw<'a> {
 
 /// The callback that hears the count of draws, and the last count it heard.
 struct Reports<'a> {
-    on_draws: &'a mut (dyn FnMut(u64) -> Result<(), MhfeError> + Send),
+    on_draws: super::SharedDrawReport<'a>,
     heard: u64,
 }
 
 impl<'a> ThreadedDraw<'a> {
-    pub(super) fn new(
-        draw: &'a PhraseDraw,
-        on_draws: &'a mut (dyn FnMut(u64) -> Result<(), MhfeError> + Send),
-    ) -> Self {
+    pub(super) fn new(draw: &'a PhraseDraw, on_draws: super::SharedDrawReport<'a>) -> Self {
         Self {
             draw,
             ended: AtomicBool::new(false),

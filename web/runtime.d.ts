@@ -7,7 +7,10 @@ export type MhfeErrorCode =
   | "INVALID_PHRASE"
   /** The container is not a valid English BIP39 phrase, or not one of the selected suite. */
   | "INVALID_CONTAINER"
-  /** A length other than 12, 15, 18, 21 or 24 was chosen. */
+  /**
+   * A length other than 12, 15, 18, 21 or 24, or a length without the check asked for: a built-in
+   * check of a 24-word phrase, or a wallet check of a phrase that is not 24 words.
+   */
   | "INVALID_WORD_COUNT"
   /** A same-length container was asked for a 24-word original. */
   | "SAME_LENGTH_NEEDS_SHORT_PHRASE"
@@ -17,16 +20,39 @@ export type MhfeErrorCode =
   | "NO_BUILT_IN_CHECK"
   /** The wallet check was asked for a same-length container. */
   | "NO_WALLET_CHECK"
-  /** A recovery to encrypt again has no built-in check and no address or fingerprint. */
+  /** Hidden wallets were asked of a same-length container, which opens none. */
+  | "NO_HIDDEN_WALLETS"
+  /**
+   * The built-in check alone was given where it does not confirm a recovery to encrypt again (a
+   * 24-word original, a same-length container or a detected length): give an address, the
+   * fingerprint or the owner.
+   */
   | "REFERENCE_REQUIRED"
   /** The phrase recovered to encrypt again does not match the address or fingerprint. */
   | "REFERENCE_MISMATCH"
-  /** A hidden wallet's phrase passes the built-in check of a shorter phrase. */
+  /**
+   * A hidden wallet's phrase passes a check: the built-in check of a shorter phrase, or by chance
+   * (once in 65,536) the 16-bit wallet check.
+   */
   | "HIDDEN_WALLET_PASSES_CHECK"
   /** Repair words that are not 2, 4, 6 or 8 English BIP39 words. */
   | "INVALID_REPAIR_WORDS"
   /** No repair within the repair words' bound passes the BIP39 checksum. */
   | "REPAIR_NOT_POSSIBLE"
+  | "TOO_MANY_MISSING_WORDS"
+  /**
+   * Several lengths pass the built-in check, by rare chance: an address or the fingerprint tells
+   * the readings apart, and a rekey needs one of them, or the owner with one of those lengths
+   * stated.
+   */
+  | "AMBIGUOUS_LENGTH"
+  /**
+   * A rekey's built-in check finds another length than the one stated, which takes precedence:
+   * rekey again confirmed by a receiving address or the master key fingerprint, or, for a stated
+   * 12- to 21-word length, by the owner. With 24 words stated beside a shorter length that passes,
+   * only an address or the fingerprint confirms one.
+   */
+  | "LENGTH_DIFFERS"
   /** PIM outside 0 to 1023. */
   | "INVALID_PIM"
   /** Memory level outside 0 to 21. */
@@ -41,7 +67,7 @@ export type MhfeErrorCode =
   | "CONTROL_CHARACTER_IN_PASSWORD"
   /** The password has a code point unassigned in Unicode 17.0.0. */
   | "UNASSIGNED_CHARACTER"
-  /** A chosen short length does not pass its check. */
+  /** No built-in check passes where a short length was stated or needed. */
   | "VERIFIER_MISMATCH"
   /** The container would equal the original. */
   | "FIXED_POINT"
@@ -55,7 +81,9 @@ export type MhfeErrorCode =
   | "SELF_CHECK_FAILED"
   /**
    * Files of different builds of the package: a class, runtime.js, worker.js, mhfe.wasm and the
-   * Argon2 builds must come from one. Not kept: the next call checks again.
+   * Argon2 builds must come from one. Also a message of the worker that the page does not know or
+   * cannot read, which ends the operation and stops the worker. Not kept: the next call checks
+   * again.
    */
   | "PACKAGE_MISMATCH"
   /** cancel() stopped the operation (MhfeCancelledError); a failing callback is CALLBACK_FAILED. */
@@ -94,8 +122,6 @@ export type MhfeErrorCode =
   | "RANDOM_FAILED"
   /** A hidden wallet's password was used already in this session. */
   | "PASSWORD_ALREADY_USED"
-  /** A rekey without the owner's yes that other passwords' wallets are safe. */
-  | "OTHER_WALLETS_NOT_CONFIRMED"
   /** A rekey that would give the old container again. */
   | "NEW_PASSWORD_SAME_AS_OLD"
   /** The owner said the recovered phrase is not theirs. */
@@ -109,6 +135,8 @@ export type MhfeErrorCode =
   | "INVALID_PASSWORD_TEXT"
   /** A new phrase's passphrase and its repetition differ. */
   | "PASSPHRASES_DIFFER"
+  /** A chosen word or a word never to use that cannot be used, or more than one of either. */
+  | "INVALID_WORD_WISH"
   /** Another long operation runs, a phrase is being drawn, or a hidden wallet is being opened. */
   | "BUSY"
   /** A session of hidden wallets was used after it closed. */
@@ -190,8 +218,23 @@ export class MhfeCancelledError extends MhfeError {
   constructor();
 }
 
-/** A secret as text or as its UTF-8 bytes; a caller's own array is copied, never emptied. */
+/**
+ * A secret as text or as its UTF-8 bytes; a caller's own array is copied, never emptied. One that
+ * a method lets the caller leave out is empty only when left out: null is a TypeError.
+ */
 export type MhfeSecret = string | Uint8Array;
+
+/** The hint below a line of words being typed: see MhfeWallet.wordHints(). */
+export interface MhfeWordHint {
+  /** "count" after one letter of the last word, "words" from two, "noWord" when none begins so. */
+  hint: "nothing" | "count" | "words" | "noWord";
+  /** How many words of the list begin with the letters typed. */
+  count: number;
+  /** For "words": those words, in list order. */
+  words: string[];
+  /** What Tab adds: the letters all those words share next, and a space when one word is left. */
+  completion: { letters: string; wordEnds: boolean };
+}
 
 /**
  * The choice made after a check word review (MhfePasswords.review): the password as typed (the
@@ -208,6 +251,27 @@ export interface MhfePackageParts {
    * classes compiles it once, with WebAssembly.compile, and passes the module to each.
    */
   wasm: Uint8Array | WebAssembly.Module;
+}
+
+/**
+ * What MhfeRepair, MhfePasswords and MhfeWallet have in common. Every method returns a promise and
+ * reports every error by rejecting it.
+ */
+export class MhfeModuleClass<Parameters> {
+  /**
+   * The quick self-check, made once per page and awaited by every other method of the class but
+   * parameters(), fullCheck() and cancel() before its first call: known answers of each part the
+   * class computes, each with a case it must refuse. A failed part closes the class for good: every
+   * such method then rejects with SELF_CHECK_FAILED, the report attached. A page awaits it before
+   * it enables any field and shows the report on failure.
+   */
+  startupCheck(): Promise<MhfeSelfCheckReport>;
+  /** The full self-check, run anew each time, in seconds; a failed part closes the class too. */
+  fullCheck(options?: {
+    onProgress?: (progress: MhfeSelfCheckProgress) => void | Promise<void>;
+  }): Promise<MhfeSelfCheckReport>;
+  /** The module's fixed values. */
+  parameters(): Promise<Parameters>;
 }
 
 /** The parts the module classes share; a page uses the classes, not these. */

@@ -7,7 +7,7 @@
     "cryptography": "46.0.5",
     "unicodedata2": "17.0.1 (Unicode 17.0.0)",
     "openssl": "OpenSSL 3.5.5 27 Jan 2026",
-    "suite3_helpers_sha256": "bcc12b46f4cf91e94542627eb79c748f562814b64ed6cda5cf978eb6acb20c07"
+    "suite3_helpers_sha256": "544649a43b5c524e6e766b937f9011b98f3c331c14b45c0262abfea1b66bdc74"
   },
   "files": [
     {

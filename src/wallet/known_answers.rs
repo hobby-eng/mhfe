@@ -384,11 +384,11 @@ impl ComponentCheck for Bip32Check {
 
 /// A receiving address of the test phrase [`ABANDON`] at its path.
 #[derive(Clone, Copy)]
-struct AddressCase {
-    coin: Coin,
-    passphrase: &'static str,
-    path: &'static str,
-    address: &'static str,
+pub(crate) struct AddressCase {
+    pub(crate) coin: Coin,
+    pub(crate) passphrase: &'static str,
+    pub(crate) path: &'static str,
+    pub(crate) address: &'static str,
     /// One of each encoding, checked at every start; the others in the full self-test.
     startup: bool,
 }
@@ -403,13 +403,13 @@ const fn at(coin: Coin, path: &'static str, address: &'static str, startup: bool
     }
 }
 
-/// Where the wallets of [`ABANDON`] put each address (the table of the wallet's unit tests). The
+/// Where the wallets of [`ABANDON`] put each address, also the table of the wallet's unit tests. The
 /// Bitcoin mainnet values at index 0 are the published vectors of BIP44, BIP49, BIP84 and BIP86,
 /// and the Dash Platform values the official DIP17/DIP18 vectors; the other Bitcoin values were
 /// computed with Python's hashlib, and the other coins with the audited JavaScript libraries
 /// @scure/bip32, @noble/hashes, @noble/curves and @scure/base, and ethers for EIP-55, each of
 /// which first reproduced BIP84's vector.
-const ADDRESSES: [AddressCase; 43] = [
+pub(crate) const ADDRESSES: [AddressCase; 43] = [
     at(
         Coin::Bitcoin,
         "m/44'/0'/0'/0/0",
@@ -829,7 +829,7 @@ mod address_search {
         path: &'static str,
         type_description: Option<&'static str>,
         pattern: &'static str,
-        addresses: u64,
+        addresses: u128,
         only_path: bool,
     }
 
@@ -976,6 +976,7 @@ mod address_search {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::self_check::{fails_with, leak};
 
         #[test]
         fn the_address_search_is_stated_as_known() {
@@ -1000,23 +1001,21 @@ mod address_search {
             let mut stated = SEARCHES_STATED;
             // Nine accounts instead of ten.
             stated[0].pattern = "m/84'/0'/0'-8'/0-1/0-99";
-            let mut check = AddressSearchCheck {
-                stated: Box::leak(Box::new(stated)),
-                ..AddressSearchCheck::new()
-            };
-            assert_eq!(
-                check.run(Tier::Startup),
-                ComponentOutcome::Failed("search 1 of 5 is stated otherwise".to_owned())
+            fails_with(
+                AddressSearchCheck {
+                    stated: leak(stated),
+                    ..AddressSearchCheck::new()
+                },
+                "search 1 of 5 is stated otherwise",
             );
             let mut stated = SEARCHES_STATED;
             stated[1].only_path = false;
-            let mut check = AddressSearchCheck {
-                stated: Box::leak(Box::new(stated)),
-                ..AddressSearchCheck::new()
-            };
-            assert_eq!(
-                check.run(Tier::Startup),
-                ComponentOutcome::Failed("search 2 of 5 is stated otherwise".to_owned())
+            fails_with(
+                AddressSearchCheck {
+                    stated: leak(stated),
+                    ..AddressSearchCheck::new()
+                },
+                "search 2 of 5 is stated otherwise",
             );
             // The highest ordinary index is a valid path: a search there is accepted.
             let mut refused = SEARCHES_REFUSED;
@@ -1040,6 +1039,7 @@ mod address_search {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::self_check::{fails_with, leak};
 
     #[test]
     fn the_wallet_checks_pass() {
@@ -1087,13 +1087,12 @@ mod tests {
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
         let mut seeds = SEEDS;
         seeds[1].passphrase = "Cafe \u{fb01} \u{ff30}\u{212b}\u{2460} \u{1f510} \u{439}";
-        let mut check = SeedCheck {
-            seeds: Box::leak(Box::new(seeds)),
-            ..SeedCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("seed 2 of 2 differs".to_owned())
+        fails_with(
+            SeedCheck {
+                seeds: leak(seeds),
+                ..SeedCheck::new()
+            },
+            "seed 2 of 2 differs",
         );
         let mut trezor = TREZOR_SEEDS;
         trezor[23] = trezor[22];
@@ -1132,26 +1131,21 @@ mod tests {
         let mut addresses = ADDRESSES;
         // The address of the next index, where the wallet does not put the case's path.
         addresses[2].path = "m/84'/0'/0'/0/1";
-        let mut check = AddressesCheck {
-            addresses: Box::leak(Box::new(addresses)),
-            ..AddressesCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("address 3 of 18 differs".to_owned())
+        fails_with(
+            AddressesCheck {
+                addresses: leak(addresses),
+                ..AddressesCheck::new()
+            },
+            "address 3 of 18 differs",
         );
         let mut damaged = DAMAGED;
         damaged[4].1 = "rHsMGQEkVNJmpGWs8XUBoTBiAAbwxZN5v3";
-        let mut check = AddressesCheck {
-            damaged: Box::leak(Box::new(damaged)),
-            ..AddressesCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed(
-                "damaged address 5 of 9 is accepted instead of refused with INVALID_ADDRESS"
-                    .to_owned()
-            )
+        fails_with(
+            AddressesCheck {
+                damaged: leak(damaged),
+                ..AddressesCheck::new()
+            },
+            "damaged address 5 of 9 is accepted instead of refused with INVALID_ADDRESS",
         );
     }
 

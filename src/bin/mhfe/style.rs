@@ -6,6 +6,7 @@
 //! scheme shows them. Results for scripts never carry colour.
 
 use std::fmt::{Display, Write};
+use std::path::Path;
 
 use anstream::{eprint, eprintln};
 use anstyle::{AnsiColor, Style};
@@ -27,6 +28,27 @@ pub const MUTED: Style = AnsiColor::BrightBlack.on_default();
 pub const GOOD: Style = AnsiColor::Green.on_default().bold();
 pub const WARNING: Style = AnsiColor::Yellow.on_default().bold();
 pub const BAD: Style = AnsiColor::Red.on_default().bold();
+
+/// Items of running text as English lists them: "a", "a and b", "a, b and c".
+pub fn and_list<T: AsRef<str>>(items: &[T]) -> String {
+    list(items, "and")
+}
+
+/// Choices of running text as English lists them: "a", "a or b", "a, b or c".
+pub fn or_list<T: AsRef<str>>(items: &[T]) -> String {
+    list(items, "or")
+}
+
+fn list<T: AsRef<str>>(items: &[T], conjunction: &str) -> String {
+    match items {
+        [] => String::new(),
+        [only] => only.as_ref().to_owned(),
+        [rest @ .., last] => {
+            let rest: Vec<&str> = rest.iter().map(AsRef::as_ref).collect();
+            format!("{} {conjunction} {}", rest.join(", "), last.as_ref())
+        }
+    }
+}
 
 /// `text` in `style`. For public text only: the result is an ordinary string, which is not
 /// wiped. Secret words are painted by [`boxed_words`].
@@ -128,9 +150,36 @@ pub fn fact_lines(label: &str, value: &str) -> Vec<String> {
 /// Something that went right, after a green tick. It is shown at once, on the step it belongs to,
 /// and kept for the summary too.
 pub fn ok(text: impl Display) {
-    let line = format!("{} {text}", paint(GOOD, "✓"));
+    let line = format!("{} {text}", paint(GOOD, TICK));
     eprintln!("{line}");
     flow::keep_shown(Kind::Result, &[line]);
+}
+
+/// The green tick of something that went right or that a choice gives.
+pub const TICK: &str = "✓";
+
+/// A line of what a choice gives, indented under its name: a green tick, then `text`.
+pub fn gives(text: &str) {
+    eprintln!("  {} {text}", paint(GOOD, TICK));
+}
+
+/// A line of what a choice costs, indented under its name: a yellow "!", then `text`.
+pub fn costs(text: &str) {
+    eprintln!("  {} {text}", paint(WARNING, "!"));
+}
+
+/// A count with thousands separated by commas, such as "2,000".
+pub fn grouped(count: impl Into<u128>) -> String {
+    let count: u128 = count.into();
+    let digits = count.to_string();
+    let mut text = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            text.push(',');
+        }
+        text.push(digit);
+    }
+    text
 }
 
 /// Advice that can be read and passed over, in grey, wrapped to the text width. Returns the lines
@@ -226,6 +275,10 @@ pub fn usage_error(clap_text: &str) {
 }
 
 fn usage_error_lines(clap_text: &str) -> Vec<String> {
+    // clap repeats a mistyped argument as it was given, which may hold control characters: they
+    // are escaped on every line, as every other message escapes them (AUD-018).
+    let clap_text: Vec<String> = clap_text.split('\n').map(escaped).collect();
+    let clap_text = clap_text.join("\n");
     let mut blocks = clap_text.trim().split("\n\n");
     let mut message = blocks.next().unwrap_or_default().lines();
     let first = message.next().unwrap_or_default();
@@ -513,6 +566,12 @@ pub fn help_note(text: &str) -> String {
         .collect()
 }
 
+/// The end of a command's help: its examples, then a grey note.
+pub fn examples_with_note(rows: &[(&str, &str)], note: &str) -> String {
+    let examples = help_section("Examples:", rows);
+    format!("{examples}\n{}", help_note(note))
+}
+
 /// The colours of `mhfe --help`, matching the rest of the tool.
 pub fn help_styles() -> clap::builder::Styles {
     clap::builder::Styles::styled()
@@ -525,23 +584,52 @@ pub fn help_styles() -> clap::builder::Styles {
         .error(BAD)
 }
 
+/// The text of a line without its colour codes, as the tests read what the tool wrote.
+/// A path as a message shows it, every control character escaped, such as `\u{1b}`, so that a
+/// terminal shows a folder or file name instead of carrying it out (AUD-015-SEC002): a name may
+/// hold any character but `/`.
+pub fn shown_path(path: &Path) -> String {
+    escaped(&path.to_string_lossy())
+}
+
+/// `text` with every control character escaped, as [`shown_path`] shows a path.
+pub fn escaped(text: &str) -> String {
+    text.chars()
+        .map(|character| {
+            if character.is_control() {
+                character.escape_unicode().to_string()
+            } else {
+                character.to_string()
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+pub fn plain(line: &str) -> String {
+    let mut text = String::new();
+    let mut in_code = false;
+    for character in line.chars() {
+        match character {
+            '\u{1b}' => in_code = true,
+            'm' if in_code => in_code = false,
+            _ if in_code => {}
+            _ => text.push(character),
+        }
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The text of a line without its colour codes.
-    fn plain(line: &str) -> String {
-        let mut text = String::new();
-        let mut in_code = false;
-        for character in line.chars() {
-            match character {
-                '\u{1b}' => in_code = true,
-                'm' if in_code => in_code = false,
-                _ if in_code => {}
-                _ => text.push(character),
-            }
-        }
-        text
+    #[test]
+    fn counts_are_grouped_by_thousands() {
+        assert_eq!(grouped(999u32), "999");
+        assert_eq!(grouped(2_000u32), "2,000");
+        assert_eq!(grouped(1_234_567u32), "1,234,567");
+        assert_eq!(grouped(1u128 << 64), "18,446,744,073,709,551,616");
     }
 
     #[test]
@@ -667,6 +755,14 @@ mod tests {
         );
         for line in usage_error_lines(missing) {
             assert!(visible_width(&line) <= TEXT_WIDTH, "{line}");
+        }
+        // A mistyped argument with control characters, C1 and a carriage return among them, is
+        // shown escaped: nothing in the message is carried out by the terminal (AUD-018).
+        let typed = "error: unexpected argument '--x\u{1b}]52;c;QUFB\u{7}\u{9b}2J\r' found\n";
+        let lines = usage_error_lines(typed);
+        assert!(plain(&lines[0]).contains("--x\\u{1b}]52;c;QUFB\\u{7}\\u{9b}2J\\u{d}"));
+        for line in &lines {
+            assert!(!plain(line).chars().any(char::is_control), "{line:?}");
         }
     }
 

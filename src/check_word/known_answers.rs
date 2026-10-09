@@ -146,6 +146,7 @@ impl ComponentCheck for CheckWordCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::self_check::{fails_with, leak};
 
     #[test]
     fn the_check_word_passes() {
@@ -171,23 +172,21 @@ mod tests {
         );
         let mut vectors = VECTORS;
         vectors[2].check_index = 4151;
-        let mut check = CheckWordCheck {
-            vectors: Box::leak(Box::new(vectors)),
-            ..CheckWordCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("vector 3 of 4 gives another check index".to_owned())
+        fails_with(
+            CheckWordCheck {
+                vectors: leak(vectors),
+                ..CheckWordCheck::new()
+            },
+            "vector 3 of 4 gives another check index",
         );
         let mut vectors = VECTORS;
         vectors[3].password = "drop-down t-shirt abacus yoyo felt-tip rubble";
-        let mut check = CheckWordCheck {
-            vectors: Box::leak(Box::new(vectors)),
-            ..CheckWordCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("vector 4 of 4 gives other words".to_owned())
+        fails_with(
+            CheckWordCheck {
+                vectors: leak(vectors),
+                ..CheckWordCheck::new()
+            },
+            "vector 4 of 4 gives other words",
         );
     }
 }

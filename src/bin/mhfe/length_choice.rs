@@ -8,7 +8,7 @@ use mhfe::{ContainerChoice, OriginalFacts, Suite};
 use crate::choice::{self, Answer, Help, Question};
 use crate::exit::Failure;
 use crate::readme;
-use crate::style::{self, paint, GOOD, MUTED, STRONG, WARNING};
+use crate::style::{self, paint, MUTED, STRONG};
 
 /// Asks a person at a terminal which container to make for a 12- to 21-word phrase. Enter alone
 /// keeps 24 words.
@@ -77,30 +77,20 @@ fn caught(choice: ContainerChoice) -> String {
     format!("{} times in {one_in}", one_in - 1)
 }
 
-/// A line of what a choice gives.
-fn good(text: &str) {
-    eprintln!("  {} {text}", paint(GOOD, "✓"));
-}
-
-/// A line of what a choice costs.
-fn bad(text: &str) {
-    eprintln!("  {} {text}", paint(WARNING, "!"));
-}
-
 fn explain_24_words(choice: ContainerChoice) {
-    good("Recovery checks the password and tells you if it is wrong.");
-    good("Every encrypted phrase has 24 words, so it does not show how long yours is.");
-    good(&format!(
+    style::gives("Recovery checks the password and tells you if it is wrong.");
+    style::gives("Every encrypted phrase has 24 words, so it does not show how long yours is.");
+    style::gives(&format!(
         "A word copied wrongly is caught {}.",
         caught(choice)
     ));
-    bad("The backup is longer than your phrase.");
+    style::costs("The backup is longer than your phrase.");
 }
 
 fn explain_same_length(choice: ContainerChoice) {
-    good("The backup is as long as your phrase and looks like any other phrase.");
-    good("Every password opens some valid wallet, which can serve as a decoy.");
-    bad("Recovery cannot check the password: a wrong one opens another wallet.");
+    style::gives("The backup is as long as your phrase and looks like any other phrase.");
+    style::gives("Every password opens some valid wallet, which can serve as a decoy.");
+    style::costs("Recovery cannot check the password: a wrong one opens another wallet.");
     eprintln!(
         "    {}",
         paint(
@@ -112,11 +102,11 @@ fn explain_same_length(choice: ContainerChoice) {
         "    {}",
         paint(MUTED, "fingerprint or a known receiving address.")
     );
-    bad(&format!(
+    style::costs(&format!(
         "It shows that your phrase has {} words.",
         choice.word_count()
     ));
-    bad(&format!(
+    style::costs(&format!(
         "A word copied wrongly is caught only {}.",
         caught(choice)
     ));

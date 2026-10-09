@@ -4,19 +4,15 @@
 //! nothing about them.
 
 use crate::container::ContainerFacts;
+use crate::detection::LengthDetection;
 use crate::engine::Argon2Engine;
 use crate::memory::LockedText;
 use crate::mhfe::{read_as, suite_3_state, RecoveredPhrase};
-use crate::packing;
 use crate::suite::Suite;
-use crate::wallet_check;
 use crate::{Mhfe, MhfeError, Password, ProgressCallback};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
-
-/// The width a hidden wallet is read at on a 24-word container: the whole state.
-const STATE_WORDS: usize = 24;
 
 impl<E: Argon2Engine> Mhfe<E> {
     /// The wallet that `password` opens on a 24-word container, read as 24 words. It has no
@@ -34,6 +30,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         passphrase: &str,
         on_progress: ProgressCallback<'_>,
     ) -> Result<RecoveredPhrase, MhfeError> {
+        ContainerFacts::read(container)?.require_hidden_wallets()?;
         let (_, x) = self.recover_state(
             container,
             password,
@@ -41,10 +38,11 @@ impl<E: Argon2Engine> Mhfe<E> {
             on_progress,
         )?;
         let x = suite_3_state(&x)?;
-        if passes_a_check(x, passphrase)? {
+        if LengthDetection::of(x).reads_as_checked(passphrase)? {
             return Err(MhfeError::HiddenWalletPassesCheck);
         }
-        read_as(x, STATE_WORDS)
+        // Read at the whole state's width, as 24 words.
+        read_as(x, crate::packing::STATE_WORDS)
     }
 }
 
@@ -61,15 +59,26 @@ pub struct HiddenWallets {
 }
 
 impl HiddenWallets {
+    /// The error codes of [`Self::open`] after which a session stays open for another password: a
+    /// password used already, one whose wallet would pass a check, and a password refused before
+    /// any work. Any other error ends the session.
+    pub const KEEPS_SESSION_OPEN: [&'static str; 9] = [
+        "PASSWORD_ALREADY_USED",
+        "HIDDEN_WALLET_PASSES_CHECK",
+        "PASSWORDS_DIFFER",
+        "PASSWORD_REPAIR_NOT_OFFERED",
+        "EMPTY_PASSWORD",
+        "PASSWORD_TOO_LONG",
+        "INVALID_PASSWORD_UTF8",
+        "CONTROL_CHARACTER_IN_PASSWORD",
+        "UNASSIGNED_CHARACTER",
+    ];
+
     /// A session on `container`, which must have 24 words, with the main wallet's passphrase,
     /// empty for a wallet without one. Refused before any Argon2 work otherwise.
     pub fn new(container: &str, main_passphrase: &str) -> Result<Self, MhfeError> {
         let facts = ContainerFacts::read(container)?;
-        if !facts.opens_hidden_wallets() {
-            return Err(MhfeError::InvalidContainer(
-                "hidden wallets are opened on a 24-word container only".to_owned(),
-            ));
-        }
+        facts.require_hidden_wallets()?;
         Ok(Self {
             container: facts.words().to_owned(),
             passphrase: LockedText::copy_of(main_passphrase),
@@ -104,52 +113,26 @@ impl HiddenWallets {
     }
 }
 
-/// Whether a state would be read as a checked phrase: a short one that passes its built-in check,
-/// or a new 24-word one that passes the wallet check with `passphrase`. The 24-word reading of a
-/// state is the state itself.
-fn passes_a_check(x: &packing::State, passphrase: &str) -> Result<bool, MhfeError> {
-    if !packing::matching_short_lengths(x).is_empty() || wallet_check::passes(&x[..], passphrase)? {
-        return Ok(true);
-    }
-    // mhfe decrypt reports a pass without a passphrase, so a hidden wallet must not pass that
-    // either, whatever the main wallet's passphrase.
-    Ok(!passphrase.is_empty() && wallet_check::passes(&x[..], "")?)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{Argon2Cost, NativeEngine};
-    use crate::{PhraseLength, Recovery, WorkFactor};
-
-    const ABANDON: &str =
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-
-    fn reduced() -> Mhfe<NativeEngine> {
-        let cost = Argon2Cost {
-            memory_kib: 256,
-            passes: 1,
-        };
-        Mhfe::with_engine(
-            WorkFactor::default(),
-            NativeEngine::reduced_for_tests(cost).unwrap(),
-        )
-    }
+    use crate::test_support::{reduced, test_password, ABANDON_12 as ABANDON};
+    use crate::{PhraseLength, Recovery};
 
     #[test]
     fn another_password_opens_another_24_word_wallet() {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
-        let main = Password::new("public test password").unwrap();
+        let main = test_password();
         let hidden = Password::new("another public test password").unwrap();
         let container = mhfe
             .encrypt(ABANDON, &main, Suite::TwentyFourWords, none)
             .unwrap();
 
         let wallet = mhfe.derive_wallet(&container, &hidden, "", none).unwrap();
-        assert_eq!(wallet.words, 24);
-        assert!(!wallet.verified);
-        assert_ne!(*wallet.phrase, ABANDON);
+        assert_eq!(wallet.words(), 24);
+        assert!(!wallet.verified());
+        assert_ne!(wallet.phrase(), ABANDON);
         // Recovery with the hidden password gives the same wallet, unverified.
         let Recovery::Phrase(recovered) = mhfe
             .decrypt(&container, &hidden, PhraseLength::Detect, none)
@@ -157,15 +140,14 @@ mod tests {
         else {
             panic!("one reading expected");
         };
-        assert_eq!(*recovered.phrase, *wallet.phrase);
-        assert!(!recovered.verified);
+        assert_eq!(recovered.phrase(), wallet.phrase());
+        assert!(!recovered.verified());
         // The same password gives the same wallet again: nothing needs to be written down.
         assert_eq!(
-            *mhfe
-                .derive_wallet(&container, &hidden, "", none)
+            mhfe.derive_wallet(&container, &hidden, "", none)
                 .unwrap()
-                .phrase,
-            *wallet.phrase
+                .phrase(),
+            wallet.phrase()
         );
     }
 
@@ -174,7 +156,7 @@ mod tests {
     fn a_reading_that_passes_a_short_check_is_refused() {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
-        let main = Password::new("public test password").unwrap();
+        let main = test_password();
         let container = mhfe
             .encrypt(ABANDON, &main, Suite::TwentyFourWords, none)
             .unwrap();
@@ -185,33 +167,18 @@ mod tests {
     }
 
     #[test]
-    fn a_state_that_passes_the_wallet_check_is_refused() {
-        // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
-        let mut state = [0u8; packing::STATE_BYTES];
-        state[24..].copy_from_slice(&76_562u64.to_be_bytes());
-        assert!(passes_a_check(&state, "TREZOR").unwrap());
-        // The same reading with the main wallet's empty passphrase is another seed, which fails.
-        assert!(!passes_a_check(&state, "").unwrap());
-        state[24..].copy_from_slice(&76_561u64.to_be_bytes());
-        assert!(!passes_a_check(&state, "TREZOR").unwrap());
-        // A reading that passes the check without a passphrase is refused as well, also when the
-        // main wallet has one: mhfe decrypt would report that pass.
-        state[24..].copy_from_slice(&98_918u64.to_be_bytes());
-        assert!(passes_a_check(&state, "").unwrap());
-        assert!(passes_a_check(&state, "TREZOR").unwrap());
-    }
-
-    #[test]
     fn a_same_length_container_is_not_taken_yet() {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
-        let main = Password::new("public test password").unwrap();
+        let main = test_password();
         let container = mhfe
             .encrypt(ABANDON, &main, Suite::SameLength, none)
             .unwrap();
         assert!(matches!(
             mhfe.derive_wallet(&container, &main, "", none),
-            Err(MhfeError::InvalidContainer(_))
+            Err(MhfeError::NoHiddenWallets {
+                container_words: 12
+            })
         ));
     }
 }

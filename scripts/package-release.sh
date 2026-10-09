@@ -138,7 +138,7 @@ for package in "${packages[@]}"; do
       # and that the files in the archive match it.
       (cd "$folder" && sed -n '/^## SHA-256 of this build$/,$p' README.md | grep -E '^[0-9a-f]{64}  ' |
         sha256sum --check --quiet --strict -)
-      echo "Emscripten 6.0.10" >> "$folder/BUILD-INFO.txt"
+      echo "Emscripten 6.0.12" >> "$folder/BUILD-INFO.txt"
       pack_tar "$folder" "mhfe-$version-browser.tar.gz"
       ;;
     *)

@@ -7,7 +7,8 @@
 // A page supplies every part as text or bytes, because a page under a strict
 // Content-Security-Policy may not fetch anything. Each operation runs in a new Web Worker made from
 // a Blob of the package's worker script, runtime/worker.js, so the page never blocks, cancel()
-// stops at once, and the worker's memory, secrets included, is freed when it ends. Every module
+// ends an operation at once, and the worker's memory, secrets included, is freed when the worker
+// is terminated, which waits until a worker still loading the WebAssembly has loaded it. Every module
 // runs in the same WebAssembly, runtime/mhfe.wasm; a request names its module and operation.
 
 /**
@@ -97,6 +98,8 @@ export class WorkerJob {
   #settle = null;
   #onEnd;
   #startTimer = null;
+  /** Whether the worker has loaded the WebAssembly (its "ready"). */
+  #loaded = false;
 
   constructor(scripts, handlers = {}, onEnd = () => {}) {
     this.#scripts = scripts;
@@ -142,12 +145,17 @@ export class WorkerJob {
         this.#worker.onmessage = (event) => this.#receive(event.data);
         this.#worker.onerror = (event) => {
           event.preventDefault();
+          // A failed worker loads nothing more and may stop at once.
+          this.#loaded = true;
+          if (this.#ended) this.#terminate();
           this.stop(
             new MhfeError("WORKER_FAILED", event.message || "The worker stopped unexpectedly."),
           );
         };
         this.#startTimer = setTimeout(() => {
           this.stop(new MhfeError("WORKER_FAILED", "The worker did not start within a minute."));
+          // A minute without loading: it is not waited for any longer.
+          this.#terminate();
         }, WORKER_START_TIMEOUT_MS);
         this.send({ ...message, compiled }, transfer);
       };
@@ -175,15 +183,33 @@ export class WorkerJob {
     }
   }
 
-  /** Ends the job once: the worker stops; `error` rejects its promise, null resolves nothing. */
+  /**
+   * Ends the job once: `error` rejects its promise, null resolves nothing, and the worker stops.
+   * A worker that is still loading the WebAssembly stops once it has loaded it, or when it fails,
+   * or at the start's time limit: Firefox crashes the whole page when a worker is terminated while
+   * it loads the WebAssembly, as when every worker of a draw fails within milliseconds. Its
+   * request is answered by nobody: its messages are ignored from now on.
+   */
   stop(error) {
     if (this.#ended) return;
     this.#ended = true;
     clearTimeout(this.#startTimer);
-    this.#worker?.terminate();
-    if (this.#url !== null) URL.revokeObjectURL(this.#url);
+    if (this.#loaded || this.#worker === null) {
+      this.#terminate();
+    } else {
+      this.#startTimer = setTimeout(() => this.#terminate(), WORKER_START_TIMEOUT_MS);
+    }
     this.#onEnd(this);
     if (error !== null) this.#settle?.reject(error);
+  }
+
+  #terminate() {
+    clearTimeout(this.#startTimer);
+    this.#startTimer = null;
+    this.#worker?.terminate();
+    this.#worker = null;
+    if (this.#url !== null) URL.revokeObjectURL(this.#url);
+    this.#url = null;
   }
 
   get ended() {
@@ -191,8 +217,21 @@ export class WorkerJob {
   }
 
   #receive(reply) {
-    // Messages that were already on their way when the job ended are ignored.
-    if (this.#ended) return;
+    // A worker's first message, whatever it is, comes after it has loaded the WebAssembly.
+    this.#loaded = true;
+    // Messages that were already on their way when the job ended are ignored; a worker that was
+    // left to finish loading stops now.
+    if (this.#ended) {
+      this.#terminate();
+      return;
+    }
+    // A reply that this page cannot read ends the job as a fault of the package, as an unknown
+    // type does: reading it as it is would throw inside the worker's event handler and leave the
+    // job running, its slot taken and its worker alive (AUD-016-API002).
+    if (!isReadableReply(reply)) {
+      this.stop(unknownMessage(reply?.type ?? reply));
+      return;
+    }
     if (reply.type === "ready") {
       this.#started(reply.buildId);
     } else if (reply.type === "result") {
@@ -202,24 +241,36 @@ export class WorkerJob {
       this.stop(new MhfeError(reply.error.code, sentence(reply.error.message)));
     } else if (reply.type === "ask") {
       this.#answer(reply.question, reply.value);
+    } else if (WORKER_NEWS.includes(reply.type)) {
+      // News the page did not ask for has no handler and is dropped.
+      this.callPage(this.#ownHandler(reply.type), reply.value, reply.type);
     } else {
-      this.callPage(this.#handlers[reply.type], reply.value, reply.type);
+      this.stop(unknownMessage(reply.type));
     }
   }
 
   /**
+   * The page's handler named `name`: an own property of the handlers only, so that a message named
+   * after an Object.prototype member such as "constructor" or "toString" reaches no page code
+   * (AUD-015-SEC007).
+   */
+  #ownHandler(name) {
+    return Object.hasOwn(this.#handlers, name) ? this.#handlers[name] : undefined;
+  }
+
+  /**
    * The worker has loaded the WebAssembly, which matched the worker's own build. Its build must be
-   * this runtime's too; a difference stops the job before the request is served.
+   * this runtime's too; a difference stops the job. The worker has the request already and starts
+   * it at once, so the stop terminates it while it runs, and its result is never used.
    */
   #started(buildId) {
     clearTimeout(this.#startTimer);
     this.#startTimer = null;
     if (buildId !== BUILD_ID) {
       this.stop(
-        new MhfeError(
-          "PACKAGE_MISMATCH",
+        packageMismatch(
           `The file runtime/worker.js is of build ${buildId} and runtime/runtime.js of build ` +
-            `${BUILD_ID}: take every file of the package from one build.`,
+            BUILD_ID,
         ),
       );
     }
@@ -244,7 +295,12 @@ export class WorkerJob {
 
   /** Asks the page and sends its answer back to the worker. */
   async #answer(question, value) {
-    const handler = this.#handlers[question];
+    // A question must be answered: one the page has no handler for is a fault of the package.
+    const handler = typeof question === "string" ? this.#ownHandler(question) : undefined;
+    if (typeof handler !== "function") {
+      this.stop(unknownMessage(question));
+      return;
+    }
     try {
       const answer = await handler(value);
       this.send({ type: "answer", value: answer?.message ?? answer }, answer?.transfer ?? []);
@@ -310,27 +366,96 @@ export class OperationSlot {
     return begin();
   }
 
+  /**
+   * Holds the slot for work the class runs itself, such as a phrase drawn on several workers at
+   * once: cancel() calls `stop(error)`. Returns the function that frees the slot when it ends.
+   */
+  hold(stop) {
+    this.requireIdle();
+    const running = { stop };
+    this.#running = running;
+    return () => {
+      if (this.#running === running) this.#running = null;
+    };
+  }
+
   cancel() {
     this.#running?.stop(new MhfeCancelledError());
   }
 }
 
 /**
- * The highest word position the Rust core reads (a 32-bit number); a position above the
- * password's words is refused there with PASSWORD_REPAIR_NOT_OFFERED.
+ * The highest word position the Rust core reads (a 32-bit number): of a password's repair, which
+ * it refuses above the password's words (PASSWORD_REPAIR_NOT_OFFERED), and of a chosen word of a
+ * new phrase, which it refuses above 24 (INVALID_WORD_WISH).
  */
-const HIGHEST_WORD_POSITION = 0xffff_ffff;
+export const HIGHEST_WORD_POSITION = 0xffff_ffff;
 
-/** The fields of a request that hold secrets; this client's own byte copies of them. */
+/**
+ * Parts of the package that come from different builds (PACKAGE_MISMATCH): `what` says which, and
+ * the advice follows. The worker says it in the same words (web/worker-runtime.js), as a worker
+ * script imports nothing; the package checks compare both.
+ */
+export function packageMismatch(what) {
+  return new MhfeError(
+    "PACKAGE_MISMATCH",
+    `${what}: take every file of the package from one build.`,
+  );
+}
+
+/**
+ * The news a worker posts besides its result, error and questions, which go to the page's
+ * handlers of the same name: web/worker-runtime.js (progress and the self-check's parts),
+ * web/core-worker.js (unverified) and web/wallet-worker.js (draws). scripts/verify-browser-package.mjs
+ * keeps this list equal to the types the worker scripts post.
+ */
+const WORKER_NEWS = ["progress", "componentStart", "component", "draws", "unverified"];
+
+/**
+ * A message or question of a worker that this page does not know or cannot read, as from a worker
+ * of another build. Only text is shown as it is: String() of an object a worker sent may throw, as
+ * one whose own toString is not a function.
+ */
+function unknownMessage(name) {
+  const shown = typeof name === "string" || name === null ? String(name) : typeof name;
+  return packageMismatch(`The worker sent a message this page does not know (${shown})`);
+}
+
+/**
+ * Whether `reply` is a message as the package's worker posts it (web/worker-runtime.js), so that
+ * reading it cannot throw: an object with a type, a ready's build as text, and an error's code and
+ * message as text. A result and the value of news or of a question go to the page as they are, and
+ * a question is checked when it is answered.
+ */
+function isReadableReply(reply) {
+  if (typeof reply !== "object" || reply === null || typeof reply.type !== "string") return false;
+  if (reply.type === "ready") return typeof reply.buildId === "string";
+  if (reply.type !== "error") return true;
+  const { error } = reply;
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    typeof error.code === "string" &&
+    typeof error.message === "string"
+  );
+}
+
+/**
+ * The fields of a request that hold secrets; this client's own byte copies of them. The worker
+ * lists the same fields (web/worker-runtime.js), as a worker script imports nothing.
+ */
 const SECRET_FIELDS = [
   "phrase",
   "password",
   "passwordRepeat",
   "passphrase",
+  "passphraseRepeat",
+  "chosenWords",
   "newPassword",
   "newPasswordRepeat",
   "mainPassphrase",
   "rolls",
+  "typed",
 ];
 
 /**
@@ -360,14 +485,27 @@ export function requireSecret(value, name) {
 }
 
 /**
+ * A secret that a method lets the caller leave out, which is then empty, such as a repetition or
+ * a BIP39 passphrase. Only a value left out (undefined) is: one given, null included, is checked
+ * as every secret is, so that a wrong type is a TypeError instead of an empty secret that the
+ * library refuses with another code (AUD-016-API003).
+ */
+export function secretOrEmpty(value, name) {
+  if (value === undefined) return "";
+  requireSecret(value, name);
+  return value;
+}
+
+/**
  * UTF-8 bytes of a phrase, password, passphrase or dice digits, in a plain Uint8Array of their
  * own, which the transfer to the worker empties and a refusal wipes. A JavaScript string may hold
  * a lone surrogate, which TextEncoder would silently turn into U+FFFD, so such a string is refused
  * instead. Bytes are copied into a new array rather than with their own slice(): a subclass such
  * as Node's Buffer, or the Buffer that bundlers add to a page, slices into a view of the caller's
- * memory, which the transfer would empty and a refusal would wipe.
+ * memory, which the transfer would empty and a refusal would wipe. An empty password is the
+ * library's to refuse (EMPTY_PASSWORD), in the order of its rules, as the command-line tool does.
  */
-export function encodeSecret(value, name, emptyAllowed) {
+export function encodeSecret(value, name) {
   requireSecret(value, name);
   let bytes;
   if (typeof value === "string") {
@@ -380,9 +518,6 @@ export function encodeSecret(value, name, emptyAllowed) {
     bytes = new TextEncoder().encode(value);
   } else {
     bytes = new Uint8Array(value);
-  }
-  if (!emptyAllowed && bytes.length === 0) {
-    throw new MhfeError("EMPTY_PASSWORD", `The ${name} is empty.`);
   }
   return bytes;
 }
@@ -414,6 +549,16 @@ export function describeChoice(choice, name) {
   );
 }
 
+/**
+ * The hint for `typed`, a line of words typed so far, from the word list of the class that `module`
+ * serves: what MhfeWallet.wordHints() and MhfePasswords.wordHints() give. The line may be part of a
+ * seed phrase or a password, so it reaches the worker as bytes that the worker wipes.
+ */
+export async function wordHintsOf(module, typed) {
+  await module.ready();
+  return module.run({ operation: "wordHints", typed: encodeSecret(typed, "typed") });
+}
+
 export function requireText(value, name) {
   if (typeof value !== "string") throw new TypeError(`${name} must be a string.`);
 }
@@ -426,6 +571,13 @@ export function requireCallback(value, name) {
   if (value !== undefined && typeof value !== "function") {
     throw new TypeError(`${name} must be a function.`);
   }
+}
+
+/** Counts as a message lists them, the last after "or": "12, 15, 18 or 21" (src/phrase.rs). */
+export function countsText(counts) {
+  return counts.length < 2
+    ? counts.join("")
+    : `${counts.slice(0, -1).join(", ")} or ${counts.at(-1)}`;
 }
 
 /**
@@ -476,6 +628,125 @@ const LONE_SURROGATE = "a\uD800";
  * that it goes away with it.
  */
 const passedOnPage = new WeakMap();
+
+/**
+ * What the module classes without Argon2 (repair, passwords, wallet) hold in common, used by
+ * composition: the worker's text, the compiled WebAssembly and the class's self-check, with which
+ * each runs its set of known answers and its operations, each in a worker of its own. The core's
+ * MhfeClient has its own, with its slot and Argon2 builds.
+ */
+export class ModuleWorker {
+  #module;
+  #workerSource;
+  #wasm;
+  #check;
+
+  /**
+   * `module` names the module's operations in the worker; `workerSource` is the text of
+   * runtime/worker.js and `wasm` runtime/mhfe.wasm; the rest goes to the class's PackageCheck.
+   */
+  constructor({ module, workerSource, wasm, classFile, classBuildId, needs, secrets }) {
+    if (typeof workerSource !== "string" || workerSource.length === 0) {
+      throw new TypeError("workerSource must be the text of runtime/worker.js.");
+    }
+    this.#module = module;
+    this.#workerSource = workerSource;
+    this.#wasm = new CompiledModule(wasm, "wasm");
+    this.#check = new PackageCheck({
+      wasm: this.#wasm,
+      classFile,
+      classBuildId,
+      needs,
+      secrets,
+    });
+  }
+
+  /** The class's startup check, made once; see a class's startupCheck(). */
+  startupCheck() {
+    return this.#check.startup("startup", (skip, handlers) =>
+      this.#selfCheck("startup", skip, handlers),
+    );
+  }
+
+  /** The class's full self-check, run anew; see a class's fullCheck(). */
+  fullCheck(onProgress) {
+    requireCallback(onProgress, "onProgress");
+    return this.#check.full(
+      [{ run: (skip, handlers) => this.#selfCheck("full", skip, handlers) }],
+      onProgress,
+    );
+  }
+
+  /** Resolves once the startup check has passed; rejects with SELF_CHECK_FAILED otherwise. */
+  ready() {
+    return this.#check.require(() => this.startupCheck());
+  }
+
+  /** Runs an operation of the module in a worker of its own, its secret buffers transferred. */
+  run(message) {
+    return this.start(message).done;
+  }
+
+  /**
+   * Starts an operation in a worker of its own, whose messages go to `handlers`, and gives the
+   * job, which can be stopped, with the promise of its result.
+   */
+  start(message, handlers = {}) {
+    const job = new WorkerJob([this.#workerSource], handlers);
+    const request = { module: this.#module, ...message };
+    return { job, done: job.run(request, secretBuffers(request), this.#wasm) };
+  }
+
+  /** Runs the module's set of known answers at `tier` in a worker of its own. */
+  #selfCheck(tier, skip, handlers) {
+    return new WorkerJob([this.#workerSource], handlers).run(
+      { module: this.#module, operation: "selfCheck", tier, skip },
+      [],
+      this.#wasm,
+    );
+  }
+}
+
+/**
+ * What the module classes MhfeRepair, MhfePasswords and MhfeWallet have in common: their
+ * self-checks and their fixed values, through the ModuleWorker each runs its operations with. A
+ * class extends it with its own operations and keeps the same ModuleWorker in a private field of
+ * its own.
+ */
+export class MhfeModuleClass {
+  #module;
+
+  constructor(module) {
+    this.#module = module;
+  }
+
+  /**
+   * The quick self-check of the class, which every other method but parameters(), fullCheck() and
+   * cancel() awaits before its first call: known answers of each part the class computes, each
+   * with a case it must refuse, and what the page itself must do. Resolves to `{ passed, tier,
+   * version, buildId, components: [{ id, label, outcome, detail? }] }`, made once per page: parts
+   * that another class of the page passed with the same WebAssembly are not run again. When a part
+   * has failed, every method of the class rejects with SELF_CHECK_FAILED from then on, the report
+   * attached; a page keeps its controls closed and shows the report.
+   */
+  async startupCheck() {
+    return this.#module.startupCheck();
+  }
+
+  /**
+   * The full self-check, run anew each time: every part with its slower cases.
+   * `onProgress({ id, label, running, outcome?, detail? })` hears of each part as it starts and
+   * ends. Resolves to a report as startupCheck() does; a failed part closes the class as there.
+   */
+  async fullCheck({ onProgress } = {}) {
+    return this.#module.fullCheck(onProgress);
+  }
+
+  /** The module's fixed values; see the class's declaration file. */
+  async parameters() {
+    return this.#module.run({ operation: "parameters" });
+  }
+}
 
 /**
  * The self-check of one class on its page. `startup()` runs once, before the first operation:
@@ -550,6 +821,9 @@ export class PackageCheck {
     const [running] = this.#startups.values();
     const report = await (running ?? startDefault());
     if (!report.passed) throw selfCheckFailed(report);
+    // A full check that failed while this one ran closes the class too (AUD-014-SEC001): what
+    // follows the await runs before any other message of a worker, so nothing slips through.
+    if (this.#failed !== null) throw selfCheckFailed(this.#failed);
   }
 
   /**
@@ -661,10 +935,9 @@ export class PackageCheck {
    */
   #packageParts() {
     if (this.#classBuildId !== BUILD_ID) {
-      throw new MhfeError(
-        "PACKAGE_MISMATCH",
+      throw packageMismatch(
         `The file ${this.#classFile} is of build ${this.#classBuildId} and runtime/runtime.js of ` +
-          `build ${BUILD_ID}: take every file of the package from one build.`,
+          `build ${BUILD_ID}`,
       );
     }
     return { ...PAGE_PARTS.package, outcome: "passed" };
@@ -717,7 +990,7 @@ export class PackageCheck {
 function encodingPart() {
   let failure = null;
   try {
-    const bytes = encodeSecret(ENCODING_PROBE, "probe", false);
+    const bytes = encodeSecret(ENCODING_PROBE, "probe");
     const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
     if (hex !== ENCODING_PROBE_UTF8) failure = "the page encodes text into other UTF-8 bytes";
   } catch {
@@ -725,7 +998,7 @@ function encodingPart() {
   }
   if (failure === null) {
     try {
-      encodeSecret(LONE_SURROGATE, "probe", false);
+      encodeSecret(LONE_SURROGATE, "probe");
       failure = "a lone surrogate is accepted instead of refused";
     } catch (error) {
       if (error?.code !== "INVALID_PASSWORD_TEXT") {
@@ -738,13 +1011,19 @@ function encodingPart() {
     : { ...PAGE_PARTS.encoding, outcome: "failed", detail: failure };
 }
 
-/** The error of every operation of a class whose self-check found a part that failed. */
+/**
+ * The error of every operation of a class whose self-check found a part that failed. Its text is
+ * the library's `self_check::failure_message`, which a report of page parts cannot call; the
+ * package checks compare both word for word.
+ */
 function selfCheckFailed(report) {
   const failed = report.components.find((component) => component.outcome === "failed");
+  // A detail that ends a sentence of its own keeps one period, as in the library (AUD-015-UI005).
+  const detail = String(failed.detail).replace(/\.+$/u, "");
   return new MhfeError(
     "SELF_CHECK_FAILED",
     sentence(
-      `the self-test failed: ${failed.label}: ${failed.detail}. ` +
+      `the self-test failed: ${failed.label}: ${detail}. ` +
         "Do not use this program on this computer",
     ),
     { report },

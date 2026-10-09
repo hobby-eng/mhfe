@@ -69,6 +69,10 @@ const ID: &str = "argon2";
 const LABEL: &str = "Argon2id";
 const SIZES_ID: &str = "argon2-sizes";
 const SIZES_LABEL: &str = "Argon2id at 64 and 256 MiB";
+/// The parts of a self-check that run Argon2, which a page names to skip or to mark: the known
+/// answer at 1 MiB, then the one at 64 and 256 MiB.
+#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
+pub(crate) const PART_IDS: [&str; 2] = [ID, SIZES_ID];
 
 /// What a call that returned an error tells: the reference code's own message for an Argon2
 /// failure, which names no input, else the error code.
@@ -79,19 +83,69 @@ fn could_not_run(error: &MhfeError) -> String {
     }
 }
 
+/// What a build of Argon2 answers its known answers with: the native engine on each copy of its
+/// core, or a page's Emscripten build through the bridge. The two parts of a self-check below ask
+/// it, so that both builds report under the same ids, labels and tiers.
+trait Argon2Answers {
+    /// The known answer at 1 MiB: `Err` names what went wrong.
+    fn small(&self) -> Result<(), String>;
+    /// The known answers at 64 and 256 MiB, with a size the computer cannot give told apart.
+    fn sizes(&self) -> ComponentOutcome;
+}
+
+/// The startup part `argon2`: the known answer of `A` at 1 MiB.
+#[derive(Default)]
+pub struct Argon2Check<A>(A);
+
+/// The full self-test's part `argon2-sizes`: the known answers of `A` at 64 and 256 MiB.
+#[derive(Default)]
+pub struct Argon2SizesCheck<A>(A);
+
+impl<A: Argon2Answers> ComponentCheck for Argon2Check<A> {
+    fn id(&self) -> &'static str {
+        ID
+    }
+
+    fn label(&self) -> &'static str {
+        LABEL
+    }
+
+    fn run(&mut self, _: Tier) -> ComponentOutcome {
+        self.0.small().into()
+    }
+}
+
+impl<A: Argon2Answers> ComponentCheck for Argon2SizesCheck<A> {
+    fn id(&self) -> &'static str {
+        SIZES_ID
+    }
+
+    fn label(&self) -> &'static str {
+        SIZES_LABEL
+    }
+
+    fn runs_at(&self, tier: Tier) -> bool {
+        tier == Tier::Full
+    }
+
+    fn run(&mut self, _: Tier) -> ComponentOutcome {
+        self.0.sizes()
+    }
+}
+
 /// The RFC 9106 test vector of Argon2id (section 5.3), in which every input differs and the secret
 /// and the associated data are set, so that every field of the C context takes part. Only the
 /// native build can run it: the Emscripten builds export argon2id_hash_raw, which has neither.
 #[cfg(not(target_arch = "wasm32"))]
-mod rfc_9106 {
-    pub(super) const PASSWORD: [u8; 32] = [0x01; 32];
-    pub(super) const SALT: [u8; 16] = [0x02; 16];
-    pub(super) const SECRET: [u8; 8] = [0x03; 8];
-    pub(super) const ASSOCIATED_DATA: [u8; 12] = [0x04; 12];
-    pub(super) const PASSES: u32 = 3;
-    pub(super) const MEMORY_KIB: u32 = 32;
-    pub(super) const LANES: u32 = 4;
-    pub(super) const TAG: [u8; 32] =
+pub(in crate::engine) mod rfc_9106 {
+    pub(in crate::engine) const PASSWORD: [u8; 32] = [0x01; 32];
+    pub(in crate::engine) const SALT: [u8; 16] = [0x02; 16];
+    pub(in crate::engine) const SECRET: [u8; 8] = [0x03; 8];
+    pub(in crate::engine) const ASSOCIATED_DATA: [u8; 12] = [0x04; 12];
+    pub(in crate::engine) const PASSES: u32 = 3;
+    pub(in crate::engine) const MEMORY_KIB: u32 = 32;
+    pub(in crate::engine) const LANES: u32 = 4;
+    pub(in crate::engine) const TAG: [u8; 32] =
         crate::self_check::hex("0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659");
 }
 
@@ -110,33 +164,53 @@ fn cores() -> Vec<(bool, &'static str)> {
     }
 }
 
-/// The startup check of the native Argon2id engine: on each copy of the core, the RFC 9106 vector
-/// and a call shaped as MHFE makes it at 1 MiB (four lanes on four threads, version 1.3, no secret
-/// or associated data, built by the engine's own code), each in the same 1 MiB work area, which
-/// must be wiped after every call, and each behind the engine's written-key guard. About two to
-/// three milliseconds. It starts four threads per call and joins them before it returns: the
-/// command-line tool runs it after a command started directly has entered its own network
-/// namespace, which needs a process of a single thread, and, for the start menu, before the menu
-/// opens, with no network namespace (a command of the menu runs in a thread of the menu).
+/// The known answers of the native Argon2id engine, which `call` computes behind the engine's
+/// written-key guard.
+///
+/// At startup ([`NativeArgon2Check`]), on each copy of the core, the RFC 9106 vector and a call
+/// shaped as MHFE makes it at 1 MiB (four lanes on four threads, version 1.3, no secret or
+/// associated data, built by the engine's own code), each in the same 1 MiB work area, which must
+/// be wiped after every call. About two to three milliseconds. It starts four threads per call and
+/// joins them before it returns: the command-line tool runs it after a command started directly
+/// has entered its own network namespace, which needs a process of a single thread, and, for the
+/// start menu, before the menu opens, with no network namespace (a command of the menu runs in a
+/// thread of the menu).
+///
+/// In the full self-test ([`NativeArgon2SizesCheck`]), the same at 64 and 256 MiB, on each copy of
+/// the core, with four threads and, once, with one: indexing over many segments and the threads.
+/// About half a second per copy and 256 MiB. A computer that cannot reserve the memory is told
+/// apart from a wrong answer: that part is not available here, rather than failed.
 #[cfg(not(target_arch = "wasm32"))]
-pub struct NativeArgon2Check {
+pub struct NativeArgon2 {
     small: KnownTag,
     rfc_tag: [u8; KEY_BYTES],
+    sizes: [KnownTag; 2],
     call: Call,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl NativeArgon2Check {
-    pub fn new() -> Self {
+impl Default for NativeArgon2 {
+    fn default() -> Self {
         Self {
             small: SMALL,
             rfc_tag: rfc_9106::TAG,
+            sizes: SIZES,
             call: ffi::argon2id,
         }
     }
+}
 
-    /// The RFC 9106 call on `core`.
-    fn rfc_inputs(ssse3: bool) -> Argon2Inputs<'static> {
+/// The startup part `argon2` of the native engine.
+#[cfg(not(target_arch = "wasm32"))]
+pub type NativeArgon2Check = Argon2Check<NativeArgon2>;
+/// The full self-test's part `argon2-sizes` of the native engine.
+#[cfg(not(target_arch = "wasm32"))]
+pub type NativeArgon2SizesCheck = Argon2SizesCheck<NativeArgon2>;
+
+#[cfg(not(target_arch = "wasm32"))]
+impl NativeArgon2 {
+    /// The RFC 9106 call, on the SSSE3 copy of the core if `ssse3`.
+    pub(in crate::engine) fn rfc_inputs(ssse3: bool) -> Argon2Inputs<'static> {
         Argon2Inputs {
             password: &rfc_9106::PASSWORD,
             salt: &rfc_9106::SALT,
@@ -150,8 +224,11 @@ impl NativeArgon2Check {
             ssse3,
         }
     }
+}
 
-    fn check(&self) -> Result<(), String> {
+#[cfg(not(target_arch = "wasm32"))]
+impl Argon2Answers for NativeArgon2 {
+    fn small(&self) -> Result<(), String> {
         let mut work_area = WorkArea::allocate(self.small.cost.memory_bytes())
             .map_err(|error| could_not_run(&error))?;
         for (ssse3, core) in cores() {
@@ -174,53 +251,8 @@ impl NativeArgon2Check {
         }
         Ok(())
     }
-}
 
-#[cfg(not(target_arch = "wasm32"))]
-impl Default for NativeArgon2Check {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl ComponentCheck for NativeArgon2Check {
-    fn id(&self) -> &'static str {
-        ID
-    }
-
-    fn label(&self) -> &'static str {
-        LABEL
-    }
-
-    fn run(&mut self, _: Tier) -> ComponentOutcome {
-        match self.check() {
-            Ok(()) => ComponentOutcome::Passed,
-            Err(detail) => ComponentOutcome::Failed(detail),
-        }
-    }
-}
-
-/// The full self-test's check of the native engine at 64 and 256 MiB, on each copy of the core,
-/// with four threads and, once, with one: indexing over many segments and the threads. About half
-/// a second per copy and 256 MiB. A computer that cannot reserve the memory is told apart from a
-/// wrong answer: that part is not available here, rather than failed.
-#[cfg(not(target_arch = "wasm32"))]
-pub struct NativeArgon2SizesCheck {
-    sizes: [KnownTag; 2],
-    call: Call,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl NativeArgon2SizesCheck {
-    pub fn new() -> Self {
-        Self {
-            sizes: SIZES,
-            call: ffi::argon2id,
-        }
-    }
-
-    fn check(&self) -> ComponentOutcome {
+    fn sizes(&self) -> ComponentOutcome {
         let largest = self.sizes[1].cost.memory_bytes();
         let mut work_area = match WorkArea::allocate(largest) {
             Ok(work_area) => work_area,
@@ -274,60 +306,59 @@ impl NativeArgon2SizesCheck {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl Default for NativeArgon2SizesCheck {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl ComponentCheck for NativeArgon2SizesCheck {
-    fn id(&self) -> &'static str {
-        SIZES_ID
-    }
-
-    fn label(&self) -> &'static str {
-        SIZES_LABEL
-    }
-
-    fn runs_at(&self, tier: Tier) -> bool {
-        tier == Tier::Full
-    }
-
-    fn run(&mut self, _: Tier) -> ComponentOutcome {
-        self.check()
-    }
-}
-
 #[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
 use super::browser::{derive_with, JsArgon2};
 
-/// The check of the page's Argon2 build: the 1 MiB known answer through the same bridge every
-/// round of an operation uses, so that a build that gives zeros, writes into a stale view of the
-/// WebAssembly memory or another wrong tag is found. Half a millisecond once the build runs. An
-/// operation runs [`BrowserArgon2Check::verify`] before its first round and after its last, which
-/// also covers the optimized code a browser makes of a long-running loop.
+/// The known answers of one of the page's Argon2 builds, through the same bridge every round of an
+/// operation uses.
+///
+/// At startup ([`BrowserArgon2Check`]) the 1 MiB known answer, so that a build that gives zeros,
+/// writes into a stale view of the WebAssembly memory or another wrong tag is found. Half a
+/// millisecond once the build runs. An operation runs [`BrowserArgon2Check::verify`] before its
+/// first round and after its last, which also covers the optimized code a browser makes of a
+/// long-running loop.
+///
+/// In the full self-test ([`BrowserArgon2SizesCheck`]) the known answers at 64 and 256 MiB: the
+/// heap must grow and the bridge read the grown memory. A page runs it for the single-threaded
+/// build and then for the threaded one, never both at once. A browser that cannot give the memory
+/// makes the part not available here, rather than failed.
 #[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
-pub struct BrowserArgon2Check<'a> {
+pub struct PageArgon2<'a> {
     argon2: &'a JsArgon2,
 }
 
+/// The startup part `argon2` of a page's Argon2 build.
 #[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
-impl<'a> BrowserArgon2Check<'a> {
+pub type BrowserArgon2Check<'a> = Argon2Check<PageArgon2<'a>>;
+/// The full self-test's part `argon2-sizes` of a page's Argon2 build.
+#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
+pub type BrowserArgon2SizesCheck<'a> = Argon2SizesCheck<PageArgon2<'a>>;
+
+#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
+impl<'a> Argon2Check<PageArgon2<'a>> {
     pub fn new(argon2: &'a JsArgon2) -> Self {
-        Self { argon2 }
+        Self(PageArgon2 { argon2 })
     }
 
     /// The known answer once: `Ok`, or [`MhfeError::SelfCheckFailed`] naming what went wrong.
     pub fn verify(&self) -> Result<(), MhfeError> {
-        self.check().map_err(|detail| MhfeError::SelfCheckFailed {
+        self.0.small().map_err(|detail| MhfeError::SelfCheckFailed {
             component: LABEL.to_owned(),
             detail,
         })
     }
+}
 
-    fn check(&self) -> Result<(), String> {
+#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
+impl<'a> Argon2SizesCheck<PageArgon2<'a>> {
+    pub fn new(argon2: &'a JsArgon2) -> Self {
+        Self(PageArgon2 { argon2 })
+    }
+}
+
+#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
+impl Argon2Answers for PageArgon2<'_> {
+    fn small(&self) -> Result<(), String> {
         let mut tag = [0u8; KEY_BYTES];
         derive_with(self.argon2, PASSWORD, SALT, SMALL.cost, &mut tag)
             .map_err(|error| could_not_run(&error))?;
@@ -337,57 +368,8 @@ impl<'a> BrowserArgon2Check<'a> {
             Err("the page's Argon2 build gives another tag".to_owned())
         }
     }
-}
 
-#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
-impl ComponentCheck for BrowserArgon2Check<'_> {
-    fn id(&self) -> &'static str {
-        ID
-    }
-
-    fn label(&self) -> &'static str {
-        LABEL
-    }
-
-    fn run(&mut self, _: Tier) -> ComponentOutcome {
-        match self.check() {
-            Ok(()) => ComponentOutcome::Passed,
-            Err(detail) => ComponentOutcome::Failed(detail),
-        }
-    }
-}
-
-/// The full self-test's check of one of the page's Argon2 builds at 64 and 256 MiB: the heap must
-/// grow and the bridge read the grown memory. A page runs it for the single-threaded build and
-/// then for the threaded one, never both at once. A browser that cannot give the memory makes the
-/// part not available here, rather than failed.
-#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
-pub struct BrowserArgon2SizesCheck<'a> {
-    argon2: &'a JsArgon2,
-}
-
-#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
-impl<'a> BrowserArgon2SizesCheck<'a> {
-    pub fn new(argon2: &'a JsArgon2) -> Self {
-        Self { argon2 }
-    }
-}
-
-#[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
-impl ComponentCheck for BrowserArgon2SizesCheck<'_> {
-    fn id(&self) -> &'static str {
-        SIZES_ID
-    }
-
-    fn label(&self) -> &'static str {
-        SIZES_LABEL
-    }
-
-    fn runs_at(&self, tier: Tier) -> bool {
-        tier == Tier::Full
-    }
-
-    fn run(&mut self, _: Tier) -> ComponentOutcome {
+    fn sizes(&self) -> ComponentOutcome {
         for size in SIZES {
             let mut tag = [0u8; KEY_BYTES];
             match derive_with(self.argon2, PASSWORD, SALT, size.cost, &mut tag) {
@@ -417,7 +399,7 @@ mod tests {
 
     #[test]
     fn the_engine_passes_its_known_answers() {
-        let mut check = NativeArgon2Check::new();
+        let mut check = NativeArgon2Check::default();
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
         assert_eq!((check.id(), check.label()), ("argon2", "Argon2id"));
         assert!(check.runs_at(Tier::Startup));
@@ -425,8 +407,8 @@ mod tests {
 
     #[test]
     fn a_corrupted_tag_fails() {
-        let mut small = NativeArgon2Check::new();
-        small.small.tag[31] ^= 1;
+        let mut small = NativeArgon2Check::default();
+        small.0.small.tag[31] ^= 1;
         assert_eq!(
             small.run(Tier::Startup),
             ComponentOutcome::Failed(format!(
@@ -434,8 +416,8 @@ mod tests {
                 cores()[0].1
             ))
         );
-        let mut rfc = NativeArgon2Check::new();
-        rfc.rfc_tag[0] ^= 0x80;
+        let mut rfc = NativeArgon2Check::default();
+        rfc.0.rfc_tag[0] ^= 0x80;
         assert!(matches!(
             rfc.run(Tier::Startup),
             ComponentOutcome::Failed(detail) if detail.ends_with("for the RFC 9106 vector")
@@ -456,8 +438,8 @@ mod tests {
             changed.threads = 2;
             ffi::argon2id(&changed, work_area, tag)
         }
-        let mut check = NativeArgon2Check::new();
-        check.call = two_lanes;
+        let mut check = NativeArgon2Check::default();
+        check.0.call = two_lanes;
         assert!(check.run(Tier::Startup).is_failure());
     }
 
@@ -466,8 +448,8 @@ mod tests {
         fn refused(_: &Argon2Inputs<'_>, _: &mut WorkArea, _: &mut [u8]) -> Result<(), MhfeError> {
             Err(MhfeError::Argon2("Threading failure".to_owned()))
         }
-        let mut check = NativeArgon2Check::new();
-        check.call = refused;
+        let mut check = NativeArgon2Check::default();
+        check.0.call = refused;
         assert_eq!(
             check.run(Tier::Startup),
             ComponentOutcome::Failed("Argon2id could not run: Threading failure".to_owned())
@@ -497,11 +479,11 @@ mod tests {
             "Argon2id could not run: the Argon2 engine returned without writing the key".to_owned(),
         );
         for call in [writes_nothing as Call, writes_zeros] {
-            let mut check = NativeArgon2Check::new();
-            check.call = call;
+            let mut check = NativeArgon2Check::default();
+            check.0.call = call;
             assert_eq!(check.run(Tier::Startup), refused);
-            let mut sizes = NativeArgon2SizesCheck::new();
-            sizes.call = call;
+            let mut sizes = NativeArgon2SizesCheck::default();
+            sizes.0.call = call;
             assert_eq!(sizes.run(Tier::Full), refused);
         }
     }
@@ -517,8 +499,8 @@ mod tests {
             work_area.fill_for_tests(0x5a);
             Ok(())
         }
-        let mut check = NativeArgon2Check::new();
-        check.call = leaves_blocks;
+        let mut check = NativeArgon2Check::default();
+        check.0.call = leaves_blocks;
         assert!(matches!(
             check.run(Tier::Startup),
             ComponentOutcome::Failed(detail) if detail.ends_with("leaves its memory unwiped")
@@ -527,11 +509,11 @@ mod tests {
 
     #[test]
     fn the_sizes_run_in_the_full_self_test_only() {
-        let mut check = NativeArgon2SizesCheck::new();
+        let mut check = NativeArgon2SizesCheck::default();
         assert!(!check.runs_at(Tier::Startup));
         assert!(check.runs_at(Tier::Full));
         assert_eq!(check.run(Tier::Full), ComponentOutcome::Passed);
-        check.sizes[1].tag[5] ^= 4;
+        check.0.sizes[1].tag[5] ^= 4;
         assert!(matches!(
             check.run(Tier::Full),
             ComponentOutcome::Failed(detail) if detail.ends_with("gives another tag at 256 MiB")
@@ -556,7 +538,7 @@ mod tests {
         <NativeArgon2SizesCheck as NoEngine<_>>::closed();
 
         fn takes_nothing<C: ComponentCheck>(_: fn() -> C) {}
-        takes_nothing(NativeArgon2Check::new);
-        takes_nothing(NativeArgon2SizesCheck::new);
+        takes_nothing(NativeArgon2Check::default);
+        takes_nothing(NativeArgon2SizesCheck::default);
     }
 }

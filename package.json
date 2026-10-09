@@ -8,7 +8,7 @@
     "check:browsers": "node scripts/verify-browsers.mjs"
   },
   "devDependencies": {
-    "playwright": "1.63.0",
+    "playwright": "1.64.0",
     "prettier": "3.9.9"
   }
 }

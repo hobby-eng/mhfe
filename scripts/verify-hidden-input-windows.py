@@ -112,7 +112,7 @@ class Session:
         return self.process.exitstatus
 
     def at_password_prompt(self):
-        self.wait_for("original: ")
+        self.wait_for("original seed phrase: ")
         # The container is read on a step of its own and taken at once.
         self.type(CONTAINER + "\r")
         self.wait_for("Container password: ")

@@ -103,6 +103,18 @@ impl PasswordRecipe {
         }
     }
 
+    /// What the recipe makes, as a person reads it: "5 words from the EFF list, about 64.6 bits",
+    /// "5 words from the EFF list and a check word, about 64.6 bits" or "16 random characters,
+    /// about 93.3 bits".
+    pub fn summary(&self) -> String {
+        let made = match self.kind {
+            Kind::Words(count) => format!("{count} words from the EFF list"),
+            Kind::CheckWord => format!("{DRAWN_WORDS} words from the EFF list and a check word"),
+            Kind::Characters(count) => format!("{count} random characters"),
+        };
+        format!("{made}, about {} bits", bits_text(self.millibits()))
+    }
+
     /// Whether the password is shorter than recommended.
     pub fn is_weak(&self) -> bool {
         match self.kind {
@@ -136,9 +148,7 @@ impl PasswordRecipe {
                 groups.len().min(self.drawn_words()) + 1,
             ));
         }
-        self.make_from_indexes(&mut |number| {
-            index_of_rolls(groups[number - 1]).ok_or(MhfeError::InvalidDiceRolls(number))
-        })
+        self.make_from_indexes(&mut |number| word_index_of_rolls(number, groups[number - 1]))
     }
 
     /// Makes a word password, asking `next_index` for the list index of each drawn word, from 1;
@@ -229,10 +239,26 @@ impl NewPassword {
     }
 }
 
+/// The strength of `count` dice words as [`bits_text`] writes it: "64.6" for five.
+pub fn word_bits(count: usize) -> String {
+    bits_text(count * MILLIBITS_PER_WORD)
+}
+
+/// The strength of `count` random characters as [`bits_text`] writes it: "93.3" for sixteen.
+pub fn character_bits(count: usize) -> String {
+    bits_text(count * MILLIBITS_PER_CHARACTER)
+}
+
 /// "64.6" for 64,625 millibits: a strength in bits, rounded to one decimal.
 pub fn bits_text(millibits: usize) -> String {
     let tenths = (millibits + 50) / 100;
     format!("{}.{}", tenths / 10, tenths % 10)
+}
+
+/// The list index of drawn word `number`, from 1, from its five dice digits as typed
+/// (`INVALID_DICE_ROLLS` for that word unless they are five digits from 1 to 6).
+pub fn word_index_of_rolls(number: usize, rolls: &str) -> Result<usize, MhfeError> {
+    index_of_rolls(rolls).ok_or(MhfeError::InvalidDiceRolls(number))
 }
 
 #[cfg(test)]
@@ -317,6 +343,16 @@ mod tests {
     #[test]
     fn strength_is_about_12_9_bits_per_word_and_5_8_per_character() {
         assert_eq!(bits_text(4 * MILLIBITS_PER_WORD), "51.7");
+        assert_eq!(word_bits(5), "64.6");
+        assert_eq!(character_bits(16), "93.3");
+        assert_eq!(
+            PasswordRecipe::check_word().summary(),
+            "5 words from the EFF list and a check word, about 64.6 bits"
+        );
+        assert_eq!(
+            PasswordRecipe::characters(16).unwrap().summary(),
+            "16 random characters, about 93.3 bits"
+        );
         assert_eq!(bits_text(5 * MILLIBITS_PER_WORD), "64.6");
         assert_eq!(bits_text(12 * MILLIBITS_PER_CHARACTER), "70.0");
         assert_eq!(bits_text(16 * MILLIBITS_PER_CHARACTER), "93.3");

@@ -184,7 +184,7 @@ impl FromStr for Coin {
             .find(|coin| coin.id() == wanted)
             .ok_or_else(|| {
                 let known: Vec<&str> = Self::ALL.iter().map(|coin| coin.id()).collect();
-                MhfeError::InvalidCoin(format!("\"{text}\"; the coins are {}", known.join(", ")))
+                MhfeError::InvalidCoin(format!("the coins are {}", known.join(", ")))
             })
     }
 }
@@ -683,11 +683,8 @@ impl FromStr for DerivationPath {
     /// Strict: starts with `m`, steps separated by `/`, each a decimal number below 2^31 with an
     /// optional hardened mark; no spaces, signs or empty steps.
     fn from_str(text: &str) -> Result<Self, MhfeError> {
-        let invalid = || {
-            MhfeError::InvalidDerivationPath(format!(
-                "\"{text}\" is not a path like m/84'/0'/0'/0/5"
-            ))
-        };
+        let invalid =
+            || MhfeError::InvalidDerivationPath("it is not a path like m/84'/0'/0'/0/5".to_owned());
         let mut steps = text.split('/');
         if steps.next() != Some("m") {
             return Err(invalid());
@@ -735,18 +732,30 @@ pub struct SearchLimits {
 }
 
 impl SearchLimits {
+    /// The most accounts or addresses of each chain a search covers: BIP32 has 2^31 ordinary
+    /// indexes below the hardened ones.
+    pub const MOST: u32 = HARDENED;
+
     /// Limits for the first `accounts` accounts and the first `indexes` addresses of each chain.
     pub fn new(accounts: u32, indexes: u32) -> Result<Self, MhfeError> {
-        let possible = |count: u32| (1..=HARDENED).contains(&count);
+        let possible = |count: u32| (1..=Self::MOST).contains(&count);
         if possible(accounts) && possible(indexes) {
             Ok(Self { accounts, indexes })
         } else {
             // The limits stand for the paths the search derives, so a count out of range is
             // reported as the invalid path it would lead to.
             Err(MhfeError::InvalidDerivationPath(format!(
-                "a search covers 1 to {HARDENED} accounts and indexes, not {accounts} and {indexes}"
+                "a search covers 1 to {} accounts and indexes, not {accounts} and {indexes}",
+                Self::MOST
             )))
         }
+    }
+
+    /// The first account's first `gap` receiving and as many change addresses: where the decoy
+    /// search of two missing words looks for an address ([`crate::search::DECOY_SCAN_GAP`] by
+    /// default).
+    pub fn first_account(gap: u32) -> Result<Self, MhfeError> {
+        Self::new(1, gap)
     }
 
     pub fn accounts(self) -> u32 {
@@ -776,7 +785,7 @@ impl Default for SearchLimits {
 pub struct AddressSearch {
     type_description: Option<String>,
     pattern: String,
-    addresses: u64,
+    addresses: u128,
     only_path: bool,
 }
 
@@ -806,10 +815,12 @@ impl AddressSearch {
                 limits.accounts() - 1,
                 limits.indexes() - 1
             ),
-            addresses: roots.len() as u64
-                * 2
-                * u64::from(limits.accounts())
-                * u64::from(limits.indexes()),
+            // In 128 bits: at the highest limits, 2^31 accounts and indexes, a type with two roots
+            // has 2^64 addresses, one more than 64 bits hold (AUD-013-API001).
+            addresses: roots.len() as u128
+                * CHAINS.len() as u128
+                * u128::from(limits.accounts())
+                * u128::from(limits.indexes()),
             only_path: false,
         }
     }
@@ -821,13 +832,24 @@ impl AddressSearch {
     /// that is not a valid one (INVALID_DERIVATION_PATH). The browser package's `describeAddress`
     /// gives this, and the self-check `address-search` compares it with known answers.
     pub fn describe(coin: &str, address: &str, path: &str) -> Result<Self, MhfeError> {
+        Self::describe_within(coin, address, path, SearchLimits::default())
+    }
+
+    /// [`AddressSearch::describe`] for a search within `limits`, such as the decoy search of two
+    /// missing words of a container phrase ([`crate::search::ContainerSearch::decoy_address_limits`]).
+    pub fn describe_within(
+        coin: &str,
+        address: &str,
+        path: &str,
+        limits: SearchLimits,
+    ) -> Result<Self, MhfeError> {
         let coin: Coin = coin.parse()?;
         let address = Address::parse(coin, address)?;
         let path = match path {
             "" => None,
             text => Some(text.parse::<DerivationPath>()?),
         };
-        Ok(Self::new(&address, path.as_ref(), SearchLimits::default()))
+        Ok(Self::new(&address, path.as_ref(), limits))
     }
 
     /// The address type, such as "native SegWit (BIP84)", when the coin has several.
@@ -841,7 +863,7 @@ impl AddressSearch {
     }
 
     /// How many addresses the search derives at most.
-    pub fn addresses(&self) -> u64 {
+    pub fn addresses(&self) -> u128 {
         self.addresses
     }
 
@@ -880,8 +902,19 @@ pub fn parse_fingerprint(text: &str) -> Result<[u8; 4], MhfeError> {
     bytes
         .and_then(|bytes| bytes.try_into().ok())
         .ok_or_else(|| {
-            MhfeError::InvalidFingerprint(format!("\"{text}\" is not eight hexadecimal digits"))
+            MhfeError::InvalidFingerprint("it is not eight hexadecimal digits".to_owned())
         })
+}
+
+/// A master key fingerprint as wallets show it and [`parse_fingerprint`] reads it: eight lower
+/// case hexadecimal digits.
+pub fn fingerprint_text(fingerprint: [u8; 4]) -> String {
+    hex::encode(fingerprint)
+}
+
+/// [`master_fingerprint`] as [`fingerprint_text`] writes it.
+pub fn master_fingerprint_text(phrase: &str, passphrase: &str) -> Result<String, MhfeError> {
+    master_fingerprint(phrase, passphrase).map(fingerprint_text)
 }
 
 /// The first four bytes of HASH160 of the master public key (BIP32), for `phrase` and the
@@ -902,6 +935,20 @@ pub fn find_address(
     address: &Address,
     path: Option<&DerivationPath>,
     limits: SearchLimits,
+) -> Result<Option<DerivationPath>, MhfeError> {
+    find_address_until(phrase, passphrase, address, path, limits, &|| false)
+}
+
+/// [`find_address`] that asks `stopped` before each address it derives and ends with
+/// [`MhfeError::Cancelled`] once it says so: a search over many addresses takes seconds, and a
+/// cancel must not wait for it (AUD-016-API001).
+pub fn find_address_until(
+    phrase: &str,
+    passphrase: &str,
+    address: &Address,
+    path: Option<&DerivationPath>,
+    limits: SearchLimits,
+    stopped: &dyn Fn() -> bool,
 ) -> Result<Option<DerivationPath>, MhfeError> {
     let master = ExtendedKey::master(phrase, passphrase)?;
     if let Some(path) = path {
@@ -924,6 +971,9 @@ pub fn find_address(
             for chain in chains {
                 let chain_key = account_key.child(chain)?;
                 for index in 0..limits.indexes {
+                    if stopped() {
+                        return Err(MhfeError::Cancelled);
+                    }
                     let key = chain_key.child(index)?;
                     if program_for(&key, address.address_type)? == address.program {
                         let found = [account_path.as_slice(), &[chain, index]].concat();
@@ -1161,6 +1211,36 @@ mod tests {
         assert_eq!(only.pattern(), "m/84'/0'/0'/0/0");
     }
 
+    /// The count of the widest searches, which 64 bits do not hold for a type with two roots,
+    /// stated exactly, without deriving anything (AUD-013-API001).
+    #[test]
+    fn the_widest_search_states_its_count_exactly() {
+        let widest = SearchLimits::new(SearchLimits::MOST, SearchLimits::MOST).unwrap();
+        let one_root =
+            Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu").unwrap();
+        let two_roots =
+            Address::parse(Coin::BitcoinCash, "1mW6fDEMjKrDHvLvoEsaeLxSCzZBf3Bfg").unwrap();
+        assert_eq!(two_roots.search_roots().len(), 2);
+        assert_eq!(
+            AddressSearch::new(&one_root, None, widest).addresses(),
+            1 << 63
+        );
+        assert_eq!(
+            AddressSearch::new(&two_roots, None, widest).addresses(),
+            1 << 64
+        );
+        let narrower = SearchLimits::new(SearchLimits::MOST, SearchLimits::MOST - 1).unwrap();
+        assert_eq!(
+            AddressSearch::new(&two_roots, None, narrower).addresses(),
+            (1 << 64) - (1 << 33)
+        );
+        let path: DerivationPath = "m/44'/145'/0'/0/0".parse().unwrap();
+        assert_eq!(
+            AddressSearch::new(&two_roots, Some(&path), widest).addresses(),
+            1
+        );
+    }
+
     /// The public BIP39 test phrase of BIP84, BIP86 and many wallets.
     const ABANDON: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -1183,281 +1263,14 @@ mod tests {
         );
     }
 
-    /// Where the wallets of the public test phrase put each address: coin, BIP39 passphrase, path,
-    /// address. The Bitcoin mainnet values at index 0 are the published vectors of BIP44, BIP49,
-    /// BIP84 and BIP86; the other Bitcoin values were computed independently with Python's hashlib
-    /// and agree with BIP49's testnet vector. The other coins were computed independently with the
-    /// audited JavaScript libraries @scure/bip32, @noble/hashes, @noble/curves and @scure/base, and
-    /// ethers for EIP-55, at the first address and at account 3, change chain, index 7.
-    const ADDRESSES: [(Coin, &str, &str, &str); 43] = [
-        (
-            Coin::Bitcoin,
-            "",
-            "m/44'/0'/0'/0/0",
-            "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/49'/0'/0'/0/0",
-            "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/84'/0'/0'/0/0",
-            "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/84'/0'/0'/0/1",
-            "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/84'/0'/0'/1/0",
-            "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/86'/0'/0'/0/0",
-            "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/86'/0'/0'/1/0",
-            "bc1p3qkhfews2uk44qtvauqyr2ttdsw7svhkl9nkm9s9c3x4ax5h60wqwruhk7",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/44'/0'/3'/1/7",
-            "12DCYXCcRpBJ5VoWDvSijepPu8mshEihvX",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/49'/0'/3'/1/7",
-            "3K7gGbTWfdq3kyBgkVTMbhfftnrhxB6jpW",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/84'/0'/3'/1/7",
-            "bc1q8r4wsa3nye5qypv80vpfg4sh99uf02u5mmh5ry",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/86'/0'/3'/1/7",
-            "bc1preq6saz8z9zrn3clx9eaen0dcsynwseakek7nwqlrj52wd2dsfsqlfsyut",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/44'/1'/0'/0/0",
-            "mkpZhYtJu2r87Js3pDiWJDmPte2NRZ8bJV",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/49'/1'/0'/0/0",
-            "2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/84'/1'/0'/0/0",
-            "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
-        ),
-        (
-            Coin::Bitcoin,
-            "",
-            "m/86'/1'/0'/0/0",
-            "tb1p8wpt9v4frpf3tkn0srd97pksgsxc5hs52lafxwru9kgeephvs7rqlqt9zj",
-        ),
-        (
-            Coin::Bitcoin,
-            "TREZOR",
-            "m/84'/0'/0'/0/0",
-            "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu",
-        ),
-        (
-            Coin::Ethereum,
-            "",
-            "m/44'/60'/0'/0/0",
-            "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
-        ),
-        (
-            Coin::Ethereum,
-            "",
-            "m/44'/60'/3'/1/7",
-            "0xc1A30611797762aea209daC2aC7E900f0cE95f9e",
-        ),
-        (
-            Coin::Xrp,
-            "",
-            "m/44'/144'/0'/0/0",
-            "rHsMGQEkVNJmpGWs8XUBoTBiAAbwxZN5v3",
-        ),
-        (
-            Coin::Xrp,
-            "",
-            "m/44'/144'/3'/1/7",
-            "rnU3BdqhZk8DL3FKjQcaAyf3DJSoUZD8eM",
-        ),
-        (
-            Coin::Tron,
-            "",
-            "m/44'/195'/0'/0/0",
-            "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH",
-        ),
-        (
-            Coin::Tron,
-            "",
-            "m/44'/195'/3'/1/7",
-            "TTD7MudE8L26nvnrEf2LHzXm6stKRpFZH1",
-        ),
-        (
-            Coin::Zcash,
-            "",
-            "m/44'/133'/0'/0/0",
-            "t1XVXWCvpMgBvUaed4XDqWtgQgJSu1Ghz7F",
-        ),
-        (
-            Coin::Zcash,
-            "",
-            "m/44'/133'/3'/1/7",
-            "t1Pii1UXFrpcFucY5NBEFa664pymr7boHq4",
-        ),
-        (
-            Coin::Dogecoin,
-            "",
-            "m/44'/3'/0'/0/0",
-            "DBus3bamQjgJULBJtYXpEzDWQRwF5iwxgC",
-        ),
-        (
-            Coin::Dogecoin,
-            "",
-            "m/44'/3'/3'/1/7",
-            "DNuJKZiVoQ6t67t8dE4NuBDhd2FNpMBsg6",
-        ),
-        (
-            Coin::BitcoinCash,
-            "",
-            "m/44'/145'/0'/0/0",
-            "bitcoincash:qqyx49mu0kkn9ftfj6hje6g2wfer34yfnq5tahq3q6",
-        ),
-        (
-            Coin::BitcoinCash,
-            "",
-            "m/44'/145'/3'/1/7",
-            "bitcoincash:qrhejavdmlfh9eajjxra3s3mn8gxls9hkvsq2yd62y",
-        ),
-        (
-            Coin::BitcoinCash,
-            "",
-            "m/44'/145'/0'/0/0",
-            "1mW6fDEMjKrDHvLvoEsaeLxSCzZBf3Bfg",
-        ),
-        // A Bitcoin Cash wallet on Bitcoin's coin type, found under the second root.
-        (
-            Coin::BitcoinCash,
-            "",
-            "m/44'/0'/0'/0/0",
-            "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA",
-        ),
-        (
-            Coin::Litecoin,
-            "",
-            "m/44'/2'/0'/0/0",
-            "LUWPbpM43E2p7ZSh8cyTBEkvpHmr3cB8Ez",
-        ),
-        (
-            Coin::Litecoin,
-            "",
-            "m/49'/2'/0'/0/0",
-            "M7wtsL7wSHDBJVMWWhtQfTMSYYkyooAAXM",
-        ),
-        (
-            Coin::Litecoin,
-            "",
-            "m/84'/2'/3'/1/7",
-            "ltc1qnnphcvq5zgyf4f0uepust6d7gyt2zl69vftnz2",
-        ),
-        (
-            Coin::EthereumClassic,
-            "",
-            "m/44'/61'/0'/0/0",
-            "0xFA22515E43658ce56A7682B801e9B5456f511420",
-        ),
-        // An Ethereum Classic wallet on Ethereum's coin type, found under the second root.
-        (
-            Coin::EthereumClassic,
-            "",
-            "m/44'/60'/0'/0/0",
-            "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
-        ),
-        (
-            Coin::Cosmos,
-            "",
-            "m/44'/118'/0'/0/0",
-            "cosmos19rl4cm2hmr8afy4kldpxz3fka4jguq0auqdal4",
-        ),
-        (
-            Coin::Cosmos,
-            "",
-            "m/44'/118'/3'/1/7",
-            "cosmos1j8dc8g9sux68h924yj646shrsjmkd7g6fwevky",
-        ),
-        (
-            Coin::Injective,
-            "",
-            "m/44'/60'/0'/0/0",
-            "inj1npvwllfr9dqr8erajqqr6s0vxnk2ak55re90dz",
-        ),
-        (
-            Coin::Dash,
-            "",
-            "m/44'/5'/0'/0/0",
-            "XoJA8qE3N2Y3jMLEtZ3vcN42qseZ8LvFf5",
-        ),
-        (
-            Coin::Dash,
-            "",
-            "m/44'/5'/3'/1/7",
-            "XbAei18dD6mdL9LR6sTmbFJTQAJBcpxuxL",
-        ),
-        // Dash Platform payment addresses: the official DIP17/DIP18 vectors, receiving key class
-        // 0' and change key class 1'.
-        (
-            Coin::Dash,
-            "",
-            "m/9'/5'/17'/0'/0'/0",
-            "dash1krma5z3ttj75la4m93xcndna9ullamq9y5e9n5rs",
-        ),
-        (
-            Coin::Dash,
-            "",
-            "m/9'/5'/17'/0'/0'/1",
-            "dash1kzjl7qzxy9lar37j8r37z3kvt07epqe20ckxfezw",
-        ),
-        (
-            Coin::Dash,
-            "",
-            "m/9'/5'/17'/0'/1'/0",
-            "dash1kpkeye606ez89g7lelp7hnldwwpt76va0v3j6x28",
-        ),
-    ];
-
+    /// Every address of the startup and full self-checks' table (known_answers::ADDRESSES, the
+    /// one copy, with where its values come from), at its path and by the search (AUD-015-ARC002).
     #[test]
     fn addresses_are_found_where_their_wallets_put_them() {
         let one = SearchLimits::new(1, 1).unwrap();
-        for (coin, passphrase, path_text, text) in ADDRESSES {
+        for case in known_answers::ADDRESSES {
+            let (coin, passphrase, path_text, text) =
+                (case.coin, case.passphrase, case.path, case.address);
             let address = Address::parse(coin, text).unwrap();
             let expected = path(path_text);
             assert_eq!(
@@ -1733,6 +1546,24 @@ mod tests {
                 "{accounts} accounts, {indexes} indexes"
             );
         }
+    }
+
+    /// A search that is stopped ends before its next address (AUD-016-API001).
+    #[test]
+    fn a_stopped_search_ends_at_once() {
+        let target =
+            Address::parse(Coin::Bitcoin, "bc1q4du7e3vw34vsflf76xf9h8gktms9wzqcl7vlh5").unwrap();
+        let derived = std::cell::Cell::new(0);
+        let stopped = || {
+            derived.set(derived.get() + 1);
+            derived.get() > 3
+        };
+        let limits = SearchLimits::default();
+        assert_eq!(
+            find_address_until(ABANDON, "", &target, None, limits, &stopped),
+            Err(MhfeError::Cancelled)
+        );
+        assert_eq!(derived.get(), 4);
     }
 
     #[test]

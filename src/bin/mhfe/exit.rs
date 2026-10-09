@@ -15,8 +15,8 @@ pub const NO_MATCH: i32 = 3;
 /// The computer cannot run the request: not enough memory for the memory level, memory that could
 /// not be reserved, or a level beyond what this environment can use.
 pub const NOT_ENOUGH_RESOURCES: i32 = 4;
-/// Stopped by the person: Ctrl+C (128 + SIGINT, as shells report it), Escape or q at a question,
-/// "No, stop" at the first question of a rekey, or Ctrl+D at an empty prompt.
+/// Stopped by the person: Ctrl+C (128 + SIGINT, as shells report it), and as it Ctrl+\, Ctrl+Z,
+/// SIGTERM or a closed terminal, Escape or q at a question, or Ctrl+D at an empty prompt.
 pub const CANCELLED: i32 = 130;
 
 /// A reason to stop, with the text to show and the exit code to return.
@@ -66,10 +66,12 @@ impl From<MhfeError> for Failure {
             | MhfeError::LengthChoiceNotApplicable { .. }
             | MhfeError::NoBuiltInCheck { .. }
             | MhfeError::NoWalletCheck { .. }
+            | MhfeError::NoHiddenWallets { .. }
             | MhfeError::ReferenceRequired
             | MhfeError::HiddenWalletPassesCheck
             | MhfeError::InvalidRepairWords(_)
             | MhfeError::RepairNotPossible { .. }
+            | MhfeError::TooManyMissingWords { .. }
             | MhfeError::InvalidPim(_)
             | MhfeError::InvalidMemoryLevel(_)
             | MhfeError::EmptyPassword
@@ -87,11 +89,16 @@ impl From<MhfeError> for Failure {
             | MhfeError::PasswordRepairNotOffered
             | MhfeError::WalletCheckNeedsPassphrase
             | MhfeError::PasswordsDiffer
+            | MhfeError::PassphrasesDiffer
+            | MhfeError::NoBuiltInCheckAtLength(_)
+            | MhfeError::NoWalletCheckAtLength(_)
+            | MhfeError::InvalidWordWish(_)
             | MhfeError::PasswordAlreadyUsed
-            | MhfeError::OtherWalletsNotConfirmed
             | MhfeError::NewPasswordSameAsOld
             | MhfeError::InvalidCoin(_) => INVALID_INPUT,
             MhfeError::VerifierMismatch
+            | MhfeError::AmbiguousLength { .. }
+            | MhfeError::LengthDiffers { .. }
             | MhfeError::ReferenceMismatch
             | MhfeError::NotConfirmedByOwner => NO_MATCH,
             MhfeError::NotEnoughMemory { .. }
@@ -116,6 +123,16 @@ impl From<std::io::Error> for Failure {
     fn from(error: std::io::Error) -> Self {
         Self::internal(format!("Input or output failed: {error}"))
     }
+}
+
+/// A refused answer as the person reads it: the error as a sentence, then `then`, such as "Please
+/// type it again.", or nothing more when `then` is empty.
+pub fn refused(error: &impl fmt::Display, then: &str) -> String {
+    let sentence = format!("{}.", capitalize(&error.to_string()));
+    if then.is_empty() {
+        return sentence;
+    }
+    format!("{sentence} {then}")
 }
 
 /// Library messages start in lower case so that they read well inside other sentences.

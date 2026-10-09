@@ -10,9 +10,14 @@
 //! - Enter ends the line, and Ctrl+D on an empty line ends the input;
 //! - Ctrl+C cancels the tool.
 //!
+//! A line of words, such as a seed phrase, is no password, so two more keys edit it there: Tab
+//! completes the word being typed as far as the words of its list agree, and Ctrl+W deletes the
+//! last word.
+//!
 //! A line that is shown is shown as the person types it, except its control characters: they are
 //! kept for the password check to refuse, but never written to the terminal, which would act on
-//! them.
+//! them. Below a shown line of words or a password, a hint lists the words of its list that begin
+//! with the word being typed (typed_line.rs).
 //!
 //! On Unix and on Windows the terminal's own line editing is switched off and this module edits
 //! the line itself, so both behave the same. A terminal's line mode would otherwise act on further
@@ -34,29 +39,77 @@ use std::time::Duration;
 
 use mhfe::memory::{LockedBytes, LockedText};
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
+use mhfe::word_hints::WordList;
 use zeroize::Zeroizing;
 
 use crate::exit::Failure;
+use crate::typed_line::{self, Hints, LineScreen};
 
 /// The terminal settings to restore while a hidden prompt has changed them. Whoever changes or
 /// restores the terminal holds this lock, so the Ctrl+C handler and a prompt never interleave.
 static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);
 
-/// Switches the terminal to reading single bytes without its own echo, runs `prompt`, reads one
-/// line as described above, shown as it is typed when `shown` is true, and restores the terminal,
-/// also when reading fails. `None` means that the input was closed. The terminal is switched
-/// before the prompt appears, so that a key typed or text pasted as soon as the prompt shows is
-/// already read as data. On Windows the standard library turns the console's UTF-16 characters
-/// into UTF-8 bytes.
+/// What a line holds, which decides the keys that edit it and the hints below it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Content {
+    /// Free text, such as a BIP39 passphrase: no hints, and every other key is data.
+    Text,
+    /// A password: every other key is data, and where it is shown the words of the EFF list are
+    /// hinted, but not a word the list lacks, as a password may hold any text.
+    Password,
+    /// Words of a list, such as a seed phrase: hinted where shown; Tab completes a word and Ctrl+W
+    /// deletes one.
+    Words(WordList),
+}
+
+impl Content {
+    fn hints(self) -> Option<Hints> {
+        match self {
+            Self::Text => None,
+            Self::Password => Some(Hints {
+                list: WordList::Eff,
+                says_no_word: false,
+            }),
+            Self::Words(list) => Some(Hints {
+                list,
+                says_no_word: true,
+            }),
+        }
+    }
+
+    /// The list that Tab completes from, in a line of words only.
+    fn completes_from(self) -> Option<WordList> {
+        match self {
+            Self::Words(list) => Some(list),
+            Self::Text | Self::Password => None,
+        }
+    }
+}
+
+/// Switches the terminal to reading single bytes without its own echo, writes `prompt`, reads one
+/// line of `content` as described above, shown as it is typed when `shown` is true, and restores
+/// the terminal, also when reading fails. `None` means that the input was closed. The terminal is
+/// switched before the prompt appears, so that a key typed or text pasted as soon as the prompt
+/// shows is already read as data. On Windows the standard library turns the console's UTF-16
+/// characters into UTF-8 bytes.
 pub fn read_line(
-    prompt: impl FnOnce() -> Result<(), Failure>,
+    prompt: &str,
     shown: bool,
+    content: Content,
 ) -> Result<Option<LockedText>, Failure> {
     let result = with_terminal_switched(platform::hide, || {
-        prompt()?;
-        let mut screen = io::stderr();
-        let echo = shown.then_some(&mut screen as &mut dyn io::Write);
-        edit_line(&mut io::stdin().lock(), echo)
+        crate::style::prompt(prompt);
+        io::Write::flush(&mut io::stderr())?;
+        if !shown {
+            return edit_line(&mut io::stdin().lock(), None, content);
+        }
+        let (mut controls, mut text) = (io::stderr(), anstream::stderr());
+        // The prompt's cells by the same rule as the characters typed after it.
+        let width = typed_line::text_cells(prompt);
+        // When the width cannot be read, the usual 80 columns.
+        let columns = columns().unwrap_or(80);
+        let mut screen = LineScreen::new(&mut controls, &mut text, width, columns, content.hints());
+        edit_line(&mut io::stdin().lock(), Some(&mut screen), content)
     });
     // The terminal did not show the Enter key either.
     anstream::eprintln!();
@@ -184,6 +237,10 @@ mod keys {
     pub const BACKSPACE: u8 = 0x08;
     pub const DELETE: u8 = 0x7f;
     pub const CTRL_U: u8 = 0x15;
+    /// In a line of words only: elsewhere it is data.
+    pub const CTRL_W: u8 = 0x17;
+    /// In a line of words only: elsewhere it is data.
+    pub const TAB: u8 = b'\t';
     pub const CTRL_D: u8 = 0x04;
     /// Normally the terminal turns Ctrl+C into a signal; should the byte arrive, it quits too.
     pub const CTRL_C: u8 = 0x03;
@@ -325,25 +382,29 @@ fn arrow(final_byte: Option<u8>) -> Key {
     }
 }
 
-/// Edits a line from raw terminal bytes: Backspace or Delete removes the last character, Ctrl+U
-/// the whole line, Enter (CR or LF) ends it, and Ctrl+D on an empty line or the end of the input
-/// gives `None`. Every other byte is kept. The buffer is reserved at its largest size and never
-/// grows, so it leaves no unwiped copy; a longer line is refused. With `echo`, every complete
-/// character that is not a control character is written to it as it arrives, and the editing keys
-/// erase what they remove from it. The line keeps the lock of its buffer, and a line that ends in
-/// any other way, refused or closed, is wiped before its pages are unlocked (AUD-010).
+/// Edits a line of `content` from raw terminal bytes: Backspace or Delete removes the last
+/// character, Ctrl+U the whole line, Enter (CR or LF) ends it, and Ctrl+D on an empty line or the
+/// end of the input gives `None`; in a line of words, Tab completes the last word and Ctrl+W
+/// deletes it. Every other byte is kept. The buffer is reserved at its largest size and never
+/// grows, so it leaves no unwiped copy; a longer line is refused. On `screen`, every complete
+/// character that is not a control character is shown as it arrives, the editing keys take off
+/// what they remove, and the hint follows each change. The line keeps the lock of its buffer, and
+/// a line that ends in any other way, refused or closed, is wiped before its pages are unlocked
+/// (AUD-010).
 fn edit_line(
     reader: &mut impl io::Read,
-    echo: Option<&mut dyn io::Write>,
+    screen: Option<&mut LineScreen>,
+    content: Content,
 ) -> Result<Option<LockedText>, Failure> {
     use crate::terminal::LINE_CAPACITY;
 
     let mut closed = false;
     // Locked before anything is typed into it: the line may be a password or a phrase.
     let line = LockedBytes::build(LINE_CAPACITY, |line| {
-        closed = edit_bytes(reader, echo, line)?;
+        closed = LineEditor::new(screen, content, line).edit(reader)?;
         Ok::<(), Failure>(())
     })?;
+    crate::terminal::note_unlocked(line.is_locked());
     if closed {
         return Ok(None);
     }
@@ -356,99 +417,211 @@ fn edit_line(
     }
 }
 
-/// The editing of [`edit_line`], into `line`, whose capacity it never exceeds. Returns whether the
-/// person closed the input instead of ending a line.
-fn edit_bytes(
-    reader: &mut impl io::Read,
-    mut echo: Option<&mut dyn io::Write>,
-    line: &mut Vec<u8>,
-) -> Result<bool, Failure> {
-    use crate::terminal::LINE_CAPACITY;
-    use keys::{BACKSPACE, CTRL_D, CTRL_U, DELETE};
+/// The editing of [`edit_line`], into `line`, whose capacity it never exceeds.
+struct LineEditor<'e, 's> {
+    screen: Option<&'e mut LineScreen<'s>>,
+    content: Content,
+    line: &'e mut Vec<u8>,
+    /// Every character of the line as it was taken: its bytes, so that a removal takes off exactly
+    /// those, also of bytes that are not UTF-8, and whether it was shown, as only those are taken
+    /// off the screen.
+    entries: Vec<Entry>,
+    /// Where the character still arriving begins: a UTF-8 character comes one byte at a time.
+    complete: usize,
+}
 
-    // For every character of the line, whether it was written to `echo`; only those are erased.
-    let mut written: Vec<bool> = Vec::with_capacity(LINE_CAPACITY);
-    // Where the character still arriving begins: a UTF-8 character comes one byte at a time.
-    let mut complete = 0;
-    let mut byte = Zeroizing::new([0u8; 1]);
-    loop {
-        match reader.read(&mut byte[..]) {
-            Ok(0) if line.is_empty() => return Ok(true),
-            Ok(0) => return Ok(false),
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(error.into()),
+impl<'e, 's> LineEditor<'e, 's> {
+    fn new(
+        screen: Option<&'e mut LineScreen<'s>>,
+        content: Content,
+        line: &'e mut Vec<u8>,
+    ) -> Self {
+        Self {
+            screen,
+            content,
+            line,
+            entries: Vec::with_capacity(crate::terminal::LINE_CAPACITY),
+            complete: 0,
         }
-        match byte[0] {
-            b'\r' | b'\n' => return Ok(false),
-            // The first bytes of a character that has not arrived whole go without a trace.
-            BACKSPACE | DELETE if complete < line.len() => line.truncate(complete),
-            BACKSPACE | DELETE => {
-                remove_last_character(line);
-                complete = line.len();
-                let erased = usize::from(written.pop() == Some(true));
-                erase(&mut echo, erased)?;
+    }
+
+    /// Edits until the line ends; returns whether the person closed the input instead.
+    fn edit(&mut self, reader: &mut impl io::Read) -> Result<bool, Failure> {
+        use keys::{BACKSPACE, CTRL_D, CTRL_U, CTRL_W, DELETE, TAB};
+
+        let mut byte = Zeroizing::new([0u8; 1]);
+        loop {
+            match reader.read(&mut byte[..]) {
+                Ok(0) if self.line.is_empty() => return Ok(true),
+                Ok(0) => return self.end(),
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error.into()),
             }
-            CTRL_U => {
-                line.clear();
-                complete = 0;
-                let erased = written.iter().filter(|shown| **shown).count();
-                written.clear();
-                erase(&mut echo, erased)?;
+            let words = self.content.completes_from();
+            match (byte[0], words) {
+                (b'\r' | b'\n', _) => return self.end(),
+                // The first bytes of a character that has not arrived whole go without a trace.
+                (BACKSPACE | DELETE, _) if self.complete < self.line.len() => {
+                    self.line.truncate(self.complete)
+                }
+                (BACKSPACE | DELETE, _) => self.remove(1)?,
+                (CTRL_U, _) => self.remove(self.entries.len())?,
+                (CTRL_W, Some(_)) => self.remove(self.last_word())?,
+                (TAB, Some(list)) => self.complete_word(list)?,
+                (CTRL_D, _) if self.line.is_empty() => return Ok(true),
+                (other, _) => self.push(other)?,
             }
-            CTRL_D if line.is_empty() => return Ok(true),
-            _ if line.len() == LINE_CAPACITY => {
-                return Err(Failure::invalid_input(format!(
-                    "An answer is longer than {LINE_CAPACITY} bytes; no valid answer is that long."
-                )))
+        }
+    }
+
+    /// Ends the line, and the hint below it goes. Returns that the input was not closed.
+    fn end(&mut self) -> Result<bool, Failure> {
+        if let Some(screen) = self.screen.as_mut() {
+            screen.finish()?;
+        }
+        Ok(false)
+    }
+
+    /// Adds a byte of a character. A complete character is shown unless it is a control
+    /// character, and the hint follows.
+    fn push(&mut self, byte: u8) -> Result<(), Failure> {
+        use crate::terminal::LINE_CAPACITY;
+        if self.line.len() == LINE_CAPACITY {
+            return Err(Failure::invalid_input(format!(
+                "An answer is longer than {LINE_CAPACITY} bytes; no valid answer is that long."
+            )));
+        }
+        self.line.push(byte);
+        match std::str::from_utf8(&self.line[self.complete..]) {
+            Ok(character) => {
+                let shown = !character.chars().any(not_shown);
+                if let (true, Some(screen)) = (shown, self.screen.as_mut()) {
+                    screen.add(character)?;
+                }
+                self.take(shown);
+                self.show_hint()?;
             }
-            other => {
-                line.push(other);
-                match std::str::from_utf8(&line[complete..]) {
-                    Ok(character) => {
-                        let shown = !character.chars().any(char::is_control);
-                        if let (true, Some(screen)) = (shown, echo.as_mut()) {
-                            screen.write_all(character.as_bytes())?;
-                            screen.flush()?;
-                        }
-                        written.push(shown);
-                        complete = line.len();
-                    }
-                    // The rest of the character is still to come.
-                    Err(error) if error.error_len().is_none() => {}
-                    // Not UTF-8: kept, so that the whole answer is refused, and not shown.
-                    Err(_) => {
-                        written.push(false);
-                        complete = line.len();
+            // The rest of the character is still to come.
+            Err(error) if error.error_len().is_none() => {}
+            // Not UTF-8: kept, so that the whole answer is refused, and not shown.
+            Err(_) => self.take(false),
+        }
+        Ok(())
+    }
+
+    /// Records the bytes since the last whole character as one character, `shown` or not.
+    fn take(&mut self, shown: bool) {
+        // A character has at most four bytes, and an invalid sequence is taken at its first
+        // invalid byte, so the count fits.
+        let bytes = (self.line.len() - self.complete) as u8;
+        self.entries.push(Entry { bytes, shown });
+        self.complete = self.line.len();
+    }
+
+    /// Removes the last `characters` whole characters, and from the screen those it showed. A
+    /// combining mark taken off changes the cell of the character before it, which a terminal
+    /// does not redraw by itself, so that cell is drawn again (AUD-018).
+    fn remove(&mut self, characters: usize) -> Result<(), Failure> {
+        // The first bytes of a character that has not arrived whole go first, without a trace.
+        self.line.truncate(self.complete);
+        let mut taken_off = 0;
+        let mut mark_taken_off = false;
+        for _ in 0..characters.min(self.entries.len()) {
+            let Some(entry) = self.entries.pop() else {
+                break;
+            };
+            let start = self.line.len() - usize::from(entry.bytes);
+            if entry.shown {
+                taken_off += 1;
+                mark_taken_off |= std::str::from_utf8(&self.line[start..])
+                    .is_ok_and(|character| typed_line::text_cells(character) == 0);
+            }
+            self.line.truncate(start);
+        }
+        self.complete = self.line.len();
+        if let (Some(screen), true) = (self.screen.as_mut(), taken_off > 0) {
+            if mark_taken_off {
+                let cell = last_cell(self.line, &self.entries);
+                screen.remove(taken_off + cell.len())?;
+                for &(start, end) in cell.iter().rev() {
+                    if let Ok(character) = std::str::from_utf8(&self.line[start..end]) {
+                        screen.add(character)?;
                     }
                 }
+            } else {
+                screen.remove(taken_off)?;
             }
         }
+        self.show_hint()
     }
-}
 
-/// Erases the last `characters` characters written to `echo`: back, a space over each, back again.
-fn erase(echo: &mut Option<&mut dyn io::Write>, characters: usize) -> Result<(), Failure> {
-    if let Some(screen) = echo.as_mut() {
-        if characters > 0 {
-            screen.write_all("\x08 \x08".repeat(characters).as_bytes())?;
-            screen.flush()?;
+    /// How many characters Ctrl+W deletes: the spaces at the end and the word before them.
+    fn last_word(&self) -> usize {
+        let Ok(text) = std::str::from_utf8(&self.line[..self.complete]) else {
+            return 0;
+        };
+        let without_spaces = text.trim_end();
+        let word = without_spaces
+            .rsplit(char::is_whitespace)
+            .next()
+            .unwrap_or_default();
+        text[without_spaces.len() - word.len()..].chars().count()
+    }
+
+    /// Adds what Tab completes of the last word from `list`, and a space once the word is whole.
+    fn complete_word(&mut self, list: WordList) -> Result<(), Failure> {
+        if self.complete < self.line.len() {
+            return Ok(());
         }
+        let Ok(text) = std::str::from_utf8(&self.line[..self.complete]) else {
+            return Ok(());
+        };
+        let completion = list.completion(text);
+        let space: &[u8] = if completion.word_ends { b" " } else { b"" };
+        for &byte in completion.letters.as_bytes().iter().chain(space) {
+            self.push(byte)?;
+        }
+        Ok(())
     }
-    Ok(())
+
+    fn show_hint(&mut self) -> Result<(), Failure> {
+        if let Some(screen) = self.screen.as_mut() {
+            // A line that is not UTF-8 gets no hint.
+            let text = std::str::from_utf8(&self.line[..self.complete]).unwrap_or_default();
+            screen.hint(text)?;
+        }
+        Ok(())
+    }
 }
 
-/// Removes the last UTF-8 character: its continuation bytes, then its first byte.
-fn remove_last_character(line: &mut Vec<u8>) {
-    const CONTINUATION_MASK: u8 = 0b1100_0000;
-    const CONTINUATION: u8 = 0b1000_0000;
-    while line
-        .last()
-        .is_some_and(|byte| byte & CONTINUATION_MASK == CONTINUATION)
-    {
-        line.pop();
+/// One character of a line as the editor took it.
+#[derive(Clone, Copy)]
+struct Entry {
+    /// Its bytes in the line: one to four, or the invalid bytes taken together.
+    bytes: u8,
+    /// Whether it is on the screen.
+    shown: bool,
+}
+
+/// The byte ranges of the shown characters that make up the last cell of `line`, the last first:
+/// its combining marks and the character they combine with.
+fn last_cell(line: &[u8], entries: &[Entry]) -> Vec<(usize, usize)> {
+    let mut cell = Vec::new();
+    let mut end = line.len();
+    for entry in entries.iter().rev() {
+        let start = end - usize::from(entry.bytes);
+        if entry.shown {
+            cell.push((start, end));
+            let takes_a_cell = std::str::from_utf8(&line[start..end])
+                .is_ok_and(|character| typed_line::text_cells(character) > 0);
+            if takes_a_cell {
+                break;
+            }
+        }
+        end = start;
     }
-    line.pop();
+    cell
 }
 
 #[cfg(unix)]
@@ -746,9 +919,32 @@ mod platform {
     }
 }
 
+/// Whether a typed character stays off the screen: a control character, which a terminal would
+/// carry out, and an invisible formatting character, such as U+202E, which turns the text after it
+/// around (bidirectional controls, zero-width characters, the byte order mark).
+fn not_shown(character: char) -> bool {
+    character.is_control()
+        || matches!(u32::from(character),
+            0x061C | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Control and invisible formatting characters stay off the screen; letters of any script and
+    /// a wide character are shown.
+    #[test]
+    fn invisible_characters_are_not_shown() {
+        for hidden in [
+            '\u{1b}', '\u{7f}', '\u{9b}', '\u{202E}', '\u{200B}', '\u{2066}', '\u{FEFF}',
+        ] {
+            assert!(not_shown(hidden), "{:x}", u32::from(hidden));
+        }
+        for shown in ['a', '\u{e9}', '\u{416}', '\u{754C}', ' '] {
+            assert!(!not_shown(shown));
+        }
+    }
 
     /// AUD-008-SEC004: two pseudo-terminals are two terminals; one descriptor of each, or a file,
     /// is told apart from the same terminal opened twice.
@@ -756,35 +952,16 @@ mod tests {
     #[test]
     fn two_terminals_are_told_apart() {
         use std::os::fd::AsRawFd;
-        let open = || {
-            let (mut leader, mut follower) = (0, 0);
-            // SAFETY: openpty fills the two descriptors; the name and settings are not asked for.
-            // Null pointers of the mutable kind, which macOS's declaration takes and Linux's
-            // accepts as well.
-            let opened = unsafe {
-                libc::openpty(
-                    &mut leader,
-                    &mut follower,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                )
-            };
-            assert_eq!(opened, 0, "no pseudo-terminal");
-            (leader, follower)
-        };
-        let (first_leader, first) = open();
-        let (second_leader, second) = open();
+        let first = Pty::open();
+        let second = Pty::open();
         // SAFETY: dup copies a descriptor that is open.
-        let first_again = unsafe { libc::dup(first) };
+        let first_again = unsafe { libc::dup(first.follower) };
         let file = std::fs::File::open("/dev/null").unwrap();
-        assert!(platform::same_terminal(first, first_again));
-        assert!(!platform::same_terminal(first, second));
-        assert!(!platform::same_terminal(first, file.as_raw_fd()));
-        for descriptor in [first_leader, first, second_leader, second, first_again] {
-            // SAFETY: each was opened above and is closed once.
-            unsafe { libc::close(descriptor) };
-        }
+        assert!(platform::same_terminal(first.follower, first_again));
+        assert!(!platform::same_terminal(first.follower, second.follower));
+        assert!(!platform::same_terminal(first.follower, file.as_raw_fd()));
+        // SAFETY: opened above and closed once; the pseudo-terminals close their own.
+        unsafe { libc::close(first_again) };
     }
 
     /// A pseudo-terminal, both ends, closed when dropped.
@@ -799,6 +976,8 @@ mod tests {
         fn open() -> Self {
             let (mut leader, mut follower) = (0, 0);
             // SAFETY: openpty fills the two descriptors; the name and settings are not asked for.
+            // Null pointers of the mutable kind, which macOS's declaration takes and Linux's
+            // accepts as well.
             let opened = unsafe {
                 libc::openpty(
                     &mut leader,
@@ -869,7 +1048,11 @@ mod tests {
     }
 
     fn edited(bytes: &[u8]) -> Option<String> {
-        edit_line(&mut io::Cursor::new(bytes.to_vec()), None)
+        edited_as(bytes, Content::Password)
+    }
+
+    fn edited_as(bytes: &[u8], content: Content) -> Option<String> {
+        edit_line(&mut io::Cursor::new(bytes.to_vec()), None, content)
             .unwrap()
             .map(|line| line.to_string())
     }
@@ -884,36 +1067,86 @@ mod tests {
         }
         // Ctrl+D inside a line is kept too; the password check refuses it.
         assert_eq!(edited(b"a\x04b\n").unwrap(), "a\u{4}b");
+        // Tab and Ctrl+W are data in a password and in free text as well.
+        assert_eq!(
+            edited_as(b"ab\t\x17\r", Content::Text).unwrap(),
+            "ab\t\u{17}"
+        );
     }
 
-    /// The line read and what the screen showed of it.
-    fn echoed(bytes: &[u8]) -> (String, Vec<u8>) {
-        let mut screen = Vec::new();
+    /// The line of `content` read and what the screen showed of it, after a prompt 2 columns wide
+    /// on a terminal 80 wide, hints left out.
+    fn echoed(bytes: &[u8], content: Content) -> (String, String) {
+        let mut controls = Vec::new();
+        let mut text = Vec::new();
+        let mut screen = LineScreen::new(&mut controls, &mut text, 2, 80, None);
         let line = edit_line(
             &mut io::Cursor::new(bytes.to_vec()),
-            Some(&mut screen as &mut dyn io::Write),
+            Some(&mut screen),
+            content,
         )
         .unwrap()
         .unwrap();
-        (line.to_string(), screen)
+        (line.to_string(), String::from_utf8(controls).unwrap())
     }
 
     #[test]
     fn a_shown_line_shows_what_is_typed_but_no_control_character() {
-        assert_eq!(echoed(b"ab\r"), ("ab".into(), b"ab".to_vec()));
-        // Backspace erases on the screen too, a whole character at a time.
-        let (line, screen) = echoed("a\u{448}\x7fb\r".as_bytes());
+        assert_eq!(
+            echoed(b"ab\r", Content::Password),
+            ("ab".into(), "ab".into())
+        );
+        // Backspace takes a whole character off the screen: back to column 4, and clear from there.
+        let (line, screen) = echoed("a\u{448}\x7fb\r".as_bytes(), Content::Password);
         assert_eq!(line, "ab");
-        assert_eq!(screen, "a\u{448}\x08 \x08b".as_bytes());
+        assert_eq!(screen, "a\u{448}\x1b[4G\x1b[Jb");
         // A TAB and U+0085 stay in the line, for the password check to refuse, but are not shown,
-        // and Backspace over one of them erases nothing on the screen.
-        let (line, screen) = echoed("a\tb\u{85}\x7f\r".as_bytes());
+        // and Backspace over one of them takes nothing off the screen.
+        let (line, screen) = echoed("a\tb\u{85}\x7f\r".as_bytes(), Content::Password);
         assert_eq!(line, "a\tb");
-        assert_eq!(screen, b"ab");
-        // Ctrl+U erases every character that was shown.
-        let (line, screen) = echoed(b"ab\tc\x15d\r");
+        assert_eq!(screen, "ab");
+        // Ctrl+U takes off every character that was shown.
+        let (line, screen) = echoed(b"ab\tc\x15d\r", Content::Password);
         assert_eq!(line, "d");
-        assert_eq!(screen, b"abc\x08 \x08\x08 \x08\x08 \x08d");
+        assert_eq!(screen, "abc\x1b[3G\x1b[Jd");
+    }
+
+    /// Backspace over a combining mark draws its cell again, so that the screen shows the line as
+    /// it is (AUD-018): back to the cell of "e", clear, and "e" again, without the mark.
+    #[test]
+    fn removing_a_combining_mark_draws_its_cell_again() {
+        let (line, screen) = echoed("e\u{301}\x7f\r".as_bytes(), Content::Password);
+        assert_eq!(line, "e");
+        assert_eq!(screen, "e\u{301}\x1b[3G\x1b[Je");
+        // A Thai tone mark on its consonant, typed as a key of its own and taken off again.
+        let (line, screen) = echoed("\u{E01}\u{E48}\x7f\r".as_bytes(), Content::Password);
+        assert_eq!(line, "\u{E01}");
+        assert_eq!(screen, "\u{E01}\u{E48}\x1b[3G\x1b[J\u{E01}");
+    }
+
+    /// A byte that is not UTF-8 is a character of its own: Backspace takes off that byte alone,
+    /// never the character before it (AUD-018).
+    #[test]
+    fn backspace_over_a_stray_byte_takes_off_that_byte_alone() {
+        assert_eq!(edited(b"a\x80\x7fb\r").unwrap(), "ab");
+        let (line, screen) = echoed(b"a\x80\x7fb\r", Content::Password);
+        assert_eq!((line.as_str(), screen.as_str()), ("ab", "ab"));
+    }
+
+    /// A line of words: Tab completes the last word as far as the list's words agree, with a space
+    /// once it is whole, and Ctrl+W deletes the last word with the spaces after it.
+    #[test]
+    fn tab_and_ctrl_w_edit_a_line_of_words() {
+        let words = Content::Words(mhfe::word_hints::WordList::Bip39);
+        assert_eq!(edited_as(b"abou\tzo\t\r", words).unwrap(), "about zo");
+        assert_eq!(edited_as(b"abandon abou\x17\r", words).unwrap(), "abandon ");
+        assert_eq!(
+            edited_as(b"abandon about  \x17\x17zoo\r", words).unwrap(),
+            "zoo"
+        );
+        // The completed letters are shown as if typed.
+        let (line, screen) = echoed(b"artw\t\r", words);
+        assert_eq!((line.as_str(), screen.as_str()), ("artwork ", "artwork "));
     }
 
     #[test]
@@ -1011,16 +1244,23 @@ mod tests {
         let longest = "a".repeat(LINE_CAPACITY);
         assert_eq!(edited(format!("{longest}\r").as_bytes()).unwrap(), longest);
         let too_long = format!("{longest}a\r");
-        assert!(edit_line(&mut io::Cursor::new(too_long), None).is_err());
-        assert!(edit_line(&mut io::Cursor::new(b"\xff\r".to_vec()), None).is_err());
+        let refused = |bytes: Vec<u8>| {
+            edit_line(&mut io::Cursor::new(bytes), None, Content::Password).is_err()
+        };
+        assert!(refused(too_long.into_bytes()));
+        assert!(refused(b"\xff\r".to_vec()));
     }
 
     /// The lock of the buffer goes with the line to the caller (AUD-007-SEC003).
     #[test]
     fn a_line_stays_locked_after_it_is_returned() {
-        let line = edit_line(&mut io::Cursor::new(b"pass word\r".to_vec()), None)
-            .unwrap()
-            .unwrap();
+        let line = edit_line(
+            &mut io::Cursor::new(b"pass word\r".to_vec()),
+            None,
+            Content::Password,
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(&*line, "pass word");
         assert_eq!(line.is_locked(), cfg!(unix));
     }

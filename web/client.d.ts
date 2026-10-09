@@ -1,4 +1,5 @@
 import type {
+  MhfeErrorCode,
   MhfePackageParts,
   MhfePasswordRepair,
   MhfeSecret,
@@ -75,6 +76,12 @@ export interface MhfeParameters {
   repairWordCounts: (2 | 4 | 6 | 8)[];
   recommendedRepairWords: number;
   repairCapacities: { count: number; unreadable: number; wrong: number }[];
+  /** The error codes after which a session of hidden wallets stays open for another password. */
+  hiddenWalletRefusals: MhfeErrorCode[];
+  /** Addresses of each chain searchDecoy() searches for two missing words by default. */
+  decoyScanGap: number;
+  /** The parts of a self-check report that run Argon2: at 1 MiB, then at 64 and 256 MiB. */
+  argon2Parts: string[];
 }
 
 export interface MhfePhraseFacts {
@@ -86,8 +93,17 @@ export interface MhfePhraseFacts {
    * own after recovery: tell the user to note the word count and choose it then.
    */
   otherLengths: WordCount[];
-  /** The containers the phrase can be encrypted into, 24 words first, with what each means. */
-  containers: { sameLength: boolean; words: WordCount; wrongWordPassesOneIn: number }[];
+  /**
+   * The containers the phrase can be encrypted into, 24 words first, with what each means;
+   * `otherLengths` of each is the field above for that container, empty for a same-length one,
+   * whose length is its own.
+   */
+  containers: {
+    sameLength: boolean;
+    words: WordCount;
+    wrongWordPassesOneIn: number;
+    otherLengths: WordCount[];
+  }[];
 }
 
 export interface MhfeContainerFacts {
@@ -98,8 +114,12 @@ export interface MhfeContainerFacts {
   /** The lengths its phrase can have: all five for 24 words, its own for a same-length one. */
   phraseLengths: WordCount[];
   builtInCheckLengths: (12 | 15 | 18 | 21)[];
-  /** For each phrase length, what confirms a recovery to encrypt again. */
-  confirmationFor: Partial<Record<`${WordCount}`, "builtInCheck" | "walletOrOwner">>;
+  /**
+   * For each phrase length, and "0" for the length detected, what confirms a recovery to encrypt
+   * again: the built-in check, for a stated 12- to 21-word length of a 24-word container, or the
+   * wallet or its owner, for every other length and for a detected one.
+   */
+  confirmationFor: Partial<Record<`${0 | WordCount}`, "builtInCheck" | "walletOrOwner">>;
   /** Whether hidden wallets open on it: 24-word containers only. */
   hiddenWallets: boolean;
   /** Whether the phrase and passphrase check is offered: 24-word containers only. */
@@ -113,6 +133,8 @@ export type MhfeKeepItem =
   | { item: "containerWords"; words: WordCount }
   | { item: "password" }
   | { item: "passphrase" }
+  /** Any BIP39 passphrase of the wallet, where it is not known whether it has one. */
+  | { item: "passphraseIfAny" }
   | { item: "repairWords" }
   | { item: "pim"; value: number }
   | { item: "memoryLevel"; value: number }
@@ -145,12 +167,26 @@ export interface MhfeCandidate {
   suiteId: string;
   /** The master key fingerprint if the wallet has no BIP39 passphrase. */
   fingerprintWithoutPassphrase: string;
-  /** Whether a 24-word phrase passes the wallet check without a passphrase; null otherwise. */
-  passesWalletCheckWithoutPassphrase: boolean | null;
+  /**
+   * Whether a 24-word reading passes the 16-bit source check with the passphrase given to
+   * decrypt(), or with none; null for every other length. Every recovery evaluates it: the
+   * container does not show whether the phrase was made with the check.
+   */
+  walletCheck: boolean | null;
+  /**
+   * The length stated, where the built-in checks gave this reading another, which takes
+   * precedence: a page says so. Null when the reading has the stated length or none was stated.
+   */
+  statedWords: WordCount | null;
+  /** The other 12- to 21-word lengths whose built-in check passes too, by chance. */
+  otherLengths: WordCount[];
 }
 
 export interface MhfeRecovery {
-  /** "ambiguous" when several lengths passed their check: show every candidate. */
+  /**
+   * "ambiguous" when several lengths passed their check, or one did beside 24 stated words:
+   * show every candidate, the checked ones first.
+   */
   kind: "phrase" | "ambiguous";
   candidates: MhfeCandidate[];
 }
@@ -172,6 +208,29 @@ export type MhfeCoin =
   | "cosmos"
   | "injective"
   | "dash";
+
+/** How far a search for missing words has come; `round` and `rounds` with the owner's wallet. */
+export interface MhfeSearchProgress {
+  stage: "search";
+  candidate: number;
+  candidates: number;
+  round?: number;
+  rounds?: number;
+}
+
+/** The result of a search for missing words. */
+export interface MhfeSearchResult {
+  found: boolean;
+  /** The container phrase found, every word in full; null when no candidate matched. */
+  container: string | null;
+  /** The master key fingerprint of the container's own words; null when none matched. */
+  containerFingerprint: string | null;
+  /** Each missing word as found, with its position from 1. */
+  words: { position: number; word: string }[];
+  /** Where a matched address was found; null otherwise. */
+  path: string | null;
+  candidates: number;
+}
 
 /** Exactly one kind of reference; an object with several is refused with a TypeError. */
 export type MhfeReference =
@@ -198,10 +257,12 @@ export type MhfeReference =
     }
   /**
    * The built-in check of a 12- to 21-word original in a 24-word container: confirms the
-   * password, not the wallet. A same-length container has none (NO_BUILT_IN_CHECK).
+   * password, not the wallet. A same-length container has none (NO_BUILT_IN_CHECK). 0 detects
+   * the length, and with a check's `passphrase` finds a 24-word phrase drawn with the phrase +
+   * passphrase check too.
    */
   | {
-      words: 12 | 15 | 18 | 21;
+      words: 0 | 12 | 15 | 18 | 21;
       address?: never;
       coin?: never;
       path?: never;
@@ -218,15 +279,40 @@ export type MhfeReference =
       words?: never;
     };
 
+/** The page's answer when a check's detection found no length: a length, or for 24 words the wallet. */
+export type MhfeNoLengthAnswer =
+  | { words: 12 | 15 | 18 | 21 }
+  | (Extract<MhfeReference, { address: string } | { fingerprint: string }> & {
+      passphrase?: MhfeSecret;
+    });
+
 /** How a rekey confirms the recovered phrase; readContainer().confirmationFor says which applies. */
 export type MhfeConfirmation =
-  /** Its built-in check, alone: no other kind may be given with it. */
+  /**
+   * Its built-in check, alone: no other kind may be given with it, and only with a 12- to 21-word
+   * length stated; with the length detected it rejects with REFERENCE_REQUIRED. A stated length
+   * that the check contradicts rejects with LENGTH_DIFFERS: rekey again with an address, the
+   * fingerprint or the owner. Several lengths that pass by accident reject it with
+   * AMBIGUOUS_LENGTH.
+   */
   | { builtInCheck: true; address?: never; fingerprint?: never; owner?: never }
   | {
-      /** Shows the phrase to its owner to compare with the written backup; true goes on. */
+      /**
+       * Shows the phrase to its owner to compare with the written backup; true goes on. With 24
+       * words stated, one 12- to 21-word length whose check passes rejects it with
+       * LENGTH_DIFFERS: the owner cannot tell the two readings apart, and an address or the
+       * fingerprint confirms one. Several lengths that pass by accident reject it with
+       * AMBIGUOUS_LENGTH unless the length stated is one of them: state the length of the reading
+       * to compare.
+       */
       owner: (check: {
         phrase: string;
         words: WordCount;
+        /**
+         * The length the user stated, present only where the built-in check found `words`
+         * instead: say so before the owner compares.
+         */
+        statedWords?: WordCount;
         fingerprintWithoutPassphrase: string;
       }) => boolean | Promise<boolean>;
       builtInCheck?: never;
@@ -257,11 +343,12 @@ export type MhfeRekeyConfirmation =
   | {
       /**
        * An address or a fingerprint without a passphrase matches the phrase's wallet without
-       * one, which says nothing about funds under a passphrase: the answer is required.
+       * one, which says nothing about funds under a passphrase: it confirms only a wallet
+       * stated to have none, and true is refused (INVALID_REQUEST).
        */
       confirmation: Exclude<MhfeConfirmation, { builtInCheck: true } | { owner: unknown }>;
-      passphrase?: undefined;
-      walletHasPassphrase: boolean;
+      passphrase?: "" | undefined;
+      walletHasPassphrase: false;
     };
 
 export interface MhfeHiddenWallet {
@@ -295,9 +382,9 @@ export interface MhfeSelfTestFault {
   /**
    * "argon2-input": Argon2id was given an input, password or salt, that the published vector does
    * not have at that round, so the fault lies before Argon2id: in the round's password or salt or
-   * in the state the round started from. "argon2-key": the published input gave another key, so the fault lies
-   * in Argon2id. "after-argon2": every Argon2id input and key was as published, so the fault lies
-   * after an operation's last Argon2id call.
+   * in the state the round started from. "argon2-key": the published input gave another key, so
+   * the fault lies in Argon2id. "after-argon2": every Argon2id input and key was as published, so
+   * the fault lies after an operation's last Argon2id call.
    */
   kind: "argon2-input" | "argon2-key" | "after-argon2";
   /** The round, 1 to 24; null for "after-argon2". */
@@ -368,8 +455,9 @@ export class MhfeClient {
   readPhrase(phrase: string): Promise<MhfePhraseFacts>;
   readContainer(container: string): Promise<MhfeContainerFacts>;
   /**
-   * Needs the password twice; a difference is refused with the code PASSWORDS_DIFFER, and a
-   * password or repetition that is neither a string nor a Uint8Array with a TypeError. Resolves
+   * Needs the password twice; after the password's own rules, a difference is refused with the
+   * code PASSWORDS_DIFFER, and a password or repetition that is neither a string nor a Uint8Array
+   * with a TypeError. Resolves
    * only after the container has been decrypted again and checked; a failed check rejects with
    * VERIFICATION_FAILED. `onUnverified` receives the container before the check, for showing it
    * marked as not yet verified; the page must then report how the check ended. If `onUnverified`
@@ -386,13 +474,17 @@ export class MhfeClient {
        * checksum more often. Default false.
        */
       sameLength?: boolean;
-      /** Repair words of the new plate, made only once the check has passed. Default 0. */
+      /**
+       * Repair words of the new container phrase, made only once the check has passed. Default 0.
+       */
       repairWordCount?: RepairWordCount;
       /**
-       * The user's answer whether the wallet has a BIP39 passphrase, required: true adds it to
-       * what to keep, since MHFE encrypts only the phrase.
+       * Whether the wallet has a BIP39 passphrase, only where the page knows it, such as after
+       * drawPhrase(): true adds it to what to keep, since MHFE encrypts only the phrase, and false
+       * leaves it out. Left out or null, `keep` names any passphrase of the wallet
+       * ("passphraseIfAny") instead.
        */
-      walletHasPassphrase: boolean;
+      walletHasPassphrase?: boolean | null;
       onUnverified?: (result: {
         container: string;
         containerFingerprint: string;
@@ -404,26 +496,80 @@ export class MhfeClient {
    * container's original; a same-length container takes only its own length.
    */
   decrypt(
-    options: MhfeSettings & { container: string; words?: 0 | WordCount },
+    options: MhfeSettings & {
+      container: string;
+      words?: 0 | WordCount;
+      /** The wallet's BIP39 passphrase for the 16-bit source check, "" (the default) for none. */
+      passphrase?: MhfeSecret;
+    },
   ): Promise<MhfeRecovery>;
   check(
     options: MhfeSettings & {
       container: string;
       reference: MhfeReference;
       passphrase?: MhfeSecret;
+      /**
+       * With `{ words: 0 }`: called when detection found no length; the length or a wallet
+       * reference for 24 words, compared on the same recovery, or null.
+       */
+      onNoLength?: () =>
+        MhfeNoLengthAnswer | null | undefined | Promise<MhfeNoLengthAnswer | null | undefined>;
     },
   ): Promise<{
     matches: boolean;
     /** Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise. */
     path: string | null;
+    /**
+     * The original seed phrase's own checks, from the same recovery, to list with the match.
+     * `builtInCheck` is the length of a 12- to 21-word one whose built-in check passes, the
+     * stated one where it passes; with `{ words }` a check that passes at another length takes
+     * precedence and matches, and this names that length. `walletCheck` is whether the 24-word
+     * reading passes the 16-bit phrase + passphrase check with the passphrase given, or with none
+     * if none was given; null for `{ words }` with a length stated, for a same-length container,
+     * and when exactly one shorter length passes its check and the reference did not match the
+     * 24-word reading. A phrase drawn without that check fails it, so that only a pass says
+     * anything.
+     */
+    evidence: { builtInCheck: number | null; walletCheck: boolean | null };
   }>;
+  /** The candidates of a container phrase with words typed as "?"; see client.js. */
+  searchCandidates(options: { container: string }): Promise<{
+    missing: number[];
+    candidates: number;
+    /** Whether searchWallet() with an address or fingerprint is offered: one missing word. */
+    offersWalletSearch: boolean;
+    /** Whether searchWallet() with the phrase's own checks is offered too. */
+    offersOwnChecks: boolean;
+  }>;
+  /** Searches for up to two missing words with the decoy wallet, without a password. */
+  searchDecoy(options: {
+    container: string;
+    reference: Extract<MhfeReference, { address: string } | { fingerprint: string }>;
+    passphrase?: MhfeSecret;
+    /** First-account receiving and change addresses searched for two missing words; default
+     * parameters().decoyScanGap. */
+    scanGap?: number;
+    onProgress?: (progress: MhfeSearchProgress) => void | Promise<void>;
+  }): Promise<MhfeSearchResult>;
+  /** Searches for one missing word with the owner's wallet, recovering every candidate. */
+  searchWallet(
+    options: Omit<MhfeSettings, "onProgress"> & {
+      container: string;
+      reference:
+        | Extract<
+            MhfeReference,
+            { address: string } | { fingerprint: string } | { walletCheck: true }
+          >
+        | { builtInCheck: true };
+      passphrase?: MhfeSecret;
+      onProgress?: (progress: MhfeSearchProgress) => void | Promise<void>;
+    },
+  ): Promise<MhfeSearchResult>;
   /** Encrypts a container again with a new password or settings; see client.js. */
   rekey(
     options: MhfeSettings & {
       container: string;
       words?: 0 | WordCount;
-      /** Must be true: every user was told that the wallets of other passwords change. */
-      otherWalletsMoved: true;
       newPassword: MhfeSecret;
       newPasswordRepeat: MhfeSecret;
       newPasswordRepair?: MhfePasswordRepair;
@@ -435,7 +581,15 @@ export class MhfeClient {
         containerFingerprint: string;
       }) => void | Promise<void>;
     } & MhfeRekeyConfirmation,
-  ): Promise<MhfeSealed>;
+  ): Promise<
+    MhfeSealed & {
+      /**
+       * The 16-bit source check of the recovered 24-word reading, with the reference's passphrase
+       * or none; null for other lengths. It never confirms a rekey.
+       */
+      walletCheck: boolean | null;
+    }
+  >;
   openHiddenWallets(options: {
     container: string;
     pim?: number;
@@ -450,6 +604,10 @@ export class MhfeClient {
   selfTest(options?: {
     onProgress?: (progress: MhfeProgress) => void | Promise<void>;
   }): Promise<MhfeSelfTest>;
-  /** Stops the running operation or session at once; its promise rejects with MhfeCancelledError. */
+  /**
+   * Stops the running operation or session: its promise rejects at once with MhfeCancelledError,
+   * and its worker is terminated, as soon as it has loaded the WebAssembly if it is still loading
+   * it.
+   */
   cancel(): void;
 }

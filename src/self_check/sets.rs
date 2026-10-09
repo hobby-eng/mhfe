@@ -7,9 +7,11 @@
 //!   compute, with Argon2 added by the caller: [`crate::engine::NativeArgon2Check`] natively, the
 //!   page's `BrowserArgon2Check` in a browser, or none for a quick check without Argon2.
 //! - [`repair`]: the repair words and the BIP39 word list they are written in.
-//! - [`passwords`]: the password encoding, the check word, the generator and the random source.
+//! - [`passwords`]: the password encoding, the check word, the generator, the word hints and the
+//!   random source.
 //! - [`wallet`]: the word list, the wallet hashes, seeds, keys and addresses, the address search
-//!   an address check states, the wallet check and the random source.
+//!   an address check states, the wallet check, the chosen word, the word hints and the random
+//!   source.
 //! - [`native`]: everything the command-line tool computes.
 //!
 //! The parts of several sets are checked once when the sets are merged ([`SelfCheck::merge`]).
@@ -71,15 +73,28 @@ pub fn core<'a>(argon2: Option<Box<dyn ComponentCheck + 'a>>) -> SelfCheck<'a> {
         .with(crate::password::known_answers::PasswordUnicodeCheck::new())
         .with(crate::phrase::known_answers::WordListCheck::new())
         .with(crate::repair::known_answers::RepairWordsCheck::new())
+        .with(crate::search::known_answers::ContainerSearchCheck::new())
         .with(crate::check_word::known_answers::CheckWordCheck::new())
-        .with(crate::wallet::known_answers::WalletHashesCheck::new())
-        .with(crate::wallet::known_answers::SeedCheck::new())
-        .with(crate::wallet::known_answers::Bip32Check::new())
-        .with(crate::wallet::known_answers::AddressesCheck::new())
+        .merge(wallet_keys())
         .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
         .with(crate::hidden::known_answers::HiddenWalletsCheck::new())
         .with(crate::rekey::known_answers::RekeyCheck::new())
         .with(crate::rehearsal::known_answers::RehearsalCheck::new())
+}
+
+/// The parts of a wallet's keys, which the core compares with and the wallet tools give: the wallet
+/// hashes, seeds, BIP32 keys and addresses.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-wallet"
+))]
+fn wallet_keys<'a>() -> SelfCheck<'a> {
+    SelfCheck::new()
+        .with(crate::wallet::known_answers::WalletHashesCheck::new())
+        .with(crate::wallet::known_answers::SeedCheck::new())
+        .with(crate::wallet::known_answers::Bip32Check::new())
+        .with(crate::wallet::known_answers::AddressesCheck::new())
 }
 
 /// The hashes of the cipher alone, SHA-256, HMAC-SHA-256 and BLAKE2b-256: for a program that only
@@ -105,6 +120,7 @@ pub fn passwords<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> 
         .with(crate::password::known_answers::PasswordUnicodeCheck::new())
         .with(crate::check_word::known_answers::CheckWordCheck::new())
         .with(crate::new_password::known_answers::GeneratorCheck::new())
+        .with(crate::word_hints::known_answers::WordHintsCheck::new())
         .with(RandomSourceCheck::new(random))
 }
 
@@ -114,12 +130,11 @@ pub fn passwords<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> 
 pub fn wallet<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
     SelfCheck::new()
         .with(crate::phrase::known_answers::WordListCheck::new())
-        .with(crate::wallet::known_answers::WalletHashesCheck::new())
-        .with(crate::wallet::known_answers::SeedCheck::new())
-        .with(crate::wallet::known_answers::Bip32Check::new())
-        .with(crate::wallet::known_answers::AddressesCheck::new())
+        .merge(wallet_keys())
         .with(crate::wallet::known_answers::AddressSearchCheck::new())
         .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
+        .with(crate::word_wishes::known_answers::WordWishesCheck::new())
+        .with(crate::word_hints::known_answers::WordHintsCheck::new())
         .with(RandomSourceCheck::new(random))
 }
 
@@ -129,12 +144,12 @@ pub fn wallet<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
 /// the checks of its own process: core dumps, isolation and hidden input.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn native<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
-    core(Some(Box::new(crate::engine::NativeArgon2Check::new())))
-        .with(crate::engine::NativeArgon2SizesCheck::new())
+    core(Some(Box::new(crate::engine::NativeArgon2Check::default())))
+        .with(crate::engine::NativeArgon2SizesCheck::default())
         .merge(passwords(random))
         .merge(wallet(None))
         .merge(repair())
-        .with(crate::memory::LockProbe)
+        .with(crate::memory::LockProbe::default())
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -142,7 +157,7 @@ mod tests {
     use super::*;
 
     /// Every check of the plan, in the order the tool runs them, each once.
-    const NATIVE_IDS: [&str; 23] = [
+    const NATIVE_IDS: [&str; 26] = [
         "cipher-hashes",
         "argon2",
         "cipher-rounds",
@@ -152,6 +167,7 @@ mod tests {
         "password-unicode",
         "bip39-words",
         "repair-words",
+        "container-search",
         "password-check-word",
         "wallet-hashes",
         "bip39-seed",
@@ -163,8 +179,10 @@ mod tests {
         "rehearsal",
         "argon2-sizes",
         "password-generator",
+        "word-hints",
         "random-source",
         "address-search",
+        "word-wishes",
         "memory-locking",
     ];
 
@@ -184,6 +202,7 @@ mod tests {
                 "password-unicode",
                 "password-check-word",
                 "password-generator",
+                "word-hints",
                 "random-source"
             ]
         );
@@ -197,6 +216,8 @@ mod tests {
                 "addresses",
                 "address-search",
                 "wallet-check",
+                "word-wishes",
+                "word-hints",
                 "random-source"
             ]
         );
@@ -226,32 +247,38 @@ mod tests {
     /// and the curve arithmetic unoptimized, many times slower, so its bound is generous. Run
     /// `cargo test --release --lib the_startup_set_stays_within_its_budget -- --nocapture` to see
     /// the time of each check.
+    /// Runs `set` at `tier` and prints the time of each check and of all, under `name`.
+    fn timed(
+        mut set: SelfCheck<'_>,
+        tier: Tier,
+        name: &str,
+    ) -> (super::super::SelfCheckReport, std::time::Duration) {
+        use std::time::Instant;
+        let started = Instant::now();
+        let check_started = std::cell::Cell::new(started);
+        let mut times = Vec::new();
+        let report = set.run(
+            tier,
+            &mut |_, _| check_started.set(Instant::now()),
+            &mut |result| times.push((result.id(), check_started.get().elapsed())),
+        );
+        let total = started.elapsed();
+        times.push((name, total));
+        for (id, time) in &times {
+            eprintln!("{id:<20} {:>9.2} ms", time.as_secs_f64() * 1e3);
+        }
+        (report, total)
+    }
+
     #[test]
     fn the_startup_set_stays_within_its_budget() {
-        use std::time::{Duration, Instant};
+        use std::time::Duration;
         let budget = if cfg!(debug_assertions) {
             Duration::from_secs(30)
         } else {
             Duration::from_millis(500)
         };
-        let mut set = native(None);
-        let started = Instant::now();
-        let check_started = std::cell::Cell::new(started);
-        let mut times = Vec::new();
-        let report = set.run(
-            Tier::Startup,
-            &mut |_, _| check_started.set(Instant::now()),
-            &mut |result| times.push((result.id(), check_started.get().elapsed())),
-        );
-        let total = started.elapsed();
-        for (id, time) in &times {
-            eprintln!("{id:<20} {:>8.2} ms", time.as_secs_f64() * 1e3);
-        }
-        eprintln!(
-            "{:<20} {:>8.2} ms",
-            "startup set",
-            total.as_secs_f64() * 1e3
-        );
+        let (report, total) = timed(native(None), Tier::Startup, "startup set");
         assert!(report.passed(), "{:?}", report.first_failure());
         assert!(total < budget, "the startup set took {total:?}");
     }
@@ -262,28 +289,11 @@ mod tests {
     #[test]
     #[ignore = "the whole full self-test: seconds and 256 MiB"]
     fn the_full_set_passes_with_the_system_generator() {
-        use std::time::Instant;
         let mut system = |bytes: &mut [u8]| {
             getrandom::fill(bytes)
                 .map_err(|_| crate::MhfeError::RandomFailed("getrandom failed".to_owned()))
         };
-        let mut set = native(Some(&mut system));
-        let started = Instant::now();
-        let check_started = std::cell::Cell::new(started);
-        let mut times = Vec::new();
-        let report = set.run(
-            Tier::Full,
-            &mut |_, _| check_started.set(Instant::now()),
-            &mut |result| times.push((result.id(), check_started.get().elapsed())),
-        );
-        for (id, time) in &times {
-            eprintln!("{id:<20} {:>9.2} ms", time.as_secs_f64() * 1e3);
-        }
-        eprintln!(
-            "{:<20} {:>9.2} ms",
-            "full set",
-            started.elapsed().as_secs_f64() * 1e3
-        );
+        let (report, _) = timed(native(Some(&mut system)), Tier::Full, "full set");
         assert!(report.passed(), "{:?}", report.first_failure());
         assert!(report
             .results()

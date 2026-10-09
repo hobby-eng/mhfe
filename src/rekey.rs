@@ -9,8 +9,8 @@ use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
-use crate::rehearsal::{Confirmation, Reference};
-use crate::{Mhfe, MhfeError, Password, WordCount, WorkFactor, ROUNDS};
+use crate::rehearsal::{Confirmation, RecoveredForRekey};
+use crate::{Mhfe, MhfeError, Password, PhraseLength, WorkFactor, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -19,10 +19,13 @@ pub(crate) mod known_answers;
 const REKEY_ROUNDS: u32 = 3 * ROUNDS;
 
 /// A phrase recovered for a rekey and confirmed, with whether its wallet has a BIP39 passphrase,
-/// which the new container's keep list names.
+/// which the new container's keep list names. One confirmed by [`Confirmation::Owner`] awaits the
+/// owner's explicit yes, given with [`ConfirmedPhrase::confirmed_by_owner`], and is not sealed
+/// before it (the specification's re-encryption rules).
 pub struct ConfirmedPhrase {
     phrase: RecoveredPhrase,
     wallet_has_passphrase: bool,
+    awaits_owner: bool,
 }
 
 impl ConfirmedPhrase {
@@ -30,7 +33,22 @@ impl ConfirmedPhrase {
         &self.phrase
     }
 
-    /// What [`crate::operation::Sealed::keep`] takes for the wallet's passphrase.
+    /// Whether the phrase still waits for the owner, who compares it with their backup or enters
+    /// it into their wallet.
+    pub fn awaits_owner(&self) -> bool {
+        self.awaits_owner
+    }
+
+    /// The phrase once the owner has answered yes, explicitly: only then may it be sealed.
+    pub fn confirmed_by_owner(self) -> Self {
+        Self {
+            awaits_owner: false,
+            ..self
+        }
+    }
+
+    /// Whether the wallet has a BIP39 passphrase, always known after a rekey's recovery;
+    /// [`crate::operation::Sealed::keep`] takes it as a [`crate::operation::WalletPassphrase`].
     pub fn wallet_has_passphrase(&self) -> bool {
         self.wallet_has_passphrase
     }
@@ -39,57 +57,56 @@ impl ConfirmedPhrase {
 /// One rekey of one container.
 pub struct Rekey {
     container: ContainerFacts,
-    words: WordCount,
+    length: PhraseLength,
     old_password: Password,
     old_work: WorkFactor,
 }
 
 impl Rekey {
-    /// A rekey of `container`, whose phrase has `words` words: required for a 24-word container,
-    /// which may hold any length, and optional for a same-length container, whose own length it
-    /// must then be. `other_wallets_moved` is the owner's answer to the warning that the wallets
-    /// other passwords open on this container change with the new one: only a yes lets it go on.
-    /// Everything is checked here, before any Argon2 work.
+    /// A rekey of `container`, whose phrase has the given `length`: a stated word count, or
+    /// [`PhraseLength::Detect`] to detect it after the recovery (`detection`). A
+    /// same-length container has its own length only. Nothing is destroyed: the old container
+    /// keeps opening every wallet with its old passwords, so that a front end warns that funds at
+    /// the old addresses of the wallets other passwords open on it are moved before the old
+    /// container and its passwords are deleted. Everything is checked here, before any Argon2
+    /// work.
     pub fn new(
         container: &str,
-        words: Option<usize>,
+        length: PhraseLength,
         old_password: Password,
         old_work: WorkFactor,
-        other_wallets_moved: bool,
     ) -> Result<Self, MhfeError> {
-        if !other_wallets_moved {
-            return Err(MhfeError::OtherWalletsNotConfirmed);
-        }
         let container = ContainerFacts::read(container)?;
-        let words = match (words, container.phrase_lengths()) {
-            (Some(words), _) => WordCount::new(words)?,
-            (None, [only]) => WordCount::new(*only)?,
-            (None, _) => {
-                return Err(MhfeError::InvalidRequest(
-                    "the word count of the phrase is needed for a 24-word container".to_owned(),
-                ))
-            }
-        };
         // Refuses a length the container cannot have.
-        container.confirmation_needed(words)?;
+        container.require_length(length)?;
         Ok(Self {
             container,
-            words,
+            length,
             old_password,
             old_work,
         })
     }
 
-    pub fn words(&self) -> WordCount {
-        self.words
+    /// The same rekey with the length stated, as after a detection that found several
+    /// ([`MhfeError::AmbiguousLength`]): checked before any Argon2 work, as [`Rekey::new`] does.
+    pub fn with_length(self, length: PhraseLength) -> Result<Self, MhfeError> {
+        self.container.require_length(length)?;
+        Ok(Self { length, ..self })
     }
 
-    /// How the recovered phrase must be confirmed: by its built-in check, or by the wallet or its
-    /// owner.
+    /// How the recovered phrase must be confirmed: by its built-in check at a stated 12- to 21-word
+    /// length, or by the wallet or its owner, also for a detected length.
     pub fn confirmation_needed(&self) -> ConfirmationNeeded {
         self.container
-            .confirmation_needed(self.words)
+            .confirmation_needed(self.length)
             .expect("the length was checked when the rekey was made")
+    }
+
+    /// Whether the owner can confirm the phrase of the rekey's length from `recovered` by
+    /// comparing it with their backup ([`RecoveredForRekey::owner_can_confirm`]): a front end
+    /// offers that answer only then.
+    pub fn owner_can_confirm(&self, recovered: &RecoveredForRekey) -> Result<bool, MhfeError> {
+        recovered.owner_can_confirm(self.length)
     }
 
     /// Refuses a new password and settings that would give the old container again: with the same
@@ -106,16 +123,9 @@ impl Rekey {
     }
 
     /// Recovers the phrase with the old password (rounds 1 to 12 of 36), confirmed as
-    /// `confirmation` says. Where the length has a built-in check, only that check is taken, as
-    /// the command-line tool offers only it. [`Confirmation::Owner`] returns the phrase for the
-    /// owner to compare with their backup; the caller goes on only if the owner confirms it.
-    ///
-    /// `wallet_has_passphrase` is what the caller states about the wallet's BIP39 passphrase. A
-    /// reference compared with a passphrase shows that the wallet has one, and a statement that
-    /// says otherwise is refused. Nothing else shows it, so there it must be stated: not the
-    /// built-in check, not the owner, and not a reference without a passphrase, which matches the
-    /// phrase's wallet without one even when the owner's funds are under a passphrase. Both are
-    /// judged before any Argon2 work.
+    /// `confirmation` says, under the length rules of recovery: [`Rekey::recover_state`], then
+    /// [`Rekey::confirm`]. A front end that asks again after a refused confirmation calls the two
+    /// itself, so that the rounds run once.
     pub fn recover<E: Argon2Engine>(
         &self,
         mhfe: &mut Mhfe<E>,
@@ -123,46 +133,79 @@ impl Rekey {
         wallet_has_passphrase: Option<bool>,
         progress: StageCallback<'_>,
     ) -> Result<ConfirmedPhrase, MhfeError> {
+        // Judged before any Argon2 work: the confirmation first, as the recovery would refuse it,
+        // then the passphrase's answer.
+        confirmation.refuse_for(self.confirmation_needed())?;
+        wallet_passphrase(&confirmation, wallet_has_passphrase)?;
+        let progress = RefCell::new(progress);
+        let recovered = self.recover_state(mhfe, confirmation, &mut |stage, round, total| {
+            (*progress.borrow_mut())(stage, round, total)
+        })?;
+        self.confirm(
+            &recovered,
+            confirmation,
+            wallet_has_passphrase,
+            &mut |stage, round, total| (*progress.borrow_mut())(stage, round, total),
+        )
+    }
+
+    /// The recovery of a rekey (rounds 1 to 12 of 36): the old container's state, from which
+    /// [`Rekey::confirm`] takes the phrase once confirmed, as often as a confirmation is refused,
+    /// without the rounds again. `confirmation` is the first one the caller will give, refused
+    /// here before any Argon2 work if it cannot confirm a phrase of the rekey's length.
+    pub fn recover_state<E: Argon2Engine>(
+        &self,
+        mhfe: &mut Mhfe<E>,
+        confirmation: Confirmation<'_>,
+        progress: StageCallback<'_>,
+    ) -> Result<RecoveredForRekey, MhfeError> {
         if mhfe.work_factor() != self.old_work {
             return Err(MhfeError::InvalidRequest(
                 "the recovery must run at the old container's settings".to_owned(),
             ));
         }
-        if self.confirmation_needed() == ConfirmationNeeded::BuiltInCheck
-            && !matches!(confirmation, Confirmation::BuiltInCheck)
-        {
-            return Err(MhfeError::InvalidRequest(
-                "this length has a built-in check, which confirms the phrase".to_owned(),
-            ));
-        }
-        // A length without a built-in check needs a reference or the owner: refused first, as the
-        // recovery would refuse it, so that the passphrase's answer is judged only after.
-        if self.confirmation_needed() == ConfirmationNeeded::WalletOrOwner
-            && matches!(
-                confirmation,
-                Confirmation::BuiltInCheck
-                    | Confirmation::Wallet(
-                        Reference::BuiltInCheck { .. } | Reference::WalletCheck { .. }
-                    )
-            )
-        {
-            return Err(MhfeError::ReferenceRequired);
-        }
-        let wallet_has_passphrase = wallet_passphrase(&confirmation, wallet_has_passphrase)?;
         let rounds = RoundCounter::starting_after(0, REKEY_ROUNDS);
-        // Both callbacks report to the one progress of the caller, never at the same time.
-        let progress = RefCell::new(progress);
-        let phrase = mhfe.recover_confirmed_reporting(
+        mhfe.recover_for_rekey(
             self.container.words(),
             &self.old_password,
-            self.words,
+            self.length,
             confirmation,
-            &mut |round, _| rounds.report(Stage::Recover, round, &mut **progress.borrow_mut()),
-            &mut || rounds.report(Stage::Compare, ROUNDS, &mut **progress.borrow_mut()),
-        )?;
+            &mut |round, _| rounds.report(Stage::Recover, round, progress),
+        )
+    }
+
+    /// The phrase of the rekey's length from `recovered`, once `confirmation` confirms it
+    /// ([`RecoveredForRekey::confirm`]). The built-in check confirms a short phrase at the length
+    /// it finds only when that length was stated; else the rekey is refused with
+    /// [`MhfeError::LengthDiffers`], and a receiving address or the fingerprint must confirm it,
+    /// which tells every reading apart (AUD-015-FUN001). With the length detected the built-in
+    /// check alone is refused (AUD-017-FUN001). [`Confirmation::Owner`] returns the phrase for the
+    /// owner to compare with their backup, awaiting the owner ([`ConfirmedPhrase::awaits_owner`]):
+    /// it is sealed only after [`ConfirmedPhrase::confirmed_by_owner`], an explicit yes. The
+    /// caller says first when the check found another length than the one stated
+    /// ([`crate::RecoveredPhrase::stated_words`]).
+    ///
+    /// `wallet_has_passphrase` is what the caller states about the wallet's BIP39 passphrase. A
+    /// reference compared with a passphrase shows that the wallet has one, and a statement that
+    /// says otherwise is refused. Nothing else shows it, so there it must be stated: not the
+    /// built-in check, not the owner, and not a reference without a passphrase, which matches the
+    /// phrase's wallet without one even when the owner's funds are under a passphrase.
+    pub fn confirm(
+        &self,
+        recovered: &RecoveredForRekey,
+        confirmation: Confirmation<'_>,
+        wallet_has_passphrase: Option<bool>,
+        progress: StageCallback<'_>,
+    ) -> Result<ConfirmedPhrase, MhfeError> {
+        let wallet_has_passphrase = wallet_passphrase(&confirmation, wallet_has_passphrase)?;
+        let rounds = RoundCounter::starting_after(0, REKEY_ROUNDS);
+        let phrase = recovered.confirm(self.length, confirmation, &mut || {
+            rounds.report(Stage::Compare, ROUNDS, progress)
+        })?;
         Ok(ConfirmedPhrase {
             phrase,
             wallet_has_passphrase,
+            awaits_owner: matches!(confirmation, Confirmation::Owner),
         })
     }
 
@@ -180,11 +223,15 @@ impl Rekey {
         progress: StageCallback<'_>,
         on_unverified: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
     ) -> Result<Sealed, MhfeError> {
+        // The owner's comparison is a confirmation only once the owner has said yes.
+        if confirmed.awaits_owner {
+            return Err(MhfeError::NotConfirmedByOwner);
+        }
         self.check_new(new_password, mhfe.work_factor())?;
         // A container of the old one's kind: 24 words, or the same length as the phrase.
         let suite = self.container.suite();
         let rounds = RoundCounter::starting_after(ROUNDS, REKEY_ROUNDS);
-        let phrase = &confirmed.phrase.phrase;
+        let phrase = &confirmed.phrase.phrase();
         Encryption::new(phrase, suite, repair_word_count)?.run(
             mhfe,
             phrase,
@@ -203,14 +250,23 @@ fn wallet_passphrase(
 ) -> Result<bool, MhfeError> {
     // Only a passphrase shows something: a reference without one proves nothing about another.
     let shown = match confirmation {
-        Confirmation::Wallet(reference) => {
-            reference.passphrase().is_some_and(|text| !text.is_empty())
-        }
+        Confirmation::Wallet(reference) => reference.given_passphrase().is_some(),
         Confirmation::BuiltInCheck | Confirmation::Owner => false,
     };
+    let reference_without_passphrase = matches!(
+        confirmation,
+        Confirmation::Wallet(reference) if reference.given_passphrase().is_none()
+    );
     match (shown, stated) {
         (true, Some(false)) => Err(MhfeError::InvalidRequest(
             "the wallet's BIP39 passphrase is stated otherwise than the reference shows".to_owned(),
+        )),
+        // A reference is compared with the wallet's passphrase when it has one (the
+        // specification's re-encryption rules): without it, it would match the phrase's wallet
+        // without one, which says nothing about the funds under the passphrase.
+        (false, Some(true)) if reference_without_passphrase => Err(MhfeError::InvalidRequest(
+            "the reference must be compared with the wallet's BIP39 passphrase, which it has"
+                .to_owned(),
         )),
         (true, _) => Ok(true),
         (false, Some(stated)) => Ok(stated),
@@ -223,6 +279,7 @@ fn wallet_passphrase(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rehearsal::Reference;
 
     fn container_24() -> String {
         // Any valid 24-word phrase serves as a container's words for the checks before Argon2.
@@ -235,39 +292,27 @@ mod tests {
         Password::new(text).unwrap()
     }
 
-    #[test]
-    fn the_owner_must_confirm_that_other_wallets_are_safe() {
-        let refused = Rekey::new(
-            &container_24(),
-            Some(24),
-            password("old password"),
-            WorkFactor::default(),
-            false,
-        );
-        assert!(matches!(refused, Err(MhfeError::OtherWalletsNotConfirmed)));
+    fn words(count: usize) -> PhraseLength {
+        PhraseLength::Words(crate::WordCount::new(count).unwrap())
     }
 
     #[test]
-    fn a_24_word_container_needs_the_phrase_length() {
-        let refused = Rekey::new(
-            &container_24(),
-            None,
-            password("old password"),
-            WorkFactor::default(),
-            true,
-        );
-        assert!(matches!(refused, Err(MhfeError::InvalidRequest(_))));
-        let rekey = Rekey::new(
-            &container_24(),
-            Some(12),
-            password("old password"),
-            WorkFactor::default(),
-            true,
-        )
-        .unwrap();
+    fn a_24_word_container_takes_a_stated_or_detected_length() {
+        let made = |length| {
+            Rekey::new(
+                &container_24(),
+                length,
+                password("old password"),
+                WorkFactor::default(),
+            )
+            .unwrap()
+            .confirmation_needed()
+        };
+        assert_eq!(made(words(12)), ConfirmationNeeded::BuiltInCheck);
+        assert_eq!(made(words(24)), ConfirmationNeeded::WalletOrOwner);
         assert_eq!(
-            rekey.confirmation_needed(),
-            ConfirmationNeeded::BuiltInCheck
+            made(PhraseLength::Detect),
+            ConfirmationNeeded::WalletOrOwner
         );
     }
 
@@ -275,10 +320,9 @@ mod tests {
     fn the_same_password_and_settings_are_refused() {
         let rekey = Rekey::new(
             &container_24(),
-            Some(24),
+            words(24),
             password("old password"),
             WorkFactor::default(),
-            true,
         )
         .unwrap();
         assert!(matches!(
@@ -293,14 +337,7 @@ mod tests {
             .is_ok());
     }
 
-    fn reduced(work: WorkFactor) -> Mhfe<crate::engine::NativeEngine> {
-        use crate::engine::{Argon2Cost, NativeEngine};
-        let cost = Argon2Cost {
-            memory_kib: 256,
-            passes: 1,
-        };
-        Mhfe::with_engine(work, NativeEngine::reduced_for_tests(cost).unwrap())
-    }
+    use crate::test_support::reduced_at as reduced;
 
     /// The settings judged are the engine's own: a recovery at other settings than the old
     /// container's is refused, and so is sealing with the old password on an engine at the old
@@ -317,10 +354,9 @@ mod tests {
             .unwrap();
         let rekey = Rekey::new(
             &container,
-            Some(12),
+            words(12),
             password("public test password"),
             old_work,
-            true,
         )
         .unwrap();
         let other_work = WorkFactor::new(1, 0).unwrap();
@@ -342,7 +378,7 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            *phrase.phrase().phrase,
+            phrase.phrase().phrase(),
             ABANDON.split_whitespace().collect::<Vec<_>>().join(" ")
         );
         let unchanged = rekey.seal(
@@ -367,14 +403,7 @@ mod tests {
         assert_ne!(sealed.container(), &*container);
     }
 
-    /// An engine that must never run: the refusals below come before any Argon2 work.
-    struct NoArgon2Calls;
-
-    impl Argon2Engine for NoArgon2Calls {
-        fn derive(&mut self, _: &[u8], _: &[u8; 16], _: &mut [u8; 32]) -> Result<(), MhfeError> {
-            panic!("Argon2 ran for a rekey that should have been refused first");
-        }
-    }
+    use crate::test_support::NoArgon2Calls;
 
     /// The wallet's passphrase, for the keep list: a reference with a passphrase shows it, a
     /// statement that says otherwise is refused, and everything else needs it stated.
@@ -394,7 +423,11 @@ mod tests {
             None
         )));
         assert!(!wallet_passphrase(&Confirmation::Wallet(&without), Some(false)).unwrap());
-        assert!(wallet_passphrase(&Confirmation::Wallet(&without), Some(true)).unwrap());
+        // A wallet said to have a passphrase is compared with it, never without.
+        assert!(matches!(
+            wallet_passphrase(&Confirmation::Wallet(&without), Some(true)),
+            Err(MhfeError::InvalidRequest(text)) if text.contains("compared with the wallet's")
+        ));
         // A reference with one shows it; a statement that says otherwise is refused.
         for stated in [None, Some(true)] {
             assert!(wallet_passphrase(&Confirmation::Wallet(&with), stated).unwrap());
@@ -414,10 +447,9 @@ mod tests {
     fn a_missing_or_contradicting_statement_is_refused_before_any_work() {
         let rekey = Rekey::new(
             &container_24(),
-            Some(12),
+            words(12),
             password("old password"),
             WorkFactor::default(),
-            true,
         )
         .unwrap();
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoArgon2Calls);
@@ -431,10 +463,9 @@ mod tests {
         let same_length = Rekey::new(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
              abandon about",
-            None,
+            PhraseLength::Detect,
             password("old password"),
             WorkFactor::default(),
-            true,
         )
         .unwrap();
         let without = Reference::Fingerprint {
@@ -486,7 +517,7 @@ mod tests {
         let container = reduced(work)
             .encrypt(ABANDON, &old, crate::Suite::SameLength, &mut |_, _| Ok(()))
             .unwrap();
-        let rekey = Rekey::new(&container, None, old, work, true).unwrap();
+        let rekey = Rekey::new(&container, PhraseLength::Detect, old, work).unwrap();
         let fingerprint = crate::wallet::master_fingerprint(ABANDON, "TREZOR").unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
@@ -512,7 +543,7 @@ mod tests {
                     &mut |_| Ok(()),
                 )
                 .unwrap();
-            let keep = sealed.keep(work, confirmed.wallet_has_passphrase());
+            let keep = sealed.keep(work, confirmed.wallet_has_passphrase().into());
             let mut expected = vec![
                 KeepItem::ContainerWords(12),
                 KeepItem::Password,
@@ -523,5 +554,265 @@ mod tests {
             }
             assert_eq!(keep.items(), expected.as_slice());
         }
+    }
+
+    const ABANDON_12: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                              abandon abandon abandon about";
+
+    /// A 24-word container of `phrase` under a public password at the reduced cost, with the
+    /// rekey of it for `length`, stated or detected.
+    fn rekey_of(phrase: &str, length: PhraseLength) -> Rekey {
+        let old = password("public test password");
+        let container = reduced(WorkFactor::default())
+            .encrypt(phrase, &old, crate::Suite::TwentyFourWords, &mut |_, _| {
+                Ok(())
+            })
+            .unwrap();
+        Rekey::new(&container, length, old, WorkFactor::default()).unwrap()
+    }
+
+    fn detected(phrase: &str) -> Rekey {
+        rekey_of(phrase, PhraseLength::Detect)
+    }
+
+    fn stated(phrase: &str, length: usize) -> Rekey {
+        rekey_of(phrase, words(length))
+    }
+
+    fn recover_detected(
+        rekey: &Rekey,
+        confirmation: Confirmation<'_>,
+    ) -> Result<ConfirmedPhrase, MhfeError> {
+        rekey.recover(
+            &mut reduced(WorkFactor::default()),
+            confirmation,
+            Some(false),
+            &mut |_, _, _| Ok(()),
+        )
+    }
+
+    /// A stated length that the built-in check contradicts (AUD-015-FUN001): the check's reading
+    /// takes precedence, but the built-in check alone does not confirm it; the wallet does, at a
+    /// short length too, and the owner sees the reading with the length stated beside it.
+    #[test]
+    fn a_stated_length_the_check_contradicts_needs_the_wallet() {
+        let fingerprint = Reference::Fingerprint {
+            fingerprint: crate::wallet::master_fingerprint(ABANDON_12, "").unwrap(),
+            passphrase: "",
+        };
+        let rekey = stated(ABANDON_12, 15);
+        assert_eq!(
+            recover_detected(&rekey, Confirmation::BuiltInCheck).err(),
+            Some(MhfeError::LengthDiffers {
+                stated: 15,
+                found: 12
+            })
+        );
+        let confirmed = recover_detected(&rekey, Confirmation::Wallet(&fingerprint)).unwrap();
+        assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
+        let shown = recover_detected(&rekey, Confirmation::Owner).unwrap();
+        assert_eq!(
+            (shown.phrase().words(), shown.phrase().stated_words()),
+            (12, Some(15))
+        );
+
+        // 24 words stated beside a passing check: the built-in check is refused before any work,
+        // the owner cannot tell the two readings apart, and the fingerprint finds the 12-word one.
+        let rekey = stated(ABANDON_12, 24);
+        assert!(matches!(
+            recover_detected(&rekey, Confirmation::BuiltInCheck),
+            Err(MhfeError::ReferenceRequired)
+        ));
+        assert_eq!(
+            recover_detected(&rekey, Confirmation::Owner).err(),
+            Some(MhfeError::LengthDiffers {
+                stated: 24,
+                found: 12
+            })
+        );
+        let confirmed = recover_detected(&rekey, Confirmation::Wallet(&fingerprint)).unwrap();
+        assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
+
+        // The right length stated: the built-in check confirms it, and a reference may too.
+        let rekey = stated(ABANDON_12, 12);
+        assert!(recover_detected(&rekey, Confirmation::BuiltInCheck).is_ok());
+        assert!(recover_detected(&rekey, Confirmation::Wallet(&fingerprint)).is_ok());
+    }
+
+    /// With the length detected the built-in check alone confirms nothing, before any Argon2 work
+    /// (AUD-017-FUN001): a 24-word original may pass a short check by chance. A reference is
+    /// compared with every reading: the right fingerprint finds the 12-word phrase, which passed
+    /// its built-in check as well, and another is refused.
+    #[test]
+    fn a_detected_length_needs_the_wallet_or_the_owner() {
+        let rekey = detected(ABANDON_12);
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoArgon2Calls);
+        assert!(matches!(
+            rekey.recover(
+                &mut mhfe,
+                Confirmation::BuiltInCheck,
+                Some(false),
+                &mut |_, _, _| Ok(())
+            ),
+            Err(MhfeError::ReferenceRequired)
+        ));
+        let fingerprint = |fingerprint| Reference::Fingerprint {
+            fingerprint,
+            passphrase: "",
+        };
+        let right = fingerprint(crate::wallet::master_fingerprint(ABANDON_12, "").unwrap());
+        let confirmed = recover_detected(&rekey, Confirmation::Wallet(&right)).unwrap();
+        assert_eq!(confirmed.phrase().words(), 12);
+        assert!(confirmed.phrase().verified());
+        let other = fingerprint([0, 0, 0, 0]);
+        assert!(matches!(
+            recover_detected(&rekey, Confirmation::Wallet(&other)),
+            Err(MhfeError::ReferenceMismatch)
+        ));
+    }
+
+    /// With the length detected, a 24-word phrase has no built-in check: its fingerprint or the
+    /// owner confirms it.
+    #[test]
+    fn a_detected_24_word_phrase_is_confirmed_by_the_wallet_or_the_owner() {
+        let phrase = crate::phrase::phrase_from_entropy(&[7u8; 32])
+            .unwrap()
+            .to_string();
+        let rekey = detected(&phrase);
+        let reference = Reference::Fingerprint {
+            fingerprint: crate::wallet::master_fingerprint(&phrase, "").unwrap(),
+            passphrase: "",
+        };
+        let confirmed = recover_detected(&rekey, Confirmation::Wallet(&reference)).unwrap();
+        assert_eq!(confirmed.phrase().phrase(), phrase);
+        assert!(!confirmed.phrase().verified());
+        let shown = recover_detected(&rekey, Confirmation::Owner).unwrap();
+        assert_eq!(shown.phrase().words(), 24);
+
+        // The owner's comparison confirms only after an explicit yes: before it nothing is sealed.
+        assert!(shown.awaits_owner());
+        let seal = |confirmed: &ConfirmedPhrase| {
+            rekey.seal(
+                &mut reduced(WorkFactor::new(1, 0).unwrap()),
+                confirmed,
+                &password("another public test password"),
+                None,
+                &mut |_, _, _| Ok(()),
+                &mut |_| Ok(()),
+            )
+        };
+        assert!(matches!(seal(&shown), Err(MhfeError::NotConfirmedByOwner)));
+        let yes = shown.confirmed_by_owner();
+        assert!(!yes.awaits_owner());
+        assert!(seal(&yes).is_ok());
+    }
+
+    /// The phrase's own checks never confirm a rekey, and are refused before any Argon2 work.
+    #[test]
+    fn a_detected_length_refuses_the_own_checks_as_a_reference() {
+        let rekey = Rekey::new(
+            &container_24(),
+            PhraseLength::Detect,
+            password("old password"),
+            WorkFactor::default(),
+        )
+        .unwrap();
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoArgon2Calls);
+        for reference in [
+            Reference::WalletCheck {
+                passphrase: "TREZOR",
+            },
+            Reference::OwnChecks { passphrase: None },
+        ] {
+            let refused = rekey.recover(
+                &mut mhfe,
+                Confirmation::Wallet(&reference),
+                Some(true),
+                &mut |_, _, _| Ok(()),
+            );
+            assert!(matches!(refused, Err(MhfeError::ReferenceRequired)));
+        }
+    }
+
+    /// A phrase that detection reads as two short lengths, the published ambiguous-12-21 vector:
+    /// one phrase is sealed, and the built-in check cannot tell the readings apart, also with a
+    /// length stated among them; a fingerprint compares every reading and finds the phrase.
+    #[test]
+    fn an_ambiguous_detection_needs_the_wallet() {
+        const AMBIGUOUS: &str =
+            "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
+        let fingerprint = Reference::Fingerprint {
+            fingerprint: crate::wallet::master_fingerprint(AMBIGUOUS, "").unwrap(),
+            passphrase: "",
+        };
+        let ambiguous = Some(MhfeError::AmbiguousLength {
+            readings: vec![12, 21, 24],
+        });
+        let rekey = detected(AMBIGUOUS);
+        let confirmed = recover_detected(&rekey, Confirmation::Wallet(&fingerprint)).unwrap();
+        assert_eq!(confirmed.phrase().phrase(), AMBIGUOUS);
+        let stated = stated(AMBIGUOUS, 12);
+        assert_eq!(
+            recover_detected(&stated, Confirmation::BuiltInCheck).err(),
+            ambiguous
+        );
+        let shown = recover_detected(&stated, Confirmation::Owner).unwrap();
+        assert_eq!(
+            (shown.phrase().phrase(), shown.phrase().other_lengths()),
+            (AMBIGUOUS, &[21][..])
+        );
+    }
+
+    /// One recovery, several confirmations (AUD-017-UI002): a refused confirmation is followed by
+    /// another without the rounds again, and the owner is offered only the lengths the library
+    /// lets them confirm, never 24 words beside a short length that passes.
+    #[test]
+    fn a_refused_confirmation_is_followed_by_another_on_the_same_recovery() {
+        const AMBIGUOUS: &str =
+            "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
+        let rekey = stated(AMBIGUOUS, 12);
+        let state = rekey
+            .recover_state(
+                &mut reduced(WorkFactor::default()),
+                Confirmation::BuiltInCheck,
+                &mut |_, _, _| Ok(()),
+            )
+            .unwrap();
+        let confirm = |rekey: &Rekey, state: &RecoveredForRekey, confirmation| {
+            rekey.confirm(state, confirmation, Some(false), &mut |_, _, _| Ok(()))
+        };
+        assert!(matches!(
+            confirm(&rekey, &state, Confirmation::BuiltInCheck),
+            Err(MhfeError::AmbiguousLength { .. })
+        ));
+        assert_eq!(state.lengths_the_owner_can_confirm().unwrap(), [12, 21]);
+        assert!(rekey.owner_can_confirm(&state).unwrap());
+        let shown = confirm(&rekey, &state, Confirmation::Owner).unwrap();
+        assert_eq!(shown.phrase().phrase(), AMBIGUOUS);
+        let as_24 = stated(AMBIGUOUS, 24);
+        assert!(!as_24.owner_can_confirm(&state).unwrap());
+
+        // A stated length the check contradicts: the owner may confirm a short one, never 24.
+        let rekey = stated(ABANDON_12, 15);
+        let state = rekey
+            .recover_state(
+                &mut reduced(WorkFactor::default()),
+                Confirmation::BuiltInCheck,
+                &mut |_, _, _| Ok(()),
+            )
+            .unwrap();
+        assert_eq!(
+            confirm(&rekey, &state, Confirmation::BuiltInCheck).err(),
+            Some(MhfeError::LengthDiffers {
+                stated: 15,
+                found: 12
+            })
+        );
+        assert!(rekey.owner_can_confirm(&state).unwrap());
+        assert!(!stated(ABANDON_12, 24).owner_can_confirm(&state).unwrap());
+        assert_eq!(
+            state.lengths_the_owner_can_confirm().unwrap(),
+            [12, 15, 18, 21]
+        );
     }
 }

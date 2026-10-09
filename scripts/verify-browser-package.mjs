@@ -5,8 +5,10 @@
 //
 // Part 1 runs the core module of the package's WebAssembly and the real Argon2 bridge with both
 // Emscripten builds. To stay fast it lowers the Argon2 cost in a test wrapper, which lets only the
-// known answer of the Argon2 build (1 MiB, one pass) through unchanged; the result must equal the
-// container that the native engine gives at the same cost (REDUCED_COST_CONTAINER in src/mhfe.rs).
+// known answers of the Argon2 build through unchanged (1 MiB with one pass, before and after every
+// operation, and 64 MiB with three passes and 256 MiB with two in the full self-check); the result
+// must equal the container that the native engine gives at the same cost (REDUCED_COST_CONTAINER
+// in src/mhfe.rs).
 // It also gives the core Argon2 builds that fail their known answer, and the self-test the
 // published round keys in place of Argon2 at full size, to check the fault it names. Part 2 runs
 // the repair, passwords and wallet modules of the same WebAssembly with public vectors, then the
@@ -29,6 +31,15 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 import { bundleClasses } from "./bundle-browser-classes.mjs";
+import {
+  AMBIGUOUS_12_WORDS,
+  FULL_SIZE_CONTAINER,
+  PHRASE,
+  REDUCED_COST_CONTAINER,
+  REDUCED_COST_SAME_LENGTH_CONTAINER,
+  SELF_CHECK_PARTS,
+  ZERO_24,
+} from "./public-test-data.mjs";
 
 const require = createRequire(import.meta.url);
 const root = new URL("../", import.meta.url);
@@ -36,26 +47,11 @@ const read = (path) => readFileSync(new URL(path, root));
 const encode = (text) => new TextEncoder().encode(text);
 const noBytes = () => new Uint8Array();
 
-const PHRASE =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const PASSWORD = encode("public test password");
 const NEW_PASSWORD = encode("another public test password");
-// Packs to the first state of AMBIGUOUS_STATES in src/packing.rs, which also passes the 21-word check.
-const AMBIGUOUS_12_WORDS =
-  "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
 /** Four Argon2 lanes need at least 32 KiB; 256 KiB and one pass match the native test. */
 const REDUCED_MEMORY_KIB = 256;
 const REDUCED_PASSES = 1;
-const REDUCED_COST_CONTAINER =
-  "slush crime nose carry menu cabbage already cart lock intact focus siren filter crouch buyer toward topple cup holiday avoid mango envelope dream sweet";
-/** The same at the same cost as a container of the phrase's own length (suite 4). */
-const REDUCED_COST_SAME_LENGTH_CONTAINER =
-  "program adjust rain raven flip eternal spider bulb under soup enrich ensure";
-const ZERO_24 =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
-/** The same phrase and password at full size: the public vector zero-12. */
-const FULL_SIZE_CONTAINER =
-  "donate stove tower picnic iron rescue trick shrimp roof rib home cigar bag pledge also nerve cycle famous provide heart ahead chunk caution peace";
 /** The master key fingerprint of PHRASE without a passphrase (BIP32 test vectors). */
 const PHRASE_FINGERPRINT = "73c5da0a";
 /** The same with the BIP39 test passphrase "TREZOR" (src/wallet.rs). */
@@ -71,6 +67,9 @@ const PASSPHRASE_UNSTATED =
   "INVALID_REQUEST: invalid request: say whether the wallet has a BIP39 passphrase";
 const PASSPHRASE_CONTRADICTED =
   "INVALID_REQUEST: invalid request: the wallet's BIP39 passphrase is stated otherwise than the reference shows";
+/** A reference without the passphrase for a wallet stated to have one (src/rekey.rs). */
+const PASSPHRASE_NOT_COMPARED =
+  "INVALID_REQUEST: invalid request: the reference must be compared with the wallet's BIP39 passphrase, which it has";
 const PASSPHRASE_ANSWER_NOT_BOOLEAN =
   "INVALID_REQUEST: invalid request: walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase";
 /** A rekey's refusal of a passphrase with the built-in check or the owner (src/wasm_api/core.rs). */
@@ -78,8 +77,11 @@ const PASSPHRASE_WITHOUT_REFERENCE =
   "INVALID_REQUEST: invalid request: a passphrase belongs to an address or fingerprint confirmation";
 /** A length without a built-in check confirmed by the built-in check (src/error.rs). */
 const REFERENCE_REQUIRED =
-  "REFERENCE_REQUIRED: a 24-word original or a same-length container has no built-in check, so a receiving address or the master key fingerprint of the wallet must confirm the recovery before it is encrypted again";
-/** The client's TypeError for a missing or non-boolean walletHasPassphrase (web/client.js). */
+  "REFERENCE_REQUIRED: the built-in check alone does not confirm this recovery: a 24-word original seed phrase, a same-length container and a detected length need a receiving address or the master key fingerprint of the wallet, or the owner's comparison with the backup, before the phrase is encrypted again";
+/**
+ * The client's TypeError for a walletHasPassphrase given but not a boolean, where encrypt takes
+ * undefined and null as no answer and a rekey only undefined (web/client.js).
+ */
 const WALLET_PASSPHRASE_REQUIRED =
   "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase.";
 /** The client's TypeError for a passphrase with the built-in check or the owner (web/client.js). */
@@ -154,12 +156,51 @@ assert.equal(parameters.highestBrowserMemoryLevel, 0);
 assert.deepEqual(parameters.wordCounts, [12, 15, 18, 21, 24]);
 assert.deepEqual(parameters.repairWordCounts, [2, 4, 6, 8]);
 assert.deepEqual(parameters.repairCapacities[1], { count: 4, unreadable: 4, wrong: 2 });
+// The page's runtime and the worker keep two copies that a worker script, which imports nothing,
+// cannot avoid: the fields that hold secrets, and the advice of PACKAGE_MISMATCH.
+{
+  const source = (file) => readFileSync(new URL(`../web/${file}`, import.meta.url), "utf8");
+  const secretFields = (text) =>
+    /const SECRET_FIELDS = \[([^\]]*)\]/u.exec(text)[1].replace(/\s/gu, "");
+  assert.equal(
+    secretFields(source("runtime.js")),
+    secretFields(source("worker-runtime.js")),
+    "the page and the worker wipe the same secret fields",
+  );
+  const advice = ": take every file of the package from one build.";
+  for (const file of ["runtime.js", "worker-runtime.js"]) {
+    assert.ok(source(file).includes(advice), `${file} gives the advice of PACKAGE_MISMATCH`);
+  }
+  // The news the page passes to its handlers is the news the worker scripts post, so that no
+  // other message name reaches a handler (AUD-015-SEC007).
+  const news = JSON.parse(/const WORKER_NEWS = (\[[^\]]*\])/u.exec(source("runtime.js"))[1]);
+  const workers = [
+    "worker-runtime.js",
+    "core-worker.js",
+    "repair-worker.js",
+    "passwords-worker.js",
+    "wallet-worker.js",
+  ]
+    .map(source)
+    .join("\n");
+  const posted = new Set([
+    ...[...workers.matchAll(/postMessage\(\{ type: "(\w+)"/gu)].map((match) => match[1]),
+    ...[...workers.matchAll(/host\.post\("(\w+)"/gu)].map((match) => match[1]),
+  ]);
+  for (const own of ["ready", "result", "error", "ask"]) posted.delete(own);
+  assert.deepEqual([...posted].sort(), [...news].sort(), "the page knows the news workers post");
+}
+assert.ok(
+  parameters.hiddenWalletRefusals.includes("PASSWORD_ALREADY_USED") &&
+    parameters.hiddenWalletRefusals.includes("HIDDEN_WALLET_PASSES_CHECK"),
+  "the core names the refusals that keep a session of hidden wallets open",
+);
 
 /**
  * The positional arguments of the core's operations, from named ones. encrypt's phrase goes as its
  * UTF-8 bytes, as the worker passes it. encrypt's walletHasPassphrase is false only when the
- * options leave it out: one given as undefined or null reaches the core as it is, which must
- * refuse it.
+ * options leave it out: one given as undefined or null reaches the core as it is, which then names
+ * any passphrase of the wallet in what to keep.
  */
 const operations = {
   encrypt: (phrase, password, argon2, options = {}) =>
@@ -190,28 +231,38 @@ const operations = {
         options.pim ?? 0,
         options.memoryLevel ?? 0,
         options.words ?? 0,
+        encode(options.passphrase ?? ""),
         argon2,
         options.onRound ?? (() => {}),
       ),
     ),
-  check: (container, password, argon2, kind, reference, options = {}) =>
-    JSON.parse(
-      core.check(
-        container,
-        password,
-        "",
-        0,
-        options.pim ?? 0,
-        0,
-        kind,
-        reference,
-        options.coin ?? "",
-        options.path ?? "",
-        options.passphrase ?? noBytes(),
-        argon2,
-        options.onRound ?? (() => {}),
-      ),
-    ),
+  // The worker's check: one recovery in a session, then the comparison.
+  check: (container, password, argon2, kind, reference, options = {}) => {
+    const coin = options.coin ?? "";
+    const path = options.path ?? "";
+    const passphrase = options.passphrase ?? noBytes();
+    const copy = passphrase.slice();
+    const session = new core.CheckSession(
+      container,
+      password,
+      "",
+      0,
+      options.pim ?? 0,
+      0,
+      kind,
+      reference,
+      coin,
+      path,
+      passphrase,
+      argon2,
+      options.onRound ?? (() => {}),
+    );
+    try {
+      return JSON.parse(session.compare(kind, reference, coin, path, copy));
+    } finally {
+      session.free();
+    }
+  },
 };
 
 const builds = {
@@ -283,9 +334,28 @@ for (const [name, createModule] of Object.entries(builds)) {
     { item: "passphrase" },
     { item: "repairWords" },
   ]);
-  // The answer is a boolean and nothing else, refused before any Argon2 round: no other value is
-  // read as a truth value, and undefined or null is no answer.
-  for (const value of [...NOT_BOOLEAN_ANSWERS, undefined, null]) {
+  // Without an answer, undefined or null, what to keep names any passphrase of the wallet in its
+  // place: a page need not ask.
+  for (const value of [undefined, null]) {
+    const unknown = operations.encrypt(PHRASE, PASSWORD, reduced, {
+      repairWordCount: 2,
+      walletHasPassphrase: value,
+    });
+    assert.equal(unknown.container, REDUCED_COST_CONTAINER);
+    assert.deepEqual(
+      unknown.keep,
+      [
+        { item: "containerWords", words: 24 },
+        { item: "password" },
+        { item: "passphraseIfAny" },
+        { item: "repairWords" },
+      ],
+      `encrypt with walletHasPassphrase ${value} names any passphrase of the wallet`,
+    );
+  }
+  // An answer given is a boolean and nothing else, refused before any Argon2 round: no other value
+  // is read as a truth value.
+  for (const value of NOT_BOOLEAN_ANSWERS) {
     expectMessage(PASSPHRASE_ANSWER_NOT_BOOLEAN, () =>
       operations.encrypt(PHRASE, PASSWORD, reduced, { walletHasPassphrase: value, onRound }),
     );
@@ -307,17 +377,53 @@ for (const [name, createModule] of Object.entries(builds)) {
         phrase: PHRASE,
         suiteId: SUITE_3,
         fingerprintWithoutPassphrase: PHRASE_FINGERPRINT,
-        passesWalletCheckWithoutPassphrase: null,
+        walletCheck: null,
+        statedWords: null,
+        otherLengths: [],
       },
     ],
   });
+  // The length rules of recovery (AUD-015-FUN001): a check that passes takes precedence over a
+  // stated length, which the reading names; 24 stated words give both readings, the checked one
+  // first; a stated short length that no check passes is refused.
+  const statedOther = operations.decrypt(created.container, PASSWORD, reduced, { words: 15 });
+  assert.deepEqual(
+    [statedOther.kind, statedOther.candidates[0].words, statedOther.candidates[0].statedWords],
+    ["phrase", 12, 15],
+  );
+  assert.equal(statedOther.candidates[0].phrase, PHRASE);
+  const stated24 = operations.decrypt(created.container, PASSWORD, reduced, { words: 24 });
+  assert.deepEqual(
+    stated24.candidates.map(({ words, verified, statedWords }) => [words, verified, statedWords]),
+    [
+      [12, true, 24],
+      [24, false, null],
+    ],
+  );
+  assert.equal(stated24.kind, "ambiguous");
+  expectMessage(
+    "VERIFIER_MISMATCH: the recovered phrase passes no built-in check: the password, PIM, " +
+      "memory level or container is probably wrong, or the original seed phrase has 24 words",
+    () => operations.decrypt(created.container, encode("wrong"), reduced, { words: 12 }),
+  );
   const wrong = operations.decrypt(created.container, encode("wrong"), reduced);
   assert.deepEqual(
     [wrong.candidates[0].words, wrong.candidates[0].status],
     [24, "readAs24"],
     "a wrong password reads as 24 words, not verified",
   );
-  assert.equal(typeof wrong.candidates[0].passesWalletCheckWithoutPassphrase, "boolean");
+  assert.equal(typeof wrong.candidates[0].walletCheck, "boolean");
+  // Every 24-word reading gets the 16-bit source check with the passphrase given, or none: the
+  // published wallet-check phrase ("abandon" 21 times, "above proof fatigue") passes with
+  // "TREZOR" and fails without a passphrase.
+  const checkedPhrase = `${"abandon ".repeat(21)}above proof fatigue`;
+  const checkedContainer = operations.encrypt(checkedPhrase, PASSWORD, reduced).container;
+  const readWith = (passphrase) =>
+    operations.decrypt(checkedContainer, PASSWORD, reduced, { passphrase }).candidates[0];
+  assert.deepEqual(
+    [readWith("TREZOR").words, readWith("TREZOR").walletCheck, readWith("").walletCheck],
+    [24, true, false],
+  );
 
   steps.length = 0;
   assert.equal(
@@ -325,6 +431,10 @@ for (const [name, createModule] of Object.entries(builds)) {
     true,
   );
   assert.deepEqual(steps.slice(-2), ["recover 12/12", "compare 12/12"]);
+  // A check at a stated length that the built-in check contradicts matches at the length found,
+  // which the evidence names (AUD-015-FUN001).
+  const checkedOther = operations.check(created.container, PASSWORD, reduced, "words", "15");
+  assert.deepEqual([checkedOther.matches, checkedOther.evidence.builtInCheck], [true, 12]);
   assert.equal(
     operations.check(created.container, PASSWORD, reduced, "fingerprint", PHRASE_FINGERPRINT)
       .matches,
@@ -334,8 +444,129 @@ for (const [name, createModule] of Object.entries(builds)) {
     operations.check(created.container, PASSWORD, reduced, "address", PHRASE_ADDRESS, {
       coin: "bitcoin",
     }),
-    { matches: true, path: "m/84'/0'/0'/0/0" },
+    { matches: true, path: "m/84'/0'/0'/0/0", evidence: { builtInCheck: 12, walletCheck: null } },
   );
+  // The length detected: the 12-word original passes its own checks, and one recovery is
+  // compared again, as a page that asks for the length when detection finds none compares it.
+  assert.deepEqual(operations.check(created.container, PASSWORD, reduced, "words", "0"), {
+    matches: true,
+    path: null,
+    evidence: { builtInCheck: 12, walletCheck: null },
+  });
+  const checkSession = new core.CheckSession(
+    created.container,
+    PASSWORD,
+    "",
+    0,
+    0,
+    0,
+    "words",
+    "0",
+    "",
+    "",
+    noBytes(),
+    reduced,
+    () => {},
+  );
+  // A stated length the built-in check contradicts matches at the length found (AUD-015-FUN001);
+  // a fingerprint of another wallet does not.
+  const atFifteen = JSON.parse(checkSession.compare("words", "15", "", "", noBytes()));
+  assert.deepEqual([atFifteen.matches, atFifteen.evidence.builtInCheck], [true, 12]);
+  assert.equal(
+    JSON.parse(checkSession.compare("fingerprint", "00000000", "", "", noBytes())).matches,
+    false,
+  );
+  assert.equal(
+    JSON.parse(checkSession.compare("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes())).matches,
+    true,
+    "a recovery is compared again without its rounds",
+  );
+  checkSession.free();
+  // The search for missing words: the candidates, the decoy wallet without Argon2, and the
+  // owner's wallet, each candidate recovered at the reduced cost.
+  const missingLast = REDUCED_COST_CONTAINER.split(" ")
+    .map((word, index) => (index === 23 ? "?" : word))
+    .join(" ");
+  assert.deepEqual(JSON.parse(core.searchCandidates(missingLast)), {
+    missing: [24],
+    candidates: 8,
+    offersWalletSearch: true,
+    offersOwnChecks: true,
+  });
+  // Two missing words leave only the decoy search; a same-length container has no own checks.
+  const twoMarked = missingLast.replace(/^\w+/u, "?");
+  assert.deepEqual(
+    fieldsOf(JSON.parse(core.searchCandidates(twoMarked)), ["missing", "offersWalletSearch"]),
+    { missing: [1, 24], offersWalletSearch: false },
+  );
+  assert.equal(JSON.parse(core.searchCandidates(twoMarked)).offersOwnChecks, false);
+  const sameLengthMissing = REDUCED_COST_SAME_LENGTH_CONTAINER.replace(/\w+$/u, "?");
+  assert.deepEqual(
+    fieldsOf(JSON.parse(core.searchCandidates(sameLengthMissing)), [
+      "offersWalletSearch",
+      "offersOwnChecks",
+    ]),
+    { offersWalletSearch: true, offersOwnChecks: false },
+  );
+  const decoyFingerprint = core.walletFingerprint(encode(REDUCED_COST_CONTAINER), noBytes());
+  const decoyFound = JSON.parse(
+    core.searchDecoy(missingLast, "fingerprint", decoyFingerprint, "", "", noBytes(), 20, () => {}),
+  );
+  assert.equal(decoyFound.container, REDUCED_COST_CONTAINER);
+  assert.deepEqual(decoyFound.words, [{ position: 24, word: "sweet" }]);
+  const decoyMissed = JSON.parse(
+    core.searchDecoy(missingLast, "fingerprint", "00000000", "", "", noBytes(), 20, () => {}),
+  );
+  assert.deepEqual([decoyMissed.found, decoyMissed.container], [false, null]);
+  // The owner's fingerprint, and the original seed phrase's own checks without and with its
+  // passphrase: a 12-word phrase passes its built-in check either way.
+  for (const [kind, reference, passphrase] of [
+    ["fingerprint", PHRASE_FINGERPRINT, ""],
+    ["builtInCheck", "", ""],
+    ["walletCheck", "", "TREZOR"],
+  ]) {
+    const seen = [];
+    const searched = JSON.parse(
+      core.searchWallet(
+        missingLast,
+        PASSWORD,
+        "",
+        0,
+        0,
+        0,
+        kind,
+        reference,
+        "",
+        "",
+        encode(passphrase),
+        reduced,
+        (candidate, candidates) => seen.push(`${candidate}/${candidates}`),
+        () => {},
+      ),
+    );
+    assert.equal(searched.container, REDUCED_COST_CONTAINER, `searchWallet with ${kind}`);
+    assert.equal(seen[0], "1/8", `searchWallet with ${kind} tells each candidate`);
+  }
+  const twoMissing = missingLast.replace(/^\S+/, "?");
+  expectCode("TOO_MANY_MISSING_WORDS", () =>
+    core.searchWallet(
+      twoMissing,
+      PASSWORD,
+      "",
+      0,
+      0,
+      0,
+      "fingerprint",
+      PHRASE_FINGERPRINT,
+      "",
+      "",
+      noBytes(),
+      reduced,
+      () => {},
+      () => {},
+    ),
+  );
+  expectCode("INVALID_REQUEST", () => core.searchCandidates(REDUCED_COST_CONTAINER));
   // An Ethereum address of the same wallet, on Ethereum's path.
   assert.deepEqual(
     operations.check(
@@ -346,7 +577,7 @@ for (const [name, createModule] of Object.entries(builds)) {
       "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
       { coin: "ethereum" },
     ),
-    { matches: true, path: "m/44'/60'/0'/0/0" },
+    { matches: true, path: "m/44'/60'/0'/0/0", evidence: { builtInCheck: 12, walletCheck: null } },
   );
   assert.equal(
     operations.check(created.container, PASSWORD, reduced, "fingerprint", PHRASE_FINGERPRINT, {
@@ -410,6 +641,9 @@ for (const [name, createModule] of Object.entries(builds)) {
   assert.deepEqual(facts.phraseLengths, [12, 15, 18, 21, 24]);
   assert.equal(facts.confirmationFor["12"], "builtInCheck");
   assert.equal(facts.confirmationFor["24"], "walletOrOwner");
+  // With the length detected, the wallet or its owner confirms a rekey, whatever length is found:
+  // a 24-word original may pass a short check by chance (AUD-017-FUN001).
+  assert.equal(facts.confirmationFor["0"], "walletOrOwner");
   assert.equal(facts.hiddenWallets, true);
   assert.equal(facts.offersWalletCheck, true);
   const phraseFacts = JSON.parse(
@@ -418,11 +652,18 @@ for (const [name, createModule] of Object.entries(builds)) {
   assert.equal(phraseFacts.phrase, PHRASE);
   assert.deepEqual(phraseFacts.otherLengths, []);
   assert.deepEqual(phraseFacts.containers, [
-    { sameLength: false, words: 24, wrongWordPassesOneIn: 256 },
-    { sameLength: true, words: 12, wrongWordPassesOneIn: 16 },
+    { sameLength: false, words: 24, wrongWordPassesOneIn: 256, otherLengths: [] },
+    { sameLength: true, words: 12, wrongWordPassesOneIn: 16, otherLengths: [] },
   ]);
-  // A public 12-word phrase whose packed state also passes the 21-word check (src/packing.rs).
-  assert.deepEqual(JSON.parse(core.describePhrase(encode(AMBIGUOUS_12_WORDS))).otherLengths, [21]);
+  // A public 12-word phrase whose packed state also passes the 21-word check (src/packing.rs):
+  // a 24-word container of it can be misread, a same-length one cannot, as the command-line tool
+  // warns only for the first.
+  const ambiguous = JSON.parse(core.describePhrase(encode(AMBIGUOUS_12_WORDS)));
+  assert.deepEqual(ambiguous.otherLengths, [21]);
+  assert.deepEqual(
+    ambiguous.containers.map((choice) => choice.otherLengths),
+    [[21], []],
+  );
   expectCode("UNASSIGNED_CHARACTER", () => core.checkPassword(encode("a͸")));
   expectCode("INVALID_PASSWORD_UTF8", () => core.checkPassword(new Uint8Array([0xff])));
   expectCode("CONTROL_CHARACTER_IN_PASSWORD", () => core.checkPassword(encode("first\r\nsecond")));
@@ -482,11 +723,11 @@ for (const [name, createModule] of Object.entries(builds)) {
 
   // A rekey: recovered with the built-in check (rounds 1-12 of 36), sealed again (13-36).
   steps.length = 0;
-  const rekey = new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, true, reduced);
+  const rekey = new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, reduced);
   rekey.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
   assert.deepEqual(
     JSON.parse(rekey.recover("builtInCheck", "", "", "", noBytes(), false, onRound)),
-    { ownerCheck: null },
+    { ownerCheck: null, walletCheck: null },
   );
   const rekeyed = JSON.parse(rekey.seal(onRound, () => {}));
   rekey.free();
@@ -503,7 +744,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   );
   // Stated to have one, the wallet keeps its passphrase after the password, before the repair
   // words.
-  const stated = new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, true, reduced);
+  const stated = new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, reduced);
   stated.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 2);
   stated.recover("builtInCheck", "", "", "", noBytes(), true, () => {});
   assert.deepEqual(
@@ -521,6 +762,62 @@ for (const [name, createModule] of Object.entries(builds)) {
     ],
   );
   stated.free();
+  /** A rekey of the 12-word phrase's 24-word container with `words` stated, 0 to detect it. */
+  const rekeyStating = (words) => {
+    const session = new core.RekeySession(created.container, words, PASSWORD, "", 0, 0, 0, reduced);
+    session.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
+    return session;
+  };
+  // A stated length that the built-in check contradicts (AUD-015-FUN001): the built-in check alone
+  // is refused once the recovery has run, and the fingerprint confirms the 12-word reading.
+  const contradicted = () => rekeyStating(15);
+  const refusedLength = contradicted();
+  expectMessage(
+    "LENGTH_DIFFERS: the built-in check finds a 12-word original seed phrase, not the 15 words " +
+      "stated: confirm it with a receiving address or the master key fingerprint of the wallet",
+    () => refusedLength.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
+  );
+  refusedLength.free();
+  const confirmedLength = contradicted();
+  assert.deepEqual(
+    JSON.parse(
+      confirmedLength.recover(
+        "fingerprint",
+        PHRASE_FINGERPRINT,
+        "",
+        "",
+        noBytes(),
+        false,
+        () => {},
+      ),
+    ),
+    { ownerCheck: null, walletCheck: null },
+  );
+  confirmedLength.free();
+  // The owner of a contradicted length is shown the reading the check found, with the length
+  // stated, which the page names before the owner compares.
+  const ownerOfContradicted = contradicted();
+  assert.deepEqual(
+    JSON.parse(ownerOfContradicted.recover("owner", "", "", "", noBytes(), false, () => {}))
+      .ownerCheck,
+    {
+      phrase: PHRASE,
+      words: 12,
+      statedWords: 15,
+      fingerprintWithoutPassphrase: PHRASE_FINGERPRINT,
+    },
+  );
+  ownerOfContradicted.free();
+  // The length detected: the fingerprint confirms the 12-word reading that detection finds; the
+  // built-in check alone is refused before any work (below).
+  const detectedLength = rekeyStating(0);
+  assert.deepEqual(
+    JSON.parse(
+      detectedLength.recover("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes(), false, () => {}),
+    ),
+    { ownerCheck: null, walletCheck: null },
+  );
+  detectedLength.free();
 
   // The confirmations of the rekeys below: the built-in check of the 12-word phrase in the 24-word
   // container, its owner reading it as 24 words, and wallet references of PHRASE that match the
@@ -551,7 +848,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   /** A rekey of the confirmation's container, ready for its recovery with the answer `answer`. */
   const recoverAs = (confirmation, answer, onRecoverRound = () => {}) => {
     const { container, words, kind, reference = "", coin = "", passphrase = "" } = confirmation;
-    const session = new core.RekeySession(container, words, PASSWORD, "", 0, 0, 0, true, reduced);
+    const session = new core.RekeySession(container, words, PASSWORD, "", 0, 0, 0, reduced);
     session.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
     const recover = () =>
       session.recover(kind, reference, coin, "", encode(passphrase), answer, onRecoverRound);
@@ -569,7 +866,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   const sameLengthKeep = (confirmation, answer) => {
     const { session, recover } = recoverAs(confirmation, answer);
     try {
-      assert.deepEqual(JSON.parse(recover()), { ownerCheck: null });
+      assert.deepEqual(JSON.parse(recover()), { ownerCheck: null, walletCheck: null });
       const sealed = JSON.parse(
         session.seal(
           () => {},
@@ -594,14 +891,14 @@ for (const [name, createModule] of Object.entries(builds)) {
     }
   }
   // An empty passphrase matches the phrase's wallet without one and proves nothing about funds
-  // under a passphrase, so the answer decides: true keeps the passphrase, false does not.
+  // under a passphrase: it confirms only a wallet stated to have none (the specification's
+  // re-encryption rules); a wallet with one is compared with it, and true is refused below.
   for (const confirmation of [plainFingerprint, plainAddress]) {
-    for (const [answer, keep] of [
-      [true, KEEP_SAME_LENGTH_AND_PASSPHRASE],
-      [false, KEEP_SAME_LENGTH],
-    ]) {
-      assert.deepEqual(sameLengthKeep(confirmation, answer), keep, describe(confirmation, answer));
-    }
+    assert.deepEqual(
+      sameLengthKeep(confirmation, false),
+      KEEP_SAME_LENGTH,
+      describe(confirmation, false),
+    );
   }
 
   // Everything else is refused before any Argon2 round, and the refusal ends the rekey.
@@ -615,6 +912,12 @@ for (const [name, createModule] of Object.entries(builds)) {
         message: PASSPHRASE_UNSTATED,
       })),
     ),
+    // A wallet said to have a passphrase, but a reference compared without it.
+    ...[plainFingerprint, plainAddress].map((confirmation) => ({
+      confirmation,
+      answer: true,
+      message: PASSPHRASE_NOT_COMPARED,
+    })),
     // An answer against the passphrase that the reference was compared with.
     ...[trezorFingerprint, trezorAddress].map((confirmation) => ({
       confirmation,
@@ -638,11 +941,14 @@ for (const [name, createModule] of Object.entries(builds)) {
       })),
     ),
     // A length without a built-in check refuses that check first, before the answer is judged:
-    // the 24-word reading and the same-length container's own length.
+    // the 24-word reading, the same-length container's own length, and the length detected on a
+    // 24-word container, where a 24-word original may pass a short check by chance
+    // (AUD-017-FUN001).
     ...[undefined, null, true, false].flatMap((answer) =>
       [
         { ...builtInCheck, words: 24 },
         { ...onSameLength, kind: "builtInCheck" },
+        { ...builtInCheck, words: 0 },
       ].map((confirmation) => ({ confirmation, answer, message: REFERENCE_REQUIRED })),
     ),
   ];
@@ -663,11 +969,7 @@ for (const [name, createModule] of Object.entries(builds)) {
     );
     session.free();
   }
-  expectCode(
-    "OTHER_WALLETS_NOT_CONFIRMED",
-    () => new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, false, reduced),
-  );
-  const same = new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, true, reduced);
+  const same = new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, reduced);
   expectCode("NEW_PASSWORD_SAME_AS_OLD", () =>
     same.setNew(PASSWORD, PASSWORD.slice(), "", 0, 0, 0, 0),
   );
@@ -678,13 +980,50 @@ for (const [name, createModule] of Object.entries(builds)) {
     ),
   );
   same.free();
-  // The owner confirms a 24-word phrase by comparing it; a no ends the rekey.
-  const owner = new core.RekeySession(created.container, 24, PASSWORD, "", 0, 0, 0, true, reduced);
+  // The owner confirms a phrase by comparing it; a no ends the rekey. With the length detected
+  // nothing was stated, so the check names no stated length.
+  const owner = new core.RekeySession(created.container, 0, PASSWORD, "", 0, 0, 0, reduced);
   owner.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
   const shown = JSON.parse(owner.recover("owner", "", "", "", noBytes(), false, () => {}));
-  assert.equal(shown.ownerCheck.words, 24);
+  assert.deepEqual(shown.ownerCheck, {
+    phrase: PHRASE,
+    words: 12,
+    fingerprintWithoutPassphrase: PHRASE_FINGERPRINT,
+  });
   expectCode("NOT_CONFIRMED_BY_OWNER", () => owner.ownerAnswer(false));
   owner.free();
+  // Only the value true is a yes, never 1, "1" or [1], which a bool of the ABI would take, and
+  // nothing is sealed before the answer (the specification's re-encryption rules).
+  const askedOwner = () => {
+    const asked = new core.RekeySession(created.container, 0, PASSWORD, "", 0, 0, 0, reduced);
+    asked.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
+    asked.recover("owner", "", "", "", noBytes(), false, () => {});
+    return asked;
+  };
+  const unanswered = askedOwner();
+  expectMessage(
+    "INVALID_REQUEST: invalid request: a rekey step out of its order",
+    () =>
+      unanswered.seal(
+        () => {},
+        () => {},
+      ),
+    "a rekey waiting for the owner seals nothing",
+  );
+  unanswered.free();
+  for (const notTrue of [1, "1", [1], "true", {}]) {
+    const asked = askedOwner();
+    expectCode("NOT_CONFIRMED_BY_OWNER", () => asked.ownerAnswer(notTrue));
+    asked.free();
+  }
+  // 24 words stated for this 12-word phrase: the owner cannot tell the two readings apart, and
+  // only an address or the fingerprint confirms it (AUD-015-FUN001).
+  const ownerOf24 = new core.RekeySession(created.container, 24, PASSWORD, "", 0, 0, 0, reduced);
+  ownerOf24.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
+  expectCode("LENGTH_DIFFERS", () =>
+    ownerOf24.recover("owner", "", "", "", noBytes(), false, () => {}),
+  );
+  ownerOf24.free();
 
   // Hidden wallets: each password opens its own wallet, none twice. The session's start and each
   // wallet run the build's known answer, a wallet before and after its rounds.
@@ -709,7 +1048,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   );
   wallets.free();
   expectCode(
-    "INVALID_CONTAINER",
+    "NO_HIDDEN_WALLETS",
     () =>
       new core.HiddenWalletSession(REDUCED_COST_SAME_LENGTH_CONTAINER, 0, 0, noBytes(), reduced),
   );
@@ -968,15 +1307,41 @@ assert.deepEqual(JSON.parse(repair.repairWords(FULL_SIZE_CONTAINER, 4)), {
   repairsUnreadable: 4,
   repairsWrong: 2,
 });
-const plate = FULL_SIZE_CONTAINER.split(" ");
-plate[2] = "?";
-plate[16] = "?";
-const repairedPlate = JSON.parse(repair.repairPlate(plate.join(" "), "shaft pupil patient jewel"));
-assert.equal(repairedPlate.container, FULL_SIZE_CONTAINER);
-assert.deepEqual(repairedPlate.plateWords, [3, 17]);
-assert.equal(repairedPlate.unchanged, false);
-assert.equal(repairedPlate.changes[0].read, null);
+const damagedWords = FULL_SIZE_CONTAINER.split(" ");
+damagedWords[2] = "?";
+damagedWords[16] = "?";
+const repairedContainer = JSON.parse(
+  repair.repairContainer(damagedWords.join(" "), "shaft pupil patient jewel"),
+);
+assert.equal(repairedContainer.container, FULL_SIZE_CONTAINER);
+assert.deepEqual(repairedContainer.containerWords, [3, 17]);
+assert.equal(repairedContainer.unchanged, false);
+assert.equal(repairedContainer.changes[0].read, null);
 expectCode("INVALID_REPAIR_WORDS", () => repair.repairWords(FULL_SIZE_CONTAINER, 3));
+// What a container phrase as typed is: each kind, from the same words.
+const inspected = (words) => JSON.parse(repair.inspectContainer(words));
+assert.deepEqual(inspected(FULL_SIZE_CONTAINER), {
+  reading: "container",
+  wordCount: 24,
+  unreadable: [],
+});
+assert.deepEqual(inspected(damagedWords.join(" ")), {
+  reading: "marked",
+  wordCount: 24,
+  unreadable: [3, 17],
+});
+const typo = FULL_SIZE_CONTAINER.split(" ");
+typo[8] = "towr";
+assert.deepEqual(inspected(typo.join(" ")), {
+  reading: "notAContainer",
+  wordCount: 24,
+  unreadable: [],
+});
+assert.deepEqual(inspected(damagedWords.slice(1).join(" ")), {
+  reading: "wrongLength",
+  wordCount: 23,
+  unreadable: [],
+});
 console.log("The repair module passes its checks.");
 
 const passwords = bindings;
@@ -1068,7 +1433,28 @@ expectCode("INVALID_PASSWORD_SIZE", () =>
 console.log("The passwords module passes its checks.");
 
 const wallet = bindings;
-assert.equal(JSON.parse(wallet.walletParameters()).coins.length, 12);
+/**
+ * drawPhrase of the WebAssembly with no chosen words, no places and no words never to use, as a
+ * draw without wishes passes them.
+ */
+const drawWithoutWishes = (instance, passphrase, repeat, walletCheck, random, onDraws = noop) =>
+  instance.drawPhrase(
+    passphrase,
+    repeat,
+    noBytes(),
+    new Uint32Array(),
+    "",
+    walletCheck,
+    random,
+    onDraws,
+  );
+const walletFacts = JSON.parse(wallet.walletParameters());
+assert.equal(walletFacts.coins.length, 12);
+// The owner's limits of chosen words (src/word_wishes.rs).
+assert.deepEqual(
+  fieldsOf(walletFacts, ["maxChosenWords", "maxNeverUseWords", "recommendedRandomBits"]),
+  { maxChosenWords: 1, maxNeverUseWords: 1, recommendedRandomBits: 240 },
+);
 assert.equal(wallet.walletFingerprint(encode(PHRASE), noBytes()), PHRASE_FINGERPRINT);
 assert.equal(wallet.walletFingerprint(encode(PHRASE), encode("TREZOR")), PHRASE_TREZOR_FINGERPRINT);
 // "abandon" 21 times and "above proof fatigue" passes the wallet check with "TREZOR"
@@ -1080,19 +1466,167 @@ expectCode("WALLET_CHECK_NEEDS_PASSPHRASE", () =>
   wallet.walletCheck(encode(checkedPhrase), noBytes()),
 );
 expectCode("INVALID_WORD_COUNT", () => wallet.walletCheck(encode(PHRASE), encode("TREZOR")));
-const search = JSON.parse(wallet.describeAddress(PHRASE_ADDRESS, "bitcoin", ""));
+const search = JSON.parse(wallet.describeAddress(PHRASE_ADDRESS, "bitcoin", "", 0));
 assert.equal(search.onlyPath, false);
-assert.ok(search.addresses > 1);
-const drawn = JSON.parse(wallet.drawPhrase(noBytes(), false, testRandom, () => {}));
+assert.equal(search.addresses, 2000);
+// A scan gap states the decoy search of two missing words: the first account, 20 of each chain.
+assert.equal(JSON.parse(wallet.describeAddress(PHRASE_ADDRESS, "bitcoin", "", 20)).addresses, 40);
+const drawn = JSON.parse(drawWithoutWishes(wallet, noBytes(), noBytes(), false, testRandom));
 assert.equal(drawn.words, 24);
 assert.equal(drawn.walletCheck, false);
 expectCode("WALLET_CHECK_NEEDS_PASSPHRASE", () =>
-  wallet.drawPhrase(noBytes(), true, testRandom, () => {}),
+  drawWithoutWishes(wallet, noBytes(), noBytes(), true, testRandom),
 );
 expectCode("RANDOM_FAILED", () =>
-  wallet.drawPhrase(noBytes(), false, { fill: () => {} }, () => {}),
+  drawWithoutWishes(wallet, noBytes(), noBytes(), false, { fill: () => {} }),
 );
+// A passphrase is typed twice, and the binding compares the two, whatever the page did before.
+expectCode("PASSPHRASES_DIFFER", () =>
+  drawWithoutWishes(wallet, encode("TREZOR"), encode("trezor"), false, testRandom),
+);
+const drawnWithPassphrase = JSON.parse(
+  drawWithoutWishes(wallet, encode("TREZOR"), encode("TREZOR"), false, testRandom),
+);
+assert.equal(drawnWithPassphrase.walletCheck, false);
+
+// A chosen word: what it costs before the draw, as the library rates it (src/word_wishes.rs), and
+// a draw that meets it. One chosen word and one word never to use at most; a word at a fixed
+// position, a word never to use and the wallet check keep 228.98 bits, the least they can keep.
+const describeDraw = (words, places, neverUse, walletCheck) =>
+  JSON.parse(wallet.describeDraw(encode(words), Uint32Array.from(places), neverUse, walletCheck));
+assert.deepEqual(describeDraw("", [], "", false), {
+  randomBits: 256,
+  randomness: "full",
+  expectedDraws: 1,
+  recognisable: false,
+  fixedPosition: false,
+});
+assert.deepEqual(describeDraw("", [], "", true), {
+  randomBits: 240,
+  randomness: "ample",
+  expectedDraws: 65536,
+  recognisable: false,
+  fixedPosition: false,
+});
+// A word never to use with the check is rated as the check alone (AUD-015-UI003).
+const neverUseChecked = describeDraw("", [], "abandon", true);
+assert.equal(neverUseChecked.randomness, "ample");
+assert.ok(neverUseChecked.randomBits > 239.98 && neverUseChecked.randomBits < 239.99);
+assert.equal(describeDraw("happy", [0], "", true).fixedPosition, false);
+// A chosen word makes the phrase recognisable to someone who learns or guesses it; a word never
+// to use alone does not.
+const worst = describeDraw("happy", [1], "abandon", true);
+assert.equal(worst.randomness, "notRecommended");
+assert.equal(worst.recognisable, true);
+assert.equal(worst.fixedPosition, true);
+assert.ok(worst.randomBits > 228.98 && worst.randomBits < 228.99, `${worst.randomBits}`);
+assert.equal(describeDraw("", [], "abandon", false).recognisable, false);
+assert.equal(describeDraw("zoo", [24], "", false).expectedDraws, 256);
+expectMessage(
+  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: the chosen word is not an " +
+    "English BIP39 word",
+  () => describeDraw("notaword", [1], "", false),
+);
+expectMessage(
+  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: choose at most 1 word",
+  () => describeDraw("happy zoo", [1, 2], "", false),
+);
+expectMessage(
+  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: name at most 1 word never " +
+    "to use",
+  () => describeDraw("", [], "abandon zoo", false),
+);
+expectCode("INVALID_WORD_WISH", () => describeDraw("happy", [25], "", false));
+expectCode("INVALID_REQUEST", () => describeDraw("happy zoo", [1], "", false));
+/** A phrase drawn without a passphrase that meets `words` at `places` and avoids `neverUse`. */
+const drawnWith = (words, places, neverUse) =>
+  JSON.parse(
+    wallet.drawPhrase(
+      noBytes(),
+      noBytes(),
+      encode(words),
+      Uint32Array.from(places),
+      neverUse,
+      false,
+      testRandom,
+      noop,
+    ),
+  ).phrase.split(" ");
+const atTheEnd = drawnWith("ZOO", [24], "abandon");
+assert.equal(atTheEnd.length, 24);
+assert.equal(atTheEnd[23], "zoo", "a chosen word at its position");
+assert.ok(!atTheEnd.includes("abandon"), "no word never to use");
+assert.ok(drawnWith("happ", [0], "").includes("happy"), "a chosen word anywhere");
+// The hints below a line of words being typed (src/word_hints.rs), from either list, as the
+// command-line tool shows them.
+const hintsOf = (list, typed) => JSON.parse(wallet.wordHints(list, encode(typed)));
+assert.deepEqual(hintsOf("bip39", "abandon z"), {
+  hint: "count",
+  count: 4,
+  words: [],
+  completion: { letters: "", wordEnds: false },
+});
+assert.deepEqual(hintsOf("bip39", "abandon ZO"), {
+  hint: "words",
+  count: 2,
+  words: ["zone", "zoo"],
+  completion: { letters: "", wordEnds: false },
+});
+assert.deepEqual(hintsOf("bip39", "abou").completion, { letters: "t", wordEnds: true });
+assert.equal(hintsOf("bip39", "xq").hint, "noWord");
+assert.equal(hintsOf("bip39", "zoo").hint, "nothing");
+// A run of letters longer than any list word still begins no word (AUD-015-UI004).
+assert.equal(hintsOf("eff", "zookeepers").hint, "noWord");
+assert.equal(hintsOf("bip39", "toolongforanyword").hint, "noWord");
+assert.equal(hintsOf("eff", "y").count, 27);
+assert.deepEqual(hintsOf("eff", "yo-").words, ["yo-yo"]);
+expectCode("INVALID_REQUEST", () => wallet.wordHints("BIP39", encode("ab")));
+expectCode("INVALID_REQUEST", () => wallet.wordHints("bip39", new Uint8Array([0xff])));
 console.log("The wallet module passes its checks.");
+
+/**
+ * The message a page reads for a refusal of the WebAssembly: its text after the code, begun with a
+ * capital letter as sentence() in web/runtime.js writes it.
+ */
+function pageMessageOf(code, action) {
+  let message = "";
+  assert.throws(
+    action,
+    (error) => {
+      message = error.message;
+      return message.startsWith(`${code}: `);
+    },
+    code,
+  );
+  const text = message.slice(code.length + 2);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+/** An Argon2 engine for refusals: the known answer that a call checks first, and no round. */
+const knownAnswerEngine = argon2Engine(await builds["single-threaded"]());
+const noArgon2 = {
+  derive: (password, salt, memoryKib, passes, key) => {
+    if (!KNOWN_ANSWER_COSTS.includes(`${memoryKib}/${passes}`)) {
+      assert.fail("a refusal came after the first round started");
+    }
+    knownAnswerEngine.derive(password, salt, memoryKib, passes, key);
+  },
+};
+// The classes give these refusals of the library early, before a secret reaches a worker; they
+// must give them with the library's code and in its words, as the command-line tool does.
+const LIBRARY_MESSAGES = {
+  MEMORY_LEVEL_NOT_SUPPORTED_HERE: pageMessageOf("MEMORY_LEVEL_NOT_SUPPORTED_HERE", () =>
+    operations.encrypt(PHRASE, encode("p"), noArgon2, { memoryLevel: 1 }),
+  ),
+  WALLET_CHECK_NEEDS_PASSPHRASE: pageMessageOf("WALLET_CHECK_NEEDS_PASSPHRASE", () =>
+    drawWithoutWishes(wallet, noBytes(), noBytes(), true, testRandom),
+  ),
+  PASSPHRASES_DIFFER: pageMessageOf("PASSPHRASES_DIFFER", () =>
+    drawWithoutWishes(wallet, encode("p"), encode("q"), true, testRandom),
+  ),
+  NO_BUILT_IN_CHECK_AT_24: pageMessageOf("INVALID_WORD_COUNT", () =>
+    operations.check(FULL_SIZE_CONTAINER, encode("p"), noArgon2, "words", "24"),
+  ),
+};
 
 // Phrases reach the WebAssembly as UTF-8 bytes, which the bindings wipe (SecretText in
 // src/wasm_api/mod.rs), as they wipe passwords: wasm-bindgen's own copy of a text argument stays
@@ -1224,6 +1758,92 @@ const phraseCases = [
     call: (instance, bytes) => encryptBytes(instance, bytes),
     expected: refusedWith("INVALID_PHRASE"),
   },
+  // The two passphrases of a new phrase are both held for wiping before either is read: a first
+  // one that is not UTF-8 leaves no copy of its repetition (AUD-013-SEC001), and the other way
+  // round.
+  {
+    name: "drawPhrase, its passphrase refused before its repetition is read",
+    text: "public test passphrase repeated for the draw",
+    call: (instance, bytes) =>
+      drawWithoutWishes(instance, new Uint8Array([0xff]), bytes, true, testRandom),
+    expected: refusedWith("INVALID_PASSPHRASE"),
+  },
+  {
+    name: "drawPhrase, its repetition refused",
+    text: "public test passphrase typed first for the draw",
+    call: (instance, bytes) =>
+      drawWithoutWishes(instance, bytes, new Uint8Array([0xff]), true, testRandom),
+    expected: refusedWith("INVALID_PASSPHRASE"),
+  },
+  // A line for a hint may be part of a password or a seed phrase: wiped, and so is the result's
+  // buffer, which tells its last letters.
+  {
+    name: "wordHints, its line",
+    text: "public test line typed for a hint below it",
+    // The words that begin with "it", which the result's wiped buffer held.
+    call: (instance, bytes) => JSON.parse(instance.wordHints("eff", bytes)).hint,
+    expected: (outcome) => outcome === "words",
+  },
+  // A chosen word is part of the new phrase: wiped after a description, a draw and a refusal,
+  // also when the passphrase is refused before it is read. The padding makes the text long enough
+  // to be sought; the word is read without the spaces around it.
+  {
+    name: "describeDraw, its chosen word",
+    text: "Happy".padStart(40),
+    call: (instance, bytes) =>
+      JSON.parse(instance.describeDraw(bytes, Uint32Array.from([1]), "", false)).randomness,
+    expected: (outcome) => outcome === "ample",
+  },
+  {
+    name: "drawPhrase, its chosen word",
+    text: "Happy".padStart(40),
+    call: (instance, bytes) =>
+      JSON.parse(
+        instance.drawPhrase(
+          noBytes(),
+          noBytes(),
+          bytes,
+          Uint32Array.from([1]),
+          "",
+          false,
+          testRandom,
+          noop,
+        ),
+      ).words,
+    expected: (outcome) => outcome === 24,
+  },
+  {
+    name: "drawPhrase, its chosen word refused",
+    text: "Notaword".padStart(40),
+    call: (instance, bytes) =>
+      instance.drawPhrase(
+        noBytes(),
+        noBytes(),
+        bytes,
+        Uint32Array.from([1]),
+        "",
+        false,
+        testRandom,
+        noop,
+      ),
+    expected: refusedWith("INVALID_WORD_WISH"),
+  },
+  {
+    name: "drawPhrase, its chosen word after a refused passphrase",
+    text: "Happy".padStart(40),
+    call: (instance, bytes) =>
+      instance.drawPhrase(
+        new Uint8Array([0xff]),
+        noBytes(),
+        bytes,
+        Uint32Array.from([1]),
+        "",
+        false,
+        testRandom,
+        noop,
+      ),
+    expected: refusedWith("INVALID_PASSPHRASE"),
+  },
 ];
 for (const { name, text, call, expected } of phraseCases) {
   const { outcome, copies } = copiesLeftBy(text, call);
@@ -1253,7 +1873,7 @@ const refusingSource = {
 };
 for (const draw of [
   () => passwords.makePassword("checkWord", undefined, noBytes(), refusingSource),
-  () => wallet.drawPhrase(noBytes(), false, refusingSource, () => {}),
+  () => drawWithoutWishes(wallet, noBytes(), noBytes(), false, refusingSource),
 ]) {
   expectMessage(
     "RANDOM_FAILED: the random generator failed: the page's random source failed: " +
@@ -1286,68 +1906,14 @@ assert.equal(
 
 // Part 2b: the self-check of each module, as its class runs it in a worker: exact parts and
 // outcomes at both tiers, each part reported as it starts and ends.
-const REPAIR_PARTS = ["bip39-words", "repair-words"];
-const PASSWORD_PARTS = [
-  "password-unicode",
-  "password-check-word",
-  "password-generator",
-  "random-source",
-];
-const WALLET_PARTS = [
-  "bip39-words",
-  "wallet-hashes",
-  "bip39-seed",
-  "bip32",
-  "addresses",
-  "address-search",
-  "wallet-check",
-  "random-source",
-];
-const CORE_PARTS = [
-  "cipher-hashes",
-  "argon2",
-  "cipher-rounds",
-  "formats",
-  "container-facts",
-  "keep-advice",
-  "password-unicode",
-  "bip39-words",
-  "repair-words",
-  "password-check-word",
-  "wallet-hashes",
-  "bip39-seed",
-  "bip32",
-  "addresses",
-  "wallet-check",
-  "hidden-wallets",
-  "rekey",
-  "rehearsal",
-];
-/** The name of each part as a person reads it, as the library defines it. */
-const LABELS = {
-  "cipher-hashes": "Cipher hashes",
-  argon2: "Argon2id",
-  "argon2-sizes": "Argon2id at 64 and 256 MiB",
-  "cipher-rounds": "Cipher rounds",
-  formats: "Formats",
-  "container-facts": "Container facts",
-  "keep-advice": "Keep advice",
-  "password-unicode": "Passwords (Unicode 17)",
-  "bip39-words": "BIP39 words",
-  "repair-words": "Repair words (MHFE-REPAIR-1)",
-  "password-check-word": "Password check word (MHFE-PASSWORD-CHECK-1)",
-  "wallet-hashes": "Wallet hashes",
-  "bip39-seed": "BIP39 seeds",
-  bip32: "BIP32 keys",
-  addresses: "Address encodings",
-  "address-search": "Address search",
-  "wallet-check": "Wallet check (MHFE-WALLET-CHECK-SEED-1)",
-  "hidden-wallets": "Hidden wallets",
-  rekey: "Rekey",
-  rehearsal: "Rehearsal",
-  "password-generator": "Password generator",
-  "random-source": "Random source",
-};
+// The parts of each module and their names, as the browser tests expect them too.
+const {
+  repair: REPAIR_PARTS,
+  passwords: PASSWORD_PARTS,
+  wallet: WALLET_PARTS,
+  core: CORE_PARTS,
+  labels: LABELS,
+} = SELF_CHECK_PARTS;
 const ARGON2_LEFT_OUT = "this check leaves Argon2 out";
 /** Every report of this part, for the check of their texts in part 3. */
 const reports = [];
@@ -2385,6 +2951,12 @@ assert.equal(clientConstant("MAX_MEMORY_LEVEL"), parameters.maxMemoryLevel);
 assert.equal(clientConstant("HIGHEST_BROWSER_MEMORY_LEVEL"), parameters.highestBrowserMemoryLevel);
 assert.deepEqual(clientConstant("WORD_COUNTS"), parameters.wordCounts);
 assert.deepEqual(clientConstant("REPAIR_WORD_COUNTS"), [0, ...parameters.repairWordCounts]);
+assert.deepEqual(clientConstant("BUILT_IN_CHECK_WORD_COUNTS"), parameters.builtInCheckWordCounts);
+assert.equal(clientConstant("DECOY_SCAN_GAP"), parameters.decoyScanGap);
+assert.deepEqual(
+  [clientConstant("ARGON2_PART"), clientConstant("ARGON2_SIZES_PART")],
+  parameters.argon2Parts,
+);
 // A real compiled module, so that the classes' compilation succeeds; the stand-in ignores it.
 const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 const sources = {
@@ -2406,6 +2978,11 @@ class StandInWorker {
   static checks = [];
   /** How a self-check is answered: by default as the package's worker would; see below. */
   static serveCheck = null;
+  /**
+   * Whether a worker says it has loaded the WebAssembly as soon as it has its first request, as
+   * the package's worker does; a test of a worker still loading turns it off.
+   */
+  static loads = true;
   constructor(url) {
     this.script = resolveObjectURL(url);
     this.terminated = false;
@@ -2431,6 +3008,10 @@ class StandInWorker {
       this.selfCheck = true;
       StandInWorker.checks.push(this);
       setTimeout(() => this.#serveCheck(), 0);
+    } else if (this.messages.length === 1 && StandInWorker.loads) {
+      setTimeout(() => {
+        if (!this.terminated) this.reply({ type: "ready", buildId: BUILD_ID });
+      }, 0);
     }
   }
   async #serveCheck() {
@@ -2543,6 +3124,28 @@ assert.deepEqual(await pending, { container: "c" });
 assert.deepEqual(progress, ["encrypt 12/24", "unverified c", "check 13/24"]);
 assert.equal(worker.terminated, true, "each worker ends with its operation");
 
+// Without an answer, left out or null, the client sends none, and the core names any passphrase
+// of the wallet in what to keep.
+for (const [description, options] of [
+  ["left out", {}],
+  ["null", { walletHasPassphrase: null }],
+]) {
+  const unanswered = client.encrypt({
+    phrase: PHRASE,
+    password: "p",
+    passwordRepeat: "p",
+    ...options,
+  });
+  worker = await started();
+  assert.equal(
+    worker.messages[0].walletHasPassphrase,
+    options.walletHasPassphrase,
+    `encrypt with walletHasPassphrase ${description} sends no answer to the worker`,
+  );
+  worker.reply({ type: "result", result: { container: "c" } });
+  assert.deepEqual(await unanswered, { container: "c" });
+}
+
 globalThis.crossOriginIsolated = true;
 assert.equal(client.mode(), "fast");
 const fast = client.decrypt({ container: "c", password: "public test password" });
@@ -2573,6 +3176,43 @@ assert.deepEqual(await reading, { container: "donate stove" });
 client.cancel();
 await assert.rejects(long, (error) => error instanceof MhfeCancelledError);
 
+// A search with the decoy wallet sends no password and one with the owner's wallet does; both pass
+// the worker's progress on, and a reference that does not belong to the search is a TypeError.
+const decoyProgress = [];
+const decoySearch = client.searchDecoy({
+  container: "c ?",
+  reference: { fingerprint: "487a156e" },
+  onProgress: (value) => decoyProgress.push(value),
+});
+worker = await started(({ operation }) => operation === "searchDecoy");
+assert.equal(worker.messages[0].password, undefined);
+assert.deepEqual(
+  [worker.messages[0].referenceKind, worker.messages[0].reference],
+  ["fingerprint", "487a156e"],
+);
+worker.reply({ type: "progress", value: { stage: "search", candidate: 8, candidates: 8 } });
+worker.reply({ type: "result", result: { found: false } });
+assert.deepEqual(await decoySearch, { found: false });
+assert.deepEqual(decoyProgress, [{ stage: "search", candidate: 8, candidates: 8 }]);
+const walletSearch = client.searchWallet({
+  container: "c ?",
+  password: "p",
+  reference: { builtInCheck: true },
+});
+worker = await started(({ operation }) => operation === "searchWallet");
+assert.equal(worker.messages[0].referenceKind, "builtInCheck");
+assert.ok(worker.messages[0].password instanceof Uint8Array, "the password goes as bytes");
+worker.reply({ type: "result", result: { found: false } });
+assert.deepEqual(await walletSearch, { found: false });
+await assert.rejects(
+  client.searchDecoy({ container: "c ?", reference: { walletCheck: true } }),
+  TypeError,
+);
+await assert.rejects(
+  client.searchWallet({ container: "c ?", password: "p", reference: { builtInCheck: "yes" } }),
+  TypeError,
+);
+
 const encrypt = (options) =>
   client.encrypt({
     phrase: PHRASE,
@@ -2585,46 +3225,33 @@ const rekeyWith = (options) =>
   client.rekey({
     container: "c",
     password: "p",
-    otherWalletsMoved: true,
     newPassword: "n",
     newPasswordRepeat: "n",
     ...options,
   });
-/** The TypeError of a missing or non-boolean walletHasPassphrase, with its exact message. */
+/** The TypeError of a walletHasPassphrase that is not a boolean, with its exact message. */
 const walletPassphraseRequired = { name: "TypeError", message: WALLET_PASSPHRASE_REQUIRED };
 /** The TypeError of a passphrase with the built-in check or the owner, with its exact message. */
 const passphraseOnlyWithReference = { name: "TypeError", message: PASSPHRASE_ONLY_WITH_REFERENCE };
 // Every error rejects the promise, the checks of the arguments included: none is thrown.
 const refusals = [
-  [
-    () => client.encrypt({ phrase: PHRASE, password: "p", walletHasPassphrase: false }),
-    { code: "PASSWORDS_DIFFER" },
-  ],
-  [
-    () => client.encrypt({ phrase: PHRASE, password: "p", passwordRepeat: "p" }),
+  // encrypt may be given no answer, but one given is a boolean.
+  ...[...NOT_BOOLEAN_ANSWERS, "yes"].map((walletHasPassphrase) => [
+    () => encrypt({ password: "p", walletHasPassphrase }),
     walletPassphraseRequired,
-  ],
-  [() => encrypt({ password: "p", walletHasPassphrase: undefined }), walletPassphraseRequired],
-  [() => encrypt({ password: "p", walletHasPassphrase: "no" }), walletPassphraseRequired],
-  [() => encrypt({ password: "p", walletHasPassphrase: null }), walletPassphraseRequired],
-  [() => encrypt({ password: "p", walletHasPassphrase: 0 }), walletPassphraseRequired],
+  ]),
   [() => encrypt({ password: "p", sameLength: "yes" }), TypeError],
   [() => encrypt({ password: "p", repairWordCount: 3 }), { code: "INVALID_REPAIR_WORDS" }],
   [() => encrypt({ password: "p", passwordRepair: { repair: "3" } }), TypeError],
-  [
-    () =>
-      client.encrypt({
-        phrase: PHRASE,
-        password: password,
-        passwordRepeat: new Uint8Array(20),
-        walletHasPassphrase: false,
-      }),
-    { code: "PASSWORDS_DIFFER" },
-  ],
   [() => encrypt({ password: "a\uD800" }), { code: "INVALID_PASSWORD_TEXT" }],
-  [() => encrypt({ password: "p", memoryLevel: 1 }), { code: "MEMORY_LEVEL_NOT_SUPPORTED_HERE" }],
+  [
+    () => encrypt({ password: "p", memoryLevel: 1 }),
+    {
+      code: "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
+      message: LIBRARY_MESSAGES.MEMORY_LEVEL_NOT_SUPPORTED_HERE,
+    },
+  ],
   [() => encrypt({ password: "p", pim: 1024 }), { code: "INVALID_PIM" }],
-  [() => encrypt({ password: "" }), { code: "EMPTY_PASSWORD" }],
   [() => encrypt({ password: "p", onUnverified: "show" }), TypeError],
   [() => client.encrypt(), TypeError],
   [
@@ -2632,15 +3259,14 @@ const refusals = [
     { code: "INVALID_WORD_COUNT" },
   ],
   [
-    () => client.rekey({ container: "c", password: "p", otherWalletsMoved: false }),
-    { code: "OTHER_WALLETS_NOT_CONFIRMED" },
+    () => client.check({ container: "c", password: "p", reference: { words: 24 } }),
+    { code: "INVALID_WORD_COUNT", message: LIBRARY_MESSAGES.NO_BUILT_IN_CHECK_AT_24 },
   ],
   [
     () =>
       client.rekey({
         container: "c",
         password: "p",
-        otherWalletsMoved: true,
         newPassword: "n",
         newPasswordRepeat: "n",
         confirmation: { words: 12 },
@@ -2707,10 +3333,6 @@ const refusals = [
     () => encrypt({ password: undefined, passwordRepeat: "p" }),
     { name: "TypeError", message: "password must be a string or a Uint8Array." },
   ],
-  [
-    () => encrypt({ password: password, passwordRepeat: undefined }),
-    { code: "PASSWORDS_DIFFER", message: "The password and its repetition differ." },
-  ],
 ];
 for (const [call, expected] of refusals) {
   let result;
@@ -2761,22 +3383,35 @@ for (const [name, message] of [
   assert.equal(calls.length, 1, `nothing of the stopped operation reaches the page after ${name}`);
 }
 
-// A rekey asks the owner in the middle and sends the answer back.
+// A rekey asks the owner in the middle and sends the answer back. The callback gets the check as
+// the worker gives it, with the length stated where the built-in check found another.
+const ownerChecks = [];
 const rekeying = client.rekey({
   container: "c",
-  words: 24,
+  words: 15,
   password: "old",
-  otherWalletsMoved: true,
   newPassword: "new",
   newPasswordRepeat: "new",
-  confirmation: { owner: ({ words }) => words === 24 },
+  confirmation: {
+    owner: (check) => {
+      ownerChecks.push(check);
+      return check.words === 12;
+    },
+  },
   walletHasPassphrase: true,
 });
 worker = await started();
 assert.equal(worker.messages[0].confirmKind, "owner");
 assert.equal(worker.messages[0].walletHasPassphrase, true, "the page's answer goes to the worker");
-worker.reply({ type: "ask", question: "ownerCheck", value: { phrase: "p", words: 24 } });
+const shownToOwner = {
+  phrase: "p",
+  words: 12,
+  statedWords: 15,
+  fingerprintWithoutPassphrase: "00000000",
+};
+worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
 await new Promise((resolve) => setTimeout(resolve, 0));
+assert.deepEqual(ownerChecks, [shownToOwner]);
 assert.deepEqual(worker.messages[1], { type: "answer", value: true });
 worker.reply({ type: "result", result: { container: "n" } });
 assert.deepEqual(await rekeying, { container: "n" });
@@ -2832,9 +3467,39 @@ worker.reply({
   value: { code: "PASSWORD_ALREADY_USED", message: "this password was already used here" },
 });
 await assert.rejects(again, { code: "PASSWORD_ALREADY_USED" });
-await assert.rejects(session.open({ password: "a", passwordRepeat: "b" }), {
-  code: "PASSWORDS_DIFFER",
+// The library compares a password and its repetition, after the password's own rules, as the
+// command-line tool does: both reach the worker, which refuses them.
+const differing = session.open({ password: "a", passwordRepeat: "b" });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(new TextDecoder().decode(worker.messages[3].value.passwordRepeat), "b");
+worker.reply({
+  type: "ask",
+  question: "refused",
+  value: { code: "PASSWORDS_DIFFER", message: "the password and its repetition differ" },
 });
+await assert.rejects(differing, { code: "PASSWORDS_DIFFER" });
+// A repetition that cannot be encoded is refused before the worker hears of it, and the copy of
+// the password made first is wiped (AUD-011-SEC001); the session stays open.
+const sessionCopies = [];
+const EncoderOfSession = globalThis.TextEncoder;
+globalThis.TextEncoder = class extends EncoderOfSession {
+  encode(text) {
+    const bytes = super.encode(text);
+    if (text === "synthetic session password") sessionCopies.push(bytes);
+    return bytes;
+  }
+};
+await assert.rejects(
+  session.open({ password: "synthetic session password", passwordRepeat: "a\uD800" }),
+  { code: "INVALID_PASSWORD_TEXT" },
+);
+globalThis.TextEncoder = EncoderOfSession;
+assert.equal(sessionCopies.length, 1, "the password was encoded once");
+assert.ok(
+  sessionCopies[0].every((byte) => byte === 0),
+  "the password's copy is wiped when its repetition is refused",
+);
+assert.equal(worker.messages.length, 4, "a refused repetition did not reach the worker");
 // A password of another type is a TypeError there too, before the entries are compared.
 for (const value of [new Uint16Array([112]), new ArrayBuffer(1), 5]) {
   await assert.rejects(session.open({ password: value, passwordRepeat: value }), {
@@ -2842,7 +3507,7 @@ for (const value of [new Uint16Array([112]), new ArrayBuffer(1), 5]) {
     message: "password must be a string or a Uint8Array.",
   });
 }
-assert.equal(worker.messages.length, 3, "no refused password reached the worker");
+assert.equal(worker.messages.length, 4, "no password of a wrong type reached the worker");
 // The worker waits for the page, so closing asks it to free the session, which wipes it.
 const closing = session.close();
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -2993,18 +3658,25 @@ for (const [kind, arrayOf] of Object.entries(callerArrays)) {
   worker.reply({ type: "result", result: { container: "c" } });
   await operation;
   keeps(given, TEST_PASSWORD, "after the operation");
-  // Refused: the repetition differs (its comparison copies are wiped), and the worker does not
-  // start (the request's copies are wiped).
+  // Refused by the worker: the repetition differs, which the library compares after the
+  // password's own rules; the page's arrays stay as given.
   const otherGiven = arrayOf("another public test password");
-  await assert.rejects(
-    client.encrypt({
-      phrase: PHRASE,
-      password: given,
-      passwordRepeat: otherGiven,
-      walletHasPassphrase: false,
-    }),
-    { code: "PASSWORDS_DIFFER" },
+  const differing = client.encrypt({
+    phrase: PHRASE,
+    password: given,
+    passwordRepeat: otherGiven,
+    walletHasPassphrase: false,
+  });
+  worker = await started();
+  assert.equal(
+    new TextDecoder().decode(worker.messages[0].passwordRepeat),
+    "another public test password",
   );
+  worker.reply({
+    type: "error",
+    error: { code: "PASSWORDS_DIFFER", message: "the password and its repetition differ" },
+  });
+  await assert.rejects(differing, { code: "PASSWORDS_DIFFER" });
   keeps(given, TEST_PASSWORD, "after its repetition was refused");
   keeps(otherGiven, "another public test password", "as a repetition that was refused");
   globalThis.Worker = class {
@@ -3038,6 +3710,59 @@ worker.reply({ type: "result", result: { words: "w" } });
 assert.deepEqual(await card, { words: "w" });
 assert.equal(worker.terminated, true);
 await assert.rejects(repairClient.repairWords({ container: "c", count: "4" }), TypeError);
+// A reply or a question named after an Object.prototype member, or unknown to the page, reaches
+// no page code: it ends the job as a fault of the package, and no answer is sent (AUD-015-SEC007).
+for (const reply of [
+  { type: "valueOf", value: null },
+  { type: "constructor", value: null },
+  { type: "__proto__", value: null },
+  { type: "notAKnownType", value: null },
+  { type: "ask", question: "toString", value: null },
+  { type: "ask", question: "notAKnownQuestion", value: null },
+]) {
+  const asking = repairClient.repairWords({ container: "c", count: 4 });
+  worker = await started();
+  worker.reply(reply);
+  await assert.rejects(asking, (error) => {
+    assert.equal(error.code, "PACKAGE_MISMATCH");
+    assert.match(error.message, /^The worker sent a message this page does not know \(/u);
+    return true;
+  });
+  assert.equal(worker.messages.length, 1, `no answer to ${reply.question ?? reply.type}`);
+  assert.equal(worker.terminated, true);
+}
+// A reply that the page cannot read, as from a faulty worker or one of another build, ends the job
+// the same way, also after the worker said it was ready: nothing throws from the worker's event
+// handler, the worker stops, and the slot is free for the next operation (AUD-016-API002).
+for (const reply of [
+  null,
+  5,
+  "result",
+  {},
+  { type: 3 },
+  { type: "ready", buildId: 5 },
+  { type: "error" },
+  { type: "error", error: null },
+  { type: "error", error: { code: "INTERNAL_ERROR" } },
+  { type: "error", error: { code: "INTERNAL_ERROR", message: 3 } },
+  { type: "error", error: { code: 3, message: "the worker failed" } },
+]) {
+  const description = JSON.stringify(reply);
+  const decrypting = client.decrypt({ container: "c", password: "p" });
+  worker = await started();
+  worker.reply({ type: "ready", buildId: BUILD_ID });
+  assert.doesNotThrow(() => worker.reply(reply), `${description} throws from the event handler`);
+  await assert.rejects(decrypting, (error) => {
+    assert.equal(error.code, "PACKAGE_MISMATCH", description);
+    assert.match(error.message, /^The worker sent a message this page does not know \(/u);
+    return true;
+  });
+  assert.equal(worker.terminated, true, `${description} stops the worker`);
+}
+const afterMalformed = client.decrypt({ container: "c", password: "p" });
+worker = await started();
+worker.reply({ type: "result", result: { kind: "phrase" } });
+assert.deepEqual(await afterMalformed, { kind: "phrase" }, "the slot is free again");
 
 const passwordsClient = new MhfePasswords({ workerSource: "passwords worker", wasm });
 const reviewing = passwordsClient.review({
@@ -3123,8 +3848,12 @@ await assert.rejects(
 );
 await assert.rejects(
   walletClient.drawPhrase({ passphrase: "p", passphraseRepeat: "q", walletCheck: true }),
-  { code: "PASSPHRASES_DIFFER" },
+  { code: "PASSPHRASES_DIFFER", message: LIBRARY_MESSAGES.PASSPHRASES_DIFFER },
 );
+await assert.rejects(walletClient.drawPhrase({ walletCheck: true }), {
+  code: "WALLET_CHECK_NEEDS_PASSPHRASE",
+  message: LIBRARY_MESSAGES.WALLET_CHECK_NEEDS_PASSPHRASE,
+});
 StandInWorker.started.length = 0;
 const draws = [];
 const drawing = walletClient.drawPhrase({
@@ -3148,10 +3877,52 @@ assert.ok(
   drawWorkers.every((each) => each.terminated),
   "the other workers stop",
 );
+// A chosen word reaches the worker as a secret of its own, which its job wipes; its place, 0 for
+// anywhere, and the words never to use as they are. One worker draws a phrase without the check.
+const wishedDraw = walletClient.drawPhrase({
+  chosen: [{ word: "zoo", position: "anywhere" }],
+  neverUse: ["abandon"],
+});
+const wishWorker = await started((message) => message.operation === "drawPhrase");
+assert.equal(new TextDecoder().decode(wishWorker.messages[0].chosenWords), "zoo");
+assert.deepEqual(Array.from(wishWorker.messages[0].places), [0]);
+assert.equal(wishWorker.messages[0].neverUse, "abandon");
+wishWorker.reply({ type: "result", result: { phrase: "found", words: 24 } });
+assert.deepEqual(await wishedDraw, { phrase: "found", words: 24, workers: 1 });
+for (const chosen of [
+  [{ word: "zoo", position: 0 }],
+  [{ word: "zoo", position: "first" }],
+  [{ position: 1 }],
+  "zoo",
+]) {
+  await assert.rejects(walletClient.drawPhrase({ chosen }), TypeError, JSON.stringify(chosen));
+}
+await assert.rejects(walletClient.drawPhrase({ neverUse: "abandon" }), TypeError);
+await assert.rejects(walletClient.describeDraw({ walletCheck: "yes" }), TypeError);
+const describing = walletClient.describeDraw({ chosen: [{ word: "zoo", position: 24 }] });
+const describeWorker = await started((message) => message.operation === "describeDraw");
+assert.equal(new TextDecoder().decode(describeWorker.messages[0].chosenWords), "zoo");
+assert.deepEqual(Array.from(describeWorker.messages[0].places), [24]);
+describeWorker.reply({ type: "result", result: { randomness: "ample" } });
+assert.deepEqual(await describing, { randomness: "ample" });
+// A line for a hint reaches the worker as a secret of its own, with the module's list.
+for (const [client, operation] of [
+  [walletClient, "wordHints"],
+  [passwordsClient, "wordHints"],
+]) {
+  const hinting = client.wordHints({ typed: "abandon ab" });
+  const hintWorker = await started((message) => message.operation === operation);
+  assert.equal(new TextDecoder().decode(hintWorker.messages[0].typed), "abandon ab");
+  hintWorker.reply({ type: "result", result: { hint: "words" } });
+  assert.deepEqual(await hinting, { hint: "words" });
+}
+await assert.rejects(walletClient.wordHints({ typed: 5 }), TypeError);
 const cancelledDraw = walletClient.drawPhrase();
 walletClient.cancel();
 await assert.rejects(cancelledDraw, (error) => error instanceof MhfeCancelledError);
-// A refused repetition leaves no copy of the first entry behind.
+// A refused repetition leaves no copy of the first entry behind: one of a wrong type is refused
+// before any copy, and one that is not valid text after the first entry was copied, which is
+// then wiped.
 const firstCopies = [];
 globalThis.TextEncoder = class extends RealTextEncoder {
   encode(text) {
@@ -3163,6 +3934,11 @@ globalThis.TextEncoder = class extends RealTextEncoder {
 await assert.rejects(
   passwordsClient.review({ password: TEST_PASSWORD, passwordRepeat: 5 }),
   TypeError,
+);
+assert.equal(firstCopies.length, 0, "a repetition of a wrong type is refused before any copy");
+await assert.rejects(
+  passwordsClient.review({ password: TEST_PASSWORD, passwordRepeat: "\uD800" }),
+  { code: "INVALID_PASSWORD_TEXT" },
 );
 await assert.rejects(
   walletClient.drawPhrase({
@@ -3179,8 +3955,159 @@ assert.ok(
   "the first entry's copy is wiped when its repetition is refused",
 );
 
-// A progress callback whose promise rejects stops every drawing worker.
+// A count of workers out of range is refused before the passphrase is copied, and a worker that
+// cannot be started leaves none of this class's copies behind, stops the workers started and frees
+// the drawing for the next (AUD-012-SEC001).
+const drawCopies = [];
+globalThis.TextEncoder = class extends RealTextEncoder {
+  encode(text) {
+    const bytes = super.encode(text);
+    if (text === TEST_PASSPHRASE) drawCopies.push(bytes);
+    return bytes;
+  }
+};
+for (const workers of [2 ** 32, 257, 0, 1.5]) {
+  await assert.rejects(
+    walletClient.drawPhrase({
+      passphrase: TEST_PASSPHRASE,
+      passphraseRepeat: TEST_PASSPHRASE,
+      walletCheck: true,
+      workers,
+    }),
+    { name: "TypeError", message: "workers must be a whole number from 1 to 256." },
+  );
+}
+assert.equal(drawCopies.length, 0, "a refused count copies no passphrase");
+// The type of walletCheck and the count of workers are checked whatever the passphrase, before
+// any worker starts (AUD-015-API001).
 StandInWorker.started.length = 0;
+for (const [options, message] of [
+  [{ walletCheck: "yes" }, "walletCheck must be true or false."],
+  [{ walletCheck: 1 }, "walletCheck must be true or false."],
+  [{ workers: 0 }, "workers must be a whole number from 1 to 256."],
+  [{ workers: "many" }, "workers must be a whole number from 1 to 256."],
+  [
+    {
+      passphrase: TEST_PASSPHRASE,
+      passphraseRepeat: TEST_PASSPHRASE,
+      walletCheck: false,
+      workers: -1,
+    },
+    "workers must be a whole number from 1 to 256.",
+  ],
+]) {
+  await assert.rejects(walletClient.drawPhrase(options), { name: "TypeError", message });
+}
+assert.equal(StandInWorker.started.length, 0, "a refused draw starts no worker");
+// A secret given as null is not one left out: only undefined takes a method's empty default, and
+// null is a TypeError, as any other type, before any copy or worker (AUD-016-API003).
+const notSecret = (name) => ({
+  name: "TypeError",
+  message: `${name} must be a string or a Uint8Array.`,
+});
+for (const [call, expected] of [
+  [() => passwordsClient.review({ password: "", passwordRepeat: null }), "repeated password"],
+  [() => passwordsClient.review({ password: null }), "password"],
+  [() => walletClient.walletCheck({ phrase: PHRASE, passphrase: null }), "passphrase"],
+  [() => walletClient.fingerprint({ phrase: PHRASE, passphrase: null }), "passphrase"],
+  [
+    () => walletClient.drawPhrase({ passphrase: "x", passphraseRepeat: null, walletCheck: false }),
+    "repeated passphrase",
+  ],
+  [() => walletClient.drawPhrase({ passphrase: null, walletCheck: false }), "passphrase"],
+  [() => walletClient.drawPhrase({ passphraseRepeat: null }), "repeated passphrase"],
+]) {
+  await assert.rejects(call(), notSecret(expected));
+}
+assert.equal(StandInWorker.started.length, 0, "a secret of a wrong type starts no worker");
+// Left out, a repetition is none and a passphrase is empty, for the library to judge.
+const reviewedOnce = passwordsClient.review({ password: "p" });
+worker = await started((message) => message.operation === "review");
+assert.deepEqual(
+  [worker.messages[0].repeated, worker.messages[0].passwordRepeat.length],
+  [false, 0],
+);
+worker.reply({ type: "result", result: { reading: "notThisShape" } });
+await reviewedOnce;
+const checkedWithout = walletClient.walletCheck({ phrase: PHRASE });
+worker = await started((message) => message.operation === "walletCheck");
+assert.equal(worker.messages[0].passphrase.length, 0);
+worker.reply({
+  type: "error",
+  error: { code: "WALLET_CHECK_NEEDS_PASSPHRASE", message: "the library refuses it" },
+});
+await assert.rejects(checkedWithout, { code: "WALLET_CHECK_NEEDS_PASSPHRASE" });
+const RealSlice = Uint8Array.prototype.slice;
+const passphraseBytes = new TextDecoder();
+let passphraseSlices = 0;
+Uint8Array.prototype.slice = function (...range) {
+  if (passphraseBytes.decode(this) === TEST_PASSPHRASE) {
+    passphraseSlices += 1;
+    // The third copy, the second worker's passphrase, cannot be made.
+    if (passphraseSlices === 3) throw new RangeError("no memory for the copy");
+  }
+  return RealSlice.apply(this, range);
+};
+StandInWorker.started.length = 0;
+const brokenDraw = walletClient.drawPhrase({
+  passphrase: TEST_PASSPHRASE,
+  passphraseRepeat: TEST_PASSPHRASE,
+  walletCheck: true,
+  workers: 2,
+});
+await assert.rejects(brokenDraw, { name: "RangeError" });
+Uint8Array.prototype.slice = RealSlice;
+assert.equal(passphraseSlices, 3, "the first worker had its copies before the third failed");
+globalThis.TextEncoder = RealTextEncoder;
+assert.equal(drawCopies.length, 2, "the passphrase and its repetition were encoded");
+assert.ok(
+  drawCopies.every((bytes) => bytes.every((byte) => byte === 0)),
+  "this class's copies are wiped when a worker cannot be started",
+);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.ok(
+  StandInWorker.started.filter((each) => !each.selfCheck).every((each) => each.terminated),
+  "the worker started is stopped",
+);
+// Nor when the empty repetition of a drawing cannot be made, before the passphrase is copied.
+const RealUint8Array = globalThis.Uint8Array;
+let emptyRefused = false;
+globalThis.TextEncoder = class extends RealTextEncoder {
+  encode(text) {
+    const bytes = super.encode(text);
+    if (text === TEST_PASSPHRASE) drawCopies.push(bytes);
+    return bytes;
+  }
+};
+drawCopies.length = 0;
+globalThis.Uint8Array = new Proxy(RealUint8Array, {
+  construct(target, args, newTarget) {
+    if (!emptyRefused && args.length === 1 && args[0] === 0) {
+      emptyRefused = true;
+      throw new RangeError("no memory for the empty repetition");
+    }
+    return Reflect.construct(target, args, newTarget);
+  },
+});
+const emptyDraw = walletClient.drawPhrase({ passphrase: TEST_PASSPHRASE, walletCheck: false });
+await assert.rejects(emptyDraw, { name: "RangeError" });
+globalThis.Uint8Array = RealUint8Array;
+globalThis.TextEncoder = RealTextEncoder;
+assert.ok(emptyRefused, "the empty repetition was refused");
+assert.ok(
+  drawCopies.every((bytes) => bytes.every((byte) => byte === 0)),
+  "no copy of the passphrase is left when the empty repetition cannot be made",
+);
+const afterBroken = walletClient.drawPhrase();
+await started();
+await new Promise((resolve) => setTimeout(resolve, 0));
+StandInWorker.started.at(-1).reply({ type: "result", result: { phrase: "next", words: 24 } });
+assert.deepEqual(await afterBroken, { phrase: "next", words: 24, workers: 1 });
+
+// A progress callback whose promise rejects stops every drawing worker; here the second has not
+// loaded the WebAssembly yet.
+StandInWorker.started.length = 0;
+StandInWorker.loads = false;
 const failingDraw = walletClient.drawPhrase({
   passphrase: "p",
   passphraseRepeat: "p",
@@ -3193,10 +4120,14 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 const failingWorkers = StandInWorker.started.filter((each) => !each.selfCheck);
 failingWorkers[0].reply({ type: "draws", value: 1024 });
 await assert.rejects(failingDraw, { code: "CALLBACK_FAILED" });
-assert.ok(
-  failingWorkers.every((each) => each.terminated),
-  "every drawing worker stops",
-);
+// A worker that has not yet said it loaded the WebAssembly stops once it has: Firefox crashes the
+// page when a worker is terminated while it loads it, as when every worker of a draw failed at
+// once (reported by wallet-tools, 2026-10-08).
+assert.ok(failingWorkers[0].terminated, "the worker that reported stops at once");
+assert.ok(!failingWorkers[1].terminated, "a worker still loading is not terminated");
+failingWorkers[1].reply({ type: "ready", buildId: BUILD_ID });
+assert.ok(failingWorkers[1].terminated, "it stops as soon as it has loaded");
+StandInWorker.loads = true;
 console.log("The repair, passwords and wallet classes pass their checks with a stand-in worker.");
 
 // Part 4b: the self-checks of the classes. Each test gives its classes a WebAssembly object of
@@ -3277,7 +4208,8 @@ assert.deepEqual(firstMessages(startupChecks), [
     skip: [
       ...WALLET_PARTS,
       "repair-words",
-      ...PASSWORD_PARTS.filter((id) => id !== "random-source"),
+      // The parts the wallet module checked already, such as the random source, once.
+      ...PASSWORD_PARTS.filter((id) => !WALLET_PARTS.includes(id)),
     ],
   },
   {
@@ -3287,7 +4219,8 @@ assert.deepEqual(firstMessages(startupChecks), [
     skip: [
       ...WALLET_PARTS,
       "repair-words",
-      ...PASSWORD_PARTS.filter((id) => id !== "random-source"),
+      // The parts the wallet module checked already, such as the random source, once.
+      ...PASSWORD_PARTS.filter((id) => !WALLET_PARTS.includes(id)),
       ...CORE_PARTS.filter(
         (id) =>
           !WALLET_PARTS.includes(id) &&
@@ -3367,7 +4300,8 @@ let workersBefore = StandInWorker.started.length;
 checksBefore = StandInWorker.checks.length;
 for (const call of [
   () => brokenRepair.repairWords({ container: FULL_SIZE_CONTAINER, count: 4 }),
-  () => brokenRepair.repairPlate({ plate: FULL_SIZE_CONTAINER, card: "labor extra" }),
+  () => brokenRepair.repairContainer({ container: FULL_SIZE_CONTAINER, card: "labor extra" }),
+  () => brokenRepair.inspectContainer({ container: FULL_SIZE_CONTAINER }),
 ]) {
   await assert.rejects(call(), (error) => {
     assert.equal(error.code, "SELF_CHECK_FAILED");
@@ -3405,6 +4339,39 @@ await assert.rejects(fullyBroken.repairWords({ container: "c", count: 4 }), {
   message:
     "The self-test failed: BIP39 words: case 3 of 24 differs. Do not use this program on this computer",
 });
+
+// A full check that fails while an operation still waits for the startup check refuses that
+// operation too, before any of its secrets reaches a worker (AUD-014-SEC001): here the startup
+// report passes only after the full one has failed.
+{
+  let passStartup;
+  StandInWorker.serveCheck = (message, worker) => {
+    const report = servedByTheWebAssembly(message, worker);
+    if (message.tier === "startup") {
+      return new Promise((resolve) => {
+        passStartup = () => resolve(report);
+      });
+    }
+    const [first, ...rest] = report.components;
+    return {
+      ...report,
+      passed: false,
+      components: [{ ...first, outcome: "failed", detail: "case 1 of 6 differs" }, ...rest],
+    };
+  };
+  const gated = new MhfeWallet({ workerSource: "wallet worker", wasm: ownWasm() });
+  const workersBefore = StandInWorker.started.length;
+  const waiting = gated.drawPhrase({ chosen: [{ word: "happy", position: 1 }] });
+  while (passStartup === undefined) await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal((await gated.fullCheck()).passed, false);
+  passStartup();
+  await assert.rejects(waiting, { code: "SELF_CHECK_FAILED" });
+  assert.ok(
+    StandInWorker.started.slice(workersBefore).every((each) => each.selfCheck),
+    "no drawing worker was started",
+  );
+  StandInWorker.serveCheck = servedByTheWebAssembly;
+}
 
 // A worker that fails gives no report and closes nothing: the next call checks again.
 const retried = new MhfeRepair({ workerSource: "repair worker", wasm: ownWasm() });

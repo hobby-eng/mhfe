@@ -9,5 +9,6 @@ const REPAIR_OPERATIONS = {
       mhfe.selfCheckRepair(request.tier, request.skip, onStart, onResult),
     ),
   repairWords: (request) => JSON.parse(mhfe.repairWords(request.container, request.count)),
-  repairPlate: (request) => JSON.parse(mhfe.repairPlate(request.plate, request.card)),
+  repairContainer: (request) => JSON.parse(mhfe.repairContainer(request.container, request.card)),
+  inspectContainer: (request) => JSON.parse(mhfe.inspectContainer(request.container)),
 };

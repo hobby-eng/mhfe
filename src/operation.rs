@@ -5,8 +5,8 @@
 
 use crate::engine::Argon2Engine;
 use crate::mhfe::{Mhfe, NewContainer};
-use crate::repair::{repair_words, REPAIR_WORD_COUNTS};
-use crate::{check_phrase, other_detected_lengths, MhfeError, Password, Suite, WorkFactor};
+use crate::repair::{self, repair_words};
+use crate::{check_phrase, MhfeError, OriginalFacts, Password, Suite, WorkFactor};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -73,10 +73,42 @@ impl RoundCounter {
     }
 }
 
+/// What is known of the wallet's BIP39 passphrase when a container is made. MHFE encrypts the
+/// phrase alone, so a wallet with a passphrase still needs it, and [`Keep`] names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WalletPassphrase {
+    /// The wallet has one, such as the passphrase typed for a new phrase.
+    Present,
+    /// The wallet has none.
+    Absent,
+    /// Not known, as where a front end does not ask: [`Keep`] then names any passphrase the
+    /// wallet may have.
+    Unknown,
+}
+
+impl From<bool> for WalletPassphrase {
+    /// Whether the wallet is known to have a passphrase.
+    fn from(has_one: bool) -> Self {
+        if has_one {
+            Self::Present
+        } else {
+            Self::Absent
+        }
+    }
+}
+
+impl From<Option<bool>> for WalletPassphrase {
+    /// An answer whether the wallet has a passphrase, or none: [`WalletPassphrase::Unknown`].
+    fn from(answer: Option<bool>) -> Self {
+        answer.map_or(Self::Unknown, Self::from)
+    }
+}
+
 /// What the owner keeps of a new container. Only what is needed to open it: its words and the
-/// password, the BIP39 passphrase of a wallet that has one, the repair words if made, a setting
-/// changed from its default, and the word count when automatic detection would misread the phrase
-/// (AUD-003-DOC002). With the defaults, 24 words and the password are all.
+/// password, the BIP39 passphrase of a wallet that has one or may have one, the repair words if
+/// made, a setting changed from its default, and the word count when automatic detection would
+/// misread the phrase (AUD-003-DOC002). With the defaults and a wallet known to have no
+/// passphrase, 24 words and the password are all.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Keep {
     items: Vec<KeepItem>,
@@ -90,7 +122,10 @@ pub enum KeepItem {
     Password,
     /// The wallet's BIP39 passphrase, which belongs to the wallet whether checked or not.
     Passphrase,
-    /// The repair words, kept apart from the plate.
+    /// Any BIP39 passphrase of the wallet, where it is not known whether it has one; in the place
+    /// of [`KeepItem::Passphrase`].
+    PassphraseIfAny,
+    /// The repair words, kept apart from the container phrase.
     RepairWords,
     Pim(u32),
     MemoryLevel(u32),
@@ -99,12 +134,13 @@ pub enum KeepItem {
 }
 
 impl Keep {
-    /// The list for a container of `container_words` made at `work`; `word_count_to_note` is the
-    /// original's length when automatic detection would also accept another one.
+    /// The list for a container of `container_words` made at `work`, for a wallet with, without or
+    /// perhaps with a BIP39 `passphrase`; `word_count_to_note` is the original's length when
+    /// automatic detection would also accept another one.
     pub fn new(
         work: WorkFactor,
         container_words: usize,
-        passphrase: bool,
+        passphrase: WalletPassphrase,
         repair_words: bool,
         word_count_to_note: Option<usize>,
     ) -> Self {
@@ -112,8 +148,10 @@ impl Keep {
             KeepItem::ContainerWords(container_words),
             KeepItem::Password,
         ];
-        if passphrase {
-            items.push(KeepItem::Passphrase);
+        match passphrase {
+            WalletPassphrase::Present => items.push(KeepItem::Passphrase),
+            WalletPassphrase::Unknown => items.push(KeepItem::PassphraseIfAny),
+            WalletPassphrase::Absent => {}
         }
         if repair_words {
             items.push(KeepItem::RepairWords);
@@ -133,9 +171,9 @@ impl Keep {
     }
 }
 
-/// An encryption with its check (creation steps 1 to 6 of the specification), and the repair
-/// words of the new plate. Everything that can be refused is refused when it is made, before any
-/// Argon2 work.
+/// An encryption with its check (creation steps 1 to 6 of the specification), and the repair words
+/// of the new container phrase. Everything that can be refused is refused when it is made, before
+/// any Argon2 work.
 pub struct Encryption {
     suite: Suite,
     repair_word_count: Option<usize>,
@@ -150,15 +188,9 @@ impl Encryption {
         repair_word_count: Option<usize>,
     ) -> Result<Self, MhfeError> {
         let words = check_phrase(original)?;
-        if suite == Suite::SameLength && words == 24 {
-            return Err(MhfeError::SameLengthNeedsShortPhrase);
-        }
+        suite.require_original(words)?;
         if let Some(count) = repair_word_count {
-            if !REPAIR_WORD_COUNTS.contains(&count) {
-                return Err(MhfeError::InvalidRepairWords(format!(
-                    "a card has 2, 4, 6 or 8 repair words, not {count}"
-                )));
-            }
+            repair::require_count(count)?;
         }
         Ok(Self {
             suite,
@@ -179,11 +211,9 @@ impl Encryption {
         on_unverified: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
     ) -> Result<Sealed, MhfeError> {
         let original_words = check_phrase(original)?;
-        // Only a 24-word container carries the checks that detection could misread.
-        let other_lengths = match self.suite {
-            Suite::TwentyFourWords => other_detected_lengths(original)?,
-            Suite::SameLength => Vec::new(),
-        };
+        let other_lengths = OriginalFacts::read(original)?
+            .other_lengths_in(self.suite)
+            .to_vec();
         let container =
             mhfe.encrypt_unchecked(original, password, self.suite, &mut |round, rounds| {
                 progress(Stage::Encrypt, round, rounds)
@@ -236,7 +266,10 @@ impl Sealed {
     /// in a 24-word container carries a built-in check; a 24-word phrase and a same-length
     /// container do not.
     pub fn built_in_check(&self) -> bool {
-        self.container.suite == Suite::TwentyFourWords && self.original_words < 24
+        self.container
+            .suite
+            .built_in_check_lengths()
+            .contains(&self.original_words)
     }
 
     /// The other lengths that automatic detection would also accept, almost always none: when not,
@@ -245,9 +278,9 @@ impl Sealed {
         &self.other_lengths
     }
 
-    /// What the owner keeps, for a container made at `work`; `passphrase` when the wallet has a
-    /// BIP39 passphrase.
-    pub fn keep(&self, work: WorkFactor, passphrase: bool) -> Keep {
+    /// What the owner keeps, for a container made at `work`, with what is known of the wallet's
+    /// BIP39 `passphrase`.
+    pub fn keep(&self, work: WorkFactor, passphrase: WalletPassphrase) -> Keep {
         Keep::new(
             work,
             self.container_words(),
@@ -309,6 +342,69 @@ mod tests {
                 (Stage::Check, 36, 36),
             ]
         );
+    }
+
+    /// The wallet's passphrase is named as far as it is known, always after the container's words
+    /// and the password and before the repair words, the settings and the word count.
+    #[test]
+    fn the_passphrase_is_kept_as_far_as_it_is_known() {
+        let work = WorkFactor::new(3, 1).unwrap();
+        let listed = |passphrase| {
+            Keep::new(work, 24, passphrase, true, Some(15))
+                .items()
+                .to_vec()
+        };
+        let around = |passphrase: &[KeepItem]| {
+            let mut items = vec![KeepItem::ContainerWords(24), KeepItem::Password];
+            items.extend_from_slice(passphrase);
+            items.extend([
+                KeepItem::RepairWords,
+                KeepItem::Pim(3),
+                KeepItem::MemoryLevel(1),
+                KeepItem::WordCount(15),
+            ]);
+            items
+        };
+        assert_eq!(
+            listed(WalletPassphrase::Present),
+            around(&[KeepItem::Passphrase])
+        );
+        assert_eq!(listed(WalletPassphrase::Absent), around(&[]));
+        assert_eq!(
+            listed(WalletPassphrase::Unknown),
+            around(&[KeepItem::PassphraseIfAny])
+        );
+        // With the defaults, a wallet not known to be without one still names it.
+        assert_eq!(
+            Keep::new(
+                WorkFactor::default(),
+                12,
+                WalletPassphrase::Unknown,
+                false,
+                None
+            )
+            .items(),
+            [
+                KeepItem::ContainerWords(12),
+                KeepItem::Password,
+                KeepItem::PassphraseIfAny
+            ]
+        );
+    }
+
+    #[test]
+    fn an_answer_or_none_tells_what_is_known_of_the_passphrase() {
+        assert_eq!(WalletPassphrase::from(true), WalletPassphrase::Present);
+        assert_eq!(WalletPassphrase::from(false), WalletPassphrase::Absent);
+        assert_eq!(
+            WalletPassphrase::from(Some(true)),
+            WalletPassphrase::Present
+        );
+        assert_eq!(
+            WalletPassphrase::from(Some(false)),
+            WalletPassphrase::Absent
+        );
+        assert_eq!(WalletPassphrase::from(None), WalletPassphrase::Unknown);
     }
 
     #[test]

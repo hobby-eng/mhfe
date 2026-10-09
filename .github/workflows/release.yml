@@ -29,8 +29,9 @@ jobs:
         run: |
           package_version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
           test "$GITHUB_REF_NAME" = "v$package_version"
-          # The release text comes from curated notes; a tag without them stops here, before the
-          # long build and the vector replay.
+          # The release text comes from curated notes; a tag without them fails this job here,
+          # before the canonical build, and no draft is made. The macOS and CI jobs of this run,
+          # and vectors.yml for the tag, still run.
           test -s "docs/releases/$GITHUB_REF_NAME.md" || {
             echo "Missing release notes: docs/releases/$GITHUB_REF_NAME.md" >&2
             exit 1
@@ -45,7 +46,7 @@ jobs:
         run: |
           scripts/build-reproducible.sh canonical-output
           cp canonical-output/release/SHA256SUMS canonical-output/release/canonical.sha256
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: canonical
           path: canonical-output/release/*.*
@@ -79,7 +80,7 @@ jobs:
         run: |
           scripts/package-release.sh "$GITHUB_REF_NAME" macos-output ${{ matrix.package }}
           cp macos-output/SHA256SUMS "macos-output/${{ matrix.package }}.sha256"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.package }}
           path: |
@@ -87,10 +88,18 @@ jobs:
             macos-output/${{ matrix.package }}.sha256
           if-no-files-found: error
 
+  # Every check of CI on the tagged commit, scripts/check.sh, the browsers and the terminal suites
+  # of Windows and macOS included, which the canonical container runs only in part
+  # (AUD-015-BLD002). Its canonical build is this workflow's canonical job.
+  checks:
+    uses: ./.github/workflows/ci.yml
+    with:
+      skip-canonical-build: true
+
   # The full-size vectors are replayed for the same tag by vectors.yml, on its own, in about
   # three hours; the draft does not wait for them, and their result shows on the tag.
   publish:
-    needs: [canonical, macos]
+    needs: [checks, canonical, macos]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -103,7 +112,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: release
           merge-multiple: true

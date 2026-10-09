@@ -91,8 +91,13 @@ fn untouched_source() -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
 /// A linear congruential generator: deterministic, but spread like random bytes, which the
 /// checks must accept.
 fn counter_source() -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
-    // Numerical Recipes' constants for a 32-bit LCG; its top byte is spread evenly.
-    let mut state: u32 = 0x2545_f491;
+    lcg_source(0x2545_f491)
+}
+
+/// The bytes of a linear congruential generator that starts at `state`: deterministic, but spread
+/// like random bytes. Numerical Recipes' constants for a 32-bit LCG, whose top byte is spread
+/// evenly.
+pub(super) fn lcg_source(mut state: u32) -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
     move |bytes: &mut [u8]| {
         for byte in bytes.iter_mut() {
             state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);

@@ -12,7 +12,8 @@ use crate::terminal::{Input, PrivateScreen};
 
 /// Said where a password is typed, so that a person who forgot a word knows how to get it back:
 /// a word left out would make it five words, an ordinary password.
-pub const FORGOTTEN_WORD_HINT: &str = "A password with a check word: type ? for a word you forgot.";
+pub const FORGOTTEN_WORD_HINT: &str =
+    "If you forgot a word of a password with a check word, type ? in its place.";
 
 /// What to do with a typed password once its check word has been looked at.
 pub enum Reviewed {
@@ -210,6 +211,12 @@ impl Action<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The hint stays on one line where a password is typed.
+    #[test]
+    fn the_forgotten_word_hint_fits_one_line() {
+        assert!(FORGOTTEN_WORD_HINT.len() <= crate::style::TEXT_WIDTH);
+    }
 
     #[test]
     fn the_summary_says_what_was_corrected() {

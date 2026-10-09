@@ -29,11 +29,11 @@ release.
 ## Emscripten runtime (browser package)
 
 - The browser package's `argon2-mt.js` and `argon2-st.js` are the Argon2 reference code compiled
-  by Emscripten 6.0.10 (`scripts/build-argon2-wasm.sh`). Each holds Emscripten's JavaScript
+  by Emscripten 6.0.12 (`scripts/build-argon2-wasm.sh`). Each holds Emscripten's JavaScript
   runtime and, inside its embedded WebAssembly, parts of Emscripten's system libraries: the musl C
   library, Emscripten's thread support, `dlmalloc` and `compiler-rt` builtins.
 - Emscripten is offered under the MIT licence or the University of Illinois/NCSA Open Source
-  Licence. Its `LICENSE`, from the Emscripten 6.0.10 installation the build uses, unchanged except
+  Licence. Its `LICENSE`, from the Emscripten 6.0.12 installation the build uses, unchanged except
   for one trailing space that Markdown formatting removes:
 
 ```text
@@ -437,7 +437,7 @@ is described above.
 - `crypto-common` 0.1.7: `MIT OR Apache-2.0`, used under MIT; [text 18](#text-18).
 - `crypto-common` 0.2.2: `MIT OR Apache-2.0`, used under MIT; [text 19](#text-19).
 - `ctrlc` 3.5.2: `MIT/Apache-2.0`, used under MIT; [text 20](#text-20).
-- `ctutils` 0.4.2: `Apache-2.0 OR MIT`, used under MIT; [text 21](#text-21).
+- `ctutils` 0.4.3: `Apache-2.0 OR MIT`, used under MIT; [text 21](#text-21).
 - `der` 0.8.2: `Apache-2.0 OR MIT`, used under MIT; [text 14](#text-14).
 - `digest` 0.10.7: `MIT OR Apache-2.0`, used under MIT; [text 22](#text-22).
 - `digest` 0.11.3: `MIT OR Apache-2.0`, used under MIT; [text 23](#text-23).
@@ -464,7 +464,7 @@ is described above.
 - `memchr` 2.8.3: `Unlicense OR MIT`, used under MIT; [text 34](#text-34).
 - `nix` 0.31.3: `MIT`, used under MIT; [text 35](#text-35).
 - `num-traits` 0.2.19: `MIT OR Apache-2.0`, used under MIT; [text 6](#text-6).
-- `objc2` 0.6.4: `MIT`, used under MIT; [text 10](#text-10).
+- `objc2` 0.6.5: `MIT`, used under MIT; [text 10](#text-10).
   The crate publishes no licence file. This is the standard SPDX MIT text with the copyright holders taken from the crate's `authors`.
 - `objc2-encode` 4.1.0: `MIT`, used under MIT; [text 10](#text-10).
   The crate publishes no licence file. This is the standard SPDX MIT text with the copyright holders taken from the crate's `authors`.
@@ -495,7 +495,7 @@ is described above.
 - `windows-link` 0.2.1: `MIT OR Apache-2.0`, used under MIT; [text 51](#text-51).
 - `windows-sys` 0.61.2: `MIT OR Apache-2.0`, used under MIT; [text 51](#text-51).
 - `wnaf` 0.14.1: `Apache-2.0 OR MIT`, used under MIT; [text 52](#text-52).
-- `zeroize` 1.9.0: `Apache-2.0 OR MIT`, used under MIT; [text 32](#text-32).
+- `zeroize` 1.9.1: `Apache-2.0 OR MIT`, used under MIT; [text 32](#text-32).
 - `zmij` 1.0.23: `MIT`, used under MIT; [text 20](#text-20).
 
 ### Licence texts
@@ -883,7 +883,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 10
 
-MIT, for block2 0.6.2, objc2 0.6.4, objc2-encode 4.1.0.
+MIT, for block2 0.6.2, objc2 0.6.5, objc2-encode 4.1.0.
 
 ```
 MIT License
@@ -1224,7 +1224,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 21
 
-MIT, for ctutils 0.4.2.
+MIT, for ctutils 0.4.3.
 
 ```
 Copyright (c) 2025-2026 The RustCrypto Project Developers
@@ -1562,7 +1562,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 32
 
-MIT, for keccak 0.2.2, zeroize 1.9.0.
+MIT, for keccak 0.2.2, zeroize 1.9.1.
 
 ```
 Copyright (c) 2018-2026 The RustCrypto Project Developers

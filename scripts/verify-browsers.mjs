@@ -40,6 +40,14 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, firefox } from "playwright";
 
 import { bundleClasses } from "./bundle-browser-classes.mjs";
+import {
+  AMBIGUOUS_12_WORDS,
+  FULL_SIZE_CONTAINER,
+  PHRASE,
+  REDUCED_COST_CONTAINER,
+  REDUCED_COST_SAME_LENGTH_CONTAINER,
+  SELF_CHECK_PARTS as SELF_CHECK,
+} from "./public-test-data.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root));
@@ -54,24 +62,11 @@ const inline = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
 // (e^-16 x 17), so a page that times out has stopped, not drawn long.
 const PAGE_TIMEOUT_MS = 600_000;
 
-// The public test data the page and this script share.
-const PHRASE =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-const REDUCED_COST_CONTAINER =
-  "slush crime nose carry menu cabbage already cart lock intact focus siren filter crouch buyer toward topple cup holiday avoid mango envelope dream sweet";
-const REDUCED_COST_SAME_LENGTH_CONTAINER =
-  "program adjust rain raven flip eternal spider bulb under soup enrich ensure";
-// The public vector zero-12, whose repair words an independent implementation computed.
-const FULL_SIZE_CONTAINER =
-  "donate stove tower picnic iron rescue trick shrimp roof rib home cigar bag pledge also nerve cycle famous provide heart ahead chunk caution peace";
+// The public test data the page and this script share, beside scripts/public-test-data.mjs.
 // Passes the wallet check with the passphrase "TREZOR" (TREZOR_COUNTER in src/wallet_check.rs).
 const CHECKED_PHRASE = "abandon ".repeat(21) + "above proof fatigue";
 // Passes the wallet check without a passphrase (EMPTY_COUNTER in src/wallet_check.rs).
 const EMPTY_CHECKED_PHRASE = "abandon ".repeat(21) + "absorb another spoil";
-// Packs to the first state of AMBIGUOUS_STATES in src/packing.rs, which also passes the 21-word
-// check.
-const AMBIGUOUS_12_WORDS =
-  "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
 // The wrong password of the page, one letter off PASSWORD.
 const WRONG_PASSWORD = "public test passwore";
 // The 256-bit states of PHRASE and of AMBIGUOUS_12_WORDS read as other lengths. A state is the
@@ -285,10 +280,12 @@ function pageScript() {
   const KEEP_24 = [{ item: "containerWords", words: 24 }, { item: "password" }];
   const KEEP_SAME_LENGTH = [{ item: "containerWords", words: 12 }, { item: "password" }];
   const PASSPHRASE = { item: "passphrase" };
-  // The client's TypeErrors for a missing or non-boolean walletHasPassphrase and for a passphrase
+  const PASSPHRASE_IF_ANY = { item: "passphraseIfAny" };
+  // The client's TypeErrors for a walletHasPassphrase that is not a boolean and for a passphrase
   // with the built-in check or the owner (web/client.js), and the library's refusals of a rekey
-  // whose passphrase is not stated or stated against its reference (src/rekey.rs) and of the
-  // built-in check where the length has none (src/error.rs), exactly as the page gets them.
+  // whose passphrase is not stated or stated against its reference (src/rekey.rs), of the
+  // built-in check where the length has none or is detected, and of a stated length that the
+  // built-in check contradicts (src/error.rs), exactly as the page gets them.
   const WALLET_PASSPHRASE_REQUIRED =
     "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase.";
   const PASSPHRASE_ONLY_WITH_REFERENCE =
@@ -297,9 +294,13 @@ function pageScript() {
   const PASSPHRASE_CONTRADICTED =
     "Invalid request: the wallet's BIP39 passphrase is stated otherwise than the reference shows";
   const REFERENCE_REQUIRED =
-    "A 24-word original or a same-length container has no built-in check, so a receiving " +
-    "address or the master key fingerprint of the wallet must confirm the recovery before it " +
-    "is encrypted again";
+    "The built-in check alone does not confirm this recovery: a 24-word original seed phrase, a " +
+    "same-length container and a detected length need a receiving address or the master key " +
+    "fingerprint of the wallet, or the owner's comparison with the backup, before the phrase is " +
+    "encrypted again";
+  const lengthDiffers = (found, stated) =>
+    `The built-in check finds a ${found}-word original seed phrase, not the ${stated} words ` +
+    "stated: confirm it with a receiving address or the master key fingerprint of the wallet";
   const encode = (text) => new TextEncoder().encode(text);
 
   const results = [];
@@ -536,6 +537,19 @@ function pageScript() {
           { count: 6, unreadable: 6, wrong: 3 },
           { count: 8, unreadable: 8, wrong: 4 },
         ],
+        hiddenWalletRefusals: [
+          "PASSWORD_ALREADY_USED",
+          "HIDDEN_WALLET_PASSES_CHECK",
+          "PASSWORDS_DIFFER",
+          "PASSWORD_REPAIR_NOT_OFFERED",
+          "EMPTY_PASSWORD",
+          "PASSWORD_TOO_LONG",
+          "INVALID_PASSWORD_UTF8",
+          "CONTROL_CHARACTER_IN_PASSWORD",
+          "UNASSIGNED_CHARACTER",
+        ],
+        decoyScanGap: 20,
+        argon2Parts: ["argon2", "argon2-sizes"],
       },
       "parameters gives every fixed value of the core",
     );
@@ -568,8 +582,8 @@ function pageScript() {
         words: 12,
         otherLengths: [],
         containers: [
-          { sameLength: false, words: 24, wrongWordPassesOneIn: 256 },
-          { sameLength: true, words: 12, wrongWordPassesOneIn: 16 },
+          { sameLength: false, words: 24, wrongWordPassesOneIn: 256, otherLengths: [] },
+          { sameLength: true, words: 12, wrongWordPassesOneIn: 16, otherLengths: [] },
         ],
       },
       "readPhrase reads four-letter forms and lists the 24-word and the same-length container",
@@ -609,7 +623,10 @@ function pageScript() {
         suiteId: SUITE_3,
         phraseLengths: [12, 15, 18, 21, 24],
         builtInCheckLengths: [12, 15, 18, 21],
+        // A detected length needs the wallet or its owner: a 24-word original may pass a short
+        // check by chance (AUD-017-FUN001).
         confirmationFor: {
+          0: "walletOrOwner",
           12: "builtInCheck",
           15: "builtInCheck",
           18: "builtInCheck",
@@ -630,7 +647,7 @@ function pageScript() {
         suiteId: SUITE_4,
         phraseLengths: [12],
         builtInCheckLengths: [],
-        confirmationFor: { 12: "walletOrOwner" },
+        confirmationFor: { 0: "walletOrOwner", 12: "walletOrOwner" },
         hiddenWallets: false,
         offersWalletCheck: false,
         containerFingerprint: FINGERPRINTS.sameLengthContainer,
@@ -641,6 +658,55 @@ function pageScript() {
       client.readContainer("abandon about"),
       "INVALID_CONTAINER",
       "a container of two words is refused",
+    );
+
+    // The search for missing words without the repair words: the candidates, and the decoy
+    // wallet, the container itself, found by its fingerprint without a password or Argon2.
+    const missingLast = FULL_SIZE_CONTAINER.split(" ")
+      .map((word, index) => (index === 23 ? "?" : word))
+      .join(" ");
+    expectEqual(
+      await client.searchCandidates({ container: missingLast }),
+      { missing: [24], candidates: 8, offersWalletSearch: true, offersOwnChecks: true },
+      "searchCandidates counts the 8 candidates of a missing last word",
+    );
+    const progress = [];
+    const found = await client.searchDecoy({
+      container: missingLast,
+      reference: { fingerprint: FINGERPRINTS.fullSizeContainer },
+      onProgress: (value) => progress.push(value),
+    });
+    expectEqual(
+      fieldsOf(found, ["found", "container", "words", "containerFingerprint"]),
+      {
+        found: true,
+        container: FULL_SIZE_CONTAINER,
+        words: [{ position: 24, word: "peace" }],
+        containerFingerprint: FINGERPRINTS.fullSizeContainer,
+      },
+      "searchDecoy finds the missing word by the container's own fingerprint",
+    );
+    expect(
+      progress.at(-1)?.stage === "search" && progress.at(-1)?.candidates === 8,
+      "searchDecoy tells how far it has come",
+    );
+    const missed = await client.searchDecoy({
+      container: missingLast,
+      reference: { fingerprint: "00000000" },
+    });
+    expectEqual(
+      fieldsOf(missed, ["found", "container"]),
+      { found: false, container: null },
+      "searchDecoy finds nothing with another fingerprint",
+    );
+    await expectRejection(
+      client.searchWallet({
+        container: missingLast.replace(/^\S+/, "?"),
+        password: PASSWORD,
+        reference: { builtInCheck: true },
+      }),
+      "TOO_MANY_MISSING_WORDS",
+      "searchWallet refuses two missing words before any round",
     );
   }
 
@@ -871,12 +937,53 @@ function pageScript() {
       "PASSWORDS_DIFFER",
       "a password as bytes without its repetition is refused the same way",
     );
-    await expectExactTypeError(
-      client.encrypt({ phrase: PHRASE, password: PASSWORD, passwordRepeat: PASSWORD }),
-      WALLET_PASSPHRASE_REQUIRED,
-      "encrypt without walletHasPassphrase is refused: no answer is assumed",
+    // The password's own rules come before the comparison, as in the command-line tool, where a
+    // script's first line is refused before its second is read.
+    await expectRejection(
+      client.encrypt({
+        phrase: PHRASE,
+        password: "a\tb",
+        passwordRepeat: "a\tc",
+        walletHasPassphrase: false,
+      }),
+      "CONTROL_CHARACTER_IN_PASSWORD",
+      "a password that breaks a rule is refused for it, before its repetition is compared",
     );
-    for (const value of ["no", null, 0]) {
+    await expectRejection(
+      client.encrypt({
+        phrase: PHRASE,
+        password: "",
+        passwordRepeat: "x",
+        walletHasPassphrase: false,
+      }),
+      "EMPTY_PASSWORD",
+      "an empty password is refused before its repetition is compared",
+    );
+    // Without an answer, left out or null, what to keep names any passphrase of the wallet in its
+    // place: a page need not ask.
+    for (const [description, value] of [
+      ["left out", undefined],
+      ["null", null],
+    ]) {
+      expectEqual(
+        fieldsOf(
+          await client.encrypt({
+            phrase: PHRASE,
+            password: PASSWORD,
+            passwordRepeat: PASSWORD,
+            repairWordCount: 2,
+            ...(value === undefined ? {} : { walletHasPassphrase: value }),
+          }),
+          ["container", "keep"],
+        ),
+        {
+          container: REDUCED_COST_CONTAINER,
+          keep: [...KEEP_24, PASSPHRASE_IF_ANY, { item: "repairWords" }],
+        },
+        `encrypt with walletHasPassphrase ${description} names any passphrase of the wallet`,
+      );
+    }
+    for (const value of ["no", 0]) {
       await expectExactTypeError(
         sealPhrase({ walletHasPassphrase: value }),
         WALLET_PASSPHRASE_REQUIRED,
@@ -976,7 +1083,9 @@ function pageScript() {
       phrase: PHRASE,
       suiteId: SUITE_3,
       fingerprintWithoutPassphrase: FINGERPRINT,
-      passesWalletCheckWithoutPassphrase: null,
+      walletCheck: null,
+      statedWords: null,
+      otherLengths: [],
     };
     const log = progressLog();
     expectEqual(
@@ -991,35 +1100,59 @@ function pageScript() {
       "the chosen length 12 with the password as bytes gives the same",
     );
     /** A 24-word reading of a state, with the values computed independently in the script. */
-    const readAs24 = (name, status) => ({
+    const readAs24 = (name, status, otherLengths = []) => ({
       words: 24,
       verified: false,
       status,
       phrase: READINGS[name],
       suiteId: SUITE_3,
       fingerprintWithoutPassphrase: FINGERPRINTS[name],
-      passesWalletCheckWithoutPassphrase: WALLET_CHECKS[name],
+      walletCheck: WALLET_CHECKS[name],
+      statedWords: null,
+      otherLengths,
     });
+    // 24 words stated beside a 12-word reading whose check passes: both readings, the checked one
+    // first, naming the length stated, as the length rules of recovery say (AUD-015-FUN001).
     const as24 = await client.decrypt({ container, password: PASSWORD, words: 24 });
     expectEqual(
       as24,
-      { kind: "phrase", candidates: [readAs24("phraseAs24", "readAs24Chosen")] },
-      "the chosen length 24 reads the whole state: the entropy and its SHA-256, with every field",
+      {
+        kind: "ambiguous",
+        candidates: [
+          { ...verified, statedWords: 24 },
+          readAs24("phraseAs24", "readAs24Chosen", [12]),
+        ],
+      },
+      "the chosen length 24 gives the checked 12 words first, then the whole state: the entropy " +
+        "and its SHA-256, with every field",
     );
-    expect(
-      as24.candidates[0].fingerprintWithoutPassphrase ===
-        (await wallet.fingerprint({ phrase: as24.candidates[0].phrase })),
-      "a candidate's fingerprint is the wallet module's",
+    const walletFingerprints = [];
+    for (const { phrase } of as24.candidates) {
+      walletFingerprints.push(await wallet.fingerprint({ phrase }));
+    }
+    expectEqual(
+      as24.candidates.map((candidate) => candidate.fingerprintWithoutPassphrase),
+      walletFingerprints,
+      "each candidate's fingerprint is the wallet module's",
     );
     await expectRejection(
       client.decrypt({ container, password: PASSWORD, memoryLevel: 1 }),
       "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
       "a recovery at memory level 1 is refused in a browser",
     );
+    // A stated short length whose check fails while another's passes: the check takes precedence,
+    // and the reading names the length stated (AUD-015-FUN001).
+    expectEqual(
+      await client.decrypt({ container, password: PASSWORD, words: 15 }),
+      { kind: "phrase", candidates: [{ ...verified, statedWords: 15 }] },
+      "a chosen length whose check fails gives the 12 words whose check passes, naming the 15 " +
+        "stated, with every field",
+    );
+    // The wrong password's state passes no short check (it reads as 24 words below).
     await expectRejection(
-      client.decrypt({ container, password: PASSWORD, words: 15 }),
+      client.decrypt({ container, password: WRONG_PASSWORD, words: 15 }),
       "VERIFIER_MISMATCH",
-      "a chosen length whose check fails is refused",
+      "a chosen length whose check fails, where no other passes, is refused",
     );
     await expectRejection(
       client.decrypt({ container, password: PASSWORD, words: 13 }),
@@ -1074,44 +1207,58 @@ function pageScript() {
       "a same-length container refuses another length",
     );
 
-    const ambiguousOriginal = {
+    const ambiguousOriginal = (statedWords = null) => ({
       words: 12,
       verified: true,
       status: "verified",
       phrase: AMBIGUOUS_12_WORDS,
       suiteId: SUITE_3,
       fingerprintWithoutPassphrase: FINGERPRINTS.ambiguous12Words,
-      passesWalletCheckWithoutPassphrase: null,
-    };
+      walletCheck: null,
+      statedWords,
+      otherLengths: [21],
+    });
+    const ambiguousAs21 = (statedWords = null) => ({
+      words: 21,
+      verified: true,
+      status: "verified",
+      phrase: READINGS.ambiguousAs21,
+      suiteId: SUITE_3,
+      fingerprintWithoutPassphrase: FINGERPRINTS.ambiguousAs21,
+      walletCheck: null,
+      statedWords,
+      otherLengths: [12],
+    });
     expectEqual(
       await client.decrypt({ container: made.ambiguous, password: PASSWORD }),
       {
         kind: "ambiguous",
         candidates: [
-          ambiguousOriginal,
-          {
-            words: 21,
-            verified: true,
-            status: "verified",
-            phrase: READINGS.ambiguousAs21,
-            suiteId: SUITE_3,
-            fingerprintWithoutPassphrase: FINGERPRINTS.ambiguousAs21,
-            passesWalletCheckWithoutPassphrase: null,
-          },
-          readAs24("ambiguousAs24", "readAs24"),
+          ambiguousOriginal(),
+          ambiguousAs21(),
+          readAs24("ambiguousAs24", "readAs24", [12, 21]),
         ],
       },
       "an ambiguous container lists the 12 and 21 verified words and the 24-word reading in full",
     );
     expectEqual(
       await client.decrypt({ container: made.ambiguous, password: PASSWORD, words: 12 }),
-      { kind: "phrase", candidates: [ambiguousOriginal] },
-      "choosing the length resolves the ambiguity",
+      { kind: "phrase", candidates: [ambiguousOriginal()] },
+      "a length stated among those that pass resolves the ambiguity",
     );
+    // 24 words stated beside lengths that pass: every reading, the checked ones first, as the
+    // length rules of recovery say (AUD-015-FUN001).
     expectEqual(
       await client.decrypt({ container: made.ambiguous, password: PASSWORD, words: 24 }),
-      { kind: "phrase", candidates: [readAs24("ambiguousAs24", "readAs24Chosen")] },
-      "the chosen length 24 gives the 24-word reading of the ambiguous state in full",
+      {
+        kind: "ambiguous",
+        candidates: [
+          ambiguousOriginal(24),
+          ambiguousAs21(24),
+          readAs24("ambiguousAs24", "readAs24Chosen", [12, 21]),
+        ],
+      },
+      "24 stated words give the checked readings first and the 24-word reading in full",
     );
 
     expectEqual(
@@ -1126,11 +1273,19 @@ function pageScript() {
             phrase: CHECKED_PHRASE,
             suiteId: SUITE_3,
             fingerprintWithoutPassphrase: FINGERPRINTS.checkedPhrase,
-            passesWalletCheckWithoutPassphrase: false,
+            walletCheck: false,
+            statedWords: null,
+            otherLengths: [],
           },
         ],
       },
       "a 24-word phrase that passes the wallet check only with its passphrase does not pass without",
+    );
+    expectEqual(
+      (await client.decrypt({ container: made.checked, password: PASSWORD, passphrase: "TREZOR" }))
+        .candidates[0].walletCheck,
+      true,
+      "with its passphrase, the same 24-word reading passes the 16-bit check",
     );
     expectEqual(
       await client.decrypt({ container: made.emptyChecked, password: PASSWORD }),
@@ -1144,7 +1299,9 @@ function pageScript() {
             phrase: EMPTY_CHECKED_PHRASE,
             suiteId: SUITE_3,
             fingerprintWithoutPassphrase: FINGERPRINTS.emptyCheckedPhrase,
-            passesWalletCheckWithoutPassphrase: true,
+            walletCheck: true,
+            statedWords: null,
+            otherLengths: [],
           },
         ],
       },
@@ -1200,13 +1357,22 @@ function pageScript() {
 
   async function checkRehearsal(client, made) {
     group("MhfeClient.check");
-    const check = (reference, options = {}) =>
+    const fullCheck = (reference, options = {}) =>
       client.check({
         container: REDUCED_COST_CONTAINER,
         password: PASSWORD,
         reference,
         ...options,
       });
+    const check = async (reference, options = {}) =>
+      fieldsOf(await fullCheck(reference, options), ["matches", "path"]);
+    // The original seed phrase's own checks come with a match: the built-in check of the 12-word
+    // phrase, and the phrase + passphrase check, which a phrase drawn without it fails.
+    expectEqual(
+      (await fullCheck({ fingerprint: FINGERPRINT })).evidence,
+      { builtInCheck: 12, walletCheck: null },
+      "a check lists the built-in check of a 12-word phrase, no wallet check without a passphrase",
+    );
     const matched = (path = null) => ({ matches: true, path });
     const notMatched = { matches: false, path: null };
     const log = progressLog();
@@ -1271,34 +1437,56 @@ function pageScript() {
       "the fingerprint without the passphrase does not match a wallet with one",
     );
     expectEqual(await check({ words: 12 }), matched(), "the built-in check of 12 words matches");
-    expectEqual(await check({ words: 15 }), notMatched, "the built-in check of 15 words does not");
+    expectEqual(await check({ words: 0 }), matched(), "the length detected matches as 12 words");
+    // The length rules of recovery: a short length whose check passes takes precedence over the
+    // stated one, so 15 stated words match, and the evidence names the 12 found (AUD-015-FUN001).
+    expectEqual(
+      await fullCheck({ words: 15 }),
+      { matches: true, path: null, evidence: { builtInCheck: 12, walletCheck: null } },
+      "the built-in check of 15 stated words matches at the 12 found, which the evidence names",
+    );
+    expectEqual(
+      await fullCheck({ words: 15 }, { password: WRONG_PASSWORD }),
+      { matches: false, path: null, evidence: { builtInCheck: null, walletCheck: null } },
+      "where no short check passes, as with the wrong password, the built-in check of 15 words " +
+        "does not match",
+    );
     await expectRejection(
       check({ words: 24 }),
       "INVALID_WORD_COUNT",
       "24 words have no built-in check",
     );
     expectEqual(
-      await client.check({
-        container: made.checkWord,
-        password: CHECK_WORD_MISSING,
-        passwordRepair: { repair: 3 },
-        reference: { fingerprint: FINGERPRINT },
-      }),
+      fieldsOf(
+        await client.check({
+          container: made.checkWord,
+          password: CHECK_WORD_MISSING,
+          passwordRepair: { repair: 3 },
+          reference: { fingerprint: FINGERPRINT },
+        }),
+        ["matches", "path"],
+      ),
       matched(),
       "passwordRepair { repair: 3 } restores the password of a check",
     );
     expectEqual(
-      await client.check({
-        container: REDUCED_COST_SAME_LENGTH_CONTAINER,
-        password: PASSWORD,
-        reference: { address: BIP84_ADDRESS, coin: "bitcoin" },
-      }),
+      fieldsOf(
+        await client.check({
+          container: REDUCED_COST_SAME_LENGTH_CONTAINER,
+          password: PASSWORD,
+          reference: { address: BIP84_ADDRESS, coin: "bitcoin" },
+        }),
+        ["matches", "path"],
+      ),
       matched(BIP84_PATH),
       "a same-length container is checked against an address",
     );
 
-    const onChecked = (reference, options) =>
-      client.check({ container: made.checked, password: PASSWORD, reference, ...options });
+    const onChecked = async (reference, options) =>
+      fieldsOf(
+        await client.check({ container: made.checked, password: PASSWORD, reference, ...options }),
+        ["matches", "path"],
+      );
     expectEqual(
       await onChecked({ walletCheck: true }, { passphrase: "TREZOR" }),
       matched(),
@@ -1317,7 +1505,39 @@ function pageScript() {
       matched(),
       "a 24-word phrase's passphrase wallet matches its fingerprint",
     );
-
+    // The length detected: the passphrase finds the 24-word phrase drawn with its check; without
+    // it the page is asked for the length and its fingerprint is compared on the same recovery.
+    expectEqual(
+      await onChecked({ words: 0 }, { passphrase: "TREZOR" }),
+      matched(),
+      "the length detected finds a 24-word phrase by the phrase + passphrase check",
+    );
+    let lengthAsked = 0;
+    const askedLog = progressLog();
+    expectEqual(
+      await onChecked(
+        { words: 0 },
+        {
+          onProgress: askedLog.onProgress,
+          onNoLength: () => {
+            lengthAsked += 1;
+            return { fingerprint: FINGERPRINTS.checkedPhraseWithTrezor, passphrase: "TREZOR" };
+          },
+        },
+      ),
+      matched(),
+      "with no length detected, the fingerprint the page gives matches",
+    );
+    expect(
+      lengthAsked === 1 &&
+        askedLog.lines.filter((line) => line.startsWith("recover")).length === 12,
+      "the page is asked once, and the recovery runs once",
+    );
+    expectEqual(
+      await onChecked({ words: 0 }, { onNoLength: () => null }),
+      notMatched,
+      "without an answer the result stays",
+    );
     const refusalLog = progressLog();
     const onProgress = refusalLog.onProgress;
     await expectRejection(
@@ -1599,7 +1819,6 @@ function pageScript() {
       container: REDUCED_COST_CONTAINER,
       words: 12,
       password: PASSWORD,
-      otherWalletsMoved: true,
       newPassword: NEW_PASSWORD,
       newPasswordRepeat: NEW_PASSWORD,
       confirmation: { builtInCheck: true },
@@ -1614,6 +1833,12 @@ function pageScript() {
         walletHasPassphrase: false,
         ...options,
       });
+    /**
+     * What a rekey resolves to: what encrypt gives for the confirmed phrase, with `walletCheck`,
+     * the 16-bit source check of a recovered 24-word reading with the reference's passphrase or
+     * none, null for every other length.
+     */
+    const asRekeyResult = (sealed, walletCheck = null) => ({ ...sealed, walletCheck });
     const sealedWithNew = await sealWithNew(PHRASE);
     const log = progressLog();
     const shown = [];
@@ -1647,8 +1872,9 @@ function pageScript() {
     );
     expectEqual(
       rekeyed,
-      sealedWithNew,
-      "a rekey resolves to what encrypt gives with the new password, every field",
+      asRekeyResult(sealedWithNew),
+      "a rekey resolves to what encrypt gives with the new password, every field, and no wallet " +
+        "check for 12 words",
     );
     expect(
       rekeyed.containerFingerprint === (await wallet.fingerprint({ phrase: rekeyed.container })),
@@ -1685,6 +1911,52 @@ function pageScript() {
       (await client.rekey({ ...base, newPasswordRepeat: encode(NEW_PASSWORD) })).container ===
         sealedWithNew.container,
       "a new password as text and its repetition as the same bytes are the same password",
+    );
+    // The length detected: a 24-word original may pass a short check by chance, so the built-in
+    // check alone confirms no detected length (REFERENCE_REQUIRED before any round, below). The
+    // fingerprint, an address or the owner does, and a reference is compared with every reading
+    // (AUD-017-FUN001).
+    expectEqual(
+      await client.rekey({ ...base, words: 0, confirmation: { fingerprint: FINGERPRINT } }),
+      asRekeyResult(sealedWithNew),
+      "a rekey with the length detected, confirmed by the fingerprint, seals the 12-word phrase: " +
+        "what encrypt gives, every field",
+    );
+    let detectedOwnerSaw = null;
+    const byDetectedOwner = await client.rekey({
+      ...base,
+      words: 0,
+      confirmation: {
+        owner: (check) => {
+          detectedOwnerSaw = check;
+          return true;
+        },
+      },
+    });
+    expectEqual(
+      detectedOwnerSaw,
+      { phrase: PHRASE, words: 12, fingerprintWithoutPassphrase: FINGERPRINT },
+      "with the length detected the owner is shown the 12 words found, and no length stated",
+    );
+    expect(
+      byDetectedOwner.container === sealedWithNew.container,
+      "the owner's yes confirms the length detected",
+    );
+    expectEqual(
+      await client.rekey({
+        ...base,
+        container: made.ambiguous,
+        words: 0,
+        confirmation: { fingerprint: FINGERPRINTS.ambiguous12Words },
+      }),
+      asRekeyResult(await sealWithNew(AMBIGUOUS_12_WORDS)),
+      "a detection that finds two lengths is told apart by the fingerprint, compared with each " +
+        "reading: what encrypt gives the 12 words, every field",
+    );
+    await expectRejection(
+      client.rekey({ ...base, container: made.ambiguous, words: 12 }),
+      "AMBIGUOUS_LENGTH",
+      "a length stated among two that pass does not let the built-in check alone confirm a rekey",
     );
     await expectRejection(
       client.rekey({
@@ -1743,7 +2015,7 @@ function pageScript() {
     );
     expectEqual(
       withPassphrase,
-      await sealWithNew(PHRASE, { walletHasPassphrase: true, repairWordCount: 2 }),
+      asRekeyResult(await sealWithNew(PHRASE, { walletHasPassphrase: true, repairWordCount: 2 })),
       "it is what encrypt gives with the same answer and repair words, every field",
     );
 
@@ -1776,10 +2048,13 @@ function pageScript() {
       { suiteId: SUITE_3, builtInCheck: false, otherLengths: [], keep: KEEP_24 },
       "the owner's yes, from a promise, seals the 24-word phrase",
     );
+    // CHECKED_PHRASE fails the 16-bit wallet check without its passphrase "TREZOR", as the script
+    // checks before the page runs.
     expectEqual(
       ownerSealed,
-      await sealWithNew(CHECKED_PHRASE),
-      "the container the owner confirmed is what encrypt gives with the new password",
+      asRekeyResult(await sealWithNew(CHECKED_PHRASE), false),
+      "the container the owner confirmed is what encrypt gives with the new password, with the " +
+        "24-word reading's wallet check, every field",
     );
     const ownerRecovery = await client.decrypt({
       container: ownerSealed.container,
@@ -1799,11 +2074,13 @@ function pageScript() {
       { container: ownerSealed.container, keep: [...KEEP_24, PASSPHRASE] },
       "the owner's rekey stated to have a passphrase keeps it; the container is the same",
     );
+    // A stated short length that the check contradicts: the owner may confirm the reading the
+    // check found, and is shown the length stated beside it, which the page names first.
     const ownerNo = [];
     await expectRejection(
       client.rekey({
         ...base,
-        words: 24,
+        words: 15,
         confirmation: {
           owner: (check) => {
             ownerNo.push(check);
@@ -1816,14 +2093,42 @@ function pageScript() {
     );
     expectEqual(
       ownerNo,
-      [
-        {
-          phrase: READINGS.phraseAs24,
-          words: 24,
-          fingerprintWithoutPassphrase: FINGERPRINTS.phraseAs24,
+      [{ phrase: PHRASE, words: 12, statedWords: 15, fingerprintWithoutPassphrase: FINGERPRINT }],
+      "the owner of 15 stated words saw the 12-word reading the check found, with the 15 stated",
+    );
+    // 24 words stated beside a 12-word reading whose check passes: the owner cannot tell the two
+    // readings apart, so the library refuses once the recovery has found them, before the owner
+    // is asked, even an owner with a yes ready; an address or the fingerprint confirms one
+    // (AUD-015-FUN001, AUD-016-BLD002).
+    const ownerOf24 = [];
+    const ownerOf24Log = progressLog();
+    await expectExactRefusal(
+      client.rekey({
+        ...base,
+        words: 24,
+        onProgress: ownerOf24Log.onProgress,
+        confirmation: {
+          owner: (check) => {
+            ownerOf24.push(check);
+            return true;
+          },
         },
-      ],
-      "the owner saw the 24-word reading of the 12-word state",
+      }),
+      "LENGTH_DIFFERS",
+      lengthDiffers(12, 24),
+      "24 words stated beside a 12-word reading whose check passes cannot reach the owner",
+    );
+    expectEqual(ownerOf24, [], "the owner was not asked");
+    expectEqual(
+      ownerOf24Log.lines,
+      roundLines("recover", 1, 12, 36),
+      "it is refused after the recovery's rounds, before anything is sealed",
+    );
+    expectEqual(
+      await client.rekey({ ...base, words: 24, confirmation: { fingerprint: FINGERPRINT } }),
+      asRekeyResult(sealedWithNew),
+      "the fingerprint confirms the 12-word reading beside 24 stated words: what encrypt gives, " +
+        "every field",
     );
     await expectRejection(
       client.rekey({ ...ownerBase, confirmation: { owner: () => "yes" } }),
@@ -1941,8 +2246,9 @@ function pageScript() {
     );
     expectEqual(
       sameRekey,
-      sameSealed,
-      "it is what encrypt with sameLength gives with the new password, every field",
+      asRekeyResult(sameSealed),
+      "it is what encrypt with sameLength gives with the new password, every field, and no " +
+        "wallet check",
     );
     const sameRecovery = await client.decrypt({
       container: sameRekey.container,
@@ -1989,19 +2295,19 @@ function pageScript() {
       sameContainer(byEthereum),
       "a rekey confirmed by an Ethereum address at its path gives the same container",
     );
-    // An empty passphrase shows nothing, so a wallet stated to have one keeps it: the reference
-    // matched the phrase's wallet without a passphrase, and the funds may be under one.
+    // A wallet stated to have a passphrase is compared with it: a reference without it would
+    // match the phrase's wallet without one and say nothing about the funds under the passphrase
+    // (the specification's re-encryption rules), so it is refused before any round.
     for (const [confirmation, description] of [
       [{ fingerprint: FINGERPRINT }, "a fingerprint"],
       [{ address: BIP84_ADDRESS, coin: "bitcoin" }, "an address"],
     ]) {
       for (const passphrase of [undefined, ""]) {
-        expectEqual(
-          await client.rekey({ ...sameBase, confirmation, passphrase, walletHasPassphrase: true }),
-          sameSealedWithPassphrase,
+        await expectRejection(
+          client.rekey({ ...sameBase, confirmation, passphrase, walletHasPassphrase: true }),
+          "INVALID_REQUEST",
           `${description} with ${passphrase === undefined ? "no" : "an empty"} passphrase, ` +
-            "stated to be of a wallet with one, keeps the passphrase: what encrypt gives with " +
-            "the same answer, every field",
+            "stated to be of a wallet with one, is refused",
         );
       }
     }
@@ -2030,7 +2336,7 @@ function pageScript() {
         passphrase: "TREZOR",
         walletHasPassphrase: true,
       }),
-      sameSealedWithPassphrase,
+      asRekeyResult(sameSealedWithPassphrase),
       "the fingerprint's passphrase, stated as well, gives what encrypt gives with it, every field",
     );
     const byTrezorAddress = await client.rekey({
@@ -2107,17 +2413,30 @@ function pageScript() {
       "it stops after the comparison, before anything is sealed",
     );
 
-    const refusalLog = progressLog();
-    await expectRefusal(
-      client.rekey({
-        ...base,
-        confirmation: { fingerprint: FINGERPRINT },
-        onProgress: refusalLog.onProgress,
-      }),
-      "INVALID_REQUEST",
-      "this length has a built-in check, which confirms the phrase",
-      "a length with a built-in check is confirmed by that check only",
+    // A late refusal: the built-in check finds 12 words, not the 15 stated. It takes precedence,
+    // but only the wallet confirms the phrase then, so the rekey stops once the recovery's rounds
+    // have found the length, before anything is sealed (AUD-015-FUN001).
+    const lengthLog = progressLog();
+    await expectExactRefusal(
+      client.rekey({ ...base, words: 15, onProgress: lengthLog.onProgress }),
+      "LENGTH_DIFFERS",
+      lengthDiffers(12, 15),
+      "a stated length that the built-in check contradicts needs the wallet's confirmation",
     );
+    expectEqual(
+      lengthLog.lines,
+      roundLines("recover", 1, 12, 36),
+      "it is refused after the recovery's rounds, before anything is sealed",
+    );
+    expectEqual(
+      await client.rekey({ ...base, words: 15, confirmation: { fingerprint: FINGERPRINT } }),
+      asRekeyResult(sealedWithNew),
+      "the fingerprint confirms the 12-word reading the check found: what encrypt gives, every " +
+        "field",
+    );
+
+    // Early refusals, before any Argon2 round.
+    const refusalLog = progressLog();
     await expectRejection(
       client.rekey({
         ...base,
@@ -2133,12 +2452,6 @@ function pageScript() {
       "REFERENCE_REQUIRED",
       REFERENCE_REQUIRED,
       "a 24-word phrase has no built-in check to confirm it",
-    );
-    await expectRefusal(
-      client.rekey({ ...base, words: 0, onProgress: refusalLog.onProgress }),
-      "INVALID_REQUEST",
-      "the word count of the phrase is needed for a 24-word container",
-      "a 24-word container needs the phrase's word count",
     );
     await expectRejection(
       client.rekey({
@@ -2172,10 +2485,12 @@ function pageScript() {
     const expectPassphraseRefusal = (options, message, description) =>
       expectEarlyRefusal(options, "INVALID_REQUEST", message, description);
     // A length without a built-in check refuses that check first, before the answer is judged:
-    // without the answer, it is still REFERENCE_REQUIRED.
+    // without the answer, it is still REFERENCE_REQUIRED. So does the length detected on a 24-word
+    // container, where a 24-word original may pass a short check by chance (AUD-017-FUN001).
     for (const [options, description] of [
       [{ ...base, words: 24 }, "a 24-word phrase"],
       [{ ...sameBase, confirmation: { builtInCheck: true } }, "a same-length container"],
+      [{ ...base, words: 0 }, "the length detected"],
     ]) {
       for (const walletHasPassphrase of [undefined, false, true]) {
         await expectEarlyRefusal(
@@ -2269,16 +2584,6 @@ function pageScript() {
       }
     }
     expect(!ownerAskedWithPassphrase, "the owner was not asked with a passphrase given");
-    await expectRejection(
-      client.rekey({ ...base, otherWalletsMoved: false }),
-      "OTHER_WALLETS_NOT_CONFIRMED",
-      "a rekey without the yes about other wallets is refused",
-    );
-    await expectRejection(
-      client.rekey({ ...base, otherWalletsMoved: undefined }),
-      "OTHER_WALLETS_NOT_CONFIRMED",
-      "otherWalletsMoved is never assumed",
-    );
     // The answer may be left out of a rekey, but one given is a boolean: null is not.
     for (const walletHasPassphrase of ["no", 1, 0, {}, null]) {
       await expectExactTypeError(
@@ -2695,7 +3000,7 @@ function pageScript() {
         container: REDUCED_COST_SAME_LENGTH_CONTAINER,
         mainPassphrase: "",
       }),
-      "INVALID_CONTAINER",
+      "NO_HIDDEN_WALLETS",
       "hidden wallets open on a 24-word container only",
     );
     await expectTypeError(
@@ -3090,30 +3395,32 @@ function pageScript() {
       "INVALID_REPAIR_WORDS",
       "three repair words are refused",
     );
-    await expectTypeError(
+    // Which counts a card has is the library's rule (INVALID_REPAIR_WORDS above); the page refuses
+    // only what is no whole number at all, without a copy of the list (web/repair.js).
+    await expectExactTypeError(
       repair.repairWords({ container: FULL_SIZE_CONTAINER, count: "4" }),
-      "count must be 2, 4, 6 or 8.",
+      "count must be a whole number.",
       "a count that is not a number is refused",
     );
 
     const card = FULL_SIZE_REPAIR_WORDS[4];
-    const plateWith = (changes) => {
+    const containerWith = (changes) => {
       const words = FULL_SIZE_CONTAINER.split(" ");
       for (const [position, word] of Object.entries(changes)) words[position - 1] = word;
       return words.join(" ");
     };
-    const repaired = (plateWords, cardWords, changes) => ({
+    const repaired = (containerWords, cardWords, changes) => ({
       container: FULL_SIZE_CONTAINER,
       containerFingerprint: FINGERPRINTS.fullSizeContainer,
       unchanged: changes.length === 0,
-      plateWords,
+      containerWords,
       cardWords,
       changes,
     });
     expectEqual(
-      await repair.repairPlate({ plate: FULL_SIZE_CONTAINER, card }),
+      await repair.repairContainer({ container: FULL_SIZE_CONTAINER, card }),
       repaired([], [], []),
-      "an intact plate and card are unchanged, with every field",
+      "an intact container phrase and card are unchanged, with every field",
     );
     const shortForms = (text) =>
       text
@@ -3121,17 +3428,20 @@ function pageScript() {
         .map((word) => word.slice(0, 4).toUpperCase())
         .join(" ");
     expectEqual(
-      await repair.repairPlate({ plate: shortForms(FULL_SIZE_CONTAINER), card: shortForms(card) }),
+      await repair.repairContainer({
+        container: shortForms(FULL_SIZE_CONTAINER),
+        card: shortForms(card),
+      }),
       repaired([], [], []),
-      "a plate and card typed in capitals and four-letter forms are read in full",
+      "a container phrase and card typed in capitals and four-letter forms are read in full",
     );
     expectEqual(
-      await repair.repairPlate({ plate: plateWith({ 3: "?" }), card }),
+      await repair.repairContainer({ container: containerWith({ 3: "?" }), card }),
       repaired([3], [], [{ onCard: false, position: 3, read: null, word: "tower" }]),
       "the repair module repairs an unreadable word",
     );
     expectEqual(
-      await repair.repairPlate({ plate: plateWith({ 5: "zoo", 20: "abandon" }), card }),
+      await repair.repairContainer({ container: containerWith({ 5: "zoo", 20: "abandon" }), card }),
       repaired(
         [5, 20],
         [],
@@ -3143,8 +3453,8 @@ function pageScript() {
       "two wrong words are repaired and reported with what was read",
     );
     expectEqual(
-      await repair.repairPlate({
-        plate: plateWith({ 1: "?", 9: "legal" }),
+      await repair.repairContainer({
+        container: containerWith({ 1: "?", 9: "legal" }),
         card: "MHFE-REPAIR-1 1/4 shaft 2/4 ? 3/4 patient 4/4 jewel",
       }),
       repaired(
@@ -3158,44 +3468,69 @@ function pageScript() {
       ),
       "a card typed with its profile and numbers, one word unreadable, is read and repaired",
     );
-    const damagedCard = await repair.repairPlate({
-      plate: plateWith({ 2: "abandon", 11: "zoo", 23: "legal" }),
+    const damagedCard = await repair.repairContainer({
+      container: containerWith({ 2: "abandon", 11: "zoo", 23: "legal" }),
       card: "appear include vicious move uphold abandon song satoshi",
     });
     expectEqual(
-      fieldsOf(damagedCard, ["container", "plateWords", "cardWords", "unchanged"]),
-      { container: FULL_SIZE_CONTAINER, plateWords: [2, 11, 23], cardWords: [6], unchanged: false },
-      "a wrong word on an eight-word card is repaired with three wrong plate words",
+      fieldsOf(damagedCard, ["container", "containerWords", "cardWords", "unchanged"]),
+      {
+        container: FULL_SIZE_CONTAINER,
+        containerWords: [2, 11, 23],
+        cardWords: [6],
+        unchanged: false,
+      },
+      "a wrong word on an eight-word card is repaired with three wrong container words",
     );
     expectEqual(
-      fieldsOf(await repair.repairPlate({ plate: FULL_SIZE_CONTAINER, card: "zoo extra" }), [
-        "plateWords",
-        "cardWords",
-        "unchanged",
-      ]),
-      { plateWords: [], cardWords: [1], unchanged: false },
+      fieldsOf(
+        await repair.repairContainer({ container: FULL_SIZE_CONTAINER, card: "zoo extra" }),
+        ["containerWords", "cardWords", "unchanged"],
+      ),
+      { containerWords: [], cardWords: [1], unchanged: false },
       "a wrong card word alone is repaired too",
     );
     await expectRejection(
-      repair.repairPlate({
-        plate: plateWith({ 1: "?", 2: "?", 3: "?" }),
+      repair.repairContainer({
+        container: containerWith({ 1: "?", 2: "?", 3: "?" }),
         card: FULL_SIZE_REPAIR_WORDS[2],
       }),
       "REPAIR_NOT_POSSIBLE",
       "three unreadable words are beyond two repair words",
     );
     await expectRejection(
-      repair.repairPlate({ plate: FULL_SIZE_CONTAINER, card: "abandon abandon abandon" }),
+      repair.repairContainer({ container: FULL_SIZE_CONTAINER, card: "abandon abandon abandon" }),
       "INVALID_REPAIR_WORDS",
       "a card of three words is refused",
     );
     await expectRejection(
-      repair.repairPlate({
-        plate: FULL_SIZE_CONTAINER.split(" ").slice(1).join(" "),
+      repair.repairContainer({
+        container: FULL_SIZE_CONTAINER.split(" ").slice(1).join(" "),
         card,
       }),
       "INVALID_CONTAINER",
-      "a plate of 23 words is refused",
+      "a container phrase of 23 words is refused",
+    );
+
+    // What a container phrase as typed is, before it is used: the page asks for the card when it
+    // is "marked" and offers it when it is "notAContainer".
+    for (const [typed, reading, wordCount, unreadable, description] of [
+      [FULL_SIZE_CONTAINER, "container", 24, [], "a valid container phrase"],
+      [containerWith({ 3: "?", 17: "?" }), "marked", 24, [3, 17], "words marked with ?"],
+      [containerWith({ 3: "?", 9: "towr" }), "marked", 24, [3, 9], "a ? and a word not listed"],
+      [containerWith({ 9: "towr" }), "notAContainer", 24, [], "a word not listed alone"],
+      [FULL_SIZE_CONTAINER.split(" ").slice(1).join(" "), "wrongLength", 23, [], "23 words"],
+    ]) {
+      expectEqual(
+        await repair.inspectContainer({ container: typed }),
+        { reading, wordCount, unreadable },
+        `inspectContainer reads ${description} as ${reading}`,
+      );
+    }
+    await expectTypeError(
+      repair.inspectContainer({}),
+      "container must be a string.",
+      "inspectContainer without a container is refused",
     );
   }
 
@@ -3205,6 +3540,11 @@ function pageScript() {
       () => new MhfePasswords({ workerSource: "", wasm: bytes(WASM_BASE64) }),
       "workerSource must be the text of runtime/worker.js.",
       "a passwords module without its worker is refused",
+    );
+    const effHint = await passwords.wordHints({ typed: "jovial trailing y" });
+    expect(
+      effHint.hint === "count" && effHint.count === 27,
+      "the hint below a password counts the EFF words that begin with one letter",
     );
     expectEqual(
       await passwords.parameters(),
@@ -3499,9 +3839,13 @@ function pageScript() {
         ],
         walletCheckBits: 16,
         drawReportInterval: 1024,
+        maxChosenWords: 1,
+        maxNeverUseWords: 1,
+        recommendedRandomBits: 240,
       },
       "parameters gives the version, the twelve coins of an address check with their names and " +
-        "address forms, 16 bits of wallet check and a report every 1,024 draws",
+        "address forms, 16 bits of wallet check, a report every 1,024 draws, and the limits of " +
+        "the wishes: 1 chosen word, 1 word never to use, 240 random bits recommended",
     );
 
     expect(
@@ -3559,6 +3903,17 @@ function pageScript() {
       },
       "describeAddress states Bitcoin's standard search: 2,000 addresses",
     );
+    // The decoy search of two missing words: the first account, as far as the gap.
+    expectEqual(
+      await wallet.describeAddress({ address: BIP84_ADDRESS, coin: "bitcoin", scanGap: 20 }),
+      {
+        type: "native SegWit (BIP84)",
+        search: "m/84'/0'/0'-0'/0-1/0-19",
+        addresses: 40,
+        onlyPath: false,
+      },
+      "describeAddress with a scan gap states the first account's first 20 of each chain",
+    );
     expectEqual(
       await wallet.describeAddress({ address: BIP84_ADDRESS, coin: "bitcoin", path: BIP84_PATH }),
       { type: "native SegWit (BIP84)", search: BIP84_PATH, addresses: 1, onlyPath: true },
@@ -3601,6 +3956,48 @@ function pageScript() {
         drawn.fingerprintWithPassphrase === (await wallet.fingerprint({ phrase: drawn.phrase })),
       "a phrase without a passphrase gets no wallet check, from one worker, with its fingerprint",
     );
+    // A chosen word: its cost as the library rates it, and a phrase that meets it.
+    const oneFixed = await wallet.describeDraw({
+      chosen: [{ word: "happy", position: 1 }],
+      walletCheck: true,
+    });
+    expect(
+      oneFixed.randomBits === 229 &&
+        oneFixed.randomness === "notRecommended" &&
+        oneFixed.recognisable === true &&
+        oneFixed.fixedPosition === true,
+      "a word at a fixed position with the wallet check keeps 229 bits: allowed, not " +
+        "recommended, and recognisable",
+    );
+    const hint = await wallet.wordHints({ typed: "abandon ZO" });
+    expect(
+      hint.hint === "words" && hint.words.join(" ") === "zone zoo",
+      "the hint below BIP39 words lists the words that begin with the last two letters",
+    );
+    await expectRejection(
+      wallet.describeDraw({
+        chosen: [
+          { word: "happy", position: 1 },
+          { word: "zoo", position: 5 },
+        ],
+      }),
+      "INVALID_WORD_WISH",
+      "a second chosen word is refused",
+    );
+    const wished = await wallet.drawPhrase({
+      chosen: [{ word: "zoo", position: 24 }],
+      neverUse: ["abandon"],
+    });
+    const wishedWords = wished.phrase.split(" ");
+    expect(
+      wishedWords[23] === "zoo" && !wishedWords.includes("abandon"),
+      "a drawn phrase has the chosen word at its position and no word never to use",
+    );
+    await expectRejection(
+      wallet.drawPhrase({ chosen: [{ word: "notaword", position: 1 }] }),
+      "INVALID_WORD_WISH",
+      "a chosen word that is not a BIP39 word is refused",
+    );
     const withPassphrase = await wallet.drawPhrase({
       passphrase: "TREZOR",
       passphraseRepeat: encode("TREZOR"),
@@ -3640,7 +4037,7 @@ function pageScript() {
         walletCheck: true,
         workers: 0,
       }),
-      "workers must be a whole number of at least 1.",
+      "workers must be a whole number from 1 to 256.",
       "no workers are refused",
     );
     // Counts the workers a drawing really starts, through the page's Worker constructor.
@@ -3672,6 +4069,20 @@ function pageScript() {
       passphraseRepeat: "TREZOR",
       walletCheck: true,
     };
+    // Every worker of a checked draw failing at once, here from a random source of zeros, must
+    // not take the page down: Firefox crashed the page when a worker was terminated while it
+    // loaded the WebAssembly (reported by wallet-tools, 2026-10-08).
+    const zeros = new MhfeWallet({
+      workerSource:
+        'Object.defineProperty(crypto, "getRandomValues", { value: (b) => b.fill(0) });\n' +
+        WORKER_SOURCE,
+      wasm: await WebAssembly.compile(bytes(WASM_BASE64)),
+    });
+    await expectRejection(
+      zeros.drawPhrase({ ...checkedDraw, workers: 8 }),
+      "RANDOM_FAILED",
+      "eight workers that all fail at once end the drawing with RANDOM_FAILED, the page alive",
+    );
     const running = wallet.drawPhrase({ ...checkedDraw, workers: 2 });
     await expectRejection(wallet.drawPhrase(), "BUSY", "a second drawing waits for none: BUSY");
     wallet.cancel();
@@ -3880,8 +4291,10 @@ function pageScript() {
         "INVALID_PASSWORD_TEXT",
         "a passphrase repetition with an unpaired surrogate is refused",
       );
+      // A repetition of the wrong type is refused before anything is copied (AUD-016-API003);
+      // the unpaired surrogate is refused after the passphrase was copied, and that copy is wiped.
       expect(
-        copies.length === 2 && wiped(),
+        copies.length === 1 && wiped(),
         "the first entry's copy is wiped when its repetition is refused",
       );
     } finally {
@@ -3905,68 +4318,6 @@ function pageScript() {
 }
 
 const { version, buildId } = JSON.parse(read("dist/modules.json").toString());
-// The parts of each module's self-check and the names the library gives them
-// (src/self_check/sets.rs); scripts/verify-browser-package.mjs checks the same.
-const SELF_CHECK = {
-  repair: ["bip39-words", "repair-words"],
-  passwords: ["password-unicode", "password-check-word", "password-generator", "random-source"],
-  wallet: [
-    "bip39-words",
-    "wallet-hashes",
-    "bip39-seed",
-    "bip32",
-    "addresses",
-    "address-search",
-    "wallet-check",
-    "random-source",
-  ],
-  core: [
-    "cipher-hashes",
-    "argon2",
-    "cipher-rounds",
-    "formats",
-    "container-facts",
-    "keep-advice",
-    "password-unicode",
-    "bip39-words",
-    "repair-words",
-    "password-check-word",
-    "wallet-hashes",
-    "bip39-seed",
-    "bip32",
-    "addresses",
-    "wallet-check",
-    "hidden-wallets",
-    "rekey",
-    "rehearsal",
-  ],
-  labels: {
-    "cipher-hashes": "Cipher hashes",
-    argon2: "Argon2id",
-    "cipher-rounds": "Cipher rounds",
-    formats: "Formats",
-    "container-facts": "Container facts",
-    "keep-advice": "Keep advice",
-    "password-unicode": "Passwords (Unicode 17)",
-    "bip39-words": "BIP39 words",
-    "repair-words": "Repair words (MHFE-REPAIR-1)",
-    "password-check-word": "Password check word (MHFE-PASSWORD-CHECK-1)",
-    "wallet-hashes": "Wallet hashes",
-    "bip39-seed": "BIP39 seeds",
-    bip32: "BIP32 keys",
-    addresses: "Address encodings",
-    "address-search": "Address search",
-    "wallet-check": "Wallet check (MHFE-WALLET-CHECK-SEED-1)",
-    "hidden-wallets": "Hidden wallets",
-    rekey: "Rekey",
-    rehearsal: "Rehearsal",
-    "password-generator": "Password generator",
-    "random-source": "Random source",
-    "browser-features": "Browser features",
-    "package-parts": "Package parts",
-    "page-encoding": "Text encoding of the page",
-  },
-};
 const sources = `
 const VERSION = ${inline(version)};
 const PACKAGE_BUILD_ID = ${inline(buildId)};

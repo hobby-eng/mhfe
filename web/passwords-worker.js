@@ -15,4 +15,5 @@ const PASSWORD_OPERATIONS = {
     JSON.parse(mhfe.passwordStrength(request.password, request.choice, request.position)),
   make: (request, host) =>
     JSON.parse(mhfe.makePassword(request.kind, request.count, request.rolls, host.random)),
+  wordHints: (request) => JSON.parse(mhfe.wordHints("eff", request.typed)),
 };

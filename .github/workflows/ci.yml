@@ -1,11 +1,18 @@
 name: CI
 
 on:
-  # Branches only: a release tag names a commit that CI has already checked on its branch, and
-  # the release workflow builds and replays the vectors itself.
+  # Branches only: the release workflow calls this one for the tagged commit itself.
   push:
     branches: ["**"]
   pull_request:
+  # The release workflow runs these checks on the tagged commit before it publishes, so that a
+  # release cannot skip any of them (AUD-015-BLD002). Its own canonical job builds the assets, so
+  # it skips this workflow's canonical build.
+  workflow_call:
+    inputs:
+      skip-canonical-build:
+        type: boolean
+        default: false
 
 # A newer push to the same branch or pull request makes a running check pointless.
 concurrency:
@@ -39,7 +46,7 @@ jobs:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
       # The Node.js of the workspace for Prettier, the browser package checks and Playwright.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
       # The workspace style for JavaScript, TypeScript, Markdown, JSON and YAML: double quotes,
@@ -48,11 +55,11 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm run format:check
-      - name: Install Emscripten 6.0.10
+      - name: Install Emscripten 6.0.12
         run: |
-          git clone --depth 1 --branch 6.0.10 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
-          "$RUNNER_TEMP/emsdk/emsdk" install 6.0.10
-          "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.10
+          git clone --depth 1 --branch 6.0.12 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install 6.0.12
+          "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.12
       - name: Install pinned wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
       # Formatting, clippy for native and WebAssembly, the fast tests (including the C/Rust
@@ -64,7 +71,7 @@ jobs:
           scripts/check.sh
       # The browser package that check.sh built, in real Chromium and Firefox at a reduced Argon2
       # cost: Blob workers under the wallet tools' Content-Security-Policy, standard and fast mode,
-      # cancellation and failing callbacks. The browsers are the ones Playwright 1.63.0 pins.
+      # cancellation and failing callbacks. The browsers are the ones Playwright 1.64.0 pins.
       - name: Check the browser package in Chromium and Firefox
         timeout-minutes: 20
         run: |
@@ -108,6 +115,8 @@ jobs:
           python scripts/verify-hidden-input-windows.py target/debug/mhfe.exe
 
   canonical-build:
+    # Absent on a push or a pull request, where it is false.
+    if: ${{ !inputs.skip-canonical-build }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -120,7 +129,7 @@ jobs:
       - name: Print canonical checksums
         run: cat canonical-output/release/SHA256SUMS
       - name: Preserve canonical build assets
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mhfe-canonical-${{ github.sha }}
           path: canonical-output/release/

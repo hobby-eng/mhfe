@@ -10,7 +10,8 @@ use zeroize::Zeroizing;
 
 use crate::engine::{Argon2Engine, KEY_BYTES, LANES};
 use crate::feistel::{Geometry, RoundTrace};
-use crate::mhfe::{self, Recovery};
+use crate::memory::LockedBytes;
+use crate::mhfe::{self, RecoveredPhrase, Recovery};
 use crate::packing;
 use crate::{
     phrase, Mhfe, MhfeError, Password, PhraseLength, Suite, WordCount, WorkFactor,
@@ -125,6 +126,17 @@ pub struct RecoveredCandidate {
     pub phrase: String,
 }
 
+impl RecoveredCandidate {
+    /// A recovered phrase as a vector records it.
+    fn of(recovered: &RecoveredPhrase) -> Self {
+        Self {
+            words: recovered.words(),
+            verified: recovered.verified(),
+            phrase: recovered.phrase().to_string(),
+        }
+    }
+}
+
 /// A suite 4 vector: the state is the entropy itself, without a verifier, and every round
 /// message carries `BE32(ENT)`.
 #[derive(Serialize)]
@@ -175,32 +187,10 @@ pub fn generate<E: Argon2Engine>(
 /// Writes the transcript of one input; [`generate`] makes sure that it is a public one.
 fn record<E: Argon2Engine>(mhfe: &mut Mhfe<E>, input: &PublicInput) -> Result<Vector, MhfeError> {
     let work = mhfe.work_factor();
-    let password = Password::new(input.password)?;
-    let source = phrase::parse(input.phrase).map_err(MhfeError::InvalidPhrase)?;
-    let entropy = Zeroizing::new(source.to_entropy());
+    let (password, entropy) = input.password_and_entropy()?;
     let x = packing::pack(&entropy)?;
-
-    let mut encryption_rounds = Vec::new();
-    let y = mhfe.permutation(&password, Geometry::SUITE_3).forward(
-        &x[..],
-        &mut |_| Ok(()),
-        Some(&mut encryption_rounds),
-    )?;
-    mhfe::reject_fixed_point(&x[..], &y)?;
-    let container = phrase::phrase_from_entropy(&y)?;
-
-    let mut decryption_rounds = Vec::new();
-    let recovered = mhfe.permutation(&password, Geometry::SUITE_3).inverse(
-        &y,
-        &mut |_| Ok(()),
-        Some(&mut decryption_rounds),
-    )?;
-    let recovered_state = mhfe::suite_3_state(&recovered)?;
-    if *recovered_state != *x {
-        return Err(MhfeError::Internal(
-            "the vector round trip did not return the original state".to_owned(),
-        ));
-    }
+    let trip = RoundTrip::run(mhfe, &password, Geometry::SUITE_3, &x[..])?;
+    let recovered_state = mhfe::suite_3_state(&trip.recovered)?;
     let recovery = match mhfe::recover(recovered_state, PhraseLength::Detect)? {
         Recovery::Phrase(phrase) => vec![phrase],
         Recovery::Ambiguous(candidates) => candidates,
@@ -215,27 +205,20 @@ fn record<E: Argon2Engine>(mhfe: &mut Mhfe<E>, input: &PublicInput) -> Result<Ve
         inputs: inputs_of(input, &password, work),
         argon2: argon2_of(work),
         packing: Packing {
-            words: source.word_count(),
+            words: packing::words_of_entropy(entropy.len()),
             entropy_hex: hex::encode(&entropy[..]),
             verifier_hex: hex::encode(&x[entropy.len()..]),
             state_hex: hex::encode(&x[..]),
         },
-        encryption: pass(Geometry::SUITE_3, &x[..], &encryption_rounds, &y),
-        container: container.to_string(),
+        encryption: pass(Geometry::SUITE_3, &x[..], &trip.encryption_rounds, &trip.y),
+        container: phrase::phrase_from_entropy(&trip.y)?.to_string(),
         decryption: pass(
             Geometry::SUITE_3,
-            &y,
-            &decryption_rounds,
+            &trip.y,
+            &trip.decryption_rounds,
             &recovered_state[..],
         ),
-        recovery: recovery
-            .into_iter()
-            .map(|candidate| RecoveredCandidate {
-                words: candidate.words,
-                verified: candidate.verified,
-                phrase: candidate.phrase.to_string(),
-            })
-            .collect(),
+        recovery: recovery.iter().map(RecoveredCandidate::of).collect(),
     })
 }
 
@@ -260,34 +243,12 @@ fn record_same_length<E: Argon2Engine>(
     input: &PublicInput,
 ) -> Result<SameLengthVector, MhfeError> {
     let work = mhfe.work_factor();
-    let password = Password::new(input.password)?;
-    let source = phrase::parse(input.phrase).map_err(MhfeError::InvalidPhrase)?;
-    let x = Zeroizing::new(source.to_entropy());
-    if x.len() == packing::STATE_BYTES {
-        return Err(MhfeError::SameLengthNeedsShortPhrase);
-    }
+    // The state of a same-length container is the entropy itself.
+    let (password, x) = input.password_and_entropy()?;
+    let words = packing::words_of_entropy(x.len());
+    Suite::SameLength.require_original(words)?;
     let geometry = Geometry::same_length(x.len())?;
-
-    let mut encryption_rounds = Vec::new();
-    let y = mhfe.permutation(&password, geometry).forward(
-        &x,
-        &mut |_| Ok(()),
-        Some(&mut encryption_rounds),
-    )?;
-    mhfe::reject_fixed_point(&x, &y)?;
-    let container = phrase::phrase_from_entropy(&y)?;
-
-    let mut decryption_rounds = Vec::new();
-    let recovered = mhfe.permutation(&password, geometry).inverse(
-        &y,
-        &mut |_| Ok(()),
-        Some(&mut decryption_rounds),
-    )?;
-    if *recovered != *x {
-        return Err(MhfeError::Internal(
-            "the vector round trip did not return the original state".to_owned(),
-        ));
-    }
+    let trip = RoundTrip::run(mhfe, &password, geometry, &x)?;
     Ok(SameLengthVector {
         schema: SAME_LENGTH_SCHEMA,
         suite_id: SAME_LENGTH_SUITE_ID,
@@ -297,20 +258,64 @@ fn record_same_length<E: Argon2Engine>(
         inputs: inputs_of(input, &password, work),
         argon2: argon2_of(work),
         state: SameLengthState {
-            words: source.word_count(),
+            words,
             entropy_bits: 8 * x.len() as u32,
             half_bytes: geometry.half_bytes(),
             state_hex: hex::encode(&x[..]),
         },
-        encryption: pass(geometry, &x, &encryption_rounds, &y),
-        container: container.to_string(),
-        decryption: pass(geometry, &y, &decryption_rounds, &recovered),
+        encryption: pass(geometry, &x, &trip.encryption_rounds, &trip.y),
+        container: phrase::phrase_from_entropy(&trip.y)?.to_string(),
+        decryption: pass(geometry, &trip.y, &trip.decryption_rounds, &trip.recovered),
         recovery: RecoveredCandidate {
-            words: source.word_count(),
+            words,
             verified: false,
-            phrase: phrase::phrase_from_entropy(&recovered)?.to_string(),
+            phrase: phrase::phrase_from_entropy(&trip.recovered)?.to_string(),
         },
     })
+}
+
+/// One round trip of the permutation of `geometry` with the trace of every round: the state `x`
+/// forward to a container's state `y`, refused when it would be `x` itself, and back, which must
+/// give `x` again.
+struct RoundTrip {
+    y: LockedBytes,
+    encryption_rounds: Vec<RoundTrace>,
+    recovered: LockedBytes,
+    decryption_rounds: Vec<RoundTrace>,
+}
+
+impl RoundTrip {
+    fn run<E: Argon2Engine>(
+        mhfe: &mut Mhfe<E>,
+        password: &Password,
+        geometry: Geometry,
+        x: &[u8],
+    ) -> Result<Self, MhfeError> {
+        let mut encryption_rounds = Vec::new();
+        let y = mhfe.permutation(password, geometry).forward(
+            x,
+            &mut |_| Ok(()),
+            Some(&mut encryption_rounds),
+        )?;
+        mhfe::reject_fixed_point(x, &y)?;
+        let mut decryption_rounds = Vec::new();
+        let recovered = mhfe.permutation(password, geometry).inverse(
+            &y,
+            &mut |_| Ok(()),
+            Some(&mut decryption_rounds),
+        )?;
+        if recovered[..] != *x {
+            return Err(MhfeError::Internal(
+                "the vector round trip did not return the original state".to_owned(),
+            ));
+        }
+        Ok(Self {
+            y,
+            encryption_rounds,
+            recovered,
+            decryption_rounds,
+        })
+    }
 }
 
 fn inputs_of(input: &PublicInput, password: &Password, work: WorkFactor) -> Inputs {
@@ -405,12 +410,16 @@ impl PublicInput {
         self.password
     }
 
-    pub const fn pim(&self) -> u32 {
-        self.pim
+    /// Its PIM and memory level.
+    pub fn work(&self) -> Result<WorkFactor, MhfeError> {
+        WorkFactor::new(self.pim, self.memory_level)
     }
 
-    pub const fn memory_level(&self) -> u32 {
-        self.memory_level
+    /// Its password and the entropy of its phrase, which a record encrypts.
+    fn password_and_entropy(&self) -> Result<(Password, Zeroizing<Vec<u8>>), MhfeError> {
+        let password = Password::new(self.password)?;
+        let source = phrase::parse(self.phrase).map_err(MhfeError::InvalidPhrase)?;
+        Ok((password, Zeroizing::new(source.to_entropy())))
     }
 }
 
@@ -511,8 +520,11 @@ pub const PUBLIC_INPUTS: [PublicInput; 17] = [
     ),
 ];
 
-/// A recovery that must not give the original: a wrong password or setting, or a wrongly chosen
-/// length. `container_of` names the positive vector whose container is used.
+/// A negative case: a recovery of the container of the positive vector that `container_of`
+/// names, with a wrong password or setting, or with a length stated or chosen that is not the
+/// original's. Most give another phrase or an error. With 24 words stated for a 12-word
+/// original, recovery gives the verified original first, beside the unverified 24-word reading;
+/// `stated-24-words` records both, and `selected-24-words` the 24-word reading alone.
 ///
 /// Like [`PublicInput`], it can only be read outside this crate, and [`negative_case`] refuses
 /// anything that is not in [`NEGATIVE_INPUTS`].
@@ -541,12 +553,9 @@ impl NegativeInput {
         self.password
     }
 
-    pub const fn pim(&self) -> u32 {
-        self.pim
-    }
-
-    pub const fn memory_level(&self) -> u32 {
-        self.memory_level
+    /// Its PIM and memory level.
+    pub fn work(&self) -> Result<WorkFactor, MhfeError> {
+        WorkFactor::new(self.pim, self.memory_level)
     }
 
     /// 0 for automatic detection, otherwise the chosen length.
@@ -575,8 +584,10 @@ const fn negative(
 
 /// Wrong password, PIM and memory level for a 12-word container; a wrong password for a 24-word
 /// container, which has no check and yields another valid phrase; and the right password with
-/// 24 words selected for a 12-word container, which gives an unverified 24-word reading.
-pub const NEGATIVE_INPUTS: [NegativeInput; 6] = [
+/// 24 words stated for a 12-word container: `selected-24-words`, the historical record of the
+/// unverified 24-word reading alone, and `stated-24-words`, the recovery under the length rules,
+/// the verified 12-word reading first and the 24-word one after it.
+pub const NEGATIVE_INPUTS: [NegativeInput; 7] = [
     negative(
         "wrong-password-detect",
         "zero-12",
@@ -604,7 +615,16 @@ pub const NEGATIVE_INPUTS: [NegativeInput; 6] = [
         0,
     ),
     negative("selected-24-words", "zero-12", TEST_PASSWORD, 0, 0, 24),
+    negative("stated-24-words", "zero-12", TEST_PASSWORD, 0, 0, 24),
 ];
+
+/// Negative cases recorded before the length rules of recovery, which keep the reading of the
+/// stated length alone; the corpus holds them byte for byte (mhfe_spec vectors/suite3/README.md).
+/// scripts/independent-suite3.py, the independent oracle, keeps its own copy, as it shares no code
+/// with this one; a test keeps the two equal. Its bytes are bound by the record of the full
+/// verification (tests/fixtures/suite3-vectors/independent-verification.json), so the link is
+/// told here only.
+const STATED_READING_ONLY: [&str; 1] = ["selected-24-words"];
 
 /// The suite 4 vector set: every short length at the defaults, zero and non-zero entropy, a
 /// non-zero PIM, memory level 1, both together, and a password that NFKD changes.
@@ -677,7 +697,8 @@ pub const SAME_LENGTH_NEGATIVE_INPUTS: [NegativeInput; 4] = [
     ),
 ];
 
-/// The recorded outcome of a negative case: the phrases recovery produced, or its error code.
+/// The recorded outcome of a negative case: the phrases recovery produced, or its error code. For
+/// a case of `STATED_READING_ONLY` it keeps only the reading of the stated length.
 #[derive(Serialize)]
 pub struct NegativeCase {
     pub schema: &'static str,
@@ -695,7 +716,9 @@ pub struct NegativeCase {
     pub error_code: Option<&'static str>,
 }
 
-/// Runs one suite 3 negative case at full size and records what recovery gives.
+/// Runs one suite 3 negative case at full size and records what recovery gives; for a case of
+/// `STATED_READING_ONLY`, only the reading of the stated length, as the historical record keeps
+/// it.
 pub fn negative_case<E: Argon2Engine>(
     mhfe: &mut Mhfe<E>,
     input: &NegativeInput,
@@ -725,7 +748,10 @@ pub fn same_length_negative_case<E: Argon2Engine>(
     run_negative(mhfe, input, container, Suite::SameLength)
 }
 
-/// A recovery of `container` that must not give its original, under the suite of its set.
+/// Recovers `container` for a negative case under the suite of its set and records the readings
+/// recovery gives, or the error code of a verifier mismatch or of a length choice that does not
+/// apply; any other error is returned. A case of `STATED_READING_ONLY` keeps the reading of the
+/// stated length alone.
 fn run_negative<E: Argon2Engine>(
     mhfe: &mut Mhfe<E>,
     input: &NegativeInput,
@@ -738,7 +764,7 @@ fn run_negative<E: Argon2Engine>(
         0 => PhraseLength::Detect,
         words => PhraseLength::Words(WordCount::new(words)?),
     };
-    let (recovery, error_code) =
+    let (mut recovery, error_code) =
         match mhfe.decrypt(container, &password, length, &mut |_, _| Ok(())) {
             Ok(Recovery::Phrase(phrase)) => (vec![phrase], None),
             Ok(Recovery::Ambiguous(candidates)) => (candidates, None),
@@ -747,6 +773,12 @@ fn run_negative<E: Argon2Engine>(
             ) => (Vec::new(), Some(error.code())),
             Err(other) => return Err(other),
         };
+    // The historical cases keep the reading of the stated length alone; every other case records
+    // the recovery as the length rules give it.
+    if let (PhraseLength::Words(words), true) = (length, STATED_READING_ONLY.contains(&input.name))
+    {
+        recovery.retain(|reading| reading.words() == words.get());
+    }
     Ok(NegativeCase {
         schema: match suite {
             Suite::TwentyFourWords => NEGATIVE_SCHEMA,
@@ -761,14 +793,7 @@ fn run_negative<E: Argon2Engine>(
         pim: work.pim(),
         memory_level: work.memory_level(),
         words: input.words,
-        recovery: recovery
-            .into_iter()
-            .map(|candidate| RecoveredCandidate {
-                words: candidate.words,
-                verified: candidate.verified,
-                phrase: candidate.phrase.to_string(),
-            })
-            .collect(),
+        recovery: recovery.iter().map(RecoveredCandidate::of).collect(),
         error_code,
     })
 }
@@ -776,12 +801,47 @@ fn run_negative<E: Argon2Engine>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{Argon2Cost, NativeEngine};
+
+    /// The independent oracle exempts the same negative cases from the length rules as this
+    /// generator: its copy of the list must name the same vectors (a copy that a second program
+    /// cannot avoid, as the workspace rule on copies allows).
+    #[test]
+    fn the_oracle_exempts_the_same_cases() {
+        let script = include_str!("../scripts/independent-suite3.py");
+        let line = script
+            .lines()
+            .find(|line| line.starts_with("STATED_READING_ONLY = {"))
+            .expect("the oracle defines STATED_READING_ONLY");
+        let names: Vec<&str> = line
+            .trim_start_matches("STATED_READING_ONLY = {")
+            .trim_end_matches('}')
+            .split(',')
+            .map(|name| name.trim().trim_matches('"'))
+            .filter(|name| !name.is_empty())
+            .collect();
+        assert_eq!(names, STATED_READING_ONLY);
+    }
     use crate::suite::{DS_MASK, DS_SALT, SAME_LENGTH_DS_MASK, SAME_LENGTH_DS_SALT};
     use blake2::digest::consts::U32;
     use blake2::{Blake2b, Digest};
     use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
+
+    /// HMAC-SHA-256, as the round mask takes it, from an implementation of its own.
+    fn hmac_sha256(key: &[u8], input: &[u8]) -> Vec<u8> {
+        let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(key).unwrap();
+        mac.update(input);
+        mac.finalize().into_bytes().to_vec()
+    }
+
+    impl PublicInput {
+        /// The length of its phrase, once its phrase, password and settings are valid.
+        fn checked_length(&self) -> usize {
+            Password::new(self.password).unwrap();
+            self.work().unwrap();
+            crate::check_phrase(self.phrase).unwrap()
+        }
+    }
 
     #[test]
     fn the_public_inputs_are_valid_and_cover_the_required_cases() {
@@ -789,9 +849,7 @@ mod tests {
         let mut lengths = std::collections::HashSet::new();
         for input in &PUBLIC_INPUTS {
             assert!(names.insert(input.name), "duplicate name {}", input.name);
-            lengths.insert(crate::check_phrase(input.phrase).unwrap());
-            Password::new(input.password).unwrap();
-            WorkFactor::new(input.pim, input.memory_level).unwrap();
+            lengths.insert(input.checked_length());
         }
         assert_eq!(lengths.len(), 5, "every phrase length");
         assert!(PUBLIC_INPUTS
@@ -807,19 +865,15 @@ mod tests {
         let entropy = phrase::parse(ambiguous.phrase).unwrap().to_entropy();
         let state = packing::pack(&entropy).unwrap();
         assert_eq!(
-            packing::matching_short_lengths(mhfe::suite_3_state(&state).unwrap()),
-            vec![12, 21]
+            crate::detection::LengthDetection::of(mhfe::suite_3_state(&state).unwrap())
+                .short_lengths(),
+            [12, 21]
         );
     }
 
     #[test]
     fn a_reduced_vector_records_consistent_rounds() {
-        let cost = Argon2Cost {
-            memory_kib: 256,
-            passes: 1,
-        };
-        let engine = NativeEngine::reduced_for_tests(cost).unwrap();
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
+        let mut mhfe = crate::test_support::reduced();
         let phrase = "legal winner thank year wave sausage worth useful legal winner thank yellow";
         let reduced = input("reduced", phrase, "Caf\u{E9} \u{1F510}", 0, 0);
         // A private input at reduced cost, which the public entry point refuses.
@@ -868,10 +922,10 @@ mod tests {
                 let key = hex::decode(&round.argon2_key_hex).unwrap();
                 let mask_input = hex::decode(&round.mask_input_hex).unwrap();
                 assert!(mask_input.starts_with(DS_MASK));
-                let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&key).unwrap();
-                mac.update(&mask_input);
-                let tag = mac.finalize().into_bytes();
-                assert_eq!(hex::encode(&tag[..16]), round.mask_hex);
+                assert_eq!(
+                    hex::encode(&hmac_sha256(&key, &mask_input)[..16]),
+                    round.mask_hex
+                );
             }
         }
     }
@@ -883,9 +937,7 @@ mod tests {
         for input in &SAME_LENGTH_INPUTS {
             assert!(names.insert(input.name), "duplicate name {}", input.name);
             assert!(!PUBLIC_INPUTS.iter().any(|other| other.name == input.name));
-            lengths.insert(crate::check_phrase(input.phrase).unwrap());
-            Password::new(input.password).unwrap();
-            WorkFactor::new(input.pim, input.memory_level).unwrap();
+            lengths.insert(input.checked_length());
         }
         assert_eq!(lengths, [12, 15, 18, 21].into_iter().collect());
         for negative in &SAME_LENGTH_NEGATIVE_INPUTS {
@@ -895,12 +947,7 @@ mod tests {
 
     #[test]
     fn a_reduced_same_length_vector_records_consistent_rounds() {
-        let cost = Argon2Cost {
-            memory_kib: 256,
-            passes: 1,
-        };
-        let engine = NativeEngine::reduced_for_tests(cost).unwrap();
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
+        let mut mhfe = crate::test_support::reduced();
         let reduced = input("reduced", ZERO_15, "Caf\u{E9} \u{1F510}", 0, 0);
         // A private input at reduced cost, which the public entry point refuses.
         assert!(generate_same_length(&mut mhfe, &reduced).is_err());
@@ -939,10 +986,10 @@ mod tests {
             let mask_input = hex::decode(&round.mask_input_hex).unwrap();
             assert!(mask_input.starts_with(SAME_LENGTH_DS_MASK));
             let key = hex::decode(&round.argon2_key_hex).unwrap();
-            let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&key).unwrap();
-            mac.update(&mask_input);
-            let tag = mac.finalize().into_bytes();
-            assert_eq!(hex::encode(&tag[..10]), round.mask_hex);
+            assert_eq!(
+                hex::encode(&hmac_sha256(&key, &mask_input)[..10]),
+                round.mask_hex
+            );
         }
         // A 24-word phrase has no same-length form.
         let refused = input("refused", ZERO_24, TEST_PASSWORD, 0, 0);

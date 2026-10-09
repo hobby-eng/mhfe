@@ -22,7 +22,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
-use crate::packing::STATE_BYTES;
+use crate::packing::{self, STATE_BYTES};
 use crate::suite::{DS_MASK, DS_SALT, ROUNDS, SAME_LENGTH_DS_MASK, SAME_LENGTH_DS_SALT};
 use crate::{MhfeError, Password, WorkFactor};
 
@@ -64,7 +64,11 @@ impl Geometry {
     /// Suite 4 for an original of `entropy_bytes` bytes (16, 20, 24 or 28): the entropy itself
     /// in two halves of `ENT/2` bits.
     pub fn same_length(entropy_bytes: usize) -> Result<Self, MhfeError> {
-        if !matches!(entropy_bytes, 16 | 20 | 24 | 28) {
+        // The entropy of a 12- to 21-word phrase.
+        let words = packing::words_of_entropy(entropy_bytes);
+        if !packing::SHORT_WORD_COUNTS.contains(&words)
+            || packing::entropy_of_words(words) != entropy_bytes
+        {
             return Err(MhfeError::Internal(format!(
                 "a same-length container cannot hold {entropy_bytes} bytes of entropy"
             )));
@@ -124,20 +128,14 @@ impl Permutation<'_> {
         on_round: RoundCallback<'_>,
         mut trace: Option<&mut Vec<RoundTrace>>,
     ) -> Result<LockedBytes, MhfeError> {
-        let (mut left, mut right) = self.split(x)?;
+        let mut halves = self.split(x)?;
         for round in 0..ROUNDS {
             on_round(round + 1)?;
-            let values = self.round_values(round, &right)?;
-            let before = trace.is_some().then(|| join(&left, &right));
-            // L_{i+1} = R_i and R_{i+1} = L_i XOR M_i, in place: the left half takes the mask,
-            // then the two halves trade places, each in its own locked buffer.
-            xor_in_place(&mut left, &values.mask);
-            std::mem::swap(&mut left, &mut right);
-            if let (Some(trace), Some(before)) = (trace.as_deref_mut(), before) {
-                trace.push(values.into_trace(round, &before, &join(&left, &right)));
-            }
+            let values = self.round_values(round, &halves.1)?;
+            // L_{i+1} = R_i and R_{i+1} = L_i XOR M_i: the left half takes the mask.
+            apply_round(&mut halves, Side::Left, values, round, trace.as_deref_mut());
         }
-        Ok(locked_join(&left, &right))
+        Ok(locked_join(&halves.0, &halves.1))
     }
 
     /// `X = Perm^-1(Y)`: rounds 11 down to 0. The callback still counts from 1 to 12.
@@ -147,22 +145,21 @@ impl Permutation<'_> {
         on_round: RoundCallback<'_>,
         mut trace: Option<&mut Vec<RoundTrace>>,
     ) -> Result<LockedBytes, MhfeError> {
-        let (mut left, mut right) = self.split(y)?;
+        let mut halves = self.split(y)?;
         for (step, round) in (0..ROUNDS).rev().enumerate() {
             on_round(step as u32 + 1)?;
             // R_i = L_{i+1}, so the mask comes from the current left half;
-            // then L_i = R_{i+1} XOR M_i.
-            let values = self.round_values(round, &left)?;
-            let before = trace.is_some().then(|| join(&left, &right));
-            // In place, as in the forward direction: the right half takes the mask, then the two
-            // halves trade places.
-            xor_in_place(&mut right, &values.mask);
-            std::mem::swap(&mut left, &mut right);
-            if let (Some(trace), Some(before)) = (trace.as_deref_mut(), before) {
-                trace.push(values.into_trace(round, &before, &join(&left, &right)));
-            }
+            // then L_i = R_{i+1} XOR M_i: the right half takes the mask.
+            let values = self.round_values(round, &halves.0)?;
+            apply_round(
+                &mut halves,
+                Side::Right,
+                values,
+                round,
+                trace.as_deref_mut(),
+            );
         }
-        Ok(locked_join(&left, &right))
+        Ok(locked_join(&halves.0, &halves.1))
     }
 
     /// `RoundMask(i, R)` together with the salt and key it passes through.
@@ -289,6 +286,37 @@ fn join(left: &[u8], right: &[u8]) -> Zeroizing<Vec<u8>> {
 }
 
 /// `half ^= mask`, in the half's own buffer.
+/// The half of the state that takes a round's mask: the left one going forward, the right one
+/// going back.
+#[derive(Clone, Copy)]
+enum Side {
+    Left,
+    Right,
+}
+
+/// One round in place, in either direction: the `masked` half takes the round's mask, then the two
+/// halves trade places, each in its own locked buffer. `trace` records the round with the state
+/// before and after it.
+fn apply_round(
+    halves: &mut Halves,
+    masked: Side,
+    values: RoundValues,
+    round: u32,
+    trace: Option<&mut Vec<RoundTrace>>,
+) {
+    let (left, right) = halves;
+    let before = trace.is_some().then(|| join(left, right));
+    let half = match masked {
+        Side::Left => &mut *left,
+        Side::Right => &mut *right,
+    };
+    xor_in_place(half, &values.mask);
+    std::mem::swap(left, right);
+    if let (Some(trace), Some(before)) = (trace, before) {
+        trace.push(values.into_trace(round, &before, &join(left, right)));
+    }
+}
+
 fn xor_in_place(half: &mut [u8], mask: &[u8]) {
     for (byte, mask_byte) in half.iter_mut().zip(mask) {
         *byte ^= mask_byte;

@@ -93,14 +93,8 @@ pub(crate) mod tests {
 
     /// A deterministic stand-in for a random source: bytes of a simple counter generator.
     pub(crate) fn counter_source(seed: u8) -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
-        let mut state = u32::from(seed).wrapping_mul(2_654_435_761).wrapping_add(1);
-        move |bytes: &mut [u8]| {
-            for byte in bytes.iter_mut() {
-                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
-                *byte = (state >> 24) as u8;
-            }
-            Ok(())
-        }
+        // Knuth's multiplicative hash spreads the small seeds apart.
+        health::lcg_source(u32::from(seed).wrapping_mul(2_654_435_761).wrapping_add(1))
     }
 
     #[test]

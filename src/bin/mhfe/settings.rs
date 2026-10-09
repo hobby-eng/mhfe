@@ -3,10 +3,9 @@
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::engine::HIGHEST_MEMORY_LEVEL;
-use mhfe::engine::{available_memory_bytes, check_can_run, NativeEngine};
+use mhfe::engine::{check_can_run, highest_available_level, NativeEngine};
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
-use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, MAX_MEMORY_LEVEL, ROUNDS};
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
@@ -14,8 +13,6 @@ use crate::flow;
 use crate::readme;
 use crate::style::{self, paint, ACCENT, MUTED, WARNING};
 use crate::terminal::Input;
-
-const GIB: u64 = 1 << 30;
 
 #[derive(Args, Clone, Copy)]
 pub struct Settings {
@@ -31,7 +28,7 @@ pub struct Settings {
 
 fn pim_help() -> String {
     style::option_help(&[
-        "Pass multiplier, 0 to 1023 (default 0).",
+        &format!("Pass multiplier, {} (default 0).", pim_range()),
         "Every step adds the default work again: PIM 1 doubles the time of the encryption and \
          of every recovery, PIM 9 makes it ten times as long. Each guess of the password costs \
          an attacker the same extra time.",
@@ -43,10 +40,14 @@ fn pim_help() -> String {
 
 fn memory_level_help() -> String {
     style::option_help(&[
-        "Memory level, 0 to 21 (default 0: 2 GiB).",
+        &format!(
+            "Memory level, {} (default 0: {}).",
+            level_range(),
+            memory_text(0)
+        ),
         "The memory of every Argon2 call, doubling every two levels; the time grows in \
          proportion to it:",
-        "0 = 2 GiB, 1 = 3 GiB, 2 = 4 GiB, 3 = 6 GiB, 4 = 8 GiB, ... 21 = 3 TiB",
+        &memory_levels(),
         "Recovery must use the same level and needs that much free memory, so choose a level \
          that the computer you will recover on can provide. The browser tools support level 0 \
          only. At 0 there is nothing to keep; any other level must be remembered or recorded \
@@ -86,11 +87,13 @@ pub enum Operation {
     Wallets,
     /// `mhfe new`: a new phrase, then the 24 rounds of an encryption.
     New,
+    /// `mhfe repair`: twelve rounds backwards for each candidate of a search for missing words.
+    Repair,
 }
 
 impl Operation {
     /// The title of the command, at the top of its screen and of its private screen.
-    pub fn title(self) -> &'static str {
+    pub const fn title(self) -> &'static str {
         match self {
             Operation::Encrypt => "Encrypt a seed phrase",
             Operation::Decrypt => "Recover a seed phrase",
@@ -98,6 +101,7 @@ impl Operation {
             Operation::Rekey | Operation::RekeyNew => "Change the password",
             Operation::Wallets => "Open hidden wallets",
             Operation::New => "Generate a new wallet",
+            Operation::Repair => "Repair a container phrase",
         }
     }
 }
@@ -135,7 +139,11 @@ fn warn_about_swap() {
     if areas.is_empty() {
         return;
     }
-    let names: Vec<&str> = areas.iter().map(|area| area.name.as_str()).collect();
+    // A device name is the system's text: shown escaped, as every path is.
+    let names: Vec<String> = areas
+        .iter()
+        .map(|area| style::escaped(&area.name))
+        .collect();
     let headline = if areas.iter().all(|area| area.unknown) {
         format!(
             "MHFE cannot tell whether swap is encrypted: {}.",
@@ -174,7 +182,11 @@ fn ask_for_own(
                 Answer::new("My own PIM and memory level", "typed next"),
             ],
         ),
-        Operation::Decrypt | Operation::Check | Operation::Rekey | Operation::Wallets => (
+        Operation::Decrypt
+        | Operation::Check
+        | Operation::Rekey
+        | Operation::Wallets
+        | Operation::Repair => (
             "Which settings was the container made with?",
             [
                 Answer::new("PIM 0 and memory level 0, the defaults", time),
@@ -202,7 +214,7 @@ fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
         let pim = ask_number(
             input,
             &Question {
-                text: "PIM, 0 to 1023",
+                text: &format!("PIM, {}", pim_range()),
                 explanation: &["Each step adds the default work again: 1 doubles the time."],
                 more: None,
                 record: None,
@@ -210,16 +222,16 @@ fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
             "PIM: ",
             &mut drawn_lines,
         )?;
-        let sizes = "0 = 2 GiB, 1 = 3 GiB, 2 = 4 GiB, 3 = 6 GiB, 4 = 8 GiB, ... 21 = 3 TiB.";
+        let sizes = format!("{}.", memory_levels());
         let available = highest_available_level().map(|highest| {
             format!("This computer has the memory for level {highest} at most now.")
         });
-        let mut explanation = vec![sizes];
+        let mut explanation = vec![sizes.as_str()];
         explanation.extend(available.as_deref());
         let level = ask_number(
             input,
             &Question {
-                text: "Memory level, 0 to 21",
+                text: &format!("Memory level, {}", level_range()),
                 explanation: &explanation,
                 more: None,
                 record: None,
@@ -270,7 +282,11 @@ fn ask_number(
 fn rounds_of(operation: Operation) -> u32 {
     match operation {
         Operation::Encrypt | Operation::RekeyNew | Operation::New => ENCRYPTION_ROUNDS,
-        Operation::Decrypt | Operation::Check | Operation::Rekey | Operation::Wallets => ROUNDS,
+        Operation::Decrypt
+        | Operation::Check
+        | Operation::Rekey
+        | Operation::Wallets
+        | Operation::Repair => ROUNDS,
     }
 }
 
@@ -285,13 +301,14 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         }
         Operation::Decrypt | Operation::Check | Operation::Rekey => "12 rounds",
         Operation::Wallets => "12 rounds a wallet",
+        Operation::Repair => "12 rounds a candidate",
     };
     // The estimate is for the twelve rounds of one pass through the cipher.
     let (low, high) = work.estimated_seconds();
     let scale = u64::from(rounds / ROUNDS);
     let gray = |text: String| paint(MUTED, text);
 
-    let memory = format!("({} GiB)", work.memory_bytes() / GIB);
+    let memory = format!("({})", work.memory_text());
     let settings = if asked {
         paint(
             ACCENT,
@@ -326,7 +343,7 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     if let Some(enforced) = isolation_text(crate::protect::isolation()) {
         style::fact("Isolation", enforced);
     }
-    let locking = mhfe::memory::LockProbe.run(Tier::Startup);
+    let locking = mhfe::memory::LockProbe::default().run(Tier::Startup);
     style::fact(
         "Secrets",
         locked_memory_text(locking, crate::protect::lock_limit()),
@@ -351,8 +368,8 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     {
         style::warn(
             &format!(
-                "Recovery will need a computer with {} GiB of free memory.",
-                work.memory_bytes() / GIB
+                "Recovery will need a computer with {} of free memory.",
+                work.memory_text()
             ),
             "",
         );
@@ -383,9 +400,10 @@ fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
 }
 
 /// Whether typed secrets are kept in locked memory, out of swap, as the library's memory-locking
-/// check finds it (mhfe::memory::LockProbe), with the most memory the process may lock when it is
-/// refused. The Argon2 work area is far too large to lock; the warning about unencrypted swap
-/// covers it.
+/// check finds it on a buffer of one typed line's size (mhfe::memory::LockProbe), with the most
+/// memory the process may lock when it is refused. A later buffer that cannot be locked is said
+/// when it is read (terminal::note_unlocked). The Argon2 work area is far too large to lock; the
+/// warning about unencrypted swap covers it.
 fn locked_memory_text(outcome: ComponentOutcome, lock_limit: Option<u64>) -> String {
     match outcome {
         ComponentOutcome::Passed => "kept in locked memory, out of swap".to_owned(),
@@ -438,19 +456,34 @@ fn with_level_hint(error: mhfe::MhfeError) -> Failure {
     failure
 }
 
-/// The highest memory level whose memory the computer reports as free, if any.
-pub fn highest_available_level() -> Option<u32> {
-    let available = available_memory_bytes()?;
-    (0..=HIGHEST_MEMORY_LEVEL)
-        .rev()
-        .filter_map(|level| WorkFactor::new(0, level).ok())
-        .find(|work| work.memory_bytes() <= available)
-        .map(WorkFactor::memory_level)
+/// The memory of the first levels and the last, from the library's work factors, such as
+/// "0 = 2 GiB, 1 = 3 GiB, 2 = 4 GiB, 3 = 6 GiB, 4 = 8 GiB, ... 21 = 3 TiB".
+fn memory_levels() -> String {
+    /// Levels listed before the ellipsis.
+    const FIRST: u32 = 5;
+    let size = |level: u32| format!("{level} = {}", memory_text(level));
+    let first: Vec<String> = (0..FIRST).map(size).collect();
+    format!("{}, ... {}", first.join(", "), size(MAX_MEMORY_LEVEL))
+}
+
+/// The memory of `level`: "2 GiB", and in whole tebibytes from 1 TiB on, as the highest levels are.
+pub fn memory_text(level: u32) -> String {
+    WorkFactor::new(0, level).map_or_else(|_| String::new(), WorkFactor::memory_text)
+}
+
+/// The PIMs a container takes: "0 to 1023".
+pub fn pim_range() -> String {
+    format!("0 to {}", mhfe::MAX_PIM)
+}
+
+/// The memory levels a container takes: "0 to 21".
+pub fn level_range() -> String {
+    format!("0 to {MAX_MEMORY_LEVEL}")
 }
 
 /// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the
 /// longer one, rounded to whole units.
-fn time_range(low_seconds: u64, high_seconds: u64) -> String {
+pub fn time_range(low_seconds: u64, high_seconds: u64) -> String {
     const MINUTE: u64 = 60;
     const HOUR: u64 = 60 * MINUTE;
     const DAY: u64 = 24 * HOUR;
@@ -468,6 +501,8 @@ fn time_range(low_seconds: u64, high_seconds: u64) -> String {
 mod tests {
     use super::*;
     use mhfe::MhfeError;
+
+    const GIB: u64 = 1 << 30;
 
     /// Every isolation text fits one summary line of 78 columns with its "  Isolation  " label.
     #[test]

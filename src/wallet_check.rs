@@ -41,6 +41,7 @@ use bip39::{Language, Mnemonic};
 use crate::memory::LockedText;
 use crate::phrase::{self, locked_phrase_from_entropy};
 use crate::random::{check_source, RandomSource};
+use crate::word_wishes::{WishOdds, WordWishes};
 use crate::{wallet, MhfeError};
 
 #[cfg(any(
@@ -56,10 +57,13 @@ mod threads;
 /// The bits the check fixes: 16, so that a wrong password passes once in 65,536, at a cost of 16
 /// of the 256 bits of a 24-word phrase. A new phrase takes about 65,536 BIP39 seeds to find.
 pub const WALLET_CHECK_BITS: u32 = 16;
+/// One in this many wrong passwords passes the check, and a new phrase takes about as many draws:
+/// 2^[`WALLET_CHECK_BITS`], 65,536.
+pub const WALLET_CHECK_ODDS: u64 = 1 << WALLET_CHECK_BITS;
 /// The domain tag, which keeps the check apart from every other hash of the seed. Draft.
 const DOMAIN: &[u8] = b"MHFE-WALLET-CHECK-SEED-1";
-/// The entropy of a new 24-word phrase: 256 bits.
-pub const NEW_ENTROPY_BYTES: usize = 32;
+/// The entropy of a new 24-word phrase: 256 bits, the whole state of a container.
+pub const NEW_ENTROPY_BYTES: usize = crate::packing::STATE_BYTES;
 
 /// Whether `entropy` passes the criterion of the wallet check with `passphrase`, which may be empty
 /// here; of any length BIP39 takes. A program that checks a recovery uses [`verify`] or
@@ -106,8 +110,10 @@ fn tagged_digest(bits: u32, seed: &[u8]) -> Zeroizing<[u8; 32]> {
 
 /// Draws between two reports to the caller, which can show progress or stop the draw then.
 pub const DRAW_REPORT_INTERVAL: u64 = 1024;
-/// Words of a phrase the wallet check is offered for: new phrases have 24.
-const CHECKED_WORDS: usize = 24;
+/// Hears the number of draws so far, from whichever thread reaches the next report; an error it
+/// returns stops the draw.
+#[cfg(not(target_arch = "wasm32"))]
+pub type SharedDrawReport<'a> = &'a mut (dyn FnMut(u64) -> Result<(), MhfeError> + Send);
 
 /// The rule of the passphrase, for every front end: the wallet check is offered only with a BIP39
 /// passphrase that is not empty (`WALLET_CHECK_NEEDS_PASSPHRASE` otherwise), for a new phrase as
@@ -120,13 +126,22 @@ pub fn require_passphrase(passphrase: &str) -> Result<(), MhfeError> {
     Ok(())
 }
 
+/// The rule of a new wallet's passphrase, typed twice: the repetition must be exactly the same text
+/// (`PASSPHRASES_DIFFER` otherwise). An empty passphrase, none, is typed once and needs none.
+pub fn require_same_passphrase(passphrase: &str, repeat: &str) -> Result<(), MhfeError> {
+    if !passphrase.is_empty() && repeat != passphrase {
+        return Err(MhfeError::PassphrasesDiffer);
+    }
+    Ok(())
+}
+
 /// Whether a recovered 24-word phrase passes the wallet check with the passphrase the owner gives.
 /// An empty passphrase is refused ([`require_passphrase`]), and so is a phrase of another length.
 pub fn verify(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
     require_passphrase(passphrase)?;
     let mnemonic = phrase::parse(text).map_err(MhfeError::InvalidPhrase)?;
-    if mnemonic.word_count() != CHECKED_WORDS {
-        return Err(MhfeError::InvalidWordCount(mnemonic.word_count()));
+    if mnemonic.word_count() != crate::packing::STATE_WORDS {
+        return Err(MhfeError::NoWalletCheckAtLength(mnemonic.word_count()));
     }
     let entropy = Zeroizing::new(mnemonic.to_entropy());
     verify_entropy(&entropy, passphrase)
@@ -138,8 +153,9 @@ pub fn verify(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
 pub fn verify_entropy(entropy: &[u8], passphrase: &str) -> Result<bool, MhfeError> {
     require_passphrase(passphrase)?;
     if entropy.len() != NEW_ENTROPY_BYTES {
-        // Three words for every four bytes of entropy (BIP39).
-        return Err(MhfeError::InvalidWordCount(entropy.len() / 4 * 3));
+        return Err(MhfeError::NoWalletCheckAtLength(
+            crate::packing::words_of_entropy(entropy.len()),
+        ));
     }
     passes(entropy, passphrase)
 }
@@ -148,12 +164,17 @@ pub fn verify_entropy(entropy: &[u8], passphrase: &str) -> Result<bool, MhfeErro
 /// BIP39 passphrase.
 pub struct PhraseDraw {
     passphrase: Option<LockedText>,
+    /// The words the phrase must hold and avoid; none by default.
+    wishes: WordWishes,
 }
 
 impl PhraseDraw {
     /// One random phrase, without the check.
     pub fn unchecked() -> Self {
-        Self { passphrase: None }
+        Self {
+            passphrase: None,
+            wishes: WordWishes::none(),
+        }
     }
 
     /// Phrases drawn until one passes the wallet check with `passphrase`, about 65,536 BIP39
@@ -163,11 +184,33 @@ impl PhraseDraw {
         require_passphrase(passphrase)?;
         Ok(Self {
             passphrase: Some(LockedText::copy_of(passphrase)),
+            wishes: WordWishes::none(),
         })
+    }
+
+    /// The same draw for a phrase that also meets `wishes`. Their limits keep it quick and leave
+    /// it enough random bits ([`crate::word_wishes`]); [`PhraseDraw::odds`] says how many.
+    pub fn with_wishes(self, wishes: WordWishes) -> Self {
+        Self { wishes, ..self }
     }
 
     pub fn is_checked(&self) -> bool {
         self.passphrase.is_some()
+    }
+
+    /// The bits the check takes from the phrase's randomness: [`WALLET_CHECK_BITS`], or 0.
+    pub fn check_bits(&self) -> u32 {
+        if self.is_checked() {
+            WALLET_CHECK_BITS
+        } else {
+            0
+        }
+    }
+
+    /// What the phrase keeps of its randomness and how many draws it is expected to take, for a
+    /// front end to say before it draws.
+    pub fn odds(&self) -> WishOdds {
+        self.wishes.odds(self.check_bits())
     }
 
     /// Up to `count` draws from `source`: the first entropy that passes, or `None`. Several
@@ -186,6 +229,12 @@ impl PhraseDraw {
                 return Err(MhfeError::RandomFailed(
                     "it gave an entropy of zeros".to_owned(),
                 ));
+            }
+            // The chosen words' bits are set after the source's bytes are judged, and a phrase
+            // that misses a wish is drawn again, before the check's costly seed.
+            self.wishes.apply(&mut entropy);
+            if !self.wishes.met_by(&entropy) {
+                continue;
             }
             let found = match &self.passphrase {
                 None => true,
@@ -231,7 +280,7 @@ impl PhraseDraw {
     pub fn draw_on_every_core<S, F>(
         &self,
         new_source: F,
-        on_draws: &mut (dyn FnMut(u64) -> Result<(), MhfeError> + Send),
+        on_draws: SharedDrawReport<'_>,
     ) -> Result<NewPhrase, MhfeError>
     where
         S: RandomSource,
@@ -247,7 +296,7 @@ impl PhraseDraw {
         &self,
         threads: usize,
         new_source: &F,
-        on_draws: &mut (dyn FnMut(u64) -> Result<(), MhfeError> + Send),
+        on_draws: SharedDrawReport<'_>,
     ) -> Result<NewPhrase, MhfeError>
     where
         S: RandomSource,
@@ -283,6 +332,14 @@ impl PhraseDraw {
         if *read != entropy {
             return Err(MhfeError::Internal(
                 "a new phrase reads back as another entropy".to_owned(),
+            ));
+        }
+        let words: &[u8; NEW_ENTROPY_BYTES] = (&read[..])
+            .try_into()
+            .map_err(|_| MhfeError::Internal("a new phrase is not 24 words".to_owned()))?;
+        if !self.wishes.met_by(words) {
+            return Err(MhfeError::Internal(
+                "a new phrase does not meet its wishes when read back".to_owned(),
             ));
         }
         if let Some(passphrase) = &self.passphrase {
@@ -408,7 +465,7 @@ mod tests {
                       abandon abandon about";
         assert!(matches!(
             verify(twelve, "TREZOR"),
-            Err(MhfeError::InvalidWordCount(12))
+            Err(MhfeError::NoWalletCheckAtLength(12))
         ));
         let phrase = crate::phrase::phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
         assert!(matches!(
@@ -425,13 +482,34 @@ mod tests {
         );
         assert_eq!(
             verify_entropy(&entropy[..16], "TREZOR"),
-            Err(MhfeError::InvalidWordCount(12))
+            Err(MhfeError::NoWalletCheckAtLength(12))
         );
         assert_eq!(
             require_passphrase(""),
             Err(MhfeError::WalletCheckNeedsPassphrase)
         );
         assert_eq!(require_passphrase("TREZOR"), Ok(()));
+    }
+
+    /// The library's messages write the odds out, as "65,536"; they must stay the check's.
+    #[test]
+    fn messages_give_the_odds_of_the_check() {
+        assert_eq!(WALLET_CHECK_ODDS, 65_536);
+        assert!(MhfeError::HiddenWalletPassesCheck
+            .to_string()
+            .contains("once in 65,536"));
+    }
+
+    #[test]
+    fn a_new_passphrase_must_be_repeated_exactly() {
+        assert_eq!(require_same_passphrase("TREZOR", "TREZOR"), Ok(()));
+        assert_eq!(require_same_passphrase("", ""), Ok(()));
+        for repeat in ["trezor", "TREZOR ", ""] {
+            assert_eq!(
+                require_same_passphrase("TREZOR", repeat),
+                Err(MhfeError::PassphrasesDiffer)
+            );
+        }
     }
 
     /// The criterion alone takes a phrase of any length, as a recovery's report without a
@@ -445,7 +523,7 @@ mod tests {
         assert_eq!(phrase_passes(twelve, passphrase), Ok(true));
         assert_eq!(
             verify(twelve, passphrase),
-            Err(MhfeError::InvalidWordCount(12))
+            Err(MhfeError::NoWalletCheckAtLength(12))
         );
     }
 

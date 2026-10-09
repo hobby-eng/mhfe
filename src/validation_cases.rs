@@ -4,8 +4,9 @@
 
 use serde_json::Value;
 
-use crate::engine::Argon2Engine;
 use crate::packing;
+// Fails the test if any case reaches Argon2: every rejection must come first.
+use crate::test_support::NoArgon2Calls;
 use crate::{Mhfe, MhfeError, Password, PhraseLength, WordCount, WorkFactor};
 
 fn fixture() -> Value {
@@ -18,15 +19,6 @@ fn cases<'a>(fixture: &'a Value, section: &str) -> &'a Vec<Value> {
 
 fn text<'a>(case: &'a Value, field: &str) -> &'a str {
     case[field].as_str().unwrap()
-}
-
-/// Fails the test if any case reaches Argon2: every rejection must come first.
-struct NoArgon2Calls;
-
-impl Argon2Engine for NoArgon2Calls {
-    fn derive(&mut self, _: &[u8], _: &[u8; 16], _: &mut [u8; 32]) -> Result<(), MhfeError> {
-        panic!("Argon2 was called for an input that should have been rejected");
-    }
 }
 
 #[test]
@@ -163,7 +155,11 @@ fn length_detection_matches_the_fixture() {
             .iter()
             .map(|words| words.as_u64().unwrap() as usize)
             .collect();
-        assert_eq!(packing::matching_short_lengths(&state), expected, "{id}");
+        assert_eq!(
+            crate::detection::LengthDetection::of(&state).short_lengths(),
+            expected,
+            "{id}"
+        );
     }
 }
 

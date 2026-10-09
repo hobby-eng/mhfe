@@ -17,8 +17,10 @@
 //! terminal.rs).
 
 use std::io::{self, IsTerminal, Write};
+use std::time::{Duration, Instant};
 
 use anstream::eprintln;
+use zeroize::Zeroizing;
 
 use crate::exit::Failure;
 use crate::flow::{self, Kind};
@@ -59,14 +61,16 @@ impl<'a> Question<'a> {
 
 /// One answer of a question: a label and a grey note beside it, which may be empty.
 pub struct Answer {
-    pub label: String,
+    /// Wiped when dropped: a label may hold words of a password, as the check word's offer to
+    /// replace one does (AUD-015-SEC006).
+    pub label: Zeroizing<String>,
     pub note: String,
 }
 
 impl Answer {
     pub fn new(label: impl Into<String>, note: impl Into<String>) -> Self {
         Self {
-            label: label.into(),
+            label: Zeroizing::new(label.into()),
             note: note.into(),
         }
     }
@@ -118,6 +122,16 @@ pub fn choose_without_default(
     help: Option<Help>,
 ) -> Result<Option<usize>, Failure> {
     flow::step();
+    choose_here_without_default(question, answers, help)
+}
+
+/// [`choose_without_default`] below what the screen shows already, for a confirmation that must
+/// be explicit, such as the owner's that a phrase shown is theirs.
+pub fn choose_here_without_default(
+    question: &Question,
+    answers: &[Answer],
+    help: Option<Help>,
+) -> Result<Option<usize>, Failure> {
     run_list(question, answers, help, None)
 }
 
@@ -135,8 +149,15 @@ fn run_list(
     hidden_input::with_keys(|next_key| {
         let mut selected = start;
         let mut drawn = draw(question, answers, selected, help_hint);
+        let shown_at = Instant::now();
         let selected = loop {
-            match (next_key()?, selected) {
+            let key = next_key()?;
+            // An answer that must be the person's own takes no key typed before the question
+            // appeared, such as during a long recovery: those keys arrive at once (AUD-018).
+            if start.is_none() && shown_at.elapsed() < TYPED_AHEAD && key != Key::Quit {
+                continue;
+            }
+            match (key, selected) {
                 (Key::Up, Some(index)) => selected = Some(index.checked_sub(1).unwrap_or(last)),
                 (Key::Up, None) => selected = Some(last),
                 (Key::Down, Some(index)) => selected = Some((index + 1) % answers.len()),
@@ -171,6 +192,11 @@ fn run_list(
         Ok(Some(selected))
     })
 }
+
+/// How soon after a question with no default answer a key counts as typed before it appeared:
+/// keys waiting in the terminal or in the standard library's buffer arrive within microseconds,
+/// while a person needs far longer than this to read the question and answer.
+const TYPED_AHEAD: Duration = Duration::from_millis(200);
 
 /// The line that records an answer: a grey label and the answer in cyan, as a fact of a summary.
 pub fn record(label: &str, answer: &str) {
@@ -329,13 +355,46 @@ pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
     draw_entry_rows(entries, Some(selected)).rows()
 }
 
-/// The entries with `selected` highlighted, or none.
-fn draw_entry_rows(entries: &[(&str, &str)], selected: Option<usize>) -> DrawnRows {
-    let label_width = entries
+/// The width of the labels of a list: its longest, to which the others are padded.
+fn label_width(entries: &[(&str, &str)]) -> usize {
+    entries
         .iter()
         .map(|(label, _)| label.chars().count())
         .max()
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
+
+/// The widest line of a list as drawn: "› 1  ", the labels padded to the longest, two spaces and
+/// the note. A list wider than [`LINE_WIDTH`] has a note cut with "…".
+#[cfg(test)]
+pub fn widest_line(entries: &[(&str, &str)]) -> usize {
+    let label_width = label_width(entries);
+    entries
+        .iter()
+        .map(|(label, note)| {
+            if note.is_empty() {
+                5 + label.chars().count()
+            } else {
+                5 + label_width + 2 + note.chars().count()
+            }
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// Whether every answer of a list shows whole, no note cut: for the tests of each list.
+#[cfg(test)]
+pub fn answers_fit(answers: &[Answer]) -> bool {
+    let entries: Vec<(&str, &str)> = answers
+        .iter()
+        .map(|answer| (answer.label.as_str(), answer.note.as_str()))
+        .collect();
+    widest_line(&entries) <= LINE_WIDTH
+}
+
+/// The entries with `selected` highlighted, or none.
+fn draw_entry_rows(entries: &[(&str, &str)], selected: Option<usize>) -> DrawnRows {
+    let label_width = label_width(entries);
     let mut rows = DrawnRows::new();
     for (index, (label, note)) in entries.iter().enumerate() {
         let number = if index < DIGIT_KEYS {
@@ -343,24 +402,26 @@ fn draw_entry_rows(entries: &[(&str, &str)], selected: Option<usize>) -> DrawnRo
         } else {
             " ".to_owned()
         };
+        // The label and its line are wiped as the label is: they are drawn again and again.
         let (marker, shown_label) = if Some(index) == selected {
-            (paint(ACCENT, "›"), paint(STRONG, label))
+            (paint(ACCENT, "›"), Zeroizing::new(paint(STRONG, label)))
         } else {
-            (" ".to_owned(), (*label).to_owned())
+            (" ".to_owned(), Zeroizing::new((*label).to_owned()))
         };
         // Marker, number and the gaps: "› 1  " and two spaces before the note.
         let note_room = LINE_WIDTH.saturating_sub(5 + label_width + 2);
         let note = shortened(note, note_room);
-        let line = if note.is_empty() {
-            format!("{marker} {number}  {shown_label}")
+        let line = Zeroizing::new(if note.is_empty() {
+            format!("{marker} {number}  {}", *shown_label)
         } else {
             // Padded by hand: the width of a painted label would count its colour codes.
             let padding = " ".repeat(label_width - label.chars().count());
             format!(
-                "{marker} {number}  {shown_label}{padding}  {}",
+                "{marker} {number}  {}{padding}  {}",
+                *shown_label,
                 paint(MUTED, note)
             )
-        };
+        });
         rows.line(&line);
     }
     rows

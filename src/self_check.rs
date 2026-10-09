@@ -42,7 +42,8 @@ impl Tier {
             "startup" => Ok(Self::Startup),
             "full" => Ok(Self::Full),
             other => Err(MhfeError::InvalidRequest(format!(
-                "a self-check tier is \"startup\" or \"full\", not \"{other}\""
+                "a self-check tier is \"startup\" or \"full\", not {}",
+                crate::error::quoted(other)
             ))),
         }
     }
@@ -62,6 +63,16 @@ pub enum ComponentOutcome {
     NotRun(String),
     /// A case gave another answer, or the part could not compute it: do not use the program.
     Failed(String),
+}
+
+impl From<Result<(), String>> for ComponentOutcome {
+    /// A part that passed, or failed with the detail it gives.
+    fn from(result: Result<(), String>) -> Self {
+        match result {
+            Ok(()) => Self::Passed,
+            Err(detail) => Self::Failed(detail),
+        }
+    }
 }
 
 impl ComponentOutcome {
@@ -199,6 +210,14 @@ impl SelfCheckReport {
             }),
         }
     }
+}
+
+/// The message of a part that failed, as every front end says it: what failed (such as "the
+/// self-test failed"), the part's label and the detail, and the advice to stop. A detail that ends
+/// a sentence of its own, as a browser's error text may, keeps one period (AUD-015-UI005).
+pub fn failure_message(what: &str, label: &str, detail: &str) -> String {
+    let detail = detail.trim_end_matches('.');
+    format!("{what}: {label}: {detail}. Do not use this program on this computer")
 }
 
 /// Called with the identifier and the label of each check just before it runs, so that a front
@@ -401,6 +420,33 @@ pub(crate) fn digest_outcome(cases: &[DigestCase]) -> ComponentOutcome {
     }
     findings.outcome()
 }
+
+/// Test data that lives as long as the test binary, as the checks hold their vectors.
+#[cfg(test)]
+pub(crate) fn leak<T>(value: T) -> &'static T {
+    Box::leak(Box::new(value))
+}
+
+/// Asserts that `check`, made with a damaged vector, fails at startup with `detail`.
+#[cfg(test)]
+pub(crate) fn fails_with(mut check: impl ComponentCheck, detail: &str) {
+    assert_eq!(
+        check.run(Tier::Startup),
+        ComponentOutcome::Failed(detail.to_owned())
+    );
+}
+
+/// The container phrase of the suite 3 vector zero-12 (vectors/suite3/zero-12.json), the public
+/// all-zero 12-word phrase under the public test password: the container the known answers of the
+/// repair words and of the search for missing words use. A unit test compares it with the vector.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair"
+))]
+pub(crate) const ZERO_12_CONTAINER: &str =
+    "donate stove tower picnic iron rescue trick shrimp roof rib home cigar bag pledge also nerve \
+     cycle famous provide heart ahead chunk caution peace";
 
 /// Decodes a hexadecimal constant at compile time; a malformed one stops the build.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]

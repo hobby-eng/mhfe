@@ -11,6 +11,7 @@ use mhfe::{HiddenWallets, MhfeError, Password};
 
 use crate::check;
 use crate::choice::{Answer, Question};
+use crate::container_repair::RepairOption;
 use crate::encrypt;
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::{self, Flow};
@@ -24,12 +25,15 @@ pub struct Options {
     /// The settings of the container
     #[command(flatten)]
     settings: Settings,
+
+    #[command(flatten)]
+    repair: RepairOption,
 }
 
 /// The top of `mhfe wallets --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Open hidden wallets on a container with other passwords",
+        "Open hidden wallets with other passwords",
         "Every password other than the container's own opens another valid 24-word wallet on a \
          24-word container. This command shows the wallet of each password you type. Nothing is \
          created or stored: the container and a password give the same wallet at any time.",
@@ -38,26 +42,19 @@ pub fn about() -> String {
 
 /// The end of `mhfe wallets -h` and `--help`.
 pub fn help() -> String {
-    let examples = style::help_section(
-        "Examples:",
+    style::examples_with_note(
         &[
             ("mhfe wallets", "Open hidden wallets on a container"),
             ("mhfe wallets --pim 1", "On a container made with PIM 1"),
         ],
-    );
-    let note = style::help_note(
         "Fund a hidden wallet only from sources linked neither to you nor to the main wallet. A \
          new password or new settings for the container (mhfe rekey) changes every hidden wallet.",
-    );
-    format!("{examples}\n{note}")
+    )
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; a wallet is only ever shown on a private screen.
-    let mut input = Input::terminal_only();
-    if !terminal::can_show_privately(&input) {
-        return Err(Failure::invalid_input(NO_PRIVATE_SCREEN));
-    }
+    let mut input = terminal::private_input(NO_PRIVATE_SCREEN)?;
     // Every step on a screen of its own, the summary at the end. The steps lie on the alternate
     // screen, which is what keeps the wallets private: without it the command does not go on.
     let flow = Flow::start(&input, Operation::Wallets.title());
@@ -72,12 +69,15 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     );
     style::more(readme::WALLETS);
 
-    let container = terminal::read_container(&mut input, Operation::Wallets.title())?;
-    if !container.opens_hidden_wallets() {
-        return Err(Failure::invalid_input(
-            "Hidden wallets are opened on a 24-word container only, for now.",
-        ));
-    }
+    // The wallets are opened one password at a time below, so a password that a search for
+    // missing words asked for is not kept.
+    let read = terminal::read_container(
+        &mut input,
+        Operation::Wallets.title(),
+        options.repair.card(Operation::Wallets, work),
+    )?;
+    let container = read.facts;
+    container.require_hidden_wallets()?;
     // A hidden wallet that passes the main wallet's check with its passphrase is refused too; the
     // question comes every time, so that it tells nothing about the main wallet.
     let passphrase = check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;
@@ -107,7 +107,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             Err(error) => return Err(error.into()),
         };
         number += 1;
-        show_wallet(&input, number, &wallet.phrase);
+        show_wallet(&input, number, wallet.phrase());
         if !another(&mut input)? {
             break;
         }
@@ -128,7 +128,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 /// A password typed twice on the private screen that this run has not used yet.
 fn read_unused_password(input: &mut Input, wallets: &HiddenWallets) -> Result<Password, Failure> {
     loop {
-        let password = encrypt::read_new_password(input, Operation::Wallets)?;
+        let password = encrypt::read_typed_password(input, Operation::Wallets)?;
         if !wallets.was_used(&password) {
             return Ok(password);
         }

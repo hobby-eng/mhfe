@@ -24,7 +24,7 @@
 //! })?;
 //! let recovery = mhfe.decrypt(&container, &password, PhraseLength::Detect, &mut |_, _| Ok(()))?;
 //! if let Recovery::Phrase(phrase) = recovery {
-//!     assert_eq!(*phrase.phrase, original);
+//!     assert_eq!(phrase.phrase(), original);
 //! }
 //! # Ok::<(), mhfe::MhfeError>(())
 //! ```
@@ -34,6 +34,7 @@
 
 pub mod check_word;
 mod container;
+mod detection;
 pub mod eff;
 pub mod engine;
 mod error;
@@ -50,11 +51,14 @@ pub mod random;
 mod rehearsal;
 pub mod rekey;
 pub mod repair;
+pub mod search;
 pub mod self_check;
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub mod self_test;
 pub mod strength;
 mod suite;
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod validation_cases;
 #[cfg(any(
@@ -68,6 +72,8 @@ pub mod wallet;
 pub mod wallet_check;
 #[cfg(all(feature = "wasm-bindings", target_arch = "wasm32"))]
 mod wasm_api;
+pub mod word_hints;
+pub mod word_wishes;
 
 pub use container::{
     ConfirmationNeeded, ContainerChoice, ContainerFacts, OriginalFacts, BUILT_IN_CHECK_WORD_COUNTS,
@@ -80,7 +86,11 @@ pub use mhfe::{
 };
 pub use password::{Password, MAX_PASSWORD_BYTES};
 pub use phrase::{check_container, check_phrase, phrase_from_entropy, read_phrase, WORD_COUNTS};
-pub use rehearsal::{CheckOutcome, Confirmation, Reference};
+pub use rehearsal::{
+    require_built_in_check_length, CheckEvidence, CheckOutcome, Confirmation, RecoveredForCheck,
+    RecoveredForRekey, Reference, ReferenceTarget,
+};
 pub use suite::{
-    Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
+    memory_text, Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID,
+    SUITE_ID,
 };

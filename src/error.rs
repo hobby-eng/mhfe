@@ -4,8 +4,6 @@
 
 use std::fmt;
 
-const GIB: u64 = 1 << 30;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MhfeError {
     /// The original seed phrase is not a valid English BIP39 phrase.
@@ -14,6 +12,12 @@ pub enum MhfeError {
     InvalidContainer(String),
     /// A phrase length other than 12, 15, 18, 21 or 24 words was selected.
     InvalidWordCount(usize),
+    /// A built-in check asked for at a length that has none: only a 12- to 21-word original of a
+    /// 24-word container carries one.
+    NoBuiltInCheckAtLength(usize),
+    /// The wallet check asked for of a phrase that is not 24 words long: only a new 24-word phrase
+    /// is drawn with it.
+    NoWalletCheckAtLength(usize),
     /// A same-length container was asked for a 24-word original, which has none: its container
     /// always has 24 words.
     SameLengthNeedsShortPhrase,
@@ -30,6 +34,11 @@ pub enum MhfeError {
     NoWalletCheck {
         container_words: usize,
     },
+    /// Hidden wallets were asked of a same-length container, which opens none
+    /// ([`crate::ContainerFacts::opens_hidden_wallets`]).
+    NoHiddenWallets {
+        container_words: usize,
+    },
     /// A recovery to re-encrypt has no built-in check, a 24-word original or a same-length
     /// container, and no address or fingerprint was given to confirm it.
     ReferenceRequired,
@@ -40,10 +49,18 @@ pub enum MhfeError {
     HiddenWalletPassesCheck,
     /// Repair words that are not 2, 4, 6 or 8 English BIP39 words.
     InvalidRepairWords(String),
+    /// Words wished for in a new phrase that cannot be used; the reason never names a word.
+    InvalidWordWish(String),
     /// No repair within the bound of the repair words passes the BIP39 checksum: more damage than
-    /// they repair, or a card of another plate, as far as the decoder can tell.
+    /// they repair, or a card of another container phrase, as far as the decoder can tell.
     RepairNotPossible {
         repair_words: usize,
+    },
+    /// More words are missing from a container phrase than a search without its repair words
+    /// looks for: each further word multiplies the candidates by about 2,048.
+    TooManyMissingWords {
+        missing: usize,
+        limit: usize,
     },
     InvalidPim(u32),
     InvalidMemoryLevel(u32),
@@ -56,8 +73,24 @@ pub enum MhfeError {
     ControlCharacterInPassword,
     /// The password contains a code point that Unicode 17.0.0 does not assign.
     UnassignedCharacter,
-    /// A short length was selected, but the check value inside the container does not match.
+    /// No built-in check passes where a short length was stated or needed: a wrong password,
+    /// setting or container, or a 24-word original.
     VerifierMismatch,
+    /// Detection found several short lengths whose built-in check passes, by accident about once
+    /// in four billion containers, where one phrase is needed: the length must be stated, one of
+    /// `readings`, the lengths it can be read as in ascending order, 24 words last.
+    AmbiguousLength {
+        readings: Vec<usize>,
+    },
+    /// A phrase to be encrypted again whose built-in check finds another length, `found`, than the
+    /// one stated, `stated`: the check takes precedence, but a receiving address or the master key
+    /// fingerprint of the wallet must confirm the phrase before a rekey seals it, since a stated
+    /// length is usually right (the specification's re-encryption rules). Where 24 words were
+    /// stated, only they tell the readings apart.
+    LengthDiffers {
+        stated: usize,
+        found: usize,
+    },
     /// The container would equal the original phrase (see the specification, step 4 of
     /// "Creating a container"). This practically means a broken Argon2 engine.
     FixedPoint,
@@ -106,11 +139,10 @@ pub enum MhfeError {
     RandomFailed(String),
     /// A password typed twice differs from its repetition.
     PasswordsDiffer,
+    /// A new wallet's BIP39 passphrase typed twice differs from its repetition.
+    PassphrasesDiffer,
     /// A password already used in this session, compared after Unicode normalization.
     PasswordAlreadyUsed,
-    /// A rekey whose owner has not confirmed that the wallets of other passwords are safe: the new
-    /// container changes them.
-    OtherWalletsNotConfirmed,
     /// A rekey whose new password and settings would give the same container as the old ones.
     NewPasswordSameAsOld,
     /// The recovered phrase was shown to its owner, who said it is not theirs.
@@ -128,6 +160,14 @@ pub enum MhfeError {
     Internal(String),
 }
 
+/// A name the program itself knows, quoted for a message: in double quotes, with every control
+/// character escaped, such as `\u{1b}`, so that a terminal shows it instead of carrying it out
+/// (AUD-015-SEC002). Text a person typed is never repeated in a message: a seed phrase pasted into
+/// the wrong field, such as the fingerprint, would be shown and kept in a log (AUD-016-SEC001).
+pub(crate) fn quoted(text: &str) -> String {
+    format!("{text:?}")
+}
+
 impl fmt::Display for MhfeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -143,7 +183,8 @@ impl fmt::Display for MhfeError {
             ),
             Self::InvalidWordCount(words) => write!(
                 f,
-                "the original phrase length must be 12, 15, 18, 21 or 24 words, not {words}"
+                "the original seed phrase must have {} words, not {words}",
+                crate::phrase::word_counts_text()
             ),
             Self::SameLengthNeedsShortPhrase => write!(
                 f,
@@ -152,13 +193,30 @@ impl fmt::Display for MhfeError {
             ),
             Self::LengthChoiceNotApplicable { container_words } => write!(
                 f,
-                "a container of {container_words} words keeps the length of its original, so no \
-                 length is chosen for it; choosing a length applies only to 24-word containers"
+                "a container of {container_words} words keeps the length of its original seed \
+                 phrase, so no length is chosen for it; choosing a length applies only to 24-word \
+                 containers"
+            ),
+            Self::NoBuiltInCheckAtLength(words) => write!(
+                f,
+                "a {words}-word original seed phrase has no built-in check (only {} words have \
+                 one); compare it with a receiving address or the master key fingerprint of the \
+                 wallet instead",
+                crate::phrase::counts_text(&crate::BUILT_IN_CHECK_WORD_COUNTS)
+            ),
+            Self::NoWalletCheckAtLength(words) => write!(
+                f,
+                "a {words}-word phrase has no wallet check: only a 24-word phrase is drawn with one"
             ),
             Self::NoBuiltInCheck { container_words } => write!(
                 f,
                 "a container of {container_words} words has no built-in check; compare it with a \
                  receiving address or the master key fingerprint of the wallet instead"
+            ),
+            Self::NoHiddenWallets { container_words } => write!(
+                f,
+                "a container of {container_words} words opens no hidden wallets: they are opened \
+                 on a 24-word container only, for now"
             ),
             Self::NoWalletCheck { container_words } => write!(
                 f,
@@ -168,9 +226,10 @@ impl fmt::Display for MhfeError {
             ),
             Self::ReferenceRequired => write!(
                 f,
-                "a 24-word original or a same-length container has no built-in check, so a \
-                 receiving address or the master key fingerprint of the wallet must confirm the \
-                 recovery before it is encrypted again"
+                "the built-in check alone does not confirm this recovery: a 24-word original seed \
+                 phrase, a same-length container and a detected length need a receiving address \
+                 or the master key fingerprint of the wallet, or the owner's comparison with the \
+                 backup, before the phrase is encrypted again"
             ),
             Self::ReferenceMismatch => write!(
                 f,
@@ -180,29 +239,40 @@ impl fmt::Display for MhfeError {
             ),
             Self::HiddenWalletPassesCheck => write!(
                 f,
-                "with this password the container gives a phrase that passes a check: the \
-                 built-in check of a shorter phrase, as the container's own password of a 12- to \
-                 21-word phrase does, or the wallet check of a new phrase, by chance once in 65,536; \
+                "with this password the container gives a phrase that passes a check: the built-in \
+                 check of a shorter phrase, as the container's own password of a 12- to 21-word \
+                 phrase does, or the wallet check of a new phrase, by chance once in 65,536; \
                  recovery would take it for a verified or main wallet, so choose another password"
             ),
+            Self::InvalidWordWish(reason) => {
+                write!(f, "the wishes for the new phrase cannot be used: {reason}")
+            }
             Self::InvalidRepairWords(reason) => {
                 write!(f, "the repair words cannot be used: {reason}")
             }
             Self::RepairNotPossible { repair_words } => write!(
                 f,
-                "the plate cannot be repaired with {repair_words} repair words: more words are \
-                 damaged than they can repair (each repairs one unreadable word, two repair one \
-                 wrong word), or the card belongs to another plate"
+                "the container phrase cannot be repaired with {repair_words} repair words: more \
+                 words are damaged than they can repair (each repairs one unreadable word, two \
+                 repair one wrong word), or the card belongs to another container phrase"
+            ),
+            Self::TooManyMissingWords { missing, limit } => write!(
+                f,
+                "{missing} words of the container phrase are missing, but this search finds at \
+                 most {limit}: each further word multiplies the candidates by about 2,048; only \
+                 the repair words repair more"
             ),
             Self::InvalidPim(pim) => {
                 write!(
                     f,
-                    "the PIM must be a whole number from 0 to 1023, not {pim}"
+                    "the PIM must be a whole number from 0 to {}, not {pim}",
+                    crate::MAX_PIM
                 )
             }
             Self::InvalidMemoryLevel(level) => write!(
                 f,
-                "the memory level must be a whole number from 0 to 21, not {level}"
+                "the memory level must be a whole number from 0 to {}, not {level}",
+                crate::MAX_MEMORY_LEVEL
             ),
             Self::EmptyPassword => write!(f, "the password is empty"),
             Self::PasswordTooLong(bytes) => write!(
@@ -225,18 +295,38 @@ impl fmt::Display for MhfeError {
             ),
             Self::VerifierMismatch => write!(
                 f,
-                "the recovered phrase does not pass its check: the password, PIM, memory \
-                 level, container or selected length is wrong"
+                "the recovered phrase passes no built-in check: the password, PIM, memory level \
+                 or container is probably wrong, or the original seed phrase has 24 words"
+            ),
+            Self::AmbiguousLength { readings } => {
+                // The 24-word reading, last, has no check to pass.
+                let passing = &readings[..readings.len().saturating_sub(1)];
+                write!(
+                    f,
+                    "the built-in check passes for {} words by accident: a receiving address or \
+                     the master key fingerprint of the wallet tells the readings apart",
+                    passing
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                )
+            }
+            Self::LengthDiffers { stated, found } => write!(
+                f,
+                "the built-in check finds a {found}-word original seed phrase, not the {stated} \
+                 words stated: confirm it with a receiving address or the master key fingerprint \
+                 of the wallet"
             ),
             Self::FixedPoint => write!(
                 f,
-                "the container would be identical to the original phrase, which should \
+                "the container would be identical to the original seed phrase, which should \
                  never happen; nothing was produced. Choose a different password, PIM or \
                  memory level, and report this if it happens again"
             ),
             Self::VerificationFailed => write!(
                 f,
-                "the new container did not turn back into the original phrase when it was \
+                "the new container did not turn back into the original seed phrase when it was \
                  checked, which points to a memory error or another fault; it was discarded. \
                  Run the encryption again, and have the computer's memory tested if it happens \
                  again"
@@ -257,13 +347,13 @@ impl fmt::Display for MhfeError {
                 f,
                 "this memory level needs {} of memory, but only {} is available; close \
                  other programs or choose a lower memory level",
-                gib_text(*needed_bytes),
-                gib_text(*available_bytes)
+                crate::suite::memory_text(*needed_bytes),
+                crate::suite::memory_text(*available_bytes)
             ),
             Self::MemoryAllocation { bytes } => write!(
                 f,
                 "the computer could not reserve {} of memory for Argon2",
-                gib_text(*bytes)
+                crate::suite::memory_text(*bytes)
             ),
             Self::MemoryLevelNotSupportedHere {
                 level,
@@ -291,14 +381,10 @@ impl fmt::Display for MhfeError {
             ),
             Self::RandomFailed(reason) => write!(f, "the random generator failed: {reason}"),
             Self::PasswordsDiffer => write!(f, "the password and its repetition differ"),
+            Self::PassphrasesDiffer => write!(f, "the passphrase and its repetition differ"),
             Self::PasswordAlreadyUsed => write!(
                 f,
                 "this password was already used here; a hidden wallet needs a password of its own"
-            ),
-            Self::OtherWalletsNotConfirmed => write!(
-                f,
-                "the wallets that other passwords open on this container change with the new \
-                 one; move their funds first and confirm that"
             ),
             Self::NewPasswordSameAsOld => write!(
                 f,
@@ -307,14 +393,12 @@ impl fmt::Display for MhfeError {
             ),
             Self::NotConfirmedByOwner => write!(
                 f,
-                "the recovered phrase is not yours: the password, PIM, memory level or container \
-                 is wrong. Nothing was changed"
+                "the recovered phrase is not yours: the password, PIM, memory level, word count or \
+                 container is wrong. Nothing was encrypted again"
             ),
             Self::InvalidCoin(reason) => write!(f, "unknown coin {reason}"),
-            Self::SelfCheckFailed { component, detail } => write!(
-                f,
-                "the self-test failed: {component}: {detail}. Do not use this program on this \
-                 computer"
+            Self::SelfCheckFailed { component, detail } => f.write_str(
+                &crate::self_check::failure_message("the self-test failed", component, detail),
             ),
             Self::Internal(message) => write!(f, "internal error: {message}"),
         }
@@ -329,16 +413,21 @@ impl MhfeError {
         match self {
             Self::InvalidPhrase(_) => "INVALID_PHRASE",
             Self::InvalidContainer(_) => "INVALID_CONTAINER",
-            Self::InvalidWordCount(_) => "INVALID_WORD_COUNT",
+            Self::InvalidWordCount(_)
+            | Self::NoBuiltInCheckAtLength(_)
+            | Self::NoWalletCheckAtLength(_) => "INVALID_WORD_COUNT",
             Self::SameLengthNeedsShortPhrase => "SAME_LENGTH_NEEDS_SHORT_PHRASE",
             Self::LengthChoiceNotApplicable { .. } => "LENGTH_CHOICE_NOT_APPLICABLE",
             Self::NoBuiltInCheck { .. } => "NO_BUILT_IN_CHECK",
             Self::NoWalletCheck { .. } => "NO_WALLET_CHECK",
+            Self::NoHiddenWallets { .. } => "NO_HIDDEN_WALLETS",
             Self::ReferenceRequired => "REFERENCE_REQUIRED",
             Self::ReferenceMismatch => "REFERENCE_MISMATCH",
             Self::HiddenWalletPassesCheck => "HIDDEN_WALLET_PASSES_CHECK",
             Self::InvalidRepairWords(_) => "INVALID_REPAIR_WORDS",
+            Self::InvalidWordWish(_) => "INVALID_WORD_WISH",
             Self::RepairNotPossible { .. } => "REPAIR_NOT_POSSIBLE",
+            Self::TooManyMissingWords { .. } => "TOO_MANY_MISSING_WORDS",
             Self::InvalidPim(_) => "INVALID_PIM",
             Self::InvalidMemoryLevel(_) => "INVALID_MEMORY_LEVEL",
             Self::EmptyPassword => "EMPTY_PASSWORD",
@@ -347,6 +436,8 @@ impl MhfeError {
             Self::ControlCharacterInPassword => "CONTROL_CHARACTER_IN_PASSWORD",
             Self::UnassignedCharacter => "UNASSIGNED_CHARACTER",
             Self::VerifierMismatch => "VERIFIER_MISMATCH",
+            Self::AmbiguousLength { .. } => "AMBIGUOUS_LENGTH",
+            Self::LengthDiffers { .. } => "LENGTH_DIFFERS",
             Self::FixedPoint => "FIXED_POINT",
             Self::VerificationFailed => "VERIFICATION_FAILED",
             Self::Cancelled => "CANCELLED",
@@ -365,8 +456,8 @@ impl MhfeError {
             Self::WalletCheckNeedsPassphrase => "WALLET_CHECK_NEEDS_PASSPHRASE",
             Self::RandomFailed(_) => "RANDOM_FAILED",
             Self::PasswordsDiffer => "PASSWORDS_DIFFER",
+            Self::PassphrasesDiffer => "PASSPHRASES_DIFFER",
             Self::PasswordAlreadyUsed => "PASSWORD_ALREADY_USED",
-            Self::OtherWalletsNotConfirmed => "OTHER_WALLETS_NOT_CONFIRMED",
             Self::NewPasswordSameAsOld => "NEW_PASSWORD_SAME_AS_OLD",
             Self::NotConfirmedByOwner => "NOT_CONFIRMED_BY_OWNER",
             Self::InvalidCoin(_) => "INVALID_COIN",
@@ -376,18 +467,40 @@ impl MhfeError {
     }
 }
 
-/// Formats a byte count in GiB, with one decimal unless it is whole, using integers only.
-fn gib_text(bytes: u64) -> String {
-    if bytes.is_multiple_of(GIB) {
-        return format!("{} GiB", bytes / GIB);
-    }
-    let tenths = bytes / (GIB / 10);
-    format!("{}.{} GiB", tenths / 10, tenths % 10)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const GIB: u64 = 1 << 30;
+
+    /// A quoted name carries no control character a terminal would carry out (AUD-015-SEC002):
+    /// C0, DEL and C1 are escaped, printable text stays as it is.
+    #[test]
+    fn quoted_text_holds_no_control_character() {
+        let typed = "ab\u{1b}]0;TITLE\u{7}\u{1b}[2J\u{7f}\u{9b}cd é";
+        let shown = quoted(typed);
+        assert!(!shown.chars().any(char::is_control), "{shown}");
+        assert_eq!(shown, r#""ab\u{1b}]0;TITLE\u{7}\u{1b}[2J\u{7f}\u{9b}cd é""#);
+    }
+
+    /// A refusal of a public field never repeats what was typed: a seed phrase pasted there by
+    /// mistake stays out of the message (AUD-016-SEC001), and so does a control sequence.
+    #[test]
+    fn a_refused_public_field_does_not_repeat_the_text() {
+        const PASTED: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                              abandon abandon abandon about";
+        for typed in [PASTED, "ab\u{1b}]0;TITLE\u{7}cd"] {
+            for refusal in [
+                crate::wallet::parse_fingerprint(typed).unwrap_err(),
+                typed.parse::<crate::wallet::Coin>().unwrap_err(),
+                typed.parse::<crate::wallet::DerivationPath>().unwrap_err(),
+            ] {
+                let message = refusal.to_string();
+                assert!(!message.contains("abandon"), "{message}");
+                assert!(!message.chars().any(char::is_control), "{message}");
+            }
+        }
+    }
 
     #[test]
     fn memory_messages_use_readable_gib_values() {
@@ -400,8 +513,6 @@ mod tests {
             "this memory level needs 2 GiB of memory, but only 1.5 GiB is available; \
              close other programs or choose a lower memory level"
         );
-        assert_eq!(gib_text(3 * GIB), "3 GiB");
-        assert_eq!(gib_text(GIB / 10 - 1), "0.0 GiB");
     }
 
     /// The two codes that only the browser bindings used to write out themselves.

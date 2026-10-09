@@ -11,7 +11,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-expected_emscripten="6.0.10"
+expected_emscripten="6.0.12"
 actual_emscripten="$(emcc --version | head -n 1 | sed -E 's/^.* ([0-9]+\.[0-9]+\.[0-9]+) .*$/\1/')"
 if [[ "$actual_emscripten" != "$expected_emscripten" ]]; then
   echo "Expected Emscripten $expected_emscripten, found $actual_emscripten" >&2

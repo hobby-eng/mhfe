@@ -16,7 +16,7 @@ use zeroize::Zeroizing;
 
 use crate::eff::{EffList, LIST_SIZE};
 use crate::memory::LockedText;
-use crate::MhfeError;
+use crate::{MhfeError, Password};
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -217,22 +217,44 @@ impl PasswordReview {
     }
 }
 
-/// The password a person typed for a new container or wallet, after the review choice they made:
-/// `repeat`, when given, must be exactly the same text, as both entries are compared before any
-/// review; `choice` applies a correction or repair the review offered, and `None` keeps the text
-/// as typed.
-pub fn chosen_password(
-    typed: &str,
-    repeat: Option<&str>,
-    choice: Option<ReviewChoice>,
-) -> Result<LockedText, MhfeError> {
-    if repeat.is_some_and(|repeat| repeat != typed) {
+/// Checks a new password as every front end does, in this order: the password's own rules first
+/// ([`Password::new`]), then that `repeat`, where it is typed twice, is exactly the same text
+/// (`PASSWORDS_DIFFER`), compared before any review.
+pub fn check_typed_twice(typed: &str, repeat: Option<&str>) -> Result<(), MhfeError> {
+    Password::new(typed)?;
+    match repeat {
+        Some(repeat) => require_same(typed, repeat),
+        None => Ok(()),
+    }
+}
+
+/// Refuses a repetition that is not exactly the password typed first (`PASSWORDS_DIFFER`): for a
+/// front end that checks the first entry's rules before it asks for the repetition.
+pub fn require_same(typed: &str, repeat: &str) -> Result<(), MhfeError> {
+    if repeat != typed {
         return Err(MhfeError::PasswordsDiffer);
     }
+    Ok(())
+}
+
+/// The password a person typed for a new container or wallet, after the review choice they made:
+/// `choice` applies a correction or repair the review offered, and `None` keeps the text as typed.
+pub fn chosen_password(typed: &str, choice: Option<ReviewChoice>) -> Result<LockedText, MhfeError> {
     match choice {
         None | Some(ReviewChoice::AsTyped) => Ok(LockedText::copy_of(typed)),
         Some(choice) => PasswordReview::of(typed).apply(choice),
     }
+}
+
+/// The password a person typed, twice for a new one, checked as [`check_typed_twice`], then with
+/// the review `choice` applied and the text that gives checked as a password again.
+pub fn typed_password(
+    typed: &str,
+    repeat: Option<&str>,
+    choice: Option<ReviewChoice>,
+) -> Result<Password, MhfeError> {
+    check_typed_twice(typed, repeat)?;
+    Password::new(&chosen_password(typed, choice)?)
 }
 
 /// Reads a password. It is split at single spaces and each word is compared with the list exactly
@@ -495,15 +517,29 @@ mod tests {
     }
 
     #[test]
-    fn a_chosen_password_needs_the_same_repetition() {
+    fn a_typed_password_needs_its_rules_then_the_same_repetition() {
         let typed = "jovial trailing ? pavilion cresting ninth";
         assert!(matches!(
-            chosen_password(typed, Some("jovial"), None),
+            typed_password(typed, Some("jovial"), None),
             Err(MhfeError::PasswordsDiffer)
         ));
-        assert_eq!(&*chosen_password(typed, Some(typed), None).unwrap(), typed);
+        // The password's own rules come before the repetition.
+        assert!(matches!(
+            typed_password("", Some("jovial"), None),
+            Err(MhfeError::EmptyPassword)
+        ));
         assert_eq!(
-            &*chosen_password(typed, None, Some(ReviewChoice::Repair(3))).unwrap(),
+            typed_password(typed, Some(typed), None).unwrap().as_bytes(),
+            typed.as_bytes()
+        );
+        assert_eq!(
+            typed_password(typed, Some(typed), Some(ReviewChoice::Repair(3)))
+                .unwrap()
+                .as_bytes(),
+            b"jovial trailing chokehold pavilion cresting ninth"
+        );
+        assert_eq!(
+            &*chosen_password(typed, Some(ReviewChoice::Repair(3))).unwrap(),
             "jovial trailing chokehold pavilion cresting ninth"
         );
     }

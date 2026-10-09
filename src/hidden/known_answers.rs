@@ -51,7 +51,9 @@ impl ComponentCheck for HiddenWalletsCheck {
                 .open(&mut mhfe, vector.password()?, &mut |_, _| Ok(()))
                 .map_err(stopped)?;
             expect(
-                wallet.words == 24 && !wallet.verified && *wallet.phrase == expected.join(" "),
+                wallet.words() == 24
+                    && !wallet.verified()
+                    && *wallet.phrase() == expected.join(" "),
                 "the published container gives another wallet",
             )?;
             // The same password again is refused before any round.

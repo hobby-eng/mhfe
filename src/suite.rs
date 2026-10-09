@@ -2,6 +2,7 @@
 //! "Work factor").
 
 use crate::engine::Argon2Cost;
+use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
 use crate::MhfeError;
 
 /// Suite identifier; the round domain strings are built from it.
@@ -45,10 +46,35 @@ impl Suite {
     /// and 12 to 21 words suite 4. The word count does not show that a phrase is a container.
     pub fn of_container(words: usize) -> Result<Self, MhfeError> {
         match words {
-            24 => Ok(Self::TwentyFourWords),
-            12 | 15 | 18 | 21 => Ok(Self::SameLength),
+            STATE_WORDS => Ok(Self::TwentyFourWords),
+            words if SHORT_WORD_COUNTS.contains(&words) => Ok(Self::SameLength),
             other => Err(MhfeError::InvalidWordCount(other)),
         }
+    }
+
+    /// The lengths of an original whose built-in check a recovery of a container of this suite
+    /// can be compared with: 12 to 21 words in suite 3, none in suite 4, which has no check.
+    pub fn built_in_check_lengths(self) -> &'static [usize] {
+        match self {
+            Self::TwentyFourWords => &SHORT_WORD_COUNTS,
+            Self::SameLength => &[],
+        }
+    }
+
+    /// Refuses an original of `words` words that this suite has no container for: suite 4 has
+    /// none for a 24-word phrase, which fills the whole state and leaves nothing to keep its
+    /// length (`SAME_LENGTH_NEEDS_SHORT_PHRASE`).
+    pub fn require_original(self, words: usize) -> Result<(), MhfeError> {
+        if self == Self::SameLength && words == STATE_WORDS {
+            return Err(MhfeError::SameLengthNeedsShortPhrase);
+        }
+        Ok(())
+    }
+
+    /// Whether a container of this suite holds a whole 256-bit state, as a phrase drawn with the
+    /// wallet check and a hidden wallet need: suite 3 only.
+    pub fn holds_full_state(self) -> bool {
+        self == Self::TwentyFourWords
     }
 }
 
@@ -72,6 +98,22 @@ const DEFAULT_SECONDS_HIGH: u64 = 120;
 pub struct WorkFactor {
     pim: u32,
     memory_level: u32,
+}
+
+/// A memory size as every front end writes it: whole tebibytes from 1 TiB on, as the highest
+/// levels are, else gibibytes with one decimal unless whole: "2 GiB", "1.5 GiB", "3 TiB". Integers
+/// only.
+pub fn memory_text(bytes: u64) -> String {
+    const GIB: u64 = 1 << 30;
+    const TIB: u64 = 1 << 40;
+    if bytes >= TIB && bytes.is_multiple_of(TIB) {
+        return format!("{} TiB", bytes / TIB);
+    }
+    if bytes.is_multiple_of(GIB) {
+        return format!("{} GiB", bytes / GIB);
+    }
+    let tenths = bytes / (GIB / 10);
+    format!("{}.{} GiB", tenths / 10, tenths % 10)
 }
 
 impl WorkFactor {
@@ -110,6 +152,23 @@ impl WorkFactor {
         u64::from(self.memory_kib()) * 1024
     }
 
+    /// The memory of every Argon2 call as [`memory_text`] writes it: "2 GiB" at level 0.
+    pub fn memory_text(self) -> String {
+        memory_text(self.memory_bytes())
+    }
+
+    /// Refuses a memory level above `highest`, the most a build or host provides, such as a
+    /// browser's (`MEMORY_LEVEL_NOT_SUPPORTED_HERE`), before any memory is used.
+    pub fn require_level(self, highest: u32) -> Result<(), MhfeError> {
+        if self.memory_level > highest {
+            return Err(MhfeError::MemoryLevelNotSupportedHere {
+                level: self.memory_level,
+                highest_supported: highest,
+            });
+        }
+        Ok(())
+    }
+
     /// Expected native time of one operation, in seconds, as a range: about one to two minutes
     /// at the defaults on a current computer, growing with the passes and the memory. At PIM
     /// 1023 this gives roughly 17 to 34 hours.
@@ -136,6 +195,20 @@ mod tests {
     use super::*;
 
     const GIB_IN_KIB: u64 = 1 << 20;
+
+    #[test]
+    fn memory_is_written_in_gibibytes_or_whole_tebibytes() {
+        const GIB: u64 = 1 << 30;
+        assert_eq!(memory_text(3 * GIB), "3 GiB");
+        assert_eq!(memory_text(GIB + GIB / 2), "1.5 GiB");
+        assert_eq!(memory_text(GIB / 10 - 1), "0.0 GiB");
+        assert_eq!(WorkFactor::default().memory_text(), "2 GiB");
+        assert_eq!(WorkFactor::new(0, 19).unwrap().memory_text(), "1536 GiB");
+        assert_eq!(
+            WorkFactor::new(0, MAX_MEMORY_LEVEL).unwrap().memory_text(),
+            "3 TiB"
+        );
+    }
 
     #[test]
     fn domain_strings_are_built_from_the_suite_identifier() {

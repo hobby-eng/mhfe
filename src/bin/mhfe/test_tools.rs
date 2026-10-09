@@ -15,7 +15,7 @@ use mhfe::vectors::{
     self, NegativeInput, PublicInput, NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS,
     SAME_LENGTH_NEGATIVE_INPUTS,
 };
-use mhfe::{Password, PhraseLength, Suite, WorkFactor};
+use mhfe::{Password, PhraseLength, Suite};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -79,8 +79,7 @@ fn only_help() -> String {
 
 /// The end of `mhfe test-vectors -h` and `--help`.
 pub fn vectors_help() -> String {
-    let examples = style::help_section(
-        "Examples:",
+    style::examples_with_note(
         &[
             (
                 "mhfe test-vectors --output vectors",
@@ -92,19 +91,17 @@ pub fn vectors_help() -> String {
             ),
             (
                 "mhfe test-vectors --output vectors --only negative-cases",
-                "Only the cases that must be refused",
+                "Only the negative cases (wrong passwords, settings and lengths), from the \
+                 containers of the vectors already in ./vectors",
             ),
             (
                 "mhfe test-vectors --same-length --output vectors4",
                 "The suite 4 vectors of same-length containers",
             ),
         ],
-    );
-    let note = style::help_note(
         "Vector files hold the public test password and every round key by design. They use \
          only fixed public inputs; nothing typed is ever used.",
-    );
-    format!("{examples}\n{note}")
+    )
 }
 
 pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
@@ -128,7 +125,7 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
     let mut written = 0;
     let mut containers = HashMap::new();
     for input in set.inputs.iter().filter(|input| selected(input.name())) {
-        let work = WorkFactor::new(input.pim(), input.memory_level())?;
+        let work = input.work()?;
         let mut mhfe = settings::reserve_memory(work)?;
         let started = Instant::now();
         let file = format!("{}.json", input.name());
@@ -158,7 +155,7 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
                 Some(container) => container.clone(),
                 None => recorded_container(&options.output, input.container_of())?,
             };
-            let work = WorkFactor::new(input.pim(), input.memory_level())?;
+            let work = input.work()?;
             let mut mhfe = settings::reserve_memory(work)?;
             let started = Instant::now();
             negative_cases.push(if options.same_length {
@@ -183,7 +180,7 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
     write_checksums(&options.output, set)?;
     style::ok(format!(
         "Wrote {written} files and SHA256SUMS to {}",
-        options.output.display()
+        style::shown_path(&options.output)
     ));
     Ok(SUCCESS)
 }
@@ -194,7 +191,7 @@ fn recorded_container(folder: &Path, name: &str) -> Result<String, Failure> {
     let missing = || {
         Failure::internal(format!(
             "The negative cases need {}; write that vector first.",
-            path.display()
+            style::shown_path(&path)
         ))
     };
     let text = fs::read_to_string(&path).map_err(|_| missing())?;
@@ -268,8 +265,7 @@ pub struct BenchmarkOptions {
 
 /// The end of `mhfe test-benchmark -h` and `--help`.
 pub fn benchmark_help() -> String {
-    let examples = style::help_section(
-        "Examples:",
+    style::examples_with_note(
         &[
             ("mhfe test-benchmark", "Time the default settings"),
             (
@@ -281,12 +277,9 @@ pub fn benchmark_help() -> String {
                 "Save the JSON record for docs/measurements/",
             ),
         ],
-    );
-    let note = style::help_note(
         "It encrypts and recovers the public test phrase once and prints a JSON record of the \
          times on standard output.",
-    );
-    format!("{examples}\n{note}")
+    )
 }
 
 #[derive(Serialize)]

@@ -2,9 +2,9 @@ import type {
   MhfePackageParts,
   MhfePasswordRepair,
   MhfeSecret,
-  MhfeSelfCheckProgress,
-  MhfeSelfCheckReport,
+  MhfeWordHint,
 } from "../runtime/runtime.js";
+import { MhfeModuleClass } from "../runtime/runtime.js";
 export {
   MhfeError,
   type MhfeErrorCode,
@@ -29,31 +29,22 @@ export interface MhfePasswordReview {
   repairs: { position: number; word: string; typed: string | null }[];
 }
 
+/** The module's fixed values, from parameters(). */
+export interface MhfePasswordsParameters {
+  version: string;
+  checkWordProfile: "MHFE-PASSWORD-CHECK-1";
+  defaultWords: number;
+  recommendedWords: number;
+  mostWords: number;
+  defaultCharacters: number;
+  recommendedCharacters: number;
+  mostCharacters: number;
+  weakBelowBits: number;
+}
+
 /** Every method returns a promise and reports every error by rejecting it. */
-export class MhfePasswords {
+export class MhfePasswords extends MhfeModuleClass<MhfePasswordsParameters> {
   constructor(sources: MhfePasswordsSources);
-  /**
-   * The quick self-check, made once per page and awaited by every other method but parameters() before its first
-   * call: known answers of each part the class computes, each with a case it must refuse. A failed
-   * part closes the class for good: every such method then rejects with SELF_CHECK_FAILED, the
-   * report attached. A page awaits it before it enables any field and shows the report on failure.
-   */
-  startupCheck(): Promise<MhfeSelfCheckReport>;
-  /** The full self-check, run anew each time, in seconds; a failed part closes the class too. */
-  fullCheck(options?: {
-    onProgress?: (progress: MhfeSelfCheckProgress) => void | Promise<void>;
-  }): Promise<MhfeSelfCheckReport>;
-  parameters(): Promise<{
-    version: string;
-    checkWordProfile: "MHFE-PASSWORD-CHECK-1";
-    defaultWords: number;
-    recommendedWords: number;
-    mostWords: number;
-    defaultCharacters: number;
-    recommendedCharacters: number;
-    mostCharacters: number;
-    weakBelowBits: number;
-  }>;
   /**
    * With `passwordRepeat`, a new password typed twice: a difference, an empty repetition included,
    * is PASSWORDS_DIFFER.
@@ -62,6 +53,8 @@ export class MhfePasswords {
     password: MhfeSecret;
     passwordRepeat?: MhfeSecret;
   }): Promise<MhfePasswordReview>;
+  /** The hint below a password being typed, from the EFF list; "noWord" is not shown there. */
+  wordHints(options: { typed: MhfeSecret }): Promise<MhfeWordHint>;
   strength(options: {
     password: MhfeSecret;
     passwordRepair?: MhfePasswordRepair;

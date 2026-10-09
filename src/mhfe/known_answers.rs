@@ -13,10 +13,12 @@
 //! engine: a release build may hold it.
 
 use super::published_rounds::PUBLISHED;
+use super::RecoveredPhrase;
+use crate::detection::LengthDetection;
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::feistel::{round_mask, round_message, round_salt, Geometry};
 use crate::operation::Encryption;
-use crate::packing;
+use crate::packing::{self, STATE_WORDS};
 use crate::self_check::{
     digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, DigestCase,
     Findings, Tier,
@@ -79,6 +81,22 @@ impl PublishedVector {
     /// the round keys to be found.
     pub(crate) fn password(&self) -> Result<Password, String> {
         Password::new(self.password).map_err(stopped)
+    }
+
+    /// The recovery of the vector's container with `words` stated, its rounds answered by
+    /// `table`: its own result, inside the refusal of damaged built-in cases.
+    pub(crate) fn recovery_at(
+        &self,
+        table: &'static [PublishedVector],
+        words: usize,
+    ) -> Result<Result<Recovery, MhfeError>, String> {
+        let words = WordCount::new(words).map_err(stopped)?;
+        Ok(self.mhfe(table)?.decrypt(
+            self.container,
+            &self.password()?,
+            PhraseLength::Words(words),
+            &mut |_, _| Ok(()),
+        ))
     }
 
     /// An `Mhfe` at the vector's settings that answers the rounds of `table`.
@@ -326,9 +344,16 @@ impl CipherRoundsCheck {
             same_readings(&selected, vector.recovery),
             "recovers another phrase with its suite selected",
         )?;
-        // A 24-word container read at a stated length gives that reading alone.
+        // A 24-word container read at a stated length gives that reading alone where its check
+        // passes; 24 words stated beside a check that passes give every reading, the checked ones
+        // first (the length rules of recovery).
         if !vector.same_length {
             for reading in vector.recovery {
+                let expected = if reading.words == STATE_WORDS && vector.recovery.len() > 1 {
+                    vector.recovery
+                } else {
+                    std::slice::from_ref(reading)
+                };
                 let words = WordCount::new(reading.words).map_err(stopped)?;
                 let chosen = mhfe
                     .decrypt(
@@ -339,12 +364,60 @@ impl CipherRoundsCheck {
                     )
                     .map_err(stopped)?;
                 expect(
-                    same_readings(&chosen, std::slice::from_ref(reading)),
+                    same_readings(&chosen, expected),
                     "recovers another phrase at a stated length",
                 )?;
             }
         }
         Ok(())
+    }
+
+    /// The length rules of recovery, which a stated length meets (AUD-015-FUN001): a built-in
+    /// check that passes takes precedence over the length stated.
+    fn length_rules(&self, findings: &mut Findings) {
+        /// One case, given the table of round keys to replay with.
+        type Case = fn(&'static [PublishedVector]) -> Result<(), String>;
+        let cases: [Case; 2] = [
+            // zero-12's container with 15 words stated: the 12-word check passes and gives the
+            // published reading, which says that 15 were stated.
+            |table| {
+                let vector = find(table, "zero-12")?;
+                let recovery = vector.recovery_at(table, 15)?.map_err(stopped)?;
+                let Recovery::Phrase(reading) = &recovery else {
+                    return Err("gives several readings where its check found one".to_owned());
+                };
+                expect(
+                    same_readings(&recovery, vector.recovery) && reading.stated_words() == Some(15),
+                    "does not take the length its check finds over a stated one",
+                )
+            },
+            // zero-12's container with 24 words stated: the 12-word reading first, which says
+            // that 24 were stated, and the unverified 24-word reading after it.
+            |table| {
+                let vector = find(table, "zero-12")?;
+                let Recovery::Ambiguous(readings) =
+                    vector.recovery_at(table, STATE_WORDS)?.map_err(stopped)?
+                else {
+                    return Err(
+                        "does not offer the 24-word reading beside the checked one".to_owned()
+                    );
+                };
+                let [checked, read_as_24] = &readings[..] else {
+                    return Err("offers other readings beside 24 stated words".to_owned());
+                };
+                let [published] = vector.recovery else {
+                    return Err("the built-in cases are damaged".to_owned());
+                };
+                expect(
+                    same_reading(checked, published)
+                        && checked.stated_words() == Some(STATE_WORDS)
+                        && (read_as_24.words, read_as_24.verified) == (STATE_WORDS, false),
+                    "reads 24 stated words otherwise than the length rules say",
+                )
+            },
+        ];
+        let table = self.vectors;
+        findings.each("length rule", &cases, |case| case(table));
     }
 
     /// Refusals the cipher must give: a short length whose verifier does not match, a container
@@ -353,16 +426,10 @@ impl CipherRoundsCheck {
         /// One refusal, given the table of round keys to replay with.
         type Refusal = fn(&'static [PublishedVector]) -> Result<(), String>;
         let checks: [Refusal; 3] = [
-            // zero-12's container read as 15 words: the verifier of that length does not match.
+            // zero-24's container read as 12 words: no short length's check passes, so the stated
+            // one fails too.
             |table| {
-                let vector = find(table, "zero-12")?;
-                let words = WordCount::new(15).map_err(stopped)?;
-                let result = vector.mhfe(table)?.decrypt(
-                    vector.container,
-                    &vector.password()?,
-                    PhraseLength::Words(words),
-                    &mut |_, _| Ok(()),
-                );
+                let result = find(table, "zero-24")?.recovery_at(table, 12)?;
                 expect_refusal(result.map(|_| ()), "VERIFIER_MISMATCH")
             },
             // zero-12's new container with its words replaced by zero-24's container, which has
@@ -421,11 +488,17 @@ pub(crate) fn same_readings(recovery: &Recovery, published: &[PublishedReading])
         Recovery::Ambiguous(candidates) => candidates.as_slice(),
     };
     readings.len() == published.len()
-        && readings.iter().zip(published).all(|(reading, expected)| {
-            reading.words == expected.words
-                && reading.verified == expected.verified
-                && *reading.phrase == *expected.phrase
-        })
+        && readings
+            .iter()
+            .zip(published)
+            .all(|(reading, expected)| same_reading(reading, expected))
+}
+
+/// Whether one reading is the published one: its length, its check and its phrase.
+fn same_reading(reading: &RecoveredPhrase, expected: &PublishedReading) -> bool {
+    reading.words == expected.words
+        && reading.verified == expected.verified
+        && *reading.phrase == *expected.phrase
 }
 
 /// Suite 4's round message, salt and mask for each entropy size, with a stand-in key: the
@@ -481,6 +554,7 @@ impl ComponentCheck for CipherRoundsCheck {
             .collect();
         let mut findings = Findings::new();
         findings.each("vector", &vectors, |vector| self.replay(vector));
+        self.length_rules(&mut findings);
         self.refusals(&mut findings);
         match Fixture::read(crate::validation_fixtures::SUITE_4) {
             Ok(fixture) => {
@@ -554,7 +628,7 @@ impl FormatsCheck {
                     expect(*packed == state, "packs another state")?;
                 }
                 expect(
-                    packing::matching_short_lengths(&state)
+                    LengthDetection::of(&state).short_lengths()
                         == fixtures::numbers(case, "matching_short_lengths")?,
                     "differs",
                 )

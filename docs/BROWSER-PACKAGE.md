@@ -21,13 +21,13 @@ The package is a set of independent module classes over one WebAssembly. A page 
 takes only the classes it needs; each needs nothing but the shared runtime, and only the core needs
 the Argon2 builds.
 
-| Folder       | Class           | What it does                                                                         |
-| ------------ | --------------- | ------------------------------------------------------------------------------------ |
-| `runtime/`   |                 | The WebAssembly, the worker, errors and the handling of secrets, shared by all       |
-| `core/`      | `MhfeClient`    | Encryption, recovery, the rehearsal check, rekey, hidden wallets and the self-test   |
-| `repair/`    | `MhfeRepair`    | Repair words of a container (MHFE-REPAIR-1) and the repair of a damaged plate        |
-| `passwords/` | `MhfePasswords` | The check word review of a password (MHFE-PASSWORD-CHECK-1), strength, new passwords |
-| `wallet/`    | `MhfeWallet`    | The wallet check of a phrase, master key fingerprints, address searches, new phrases |
+| Folder       | Class           | What it does                                                                             |
+| ------------ | --------------- | ---------------------------------------------------------------------------------------- |
+| `runtime/`   |                 | The WebAssembly, the worker, errors and the handling of secrets, shared by all           |
+| `core/`      | `MhfeClient`    | Encryption, recovery, the rehearsal check, rekey, hidden wallets and the self-test       |
+| `repair/`    | `MhfeRepair`    | Repair words of a container (MHFE-REPAIR-1) and the repair of a damaged container phrase |
+| `passwords/` | `MhfePasswords` | The check word review of a password (MHFE-PASSWORD-CHECK-1), strength, new passwords     |
+| `wallet/`    | `MhfeWallet`    | The wallet check of a phrase, master key fingerprints, address searches, new phrases     |
 
 `runtime/` holds `runtime.js` and its type declarations, `mhfe.wasm`, the Rust library with
 every module, and `worker.js`, the self-contained worker script that runs it. Each module folder
@@ -91,7 +91,7 @@ const sealed = await client.encrypt({
   passwordRepeat, // the password typed a second time; a difference is refused
   sameLength: false, // true only when the user has chosen a container of the phrase's length
   repairWordCount: 4, // 0 (the default) for none, or 2, 4, 6 or 8
-  walletHasPassphrase, // required: the user's answer, true or false, never preselected
+  walletHasPassphrase, // optional: true or false only where the page knows it
   onProgress: ({ stage, round, rounds }) => showProgress(stage, round, rounds),
   // After 12 of the 24 rounds: show it, marked as not yet verified, while the check runs.
   onUnverified: ({ container, containerFingerprint }) => showUnverified(container),
@@ -100,30 +100,60 @@ const sealed = await client.encrypt({
 // sealed: { container, suiteId, containerFingerprint, builtInCheck, otherLengths, repairWords,
 //           repairProfile, keep: [{ item, ... }] }
 
-const recovery = await client.decrypt({ container, password });
+const recovery = await client.decrypt({
+  container,
+  password,
+  passphrase, // the wallet's BIP39 passphrase for the 16-bit source check; "" (the default): none
+});
 // recovery.kind is "phrase" or, very rarely, "ambiguous"; show every candidate then. Each
-// candidate has a status: "verified", "noBuiltInCheck", "readAs24" or "readAs24Chosen".
+// candidate: { words, verified, status, phrase, suiteId, fingerprintWithoutPassphrase,
+//              walletCheck, statedWords, otherLengths }; status is "verified", "noBuiltInCheck",
+//              "readAs24" or "readAs24Chosen".
 
 // The first receiving address of the public BIP84 test wallet, whose phrase is "abandon" eleven
 // times and then "about". `coin` is required, an id of MhfeWallet.parameters().coins: no coin is
 // the default, so that a page for one coin names no other. "ethereum" covers every EVM network.
 // `coin` and `path` belong only to an address: with another reference they are a TypeError.
-const { matches, path } = await client.check({
+const { matches, path, evidence } = await client.check({
   container,
   password,
   reference: { address: "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", coin: "bitcoin" },
 });
 // For a container of that phrase: matches is true and path is "m/84'/0'/0'/0/0", where the
 // address was found. Without a match, and for the other references, path is null.
+// evidence: { builtInCheck, walletCheck }, the original seed phrase's own checks.
 ```
 
+`pim` and `memoryLevel`, 0 by default, are the container's settings: `encrypt()`, `decrypt()`,
+`check()`, `searchWallet()`, `openHiddenWallets()` and, for the old container, `rekey()` take them.
+Wherever a password is typed, `passwordRepair` is the choice of its check word review (see
+[Passwords](#passwords)).
+
 `walletHasPassphrase` says whether the wallet of the phrase has a BIP39 passphrase. MHFE encrypts
-the phrase, not the passphrase, so a wallet with one still needs it, and with `true` the result's
-`keep` names it. `encrypt()` requires the answer: without it, or with anything but `true` or
-`false`, it rejects with a `TypeError`. `keep` lists what the owner keeps, in this order:
-`{ item: "containerWords", words }` and `{ item: "password" }` always, then only where needed
-`{ item: "passphrase" }`, `{ item: "repairWords" }`, `{ item: "pim", value }`,
-`{ item: "memoryLevel", value }` and `{ item: "wordCount", words }`.
+the phrase, not the passphrase, so a wallet with one still needs it: with `true` the result's
+`keep` names it, and with `false` it does not. Pass it only where the page knows the answer without
+asking, such as for a phrase it has just drawn with `drawPhrase()`. Left out or `null`, `keep` names
+any passphrase of the wallet, `{ item: "passphraseIfAny" }`, in its place, as `mhfe encrypt` does,
+which does not ask; any other value is a `TypeError`. `keep` lists what the owner keeps, in this
+order: `{ item: "containerWords", words }` and `{ item: "password" }` always, then
+`{ item: "passphrase" }` or `{ item: "passphraseIfAny" }` where it applies, and only where needed
+`{ item: "repairWords" }`, `{ item: "pim", value }`, `{ item: "memoryLevel", value }` and
+`{ item: "wordCount", words }`.
+
+`decrypt()` takes `words`, 0 (the default) to detect the length or the length the user knows, and
+`passphrase`, the wallet's BIP39 passphrase, "" (the default) for none. Each candidate says what
+the page shows with the phrase:
+
+- `walletCheck` says whether a 24-word reading passes the 16-bit source check with `passphrase`,
+  and is null for every other length. Every recovery evaluates it: the container does not show
+  whether the phrase was made with the check, so a page asks for the passphrase when a 24-word
+  reading comes out and decrypts again with it, or asks before. A pass makes a right password very
+  likely; a failure means something only if the wallet was made with the check.
+- `statedWords` is the length stated where a built-in check that passes gave the reading another
+  length, which takes precedence: the page says so. It is null when the reading has the length
+  stated or none was stated. 24 stated words beside a check that passes give `"ambiguous"`, the
+  checked reading first.
+- `otherLengths` lists the other 12- to 21-word lengths whose built-in check passes too, by chance.
 
 `readPhrase()` and `readContainer()` read words the way a person may have typed them and give them
 back written out, with what the page needs to know about them: the containers a phrase can go into
@@ -131,55 +161,113 @@ and what each means, and for a container the lengths its phrase can have, what c
 of each, and whether hidden wallets and the wallet check apply. `parameters()` gives the fixed
 values, such as the repair word counts and what each repairs.
 
-`check()` takes exactly one reference: `{ address, coin, path? }`, `{ fingerprint }`,
-`{ words }`, the built-in check of a 12- to 21-word original, or `{ walletCheck: true }`, the
-phrase and passphrase check, with the wallet's `passphrase`. The wallet check compares the
-container's 24-word reading only, never a shorter one, as the profile defines it. Some references
-cannot apply, and these are refused before the first round (the worker runs only the small
-known answer of its Argon2 build first). A same-length container has no built-in check
-(`NO_BUILT_IN_CHECK`) and no wallet check (`NO_WALLET_CHECK`). On a 24-word container the wallet
-check without a passphrase is refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says
-which apply (`builtInCheckLengths`, `offersWalletCheck`).
+`check()` takes exactly one reference: `{ address, coin, path? }`, `{ fingerprint }`, `{ words }`,
+the built-in check of a 12- to 21-word original seed phrase, or `{ walletCheck: true }`, the phrase
+and passphrase check, with the wallet's `passphrase`. The wallet check compares the container's
+24-word reading only, never a shorter one, as the profile defines it. Some references cannot apply,
+and these are refused before the first round (the worker runs only the small known answer of its
+Argon2 build first). A same-length container has no built-in check (`NO_BUILT_IN_CHECK`) and no
+wallet check (`NO_WALLET_CHECK`). On a 24-word container the wallet check without a passphrase is
+refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says which apply
+(`builtInCheckLengths`, `offersWalletCheck`).
+
+`evidence` is what the same recovery shows of the original seed phrase's own checks:
+
+- `builtInCheck` is the 12- to 21-word length whose built-in check passes, the stated one where it
+  passes, or null. With `{ words }`, a check that passes at another length takes precedence and
+  matches, and `builtInCheck` names that length: say so, as the command-line tool does.
+- `walletCheck` says whether the 24-word reading passes the 16-bit phrase + passphrase check with
+  the `passphrase` given, or with none if none was given. It is null for `{ words }` with a length
+  stated, for a same-length container, and when exactly one shorter length passes its check and the
+  reference did not match the 24-word reading. A phrase drawn without that check fails it, so only
+  a pass says anything.
+
+`{ words: 0 }` detects the length: the built-in check of whichever 12- to 21-word length passes it,
+or with a `passphrase`, the phrase + passphrase check of a 24-word phrase drawn with it. Ask the
+user whether a BIP39 passphrase is used with the original seed phrase first. When detection finds
+no length, `onNoLength` is called: ask how many words the original seed phrase has, and return
+`{ words }` for 12 to 21 words, which then does not match, or for 24 words
+`{ address, coin, path?, passphrase? }` or `{ fingerprint, passphrase? }`, compared on the same
+recovery without its rounds again; `null` keeps the result. `onNoLength` with another reference is
+a `TypeError`.
 
 ```js
 const resealed = await client.rekey({
   container,
-  words: 24, // the phrase's word count; required for a 24-word container
+  words: 24, // the phrase's word count; 0, the default, detects it
   password,
-  otherWalletsMoved: true, // only on the user's yes, see "What the page should do"
+  pim, // the old container's settings, 0 by default
+  memoryLevel,
   newPassword,
   newPasswordRepeat,
+  newPasswordRepair, // the check word review's choice for the new password
+  newPim, // the new container's settings, 0 by default; memory level 0 only in a browser
+  newMemoryLevel,
+  repairWordCount: 4, // repair words of the new container, as for encrypt()
   // Or { builtInCheck: true }, { fingerprint } or { owner }.
   confirmation: { address, coin: "bitcoin" },
   passphrase, // the wallet's BIP39 passphrase, only with an address or a fingerprint
   walletHasPassphrase, // the user's answer; may be left out only when passphrase is not empty
+  onProgress, // as for encrypt(), over 36 rounds
+  onUnverified, // as for encrypt(): the new container before its check
 });
+// resealed: what encrypt() gives, and walletCheck
 ```
 
 `rekey()` encrypts a container again with a new password or settings, in 36 rounds. It recovers the
 phrase with the old password, confirms it and seals it again in a container of the same kind. The
-result is the same as that of `encrypt()`.
+result is that of `encrypt()` with `walletCheck`: whether the recovered 24-word reading passes the
+16-bit source check with the reference's `passphrase` or none, null for other lengths. Every
+recovery reports it, and it never confirms a rekey.
 
-- `words` is the phrase's word count. A 24-word container can hold any length, so it needs it
-  (`INVALID_REQUEST` without it). For a same-length container it is 0 or the container's own length.
+- `words` is the phrase's word count, or 0, the default, to detect it. For a same-length container
+  it is 0 or the container's own length. With the length detected on a 24-word container
+  (`confirmationFor["0"]` is `"walletOrOwner"`), `{ builtInCheck: true }` alone is refused with
+  `REFERENCE_REQUIRED` before the first round (only the 1 MiB known answer of the Argon2 build runs
+  first, as for `check()`): a 24-word original may pass a short check by chance and would be sealed
+  again as another wallet. An address or the fingerprint is compared with every reading and
+  confirms the one it matches, whatever its length; the owner confirms the one reading found.
+- Several lengths that pass by accident, about once in four billion containers, reject
+  `{ builtInCheck: true }` and `{ owner }` with `AMBIGUOUS_LENGTH`, unless the owner's stated
+  length is one of them: rekey again with an address or the fingerprint, which compares every
+  reading, or with the owner and the length of the reading to compare stated. A stated length that
+  the built-in check contradicts rejects `{ builtInCheck: true }` with `LENGTH_DIFFERS`: rekey again
+  with an address, the fingerprint or the owner. `{ owner }` beside 24 stated words is rejected
+  with `LENGTH_DIFFERS` too when one 12- to 21-word length passes its check: the owner cannot tell
+  the two readings apart, and only an address or the fingerprint confirms one. A stated 12- to
+  21-word length whose built-in check fails, with no other length passing, rejects with
+  `VERIFIER_MISMATCH` whatever the confirmation, before any reference is compared: the password, a
+  setting or the stated length is wrong.
+- Each of these refusals ends the rekey: a page calls `rekey()` again, which recovers again in 12
+  rounds. After `AMBIGUOUS_LENGTH` or `LENGTH_DIFFERS` the command-line tool asks again on the same
+  recovery instead, as listed
+  [further down](#what-the-command-line-tool-has-and-the-browser-does-not).
 - `confirmation` is one of four kinds; `readContainer().confirmationFor` says which a length needs.
-  A length with a built-in check takes `{ builtInCheck: true }` and nothing else
-  (`INVALID_REQUEST`). Any other length needs a receiving address `{ address, coin, path? }`, the
-  fingerprint `{ fingerprint }` or the owner, `{ owner: (check) => boolean | Promise<boolean> }`.
+  A length with a built-in check takes `{ builtInCheck: true }`, or a receiving address
+  `{ address, coin, path? }`, the fingerprint `{ fingerprint }` or the owner,
+  `{ owner: (check) => boolean | Promise<boolean> }`, which any other length needs.
   `{ builtInCheck: true }` there is refused with `REFERENCE_REQUIRED`, before a missing or
   contradicting `walletHasPassphrase` is judged (a value of the wrong type is refused even
   earlier), and a reference that does not match with `REFERENCE_MISMATCH`.
-- The owner callback receives `{ phrase, words, fingerprintWithoutPassphrase }` to compare with the
-  written backup. The rekey waits for its answer; anything but `true` stops it with
-  `NOT_CONFIRMED_BY_OWNER`.
+- The owner callback receives `{ phrase, words, statedWords?, fingerprintWithoutPassphrase }` to
+  compare with the written backup. `statedWords` is there only where the built-in check found
+  `words` instead of the length stated: say so before the owner compares, as the command-line
+  tool does. The rekey waits for its answer; anything but `true` stops it with
+  `NOT_CONFIRMED_BY_OWNER`, and the library seals nothing before that yes. Offer `{ owner }` only to
+  a user who knows neither a receiving address nor the fingerprint, as the specification allows
+  it only then, and ask for the answer with nothing preselected. For a phrase without a built-in
+  check (`words` 24, or a same-length container), keep a fingerprint of the confirmed phrase for
+  the rehearsal of the new container before sealing: `fingerprintWithoutPassphrase`, or
+  `MhfeWallet.fingerprint()` with the wallet's passphrase.
 - `walletHasPassphrase` says whether the wallet has a BIP39 passphrase, so that the new
   container's `keep` names it, as after `encrypt()`. Only an address or a fingerprint compared with
   a `passphrase` that is not empty shows that the wallet has one: there the answer may be left out,
   and `false` is refused with `INVALID_REQUEST`. Everywhere else the answer is required
   (`INVALID_REQUEST` without it): `{ builtInCheck: true }` and `{ owner }` show nothing of a
   passphrase, and an address or a fingerprint with an empty `passphrase` matches the phrase's
-  wallet without one, which proves nothing about funds under a passphrase. There `true` is taken,
-  and `keep` names the passphrase. Both refusals come before the first round. The client takes
+  wallet without one, which proves nothing about funds under a passphrase, so it confirms only a
+  wallet stated to have none: `true` is refused there with `INVALID_REQUEST`, as a wallet with a
+  passphrase is compared with it. These refusals come before the first round. The client takes
   `true`, `false` or `undefined`; any other value, `null` included, is a `TypeError`.
 - `passphrase` belongs only to an address or a fingerprint: one that is not empty with
   `{ builtInCheck: true }` or `{ owner }` is a `TypeError`, and the types in `core/client.d.ts`
@@ -189,9 +277,8 @@ result is the same as that of `encrypt()`.
   rekey runs (`INVALID_REQUEST`).
 - The wallet check (16 bits) and a word count never confirm a rekey: `{ walletCheck }` and
   `{ words }` are a `TypeError` here.
-- Without `otherWalletsMoved: true` the rekey is refused with `OTHER_WALLETS_NOT_CONFIRMED`. A new
-  password and settings that would give the old container again are refused with
-  `NEW_PASSWORD_SAME_AS_OLD`. Both come before the first round.
+- A new password and settings that would give the old container again are refused with
+  `NEW_PASSWORD_SAME_AS_OLD`, before the first round.
 
 ```js
 const session = await client.openHiddenWallets({ container, mainPassphrase }); // "" for none
@@ -229,9 +316,30 @@ const repair = new MhfeRepair({ workerSource, wasm }); // the same worker and We
 const card = await repair.repairWords({ container, count: 4 }); // 2, 4, 6 or 8 words
 // card: { profile, words, repairsUnreadable, repairsWrong }
 
-// The plate and the card as read, "?" for a word that cannot be read.
-const repaired = await repair.repairPlate({ plate: plateAsRead, card: cardAsRead });
-// repaired: { container, containerFingerprint, unchanged, plateWords, cardWords, changes }
+// The container phrase and the card as read, "?" for a word that cannot be read.
+const repaired = await repair.repairContainer({ container: containerAsRead, card: cardAsRead });
+// repaired: { container, containerFingerprint, unchanged, containerWords, cardWords, changes }
+
+// What a container phrase as typed is, before a page decrypts, checks or repairs it.
+const { reading, wordCount, unreadable } = await repair.inspectContainer({ container: typed });
+// reading: "container", "marked" (words typed as "?"), "notAContainer" or "wrongLength"
+
+// Without the repair words: the candidates, then the decoy wallet, the container itself, in
+// seconds for one missing word and minutes for two, and only then the owner's wallet, a full
+// recovery a candidate.
+const { missing, candidates, offersWalletSearch, offersOwnChecks } = await client.searchCandidates({
+  container: typed,
+});
+// The answers offered come from the library: the wallet search for one missing word, and the
+// original seed phrase's own checks where the container carries them, as the command-line tool.
+const fast = await client.searchDecoy({ container: typed, reference: { fingerprint }, passphrase });
+// For two missing words and an address: scanGap, the first-account addresses of each chain
+// searched, parameters().decoyScanGap (20) by default; ask the user, as the command-line tool
+// does, when the wallet may go on.
+const slow = await client.searchWallet({ container: typed, password, reference: { fingerprint } });
+// reference also { address, coin, path? }; for searchWallet the original seed phrase's own
+// checks: { walletCheck: true } with its BIP39 passphrase, or { builtInCheck: true } without.
+// { found, container, containerFingerprint, words: [{ position, word }], path, candidates }
 ```
 
 ### Passwords
@@ -250,9 +358,11 @@ const made = await passwords.make(); // five words, as `mhfe password` makes
 // made: { password, bits, weak, checkWord }, bits a number such as 64.625
 ```
 
-`review()` of a new password takes it twice, `{ password, passwordRepeat }`, and compares the two
-entries first: a difference is `PASSWORDS_DIFFER`, and so is an empty `passwordRepeat`. Without
-`passwordRepeat` the password was typed once, as for an existing container.
+`review()` of a new password takes it twice, `{ password, passwordRepeat }`, checks the
+password's own rules and then compares the two entries, in the order the command-line tool does:
+a difference is `PASSWORDS_DIFFER`, and so is an empty `passwordRepeat`. Without `passwordRepeat`
+the password was typed once, as for an existing container. `encrypt()`, `rekey()` and a hidden
+wallet's `open()` check a new password the same way.
 
 `make()` makes words by default: five words, or `count` words from 1 to 32.
 `{ kind: "characters" }` gives 16 characters, or `count` from 1 to 64, and `{ kind: "checkWord" }`
@@ -274,10 +384,20 @@ const wallet = new MhfeWallet({ workerSource, wasm });
 const fingerprint = await wallet.fingerprint({ phrase, passphrase }); // passphrase may be ""
 const passes = await wallet.walletCheck({ phrase, passphrase }); // 24 words and a passphrase
 const scope = await wallet.describeAddress({ address, coin: "bitcoin" }); // shown before a check
+// With scanGap, the decoy search of two missing words: the first account, scanGap of each chain.
+const decoyScope = await wallet.describeAddress({ address, coin: "bitcoin", scanGap: 20 });
+// A chosen word, at a position from 1 to 24 or "anywhere", and a word never to use (not
+// recommended): what they leave of the phrase's randomness, shown before the draw.
+const chosen = [{ word: "zoo", position: 24 }];
+const neverUse = ["abandon"];
+const cost = await wallet.describeDraw({ chosen, neverUse, walletCheck });
+// cost: { randomBits, randomness, expectedDraws, recognisable, fixedPosition }
 const drawn = await wallet.drawPhrase({
   passphrase, // "" for a wallet without one
   passphraseRepeat, // the passphrase typed a second time; a difference is refused
   walletCheck, // the user's answer, never preselected; true needs a passphrase
+  chosen, // optional
+  neverUse, // optional
   onProgress: ({ draws }) => showDraws(draws),
 });
 // drawn: { phrase, words, walletCheck, fingerprintWithPassphrase, workers }
@@ -291,29 +411,71 @@ passphrase that is not empty (`INVALID_WORD_COUNT`, `WALLET_CHECK_NEEDS_PASSPHRA
 typed twice (`PASSPHRASES_DIFFER` otherwise), and `walletCheck` must then be `true` or `false`.
 `walletCheck: true` without a passphrase is refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. A phrase
 with the wallet check takes about 65,536 draws. They are spread over `workers` workers, by default
-as many as the processor has cores, at most eight. One phrase is drawn at a time (`BUSY`
-otherwise), and `wallet.cancel()` stops it.
+as many as the processor has cores, at most eight; a page may ask for 1 to 256. One phrase is drawn
+at a time (`BUSY` otherwise), and `wallet.cancel()` stops it.
+
+`chosen` holds at most `parameters().maxChosenWords` (1) word for the new phrase, `{ word, position
+}` with `position` from 1 to 24 or `"anywhere"`, and `neverUse` at most
+`parameters().maxNeverUseWords` (1) word it must not hold. Choosing a word is not recommended
+(README, "Chosen words") and is a feature of this program, not of the specification. The chosen
+word is part of the secret phrase: it reaches the worker as bytes that it wipes, and no refusal
+names it. A word outside the English list, a second word of either kind or a chosen word also never
+to use is refused with `INVALID_WORD_WISH`. The phrase is drawn until it meets both wishes, so every
+phrase that meets them is equally likely. `describeDraw()` says first what they cost, as the
+command-line tool states it before it draws: `randomBits`, the random bits the phrase keeps for
+someone who knows the word, about, the check's 16 included, at least 228.98 with the check and
+244.98 without; `randomness`, `"full"` for all 256, `"ample"` from
+`parameters().recommendedRandomBits` (240, what the check alone leaves: still far more than enough)
+and `"notRecommended"` below it, rated without the word never to use, whose 0.016 bits do not
+matter; `expectedDraws`; `recognisable`, true with a chosen word, which lets someone who learns or
+guesses it rule out almost every wrong MHFE password and tell the wallet from a decoy; and
+`fixedPosition`, true when the chosen word has a position. A page shows a warning for anything but
+`"full"`, and another for `recognisable`, as the command-line tool does, which adds for a word at a
+fixed position that a word anywhere keeps more.
+
+`wordHints({ typed })` gives the hint below a line of BIP39 words being typed, a seed phrase, a
+container phrase, repair words or a chosen word, by the command-line tool's rule (owner,
+2026-10-08): `{ hint, count, words, completion: { letters, wordEnds } }`. For the last word of the
+line, `hint` is `"count"` after one letter, with how many words begin with it; `"words"` from two
+letters, with those words in list order; `"noWord"` when none does; and `"nothing"` when no word of
+letters is being typed or the word is whole with no longer word after it. `completion` is what Tab
+adds: the letters all those words share next, and whether one word is left, which then ends with a
+space. `MhfePasswords.wordHints()` gives the same for the words of the EFF list in a password; a
+password may hold any text, so a page shows nothing for `"noWord"` there and keeps Tab a character
+of the password. The line reaches the worker as bytes that it wipes. Each call starts a worker, so
+a page may ask once typing pauses. The lists are public: a hint tells nothing that someone who sees
+the screen could not look up, but it is shown only where the typed text itself is shown.
 
 ## Progress, cancelling and errors
 
 Long operations report `onProgress({ stage, round, rounds })` as each round starts:
 
-| Operation            | Rounds | Stages                                                                   |
-| -------------------- | ------ | ------------------------------------------------------------------------ |
-| `encrypt`            | 24     | "encrypt" 1 to 12, then "check" 13 to 24                                 |
-| `decrypt`            | 12     | "recover"                                                                |
-| `check`              | 12     | "recover", then "compare" once before the comparison with the reference  |
-| `rekey`              | 36     | "recover" 1 to 12, "compare" with a wallet reference, "encrypt", "check" |
-| hidden wallet `open` | 12     | "recover"                                                                |
-| `selfTest`           | 24     | "encrypt" 1 to 12, then "recover" 13 to 24                               |
+| Operation            | Rounds         | Stages                                                                   |
+| -------------------- | -------------- | ------------------------------------------------------------------------ |
+| `encrypt`            | 24             | "encrypt" 1 to 12, then "check" 13 to 24                                 |
+| `decrypt`            | 12             | "recover"                                                                |
+| `check`              | 12             | "recover", then "compare" once before the comparison with the reference  |
+| `rekey`              | 36             | "recover" 1 to 12, "compare" with a wallet reference, "encrypt", "check" |
+| hidden wallet `open` | 12             | "recover"                                                                |
+| `selfTest`           | 24             | "encrypt" 1 to 12, then "recover" 13 to 24                               |
+| `searchWallet`       | 12 a candidate | "search"                                                                 |
+| `searchDecoy`        | none           | "search"                                                                 |
 
-A new phrase with the wallet check reports `{ stage: "draw", draws }` instead: the draws of all its
-workers together, after every 1,024 draws of each.
+The searches for missing words report `{ stage: "search", candidate, candidates }` instead:
+`searchDecoy()` at the first candidate, every 64th and the last, and `searchWallet()` with `round`
+and `rounds` of the candidate's recovery as each of its rounds starts.
+
+A new phrase reports `{ stage: "draw", draws }` instead: the draws of all its workers together,
+after every 1,024 draws of each, so in practice only a phrase with the wallet check, which takes
+about 65,536 draws, reports any.
 
 Each operation runs in a new worker, which is terminated when the operation ends; this also frees
-the 2 GiB of Argon2 memory. `client.cancel()` stops the running long operation or session at once,
-and `wallet.cancel()` a phrase being drawn; its promise rejects with `MhfeCancelledError`, code
-`CANCELLED`. The core runs one long operation or session at a time (`BUSY` otherwise); its
+the 2 GiB of Argon2 memory. A worker that is still loading the WebAssembly when its operation ends
+is terminated as soon as it has loaded it, or after the minute a start may take: Firefox crashes
+the whole page when a worker is terminated while it loads the WebAssembly. `client.cancel()` stops
+the running long operation or session, and `wallet.cancel()` a phrase being drawn: its promise
+rejects at once with `MhfeCancelledError`, code `CANCELLED`, and its worker is terminated as just
+described. The core runs one long operation or session at a time (`BUSY` otherwise); its
 parameters and reading words never wait. The other modules run every call in a worker of its own,
 and their calls never wait for each other; only `MhfeWallet` draws one new phrase at a time.
 
@@ -324,7 +486,9 @@ settings and lengths, which rejects with its own code (`INVALID_PIM`, `INVALID_M
 `INVALID_WORD_COUNT`, `INVALID_REPAIR_WORDS`); every other error is an `MhfeError`
 with a `code` and an English `message` that a page can show as it is. A password and its
 repetition are checked for their type before they are compared, so two values of a wrong type are
-a `TypeError`, not `PASSWORDS_DIFFER`. `MhfeErrorCode` in
+a `TypeError`, not `PASSWORDS_DIFFER`. A secret that may be left out, such as a repetition or a
+BIP39 passphrase, is empty only when it is left out (`undefined`): `null` is a `TypeError` too, not
+an empty secret. `MhfeErrorCode` in
 `runtime/runtime.d.ts` lists every code. `mode()`, `maxSupportedMemLevel()` and both `cancel()`
 methods are synchronous and return at once.
 
@@ -332,7 +496,7 @@ If a callback of the page throws, or is async and its promise rejects while the 
 operation stops, its worker ends and the promise rejects with `CALLBACK_FAILED`, the page's error
 as its `cause`. A failing `onProgress` of a hidden wallet ends the whole session, and one of a new
 phrase stops every worker of the draw. The client does not wait for a callback's promise, except
-for the owner's answer in a rekey, which it awaits.
+for the owner's answer in a rekey and the answer of `check()`'s `onNoLength`, which it awaits.
 
 ## Self-checks
 
@@ -341,12 +505,12 @@ of different builds, a damaged file that changes an answer or a browser that com
 wrongly shows before anything secret is typed. The checks are those of the command-line tool, run by
 the same Rust code: each compares exact output with published test vectors, or with values from an
 independent implementation that first reproduced a published vector, and gives every verifier a case
-it must refuse, such as a card of another plate, six words that do not fit their check word or a
-damaged address. They use public test data only, in a worker of the class, and load nothing. The
-same parts with their slower cases make the full self-test; the published MHFE vectors at their full
-cost stay in `selfTest()`. The repository's
-[`docs/API.md`](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md#self-checks) lists what
-each part compares.
+it must refuse, such as a card of another container phrase, six words that do not fit their check
+word or a damaged address. They use public test data only, in a worker of the class, and load
+nothing. The same parts with their slower cases make the full self-test; the published MHFE vectors
+at their full cost stay in `selfTest()`. The repository's
+[`docs/API.md`](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md#self-checks) lists what each
+part compares.
 
 ### Before first use
 
@@ -375,15 +539,19 @@ address or a vector's text; no label names a coin either. The page's own parts c
 The class's own parts follow, run in its worker:
 
 - `MhfeClient`: `cipher-hashes`, `argon2`, `cipher-rounds`, `formats`, `container-facts`,
-  `keep-advice`, `password-unicode`, `bip39-words`, `repair-words`, `password-check-word`,
+  `keep-advice`, `password-unicode`, `bip39-words`, `repair-words`, `container-search`,
+  `password-check-word`,
   `wallet-hashes`, `bip39-seed`, `bip32`, `addresses`, `wallet-check`, `hidden-wallets`, `rekey`
   and `rehearsal`;
 - `MhfeRepair`: `bip39-words` and `repair-words`;
-- `MhfePasswords`: `password-unicode`, `password-check-word`, `password-generator` and
-  `random-source`;
+- `MhfePasswords`: `password-unicode`, `password-check-word`, `password-generator`, `word-hints`
+  and `random-source`;
 - `MhfeWallet`: `bip39-words`, `wallet-hashes`, `bip39-seed`, `bip32`, `addresses`,
-  `address-search`, `wallet-check` and `random-source`; `address-search` compares what
-  `describeAddress()` states with known answers, through the same library call.
+  `address-search`, `wallet-check`, `word-wishes`, `word-hints` and `random-source`;
+  `address-search` compares what `describeAddress()` states with known answers, through the same
+  library call, and `word-wishes` draws six phrases with chosen words from a scripted source,
+  compares them and the draw each takes with an independent implementation's, and sets, reads and
+  filters a word at every position against an independent oracle.
 
 None of them needs Argon2 except `argon2`. `MhfeClient.startupCheck()` runs Argon2's known answer
 at 1 MiB through the Argon2 build of the page's mode, which it loads for this.
@@ -461,8 +629,8 @@ only at Argon2's full size. Of its 24 rounds, 1 to 12 are the encryption and 13 
 first left the published path:
 
 - "argon2-input": in round `round`, Argon2id was given an input, password or salt, that the
-  published vector does not have there, so the fault lies before Argon2id, in that round's salt or
-  in the state the round started from;
+  published vector does not have there, so the fault lies before Argon2id, in that round's password
+  or salt or in the state the round started from;
 - "argon2-key": in round `round`, the published input gave another key, so the fault lies in
   Argon2id;
 - "after-argon2", `round` `null`: every Argon2id input and key was as published, so the fault lies
@@ -474,13 +642,14 @@ returned another key for the published input, so the fault is in Argon2id". `fir
 
 ### Every Argon2 operation
 
-Every operation that runs Argon2 (`encrypt`, `decrypt`, `check`, `rekey`, the `open` of a hidden
-wallet, and `selfTest`) computes Argon2's known answer at 1 MiB through its Argon2 build before its
-first round and again after its last; a session of hidden wallets also when it starts. A different
-answer rejects with `SELF_CHECK_FAILED` ("The self-test failed: Argon2id: …"), in place of the
-operation's own error if it had one, and the result is dropped. The answer after the last round
-also covers the optimized code that a browser makes of a long-running loop. Every round also
-refuses a key that the build left unwritten or set to zeros (`ARGON2_FAILED`).
+Every operation that runs Argon2 (`encrypt`, `decrypt`, `check`, `searchWallet`, `rekey`, the
+`open` of a hidden wallet, and `selfTest`) computes Argon2's known answer at 1 MiB through its
+Argon2 build before its first round and again after its last; a session of hidden wallets also
+when it starts. A different answer rejects with `SELF_CHECK_FAILED` ("The self-test failed:
+Argon2id: …"), in place of the operation's own error if it had one, and the result is dropped. The
+answer after the last round also covers the optimized code that a browser makes of a long-running
+loop. Every round also refuses a key that the build left unwritten or set to zeros
+(`ARGON2_FAILED`).
 
 ### When a check fails
 
@@ -557,9 +726,9 @@ next to its own checksum file. A page whose own launcher sends these headers doe
 
 A browser gives WebAssembly at most 4 GiB, and the reference Argon2 code allows 2 GiB on 32-bit
 targets, so the browser supports memory level 0 only. `client.maxSupportedMemLevel()` returns 0. A
-higher level, also as the new level of a rekey, is refused with `MEMORY_LEVEL_NOT_SUPPORTED_HERE`
-before anything starts. Use the command-line tool for higher levels. Containers made with level 0
-in the browser and on the command line are identical.
+higher level, also as the new level of a rekey (`newMemoryLevel`), is refused with
+`MEMORY_LEVEL_NOT_SUPPORTED_HERE` before anything starts. Use the command-line tool for higher
+levels. Containers made with level 0 in the browser and on the command line are identical.
 
 A page cannot measure how much memory the computer has free, so nothing checks in advance that the
 browser can give the 2 GiB of level 0. When it cannot, an operation fails with
@@ -583,6 +752,13 @@ The page should say why these are missing where a user would look for them:
   colours and the length limit of a typed line: a page has its own layout, forms and help;
 - the time estimates of the settings question and of the self-test: their figures were measured
   with the native program; the page shows the measured progress instead;
+- the decoy search on every processor core: the package's WebAssembly has no threads for it and
+  compares the candidates one after another, so two missing words take longer than on the command
+  line;
+- a second confirmation of a rekey on the same recovery after `AMBIGUOUS_LENGTH` or
+  `LENGTH_DIFFERS`, without its 12 rounds again, offering the owner only the lengths the owner can
+  tell apart: the package recovers and confirms in one call, so a page calls `rekey()` again (see
+  [Core](#core));
 - reading from standard input, exit codes and the long vector replays and benchmarks of
   `test-vectors` and `test-benchmark`: they serve scripts and development, not a page;
 - `mhfe serve` and the menu entry that serves a tool: they are the launcher that gives a page its
@@ -607,35 +783,67 @@ do for them:
 - say that letter case and the spaces between words count in the password (after the NFKD
   normalization the client applies), and that a fixed form, such as lowercase words with single
   spaces, is the easiest to type again years later;
+- where a new container password is set (encrypt, a new wallet, the new password of a rekey), offer
+  the user's own password or one that `MhfePasswords.make()` makes, of the kinds the command-line
+  tool offers: five dice words, five words and a check word, or sixteen random characters. Show a
+  password made once, privately, and have it typed back from the user's copy before it is used,
+  showing it again after a wrong copy;
 - review a password with `MhfePasswords.review()` before any long work and offer its answers in its
   order (`repairsFirst`), the password as typed always among them; pass the choice as
-  `passwordRepair`. Say "A password with a check word: type ? for a word you forgot" only where an
-  existing password is typed, not where a new one is; review a new password and the passwords of
-  hidden wallets too, with `passwordRepeat`, and warn when `strength()` calls a password weak;
+  `passwordRepair`. Say "If you forgot a word of a password with a check word, type ? in its place"
+  only where an existing password is typed, not where a new one is; review a new password and the
+  passwords of hidden wallets too, with `passwordRepeat`, and warn when `strength()` calls a
+  password weak;
 - offer the container length for a 12- to 21-word phrase as a choice the user makes, with 24 words
   selected by default, and show what each gives before the choice (`readPhrase().containers`): 24
   words report a wrong password and hide the phrase's length; the same length keeps the backup's
-  length but reports no wrong password (any password gives another valid phrase), shows the
-  length, and lets a miscopied word through about once in 16 (12 words) to 128 (21 words). Set
-  `sameLength` only on that choice;
+  length but reports no wrong password (any password gives another valid phrase), shows the length,
+  and lets a miscopied word through about once in 16 (12 words) to 128 (21 words). Set `sameLength`
+  only on that choice;
 - for a same-length container, label every recovered phrase as not verified and offer the check
-  against an address or the fingerprint, the only confirmation it has; `{ words }` is refused
-  with `NO_BUILT_IN_CHECK` and `{ walletCheck: true }` with `NO_WALLET_CHECK`;
-- before an encryption, ask whether the wallet of the phrase has a BIP39 passphrase, with neither
-  answer preselected, before the long work starts, and pass the answer as `walletHasPassphrase`.
-  Say why it is asked: MHFE encrypts the phrase, not the passphrase, so a wallet with one still
-  needs it, and the list of what to keep names it. A phrase just drawn with `drawPhrase()` has one
-  when a passphrase was typed for it, checked or not. Ask the same, in the same way, before a
-  rekey, as the command-line tool does: once, whatever confirms the recovery, after the kind of
-  confirmation is known and before any address or fingerprint is typed, since a reference compared
-  without a passphrase matches only the phrase's wallet without one, which says nothing about funds
-  under one. With an address or a fingerprint, then ask for the passphrase only when the wallet has
-  one, refuse an empty one there, and pass it with the answer;
+  against an address or the fingerprint, the only confirmation it has; `{ words }` is refused with
+  `NO_BUILT_IN_CHECK` and `{ walletCheck: true }` with `NO_WALLET_CHECK`;
+- before an encryption, ask nothing about a BIP39 passphrase, as the command-line tool asks nothing:
+  in a tool that encrypts a phrase such a question looks suspicious, and without an answer the
+  result's `keep` names any passphrase of the wallet. Pass `walletHasPassphrase` only where the page
+  knows the answer, such as for a phrase just drawn with `drawPhrase()`, which has one when a
+  passphrase was typed for it, checked or not;
+- before a rekey, ask whether the wallet has a BIP39 passphrase, with neither answer preselected, as
+  the command-line tool does: once, whatever confirms the recovery, after the kind of confirmation
+  is known and before any address or fingerprint is typed, since a reference compared without a
+  passphrase matches only the phrase's wallet without one, which says nothing about funds under one.
+  Say why it is asked, next to the question: only so that the list of what to keep is complete; MHFE
+  stores no passphrase and asks for one only to compare it with an address or a fingerprint. With an
+  address or a fingerprint, then ask for the passphrase only when the wallet has one, refuse an
+  empty one there, and pass it with the answer;
+- wherever a container phrase is typed to be decrypted, checked, rekeyed or opened, read it with
+  `MhfeRepair.inspectContainer()` first, as the command-line tool does: for "marked" ask for the
+  repair words at once, with a way back to the container phrase; for "notAContainer" say why it is
+  not one and offer to type it again or to repair it with its repair words. Repair it with
+  `repairContainer()`, show the repaired container phrase with every change, and use it only after
+  the user has said so; say that the written container phrase must be corrected too. Without the
+  repair words, for "marked" words, offer the search as the command-line tool does: ask first what
+  the user knows, an address or fingerprint of the container's own wallet (`searchDecoy()`, seconds
+  for one missing word, minutes for two, and no password), one of their wallet, the original seed
+  phrase's (`searchWallet()` with `{ address, coin }` or `{ fingerprint }`), the original seed
+  phrase's passphrase alone (`{ walletCheck: true }`, its built-in check and the phrase +
+  passphrase check of a phrase made by `mhfe new`), or nothing (`{ builtInCheck: true }`, a 12- to
+  21-word original seed phrase only). For a wallet, ask then whether a BIP39 passphrase is used
+  with the container phrase, or with the original seed phrase, naming whose, and pass it, "" for
+  none; the decoy is compared with exactly the passphrase given. Offer only the container's own
+  wallet for two missing words, and no own checks for a same-length container. Before
+  `searchWallet()` say how long it takes: the candidates (`searchCandidates()`) times one recovery
+  in this mode at the settings given (see [Fast and standard mode](#fast-and-standard-mode) for the
+  defaults); it looks for one missing word only, and the decoy search for two, an address then
+  within `scanGap`, asked as the command-line tool asks it. After a refusal or nothing found, ask
+  again what the user knows rather than for the container phrase. Show the words found before the
+  container is used;
 - show the suite identifier (`suiteId`) when a container is made, and what to keep as the result's
-  `keep` list gives it, in its order, adding nothing and leaving nothing out: with the defaults the
-  container's words and the password are enough; the wallet's BIP39 passphrase, the repair words, a
-  PIM or memory level that is not the default and, rarely, the word count are added there when
-  needed;
+  `keep` list gives it, in its order, adding nothing and leaving nothing out: the container's words
+  and the password always; the wallet's BIP39 passphrase, or any passphrase of the wallet where the
+  page did not know (`passphraseIfAny`, which the command-line tool words "any BIP39 passphrase of
+  the wallet"), the repair words, a PIM or memory level that is not the default and, rarely, the
+  word count are added there when needed;
 - if it shows the container from `onUnverified`, mark it clearly as not yet verified, and then say
   how the check ended: verified when the promise resolves, wrong and not to be used on
   `VERIFICATION_FAILED`, not verified on a cancel or any other error. Never make repair words from
@@ -644,9 +852,10 @@ do for them:
   command-line tool writes only the checked one to a file or a program;
 - show the words it has read back to the user in full: `readContainer()` and `readPhrase()` return
   them;
-- before encrypting, also a new phrase, look at `otherLengths` from `readPhrase()`: when it is not
-  empty (about one phrase in four billion), tell the user to note the word count and choose it
-  during recovery, because automatic detection would not give the phrase on its own. After an
+- before encrypting, also a new phrase, look at `otherLengths` of the container chosen from
+  `readPhrase().containers`: when it is not empty (about one phrase in four billion, and never for
+  a same-length container), tell the user to note the word count and choose it during recovery,
+  because automatic detection would not give the phrase on its own. After an
   encryption or a rekey, the result's `otherLengths` says the same, and `keep` then lists the word
   count;
 - show master key fingerprints openly, with what they are of: `containerFingerprint` is of the
@@ -656,28 +865,36 @@ do for them:
 - before a recovery, say that the seed phrase will be shown, so recover only on a trusted offline
   computer. Show what each candidate's `status` means: "verified" confirms the password, not the
   wallet, which the check confirms; "noBuiltInCheck" is not verified, so confirm it against the
-  wallet; "readAs24" is not verified, and for a shorter original the password or a setting is
-  wrong; "readAs24Chosen" is not verified, so compare it with the wallet. For "ambiguous", ask the
-  user to compare each candidate with the wallet. Say that a phrase passes its 16-bit check without
-  a BIP39 passphrase only when `passesWalletCheckWithoutPassphrase` is true, and never report a
-  `false`: a phrase made without the check fails it. When the user is done, remove the phrase from
-  the screen, say so, and ask the user to close the page;
+  wallet; "readAs24" is not verified, and for a shorter original seed phrase the password or a
+  setting is wrong; "readAs24Chosen" is not verified, so compare it with the wallet. For
+  "ambiguous", ask the user to compare each candidate with the wallet. Every 24-word reading gets
+  the 16-bit source check (`walletCheck`) with the `passphrase` given to `decrypt()`, "" for none:
+  the container does not show whether the phrase was made with the check. When a 24-word reading
+  comes out, ask whether a BIP39 passphrase is used with the phrase, and say why in a few
+  sentences, not only a link; ask before the recovery or decrypt again with the answer. Say
+  "passes the 16-bit check" for `true`; for `false` say that it matters only if the wallet was made
+  with the check, as a phrase made without it fails. When the user is done,
+  remove the phrase from the screen, say so, and ask the user to close the page;
 - offer a check only where `readContainer()` says it applies, and show what an address check will
-  search (`MhfeWallet.describeAddress()`) before it runs;
-- before a rekey, ask every user, whatever the container, whether the funds of the wallets that
-  other passwords open on it are moved or backed up another way, since those wallets change with
-  the new password; pass `otherWalletsMoved` only on the user's yes. Show the phrase of an owner
-  confirmation concealed, ask the owner to compare it with a written record, not with memory, and
-  remove it after the answer. Say afterwards that the old plate and password still open the wallet
-  until they are destroyed, and that the new plate is rehearsed before the old one is destroyed;
+  search (`MhfeWallet.describeAddress()`) before it runs. Beside a match, list each of the original
+  seed phrase's own checks that `evidence` shows passing, as the command-line tool does, and when
+  `{ words }` matched at another length, say that the check found `evidence.builtInCheck` words;
+- before a rekey, tell every user, whatever the container, in one plain sentence: wallets that
+  other passwords open on the old container do not move to the new one, so keep the old container,
+  its passwords, and a PIM or memory level that is not 0, until you have moved their funds. Your
+  own wallet's addresses do not change. Ask nothing about such wallets, as an answer
+  would be a record of one. Show the phrase of an owner confirmation concealed, ask the owner to
+  compare it with a written record, not with memory, and remove it after the answer. Say afterwards
+  that the old container phrase and password still open the wallet, and that the new container
+  phrase is rehearsed with a check;
 - before hidden wallets, say every time that nothing is created or stored and that the container and
   each password give the same wallet every time; ask for the main wallet's BIP39 passphrase every
   time; show no list or count of the wallets opened, as the command-line tool shows them only on its
   private screen. Under each wallet, say that there is no need to write it down: the container and
   this password give it again. When the user is done, say to fund hidden wallets only from sources
-  not linked to the user, and that a rekey of the container changes them. Close the session when
-  the user leaves the page and after a while without use, since it holds the Argon2 work area and
-  the passwords used until then;
+  not linked to the user, and that a rekey of the container changes them. Close the session when the
+  user leaves the page and after a while without use, since it holds the Argon2 work area and the
+  passwords used until then;
 - offer the wallet check of a new phrase only with a BIP39 passphrase and with neither answer
   preselected, and say what it costs: about 65,536 draws, and 16 of the phrase's 256 bits. When the
   user chooses it, warn that all funds belong under this passphrase, since the wallet without it
@@ -695,19 +912,19 @@ do for them:
   way;
 - on `PACKAGE_MISMATCH`, say that the page's files of the package come from different builds and
   offer nothing of that class; on `WORKER_FAILED`, show the message and let the user try again;
-- offer the full self-test as an action of its own: `fullCheck()` of every class the page uses,
-  one after another, each part shown as `onProgress` reports it, with its label and outcome. Show
-  a warning with its detail and a part not available or not run with its reason, such as "not
+- offer the full self-test as an action of its own: `fullCheck()` of every class the page uses, one
+  after another, each part shown as `onProgress` reports it, with its label and outcome. Show a
+  warning with its detail and a part not available or not run with its reason, such as "not
   available in a browser: a web page cannot keep its memory out of swap"; neither is a failure;
-- offer the published vectors as another action, `selfTest()`, and show its result for each
-  vector: suite 3 encrypts as published or not, suite 4 recovers as published or not. When
-  `passed` is false, say that this program does not compute MHFE as published, must not be used
-  for a real phrase, and that another computer or build should be tried, and say where it went
-  wrong with `fault.message`, the sentence the command-line tool shows, rather than composing one
-  from `firstWrongRound`, which does not tell a fault before Argon2id from one in it;
+- offer the published vectors as another action, `selfTest()`, and show its result for each vector:
+  suite 3 encrypts as published or not, suite 4 recovers as published or not. When `passed` is
+  false, say that this program does not compute MHFE as published, must not be used for a real
+  phrase, and that another computer or build should be tried, and say where it went wrong with
+  `fault.message`, the sentence the command-line tool shows, rather than composing one from
+  `firstWrongRound`, which does not tell a fault before Argon2id from one in it;
 - keep `check()` apart from the self-test: it rehearses the recovery of the user's container and
-  checks nothing of the program. A self-test calls `startupCheck()`, `fullCheck()` and
-  `selfTest()` only;
+  checks nothing of the program. A self-test calls `startupCheck()`, `fullCheck()` and `selfTest()`
+  only;
 - warn in standard mode that the operation takes longer, because the four Argon2 lanes then run one
   after another;
 - ask the user to rehearse the recovery with the container typed from the finished backup, not from
@@ -715,9 +932,9 @@ do for them:
   copied word still passes the BIP39 checksum in about one case in 256, and in a same-length
   container as often as one case in 16; make repair words only from a container whose recovery was
   rehearsed;
-- start an operation only on an explicit user action and offer a cancel button; start
-  `selfTest()` only when the user asks for it, since it takes minutes. The checks before first use
-  need no action.
+- start an operation only on an explicit user action and offer a cancel button; start `selfTest()`
+  only when the user asks for it, since it takes minutes. The checks before first use need no
+  action.
 
 The README sections that the command-line tool links to:
 
@@ -745,9 +962,10 @@ class, and wiped there; a `Uint8Array` the page passes is always copied into an 
 never transferred or emptied, whatever its kind. Text with an unpaired surrogate, a phrase included,
 is refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser. The Rust code and the
 Argon2 bridge overwrite every copy of these bytes, the keys and the states they hold, and every
-worker is terminated when its operation or session ends. A cancelled operation,
-or a session of hidden wallets closed while it opens a wallet, stops its worker at once instead:
-the browser frees that memory without overwriting it. What reaches the page
+worker is terminated when its operation or session ends. A cancelled operation, or a session of
+hidden wallets closed while it opens a wallet, terminates its worker instead, as soon as the worker
+has loaded the WebAssembly if it is still loading it: the browser frees that memory without
+overwriting it. What reaches the page
 is a JavaScript string, which the browser cannot erase: a password typed into a page, a recovered or
 new phrase, a generated password, the words of a check word review, the phrase of an owner
 confirmation and the phrases of hidden wallets. Pass passwords and passphrases as `Uint8Array` where

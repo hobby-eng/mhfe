@@ -5,26 +5,10 @@
 // web/argon2-engine.js bridges it to the WebAssembly.
 "use strict";
 
-/** The parts of a self-check that run Argon2 (src/engine/known_answers.rs). */
-const ARGON2_PARTS = ["argon2", "argon2-sizes"];
+/** The parts of a self-check that run Argon2, as the core names them (src/engine). */
+const argon2Parts = () => JSON.parse(mhfe.suiteParameters()).argon2Parts;
 /** What an Argon2 part of a self-check adds when the threaded build did not start. */
 const FALLBACK_NOTE = "the check ran the single-threaded build of the standard mode instead";
-
-/**
- * Refusals after which a session of hidden wallets stays open for another password: a password used
- * already, one whose wallet would pass a check, and a password refused before any work.
- */
-const HIDDEN_WALLET_REFUSALS = new Set([
-  "PASSWORD_ALREADY_USED",
-  "HIDDEN_WALLET_PASSES_CHECK",
-  "PASSWORDS_DIFFER",
-  "PASSWORD_REPAIR_NOT_OFFERED",
-  "EMPTY_PASSWORD",
-  "PASSWORD_TOO_LONG",
-  "INVALID_PASSWORD_UTF8",
-  "CONTROL_CHARACTER_IN_PASSWORD",
-  "UNASSIGNED_CHARACTER",
-]);
 
 const CORE_OPERATIONS = {
   parameters: () => JSON.parse(mhfe.suiteParameters()),
@@ -64,16 +48,83 @@ const CORE_OPERATIONS = {
         request.pim,
         request.memoryLevel,
         request.words,
+        request.passphrase,
         argon2,
         host.progress,
       ),
     );
   },
 
+  /**
+   * The rehearsal check: one recovery, compared with the page's reference and, when detection
+   * found no length (`{ words: 0 }`) and the page asks for it, with the reference the page then
+   * gives, without the rounds again.
+   */
   async check(request, host) {
     const argon2 = await argon2For(request);
+    const session = new mhfe.CheckSession(
+      request.container,
+      request.password,
+      request.choice,
+      request.position,
+      request.pim,
+      request.memoryLevel,
+      request.referenceKind,
+      request.reference,
+      request.coin,
+      request.path,
+      request.passphrase,
+      argon2,
+      host.progress,
+    );
+    try {
+      const compare = (reference) =>
+        JSON.parse(
+          session.compare(
+            reference.referenceKind,
+            reference.reference,
+            reference.coin,
+            reference.path,
+            reference.passphrase,
+          ),
+        );
+      const result = compare(request);
+      if (result.matches || !request.asksLength) return result;
+      const next = await host.ask("noLength", null);
+      if (next === null) return result;
+      try {
+        return compare(next);
+      } finally {
+        wipeSecrets(next);
+      }
+    } finally {
+      session.free();
+    }
+  },
+
+  searchCandidates: (request) => JSON.parse(mhfe.searchCandidates(request.container)),
+
+  searchDecoy: (request, host) =>
+    JSON.parse(
+      mhfe.searchDecoy(
+        request.container,
+        request.referenceKind,
+        request.reference,
+        request.coin,
+        request.path,
+        request.passphrase,
+        request.scanGap,
+        (candidate, candidates) =>
+          host.post("progress", { stage: "search", candidate, candidates }),
+      ),
+    ),
+
+  async searchWallet(request, host) {
+    const argon2 = await argon2For(request);
+    let candidate = 0;
+    let candidates = 0;
     return JSON.parse(
-      mhfe.check(
+      mhfe.searchWallet(
         request.container,
         request.password,
         request.choice,
@@ -86,7 +137,12 @@ const CORE_OPERATIONS = {
         request.path,
         request.passphrase,
         argon2,
-        host.progress,
+        (index, count) => {
+          candidate = index;
+          candidates = count;
+        },
+        (round, rounds) =>
+          host.post("progress", { stage: "search", candidate, candidates, round, rounds }),
       ),
     );
   },
@@ -138,7 +194,6 @@ const CORE_OPERATIONS = {
       request.position,
       request.pim,
       request.memoryLevel,
-      request.otherWalletsMoved,
       argon2,
     );
     try {
@@ -166,9 +221,11 @@ const CORE_OPERATIONS = {
         const confirmed = await host.ask("ownerCheck", recovered.ownerCheck);
         session.ownerAnswer(confirmed === true);
       }
-      return JSON.parse(
+      const sealed = JSON.parse(
         session.seal(host.progress, (json) => host.post("unverified", JSON.parse(json))),
       );
+      // The 16-bit source check of the recovered 24-word reading, reported beside the result.
+      return { ...sealed, walletCheck: recovered.walletCheck };
     } finally {
       session.free();
     }
@@ -189,6 +246,7 @@ const CORE_OPERATIONS = {
       argon2,
     );
     try {
+      const keepsSessionOpen = new Set(JSON.parse(mhfe.suiteParameters()).hiddenWalletRefusals);
       let next = await host.ask("ready", null);
       while (next !== null && next?.close !== true) {
         let reply;
@@ -205,7 +263,8 @@ const CORE_OPERATIONS = {
           reply = ["opened", wallet];
         } catch (error) {
           const refusal = describeError(error);
-          if (!HIDDEN_WALLET_REFUSALS.has(refusal.code)) throw error;
+          // The library says which refusals leave the session open for another password.
+          if (!keepsSessionOpen.has(refusal.code)) throw error;
           reply = ["refused", refusal];
         } finally {
           wipeSecrets(next);
@@ -257,7 +316,7 @@ async function argon2ForCheck(request) {
   return {
     argon2: { derive: refuse, reserve: refuse },
     outcomeOf: (result) =>
-      ARGON2_PARTS.includes(result.id) && result.outcome === "failed"
+      argon2Parts().includes(result.id) && result.outcome === "failed"
         ? { ...result, outcome: "notAvailable" }
         : result,
   };
@@ -268,7 +327,7 @@ async function argon2ForCheck(request) {
  * naming why: it passes with a warning that says so, and its failure, a wrong answer, says so too.
  */
 function afterFallback(result, failures) {
-  if (failures.length === 0 || !ARGON2_PARTS.includes(result.id)) return result;
+  if (failures.length === 0 || !argon2Parts().includes(result.id)) return result;
   const note = `${failures.join("; ")}; ${FALLBACK_NOTE}`;
   if (result.outcome === "passed") return { ...result, outcome: "warning", detail: note };
   return { ...result, detail: `${note}; ${result.detail}` };
@@ -307,11 +366,9 @@ function argon2Builds() {
 function startArgon2(build, threadedScript) {
   if (build.create === undefined) throw noArgon2Build();
   if (build.buildId !== WORKER_BUILD_ID) {
-    // It starts with a word, not the path, which the page's sentence() would capitalize.
-    throw new Error(
-      `PACKAGE_MISMATCH: the file ${build.file} is of build ${build.buildId} and ` +
-        `runtime/worker.js of build ${WORKER_BUILD_ID}: take every file of the package from ` +
-        "one build.",
+    throw packageMismatch(
+      `the file ${build.file} is of build ${build.buildId} and runtime/worker.js of build ` +
+        WORKER_BUILD_ID,
     );
   }
   if (build.name === "threaded") {

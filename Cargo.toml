@@ -1,6 +1,6 @@
 [package]
 name = "mhfe-experimental"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.99.0"
 authors = ["Sergei Semenov"]
@@ -39,7 +39,7 @@ sha2 = "=0.11.0"
 sha3 = { version = "=0.12.0", default-features = false }
 # Its UNICODE_VERSION is (17, 0, 0), the version the specification pins for passwords.
 unicode-normalization = "=0.1.25"
-zeroize = { version = "=1.9.0", features = ["zeroize_derive"] }
+zeroize = { version = "=1.9.1", features = ["zeroize_derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Coloured terminal output; clap already uses both, so they add no new code to the build.
@@ -47,7 +47,9 @@ anstream = "=1.0.0"
 anstyle = "=1.0.14"
 clap = { version = "=4.6.7", features = ["derive"] }
 # Ctrl+C stops the tool at once, also inside an Argon2 round.
-ctrlc = "=3.5.2"
+# "termination": SIGTERM and SIGHUP end the tool through the Ctrl+C handler too, which restores
+# the terminal and leaves a private screen first (AUD-015-SEC004).
+ctrlc = { version = "=3.5.2", features = ["termination"] }
 # Randomness for `mhfe password`, straight from the operating system.
 getrandom = "=0.4.3"
 
@@ -85,7 +87,7 @@ wasm = ["browser-core", "browser-repair", "browser-passwords", "browser-wallet"]
 wasm-bindings = ["dep:wasm-bindgen", "dep:js-sys"]
 # Encryption, recovery, the rehearsal check, rekey, hidden wallets and the self-test: Argon2.
 browser-core = ["wasm-bindings"]
-# Repair words of a container and the repair of a damaged plate (MHFE-REPAIR-1).
+# Repair words of a container and the repair of a damaged container phrase (MHFE-REPAIR-1).
 browser-repair = ["wasm-bindings"]
 # Password check word (MHFE-PASSWORD-CHECK-1), password generator and strength estimate.
 browser-passwords = ["wasm-bindings"]

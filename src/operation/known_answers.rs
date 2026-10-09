@@ -1,33 +1,35 @@
 //! Known answers of what a new container tells its owner to keep: the self-check `keep-advice`.
 //!
 //! The expected lists follow the rule of [`super::Keep`] (AUD-003-DOC002 and the owner's rule):
-//! with the defaults, the container's words and the password are all; the BIP39 passphrase, the
-//! repair words and a PIM or memory level other than 0 are added when they apply, and the word
-//! count when automatic detection would also accept another length. Each case seals a published
-//! vector, replayed with its recorded round keys.
+//! with the defaults, the container's words and the password are all; the BIP39 passphrase of a
+//! wallet that has one, or any passphrase where that is not known, the repair words and a PIM or
+//! memory level other than 0 are added when they apply, and the word count when automatic
+//! detection would also accept another length. Each case seals a published vector, replayed with
+//! its recorded round keys.
 
-use super::{Encryption, KeepItem};
+use super::{Encryption, KeepItem, WalletPassphrase};
 use crate::mhfe::known_answers::{published, published_table};
 use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
 
-/// A vector sealed with or without repair words, kept with or without a passphrase.
+/// A vector sealed with or without repair words, kept for a wallet with, without or perhaps with
+/// a passphrase.
 #[derive(Clone, Copy)]
 struct KeepCase {
     vector: &'static str,
     repair_words: Option<usize>,
-    passphrase: bool,
+    passphrase: WalletPassphrase,
     expected: &'static [KeepItem],
     /// Whether the container carries a built-in check, and the other lengths detection accepts.
     built_in_check: bool,
     other_lengths: &'static [usize],
 }
 
-const CASES: [KeepCase; 5] = [
+const CASES: [KeepCase; 6] = [
     // The defaults with four repair words and no passphrase: no PIM, no memory level.
     KeepCase {
         vector: "zero-12",
         repair_words: Some(4),
-        passphrase: false,
+        passphrase: WalletPassphrase::Absent,
         expected: &[
             KeepItem::ContainerWords(24),
             KeepItem::Password,
@@ -39,7 +41,7 @@ const CASES: [KeepCase; 5] = [
     KeepCase {
         vector: "zero-12",
         repair_words: None,
-        passphrase: true,
+        passphrase: WalletPassphrase::Present,
         expected: &[
             KeepItem::ContainerWords(24),
             KeepItem::Password,
@@ -51,7 +53,7 @@ const CASES: [KeepCase; 5] = [
     KeepCase {
         vector: "zero-12-pim-1-memory-level-1",
         repair_words: None,
-        passphrase: false,
+        passphrase: WalletPassphrase::Absent,
         expected: &[
             KeepItem::ContainerWords(24),
             KeepItem::Password,
@@ -65,7 +67,7 @@ const CASES: [KeepCase; 5] = [
     KeepCase {
         vector: "ambiguous-12-21",
         repair_words: None,
-        passphrase: false,
+        passphrase: WalletPassphrase::Absent,
         expected: &[
             KeepItem::ContainerWords(24),
             KeepItem::Password,
@@ -78,9 +80,26 @@ const CASES: [KeepCase; 5] = [
     KeepCase {
         vector: "same-length-zero-12",
         repair_words: None,
-        passphrase: false,
+        passphrase: WalletPassphrase::Absent,
         expected: &[KeepItem::ContainerWords(12), KeepItem::Password],
         built_in_check: false,
+        other_lengths: &[],
+    },
+    // Not known whether the wallet has a passphrase: any passphrase is named in its place, before
+    // the repair words and the settings.
+    KeepCase {
+        vector: "zero-12-pim-1-memory-level-1",
+        repair_words: Some(2),
+        passphrase: WalletPassphrase::Unknown,
+        expected: &[
+            KeepItem::ContainerWords(24),
+            KeepItem::Password,
+            KeepItem::PassphraseIfAny,
+            KeepItem::RepairWords,
+            KeepItem::Pim(1),
+            KeepItem::MemoryLevel(1),
+        ],
+        built_in_check: true,
         other_lengths: &[],
     },
 ];
@@ -164,7 +183,7 @@ mod tests {
         };
         assert_eq!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("case 1 of 5 differs".to_owned())
+            ComponentOutcome::Failed("case 1 of 6 differs".to_owned())
         );
         let mut cases = CASES;
         cases[3].other_lengths = &[];
@@ -173,7 +192,7 @@ mod tests {
         };
         assert_eq!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("case 4 of 5 tells other checks".to_owned())
+            ComponentOutcome::Failed("case 4 of 6 tells other checks".to_owned())
         );
     }
 }

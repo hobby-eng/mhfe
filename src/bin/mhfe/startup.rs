@@ -70,8 +70,8 @@ fn failure_text(failed: &ComponentResult) -> String {
     }
     let detail = failed.outcome().detail().unwrap_or("it failed");
     format!(
-        "{AT_START}: {}: {detail}. Do not use this program on this computer.",
-        failed.label()
+        "{}.",
+        mhfe::self_check::failure_message(AT_START, failed.label(), detail)
     )
 }
 
@@ -202,8 +202,9 @@ mod tests {
         );
         assert_eq!(
             library.len(),
-            23,
-            "the plan's 22 parts of the library and the address search"
+            26,
+            "the plan's 22 parts of the library, the address search, the search for missing words, \
+             the chosen word of a new phrase and the word hints"
         );
     }
 

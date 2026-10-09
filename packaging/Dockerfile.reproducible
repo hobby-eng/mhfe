@@ -10,21 +10,21 @@
 # Every tool is pinned: the base images by digest, downloads by SHA-256, Ubuntu packages by an
 # archive snapshot date, Rust crates by Cargo.lock.
 
-# Emscripten 6.0.10 (linux/amd64 image) compiles the browser builds of the Argon2 C code.
-FROM emscripten/emsdk:6.0.10@sha256:d4d9b9a07e28f8795ebca83b4b3bf98febb65f956e1364ac32483eea3d99bd8f AS argon2-wasm
+# Emscripten 6.0.12 (linux/amd64 image) compiles the browser builds of the Argon2 C code.
+FROM emscripten/emsdk:6.0.12@sha256:77638e6c215a65f25a704c0c831d5c2463a8c0468a58c6cb82489dbe621dfa05 AS argon2-wasm
 WORKDIR /workspace
 COPY vendor/phc-winner-argon2 vendor/phc-winner-argon2
 COPY scripts/build-argon2-wasm.sh scripts/remove-network-code.mjs scripts/
 RUN scripts/build-argon2-wasm.sh
 
-FROM buildpack-deps:noble@sha256:cf0b8fb7b19c45ef68523a0c8a32a742b5f2c0839b1e8ca0061f73d6b1a19062 AS toolchain
+FROM buildpack-deps:noble@sha256:e93e9fafe026efb1c7788c98f48b04a170d81f7adfd8ca81ff76b44624e71328 AS toolchain
 
 ARG NODE_VERSION=26.10.0
 ARG NODE_ARCHIVE_SHA256=ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022
 ARG RUSTUP_VERSION=1.29.1
 ARG RUSTUP_INIT_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
 # Ubuntu archive snapshot for the cross compilers, so that their versions never change.
-ARG UBUNTU_SNAPSHOT=20261002T000000Z
+ARG UBUNTU_SNAPSHOT=20261009T000000Z
 # Bound compilation and test concurrency on the maintainer's machine without changing Argon2.
 ARG BUILD_JOBS=2
 
@@ -88,7 +88,9 @@ FROM dependencies AS verified
 ENV CARGO_NET_OFFLINE=true
 COPY . .
 COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
-# The same fast checks as CI, then the release builds. No network from here on. Clippy also runs
+# Some of the checks of scripts/check.sh, those this stage needs before it builds, then the release
+# builds; the release workflow runs the whole of check.sh through ci.yml on the tagged
+# commit before it publishes (AUD-015-BLD002). No network from here on. Clippy also runs
 # for both cross targets: the native run never sees code for Windows or ARM64 alone. Every build
 # writes the directories of the container under fixed names (packaging/remap-builder-paths.sh),
 # as a local build does, and scripts/check-release-artifacts.sh refuses a program or WebAssembly

@@ -24,13 +24,18 @@ Never include a real seed phrase, password, private key or wallet file.
   tool never takes secrets from command-line arguments, never writes them to files and never logs
   them. Error messages never contain a phrase, a password or any part of them.
 - A secret's prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
-  on an empty line and Ctrl+C keep their meaning; every other character, including those a
-  terminal would usually act on (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+W, Ctrl+Z, Ctrl+\\), reaches the
-  password check, which refuses a control character instead of removing it; a control character
-  is never written back to the terminal, which would act on it. The terminal settings are restored
-  after the answer and on Ctrl+C. `scripts/verify-hidden-input.py` checks this
-  in a pseudo-terminal on Linux and macOS, and `scripts/verify-hidden-input-windows.py` in a
-  Windows pseudo-console; CI runs them on all three systems.
+  on an empty line and Ctrl+C keep their meaning. A line of words, such as a seed phrase, a
+  container phrase or a chosen word, is no password, so there Tab also completes the word being
+  typed as far as the words of its list agree, and Ctrl+W deletes the last word. Every other
+  character, including those a terminal would usually act on (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+Z,
+  Ctrl+\\, and Ctrl+W in a password), reaches the password check, which refuses a control character
+  instead of removing it; a control character is never written back to the terminal, which would
+  act on it. The terminal settings are restored after the answer and on Ctrl+C. SIGTERM and a
+  closed terminal end the tool as Ctrl+C does, and so do Ctrl+\\ and Ctrl+Z outside such a prompt
+  or a list, so that none leaves a private screen with a secret on it.
+  `scripts/verify-hidden-input.py` checks this in a pseudo-terminal on Linux and macOS, and
+  `scripts/verify-hidden-input-windows.py` in a Windows pseudo-console; CI runs them on all three
+  systems.
 - Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
   key or mask is wiped when it is dropped; short-lived working buffers inside dependencies, such as
   those of Unicode normalization and BIP39 word parsing, are not. The Argon2 work area is wiped by
@@ -38,7 +43,9 @@ Never include a real seed phrase, password, private key or wallet file.
   round fails, for example because a thread could not be started, the C code returns before that
   step and the Rust owner wipes the area instead. This is best effort: a compiler, the operating
   system, swap or a terminal's scrollback can keep copies beyond the program's reach, and so can the
-  standard library's own buffer of standard input. Answers read from standard input are limited to
+  standard library's own buffers: that of standard input, and the line buffer of standard output,
+  which keeps the last line a phrase or a container was printed on until later output overwrites
+  it. Answers read from standard input are limited to
   8192 bytes and read into a buffer of that size, so the program's copy never has to grow and leave
   an unwiped copy behind. At a terminal, secrets, a new container and a recovered phrase appear on
   the terminal's alternate screen, which is cleared before the tool returns to the main screen, so
@@ -73,17 +80,24 @@ Never include a real seed phrase, password, private key or wallet file.
   area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap in memory
   (zram) is safe. macOS encrypts its swap; on Windows, use BitLocker or no page file.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
-  again from its words and compares the result with the original phrase: a typing mistake or a
+  again from its words and compares the result with the original seed phrase: a typing mistake or a
   hardware fault cannot silently produce a container that no password opens. At a terminal the
   container is shown during that check, marked as not yet verified, and the outcome is reported;
   a failed or cancelled check says that the container must not be relied on. With `--stdin`, or
   when standard output goes to a file or another program, the container is printed only after
   the check has passed.
-- `rekey` recovers the phrase into locked memory. It encrypts it again only once the recovery is
-  confirmed (`Mhfe::recover_confirmed`): by the built-in check at the length the owner states, by
-  an address or the fingerprint of the wallet, or by the owner, who chose to see the phrase on a
-  private screen and compare it with their backup. So a wrong password cannot be sealed into a new
-  container that then looks verified. It does not revoke the old container, and says so.
+- `rekey` recovers the phrase into locked memory (`Rekey::recover_state`) and encrypts it again
+  only once the recovery is confirmed (`Rekey::confirm`, the guard in `src/rekey.rs` that the tool
+  and the browser package both go through). The built-in check confirms it only at a 12- to
+  21-word length the owner states, when the check passes at that length and at no other. With the
+  length detected, for a 24-word original seed phrase or a same-length container, which have no
+  check, and when the check finds another length than the one stated (`LENGTH_DIFFERS`) or several
+  lengths pass, only an address or the fingerprint of the wallet confirms it, or the owner, who
+  chose to see the phrase on a private screen and compare it with their backup. Where the owner
+  could not tell the phrase from another reading, as with 24 words stated beside a shorter length
+  whose check passes, only the address or the fingerprint confirms it. So a wrong password cannot
+  be sealed into a new container that then looks verified. It does not revoke the old container,
+  and says so.
 - `new` draws a new phrase from the operating system's random generator, on every processor core
   when it must pass a check with the BIP39 passphrase, and shows it only on a private screen. That
   check is a draft over the BIP39 seed with the passphrase, which may not be empty: a filter of 16
@@ -103,18 +117,18 @@ Never include a real seed phrase, password, private key or wallet file.
   (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which
   listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
 - On Linux the kernel enforces this. A command that handles secrets (`encrypt`, `decrypt`, `check`,
-  `rekey`, `new`, `wallets`, `password`) runs under a seccomp filter that refuses to create any
-  socket, and refuses io_uring altogether, whose operations could create one without the system
-  call the filter sees; and under a Landlock ruleset that refuses every write to the file system
-  (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect). Both cover every thread the
-  command starts, Argon2's included, and cannot be undone. A command started directly also moves
-  into a network namespace of its own, with only inactive loopback and no external routes; where
-  the system allows no user namespaces it runs on without one. Its summary says "isolated network,
-  no new sockets or file writes" with the namespace and "no new sockets or file writes" without it.
-  The start menu runs each command in a thread of its own, so that it can still start
-  `mhfe serve`, which is not isolated because the browser it opens must write its profile; a thread
-  cannot get a namespace of its own, so the menu's commands have the filter and the ruleset only.
-  The summary of a command says what the kernel enforces. These boundaries do not revoke
+  `rekey`, `new`, `wallets`, `repair`, `repair-words`, `password`) runs under a seccomp filter that
+  refuses to create any socket, and refuses io_uring altogether, whose operations could create one
+  without the system call the filter sees; and under a Landlock ruleset that refuses every write to
+  the file system (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect). Both cover every
+  thread the command starts, Argon2's included, and cannot be undone. A command started directly
+  also moves into a network namespace of its own, with only inactive loopback and no external
+  routes; where the system allows no user namespaces it runs on without one. Its summary says
+  "isolated network, no new sockets or file writes" with the namespace and "no new sockets or file
+  writes" without it. The start menu runs each command in a thread of its own, so that it can still
+  start `mhfe serve`, which is not isolated because the browser it opens must write its profile; a
+  thread cannot get a namespace of its own, so the menu's commands have the filter and the ruleset
+  only. The summary of a command says what the kernel enforces. These boundaries do not revoke
   descriptors already open: an inherited socket remains in its original network namespace, and an
   already writable file, pipe or redirected standard output remains writable. They therefore
   restrict new access rather than guarantee containment of arbitrary compromised code. Start the
@@ -130,14 +144,17 @@ Argon2 is the reference C implementation, vendored unchanged (see
 is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
 The engine module also makes the calls that lock secrets in memory and keep the work area out of
 core dumps (`mlock`, `madvise`). The command-line tool denies unsafe code too, except in
-`src/bin/mhfe/protect.rs`, which forbids core dumps (`setrlimit`, `prctl`) and isolates a command
-(seccomp, Landlock), and in
-`src/bin/mhfe/hidden_input.rs`, which switches the
-terminal's echo and line mode for a secret's prompt and a list (`tcgetattr`/`tcsetattr` on Unix,
-`GetConsoleMode`/`SetConsoleMode` on Windows) and restores them, and reads the terminal's width and
-whether a key follows Escape (`ioctl`/`select` on Unix, `GetConsoleScreenBufferInfo`/
-`PeekConsoleInputW` on Windows). The engine module keeps these
-invariants:
+`src/bin/mhfe/protect.rs`, which forbids core dumps (`setrlimit`, `prctl`), routes Ctrl+\\ and
+Ctrl+Z to the Ctrl+C handler (`sigaction`, `raise`), isolates a command (seccomp through `prctl`,
+Landlock, a network namespace through `unshare`), and reads each protection back by asking for it
+or trying what it forbids (`getrlimit`, `prctl`, `socket`, io_uring, `open`); and in
+`src/bin/mhfe/hidden_input.rs`, which switches the terminal's echo and line mode for a secret's
+prompt and a list (`tcgetattr`/`tcsetattr` on Unix, `GetConsoleMode`/`SetConsoleMode` on Windows,
+where it also has the console carry out control sequences) and restores them, reads the
+terminal's width and whether a key follows Escape (`ioctl`/`select` on Unix,
+`GetConsoleScreenBufferInfo`/`PeekConsoleInputW` on Windows), and tells whether standard output is
+the terminal the private screen is shown on (`fstat` on Unix, `GetConsoleMode` on Windows). The
+engine module keeps these invariants:
 
 - `argon2_context` is copied field for field; compile-time assertions check its size, alignment and
   every field offset on 32- and 64-bit targets, and a test proves that every field reaches the C
@@ -162,22 +179,22 @@ The only other unsafe calls in that module are the free-memory queries for macOS
 
 ## Containers of the same length
 
-A container of the same length as its 12- to 21-word original (suite 4, `--same-length`, or
-`sameLength` in the browser) is made only when the user chooses it; 24 words are the default, and
+A container of the same length as its 12- to 21-word original seed phrase (suite 4, `--same-length`,
+or `sameLength` in the browser) is made only when the user chooses it; 24 words are the default, and
 the tool and the documented page behaviour show the consequences before the choice. Compared with a
 24-word container:
 
 - It has no built-in check. A wrong password, PIM or memory level gives another valid phrase of the
   same length with no error, so only a comparison with the wallet (`mhfe check --address` or
   `--fingerprint`) confirms a recovery, and every recovered phrase is labelled as not verified.
-- It shows the original's word count, and its BIP39 checksum of 4 to 7 bits lets a miscopied word
-  through about once in 16 to 128, against once in 256 for 24 words.
+- It shows the original seed phrase's word count, and its BIP39 checksum of 4 to 7 bits lets a
+  miscopied word through about once in 16 to 128, against once in 256 for 24 words.
 - Its state is the entropy itself, 128 to 224 bits in two halves of 64 to 112 bits, so each round's
   salt is drawn from at most 2^64 to 2^112 values. The specification extends its analysis of
   plausible deniability to this state, but does not assert its suite 3 conjectures on attack cost
   for it; treat the format as newer and less analysed than the 24-word one.
-- A container is told apart from its original only by the user's own records: both are valid phrases
-  of the same length, and a wallet accepts either.
+- A container is told apart from its original seed phrase only by the user's own records: both are
+  valid phrases of the same length, and a wallet accepts either.
 
 ## The fast-mode launcher
 
@@ -213,9 +230,10 @@ tab.
 
 The browser package ([`docs/BROWSER-PACKAGE.md`](docs/BROWSER-PACKAGE.md)) runs the same Rust code
 and the same Argon2 C code in a web page, as independent classes: `MhfeClient` (encryption,
-recovery, the check, rekey, hidden wallets and the self-test), `MhfeRepair`, `MhfePasswords` and
-`MhfeWallet`. A page has none of the protections of the operating system described above: no
-private screen, no locked memory, no control of crash reports and no isolation of its own.
+recovery, the check, rekey, hidden wallets, the search for missing words of a container phrase and
+the self-test), `MhfeRepair`, `MhfePasswords` and `MhfeWallet`. A page has none of the
+protections of the operating system described above: no private screen, no locked memory, no
+control of crash reports and no isolation of its own.
 
 - The package fetches nothing and needs no `connect-src`; it works under a policy that allows
   scripts only by hash, WebAssembly and `blob:` workers. The page passes its files to each class
@@ -246,15 +264,14 @@ private screen, no locked memory, no control of crash reports and no isolation o
   owner to confirm a rekey, the phrases of hidden wallets, a generated password and the words of a
   check word review. Pass passwords and passphrases as `Uint8Array` where possible, keep such
   values on screen only as long as needed and close the tab afterwards.
-- The rules of the library hold in the browser too: a rekey seals only a recovery that is
-  confirmed and only after the user's answer about other wallets on the container, the wallet
-  check of a new phrase needs a BIP39 passphrase and never confirms a rekey, and a hidden wallet's
-  password is refused when it was used already or when its wallet would pass a check. What the
-  terminal's private screen does falls to the page: `docs/BROWSER-PACKAGE.md` ("What the page
+- The rules of the library hold in the browser too: a rekey seals only a recovery that is confirmed,
+  the wallet check of a new phrase needs a BIP39 passphrase and never confirms a rekey, and a hidden
+  wallet's password is refused when it was used already or when its wallet would pass a check. What
+  the terminal's private screen does falls to the page: `docs/BROWSER-PACKAGE.md` ("What the page
   should do") asks it to show the phrase of an owner's confirmation concealed and remove it after
-  the answer, to remove a recovered phrase from the screen once the user is done, to show no list
-  or count of the hidden wallets opened, and to close a session of hidden wallets when the user
-  leaves the page and after a while without use.
+  the answer, to remove a recovered phrase from the screen once the user is done, to show no list or
+  count of the hidden wallets opened, and to close a session of hidden wallets when the user leaves
+  the page and after a while without use.
 - Every class checks its parts with known answers and public test data before its first operation
   (`startupCheck()`), and on request with slower cases (`fullCheck()`); every Argon2 operation
   checks its Argon2 build before its first round and after its last. A wrong answer closes the

@@ -180,6 +180,29 @@ def detected_recovery(x):
     return candidates + [(24, False, read_as(x, 24))]
 
 
+# Negative cases recorded before the length rules of recovery, which keep the reading of the
+# stated length alone; the corpus holds them byte for byte.
+STATED_READING_ONLY = {"selected-24-words"}
+
+
+def stated_recovery(x, words, name):
+    """Recovery under the length rules of the specification: detection always runs, and a matching
+    layout takes precedence over a stated length. None where a stated short length matches
+    nothing (VERIFIER_MISMATCH)."""
+    lengths = matching_short_lengths(x)
+    if words == 0:
+        return detected_recovery(x)
+    if words == 24 and name in STATED_READING_ONLY:
+        return [(24, False, read_as(x, 24))]
+    if words in lengths:
+        return [(words, True, read_as(x, words))]
+    if words == 24:
+        return [(w, True, read_as(x, w)) for w in lengths] + [(24, False, read_as(x, 24))]
+    if not lengths:
+        return None
+    return detected_recovery(x)
+
+
 def read_as(x, words):
     return entropy_to_phrase(x[: SHORT_LENGTHS.get(words, 32)])
 
@@ -333,13 +356,8 @@ def check_negative_case(case):
     pim, level, words = case["pim"], case["memory_level"], case["words"]
     password = check_password(case)
     x, _ = inverse(phrase_to_entropy(case["container"]), openssl_argon2id, password, pim, level)
-    if words == 0:
-        expected, error = detected_recovery(x), None
-    elif words == 24:
-        expected, error = [(24, False, read_as(x, 24))], None
-    elif words in matching_short_lengths(x):
-        expected, error = [(words, True, read_as(x, words))], None
-    else:
+    expected, error = stated_recovery(x, words, case["name"]), None
+    if expected is None:
         expected, error = [], "VERIFIER_MISMATCH"
     recorded = [(c["words"], c["verified"], c["phrase"]) for c in case["recovery"]]
     assert (recorded, case["error_code"]) == (expected, error), case["name"]

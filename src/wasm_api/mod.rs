@@ -5,9 +5,10 @@
 //!
 //! - core: encryption, recovery, the rehearsal check, rekey, hidden wallets and the self-test, with
 //!   Argon2;
-//! - repair: repair words and the repair of a damaged plate;
+//! - repair: repair words and the repair of a damaged container phrase;
 //! - passwords: the password check word, the password generator and the strength estimate;
-//! - wallet: the wallet check of a phrase, fingerprints, address search scopes and new phrases.
+//! - wallet: the wallet check of a phrase, fingerprints, address search scopes and new phrases;
+//! - the word hints of the BIP39 and EFF lists, which the wallet and password modules share.
 //!
 //! The bindings only translate: every rule lives in the library. Secrets, the seed phrases among
 //! them, arrive as UTF-8 bytes and are wiped here after use ([`SecretText`]): wasm-bindgen copies
@@ -36,11 +37,52 @@ mod passwords;
 mod repair;
 #[cfg(feature = "browser-wallet")]
 mod wallet;
+#[cfg(any(feature = "browser-passwords", feature = "browser-wallet"))]
+mod word_hints;
 
 /// The release version of the package, the same in every module: the one identity a page checks.
 #[wasm_bindgen(js_name = packageVersion)]
 pub fn package_version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
+}
+
+/// What a card of `count` repair words repairs, as the page reads it.
+#[cfg(any(feature = "browser-core", feature = "browser-repair"))]
+#[derive(serde::Serialize)]
+pub(crate) struct CapacityJson {
+    count: usize,
+    unreadable: usize,
+    wrong: usize,
+}
+
+/// What every card repairs, by the library's [`crate::repair::capacity`].
+#[cfg(any(feature = "browser-core", feature = "browser-repair"))]
+pub(crate) fn repair_capacities() -> Vec<CapacityJson> {
+    crate::repair::REPAIR_WORD_COUNTS
+        .iter()
+        .map(|&count| {
+            let (unreadable, wrong) = crate::repair::capacity(count);
+            CapacityJson {
+                count,
+                unreadable,
+                wrong,
+            }
+        })
+        .collect()
+}
+
+/// Calls a callback of the page with `arguments`: an exception thrown there stops the operation,
+/// as a cancel does.
+#[cfg(any(feature = "browser-core", feature = "browser-wallet"))]
+pub(crate) fn call_page(
+    callback: &js_sys::Function,
+    arguments: &[JsValue],
+) -> Result<(), MhfeError> {
+    let arguments: js_sys::Array = arguments.iter().collect();
+    callback
+        .apply(&JsValue::UNDEFINED, &arguments)
+        .map(|_| ())
+        .map_err(|_| MhfeError::Cancelled)
 }
 
 /// "CODE: message", the form the workers and the clients parse.
@@ -214,11 +256,6 @@ impl SecretText {
 /// A setting or count as JavaScript passed it. wasm-bindgen would turn a `u32` parameter into the
 /// number modulo 2^32, so that 2^32 became 0 and -1 became 4294967295; taking the number as it is
 /// lets anything but a whole number in the `u32` range be refused with the error code `code`.
-#[cfg(any(
-    feature = "browser-core",
-    feature = "browser-repair",
-    feature = "browser-passwords"
-))]
 pub(crate) fn whole_number(value: f64, code: &str, name: &str) -> Result<u32, JsError> {
     // NaN and the infinities have a NaN fractional part, so they fail the first test.
     if value.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&value) {
@@ -248,23 +285,26 @@ impl crate::random::RandomSource for JsRandom {
             MhfeError::RandomFailed(format!(
                 "the page's random source failed: {}",
                 js_message(&error)
+                    .unwrap_or_else(|| "it threw something other than an Error".to_owned())
             ))
         })
     }
 }
 
 /// The message of a JavaScript error, such as the browser's own words when getRandomValues
-/// refuses, so that the cause reaches the page.
-#[cfg(any(feature = "browser-passwords", feature = "browser-wallet"))]
-fn js_message(error: &JsValue) -> String {
-    error
-        .as_string()
-        .or_else(|| {
-            js_sys::Reflect::get(error, &JsValue::from_str("message"))
-                .ok()?
-                .as_string()
-        })
-        .unwrap_or_else(|| "it threw something other than an Error".to_owned())
+/// refuses, so that the cause reaches the page: the thrown text, or an Error's message; `None`
+/// for anything else, which the caller names.
+#[cfg(any(
+    feature = "browser-core",
+    feature = "browser-passwords",
+    feature = "browser-wallet"
+))]
+pub(crate) fn js_message(error: &JsValue) -> Option<String> {
+    error.as_string().or_else(|| {
+        js_sys::Reflect::get(error, &JsValue::from_str("message"))
+            .ok()?
+            .as_string()
+    })
 }
 
 /// A review choice of the password check word as a page passes it: `kind` is "" or "asTyped" for

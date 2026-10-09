@@ -43,13 +43,18 @@ pub(super) fn processor_has_ssse3() -> bool {
 /// A program calls it before asking for secrets and reserves the memory after the password is
 /// encoded, the order the specification gives for creating a container.
 pub fn check_can_run(work: WorkFactor) -> Result<(), MhfeError> {
-    if work.memory_level() > HIGHEST_MEMORY_LEVEL {
-        return Err(MhfeError::MemoryLevelNotSupportedHere {
-            level: work.memory_level(),
-            highest_supported: HIGHEST_MEMORY_LEVEL,
-        });
-    }
+    work.require_level(HIGHEST_MEMORY_LEVEL)?;
     check_free_memory(work.memory_bytes())
+}
+
+/// The highest memory level whose memory the computer reports as free, if it reports any.
+pub fn highest_available_level() -> Option<u32> {
+    let available = available_memory_bytes()?;
+    (0..=HIGHEST_MEMORY_LEVEL)
+        .rev()
+        .filter_map(|level| WorkFactor::new(0, level).ok())
+        .find(|work| work.memory_bytes() <= available)
+        .map(WorkFactor::memory_level)
 }
 
 impl NativeEngine {

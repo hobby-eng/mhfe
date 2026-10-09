@@ -11,7 +11,7 @@ use crate::mhfe::known_answers::published;
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
-use crate::{Suite, WordCount};
+use crate::{PhraseLength, Suite, WordCount};
 
 /// What a container's words tell.
 #[derive(Clone, Copy)]
@@ -132,7 +132,8 @@ impl ContainerFactsCheck {
 
     fn container(case: &ContainerCase) -> Result<(), String> {
         let vector = published(case.vector)?;
-        // Read as typed on a plate: capitals and the first four letters of each word.
+        // Read as typed from a written container phrase: capitals and the first four letters of
+        // each word.
         let typed: Vec<String> = vector
             .container
             .split(' ')
@@ -152,7 +153,7 @@ impl ContainerFactsCheck {
         )?;
         for &(words, expected) in case.confirmations {
             let words = WordCount::new(words).map_err(stopped)?;
-            let result = facts.confirmation_needed(words);
+            let result = facts.confirmation_needed(PhraseLength::Words(words));
             match expected {
                 Ok(needed) => expect(result == Ok(needed), "needs another confirmation")?,
                 Err(code) => expect_refusal(result, code)?,
@@ -210,6 +211,7 @@ impl ComponentCheck for ContainerFactsCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::self_check::{fails_with, leak};
 
     #[test]
     fn the_container_facts_pass() {
@@ -223,33 +225,30 @@ mod tests {
     fn a_wrong_fact_fails() {
         let mut containers = CONTAINERS;
         containers[1].opens_hidden_wallets = true;
-        let mut check = ContainerFactsCheck {
-            containers: Box::leak(Box::new(containers)),
-            ..ContainerFactsCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("container 2 of 2 offers other wallets".to_owned())
+        fails_with(
+            ContainerFactsCheck {
+                containers: leak(containers),
+                ..ContainerFactsCheck::new()
+            },
+            "container 2 of 2 offers other wallets",
         );
         let mut containers = CONTAINERS;
         containers[0].confirmations = &[(24, Ok(ConfirmationNeeded::BuiltInCheck))];
-        let mut check = ContainerFactsCheck {
-            containers: Box::leak(Box::new(containers)),
-            ..ContainerFactsCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("container 1 of 2 needs another confirmation".to_owned())
+        fails_with(
+            ContainerFactsCheck {
+                containers: leak(containers),
+                ..ContainerFactsCheck::new()
+            },
+            "container 1 of 2 needs another confirmation",
         );
         let mut originals = ORIGINALS;
         originals[2].other_lengths = &[];
-        let mut check = ContainerFactsCheck {
-            originals: Box::leak(Box::new(originals)),
-            ..ContainerFactsCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("original 3 of 3 gives other lengths".to_owned())
+        fails_with(
+            ContainerFactsCheck {
+                originals: leak(originals),
+                ..ContainerFactsCheck::new()
+            },
+            "original 3 of 3 gives other lengths",
         );
     }
 }

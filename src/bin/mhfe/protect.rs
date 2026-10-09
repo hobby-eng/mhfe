@@ -1,6 +1,7 @@
 //! What the tool does to keep secrets inside its own memory and itself offline:
 //!
 //! - no core dumps, and no reading of its memory by other programs of the same user;
+//! - Ctrl+\ and Ctrl+Z end the tool as Ctrl+C does, so that no key leaves a secret on the screen;
 //! - a warning when swap could write memory to a disk without encryption. Argon2's work area is far
 //!   too large to keep out of swap (src/memory.rs), and from its blocks a password guess can be
 //!   tested cheaply, so unencrypted swap matters;
@@ -14,8 +15,8 @@
 //! Each protection is read back before it is relied on: [`CoreDumpCheck`] and [`IsolationCheck`]
 //! are parts of the checks at start (startup.rs) and of `mhfe self-test`.
 
-// prctl, setrlimit and the Landlock calls are operating-system calls that Rust offers only through
-// unsafe foreign functions.
+// prctl, setrlimit, sigaction and the Landlock calls are operating-system calls that Rust offers
+// only through unsafe foreign functions.
 #![allow(unsafe_code)]
 
 use std::cell::Cell;
@@ -42,6 +43,46 @@ pub fn harden_process() {
     {
         // SAFETY: PR_SET_DUMPABLE takes an integer and touches no memory of this process.
         unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) };
+    }
+}
+
+/// Ctrl+\ (SIGQUIT) and Ctrl+Z (SIGTSTP) interrupt the tool as Ctrl+C does, so that its handler
+/// (terminal::stop_on_ctrl_c) restores the terminal and leaves a private screen: by default the
+/// first would end the tool and the second stop it with a secret still on the screen
+/// (AUD-015-SEC004). A handler, unlike an ignored signal, is reset for a program the tool starts,
+/// such as the browser of `mhfe serve`. Returns whether both handlers read back as set, as every
+/// protection is read back before it is relied on.
+pub fn interrupt_on_quit_and_suspend() -> bool {
+    #[cfg(not(unix))]
+    {
+        true
+    }
+    #[cfg(unix)]
+    {
+        extern "C" fn interrupt(_signal: libc::c_int) {
+            // SAFETY: raise is async-signal-safe (POSIX.1-2008, 2.4.3); the handler of SIGINT
+            // (ctrlc) only writes to the pipe its thread waits on.
+            unsafe { libc::raise(libc::SIGINT) };
+        }
+        let handler = interrupt as extern "C" fn(libc::c_int) as libc::sighandler_t;
+        let mut set = true;
+        for signal in [libc::SIGQUIT, libc::SIGTSTP] {
+            // SAFETY: a zeroed sigaction is a valid empty one; every field set below is a plain
+            // value, and sigaction reads the first structure and writes the second only during
+            // the call.
+            let in_force = unsafe {
+                let mut action: libc::sigaction = std::mem::zeroed();
+                action.sa_sigaction = handler;
+                action.sa_flags = libc::SA_RESTART;
+                libc::sigemptyset(&mut action.sa_mask);
+                let mut current: libc::sigaction = std::mem::zeroed();
+                libc::sigaction(signal, &action, std::ptr::null_mut()) == 0
+                    && libc::sigaction(signal, std::ptr::null(), &mut current) == 0
+                    && current.sa_sigaction == handler
+            };
+            set &= in_force;
+        }
+        set
     }
 }
 

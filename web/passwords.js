@@ -17,15 +17,15 @@
 // waits for the class's startup check (startupCheck()).
 
 import {
-  CompiledModule,
-  PackageCheck,
-  WorkerJob,
+  MhfeModuleClass,
+  ModuleWorker,
   describeChoice,
   encodeSecret,
-  requireCallback,
+  requireSecret,
   requireText,
-  secretBuffers,
+  secretOrEmpty,
   wipeSecrets,
+  wordHintsOf,
 } from "../runtime/runtime.js";
 
 export { MhfeError } from "../runtime/runtime.js";
@@ -39,60 +39,21 @@ const CHECK_WORD_TAKES_NO_COUNT =
 /** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
 const PASSWORDS_BUILD_ID = "development";
 
-export class MhfePasswords {
-  #workerSource;
-  #wasm;
-  #check;
+export class MhfePasswords extends MhfeModuleClass {
+  #module;
 
   constructor({ workerSource, wasm } = {}) {
-    if (typeof workerSource !== "string" || workerSource.length === 0) {
-      throw new TypeError("workerSource must be the text of runtime/worker.js.");
-    }
-    this.#workerSource = workerSource;
-    this.#wasm = new CompiledModule(wasm, "wasm");
-    this.#check = new PackageCheck({
-      wasm: this.#wasm,
+    const module = new ModuleWorker({
+      module: PASSWORDS_MODULE,
+      workerSource,
+      wasm,
       classFile: "passwords/passwords.js",
       classBuildId: PASSWORDS_BUILD_ID,
       needs: ["random"],
       secrets: true,
     });
-  }
-
-  /**
-   * The quick self-check of this class, which every other method awaits before its first call:
-   * known answers of each part the class computes, each with a case it must refuse, and what the
-   * page itself must do. Resolves to `{ passed, tier, version, buildId, components: [{ id, label,
-   * outcome, detail? }] }`, made once per page: parts that another class of the page passed with
-   * the same WebAssembly are not run again. When a part has failed, every method of the class
-   * rejects with SELF_CHECK_FAILED from then on, the report attached; a page keeps its controls
-   * closed and shows the report.
-   */
-  async startupCheck() {
-    return this.#check.startup("startup", (skip, handlers) =>
-      this.#selfCheck("startup", skip, handlers),
-    );
-  }
-
-  /**
-   * The full self-check, run anew each time: every part with its slower cases, the browser's random generator included.
-   * `onProgress({ id, label, running, outcome?, detail? })` hears of each part as it starts and
-   * ends. Resolves to a report as startupCheck() does; a failed part closes the class as there.
-   */
-  async fullCheck({ onProgress } = {}) {
-    requireCallback(onProgress, "onProgress");
-    return this.#check.full(
-      [{ run: (skip, handlers) => this.#selfCheck("full", skip, handlers) }],
-      onProgress,
-    );
-  }
-
-  /**
-   * The module's fixed values: `{ version, checkWordProfile, defaultWords, recommendedWords,
-   * mostWords, defaultCharacters, recommendedCharacters, mostCharacters, weakBelowBits }`.
-   */
-  async parameters() {
-    return this.#run({ operation: "parameters" });
+    super(module);
+    this.#module = module;
   }
 
   /**
@@ -105,21 +66,35 @@ export class MhfePasswords {
    * operation as `passwordRepair`: "asTyped", "corrected" or `{ repair: position }`.
    */
   async review({ password, passwordRepeat } = {}) {
-    await this.#ready();
+    // Both types are checked before they are compared or copied: a repetition left out is none.
+    requireSecret(password, "password");
+    const repeat = secretOrEmpty(passwordRepeat, "repeated password");
+    await this.#module.ready();
     const message = {
       operation: "review",
-      password: encodeSecret(password, "password", false),
+      password: encodeSecret(password, "password"),
       // An empty repetition is a repetition that differs, not a missing one.
       repeated: passwordRepeat !== undefined,
     };
     try {
-      message.passwordRepeat = encodeSecret(passwordRepeat ?? "", "repeated password", true);
+      message.passwordRepeat = encodeSecret(repeat, "repeated password");
     } catch (error) {
       // A refused repetition must not leave the password's copy behind.
       wipeSecrets(message);
       throw error;
     }
-    return this.#run(message);
+    return this.#module.run(message);
+  }
+
+  /**
+   * The hint below a password being typed, from the EFF list, by the rule of the command-line
+   * tool: `{ hint, count, words, completion: { letters, wordEnds } }`, as MhfeWallet.wordHints()
+   * gives it for BIP39 words. A password may hold any text, so a page shows nothing for "noWord"
+   * there, and Tab stays a character of the password. Each call starts a worker: a page may ask
+   * once typing pauses.
+   */
+  async wordHints({ typed } = {}) {
+    return wordHintsOf(this.#module, typed);
   }
 
   /**
@@ -129,14 +104,14 @@ export class MhfePasswords {
    */
   async strength({ password, passwordRepair } = {}) {
     const [choice, position] = describeChoice(passwordRepair, "passwordRepair");
-    await this.#ready();
+    await this.#module.ready();
     const message = {
       operation: "strength",
-      password: encodeSecret(password, "password", true),
+      password: encodeSecret(password, "password"),
       choice,
       position,
     };
-    return this.#run(message);
+    return this.#module.run(message);
   }
 
   /**
@@ -155,35 +130,13 @@ export class MhfePasswords {
     if (kind === "checkWord" && count !== undefined) {
       throw new TypeError(CHECK_WORD_TAKES_NO_COUNT);
     }
-    await this.#ready();
+    await this.#module.ready();
     const message = {
       operation: "make",
       kind,
       count,
-      rolls: encodeSecret(dice, "dice digits", true),
+      rolls: encodeSecret(dice, "dice digits"),
     };
-    return this.#run(message);
-  }
-
-  #run(message) {
-    return new WorkerJob([this.#workerSource]).run(
-      { module: PASSWORDS_MODULE, ...message },
-      secretBuffers(message),
-      this.#wasm,
-    );
-  }
-
-  /** Runs the module's set of known answers at `tier` in a worker of its own. */
-  #selfCheck(tier, skip, handlers) {
-    return new WorkerJob([this.#workerSource], handlers).run(
-      { module: PASSWORDS_MODULE, operation: "selfCheck", tier, skip },
-      [],
-      this.#wasm,
-    );
-  }
-
-  /** Resolves once the startup check has passed; see startupCheck(). */
-  #ready() {
-    return this.#check.require(() => this.startupCheck());
+    return this.#module.run(message);
   }
 }

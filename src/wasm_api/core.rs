@@ -12,35 +12,27 @@
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-use super::{js_error, json, review_choice, run_self_check, secret_json, whole_number, SecretText};
-use crate::check_word::chosen_password;
+use super::{
+    call_page, js_error, json, repair_capacities, review_choice, run_self_check, secret_json,
+    whole_number, CapacityJson, SecretText,
+};
+use crate::check_word;
 use crate::engine::browser::{BrowserEngine, JsArgon2, HIGHEST_BROWSER_MEMORY_LEVEL};
 use crate::engine::{BrowserArgon2Check, BrowserArgon2SizesCheck};
 use crate::mhfe::RecoveredPhrase;
-use crate::operation::{Encryption, Sealed, Stage};
+use crate::operation::{Encryption, Sealed, Stage, StageCallback, WalletPassphrase};
 use crate::rekey::{ConfirmedPhrase, Rekey};
-use crate::repair::{
-    self, PROFILE as REPAIR_PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS,
-};
+use crate::repair::{PROFILE as REPAIR_PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS};
+use crate::search::{ContainerSearch, Found, DECOY_SCAN_GAP};
 use crate::self_check::{sets, ComponentCheck, SelfCheck};
 use crate::self_test::{SelfTest, SelfTestFault};
-use crate::wallet::{
-    master_fingerprint, parse_fingerprint, Address, Coin, DerivationPath, SearchLimits,
-};
+use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
 use crate::{
     Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets, Mhfe, MhfeError,
-    OriginalFacts, Password, PhraseLength, Recovery, RecoveryStatus, Reference, Suite, WordCount,
-    WorkFactor, BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS,
-    SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
+    OriginalFacts, Password, PhraseLength, RecoveredForCheck, Recovery, RecoveryStatus,
+    ReferenceTarget, Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL,
+    MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
 };
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Capacity {
-    count: usize,
-    unreadable: usize,
-    wrong: usize,
-}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,7 +48,14 @@ struct SuiteParameters {
     built_in_check_word_counts: &'static [usize],
     repair_word_counts: [usize; 4],
     recommended_repair_words: usize,
-    repair_capacities: Vec<Capacity>,
+    repair_capacities: Vec<CapacityJson>,
+    /// The error codes after which a session of hidden wallets stays open: the library's
+    /// `KEEPS_SESSION_OPEN`, under the name the page reads.
+    hidden_wallet_refusals: &'static [&'static str],
+    /// The addresses of each chain searched for two missing words unless a page says otherwise.
+    decoy_scan_gap: u32,
+    /// The parts of the self-check that run Argon2: at 1 MiB, then at 64 and 256 MiB.
+    argon2_parts: [&'static str; 2],
 }
 
 /// The fixed suite values and the limits of the browser build.
@@ -74,17 +73,10 @@ pub fn suite_parameters() -> Result<String, JsError> {
         built_in_check_word_counts: &BUILT_IN_CHECK_WORD_COUNTS,
         repair_word_counts: REPAIR_WORD_COUNTS,
         recommended_repair_words: RECOMMENDED_REPAIR_WORDS,
-        repair_capacities: REPAIR_WORD_COUNTS
-            .iter()
-            .map(|&count| {
-                let (unreadable, wrong) = repair::capacity(count);
-                Capacity {
-                    count,
-                    unreadable,
-                    wrong,
-                }
-            })
-            .collect(),
+        hidden_wallet_refusals: &HiddenWallets::KEEPS_SESSION_OPEN,
+        repair_capacities: repair_capacities(),
+        decoy_scan_gap: DECOY_SCAN_GAP,
+        argon2_parts: crate::engine::known_answers::PART_IDS,
     })
 }
 
@@ -96,10 +88,13 @@ pub fn check_password(password_utf8: Vec<u8>) -> Result<(), JsError> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ChoiceJson {
+struct ChoiceJson<'a> {
     same_length: bool,
     words: usize,
     wrong_word_passes_one_in: u32,
+    /// The other lengths detection could read from this container, as the command-line tool warns
+    /// of them once the container is chosen: none for a same-length one.
+    other_lengths: &'a [usize],
 }
 
 #[derive(Serialize)]
@@ -108,13 +103,14 @@ struct PhraseFactsJson<'a> {
     phrase: &'a str,
     words: usize,
     other_lengths: &'a [usize],
-    containers: Vec<ChoiceJson>,
+    containers: Vec<ChoiceJson<'a>>,
 }
 
 /// Reads an original phrase, its UTF-8 bytes as the person may have typed it, and returns JSON
-/// `{ phrase, words, otherLengths, containers: [{ sameLength, words, wrongWordPassesOneIn }] }`,
-/// the phrase with every word written out, for showing back, and the containers it can be
-/// encrypted into with the consequence of each. The bytes are wiped afterwards.
+/// `{ phrase, words, otherLengths, containers: [{ sameLength, words, wrongWordPassesOneIn,
+/// otherLengths }] }`, the phrase with every word written out, for showing back, and the
+/// containers it can be encrypted into with the consequence of each; `otherLengths` at the top is
+/// the 24-word container's. The bytes are wiped afterwards.
 #[wasm_bindgen(js_name = describePhrase)]
 pub fn describe_phrase(phrase_utf8: Vec<u8>) -> Result<js_sys::JsString, JsError> {
     let phrase = SecretText::new(phrase_utf8);
@@ -130,6 +126,7 @@ pub fn describe_phrase(phrase_utf8: Vec<u8>) -> Result<js_sys::JsString, JsError
                 same_length: choice.suite() == Suite::SameLength,
                 words: choice.word_count(),
                 wrong_word_passes_one_in: choice.wrong_word_passes_one_in(),
+                other_lengths: facts.other_lengths_in(choice.suite()),
             })
             .collect(),
     })
@@ -157,11 +154,15 @@ pub fn describe_container(container: &str) -> Result<String, JsError> {
     let facts = ContainerFacts::read(container).map_err(js_error)?;
     let mut confirmation_for = std::collections::BTreeMap::new();
     for &words in facts.phrase_lengths() {
-        let needed = facts
-            .confirmation_needed(WordCount::new(words).map_err(js_error)?)
-            .map_err(js_error)?;
+        let length = PhraseLength::Words(WordCount::new(words).map_err(js_error)?);
+        let needed = facts.confirmation_needed(length).map_err(js_error)?;
         confirmation_for.insert(words.to_string(), confirmation_name(needed));
     }
+    // 0: the length detected after the recovery.
+    let detected = facts
+        .confirmation_needed(PhraseLength::Detect)
+        .map_err(js_error)?;
+    confirmation_for.insert("0".to_owned(), confirmation_name(detected));
     json(&ContainerFactsJson {
         container: facts.words(),
         words: facts.word_count(),
@@ -171,7 +172,7 @@ pub fn describe_container(container: &str) -> Result<String, JsError> {
         confirmation_for,
         hidden_wallets: facts.opens_hidden_wallets(),
         offers_wallet_check: facts.offers_wallet_check(),
-        container_fingerprint: hex::encode(facts.fingerprint().map_err(js_error)?),
+        container_fingerprint: fingerprint_text(facts.fingerprint().map_err(js_error)?),
     })
 }
 
@@ -196,6 +197,7 @@ enum KeepJson {
     ContainerWords { words: usize },
     Password,
     Passphrase,
+    PassphraseIfAny,
     RepairWords,
     Pim { value: u32 },
     MemoryLevel { value: u32 },
@@ -216,7 +218,11 @@ struct SealedJson<'a> {
 }
 
 /// The result of an encryption or a rekey: the checked container and what to keep.
-fn sealed_json(sealed: &Sealed, work: WorkFactor, passphrase: bool) -> Result<String, JsError> {
+fn sealed_json(
+    sealed: &Sealed,
+    work: WorkFactor,
+    passphrase: WalletPassphrase,
+) -> Result<String, JsError> {
     use crate::operation::KeepItem;
     let keep = sealed
         .keep(work, passphrase)
@@ -226,6 +232,7 @@ fn sealed_json(sealed: &Sealed, work: WorkFactor, passphrase: bool) -> Result<St
             KeepItem::ContainerWords(words) => KeepJson::ContainerWords { words },
             KeepItem::Password => KeepJson::Password,
             KeepItem::Passphrase => KeepJson::Passphrase,
+            KeepItem::PassphraseIfAny => KeepJson::PassphraseIfAny,
             KeepItem::RepairWords => KeepJson::RepairWords,
             KeepItem::Pim(value) => KeepJson::Pim { value },
             KeepItem::MemoryLevel(value) => KeepJson::MemoryLevel { value },
@@ -235,9 +242,7 @@ fn sealed_json(sealed: &Sealed, work: WorkFactor, passphrase: bool) -> Result<St
     json(&SealedJson {
         container: sealed.container(),
         suite_id: sealed.suite().id(),
-        container_fingerprint: hex::encode(
-            master_fingerprint(sealed.container(), "").map_err(js_error)?,
-        ),
+        container_fingerprint: master_fingerprint_text(sealed.container(), "").map_err(js_error)?,
         built_in_check: sealed.built_in_check(),
         other_lengths: sealed.other_lengths(),
         repair_words: sealed.repair_words(),
@@ -253,9 +258,10 @@ fn sealed_json(sealed: &Sealed, work: WorkFactor, passphrase: bool) -> Result<St
 ///
 /// The password is typed twice: `repeat_utf8` must be the same text (PASSWORDS_DIFFER), and
 /// `choice` with `position` applies a correction or repair of its check word review ("" keeps it
-/// as typed). `repair_word_count` is 0 for none, or 2, 4, 6 or 8. `wallet_has_passphrase`, true
-/// or false and nothing else (INVALID_REQUEST), is the user's answer whether the wallet has a
-/// BIP39 passphrase: true adds it to what to keep, since MHFE encrypts only the phrase.
+/// as typed). `repair_word_count` is 0 for none, or 2, 4, 6 or 8. `wallet_has_passphrase` is
+/// whether the wallet has a BIP39 passphrase, where the page knows it: true adds it to what to
+/// keep, since MHFE encrypts only the phrase, and false leaves it out. Undefined or null, not
+/// known, adds `{ item: "passphraseIfAny" }` in its place; anything else is INVALID_REQUEST.
 ///
 /// After the first twelve rounds `on_unverified({ container, containerFingerprint })` receives
 /// the container, so that a page can show it, marked as not yet verified, while the check runs.
@@ -283,7 +289,7 @@ pub fn encrypt(
     let typed = SecretText::new(password_utf8);
     let repeat = SecretText::new(repeat_utf8);
     let password = new_password_from(&typed, &repeat, choice, position)?;
-    let wallet_has_passphrase = passphrase_answer(&wallet_has_passphrase)?;
+    let wallet_passphrase = WalletPassphrase::from(passphrase_answer(&wallet_has_passphrase)?);
     let phrase = phrase.phrase()?;
     let suite = if same_length {
         Suite::SameLength
@@ -293,15 +299,13 @@ pub fn encrypt(
     let encryption =
         Encryption::new(phrase, suite, repair_count(repair_word_count)?).map_err(js_error)?;
     let (mut mhfe, work) = mhfe_for(pim, memory_level, argon2)?;
-    let sealed = encryption.run(
+    let sealed = sealed_for_page(
         &mut mhfe,
-        phrase,
-        &password,
-        &mut |stage, round, rounds| report(on_round, stage, round, rounds),
-        &mut |container| unverified(on_unverified, container),
-    );
-    let sealed = verified(&mhfe, sealed)?;
-    sealed_json(&sealed, work, wallet_has_passphrase)
+        on_round,
+        on_unverified,
+        |mhfe, progress, shown| encryption.run(mhfe, phrase, &password, progress, shown),
+    )?;
+    sealed_json(&sealed, work, wallet_passphrase)
 }
 
 #[derive(Serialize)]
@@ -315,8 +319,13 @@ struct CandidateJson<'a> {
     /// The suite of the container, which its word count selected.
     suite_id: &'static str,
     fingerprint_without_passphrase: String,
-    /// Null where the wallet check does not apply: every length but 24.
-    passes_wallet_check_without_passphrase: Option<bool>,
+    /// Whether a 24-word reading passes the 16-bit source check with the passphrase given, or the
+    /// empty one; null for every other length, where it does not apply.
+    wallet_check: Option<bool>,
+    /// The length stated, where the built-in checks gave this reading another; null otherwise.
+    stated_words: Option<usize>,
+    /// The other 12- to 21-word lengths whose built-in check passes too, by chance.
+    other_lengths: &'a [usize],
 }
 
 #[derive(Serialize)]
@@ -329,8 +338,13 @@ struct RecoveryJson<'a> {
 
 /// Recovers the phrase; the container's word count selects the suite. `words` is 0 for automatic
 /// detection, otherwise the chosen length, which a same-length container takes only as its own.
-/// Returns JSON `{ kind, candidates: [{ words, verified, status, phrase, suiteId,
-/// fingerprintWithoutPassphrase, passesWalletCheckWithoutPassphrase }] }`.
+/// `passphrase_utf8` is the wallet's BIP39 passphrase, empty for none, for the 16-bit source
+/// check, which every recovery evaluates on each 24-word reading; it is wiped afterwards. Returns
+/// JSON `{ kind, candidates: [{ words, verified, status, phrase, suiteId,
+/// fingerprintWithoutPassphrase, walletCheck, statedWords, otherLengths }] }`. A stated length
+/// does not replace detection: a built-in check that passes takes precedence, and
+/// `statedWords` then names the length stated; 24 stated words beside a check that passes
+/// give "ambiguous", the checked reading first.
 #[allow(clippy::too_many_arguments)]
 #[wasm_bindgen]
 pub fn decrypt(
@@ -341,14 +355,15 @@ pub fn decrypt(
     pim: f64,
     memory_level: f64,
     words: f64,
+    passphrase_utf8: Vec<u8>,
     argon2: JsArgon2,
     on_round: &js_sys::Function,
 ) -> Result<js_sys::JsString, JsError> {
+    // Under a wiping owner first, so that a refusal below drops it wiped too.
+    let passphrase = SecretText::new(passphrase_utf8);
     let password = password_from(password_utf8, choice, position)?;
-    let length = match whole_number(words, "INVALID_WORD_COUNT", "the word count")? {
-        0 => PhraseLength::Detect,
-        words => PhraseLength::Words(WordCount::new(words as usize).map_err(js_error)?),
-    };
+    let length = word_count(words)?;
+    let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
     let (mut mhfe, _) = mhfe_for(pim, memory_level, argon2)?;
     let recovery = mhfe.decrypt(container, &password, length, &mut |round, rounds| {
         report(on_round, Stage::Recover, round, rounds)
@@ -360,30 +375,34 @@ pub fn decrypt(
     };
     let candidates = phrases
         .iter()
-        .map(|candidate| candidate_json(candidate, length))
+        .map(|candidate| candidate_json(candidate, length, passphrase))
         .collect::<Result<Vec<_>, JsError>>()?;
     secret_json(&RecoveryJson { kind, candidates })
 }
 
-fn candidate_json(
-    candidate: &RecoveredPhrase,
+fn candidate_json<'a>(
+    candidate: &'a RecoveredPhrase,
     length: PhraseLength,
-) -> Result<CandidateJson<'_>, JsError> {
+    passphrase: &str,
+) -> Result<CandidateJson<'a>, JsError> {
     Ok(CandidateJson {
-        words: candidate.words,
-        verified: candidate.verified,
+        words: candidate.words(),
+        verified: candidate.verified(),
         status: match candidate.status(length) {
             RecoveryStatus::Verified => "verified",
             RecoveryStatus::NoBuiltInCheck => "noBuiltInCheck",
             RecoveryStatus::ReadAs24Detected => "readAs24",
             RecoveryStatus::ReadAs24Chosen => "readAs24Chosen",
         },
-        phrase: &candidate.phrase,
-        suite_id: candidate.suite.id(),
-        fingerprint_without_passphrase: hex::encode(
-            master_fingerprint(&candidate.phrase, "").map_err(js_error)?,
-        ),
-        passes_wallet_check_without_passphrase: candidate.passes_wallet_check_without_passphrase(),
+        phrase: candidate.phrase(),
+        suite_id: candidate.suite().id(),
+        fingerprint_without_passphrase: master_fingerprint_text(candidate.phrase(), "")
+            .map_err(js_error)?,
+        wallet_check: candidate
+            .passes_wallet_check(passphrase)
+            .map_err(js_error)?,
+        stated_words: candidate.stated_words(),
+        other_lengths: candidate.other_lengths(),
     })
 }
 
@@ -392,94 +411,273 @@ struct CheckJson {
     matches: bool,
     /// Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise.
     path: Option<String>,
+    /// The original seed phrase's own checks, from the same recovery.
+    evidence: EvidenceJson,
 }
 
-/// A reference of the wallet as the page passes it, owning what the library's [`Reference`]
-/// borrows.
-struct WalletReference {
-    address: Option<Address>,
-    path: Option<DerivationPath>,
-    fingerprint: Option<[u8; 4]>,
-    words: Option<WordCount>,
-    wallet_check: bool,
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EvidenceJson {
+    /// The length of a 12- to 21-word original seed phrase whose built-in check passes, or null.
+    built_in_check: Option<usize>,
+    /// Whether the 24-word reading passes the 16-bit phrase + passphrase check, with the
+    /// passphrase given or the empty one when none was given. Null for a stated length, for a
+    /// same-length container, and when exactly one shorter length passes its built-in check and
+    /// the reference did not match the 24-word reading.
+    wallet_check: Option<bool>,
 }
 
-impl WalletReference {
-    /// `kind` is "address", "fingerprint", "words" or "walletCheck"; `reference` the address, the
-    /// eight hex digits or the word count, empty for "walletCheck"; `coin` an address's coin id;
-    /// `path` empty for the standard path search.
-    fn parse(kind: &str, reference: &str, coin: &str, path: &str) -> Result<Self, JsError> {
-        let mut parsed = Self {
-            address: None,
-            path: None,
-            fingerprint: None,
-            words: None,
-            wallet_check: false,
-        };
-        match kind {
-            "address" => {
-                let coin: Coin = coin.parse().map_err(js_error)?;
-                parsed.address = Some(Address::parse(coin, reference).map_err(js_error)?);
-                parsed.path = match path {
+/// A reference as the page passes it: `kind` is "address", "fingerprint", "words" or
+/// "walletCheck"; `reference` the address, the eight hex digits or the word count, 0 to detect
+/// it, empty for "walletCheck"; `coin` an address's coin id; `path` empty for the standard path
+/// search.
+fn reference_target(
+    kind: &str,
+    reference: &str,
+    coin: &str,
+    path: &str,
+) -> Result<ReferenceTarget, JsError> {
+    Ok(match kind {
+        "address" => {
+            let coin: Coin = coin.parse().map_err(js_error)?;
+            ReferenceTarget::Address {
+                address: Address::parse(coin, reference).map_err(js_error)?,
+                path: match path {
                     "" => None,
                     text => Some(text.parse().map_err(js_error)?),
-                };
-            }
-            "fingerprint" => {
-                parsed.fingerprint = Some(parse_fingerprint(reference).map_err(js_error)?);
-            }
-            "words" => {
-                parsed.words = Some(
-                    reference
-                        .parse()
-                        .map_err(|_| MhfeError::InvalidWordCount(0))
-                        .and_then(WordCount::new)
-                        .map_err(js_error)?,
-                );
-            }
-            "walletCheck" => parsed.wallet_check = true,
-            other => {
-                return Err(js_error(MhfeError::InvalidRequest(format!(
-                    "unknown reference kind {other}"
-                ))))
+                },
             }
         }
-        Ok(parsed)
+        "fingerprint" => {
+            ReferenceTarget::Fingerprint(parse_fingerprint(reference).map_err(js_error)?)
+        }
+        "words" => {
+            let words = reference.parse().map_err(|_| {
+                js_error(MhfeError::InvalidRequest(
+                    "the word count must be a whole number".to_owned(),
+                ))
+            })?;
+            ReferenceTarget::Length(PhraseLength::from_count(words).map_err(js_error)?)
+        }
+        "walletCheck" => ReferenceTarget::WalletCheck,
+        other => {
+            return Err(js_error(MhfeError::InvalidRequest(format!(
+                "unknown reference kind {other}"
+            ))))
+        }
+    })
+}
+
+/// A rehearsal check in one worker: the recovery once, then a comparison with the page's
+/// reference and, when detection found no length, with the one the page gives next, without the
+/// rounds again ([`RecoveredForCheck`]). Only whether each matches comes out; freed or dropped,
+/// it wipes the recovered state.
+#[wasm_bindgen]
+pub struct CheckSession {
+    recovered: RecoveredForCheck,
+}
+
+#[wasm_bindgen]
+impl CheckSession {
+    /// Recovers `container` for a check against the reference, which is refused first, before
+    /// any round, when the container cannot be checked with it. The rounds are reported as
+    /// "recover", then once "compare". `reference_kind` is "address", "fingerprint", "words" or
+    /// "walletCheck" (the phrase and passphrase check of a 24-word container); see
+    /// [`reference_target`].
+    #[allow(clippy::too_many_arguments)]
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        container: &str,
+        password_utf8: Vec<u8>,
+        choice: &str,
+        position: f64,
+        pim: f64,
+        memory_level: f64,
+        reference_kind: &str,
+        reference: &str,
+        coin: &str,
+        path: &str,
+        passphrase_utf8: Vec<u8>,
+        argon2: JsArgon2,
+        on_round: &js_sys::Function,
+    ) -> Result<CheckSession, JsError> {
+        // Both secrets are put under a wiping owner before anything can fail, so that no early
+        // return drops either of them unwiped. The passphrase is read in place, without a copy.
+        let passphrase = SecretText::new(passphrase_utf8);
+        let password = password_from(password_utf8, choice, position)?;
+        let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
+        let wallet = reference_target(reference_kind, reference, coin, path)?;
+        // The library refuses a check that cannot be, an empty passphrase of the wallet check
+        // among them, before any round, in the same order for every front end. The work area is
+        // freed when this engine is dropped, before the page is asked anything.
+        let (mut mhfe, _) = mhfe_for(pim, memory_level, argon2)?;
+        let recovered = mhfe.recover_for_check_in_stages(
+            container,
+            &password,
+            &wallet.with(passphrase),
+            &mut |stage, round, rounds| report(on_round, stage, round, rounds),
+        );
+        let recovered = verified(&mhfe, recovered)?;
+        Ok(Self { recovered })
     }
 
-    /// The library's reference, with `passphrase` the wallet's BIP39 passphrase.
-    fn reference<'a>(&'a self, passphrase: &'a str) -> Reference<'a> {
-        if let Some(address) = &self.address {
-            Reference::Address {
-                address,
-                passphrase,
-                path: self.path.as_ref(),
-                limits: SearchLimits::default(),
-            }
-        } else if let Some(fingerprint) = self.fingerprint {
-            Reference::Fingerprint {
-                fingerprint,
-                passphrase,
-            }
-        } else if let Some(words) = self.words {
-            Reference::BuiltInCheck { words }
-        } else {
-            debug_assert!(self.wallet_check);
-            Reference::WalletCheck { passphrase }
-        }
+    /// Compares the recovery with a reference given as for [`CheckSession::new`], as JSON
+    /// `{"matches": bool, "path": string | null, "evidence": {...}}`: only whether it matches
+    /// comes out, and for a matched address the path where it was found.
+    pub fn compare(
+        &self,
+        reference_kind: &str,
+        reference: &str,
+        coin: &str,
+        path: &str,
+        passphrase_utf8: Vec<u8>,
+    ) -> Result<String, JsError> {
+        let passphrase = SecretText::new(passphrase_utf8);
+        let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
+        let wallet = reference_target(reference_kind, reference, coin, path)?;
+        let evidence = self
+            .recovered
+            .compare(&wallet.with(passphrase))
+            .map_err(js_error)?;
+        json(&CheckJson {
+            matches: evidence.outcome.matches(),
+            path: evidence.outcome.path().map(ToString::to_string),
+            evidence: EvidenceJson {
+                built_in_check: evidence.built_in_check,
+                wallet_check: evidence.wallet_check,
+            },
+        })
     }
 }
 
-/// The rehearsal check, as JSON: `{"matches": bool, "path": string | null}`. Only whether the
-/// recovery matches comes out, and for a matched address the path where it was found. The rounds
-/// of the recovery are reported as "recover", then once "compare" before the comparison.
-///
-/// `reference_kind` is "address", "fingerprint", "words" or "walletCheck" (the phrase and
-/// passphrase check of a 24-word container); see [`WalletReference::parse`].
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CandidatesJson {
+    missing: Vec<usize>,
+    candidates: usize,
+    /// Whether the original seed phrase's wallet can tell the candidates apart (one missing word).
+    offers_wallet_search: bool,
+    /// Whether the original seed phrase's own checks can too: one missing word in a container that
+    /// carries them.
+    offers_own_checks: bool,
+}
+
+/// The candidates of a container phrase with words typed as "?", before a search: JSON
+/// `{ missing, candidates, offersWalletSearch, offersOwnChecks }`, the missing words' positions
+/// from 1, how many candidate containers pass the BIP39 checksum, and which searches with the
+/// password the library offers for them, as the command-line tool asks it. More than two missing
+/// words are refused (`TOO_MANY_MISSING_WORDS`), and words with none marked (`INVALID_REQUEST`).
+#[wasm_bindgen(js_name = searchCandidates)]
+pub fn search_candidates(written: &str) -> Result<String, JsError> {
+    let search = ContainerSearch::new(written).map_err(js_error)?;
+    json(&CandidatesJson {
+        missing: search.missing(),
+        candidates: search.count(),
+        offers_wallet_search: search.offers_wallet_search(),
+        offers_own_checks: search.offers_own_checks(),
+    })
+}
+
+#[derive(Serialize)]
+struct FoundWordJson {
+    position: usize,
+    word: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchJson {
+    found: bool,
+    /// The container phrase found, or null.
+    container: Option<String>,
+    container_fingerprint: Option<String>,
+    words: Vec<FoundWordJson>,
+    /// Where a matched address was found, or null.
+    path: Option<String>,
+    candidates: usize,
+}
+
+fn search_json(search: &ContainerSearch, found: Option<Found>) -> Result<String, JsError> {
+    let Some(found) = found else {
+        return json(&SearchJson {
+            found: false,
+            container: None,
+            container_fingerprint: None,
+            words: Vec::new(),
+            path: None,
+            candidates: search.count(),
+        });
+    };
+    let fingerprint = master_fingerprint_text(&found.container, "").map_err(js_error)?;
+    json(&SearchJson {
+        found: true,
+        container: Some(found.container.to_string()),
+        container_fingerprint: Some(fingerprint),
+        words: found
+            .words
+            .iter()
+            .map(|&(position, word)| FoundWordJson { position, word })
+            .collect(),
+        path: found.outcome.path().map(ToString::to_string),
+        candidates: search.count(),
+    })
+}
+
+/// Candidates compared between two reports of a search with the decoy wallet, so that thousands
+/// of them do not flood the page with messages.
+const DECOY_REPORT_EVERY: usize = 64;
+
+/// The search for words typed as "?" with the decoy wallet, the container itself as a wallet:
+/// every candidate is compared with an address (`reference_kind` "address", `coin`, `path`) or a
+/// fingerprint ("fingerprint") with `passphrase_utf8`, the BIP39 passphrase used with the
+/// container phrase, empty for none, without the password and without Argon2.
+/// Up to two missing words; for two, an address is searched among the first `scan_gap`
+/// receiving and as many change addresses of the first account, 20 being the usual gap of a
+/// wallet. `on_candidates(done, count)` hears of the progress.
+/// Returns JSON `{ found, container, containerFingerprint, words: [{ position, word }], path,
+/// candidates }`.
+#[wasm_bindgen(js_name = searchDecoy)]
 #[allow(clippy::too_many_arguments)]
-#[wasm_bindgen]
-pub fn check(
-    container: &str,
+pub fn search_decoy(
+    written: &str,
+    reference_kind: &str,
+    reference: &str,
+    coin: &str,
+    path: &str,
+    passphrase_utf8: Vec<u8>,
+    scan_gap: f64,
+    on_candidates: &js_sys::Function,
+) -> Result<String, JsError> {
+    let passphrase = SecretText::new(passphrase_utf8);
+    let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
+    let scan_gap = whole_number(scan_gap, "INVALID_REQUEST", "scanGap")?;
+    let wallet = reference_target(reference_kind, reference, coin, path)?;
+    let search = ContainerSearch::new(written).map_err(js_error)?;
+    let found = search
+        .search_decoy(&wallet.with(passphrase), scan_gap, &mut |done, count| {
+            // The first candidate too, so that a page hears of a search that ends at once.
+            if done == 1 || done % DECOY_REPORT_EVERY == 0 || done == count {
+                report_candidates(on_candidates, done, count)?;
+            }
+            Ok(())
+        })
+        .map_err(js_error)?;
+    search_json(&search, found)
+}
+
+/// The search for one word typed as "?" with the owner's wallet: every candidate is recovered
+/// with the password at the settings given, a full recovery each, and compared with an address
+/// or a fingerprint, or with the original seed phrase's own checks: "builtInCheck" (empty
+/// reference), the built-in check of a 12- to 21-word one, and "walletCheck", which adds with its
+/// BIP39 passphrase the phrase + passphrase check of a 24-word one made by `mhfe new`.
+/// `on_candidates(candidate, count)` hears of each candidate as it starts, `on_round` of its
+/// rounds. Returns JSON as [`search_decoy`].
+#[wasm_bindgen(js_name = searchWallet)]
+#[allow(clippy::too_many_arguments)]
+pub fn search_wallet(
+    // A deliberate copy of the arguments of CheckSession::new: the WebAssembly boundary takes
+    // every input as an argument of its own, the secrets as bytes that the binding wipes.
+    written: &str,
     password_utf8: Vec<u8>,
     choice: &str,
     position: f64,
@@ -491,28 +689,59 @@ pub fn check(
     path: &str,
     passphrase_utf8: Vec<u8>,
     argon2: JsArgon2,
+    on_candidates: &js_sys::Function,
     on_round: &js_sys::Function,
 ) -> Result<String, JsError> {
-    // Both secrets are put under a wiping owner before anything can fail, so that no early
-    // return drops either of them unwiped. The passphrase is read in place, without a copy.
+    // Both secrets are put under a wiping owner before anything can fail.
     let passphrase = SecretText::new(passphrase_utf8);
     let password = password_from(password_utf8, choice, position)?;
     let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
-    let wallet = WalletReference::parse(reference_kind, reference, coin, path)?;
-    // The library refuses a wallet check that cannot be, an empty passphrase among them, before
-    // any round, in the same order for every front end.
+    // The original seed phrase's own checks need no reference: the built-in check, and with the
+    // passphrase of "walletCheck" the phrase + passphrase check too.
+    enum Compared<'a> {
+        OwnChecks(Option<&'a str>),
+        Wallet(ReferenceTarget),
+    }
+    let compared = match reference_kind {
+        "builtInCheck" => Compared::OwnChecks(None),
+        "walletCheck" => Compared::OwnChecks(Some(passphrase)),
+        _ => Compared::Wallet(reference_target(reference_kind, reference, coin, path)?),
+    };
+    let search = ContainerSearch::new(written).map_err(js_error)?;
     let (mut mhfe, _) = mhfe_for(pim, memory_level, argon2)?;
-    let outcome = mhfe.check_in_stages(
-        container,
-        &password,
-        &wallet.reference(passphrase),
-        &mut |stage, round, rounds| report(on_round, stage, round, rounds),
-    );
-    let outcome = verified(&mhfe, outcome)?;
-    json(&CheckJson {
-        matches: outcome.matches(),
-        path: outcome.path().map(ToString::to_string),
-    })
+    let mut current = 0;
+    let mut progress = |candidate, count, round, rounds| {
+        if candidate != current {
+            current = candidate;
+            report_candidates(on_candidates, candidate, count)?;
+        }
+        report(on_round, Stage::Recover, round, rounds)
+    };
+    let found = match &compared {
+        Compared::OwnChecks(passphrase) => {
+            search.search_own_checks(&mut mhfe, &password, *passphrase, &mut progress)
+        }
+        Compared::Wallet(wallet) => search.search_wallet(
+            &mut mhfe,
+            &password,
+            &wallet.with(passphrase),
+            &mut progress,
+        ),
+    };
+    let found = verified(&mhfe, found)?;
+    search_json(&search, found)
+}
+
+/// Tells the worker how far a search has come. An exception thrown there stops it.
+fn report_candidates(
+    on_candidates: &js_sys::Function,
+    candidate: usize,
+    count: usize,
+) -> Result<(), MhfeError> {
+    call_page(
+        on_candidates,
+        &[JsValue::from(candidate as u32), JsValue::from(count as u32)],
+    )
 }
 
 /// Where a rekey stands, so that its calls come in their order only.
@@ -545,12 +774,30 @@ pub struct RekeySession {
     step: RekeyStep,
 }
 
+/// A phrase given to the page to be shown: one the owner compares with their backup, or a
+/// hidden wallet, with the fingerprint of its wallet without a passphrase.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct OwnerCheckJson<'a> {
+struct PhraseJson<'a> {
     phrase: &'a str,
     words: usize,
+    /// The length the person stated, where the built-in check found this one instead: the page
+    /// says so before the owner compares (AUD-017-API001). Left out otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stated_words: Option<usize>,
     fingerprint_without_passphrase: String,
+}
+
+impl<'a> PhraseJson<'a> {
+    fn of(recovered: &'a RecoveredPhrase) -> Result<Self, JsError> {
+        Ok(Self {
+            phrase: recovered.phrase(),
+            words: recovered.words(),
+            stated_words: recovered.stated_words(),
+            fingerprint_without_passphrase: master_fingerprint_text(recovered.phrase(), "")
+                .map_err(js_error)?,
+        })
+    }
 }
 
 #[derive(Serialize)]
@@ -558,14 +805,18 @@ struct OwnerCheckJson<'a> {
 struct RecoveredJson<'a> {
     /// The phrase for the owner to compare with their backup, when the owner confirms it; null
     /// when the built-in check or the wallet confirmed it.
-    owner_check: Option<OwnerCheckJson<'a>>,
+    owner_check: Option<PhraseJson<'a>>,
+    /// The 16-bit source check of a 24-word reading with the reference's passphrase, or the empty
+    /// one; null for other lengths. It never confirms a rekey: 16 bits are too few.
+    wallet_check: Option<bool>,
 }
 
 #[wasm_bindgen]
 impl RekeySession {
     /// A rekey of `container` with the old password and settings. `words` is the phrase's word
-    /// count, 0 to take a same-length container's own; `other_wallets_moved` is the owner's yes to
-    /// the warning that the wallets other passwords open on this container change.
+    /// count, 0 to detect it (a same-length container's own length). A page tells every user
+    /// first that wallets other passwords open on the old container do not move to the new one,
+    /// so the old container, its passwords and settings are kept until their funds are moved.
     #[allow(clippy::too_many_arguments)]
     #[wasm_bindgen(constructor)]
     pub fn new(
@@ -576,17 +827,12 @@ impl RekeySession {
         position: f64,
         pim: f64,
         memory_level: f64,
-        other_wallets_moved: bool,
         argon2: JsArgon2,
     ) -> Result<RekeySession, JsError> {
         let password = password_from(password_utf8, choice, position)?;
         let old_work = work_from(pim, memory_level)?;
-        let words = match whole_number(words, "INVALID_WORD_COUNT", "the word count")? {
-            0 => None,
-            words => Some(words as usize),
-        };
-        let rekey = Rekey::new(container, words, password, old_work, other_wallets_moved)
-            .map_err(js_error)?;
+        let length = word_count(words)?;
+        let rekey = Rekey::new(container, length, password, old_work).map_err(js_error)?;
         Ok(Self {
             rekey,
             argon2,
@@ -638,9 +884,13 @@ impl RekeySession {
     /// `wallet_has_passphrase` states whether the wallet has a BIP39 passphrase, for the new
     /// container's keep list: true, false, or undefined or null for none given; anything else is
     /// INVALID_REQUEST. Only a reference with a non-empty passphrase shows the answer, and there
-    /// false is refused; everywhere else it is required (see [`Rekey::recover`]). Every refusal
-    /// comes before any Argon2 work. Returns JSON `{ ownerCheck }`: for "owner", the phrase to
-    /// compare, and the rekey then waits for `ownerAnswer`.
+    /// false is refused; everywhere else it is required (see [`Rekey::recover`]). These refusals,
+    /// and REFERENCE_REQUIRED for a confirmation that cannot confirm a phrase of the rekey's
+    /// length, come before the first round; only the Argon2 build's 1 MiB known answer runs
+    /// before them. Returns JSON `{ ownerCheck, walletCheck }`: for "owner", the phrase to
+    /// compare, and the rekey then waits for `ownerAnswer`; `walletCheck` the 16-bit source check
+    /// of a 24-word reading with the reference's passphrase or the empty one, null for other
+    /// lengths.
     #[allow(clippy::too_many_arguments)]
     pub fn recover(
         &mut self,
@@ -657,7 +907,7 @@ impl RekeySession {
         self.expect(RekeyStep::Ready)?;
         let outcome = (|| {
             let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
-            let wallet_has_passphrase = optional_passphrase_answer(&wallet_has_passphrase)?;
+            let wallet_has_passphrase = passphrase_answer(&wallet_has_passphrase)?;
             // The wallet check (16 bits) and a word count never confirm a phrase to seal again.
             let wallet = match kind {
                 "builtInCheck" | "owner" if !passphrase.is_empty() => {
@@ -666,16 +916,14 @@ impl RekeySession {
                     )))
                 }
                 "builtInCheck" | "owner" => None,
-                "address" | "fingerprint" => {
-                    Some(WalletReference::parse(kind, reference, coin, path)?)
-                }
+                "address" | "fingerprint" => Some(reference_target(kind, reference, coin, path)?),
                 other => {
                     return Err(js_error(MhfeError::InvalidRequest(format!(
                         "a rekey is not confirmed by {other}"
                     ))))
                 }
             };
-            let reference = wallet.as_ref().map(|wallet| wallet.reference(passphrase));
+            let reference = wallet.as_ref().map(|wallet| wallet.with(passphrase));
             let confirmation = match (kind, &reference) {
                 ("builtInCheck", _) => Confirmation::BuiltInCheck,
                 ("owner", _) => Confirmation::Owner,
@@ -691,19 +939,29 @@ impl RekeySession {
                 wallet_has_passphrase,
                 &mut |stage, round, rounds| report(on_round, stage, round, rounds),
             );
-            verified(&mhfe, confirmed)
+            let confirmed = verified(&mhfe, confirmed)?;
+            // Every recovery evaluates it on a 24-word reading (the specification's recovery
+            // rules), with the passphrase given or the empty one.
+            let wallet_check = confirmed
+                .phrase()
+                .passes_wallet_check(passphrase)
+                .map_err(js_error)?;
+            Ok((confirmed, wallet_check))
         })();
-        let confirmed = self.or_end(outcome)?;
+        let (confirmed, wallet_check) = self.or_end(outcome)?;
         let phrase = confirmed.phrase();
         let owner = kind == "owner";
-        let fingerprint = hex::encode(master_fingerprint(&phrase.phrase, "").map_err(js_error)?);
-        let result = secret_json(&RecoveredJson {
-            owner_check: owner.then(|| OwnerCheckJson {
-                phrase: &phrase.phrase,
-                words: phrase.words,
-                fingerprint_without_passphrase: fingerprint,
-            }),
-        })?;
+        // A failure here ends the rekey too, as every failure of the recovery does.
+        let result = owner
+            .then(|| PhraseJson::of(phrase))
+            .transpose()
+            .and_then(|owner_check| {
+                secret_json(&RecoveredJson {
+                    owner_check,
+                    wallet_check,
+                })
+            });
+        let result = self.or_end(result)?;
         self.confirmed = Some(confirmed);
         self.step = if owner {
             RekeyStep::AwaitingOwner
@@ -716,13 +974,19 @@ impl RekeySession {
     /// The owner's answer after comparing the shown phrase with their backup: anything but yes
     /// ends the rekey (NOT_CONFIRMED_BY_OWNER) and drops the phrase.
     #[wasm_bindgen(js_name = ownerAnswer)]
-    pub fn owner_answer(&mut self, confirmed: bool) -> Result<(), JsError> {
+    pub fn owner_answer(&mut self, confirmed: JsValue) -> Result<(), JsError> {
         self.expect(RekeyStep::AwaitingOwner)?;
-        if !confirmed {
+        // Only the value true is a yes: a bool of the ABI would take 1, "1" or [1] as one.
+        if confirmed.as_bool() != Some(true) {
             self.confirmed = None;
             self.step = RekeyStep::Ended;
             return Err(js_error(MhfeError::NotConfirmedByOwner));
         }
+        // The library seals an owner's phrase only once it has the yes.
+        self.confirmed = self
+            .confirmed
+            .take()
+            .map(ConfirmedPhrase::confirmed_by_owner);
         self.step = RekeyStep::Confirmed;
         Ok(())
     }
@@ -746,16 +1010,17 @@ impl RekeySession {
             )));
         };
         let (mut mhfe, _) = mhfe_with(work, self.argon2.clone().unchecked_into())?;
-        let sealed = self.rekey.seal(
+        let repair_words = self.repair_word_count;
+        let sealed = sealed_for_page(
             &mut mhfe,
-            &confirmed,
-            &password,
-            self.repair_word_count,
-            &mut |stage, round, rounds| report(on_round, stage, round, rounds),
-            &mut |container| unverified(on_unverified, container),
-        );
-        let sealed = verified(&mhfe, sealed)?;
-        sealed_json(&sealed, work, confirmed.wallet_has_passphrase())
+            on_round,
+            on_unverified,
+            |mhfe, progress, shown| {
+                self.rekey
+                    .seal(mhfe, &confirmed, &password, repair_words, progress, shown)
+            },
+        )?;
+        sealed_json(&sealed, work, confirmed.wallet_has_passphrase().into())
     }
 
     fn expect(&mut self, step: RekeyStep) -> Result<(), JsError> {
@@ -786,14 +1051,6 @@ impl RekeySession {
 pub struct HiddenWalletSession {
     wallets: HiddenWallets,
     mhfe: Mhfe<BrowserEngine>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct HiddenWalletJson<'a> {
-    phrase: &'a str,
-    words: usize,
-    fingerprint_without_passphrase: String,
 }
 
 #[wasm_bindgen]
@@ -847,13 +1104,7 @@ impl HiddenWalletSession {
                 report(on_round, Stage::Recover, round, rounds)
             });
         let wallet = verified(&self.mhfe, wallet)?;
-        secret_json(&HiddenWalletJson {
-            phrase: &wallet.phrase,
-            words: wallet.words,
-            fingerprint_without_passphrase: hex::encode(
-                master_fingerprint(&wallet.phrase, "").map_err(js_error)?,
-            ),
-        })
+        secret_json(&PhraseJson::of(&wallet)?)
     }
 }
 
@@ -973,24 +1224,19 @@ pub fn self_check_argon2(
     run_self_check(set, tier, &skip_ids, on_start, on_result)
 }
 
-/// The user's answer whether the wallet has a BIP39 passphrase: true or false. Anything else is
-/// refused rather than read as a truth value, so that no stray value drops the passphrase from
-/// what to keep.
-fn passphrase_answer(value: &JsValue) -> Result<bool, JsError> {
-    value.as_bool().ok_or_else(|| {
+/// The answer whether the wallet has a BIP39 passphrase: true or false, or none when it is
+/// undefined or null. Anything else is refused rather than read as a truth value, so that no stray
+/// value drops the passphrase from what to keep.
+fn passphrase_answer(value: &JsValue) -> Result<Option<bool>, JsError> {
+    if value.is_undefined() || value.is_null() {
+        return Ok(None);
+    }
+    value.as_bool().map(Some).ok_or_else(|| {
         js_error(MhfeError::InvalidRequest(
             "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase"
                 .to_owned(),
         ))
     })
-}
-
-/// [`passphrase_answer`], or none when it is undefined or null: not given.
-fn optional_passphrase_answer(value: &JsValue) -> Result<Option<bool>, JsError> {
-    if value.is_undefined() || value.is_null() {
-        return Ok(None);
-    }
-    passphrase_answer(value).map(Some)
 }
 
 /// A password of an existing container, with the review choice of its check word.
@@ -1001,12 +1247,11 @@ fn password_from(password_utf8: Vec<u8>, choice: &str, position: f64) -> Result<
         return Password::from_utf8(typed.bytes()).map_err(js_error);
     }
     let text = typed.text(MhfeError::InvalidPasswordUtf8)?;
-    let chosen = chosen_password(text, None, choice).map_err(js_error)?;
-    Password::new(&chosen).map_err(js_error)
+    check_word::typed_password(text, None, choice).map_err(js_error)
 }
 
-/// A new password typed twice, with the review choice of its check word: the two entries are
-/// compared first, exactly as typed.
+/// A new password typed twice, with the review choice of its check word: the password's own rules
+/// first, then the two entries compared exactly as typed (check_word::check_typed_twice).
 fn new_password_from(
     typed: &SecretText,
     repeat: &SecretText,
@@ -1014,12 +1259,15 @@ fn new_password_from(
     position: f64,
 ) -> Result<Password, JsError> {
     let text = typed.text(MhfeError::InvalidPasswordUtf8)?;
-    // The checks of a password come first, as the command-line tool makes them.
-    Password::new(text).map_err(js_error)?;
     let repeat = repeat.text(MhfeError::InvalidPasswordUtf8)?;
-    let chosen =
-        chosen_password(text, Some(repeat), review_choice(choice, position)?).map_err(js_error)?;
-    Password::new(&chosen).map_err(js_error)
+    check_word::typed_password(text, Some(repeat), review_choice(choice, position)?)
+        .map_err(js_error)
+}
+
+/// The length of the original seed phrase as the page passes it: a word count, or 0 to detect it.
+fn word_count(words: f64) -> Result<PhraseLength, JsError> {
+    let words = whole_number(words, "INVALID_WORD_COUNT", "the word count")?;
+    PhraseLength::from_count(words as usize).map_err(js_error)
 }
 
 /// 0 for no repair words, else 2, 4, 6 or 8, which the encryption checks.
@@ -1060,6 +1308,27 @@ fn mhfe_with(
 /// browser made of it, fails here with SELF_CHECK_FAILED, and the result is dropped instead of
 /// returned. The answer is checked after a failed operation too, since a fault of the build is the
 /// more fundamental cause.
+/// Seals a phrase with `seal`, an encryption or a rekey: its rounds reported to `on_round`, the
+/// container before its check to `on_unverified`, and the Argon2 build's known answer checked
+/// after the last round ([`verified`]).
+fn sealed_for_page(
+    mhfe: &mut Mhfe<BrowserEngine>,
+    on_round: &js_sys::Function,
+    on_unverified: &js_sys::Function,
+    seal: impl FnOnce(
+        &mut Mhfe<BrowserEngine>,
+        StageCallback<'_>,
+        &mut dyn FnMut(&str) -> Result<(), MhfeError>,
+    ) -> Result<Sealed, MhfeError>,
+) -> Result<Sealed, JsError> {
+    let sealed = seal(
+        mhfe,
+        &mut |stage, round, rounds| report(on_round, stage, round, rounds),
+        &mut |container| unverified(on_unverified, container),
+    );
+    verified(mhfe, sealed)
+}
+
 fn verified<T>(mhfe: &Mhfe<BrowserEngine>, outcome: Result<T, MhfeError>) -> Result<T, JsError> {
     mhfe.engine().verify_known_answer().map_err(js_error)?;
     outcome.map_err(js_error)
@@ -1073,27 +1342,23 @@ fn report(
     round: u32,
     rounds: u32,
 ) -> Result<(), MhfeError> {
-    on_round
-        .call3(
-            &JsValue::UNDEFINED,
-            &JsValue::from(round),
-            &JsValue::from(rounds),
-            &JsValue::from_str(stage.name()),
-        )
-        .map(|_| ())
-        .map_err(|_| MhfeError::Cancelled)
+    call_page(
+        on_round,
+        &[
+            JsValue::from(round),
+            JsValue::from(rounds),
+            JsValue::from_str(stage.name()),
+        ],
+    )
 }
 
 /// Gives the page the container before its check, with its own fingerprint.
 fn unverified(on_unverified: &js_sys::Function, container: &str) -> Result<(), MhfeError> {
-    let fingerprint = hex::encode(master_fingerprint(container, "")?);
+    let fingerprint = master_fingerprint_text(container, "")?;
     let text = serde_json::to_string(&UnverifiedJson {
         container,
         container_fingerprint: fingerprint,
     })
     .map_err(|error| MhfeError::Internal(error.to_string()))?;
-    on_unverified
-        .call1(&JsValue::UNDEFINED, &JsValue::from_str(&text))
-        .map(|_| ())
-        .map_err(|_| MhfeError::Cancelled)
+    call_page(on_unverified, &[JsValue::from_str(&text)])
 }

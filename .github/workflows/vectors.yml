@@ -39,6 +39,8 @@ jobs:
           # Only the exact files listed with their SHA-256 in the requirements file are accepted.
           python3 -m pip install --user --require-hashes -r scripts/independent-suite3-requirements.txt
           python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json
+          # The terminal cell table of the line editor, from the same Unicode 17.0.0 database.
+          python3 scripts/generate-cell-widths.py --check
           # Every file listed in SHA256SUMS: the vectors and the negative cases, not the
           # independent-verification.json record next to them.
           (cd tests/fixtures/suite3-vectors &&

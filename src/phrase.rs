@@ -6,6 +6,7 @@ use bip39::{Language, Mnemonic};
 use zeroize::Zeroizing;
 
 use crate::memory::LockedText;
+use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
 use crate::MhfeError;
 
 #[cfg(any(
@@ -17,9 +18,19 @@ use crate::MhfeError;
 pub(crate) mod known_answers;
 
 /// Word counts of a BIP39 phrase.
-pub const WORD_COUNTS: [usize; 5] = [12, 15, 18, 21, 24];
+pub const WORD_COUNTS: [usize; 5] = [
+    SHORT_WORD_COUNTS[0],
+    SHORT_WORD_COUNTS[1],
+    SHORT_WORD_COUNTS[2],
+    SHORT_WORD_COUNTS[3],
+    STATE_WORDS,
+];
+/// The bits of a word's number in the list (BIP39).
+pub(crate) const WORD_BITS: usize = 11;
+/// The words of the English list: 2^11.
+pub(crate) const LIST_SIZE: u16 = 1 << WORD_BITS;
 /// The longest English BIP39 word has eight letters.
-const LONGEST_WORD: usize = 8;
+pub(crate) const LONGEST_WORD: usize = 8;
 /// Shortest typed prefix that is expanded: the English list is unique in its first four letters.
 const PREFIX_LETTERS: usize = 4;
 
@@ -30,7 +41,8 @@ pub fn parse(input: &str) -> Result<Mnemonic, String> {
     let word_count = input.split_whitespace().count();
     if !WORD_COUNTS.contains(&word_count) {
         return Err(format!(
-            "it has {word_count} words, but a phrase has 12, 15, 18, 21 or 24"
+            "it has {word_count} words, but a phrase has {}",
+            word_counts_text()
         ));
     }
 
@@ -134,17 +146,15 @@ fn mnemonic_of(entropy: &[u8]) -> Result<Mnemonic, MhfeError> {
 /// Checks a container before anything is computed and returns it as read: every word written
 /// out in full and in lower case, one space apart, so a person can compare it with the backup.
 pub fn check_container(input: &str) -> Result<String, MhfeError> {
-    parse_container(input)
-        .map(|container| container.to_string())
-        .map_err(MhfeError::InvalidContainer)
+    crate::ContainerFacts::read(input).map(|facts| facts.words().to_owned())
 }
 
 /// A word of the English list, or the only word that starts with the typed letters when at
 /// least four were typed.
 pub(crate) fn complete_word(typed: &str) -> Option<&'static str> {
     let english = Language::English;
-    if let Some(index) = english.find_word(typed) {
-        return Some(english.word_list()[usize::from(index)]);
+    if let Some(number) = english.find_word(typed) {
+        return Some(word(number));
     }
     if typed.len() < PREFIX_LETTERS {
         return None;
@@ -154,6 +164,81 @@ pub(crate) fn complete_word(typed: &str) -> Option<&'static str> {
         (Some(only), None) => Some(only),
         _ => None,
     }
+}
+
+/// The word counts of a BIP39 phrase as a message lists them: "12, 15, 18, 21 or 24".
+pub(crate) fn word_counts_text() -> String {
+    counts_text(&WORD_COUNTS)
+}
+
+/// Word counts as a message lists them, the last after "or": "12, 15, 18 or 21".
+pub(crate) fn counts_text(counts: &[usize]) -> String {
+    let counts: Vec<String> = counts.iter().map(ToString::to_string).collect();
+    match counts.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} or {last}", rest.join(", ")),
+        Some((last, _)) => last.clone(),
+        None => String::new(),
+    }
+}
+
+/// The word numbers of `text` as typed, each word completed from four letters in any case, and the
+/// positions, from 0, that are unreadable: `?` or not a word of the list. An unreadable word stands
+/// as 0 until it is repaired or found.
+pub(crate) fn word_numbers(text: &str) -> (Vec<u16>, Vec<usize>) {
+    let mut numbers = Vec::new();
+    let mut unreadable = Vec::new();
+    for (position, typed) in text.split_whitespace().enumerate() {
+        match complete_word(&typed.to_ascii_lowercase()).and_then(word_number) {
+            Some(number) => numbers.push(number),
+            None => {
+                numbers.push(0);
+                unreadable.push(position);
+            }
+        }
+    }
+    (numbers, unreadable)
+}
+
+/// The number of a word of the English list.
+pub(crate) fn word_number(word: &str) -> Option<u16> {
+    Language::English.find_word(word)
+}
+
+/// The word of the English list with `number`.
+pub(crate) fn word(number: u16) -> &'static str {
+    Language::English.word_list()[usize::from(number)]
+}
+
+/// The number of word `index` of the phrase whose entropy and checksum are `bits`, read as BIP39
+/// writes it: 11 bits each, the first bit the highest.
+pub(crate) fn number_at(bits: &[u8], index: usize) -> u16 {
+    (0..WORD_BITS).fold(0, |number, bit| {
+        let at = index * WORD_BITS + bit;
+        (number << 1) | u16::from(bits[at / 8] >> (7 - at % 8) & 1)
+    })
+}
+
+/// Writes the `count` lowest bits of `value` into `bits` from bit `start` on, the highest first,
+/// as BIP39 writes a word's number; the bits around them stay as they are.
+pub(crate) fn write_bits(bits: &mut [u8], start: usize, count: usize, value: u16) {
+    for offset in 0..count {
+        let at = start + offset;
+        let mask = 0x80 >> (at % 8);
+        if value >> (count - 1 - offset) & 1 == 1 {
+            bits[at / 8] |= mask;
+        } else {
+            bits[at / 8] &= !mask;
+        }
+    }
+}
+
+/// The words of `numbers`, one space apart.
+pub(crate) fn words_of(numbers: &[u16]) -> String {
+    numbers
+        .iter()
+        .map(|&number| word(number))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]
@@ -175,7 +260,7 @@ mod tests {
     #[test]
     fn phrase_text_never_outgrows_its_buffer() {
         for words in WORD_COUNTS {
-            let bytes = words / 3 * 4;
+            let bytes = crate::packing::entropy_of_words(words);
             // Varied public entropy, so that the phrases include words of every length.
             for seed in 0u8..64 {
                 let entropy: Vec<u8> = (0..bytes)

@@ -1,5 +1,6 @@
 // Checks both Emscripten builds of the reference Argon2 code in Node.js, where the
-// threaded build runs with real threads. Build them first with build-argon2-wasm.sh.
+// threaded build runs with real threads. Build them first with scripts/build-wasm.sh, which
+// places them in dist/core/.
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);

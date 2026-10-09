@@ -42,12 +42,7 @@ pub struct BrowserEngine {
 impl BrowserEngine {
     /// Refuses memory levels a browser cannot provide before any memory is used.
     pub fn new(argon2: JsArgon2, work: WorkFactor) -> Result<Self, MhfeError> {
-        if work.memory_level() > HIGHEST_BROWSER_MEMORY_LEVEL {
-            return Err(MhfeError::MemoryLevelNotSupportedHere {
-                level: work.memory_level(),
-                highest_supported: HIGHEST_BROWSER_MEMORY_LEVEL,
-            });
-        }
+        work.require_level(HIGHEST_BROWSER_MEMORY_LEVEL)?;
         Ok(Self {
             argon2,
             cost: work.argon2_cost(),
@@ -94,13 +89,7 @@ pub(super) fn derive_with(
 /// The error of a failed call of the Argon2 build: "MEMORY_ALLOCATION_FAILED: …" becomes
 /// [`MhfeError::MemoryAllocation`], anything else [`MhfeError::Argon2`].
 fn error_of(error: JsValue, cost: Argon2Cost) -> MhfeError {
-    let message = error
-        .as_string()
-        .or_else(|| {
-            js_sys::Reflect::get(&error, &"message".into())
-                .ok()?
-                .as_string()
-        })
+    let message = crate::wasm_api::js_message(&error)
         .unwrap_or_else(|| "the browser Argon2 engine failed".to_owned());
     if message.starts_with("MEMORY_ALLOCATION_FAILED") {
         MhfeError::MemoryAllocation {

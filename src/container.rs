@@ -8,7 +8,7 @@ use crate::memory::LockedText;
 use crate::packing;
 use crate::phrase::{self, WORD_COUNTS};
 use crate::suite::Suite;
-use crate::{other_detected_lengths, read_phrase, wallet, MhfeError, WordCount};
+use crate::{other_detected_lengths, read_phrase, wallet, MhfeError, PhraseLength};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -16,13 +16,6 @@ pub(crate) mod known_answers;
 /// The lengths of an original that has a built-in check in a 24-word container: 12, 15, 18 and
 /// 21 words. A 24-word original fills the container's state and leaves no room for one.
 pub const BUILT_IN_CHECK_WORD_COUNTS: [usize; 4] = packing::SHORT_WORD_COUNTS;
-
-/// A suite 3 container has 24 words, whatever the length of its original.
-const SUITE_3_WORDS: usize = 24;
-
-/// BIP39 adds one checksum bit for every three words: a phrase of `words` words has `words / 3`
-/// of them, 4 for 12 words and 8 for 24 (BIP39: CS = ENT / 32 and words = (ENT + CS) / 11).
-const WORDS_PER_CHECKSUM_BIT: usize = 3;
 
 /// A container as read, with what its words alone tell: its suite, the lengths its original may
 /// have and the checks a recovery of it can be compared with.
@@ -41,7 +34,9 @@ pub enum ConfirmationNeeded {
     /// container.
     BuiltInCheck,
     /// A receiving address or the master key fingerprint of the wallet, or the owner, who compares
-    /// the phrase with their backup: a 24-word original and a same-length container have no check.
+    /// the phrase with their backup: a 24-word original and a same-length container have no check,
+    /// and a detected length is not confirmed by one, as a 24-word original may pass a short check
+    /// by chance (AUD-017-FUN001).
     WalletOrOwner,
 }
 
@@ -87,34 +82,69 @@ impl ContainerFacts {
     /// The lengths of an original whose built-in check a recovery can be compared with: 12 to 21
     /// words for a 24-word container, none for a same-length container, which has no check.
     pub fn built_in_check_lengths(&self) -> &'static [usize] {
-        match self.suite {
-            Suite::TwentyFourWords => &BUILT_IN_CHECK_WORD_COUNTS,
-            Suite::SameLength => &[],
-        }
+        self.suite.built_in_check_lengths()
     }
 
     /// Whether other passwords open hidden wallets on this container
     /// ([`crate::Mhfe::derive_wallet`]): on a 24-word container only, for now.
     pub fn opens_hidden_wallets(&self) -> bool {
-        self.suite == Suite::TwentyFourWords
+        self.suite.holds_full_state()
+    }
+
+    /// Refuses a `length` the phrase of this container cannot have: a same-length container keeps
+    /// the length of its original (`LENGTH_CHOICE_NOT_APPLICABLE`), which detection gives.
+    pub fn require_length(&self, length: PhraseLength) -> Result<(), MhfeError> {
+        match length {
+            PhraseLength::Words(words) if !self.phrase_lengths().contains(&words.get()) => {
+                Err(MhfeError::LengthChoiceNotApplicable {
+                    container_words: self.word_count,
+                })
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Refuses a reference this container cannot be checked with, before any Argon2 work, as a
+    /// check refuses it: the built-in check or the phrase's own checks of a same-length container,
+    /// a length without a built-in check, and the wallet check where it does not apply or has no
+    /// passphrase.
+    pub fn require_reference(&self, reference: &crate::Reference<'_>) -> Result<(), MhfeError> {
+        crate::rehearsal::refuse_impossible(self.word_count, reference)
+    }
+
+    /// Refuses hidden wallets on a container that opens none, before any Argon2 work.
+    pub fn require_hidden_wallets(&self) -> Result<(), MhfeError> {
+        if !self.opens_hidden_wallets() {
+            return Err(MhfeError::NoHiddenWallets {
+                container_words: self.word_count,
+            });
+        }
+        Ok(())
     }
 
     /// Whether a recovery can be compared with the wallet check of a phrase drawn to pass it
     /// ([`crate::wallet_check`]). Such a phrase has 24 words, so only a 24-word container holds it.
     pub fn offers_wallet_check(&self) -> bool {
-        self.suite == Suite::TwentyFourWords
+        self.suite.holds_full_state()
     }
 
-    /// How a phrase of `words` words recovered from this container is confirmed before it is
+    /// How a phrase of the given `length` recovered from this container is confirmed before it is
     /// encrypted again. A same-length container keeps the length of its original, so another
-    /// length is refused with [`MhfeError::LengthChoiceNotApplicable`].
-    pub fn confirmation_needed(&self, words: WordCount) -> Result<ConfirmationNeeded, MhfeError> {
-        if !self.phrase_lengths().contains(&words.get()) {
-            return Err(MhfeError::LengthChoiceNotApplicable {
-                container_words: self.word_count,
-            });
-        }
-        if self.built_in_check_lengths().contains(&words.get()) {
+    /// length is refused with [`MhfeError::LengthChoiceNotApplicable`], and detection gives that
+    /// length.
+    pub fn confirmation_needed(
+        &self,
+        length: PhraseLength,
+    ) -> Result<ConfirmationNeeded, MhfeError> {
+        self.require_length(length)?;
+        let words = match (length, self.suite) {
+            (PhraseLength::Words(words), _) => words.get(),
+            (PhraseLength::Detect, Suite::SameLength) => self.word_count,
+            (PhraseLength::Detect, Suite::TwentyFourWords) => {
+                return Ok(ConfirmationNeeded::WalletOrOwner)
+            }
+        };
+        if self.built_in_check_lengths().contains(&words) {
             Ok(ConfirmationNeeded::BuiltInCheck)
         } else {
             Ok(ConfirmationNeeded::WalletOrOwner)
@@ -180,13 +210,25 @@ impl OriginalFacts {
         &self.other_lengths
     }
 
+    /// [`Self::other_lengths`] for a container of `suite`: only a 24-word container carries the
+    /// built-in checks that detection could misread, so a same-length container has none.
+    pub fn other_lengths_in(&self, suite: Suite) -> &[usize] {
+        if suite.built_in_check_lengths().is_empty() {
+            return &[];
+        }
+        &self.other_lengths
+    }
+
     /// The containers this phrase can have, the recommended one first: 24 words, and for a 12- to
     /// 21-word phrase a container as long as the phrase, which only the person's own choice may
     /// select.
     pub fn container_choices(&self) -> Vec<ContainerChoice> {
-        let mut choices = vec![ContainerChoice::new(Suite::TwentyFourWords, SUITE_3_WORDS)];
+        let mut choices = vec![ContainerChoice::new(
+            Suite::TwentyFourWords,
+            packing::STATE_WORDS,
+        )];
         // A 24-word phrase fills the whole state: its only container has 24 words.
-        if self.word_count < SUITE_3_WORDS {
+        if self.word_count < packing::STATE_WORDS {
             choices.push(ContainerChoice::new(Suite::SameLength, self.word_count));
         }
         choices
@@ -195,11 +237,10 @@ impl OriginalFacts {
 
 impl ContainerChoice {
     fn new(suite: Suite, word_count: usize) -> Self {
-        let checksum_bits = word_count / WORDS_PER_CHECKSUM_BIT;
         Self {
             suite,
             word_count,
-            wrong_word_passes_one_in: 1 << checksum_bits,
+            wrong_word_passes_one_in: 1 << packing::checksum_bits(word_count),
         }
     }
 
@@ -223,6 +264,7 @@ impl ContainerChoice {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::WordCount;
 
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -235,8 +277,8 @@ mod tests {
         crate::phrase_from_entropy(&vec![0; bytes]).unwrap()
     }
 
-    fn words(count: usize) -> WordCount {
-        WordCount::new(count).unwrap()
+    fn words(count: usize) -> PhraseLength {
+        PhraseLength::Words(WordCount::new(count).unwrap())
     }
 
     #[test]
@@ -270,6 +312,10 @@ mod tests {
             container.confirmation_needed(words(24)),
             Ok(ConfirmationNeeded::WalletOrOwner)
         );
+        assert_eq!(
+            container.confirmation_needed(PhraseLength::Detect),
+            Ok(ConfirmationNeeded::WalletOrOwner)
+        );
     }
 
     #[test]
@@ -281,10 +327,12 @@ mod tests {
             assert!(container.built_in_check_lengths().is_empty());
             assert!(!container.opens_hidden_wallets());
             assert!(!container.offers_wallet_check());
-            assert_eq!(
-                container.confirmation_needed(words(count)),
-                Ok(ConfirmationNeeded::WalletOrOwner)
-            );
+            for length in [words(count), PhraseLength::Detect] {
+                assert_eq!(
+                    container.confirmation_needed(length),
+                    Ok(ConfirmationNeeded::WalletOrOwner)
+                );
+            }
             for other in WORD_COUNTS.into_iter().filter(|&other| other != count) {
                 assert_eq!(
                     container.confirmation_needed(words(other)),

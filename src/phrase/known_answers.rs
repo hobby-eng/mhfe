@@ -217,6 +217,7 @@ impl ComponentCheck for WordListCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::self_check::{fails_with, leak};
     use bip39::Mnemonic;
 
     #[test]
@@ -244,13 +245,12 @@ mod tests {
         vectors[11].phrase =
             "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo \
                               zoo zoo zoo zoo zoo wrong";
-        let mut check = WordListCheck {
-            vectors: Box::leak(Box::new(vectors)),
-            ..WordListCheck::new()
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("test vector 4 of 4 gives other words".to_owned())
+        fails_with(
+            WordListCheck {
+                vectors: leak(vectors),
+                ..WordListCheck::new()
+            },
+            "test vector 4 of 4 gives other words",
         );
         // A vector outside the startup set fails only the full self-test.
         let mut vectors = TREZOR_ENGLISH;
