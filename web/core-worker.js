@@ -182,7 +182,9 @@ const CORE_OPERATIONS = {
 
   /**
    * A rekey in its order: the old container and password, the new password and settings, the
-   * recovery, the owner's answer where the owner confirms the phrase, then the seal.
+   * recovery and its confirmation (again on the same recovery after a refusal that allows it,
+   * when the page gives another), the owner's answer where the owner confirms the phrase, then
+   * the seal.
    */
   async rekey(request, host) {
     const argon2 = await argon2For(request);
@@ -206,17 +208,7 @@ const CORE_OPERATIONS = {
         request.newMemoryLevel,
         request.repairWordCount,
       );
-      const recovered = JSON.parse(
-        session.recover(
-          request.confirmKind,
-          request.reference,
-          request.coin,
-          request.path,
-          request.passphrase,
-          request.walletHasPassphrase,
-          host.progress,
-        ),
-      );
+      const recovered = await recoverConfirmed(session, request, host);
       if (recovered.ownerCheck !== null) {
         const confirmed = await host.ask("ownerCheck", recovered.ownerCheck);
         session.ownerAnswer(confirmed === true);
@@ -277,6 +269,52 @@ const CORE_OPERATIONS = {
     }
   },
 };
+
+/**
+ * A rekey's recovery and confirmation. When a confirmation is refused after the rounds and the
+ * core allows another on the same recovery (its ownerLengths), the page is asked for one, if it
+ * gives them (`request.confirmsAgain`), and it is confirmed without the rounds again; null from
+ * the page, or no answer asked for, ends the rekey with the refusal.
+ */
+async function recoverConfirmed(session, request, host) {
+  let confirm = () =>
+    session.recover(
+      request.confirmKind,
+      request.reference,
+      request.coin,
+      request.path,
+      request.passphrase,
+      request.walletHasPassphrase,
+      host.progress,
+    );
+  for (;;) {
+    let refusal;
+    try {
+      return JSON.parse(confirm());
+    } catch (error) {
+      refusal = error;
+    }
+    const ownerLengths = JSON.parse(session.ownerLengths());
+    if (ownerLengths === null || !request.confirmsAgain) throw refusal;
+    const next = await host.ask("confirmAgain", { ...describeError(refusal), ownerLengths });
+    if (next === null) throw refusal;
+    confirm = () => {
+      try {
+        return session.confirmAgain(
+          next.confirmKind,
+          next.reference,
+          next.coin,
+          next.path,
+          next.passphrase,
+          next.words,
+          host.progress,
+        );
+      } finally {
+        wipeSecrets(next);
+      }
+    };
+  }
+}
 
 /** The Argon2 bridge over the Emscripten build placed in front of this file; see startArgon2. */
 async function argon2For(request) {

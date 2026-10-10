@@ -1958,6 +1958,42 @@ function pageScript() {
       "AMBIGUOUS_LENGTH",
       "a length stated among two that pass does not let the built-in check alone confirm a rekey",
     );
+    // On the same recovery (AUD-017-UI002): the page is given the lengths the owner can tell
+    // apart, the owner states one and compares its reading.
+    const ambiguousAsked = [];
+    let ambiguousShown = null;
+    expectEqual(
+      await client.rekey({
+        ...base,
+        container: made.ambiguous,
+        words: 12,
+        onConfirmAgain: ({ error, ownerLengths }) => {
+          ambiguousAsked.push([error.code, ownerLengths]);
+          return {
+            owner: (check) => {
+              ambiguousShown = check;
+              return true;
+            },
+            words: 12,
+          };
+        },
+      }),
+      asRekeyResult(await sealWithNew(AMBIGUOUS_12_WORDS)),
+      "after AMBIGUOUS_LENGTH the owner confirms the 12-word reading on the same recovery: what " +
+        "encrypt gives, every field",
+    );
+    expectEqual(
+      [ambiguousAsked, ambiguousShown],
+      [
+        [["AMBIGUOUS_LENGTH", [12, 21]]],
+        {
+          phrase: AMBIGUOUS_12_WORDS,
+          words: 12,
+          fingerprintWithoutPassphrase: FINGERPRINTS.ambiguous12Words,
+        },
+      ],
+      "the page was given both lengths, and the owner was shown the reading of the one stated",
+    );
     await expectRejection(
       client.rekey({
         ...base,
@@ -2433,6 +2469,45 @@ function pageScript() {
       asRekeyResult(sealedWithNew),
       "the fingerprint confirms the 12-word reading the check found: what encrypt gives, every " +
         "field",
+    );
+    // The fingerprint given after the refusal confirms on the same recovery: the rounds of the
+    // recovery run once (AUD-017-UI002). A null answer ends the rekey with the refusal.
+    const againLog = progressLog();
+    const againAsked = [];
+    expectEqual(
+      await client.rekey({
+        ...base,
+        words: 15,
+        onProgress: againLog.onProgress,
+        onConfirmAgain: ({ error, ownerLengths }) => {
+          againAsked.push([error.code, error.message, ownerLengths]);
+          return { fingerprint: FINGERPRINT };
+        },
+      }),
+      asRekeyResult(sealedWithNew),
+      "after LENGTH_DIFFERS the fingerprint confirms on the same recovery: what encrypt gives, " +
+        "every field",
+    );
+    expectEqual(
+      againAsked,
+      [["LENGTH_DIFFERS", lengthDiffers(12, 15), [15]]],
+      "the page was given the refusal and the stated length for the owner",
+    );
+    expectEqual(
+      againLog.lines,
+      [
+        ...roundLines("recover", 1, 12, 36),
+        "compare 12/36",
+        ...roundLines("encrypt", 13, 24, 36),
+        ...roundLines("check", 25, 36, 36),
+      ],
+      "the recovery's rounds ran once",
+    );
+    await expectExactRefusal(
+      client.rekey({ ...base, words: 15, onConfirmAgain: () => null }),
+      "LENGTH_DIFFERS",
+      lengthDiffers(12, 15),
+      "a page that gives no other confirmation ends the rekey with the refusal",
     );
 
     // Early refusals, before any Argon2 round.

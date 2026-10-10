@@ -87,11 +87,13 @@ impl Rekey {
         })
     }
 
-    /// The same rekey with the length stated, as after a detection that found several
-    /// ([`MhfeError::AmbiguousLength`]): checked before any Argon2 work, as [`Rekey::new`] does.
-    pub fn with_length(self, length: PhraseLength) -> Result<Self, MhfeError> {
+    /// States the length of the phrase, as the owner does after a recovery that found several
+    /// ([`MhfeError::AmbiguousLength`], [`Rekey::owner_lengths_after`]): refused, as by
+    /// [`Rekey::new`], when the container cannot have it.
+    pub fn set_length(&mut self, length: PhraseLength) -> Result<(), MhfeError> {
         self.container.require_length(length)?;
-        Ok(Self { length, ..self })
+        self.length = length;
+        Ok(())
     }
 
     /// How the recovered phrase must be confirmed: by its built-in check at a stated 12- to 21-word
@@ -102,11 +104,30 @@ impl Rekey {
             .expect("the length was checked when the rekey was made")
     }
 
-    /// Whether the owner can confirm the phrase of the rekey's length from `recovered` by
-    /// comparing it with their backup ([`RecoveredForRekey::owner_can_confirm`]): a front end
-    /// offers that answer only then.
-    pub fn owner_can_confirm(&self, recovered: &RecoveredForRekey) -> Result<bool, MhfeError> {
-        recovered.owner_can_confirm(self.length)
+    /// After `refusal`, a confirmation of this rekey refused on `recovered`: whether another may
+    /// follow on the same recovery, without its rounds again (AUD-017-UI002), and at which lengths
+    /// the owner may then compare the phrase shown with their backup. `None` for a refusal that
+    /// ends the rekey; otherwise those lengths, empty where only a receiving address or the
+    /// fingerprint tells the readings apart, and a front end offers the owner only when there are
+    /// some. After [`MhfeError::AmbiguousLength`] the owner states one of them
+    /// ([`Rekey::set_length`]); after [`MhfeError::LengthDiffers`] it is the stated length, at
+    /// which the owner is shown the reading the built-in check found.
+    pub fn owner_lengths_after(
+        &self,
+        recovered: &RecoveredForRekey,
+        refusal: &MhfeError,
+    ) -> Result<Option<Vec<usize>>, MhfeError> {
+        Ok(match refusal {
+            MhfeError::AmbiguousLength { .. } => Some(recovered.lengths_the_owner_can_confirm()?),
+            MhfeError::LengthDiffers { stated, .. } => {
+                Some(if recovered.owner_can_confirm(self.length)? {
+                    vec![*stated]
+                } else {
+                    Vec::new()
+                })
+            }
+            _ => None,
+        })
     }
 
     /// Refuses a new password and settings that would give the old container again: with the same
@@ -133,10 +154,7 @@ impl Rekey {
         wallet_has_passphrase: Option<bool>,
         progress: StageCallback<'_>,
     ) -> Result<ConfirmedPhrase, MhfeError> {
-        // Judged before any Argon2 work: the confirmation first, as the recovery would refuse it,
-        // then the passphrase's answer.
-        confirmation.refuse_for(self.confirmation_needed())?;
-        wallet_passphrase(&confirmation, wallet_has_passphrase)?;
+        self.check_confirmation(&confirmation, wallet_has_passphrase)?;
         let progress = RefCell::new(progress);
         let recovered = self.recover_state(mhfe, confirmation, &mut |stage, round, total| {
             (*progress.borrow_mut())(stage, round, total)
@@ -147,6 +165,21 @@ impl Rekey {
             wallet_has_passphrase,
             &mut |stage, round, total| (*progress.borrow_mut())(stage, round, total),
         )
+    }
+
+    /// Judges `confirmation` and the caller's statement whether the wallet has a BIP39 passphrase
+    /// before any Argon2 work, as [`Rekey::recover`] does: the confirmation first, as the recovery
+    /// would refuse it, then the statement, and returns the answer ([`Rekey::confirm`] says when a
+    /// statement is required or refused). A front end that confirms again on the same recovery
+    /// judges them with the first confirmation and keeps the answer for every confirmation that
+    /// follows, as the command-line tool asks it once.
+    pub fn check_confirmation(
+        &self,
+        confirmation: &Confirmation<'_>,
+        wallet_has_passphrase: Option<bool>,
+    ) -> Result<bool, MhfeError> {
+        confirmation.refuse_for(self.confirmation_needed())?;
+        wallet_passphrase(confirmation, wallet_has_passphrase)
     }
 
     /// The recovery of a rekey (rounds 1 to 12 of 36): the old container's state, from which
@@ -763,14 +796,34 @@ mod tests {
         );
     }
 
+    /// A length the owner states after the recovery is checked as one given at the start: a
+    /// same-length container has its own length only.
+    #[test]
+    fn a_length_set_later_must_fit_the_container() {
+        let old = password("public test password");
+        let container = reduced(WorkFactor::default())
+            .encrypt(ABANDON_12, &old, crate::Suite::SameLength, &mut |_, _| {
+                Ok(())
+            })
+            .unwrap();
+        let mut rekey =
+            Rekey::new(&container, PhraseLength::Detect, old, WorkFactor::default()).unwrap();
+        assert!(rekey.set_length(words(12)).is_ok());
+        assert!(matches!(
+            rekey.set_length(words(15)),
+            Err(MhfeError::LengthChoiceNotApplicable { .. })
+        ));
+    }
+
     /// One recovery, several confirmations (AUD-017-UI002): a refused confirmation is followed by
     /// another without the rounds again, and the owner is offered only the lengths the library
-    /// lets them confirm, never 24 words beside a short length that passes.
+    /// lets them confirm, never 24 words beside a short length that passes. A refusal of another
+    /// kind ends the rekey.
     #[test]
     fn a_refused_confirmation_is_followed_by_another_on_the_same_recovery() {
         const AMBIGUOUS: &str =
             "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
-        let rekey = stated(AMBIGUOUS, 12);
+        let mut rekey = stated(AMBIGUOUS, 12);
         let state = rekey
             .recover_state(
                 &mut reduced(WorkFactor::default()),
@@ -781,18 +834,24 @@ mod tests {
         let confirm = |rekey: &Rekey, state: &RecoveredForRekey, confirmation| {
             rekey.confirm(state, confirmation, Some(false), &mut |_, _, _| Ok(()))
         };
-        assert!(matches!(
-            confirm(&rekey, &state, Confirmation::BuiltInCheck),
-            Err(MhfeError::AmbiguousLength { .. })
-        ));
-        assert_eq!(state.lengths_the_owner_can_confirm().unwrap(), [12, 21]);
-        assert!(rekey.owner_can_confirm(&state).unwrap());
+        let refusal = confirm(&rekey, &state, Confirmation::BuiltInCheck)
+            .err()
+            .unwrap();
+        assert!(matches!(refusal, MhfeError::AmbiguousLength { .. }));
+        assert_eq!(
+            rekey.owner_lengths_after(&state, &refusal).unwrap(),
+            Some(vec![12, 21])
+        );
+        // The owner states the 21-word reading and is shown it; then the 12-word one.
+        rekey.set_length(words(21)).unwrap();
+        let shown = confirm(&rekey, &state, Confirmation::Owner).unwrap();
+        assert_eq!(shown.phrase().words(), 21);
+        rekey.set_length(words(12)).unwrap();
         let shown = confirm(&rekey, &state, Confirmation::Owner).unwrap();
         assert_eq!(shown.phrase().phrase(), AMBIGUOUS);
-        let as_24 = stated(AMBIGUOUS, 24);
-        assert!(!as_24.owner_can_confirm(&state).unwrap());
 
-        // A stated length the check contradicts: the owner may confirm a short one, never 24.
+        // A stated length the check contradicts: the owner compares the reading the check found
+        // at the stated length, never beside 24 stated words.
         let rekey = stated(ABANDON_12, 15);
         let state = rekey
             .recover_state(
@@ -801,18 +860,42 @@ mod tests {
                 &mut |_, _, _| Ok(()),
             )
             .unwrap();
+        let refusal = confirm(&rekey, &state, Confirmation::BuiltInCheck)
+            .err()
+            .unwrap();
         assert_eq!(
-            confirm(&rekey, &state, Confirmation::BuiltInCheck).err(),
-            Some(MhfeError::LengthDiffers {
+            refusal,
+            MhfeError::LengthDiffers {
                 stated: 15,
                 found: 12
-            })
+            }
         );
-        assert!(rekey.owner_can_confirm(&state).unwrap());
-        assert!(!stated(ABANDON_12, 24).owner_can_confirm(&state).unwrap());
         assert_eq!(
-            state.lengths_the_owner_can_confirm().unwrap(),
-            [12, 15, 18, 21]
+            rekey.owner_lengths_after(&state, &refusal).unwrap(),
+            Some(vec![15])
         );
+        let as_24 = stated(ABANDON_12, 24);
+        let beside_24 = MhfeError::LengthDiffers {
+            stated: 24,
+            found: 12,
+        };
+        assert_eq!(
+            as_24.owner_lengths_after(&state, &beside_24).unwrap(),
+            Some(Vec::new())
+        );
+        // The fingerprint confirms it on the same recovery; a wrong one ends the rekey.
+        let fingerprint = |fingerprint| Reference::Fingerprint {
+            fingerprint,
+            passphrase: "",
+        };
+        let wrong = fingerprint([0, 0, 0, 0]);
+        let mismatch = confirm(&rekey, &state, Confirmation::Wallet(&wrong))
+            .err()
+            .unwrap();
+        assert_eq!(mismatch, MhfeError::ReferenceMismatch);
+        assert_eq!(rekey.owner_lengths_after(&state, &mismatch).unwrap(), None);
+        let right = fingerprint(crate::wallet::master_fingerprint(ABANDON_12, "").unwrap());
+        let confirmed = confirm(&rekey, &state, Confirmation::Wallet(&right)).unwrap();
+        assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
     }
 }

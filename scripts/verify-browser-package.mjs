@@ -777,7 +777,116 @@ for (const [name, createModule] of Object.entries(builds)) {
       "stated: confirm it with a receiving address or the master key fingerprint of the wallet",
     () => refusedLength.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
   );
+  // The refusal keeps the recovery (AUD-017-UI002): the owner may compare at the stated length,
+  // and the fingerprint confirms the reading on the same recovery, without its rounds again.
+  assert.equal(refusedLength.ownerLengths(), "[15]");
+  steps.length = 0;
+  assert.deepEqual(
+    JSON.parse(
+      refusedLength.confirmAgain("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes(), 0, onRound),
+    ),
+    { ownerCheck: null, walletCheck: null },
+  );
+  assert.deepEqual(steps, ["compare 12/36"], "confirmed again without a round");
+  assert.equal(refusedLength.ownerLengths(), "null", "confirmed, it waits for no other");
+  const confirmedAgain = JSON.parse(
+    refusedLength.seal(
+      () => {},
+      () => {},
+    ),
+  );
+  assert.equal(
+    operations.decrypt(confirmedAgain.container, NEW_PASSWORD, reduced).candidates[0].phrase,
+    PHRASE,
+  );
   refusedLength.free();
+  // The owner compares the reading the check found at the stated length; the built-in check again
+  // is refused again and keeps the recovery, and the answer about the passphrase holds.
+  const ownerAgain = contradicted();
+  expectCode("LENGTH_DIFFERS", () =>
+    ownerAgain.recover("builtInCheck", "", "", "", noBytes(), true, () => {}),
+  );
+  expectCode("LENGTH_DIFFERS", () =>
+    ownerAgain.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, noRoundExpected),
+  );
+  assert.deepEqual(
+    JSON.parse(ownerAgain.confirmAgain("owner", "", "", "", noBytes(), 15, noRoundExpected))
+      .ownerCheck,
+    {
+      phrase: PHRASE,
+      words: 12,
+      statedWords: 15,
+      fingerprintWithoutPassphrase: PHRASE_FINGERPRINT,
+    },
+  );
+  ownerAgain.ownerAnswer(true);
+  assert.deepEqual(
+    JSON.parse(
+      ownerAgain.seal(
+        () => {},
+        () => {},
+      ),
+    ).keep,
+    [{ item: "containerWords", words: 24 }, { item: "password" }, { item: "passphrase" }],
+    "the wallet stated with the first confirmation to have a passphrase keeps it",
+  );
+  ownerAgain.free();
+  // What ends a rekey after a refusal: a length the owner cannot confirm, a length with another
+  // kind, a reference that does not match. Before a refusal there is nothing to confirm again.
+  const endsAfterRefusal = [
+    {
+      confirm: (session) => session.confirmAgain("owner", "", "", "", noBytes(), 12, () => {}),
+      message:
+        "INVALID_REQUEST: invalid request: the owner confirms a reading of [15] words here, not 12",
+    },
+    {
+      confirm: (session) =>
+        session.confirmAgain("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes(), 15, () => {}),
+      message: "INVALID_REQUEST: invalid request: only the owner's confirmation states a length",
+    },
+    {
+      confirm: (session) =>
+        session.confirmAgain("fingerprint", "00000000", "", "", noBytes(), 0, () => {}),
+      code: "REFERENCE_MISMATCH",
+    },
+  ];
+  for (const { confirm, message, code } of endsAfterRefusal) {
+    const session = contradicted();
+    expectCode("LENGTH_DIFFERS", () =>
+      session.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
+    );
+    if (message === undefined) expectCode(code, () => confirm(session));
+    else expectMessage(message, () => confirm(session));
+    assert.equal(session.ownerLengths(), "null", `${message ?? code}: the rekey ended`);
+    expectMessage("INVALID_REQUEST: invalid request: a rekey step out of its order", () =>
+      session.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, () => {}),
+    );
+    session.free();
+  }
+  const notRefused = rekeyStating(12);
+  assert.equal(notRefused.ownerLengths(), "null");
+  expectMessage("INVALID_REQUEST: invalid request: a rekey step out of its order", () =>
+    notRefused.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, noRoundExpected),
+  );
+  notRefused.free();
+  // Several lengths that pass by accident: the owner states the one to compare among those the
+  // library leaves, here both readings, and is shown it.
+  const ambiguousContainer = operations.encrypt(AMBIGUOUS_12_WORDS, PASSWORD, reduced).container;
+  const several = new core.RekeySession(ambiguousContainer, 12, PASSWORD, "", 0, 0, 0, reduced);
+  several.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
+  expectCode("AMBIGUOUS_LENGTH", () =>
+    several.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
+  );
+  assert.equal(several.ownerLengths(), "[12,21]");
+  const shownOfSeveral = JSON.parse(
+    several.confirmAgain("owner", "", "", "", noBytes(), 21, () => {}),
+  );
+  assert.equal(
+    shownOfSeveral.ownerCheck.words,
+    21,
+    "the owner is shown the reading of the stated length",
+  );
+  several.free();
   const confirmedLength = contradicted();
   assert.deepEqual(
     JSON.parse(
@@ -1022,6 +1131,12 @@ for (const [name, createModule] of Object.entries(builds)) {
   ownerOf24.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
   expectCode("LENGTH_DIFFERS", () =>
     ownerOf24.recover("owner", "", "", "", noBytes(), false, () => {}),
+  );
+  assert.equal(ownerOf24.ownerLengths(), "[]", "only an address or the fingerprint is left");
+  expectMessage(
+    "INVALID_REQUEST: invalid request: the owner cannot confirm this phrase: an address or the " +
+      "fingerprint does",
+    () => ownerOf24.confirmAgain("owner", "", "", "", noBytes(), 24, () => {}),
   );
   ownerOf24.free();
 
@@ -2910,7 +3025,7 @@ await import(`data:text/javascript;base64,${Buffer.from(joined).toString("base64
     throw new Error(`The classes do not join into one module: ${error.message}`);
   },
 );
-const { MhfeClient, MhfeCancelledError } = await importClass("dist/core/client.js");
+const { MhfeClient, MhfeCancelledError, MhfeError } = await importClass("dist/core/client.js");
 const { MhfeRepair } = await importClass("dist/repair/repair.js");
 const { MhfePasswords } = await importClass("dist/passwords/passwords.js");
 const { MhfeWallet } = await importClass("dist/wallet/wallet.js");
@@ -3278,6 +3393,15 @@ const refusals = [
     () => rekeyWith({ confirmation: { builtInCheck: true }, walletHasPassphrase }),
     walletPassphraseRequired,
   ]),
+  [
+    () =>
+      rekeyWith({
+        confirmation: { builtInCheck: true },
+        walletHasPassphrase: false,
+        onConfirmAgain: "again",
+      }),
+    TypeError,
+  ],
   // A passphrase, as text or bytes, belongs only to an address or a fingerprint.
   ...[{ builtInCheck: true }, { owner: () => true }].flatMap((confirmation) =>
     ["TREZOR", encode("TREZOR")].map((passphrase) => [
@@ -3415,6 +3539,113 @@ assert.deepEqual(ownerChecks, [shownToOwner]);
 assert.deepEqual(worker.messages[1], { type: "answer", value: true });
 worker.reply({ type: "result", result: { container: "n" } });
 assert.deepEqual(await rekeying, { container: "n" });
+// After a refusal that allows another confirmation the worker asks the page (AUD-017-UI002): the
+// page gets the refusal as an MhfeError with the owner's lengths, and its answer goes back with
+// its passphrase as bytes, or with the length the owner compares; the owner callback of the
+// answer is the one asked then. Without onConfirmAgain the worker is told not to ask.
+const confirmAgainCalls = [];
+const answers = [
+  { fingerprint: PHRASE_TREZOR_FINGERPRINT, passphrase: "TREZOR" },
+  { owner: (check) => confirmAgainCalls.push(["owner", check]) > 0 },
+];
+const confirmingAgain = rekeyWith({
+  words: 15,
+  confirmation: { builtInCheck: true },
+  walletHasPassphrase: true,
+  onConfirmAgain: (refusal) => {
+    confirmAgainCalls.push(["refusal", refusal]);
+    return answers.shift();
+  },
+});
+worker = await started();
+assert.equal(worker.messages[0].confirmsAgain, true);
+const lengthDiffers = { code: "LENGTH_DIFFERS", message: "the check finds 12", ownerLengths: [15] };
+worker.reply({ type: "ask", question: "confirmAgain", value: lengthDiffers });
+await new Promise((resolve) => setTimeout(resolve, 0));
+const [, firstRefusal] = confirmAgainCalls[0];
+assert.ok(firstRefusal.error instanceof MhfeError);
+assert.deepEqual(
+  [firstRefusal.error.code, firstRefusal.error.message, firstRefusal.ownerLengths],
+  ["LENGTH_DIFFERS", "The check finds 12", [15]],
+);
+assert.deepEqual(
+  fieldsOf(worker.messages[1].value, ["confirmKind", "reference", "coin", "path", "words"]),
+  {
+    confirmKind: "fingerprint",
+    reference: PHRASE_TREZOR_FINGERPRINT,
+    coin: "",
+    path: "",
+    words: 0,
+  },
+);
+assert.equal(new TextDecoder().decode(worker.messages[1].value.passphrase), "TREZOR");
+worker.reply({ type: "ask", question: "confirmAgain", value: lengthDiffers });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.deepEqual(fieldsOf(worker.messages[2].value, ["confirmKind", "words"]), {
+  confirmKind: "owner",
+  words: 15,
+});
+worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.deepEqual(confirmAgainCalls.at(-1), ["owner", shownToOwner]);
+assert.deepEqual(worker.messages[3], { type: "answer", value: true });
+worker.reply({ type: "result", result: { container: "n" } });
+assert.deepEqual(await confirmingAgain, { container: "n" });
+const notAsking = rekeyWith({ confirmation: { builtInCheck: true }, walletHasPassphrase: false });
+worker = await started();
+assert.equal(worker.messages[0].confirmsAgain, false);
+worker.reply({ type: "result", result: { container: "n" } });
+await notAsking;
+// A null answer ends the rekey with the refusal, as the worker throws it; an answer the client
+// refuses stops the rekey with CALLBACK_FAILED, its TypeError as the cause.
+const stopsAgain = rekeyWith({
+  confirmation: { builtInCheck: true },
+  walletHasPassphrase: false,
+  onConfirmAgain: () => null,
+});
+worker = await started();
+worker.reply({ type: "ask", question: "confirmAgain", value: lengthDiffers });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.deepEqual(worker.messages[1], { type: "answer", value: null });
+worker.reply({ type: "error", error: { code: "LENGTH_DIFFERS", message: "the check finds 12" } });
+await assert.rejects(stopsAgain, { code: "LENGTH_DIFFERS" });
+for (const [answer, ownerLengths, message] of [
+  [{ owner: () => true, words: 12 }, [15], "words must name the reading the owner compares: 15."],
+  [
+    { owner: () => true },
+    [],
+    "the owner cannot confirm this phrase: give an address or the fingerprint.",
+  ],
+  [{ owner: () => true }, [12, 21], "words must name the reading the owner compares: 12 or 21."],
+  [{ fingerprint: "00000000", words: 15 }, [15], "words belongs only to the owner's confirmation."],
+  [{ owner: () => true, passphrase: "TREZOR" }, [15], PASSPHRASE_ONLY_WITH_REFERENCE],
+  [
+    { walletCheck: true },
+    [15],
+    "a rekey is confirmed by an address or a fingerprint, not by the wallet check.",
+  ],
+]) {
+  const refused = rekeyWith({
+    confirmation: { builtInCheck: true },
+    walletHasPassphrase: false,
+    onConfirmAgain: () => answer,
+  });
+  worker = await started();
+  worker.reply({
+    type: "ask",
+    question: "confirmAgain",
+    value: { ...lengthDiffers, ownerLengths },
+  });
+  await assert.rejects(
+    refused,
+    (error) =>
+      error.code === "CALLBACK_FAILED" &&
+      error.cause instanceof TypeError &&
+      error.cause.message === message,
+    message,
+  );
+  assert.equal(worker.terminated, true, `${message}: the worker stops`);
+}
 // Whether a left-out answer is enough is the core's to judge, from the reference's passphrase:
 // the client sends it as it is, undefined, with the passphrase as bytes.
 const byFingerprint = rekeyWith({

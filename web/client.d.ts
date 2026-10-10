@@ -1,4 +1,5 @@
 import type {
+  MhfeError,
   MhfeErrorCode,
   MhfePackageParts,
   MhfePasswordRepair,
@@ -291,9 +292,9 @@ export type MhfeConfirmation =
   /**
    * Its built-in check, alone: no other kind may be given with it, and only with a 12- to 21-word
    * length stated; with the length detected it rejects with REFERENCE_REQUIRED. A stated length
-   * that the check contradicts rejects with LENGTH_DIFFERS: rekey again with an address, the
-   * fingerprint or the owner. Several lengths that pass by accident reject it with
-   * AMBIGUOUS_LENGTH.
+   * that the check contradicts rejects with LENGTH_DIFFERS: confirm again with an address, the
+   * fingerprint or the owner, on the same recovery with `onConfirmAgain`. Several lengths that
+   * pass by accident reject it with AMBIGUOUS_LENGTH.
    */
   | { builtInCheck: true; address?: never; fingerprint?: never; owner?: never }
   | {
@@ -350,6 +351,21 @@ export type MhfeRekeyConfirmation =
       passphrase?: "" | undefined;
       walletHasPassphrase: false;
     };
+
+/**
+ * The page's answer when a rekey's confirmation is refused with AMBIGUOUS_LENGTH or
+ * LENGTH_DIFFERS: another confirmation, judged on the same recovery without the rounds again.
+ */
+export type MhfeConfirmAgainAnswer =
+  | (Exclude<MhfeConfirmation, { builtInCheck: true } | { owner: unknown }> & {
+      passphrase?: MhfeSecret;
+      words?: never;
+    })
+  | (Extract<MhfeConfirmation, { owner: unknown }> & {
+      /** One of `ownerLengths`; may be left out when there is only one. */
+      words?: WordCount;
+      passphrase?: never;
+    });
 
 export interface MhfeHiddenWallet {
   phrase: string;
@@ -580,6 +596,20 @@ export class MhfeClient {
         container: string;
         containerFingerprint: string;
       }) => void | Promise<void>;
+      /**
+       * Called after AMBIGUOUS_LENGTH or LENGTH_DIFFERS, once the recovery's rounds are done:
+       * another confirmation, judged on the same recovery, or null, which rejects with the
+       * refusal. `ownerLengths` are the lengths at which the owner may compare the phrase with
+       * their backup, empty where only an address or the fingerprint confirms it.
+       */
+      onConfirmAgain?: (refusal: {
+        error: MhfeError;
+        ownerLengths: WordCount[];
+      }) =>
+        | MhfeConfirmAgainAnswer
+        | null
+        | undefined
+        | Promise<MhfeConfirmAgainAnswer | null | undefined>;
     } & MhfeRekeyConfirmation,
   ): Promise<
     MhfeSealed & {

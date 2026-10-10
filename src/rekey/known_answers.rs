@@ -5,12 +5,15 @@
 //! unicode-password (another password) and zero-12-pim-1 (PIM 1), the second with the length
 //! detected. Both are replayed with the recorded round keys of the three vectors, whose salts
 //! differ; the detected one is confirmed by its fingerprint, as the built-in check alone confirms
-//! no detected length (AUD-017-FUN001). The refusals: the same password and settings, a
-//! fingerprint that does not match, zero-24 with its length detected and only the built-in check,
-//! and zero-12 with 15 words stated and only the built-in check, which finds 12 (AUD-015-FUN001).
+//! no detected length (AUD-017-FUN001). One recovery is confirmed twice (AUD-017-UI002): zero-12
+//! with 15 words stated, whose built-in check finds 12 and is refused, leaves the owner the stated
+//! length and is then confirmed by its fingerprint without the rounds again, and sealed as
+//! unicode-password. The refusals: the same password and settings, a fingerprint that does not
+//! match, zero-24 with its length detected and only the built-in check, and zero-12 with 15 words
+//! stated and only the built-in check, which finds 12 (AUD-015-FUN001).
 
-use super::Rekey;
-use crate::mhfe::known_answers::{published, published_table};
+use super::{ConfirmedPhrase, Rekey};
+use crate::mhfe::known_answers::{published, published_table, PublishedVector};
 use crate::rehearsal::{Confirmation, Reference};
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
@@ -149,10 +152,62 @@ impl RekeyCheck {
                 &mut |_, _, _| Ok(()),
             )
             .map_err(stopped)?;
+        Self::sealed_as(&rekey, &confirmed, to)
+    }
+
+    /// One recovery, a refused confirmation, then another on the same recovery (AUD-017-UI002):
+    /// zero-12 with 15 words stated, whose built-in check finds 12, leaves the owner the stated
+    /// length; its fingerprint confirms it without the rounds again.
+    fn confirmed_again() -> Result<(), String> {
+        let from = published("zero-12")?;
+        let rekey = Rekey::new(
+            from.container,
+            PhraseLength::Words(WordCount::new(15).map_err(stopped)?),
+            from.password()?,
+            from.work()?,
+        )
+        .map_err(stopped)?;
+        let recovered = rekey
+            .recover_state(
+                &mut from.mhfe(published_table())?,
+                Confirmation::BuiltInCheck,
+                &mut |_, _, _| Ok(()),
+            )
+            .map_err(stopped)?;
+        let confirm = |confirmation| {
+            rekey.confirm(&recovered, confirmation, Some(false), &mut |_, _, _| Ok(()))
+        };
+        let refusal = match confirm(Confirmation::BuiltInCheck) {
+            Ok(_) => return Err("the built-in check confirmed 15 stated words".to_owned()),
+            Err(refusal) => refusal,
+        };
+        expect_refusal(Err::<(), _>(refusal.clone()), "LENGTH_DIFFERS")
+            .map_err(|what| format!("15 stated words {what}"))?;
+        expect(
+            rekey
+                .owner_lengths_after(&recovered, &refusal)
+                .map_err(stopped)?
+                == Some(vec![15]),
+            "the owner is not left the stated length after the refusal",
+        )?;
+        let fingerprint = Reference::Fingerprint {
+            fingerprint: crate::wallet::master_fingerprint(from.phrase, "").map_err(stopped)?,
+            passphrase: "",
+        };
+        let confirmed = confirm(Confirmation::Wallet(&fingerprint)).map_err(stopped)?;
+        Self::sealed_as(&rekey, &confirmed, published("unicode-password")?)
+    }
+
+    /// Seals `confirmed` with the password and settings of `to`, whose container it must give.
+    fn sealed_as(
+        rekey: &Rekey,
+        confirmed: &ConfirmedPhrase,
+        to: &PublishedVector,
+    ) -> Result<(), String> {
         let sealed = rekey
             .seal(
                 &mut to.mhfe(published_table())?,
-                &confirmed,
+                confirmed,
                 &to.password()?,
                 None,
                 &mut |_, _, _| Ok(()),
@@ -193,6 +248,7 @@ impl ComponentCheck for RekeyCheck {
             )
             .map_err(|what| format!("the same password and settings {what}"))
         });
+        findings.one(Self::confirmed_again);
         findings.each("refusal", &REFUSALS, Refusal::run);
         findings.outcome()
     }

@@ -29,9 +29,9 @@ use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
 use crate::{
     Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets, Mhfe, MhfeError,
-    OriginalFacts, Password, PhraseLength, RecoveredForCheck, Recovery, RecoveryStatus,
-    ReferenceTarget, Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL,
-    MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
+    OriginalFacts, Password, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
+    RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS,
+    MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
 };
 
 #[derive(Serialize)]
@@ -751,6 +751,9 @@ enum RekeyStep {
     Made,
     /// The new password and settings are set; the recovery comes next.
     Ready,
+    /// Recovered, and its confirmation refused with another allowed on the same recovery:
+    /// `confirmAgain` comes next.
+    Refused,
     /// Recovered; the owner's answer about the shown phrase comes next.
     AwaitingOwner,
     /// Recovered and confirmed; the seal comes next.
@@ -759,9 +762,10 @@ enum RekeyStep {
     Ended,
 }
 
-/// A rekey in one worker: made, given the new password and settings, recovered (and confirmed by
-/// the owner where that is the confirmation), then sealed. A call out of this order is refused
-/// with INVALID_REQUEST, and any failure ends the rekey.
+/// A rekey in one worker: made, given the new password and settings, recovered and confirmed
+/// (again on the same recovery after a refusal that allows it, and by the owner's answer where the
+/// owner confirms), then sealed. A call out of this order is refused with INVALID_REQUEST, and any
+/// other failure ends the rekey.
 #[wasm_bindgen]
 pub struct RekeySession {
     rekey: Rekey,
@@ -770,6 +774,13 @@ pub struct RekeySession {
     new_password: Option<Password>,
     new_work: Option<WorkFactor>,
     repair_word_count: Option<usize>,
+    /// The old container's state between a refused confirmation and the next, in locked memory.
+    recovered: Option<RecoveredForRekey>,
+    /// Whether the wallet has a BIP39 passphrase, judged with the first confirmation before the
+    /// rounds; it holds for every confirmation that follows, as the command-line tool asks it once.
+    wallet_has_passphrase: Option<bool>,
+    /// The lengths at which the owner may confirm after the refusal (`ownerLengths`).
+    owner_lengths: Vec<usize>,
     confirmed: Option<ConfirmedPhrase>,
     step: RekeyStep,
 }
@@ -806,9 +817,68 @@ struct RecoveredJson<'a> {
     /// The phrase for the owner to compare with their backup, when the owner confirms it; null
     /// when the built-in check or the wallet confirmed it.
     owner_check: Option<PhraseJson<'a>>,
-    /// The 16-bit source check of a 24-word reading with the reference's passphrase, or the empty
+    /// The 16-bit source check of a 24-word reading, with the reference's passphrase, or the empty
     /// one; null for other lengths. It never confirms a rekey: 16 bits are too few.
     wallet_check: Option<bool>,
+}
+
+/// Why a confirmation on the recovered state did not confirm the phrase: a refusal that another
+/// confirmation may follow, the owner's lengths with it, or a failure that ends the rekey.
+enum NotConfirmed {
+    Again {
+        refusal: MhfeError,
+        owner_lengths: Vec<usize>,
+    },
+    Ends(JsError),
+}
+
+impl From<JsError> for NotConfirmed {
+    fn from(error: JsError) -> Self {
+        Self::Ends(error)
+    }
+}
+
+impl From<MhfeError> for NotConfirmed {
+    fn from(error: MhfeError) -> Self {
+        Self::Ends(js_error(error))
+    }
+}
+
+/// Calls `then` with the library's confirmation of a rekey as the page names it, and the text of
+/// `passphrase`: "builtInCheck" and "owner", which take no passphrase (INVALID_REQUEST with one),
+/// or the wallet's reference of "address" or "fingerprint", as for `check`, compared with the
+/// passphrase.
+fn with_rekey_confirmation<T>(
+    kind: &str,
+    reference: &str,
+    coin: &str,
+    path: &str,
+    passphrase: &SecretText,
+    then: impl FnOnce(Confirmation<'_>, &str) -> T,
+) -> Result<T, JsError> {
+    let text = passphrase.text(MhfeError::InvalidPassphrase)?;
+    // The wallet check (16 bits) and a word count never confirm a phrase to seal again.
+    let wallet = match kind {
+        "builtInCheck" | "owner" if !text.is_empty() => {
+            return Err(js_error(MhfeError::InvalidRequest(
+                "a passphrase belongs to an address or fingerprint confirmation".to_owned(),
+            )))
+        }
+        "builtInCheck" | "owner" => None,
+        "address" | "fingerprint" => Some(reference_target(kind, reference, coin, path)?),
+        other => {
+            return Err(js_error(MhfeError::InvalidRequest(format!(
+                "a rekey is not confirmed by {other}"
+            ))))
+        }
+    };
+    let reference = wallet.as_ref().map(|wallet| wallet.with(text));
+    let confirmation = match (kind, &reference) {
+        (_, Some(reference)) => Confirmation::Wallet(reference),
+        ("owner", None) => Confirmation::Owner,
+        _ => Confirmation::BuiltInCheck,
+    };
+    Ok(then(confirmation, text))
 }
 
 #[wasm_bindgen]
@@ -840,6 +910,9 @@ impl RekeySession {
             new_password: None,
             new_work: None,
             repair_word_count: None,
+            recovered: None,
+            wallet_has_passphrase: None,
+            owner_lengths: Vec::new(),
             confirmed: None,
             step: RekeyStep::Made,
         })
@@ -884,13 +957,15 @@ impl RekeySession {
     /// `wallet_has_passphrase` states whether the wallet has a BIP39 passphrase, for the new
     /// container's keep list: true, false, or undefined or null for none given; anything else is
     /// INVALID_REQUEST. Only a reference with a non-empty passphrase shows the answer, and there
-    /// false is refused; everywhere else it is required (see [`Rekey::recover`]). These refusals,
-    /// and REFERENCE_REQUIRED for a confirmation that cannot confirm a phrase of the rekey's
-    /// length, come before the first round; only the Argon2 build's 1 MiB known answer runs
-    /// before them. Returns JSON `{ ownerCheck, walletCheck }`: for "owner", the phrase to
-    /// compare, and the rekey then waits for `ownerAnswer`; `walletCheck` the 16-bit source check
-    /// of a 24-word reading with the reference's passphrase or the empty one, null for other
-    /// lengths.
+    /// false is refused; everywhere else it is required (see [`Rekey::recover`]). The answer holds
+    /// for every confirmation of the rekey. These refusals, and REFERENCE_REQUIRED for a
+    /// confirmation that cannot confirm a phrase of the rekey's length, come before the first
+    /// round; only the Argon2 build's 1 MiB known answer runs before them. Returns JSON
+    /// `{ ownerCheck, walletCheck }`: for "owner", the phrase to compare, and the rekey then waits
+    /// for `ownerAnswer`; `walletCheck` the 16-bit source check of a 24-word reading with the
+    /// reference's passphrase or the empty one, null for other lengths. A refusal after the
+    /// rounds that allows another confirmation (AMBIGUOUS_LENGTH, LENGTH_DIFFERS) keeps the
+    /// recovery for `confirmAgain`; `ownerLengths` then says whether the owner may give it.
     #[allow(clippy::too_many_arguments)]
     pub fn recover(
         &mut self,
@@ -905,70 +980,76 @@ impl RekeySession {
         // Under a wiping owner first, so that a step out of its order drops it wiped too.
         let passphrase = SecretText::new(passphrase_utf8);
         self.expect(RekeyStep::Ready)?;
-        let outcome = (|| {
-            let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
-            let wallet_has_passphrase = passphrase_answer(&wallet_has_passphrase)?;
-            // The wallet check (16 bits) and a word count never confirm a phrase to seal again.
-            let wallet = match kind {
-                "builtInCheck" | "owner" if !passphrase.is_empty() => {
-                    return Err(js_error(MhfeError::InvalidRequest(
-                        "a passphrase belongs to an address or fingerprint confirmation".to_owned(),
-                    )))
-                }
-                "builtInCheck" | "owner" => None,
-                "address" | "fingerprint" => Some(reference_target(kind, reference, coin, path)?),
-                other => {
-                    return Err(js_error(MhfeError::InvalidRequest(format!(
-                        "a rekey is not confirmed by {other}"
-                    ))))
-                }
-            };
-            let reference = wallet.as_ref().map(|wallet| wallet.with(passphrase));
-            let confirmation = match (kind, &reference) {
-                ("builtInCheck", _) => Confirmation::BuiltInCheck,
-                ("owner", _) => Confirmation::Owner,
-                (_, Some(reference)) => Confirmation::Wallet(reference),
-                (_, None) => unreachable!("a wallet kind has its reference"),
-            };
-            // The old work area is freed when this engine is dropped, before the owner is asked
-            // or the new one is made.
-            let (mut mhfe, _) = mhfe_with(self.old_work, self.argon2.clone().unchecked_into())?;
-            let confirmed = self.rekey.recover(
-                &mut mhfe,
-                confirmation,
-                wallet_has_passphrase,
-                &mut |stage, round, rounds| report(on_round, stage, round, rounds),
-            );
-            let confirmed = verified(&mhfe, confirmed)?;
-            // Every recovery evaluates it on a 24-word reading (the specification's recovery
-            // rules), with the passphrase given or the empty one.
-            let wallet_check = confirmed
-                .phrase()
-                .passes_wallet_check(passphrase)
-                .map_err(js_error)?;
-            Ok((confirmed, wallet_check))
-        })();
-        let (confirmed, wallet_check) = self.or_end(outcome)?;
-        let phrase = confirmed.phrase();
-        let owner = kind == "owner";
-        // A failure here ends the rekey too, as every failure of the recovery does.
-        let result = owner
-            .then(|| PhraseJson::of(phrase))
-            .transpose()
-            .and_then(|owner_check| {
-                secret_json(&RecoveredJson {
-                    owner_check,
-                    wallet_check,
-                })
+        let outcome = with_rekey_confirmation(
+            kind,
+            reference,
+            coin,
+            path,
+            &passphrase,
+            |confirmation, _| {
+                let stated = passphrase_answer(&wallet_has_passphrase)?;
+                let has_passphrase = self
+                    .rekey
+                    .check_confirmation(&confirmation, stated)
+                    .map_err(js_error)?;
+                // The old work area is freed when this engine is dropped, at the end of this block,
+                // before the owner is asked or the new one is made.
+                let (mut mhfe, _) = mhfe_with(self.old_work, self.argon2.clone().unchecked_into())?;
+                let recovered = self.rekey.recover_state(
+                    &mut mhfe,
+                    confirmation,
+                    &mut |stage, round, rounds| report(on_round, stage, round, rounds),
+                );
+                Ok((verified(&mhfe, recovered)?, has_passphrase))
+            },
+        )
+        // A refusal of the confirmation as named, or else the recovery's own outcome.
+        .and_then(|outcome| outcome);
+        let (recovered, has_passphrase) = self.or_end(outcome)?;
+        self.recovered = Some(recovered);
+        self.wallet_has_passphrase = Some(has_passphrase);
+        self.confirm_recovered(kind, reference, coin, path, &passphrase, on_round)
+    }
+
+    /// After a refused confirmation that allows another (the rekey waits for `confirmAgain`), the
+    /// lengths at which the owner may compare the phrase with their backup, as JSON: empty where
+    /// only an address or the fingerprint confirms it. After AMBIGUOUS_LENGTH the owner states one
+    /// of them; after LENGTH_DIFFERS it is the stated length, at which the owner is shown the
+    /// reading the built-in check found. null when no confirmation may follow.
+    #[wasm_bindgen(js_name = ownerLengths)]
+    pub fn owner_lengths(&self) -> Result<String, JsError> {
+        json(&(self.step == RekeyStep::Refused).then_some(&self.owner_lengths))
+    }
+
+    /// Confirms the phrase again on the same recovery, without its rounds, after a refusal that
+    /// allows it (AUD-017-UI002): `kind`, `reference`, `coin`, `path` and `passphrase` as for
+    /// `recover`, with its answer whether the wallet has a BIP39 passphrase. `words` is the length
+    /// the owner compares, one of `ownerLengths` (INVALID_REQUEST otherwise), and 0 with every
+    /// other kind. Returns what `recover` returns; a refusal that allows another keeps the
+    /// recovery again, and any other failure ends the rekey.
+    #[allow(clippy::too_many_arguments)]
+    #[wasm_bindgen(js_name = confirmAgain)]
+    pub fn confirm_again(
+        &mut self,
+        kind: &str,
+        reference: &str,
+        coin: &str,
+        path: &str,
+        passphrase_utf8: Vec<u8>,
+        words: f64,
+        on_round: &js_sys::Function,
+    ) -> Result<js_sys::JsString, JsError> {
+        // Under a wiping owner first, so that a step out of its order drops it wiped too.
+        let passphrase = SecretText::new(passphrase_utf8);
+        self.expect(RekeyStep::Refused)?;
+        let outcome = self
+            .owner_length(kind, words)
+            .and_then(|length| match length {
+                Some(length) => self.rekey.set_length(length).map_err(js_error),
+                None => Ok(()),
             });
-        let result = self.or_end(result)?;
-        self.confirmed = Some(confirmed);
-        self.step = if owner {
-            RekeyStep::AwaitingOwner
-        } else {
-            RekeyStep::Confirmed
-        };
-        Ok(result)
+        self.or_end(outcome)?;
+        self.confirm_recovered(kind, reference, coin, path, &passphrase, on_round)
     }
 
     /// The owner's answer after comparing the shown phrase with their backup: anything but yes
@@ -978,8 +1059,7 @@ impl RekeySession {
         self.expect(RekeyStep::AwaitingOwner)?;
         // Only the value true is a yes: a bool of the ABI would take 1, "1" or [1] as one.
         if confirmed.as_bool() != Some(true) {
-            self.confirmed = None;
-            self.step = RekeyStep::Ended;
+            self.end();
             return Err(js_error(MhfeError::NotConfirmedByOwner));
         }
         // The library seals an owner's phrase only once it has the yes.
@@ -1022,13 +1102,130 @@ impl RekeySession {
         )?;
         sealed_json(&sealed, work, confirmed.wallet_has_passphrase().into())
     }
+}
+
+impl RekeySession {
+    /// Confirms the phrase on the recovered state as `kind` says, and returns what `recover`
+    /// returns. The state is dropped, and wiped, once the phrase is confirmed or the rekey ends;
+    /// a refusal that allows another confirmation keeps it.
+    fn confirm_recovered(
+        &mut self,
+        kind: &str,
+        reference: &str,
+        coin: &str,
+        path: &str,
+        passphrase: &SecretText,
+        on_round: &js_sys::Function,
+    ) -> Result<js_sys::JsString, JsError> {
+        match self.try_confirm(kind, reference, coin, path, passphrase, on_round) {
+            Ok((confirmed, result)) => {
+                self.recovered = None;
+                self.step = if confirmed.awaits_owner() {
+                    RekeyStep::AwaitingOwner
+                } else {
+                    RekeyStep::Confirmed
+                };
+                self.confirmed = Some(confirmed);
+                Ok(result)
+            }
+            Err(NotConfirmed::Again {
+                refusal,
+                owner_lengths,
+            }) => {
+                self.owner_lengths = owner_lengths;
+                self.step = RekeyStep::Refused;
+                Err(js_error(refusal))
+            }
+            Err(NotConfirmed::Ends(error)) => {
+                self.end();
+                Err(error)
+            }
+        }
+    }
+
+    fn try_confirm(
+        &self,
+        kind: &str,
+        reference: &str,
+        coin: &str,
+        path: &str,
+        passphrase: &SecretText,
+        on_round: &js_sys::Function,
+    ) -> Result<(ConfirmedPhrase, js_sys::JsString), NotConfirmed> {
+        let recovered = self.recovered.as_ref().ok_or_else(|| {
+            MhfeError::Internal("a rekey confirms without its recovery".to_owned())
+        })?;
+        with_rekey_confirmation(
+            kind,
+            reference,
+            coin,
+            path,
+            passphrase,
+            |confirmation, text| {
+                let confirmed = self.rekey.confirm(
+                    recovered,
+                    confirmation,
+                    self.wallet_has_passphrase,
+                    &mut |stage, round, rounds| report(on_round, stage, round, rounds),
+                );
+                let confirmed = match confirmed {
+                    Ok(confirmed) => confirmed,
+                    Err(refusal) => {
+                        return Err(match self.rekey.owner_lengths_after(recovered, &refusal)? {
+                            Some(owner_lengths) => NotConfirmed::Again {
+                                refusal,
+                                owner_lengths,
+                            },
+                            None => refusal.into(),
+                        })
+                    }
+                };
+                // Every recovery evaluates it on a 24-word reading (the specification's recovery
+                // rules), with the passphrase given or the empty one.
+                let wallet_check = confirmed.phrase().passes_wallet_check(text)?;
+                let owner_check = confirmed
+                    .awaits_owner()
+                    .then(|| PhraseJson::of(confirmed.phrase()))
+                    .transpose()?;
+                let result = secret_json(&RecoveredJson {
+                    owner_check,
+                    wallet_check,
+                })?;
+                Ok((confirmed, result))
+            },
+        )?
+    }
+
+    /// The length the owner states with `words` for a confirmation of `kind` after a refusal: one
+    /// of the lengths the library left the owner, and 0 with every other kind.
+    fn owner_length(&self, kind: &str, words: f64) -> Result<Option<PhraseLength>, JsError> {
+        let words = whole_number(words, "INVALID_WORD_COUNT", "the word count")? as usize;
+        match (kind, words) {
+            ("owner", words) if self.owner_lengths.contains(&words) => Ok(Some(
+                PhraseLength::Words(WordCount::new(words).map_err(js_error)?),
+            )),
+            ("owner", _) if self.owner_lengths.is_empty() => {
+                Err(js_error(MhfeError::InvalidRequest(
+                    "the owner cannot confirm this phrase: an address or the fingerprint does"
+                        .to_owned(),
+                )))
+            }
+            ("owner", words) => Err(js_error(MhfeError::InvalidRequest(format!(
+                "the owner confirms a reading of {:?} words here, not {words}",
+                self.owner_lengths
+            )))),
+            (_, 0) => Ok(None),
+            _ => Err(js_error(MhfeError::InvalidRequest(
+                "only the owner's confirmation states a length".to_owned(),
+            ))),
+        }
+    }
 
     fn expect(&mut self, step: RekeyStep) -> Result<(), JsError> {
         if self.step == step {
             return Ok(());
         }
-        self.step = RekeyStep::Ended;
-        self.confirmed = None;
+        self.end();
         Err(js_error(MhfeError::InvalidRequest(
             "a rekey step out of its order".to_owned(),
         )))
@@ -1037,10 +1234,16 @@ impl RekeySession {
     /// Ends the rekey when `outcome` failed.
     fn or_end<T>(&mut self, outcome: Result<T, JsError>) -> Result<T, JsError> {
         if outcome.is_err() {
-            self.step = RekeyStep::Ended;
-            self.confirmed = None;
+            self.end();
         }
         outcome
+    }
+
+    /// Ends the rekey: the recovered state and the phrase are dropped, and wiped.
+    fn end(&mut self) {
+        self.step = RekeyStep::Ended;
+        self.recovered = None;
+        self.confirmed = None;
     }
 }
 

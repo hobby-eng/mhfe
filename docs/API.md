@@ -292,7 +292,7 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   short check by chance and would be sealed again as another wallet (AUD-017-FUN001). A reference
   given is compared with every reading. Several lengths that pass by accident are refused under the
   built-in check of a stated length that selects one of them (`AMBIGUOUS_LENGTH`): an address or a
-  fingerprint compares every reading, and for the owner `with_length` states the length of the
+  fingerprint compares every reading, and for the owner `set_length` states the length of the
   reading to show. A stated length that the built-in check contradicts is refused with
   `LENGTH_DIFFERS` under the built-in check, and under the owner beside 24 stated words, which only
   an address or a fingerprint tells apart (AUD-015-FUN001). `recover` is `recover_state` followed by
@@ -300,10 +300,18 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `RecoveredForRekey`, the recovered state in locked memory, wiped when dropped, and
   `confirm(recovered, confirmation, wallet_has_passphrase, progress)` takes the phrase from it once
   confirmed, as often as a confirmation is refused, without the rounds again (AUD-017-UI002).
-  `owner_can_confirm(recovered)` and `RecoveredForRekey::lengths_the_owner_can_confirm()` say
-  whether, and at which stated lengths, the owner's comparison can confirm a reading, so that a
-  front end offers that answer only there. `check_new` refuses a new password and settings that give
-  the old container again (`NEW_PASSWORD_SAME_AS_OLD`).
+  `check_confirmation(confirmation, wallet_has_passphrase)` judges the first confirmation and the
+  statement about the wallet's BIP39 passphrase before any Argon2 work, as `recover` does, and
+  returns the answer, which then holds for every confirmation. After a refusal,
+  `owner_lengths_after(recovered, refusal)` says whether another confirmation may follow on the
+  same recovery (`None` for a refusal that ends the rekey, as only `AMBIGUOUS_LENGTH` and
+  `LENGTH_DIFFERS` allow one) and at which lengths the owner's comparison can confirm a reading,
+  empty where only an address or a fingerprint tells the readings apart, so that a front end offers
+  the owner only there: after `AMBIGUOUS_LENGTH` the owner states one of them with
+  `set_length(length)`, after `LENGTH_DIFFERS` it is the stated one.
+  `RecoveredForRekey::lengths_the_owner_can_confirm()` and `owner_can_confirm(length)` give the
+  same for any length. `check_new` refuses a new password and settings that give the old container
+  again (`NEW_PASSWORD_SAME_AS_OLD`).
   `recover(mhfe, confirmation, wallet_has_passphrase, progress)` runs only at the old settings and
   takes any confirmation the length allows: a reference or the owner where it has a built-in check
   too. Where it has none, the built-in check, and a `Reference::BuiltInCheck` or
@@ -564,7 +572,9 @@ The parts, by identifier and label, and what each compares:
   its fingerprint, must give the published containers; the same password and settings
   (`NEW_PASSWORD_SAME_AS_OLD`), a fingerprint that does not match (`REFERENCE_MISMATCH`), a
   detected length confirmed by the built-in check alone (`REFERENCE_REQUIRED`) and a stated length
-  that the built-in check contradicts (`LENGTH_DIFFERS`) are refused.
+  that the built-in check contradicts (`LENGTH_DIFFERS`) are refused. The last, 15 words stated,
+  is then confirmed on the same recovery by its fingerprint, with the stated length left to the
+  owner, and must give the published container of unicode-password.
 - `rehearsal`, "Rehearsal": `Mhfe::check` of a published container with a fingerprint, an address at
   its path and the built-in check, and a fingerprint one bit off that must not match.
 - `password-generator`, "Password generator": scripted bytes through the unbiased draw, the
@@ -786,7 +796,12 @@ await client.rekey({
   walletHasPassphrase, // required unless passphrase is not empty
   onProgress,
   onUnverified,
+  onConfirmAgain, // after AMBIGUOUS_LENGTH or LENGTH_DIFFERS: another confirmation, or null
 }); // a sealed container, as from encrypt, and walletCheck
+// onConfirmAgain({ error, ownerLengths }) returns { address, coin, path?, passphrase? },
+// { fingerprint, passphrase? } or { owner, words }, words one of ownerLengths (left out when there
+// is one), judged on the same recovery without the rounds again; ownerLengths is empty where only
+// an address or the fingerprint confirms the phrase.
 // walletCheck: the 16-bit source check of a recovered 24-word reading with the passphrase given or
 // none, null for other lengths; it never confirms a rekey. With words 0, the built-in check alone
 // is refused before the first round (REFERENCE_REQUIRED): an address, the fingerprint or the owner
@@ -981,7 +996,14 @@ or `null`, for which `encrypt` lists `{ item: "passphraseIfAny" }`. Anything els
 `INVALID_REQUEST` ("walletHasPassphrase must be true or false: whether the wallet has a BIP39
 passphrase"). `RekeySession.recover` also refuses a passphrase that is not empty with
 `"builtInCheck"` or `"owner"` (`INVALID_REQUEST`, "a passphrase belongs to an address or fingerprint
-confirmation"); both come before the library judges the answer as above. Secrets are UTF-8 bytes,
+confirmation"); both come before the library judges the answer as above. After a refusal that
+allows another confirmation (`AMBIGUOUS_LENGTH`, `LENGTH_DIFFERS`) the session keeps the recovered
+state: `RekeySession.ownerLengths()` returns JSON, the lengths the owner may compare (empty where
+only an address or the fingerprint confirms it) or null when the rekey has ended, and
+`RekeySession.confirmAgain(kind, reference, coin, path, passphrase, words, onRound)` confirms on
+the same state without the rounds again, `words` one of those lengths for `"owner"` and 0 for every
+other kind (`INVALID_REQUEST` otherwise), with the answer about the passphrase given to `recover`;
+any other failure ends the rekey and wipes the state. Secrets are UTF-8 bytes,
 which the bindings wipe: passwords, BIP39 passphrases, dice rolls, the phrase of `describePhrase`,
 `encrypt`, `walletCheck` and `walletFingerprint`, whose bytes are `INVALID_PHRASE` when they are not
 UTF-8, the chosen words of `describeDraw` and `drawPhrase`, and the line of `wordHints`, which may

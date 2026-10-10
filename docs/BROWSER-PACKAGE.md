@@ -210,6 +210,8 @@ const resealed = await client.rekey({
   walletHasPassphrase, // the user's answer; may be left out only when passphrase is not empty
   onProgress, // as for encrypt(), over 36 rounds
   onUnverified, // as for encrypt(): the new container before its check
+  // After AMBIGUOUS_LENGTH or LENGTH_DIFFERS: another confirmation on the same recovery, or null.
+  onConfirmAgain: ({ error, ownerLengths }) => ({ fingerprint }),
 });
 // resealed: what encrypt() gives, and walletCheck
 ```
@@ -229,19 +231,28 @@ recovery reports it, and it never confirms a rekey.
   confirms the one it matches, whatever its length; the owner confirms the one reading found.
 - Several lengths that pass by accident, about once in four billion containers, reject
   `{ builtInCheck: true }` and `{ owner }` with `AMBIGUOUS_LENGTH`, unless the owner's stated
-  length is one of them: rekey again with an address or the fingerprint, which compares every
+  length is one of them: confirm again with an address or the fingerprint, which compares every
   reading, or with the owner and the length of the reading to compare stated. A stated length that
-  the built-in check contradicts rejects `{ builtInCheck: true }` with `LENGTH_DIFFERS`: rekey again
-  with an address, the fingerprint or the owner. `{ owner }` beside 24 stated words is rejected
+  the built-in check contradicts rejects `{ builtInCheck: true }` with `LENGTH_DIFFERS`: confirm
+  again with an address, the fingerprint or the owner. `{ owner }` beside 24 stated words is rejected
   with `LENGTH_DIFFERS` too when one 12- to 21-word length passes its check: the owner cannot tell
   the two readings apart, and only an address or the fingerprint confirms one. A stated 12- to
   21-word length whose built-in check fails, with no other length passing, rejects with
   `VERIFIER_MISMATCH` whatever the confirmation, before any reference is compared: the password, a
   setting or the stated length is wrong.
-- Each of these refusals ends the rekey: a page calls `rekey()` again, which recovers again in 12
-  rounds. After `AMBIGUOUS_LENGTH` or `LENGTH_DIFFERS` the command-line tool asks again on the same
-  recovery instead, as listed
-  [further down](#what-the-command-line-tool-has-and-the-browser-does-not).
+- After `AMBIGUOUS_LENGTH` or `LENGTH_DIFFERS`, which come once the recovery's 12 rounds are done,
+  `onConfirmAgain` is called, when given, with `{ error, ownerLengths }`: the refusal as an
+  `MhfeError`, and the lengths at which the owner may compare the phrase with their backup, empty
+  where only an address or the fingerprint confirms it, as the command-line tool asks again. It
+  returns another confirmation, judged on the same recovery without the rounds again:
+  `{ address, coin, path?, passphrase? }`, `{ fingerprint, passphrase? }`, or `{ owner, words }`
+  with `words` one of `ownerLengths`, which may be left out when there is only one; or `null`,
+  which rejects with the refusal. Offer the owner only when `ownerLengths` is not empty. After
+  `AMBIGUOUS_LENGTH` the owner states the length of the reading to compare; after `LENGTH_DIFFERS`
+  it is the stated length, and the owner callback gets the reading the check found, with
+  `statedWords`. The answer to `walletHasPassphrase` holds for every confirmation. A confirmation
+  refused again in the same way calls `onConfirmAgain` again. Without it, and after every other
+  refusal, the rekey ends: a page calls `rekey()` again, which recovers again in 12 rounds.
 - `confirmation` is one of four kinds; `readContainer().confirmationFor` says which a length needs.
   A length with a built-in check takes `{ builtInCheck: true }`, or a receiving address
   `{ address, coin, path? }`, the fingerprint `{ fingerprint }` or the owner,
@@ -496,7 +507,8 @@ If a callback of the page throws, or is async and its promise rejects while the 
 operation stops, its worker ends and the promise rejects with `CALLBACK_FAILED`, the page's error
 as its `cause`. A failing `onProgress` of a hidden wallet ends the whole session, and one of a new
 phrase stops every worker of the draw. The client does not wait for a callback's promise, except
-for the owner's answer in a rekey and the answer of `check()`'s `onNoLength`, which it awaits.
+for the owner's answer and `onConfirmAgain` in a rekey and the answer of `check()`'s `onNoLength`,
+which it awaits.
 
 ## Self-checks
 
@@ -755,10 +767,6 @@ The page should say why these are missing where a user would look for them:
 - the decoy search on every processor core: the package's WebAssembly has no threads for it and
   compares the candidates one after another, so two missing words take longer than on the command
   line;
-- a second confirmation of a rekey on the same recovery after `AMBIGUOUS_LENGTH` or
-  `LENGTH_DIFFERS`, without its 12 rounds again, offering the owner only the lengths the owner can
-  tell apart: the package recovers and confirms in one call, so a page calls `rekey()` again (see
-  [Core](#core));
 - reading from standard input, exit codes and the long vector replays and benchmarks of
   `test-vectors` and `test-benchmark`: they serve scripts and development, not a page;
 - `mhfe serve` and the menu entry that serves a tool: they are the launcher that gives a page its

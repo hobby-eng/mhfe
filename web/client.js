@@ -547,8 +547,20 @@ export class MhfeClient {
    * beside 24 stated words is rejected with LENGTH_DIFFERS too when one 12- to 21-word length
    * passes its check: only an address or the fingerprint tells the two readings apart. A stated
    * 12- to 21-word length whose check fails while no other passes rejects with VERIFIER_MISMATCH,
-   * whatever the confirmation. Every refusal ends the rekey: a page calls rekey() again, which
-   * recovers again.
+   * whatever the confirmation.
+   *
+   * After AMBIGUOUS_LENGTH or LENGTH_DIFFERS, which come once the recovery's rounds are done,
+   * `onConfirmAgain` is called, when given, with `{ error, ownerLengths }`: the refusal as an
+   * MhfeError, and the lengths at which the owner may compare the phrase with their backup, empty
+   * where only an address or the fingerprint confirms it. It returns another confirmation, which
+   * is judged on the same recovery without the rounds again: `{ address, coin, path?,
+   * passphrase? }`, `{ fingerprint, passphrase? }`, or `{ owner, words }` with `words` one of
+   * `ownerLengths` (left out when there is only one); or null, which rejects with the refusal.
+   * After AMBIGUOUS_LENGTH the owner states the length of the reading to compare; after
+   * LENGTH_DIFFERS it is the stated one, and the owner callback gets the reading the check found.
+   * The answer to `walletHasPassphrase` holds for every confirmation. Without `onConfirmAgain`,
+   * and after every other refusal, the rekey ends: a page calls rekey() again, which recovers
+   * again.
    *
    * `confirmation` is exactly one of `{ builtInCheck: true }`, `{ address, coin, path? }`,
    * `{ fingerprint }` or `{ owner: (check) => boolean | Promise<boolean> }`
@@ -590,6 +602,7 @@ export class MhfeClient {
     walletHasPassphrase,
     onProgress,
     onUnverified,
+    onConfirmAgain,
   } = {}) {
     requireText(container, "container");
     if (walletHasPassphrase !== undefined) requireWalletPassphrase(walletHasPassphrase);
@@ -597,13 +610,16 @@ export class MhfeClient {
     requireSettings(newPim, newMemoryLevel);
     requireRepairWordCount(repairWordCount);
     requireCallback(onUnverified, "onUnverified");
-    const [confirmKind, reference, coin, path, owner] = describeConfirmation(confirmation);
-    // Only a string or bytes has a length here; any other type is refused when it is encoded.
-    const givenPassphrase =
-      (typeof passphrase === "string" || passphrase instanceof Uint8Array) && passphrase.length > 0;
-    if (givenPassphrase && (confirmKind === "builtInCheck" || confirmKind === "owner")) {
-      throw new TypeError("passphrase belongs only to an address or fingerprint confirmation.");
-    }
+    requireCallback(onConfirmAgain, "onConfirmAgain");
+    const [confirmKind, reference, coin, path, firstOwner] = describeConfirmation(confirmation);
+    requirePassphraseFits(confirmKind, passphrase);
+    // The owner callback of the confirmation being judged: an answer of onConfirmAgain may give
+    // another.
+    let owner = firstOwner;
+    const confirmAgain = (refusal) =>
+      answerConfirmAgain(onConfirmAgain, refusal, (next) => {
+        owner = next;
+      });
     const [choice, position] = describeChoice(passwordRepair, "passwordRepair");
     const [newChoice, newPosition] = describeChoice(newPasswordRepair, "newPasswordRepair");
     const request = {
@@ -622,7 +638,10 @@ export class MhfeClient {
       coin,
       path,
       walletHasPassphrase,
+      confirmsAgain: onConfirmAgain !== undefined,
     };
+    const handlers = { unverified: onUnverified, ownerCheck: (check) => owner(check) };
+    if (onConfirmAgain !== undefined) handlers.confirmAgain = confirmAgain;
     return this.#long(request, {
       password,
       pim,
@@ -631,7 +650,7 @@ export class MhfeClient {
       passphrase,
       newPassword,
       newPasswordRepeat,
-      handlers: { unverified: onUnverified, ownerCheck: owner },
+      handlers,
     });
   }
 
@@ -1119,6 +1138,60 @@ async function answerNoLength(onNoLength) {
     passphrase: encodeSecret(passphrase, "passphrase"),
   };
   return { message, transfer: secretBuffers(message) };
+}
+
+/**
+ * The page's answer when a rekey's confirmation is refused and another may follow on the same
+ * recovery (rekey()'s onConfirmAgain): another confirmation, sent to the worker with its
+ * passphrase as a secret, or null. The answer is checked as rekey() checks its confirmation; the
+ * owner states `words`, one of `ownerLengths`. `useOwner` takes the callback of an owner's answer.
+ */
+async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths }, useOwner) {
+  const answer = await onConfirmAgain({
+    error: new MhfeError(code, sentence(message)),
+    ownerLengths: [...ownerLengths],
+  });
+  if (answer === null || answer === undefined) return null;
+  const { passphrase = "", words, ...confirmation } = answer;
+  const [confirmKind, reference, coin, path, owner] = describeConfirmation(confirmation);
+  requirePassphraseFits(confirmKind, passphrase);
+  let stated = 0;
+  if (owner !== undefined) {
+    stated = words ?? (ownerLengths.length === 1 ? ownerLengths[0] : undefined);
+    // The core refuses any other length too; this names the page's mistake at once.
+    if (!ownerLengths.includes(stated)) {
+      throw new TypeError(
+        ownerLengths.length === 0
+          ? "the owner cannot confirm this phrase: give an address or the fingerprint."
+          : `words must name the reading the owner compares: ${countsText(ownerLengths)}.`,
+      );
+    }
+    useOwner(owner);
+  } else if (words !== undefined) {
+    throw new TypeError("words belongs only to the owner's confirmation.");
+  }
+  const next = {
+    confirmKind,
+    reference,
+    coin,
+    path,
+    words: stated,
+    passphrase: encodeSecret(passphrase, "passphrase"),
+  };
+  return { message: next, transfer: secretBuffers(next) };
+}
+
+/**
+ * A passphrase belongs only to an address or a fingerprint: a non-empty one with the built-in
+ * check or the owner is a TypeError (the core refuses it too).
+ */
+function requirePassphraseFits(confirmKind, passphrase) {
+  // Only a string or bytes has a length here; any other type is refused when it is encoded.
+  const givenPassphrase =
+    (typeof passphrase === "string" || passphrase instanceof Uint8Array) && passphrase.length > 0;
+  if (givenPassphrase && (confirmKind === "builtInCheck" || confirmKind === "owner")) {
+    throw new TypeError("passphrase belongs only to an address or fingerprint confirmation.");
+  }
 }
 
 /**

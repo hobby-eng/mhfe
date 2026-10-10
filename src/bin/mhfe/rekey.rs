@@ -214,42 +214,43 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     drop(mhfe);
     let recovered = loop {
         let reference = how.reference();
-        let confirmed = rekey.confirm(
+        let refusal = match rekey.confirm(
             &state,
             how.confirmation(reference.as_ref()),
             Some(wallet_passphrase),
             &mut |_, _, _| Ok(()),
-        );
-        match confirmed {
+        ) {
+            Ok(confirmed) => break confirmed,
+            Err(refusal) => refusal,
+        };
+        // Whether another confirmation may follow, and at which lengths the owner may give it, is
+        // the library's to say (AUD-017-ARC002); any other refusal ends the rekey.
+        let Some(owner_lengths) = rekey.owner_lengths_after(&state, &refusal)? else {
+            return Err(refusal.into());
+        };
+        style::retry_next(match refusal {
+            // The built-in check finds another length than the one stated: it takes precedence,
+            // and the wallet confirms the phrase (AUD-015-FUN001).
+            MhfeError::LengthDiffers { stated, found } => format!(
+                "{} {}, but the wallet must confirm the phrase.",
+                phrase_length::check_finds(found, stated),
+                phrase_length::MORE_RELIABLE
+            ),
             // Several lengths pass, about once in four billion containers: the built-in check
             // cannot tell them apart, a stated length neither (the specification's re-encryption
-            // rules). An address or the fingerprint compares every reading; the owner states the
-            // length of a reading the library lets them confirm and compares it with the backup.
-            Err(MhfeError::AmbiguousLength { .. }) => {
-                style::retry_next(SEVERAL_LENGTHS);
-                let lengths = state.lengths_the_owner_can_confirm()?;
-                let kind = ask_how_to_confirm(&mut input, !lengths.is_empty())?;
-                if kind == Kind::Owner {
-                    let stated = phrase_length::ask_stated(&mut input, &lengths, &[], "Phrase")?;
-                    rekey = rekey.with_length(PhraseLength::Words(stated))?;
-                }
-                how = how_of(&mut input, kind, wallet_passphrase)?;
-            }
-            // The built-in check finds another length than the one stated: it takes precedence,
-            // and the wallet confirms the phrase (AUD-015-FUN001). Whether the owner's comparison
-            // can confirm it is the library's to say (AUD-017-ARC002).
-            Err(MhfeError::LengthDiffers { stated, found }) => {
-                style::retry_next(format!(
-                    "{} {}, but the wallet must confirm the phrase.",
-                    phrase_length::check_finds(found, stated),
-                    phrase_length::MORE_RELIABLE
-                ));
-                let with_owner = rekey.owner_can_confirm(&state)?;
-                let kind = ask_how_to_confirm(&mut input, with_owner)?;
-                how = how_of(&mut input, kind, wallet_passphrase)?;
-            }
-            other => break other?,
+            // rules). An address or the fingerprint compares every reading.
+            _ => SEVERAL_LENGTHS.to_owned(),
+        });
+        let kind = ask_how_to_confirm(&mut input, !owner_lengths.is_empty())?;
+        // The owner compares the reading of one of these lengths, stated where there is a choice.
+        if kind == Kind::Owner {
+            let stated = match owner_lengths[..] {
+                [only] => WordCount::new(only)?,
+                _ => phrase_length::ask_stated(&mut input, &owner_lengths, &[], "Phrase")?,
+            };
+            rekey.set_length(PhraseLength::Words(stated))?;
         }
+        how = how_of(&mut input, kind, wallet_passphrase)?;
     };
     drop(state);
     let phrase = recovered.phrase();
