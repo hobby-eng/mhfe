@@ -474,14 +474,14 @@ fn ask_how_to_confirm(input: &mut Input, with_owner: bool) -> Result<Kind, Failu
 /// Why a rekey asks about the passphrase, under the question: a person may well wonder why a tool
 /// that encrypts a phrase asks about a passphrase at all.
 const ASKS_WHY: &[&str] = &[
-    "Asked only so that the list of what to keep at the end is complete:",
-    "MHFE stores no passphrase and asks for one only to compare it with an",
-    "address or a fingerprint.",
+    "Asked so that the list of what to keep at the end is complete:",
+    "MHFE stores no passphrase. It asks for one only to compare an address",
+    "or a fingerprint, or for the fingerprint to rehearse the new container.",
 ];
 
 /// Asks whether the wallet of the phrase has a BIP39 passphrase, which the keep list at the end
-/// names: MHFE encrypts the phrase, not the passphrase. A wallet with one confirmed by an address
-/// or a fingerprint is then asked for it.
+/// names: MHFE encrypts the phrase, not the passphrase. A wallet with one is asked for it to
+/// compare an address or a fingerprint, or for the fingerprint that rehearses the new container.
 fn ask_wallet_passphrase(input: &mut Input) -> Result<bool, Failure> {
     let answers = [
         Answer::new("No BIP39 passphrase", "the phrase alone opens the wallet"),

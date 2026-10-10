@@ -804,9 +804,9 @@ def check_rekey_warns_about_other_wallets():
 
 # Why a rekey asks about the passphrase, the lines under the question (ASKS_WHY in
 # src/bin/mhfe/rekey.rs).
-PASSPHRASE_WHY = (b"Asked only so that the list of what to keep at the end is complete:",
-                  b"MHFE stores no passphrase and asks for one only to compare it with an",
-                  b"address or a fingerprint.")
+PASSPHRASE_WHY = (b"Asked so that the list of what to keep at the end is complete:",
+                  b"MHFE stores no passphrase. It asks for one only to compare an address",
+                  b"or a fingerprint, or for the fingerprint to rehearse the new container.")
 # The record of any answer about the passphrase, at the start of its line of the summary.
 ANY_PASSPHRASE_RECORDED = rb"(?m)^  Passphrase "
 
@@ -1394,6 +1394,15 @@ def container_with(changes):
     return " ".join(words).encode()
 
 
+def check_repair_details(stderr, context):
+    """The public repair example must name both positions, erasures and restored words."""
+    for position, restored in ((3, b"tower"), (17, b"cycle")):
+        line = next(line for line in stderr.splitlines()
+                    if f"word {position:>2}".encode() in line)
+        assert b"unreadable" in line and "→".encode() in line and restored in line, (
+            f"{context}: missing erasure and replacement for word {position}: {line!r}")
+
+
 def check_container_repair():
     """A container phrase with words typed as ? asks for its repair words at once; the repaired
     container phrase and every repaired word are shown on the private screen, and only "Use it"
@@ -1444,6 +1453,7 @@ def check_container_repair():
                          capped=sys.platform == "linux")
     assert result.returncode == INVALID_INPUT, f"repair, script: exit code {result.returncode}"
     assert REPAIRED_SHOWN in result.stderr, f"repair, script: {result.stderr!r}"
+    check_repair_details(result.stderr, "repair, script")
     assert result.stdout == b"", "repair, script: wrote to standard output"
     print("repair, script: --repair reads the card after the container phrase, says what it repaired")
 
@@ -1495,6 +1505,7 @@ def check_repair_command():
     assert result.returncode == 0, f"repair command, script: exit code {result.returncode}"
     assert result.stdout.strip() == CONTAINER.encode(), f"repair, script: {result.stdout!r}"
     assert REPAIRED_SHOWN in result.stderr, f"repair command, script: {result.stderr!r}"
+    check_repair_details(result.stderr, "repair command, script")
     print("repair command, script: the repaired container phrase on standard output")
 
 

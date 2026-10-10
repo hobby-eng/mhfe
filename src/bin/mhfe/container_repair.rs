@@ -389,7 +389,9 @@ fn repair_with_card(
         ))));
     }
     if input.is_script() {
-        style::ok(what_was_repaired(&repaired));
+        // A script is told every repaired word too, before the repaired container phrase is used,
+        // so that the written phrase can be corrected.
+        report_changes(&repaired);
     } else {
         show_repaired(&repaired);
         if !uses_repair(input)? {
@@ -428,8 +430,7 @@ fn show_repaired(repaired: &Repaired) {
     for line in style::boxed_words(&repaired.container) {
         eprintln!("{}", *line);
     }
-    style::ok(what_was_repaired(repaired));
-    print_changes(repaired);
+    report_changes(repaired);
 }
 
 /// The answers whether to use the repaired container phrase.
@@ -679,8 +680,10 @@ pub fn print_card(words: &str, input: &Input) {
 /// Repair words a row of the card, as the words of a phrase are shown.
 const CARD_WORDS_PER_ROW: usize = 4;
 
-/// Each repaired word with what was read there, so that no repair is silent.
-fn print_changes(repaired: &Repaired) {
+/// What was repaired: the summary, then a line for each word with what was read and what it
+/// became, as a terminal and a script show it.
+fn report_changes(repaired: &Repaired) {
+    style::ok(what_was_repaired(repaired));
     for change in &repaired.changes {
         let place = if change.on_card { "card" } else { "word" };
         let read = change.read.as_deref().unwrap_or("unreadable");

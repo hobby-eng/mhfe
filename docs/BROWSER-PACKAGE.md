@@ -820,8 +820,9 @@ do for them:
   the command-line tool does: once, whatever confirms the recovery, after the kind of confirmation
   is known and before any address or fingerprint is typed, since a reference compared without a
   passphrase matches only the phrase's wallet without one, which says nothing about funds under one.
-  Say why it is asked, next to the question: only so that the list of what to keep is complete; MHFE
-  stores no passphrase and asks for one only to compare it with an address or a fingerprint. With an
+  Say why it is asked, next to the question: so that the list of what to keep is complete; MHFE
+  stores no passphrase and asks for one only to compare an address or a fingerprint, or for the
+  fingerprint to rehearse the new container. With an
   address or a fingerprint, then ask for the passphrase only when the wallet has one, refuse an
   empty one there, and pass it with the answer;
 - wherever a container phrase is typed to be decrypted, checked, rekeyed or opened, read it with
