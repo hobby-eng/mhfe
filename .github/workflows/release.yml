@@ -90,11 +90,10 @@ jobs:
 
   # Every check of CI on the tagged commit, scripts/check.sh, the browsers and the terminal suites
   # of Windows and macOS included, which the canonical container runs only in part
-  # (AUD-015-BLD002). Its canonical build is this workflow's canonical job.
+  # (AUD-015-BLD002). Its canonical build is this workflow's canonical job; CI's own runs only by
+  # hand.
   checks:
     uses: ./.github/workflows/ci.yml
-    with:
-      skip-canonical-build: true
 
   # The full-size vectors are replayed for the same tag by vectors.yml, on its own, in about
   # three hours; the draft does not wait for them, and their result shows on the tag.

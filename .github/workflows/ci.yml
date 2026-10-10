@@ -6,13 +6,10 @@ on:
     branches: ["**"]
   pull_request:
   # The release workflow runs these checks on the tagged commit before it publishes, so that a
-  # release cannot skip any of them (AUD-015-BLD002). Its own canonical job builds the assets, so
-  # it skips this workflow's canonical build.
+  # release cannot skip any of them (AUD-015-BLD002). Its own canonical job builds the assets.
   workflow_call:
-    inputs:
-      skip-canonical-build:
-        type: boolean
-        default: false
+  # By hand, the checks with the canonical build of this workflow.
+  workflow_dispatch:
 
 # A newer push to the same branch or pull request makes a running check pointless.
 concurrency:
@@ -115,8 +112,9 @@ jobs:
           python scripts/verify-hidden-input-windows.py target/debug/mhfe.exe
 
   canonical-build:
-    # Absent on a push or a pull request, where it is false.
-    if: ${{ !inputs.skip-canonical-build }}
+    # An hour-long build runs only by hand and for a release, whose workflow builds the assets
+    # itself; never on a push or a pull request.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

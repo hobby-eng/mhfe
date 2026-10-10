@@ -281,8 +281,10 @@ TEXT_WIDTH, FACT_LABEL_WIDTH = 78, 10
 # gives its known answers or its protection holds (verdicts in src/bin/mhfe/self_test.rs). Only
 # Linux lets a program isolate itself; elsewhere the report says why there is nothing to read
 # back (IsolationCheck in src/bin/mhfe/protect.rs). Hidden input is tested only at a terminal.
+# How the self-test words a part that this system cannot test (ComponentOutcome::NotAvailable).
+NOT_AVAILABLE = "not available here: "
 ISOLATED = ("enforced" if sys.platform == "linux"
-            else "not available here: this system offers none to a program")
+            else NOT_AVAILABLE + "this system offers none to a program")
 SELF_TEST_PARTS = (
     ("Cipher hashes", "as published"),
     ("Argon2id", "as published"),
@@ -315,7 +317,7 @@ SELF_TEST_PARTS = (
     ("Hidden input", "echo off"),
 )
 # The same parts without a terminal on standard input.
-SELF_TEST_PARTS_PIPED = (*SELF_TEST_PARTS[:-1], ("Hidden input", "not available here: no terminal"))
+SELF_TEST_PARTS_PIPED = (*SELF_TEST_PARTS[:-1], ("Hidden input", NOT_AVAILABLE + "no terminal"))
 # What the published vectors cost by the estimate of the default settings, which the report and
 # the menu state (vectors_cost in src/bin/mhfe/self_test.rs).
 VECTORS_COST = "about 2 to 4 minutes, 2 GiB"
@@ -1858,9 +1860,12 @@ def self_test_report(marks, paint=plain):
     column = 2 + width + 2
     lines = ["", f"{paint(NAME, 'MHFE')} {paint(GREY, '·')} {paint(BOLD, 'Test this program')}"]
     for label, mark in marks:
+        # A protection this system does not offer is said in grey, not as a pass (verdicts in
+        # src/bin/mhfe/self_test.rs).
+        style = GREY if mark.startswith(NOT_AVAILABLE) else PASS
         first, *rest = wrapped(mark, TEXT_WIDTH - column)
-        lines.append(f"  {paint(GREY, label.ljust(width))}  {paint(PASS, first)}")
-        lines.extend(" " * column + paint(PASS, line) for line in rest)
+        lines.append(f"  {paint(GREY, label.ljust(width))}  {paint(style, first)}")
+        lines.extend(" " * column + paint(style, line) for line in rest)
     vectors = paint(GREY, f"not run · mhfe self-test --vectors, {VECTORS_COST}")
     return [*lines, "", fact_line(paint, "Time", "a few seconds"),
             fact_line(paint, "Vectors", vectors), ""]
