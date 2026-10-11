@@ -1,5 +1,9 @@
 # AUD-018 release-verification harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These scripts belong to the 2026-10-09 UTC remediation follow-up and pre-release
 verification of MHFE 0.5.1. Reviewed HEAD is
 `3c60594479302827fe40975b04fd07f9f6fd4b3b` plus uncommitted changes, identified by

@@ -1,5 +1,9 @@
 # AUD-011 audit harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This ordinary full-scope, read-only audit reviews the current modular/DRY refactor of MHFE
 on 2026-10-08. HEAD is `abb16671b641378c0fc3c4d855f8d126498e754b`, but the working tree
 is dirty: use the source fingerprint in the report, not HEAD alone. Only synthetic and

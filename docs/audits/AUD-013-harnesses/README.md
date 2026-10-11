@@ -1,5 +1,9 @@
 # AUD-013 rerunnable evidence
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This fresh audit reviews the dirty MHFE checkout based on commit
 `abb16671b641378c0fc3c4d855f8d126498e754b`; the report's source manifest identifies
 the actual reviewed bytes. The aborted preparation is not verification evidence.

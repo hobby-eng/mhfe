@@ -1,5 +1,9 @@
 # AUD-018 core release review
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These checks belong to the pre-release review of the modified MHFE 0.5.1 tree based on commit
 `3c60594479302827fe40975b04fd07f9f6fd4b3b`, initial non-audit fingerprint
 `3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3`.

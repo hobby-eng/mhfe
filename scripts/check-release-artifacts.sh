@@ -20,8 +20,8 @@
 #
 #   scripts/check-release-artifacts.sh --archives <archive> ...
 #
-# checks packed release archives instead: each must carry LICENSE and THIRD_PARTY_NOTICES.md, byte
-# for byte as in this checkout. scripts/package-release.sh runs it on every archive it packs.
+# checks packed release archives instead: each must carry LICENSE-MIT, LICENSE-APACHE and
+# THIRD_PARTY_NOTICES.md, byte for byte as in this checkout. scripts/package-release.sh runs it on every archive it packs.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -75,7 +75,7 @@ import sys
 import tarfile
 import zipfile
 
-REQUIRED = ("LICENSE", "THIRD_PARTY_NOTICES.md")
+REQUIRED = ("LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY_NOTICES.md")
 
 
 def members(archive):

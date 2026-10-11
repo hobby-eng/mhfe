@@ -1,5 +1,9 @@
 # AUD-017 R1 harnesses: the length rule
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 - `length_rule_probe.py` checks the stated-length recovery of `scripts/independent-suite3.py` against an oracle written from the specification's rule ("Recovering a mnemonic", mhfe_spec README).
   - The script's functions are loaded by AST.
   - It covers 9 packed states (12, 15, 18, 21, zero-24, random, and the three ambiguous ones) with every stated length: 54 cases.

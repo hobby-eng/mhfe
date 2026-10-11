@@ -1,5 +1,9 @@
 # AUD-013 Rust audit probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These probes belong to AUD-013 and review the dirty source snapshot identified in that report, whose base commit and source fingerprint are retained in local evidence. They do not run Argon2, derive keys, or search addresses. The address fixtures are public BIP44/BIP84 values already retained in `src/wallet.rs`.
 
 `address-search-boundary.rs` calls the public search-description API with its documented maximum counts. It compares the reported number with an independently calculated `u128` value, retaining the largest one-root case and adjacent two-root cases as controls. It prints each expected and observed count and exits 1 if any count differs or construction panics; exit 0 means all counts matched. The maximum two-root count is 2^64, which cannot be represented by the current `u64` return type. Compiling this probe against a release library requires the library's `panic=abort` setting; its overflow checks are normally disabled, so the observed faulty count is zero. A debug library normally panics, which the probe catches.

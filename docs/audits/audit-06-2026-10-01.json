@@ -1013,11 +1013,11 @@
         ],
         "note": "Documentation-only edit; no check was rerun.",
         "commitMap": {
-          "19b8f25": "64e38cb",
           "4895169": "17c45ad",
+          "6953856": "0a1fa16",
+          "19b8f25": "64e38cb",
           "59635bf": "6856df1",
           "65b56f3": "b6e65fb",
-          "6953856": "0a1fa16",
           "6b349ce": "bda39d7",
           "7375a03": "7f5e8fb",
           "94a7e7c": "4c0144c",
@@ -1036,10 +1036,10 @@
         ],
         "note": "Documentation-only edit; no check was rerun.",
         "commitMap": {
+          "4074932": "17c45ad",
           "11f2b4e": "2547a26",
           "11f2b4e999678b63b03c5e0e743c48f8658366cd": "2547a26e3605f7e983274f2a4b8ac99b63b06acf",
           "1980ab4c541261920db5ecc963a6f27c65387cf8": "f6067310e5acae95b02b5bc96d78007426c8d15a",
-          "4074932": "17c45ad",
           "47c3bab": "64e38cb",
           "4ace03e": "4c0144c",
           "55f57898aebc8a3c620bc7df85d84a13a3a66b42": "0205a0a122491482461b5854e1dfc6ea280ffac7",
@@ -1057,7 +1057,20 @@
           "fe1823051c74ae4d7883e5f123fe77a20c6f92d4": "bda39d7f3098dba04f36f3b188998267d6e2d115",
           "ff5072f1ae1db8729e2c3844b03e02f8db679a9d": "a8358a753815e0c656f5caafd7b2abc39810ee76"
         }
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [],
+        "reportDocument": {
+          "document": "docs/audits/audit-06-2026-10-01.md",
+          "previousSha256": "c84b99699872b09511f4bdd2cae875394e45f6a4c9341e826bf72a8f7b4fd9ac",
+          "redactedSha256": "0eea750c8f15253f39e2690b14a816439877996a7c75e75aa6b22a5848c15027"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

@@ -1,5 +1,9 @@
 # AUD-008 QA probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These probes belong to the QA contribution to MHFE pre-release audit AUD-008, reviewing
 commit `b6993bb1c11834a01847d1812b31a24145ab1f18` with the dirty source snapshot recorded locally in
 `docs/audits/AUD-008-evidence/snapshot.json`. They modify no product, test, fixture or workflow file.

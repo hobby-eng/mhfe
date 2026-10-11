@@ -1,5 +1,9 @@
 # AUD-008 — MHFE pre-release audit harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These scripts reproduce scoped checks from the eleven-reviewer audit of MHFE 0.5.0 at
 `632af98b6ce06a73dd2e27ed606e0a4212daed09`, including the captured dirty source bytes.
 The product fingerprint is

@@ -1,5 +1,9 @@
 # Statistical control witnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These bounded audit-only calculations belong to AUD-014. They replay a retained analytic model of the baseline controls, not the current production implementation or a mutated production test suite. The baseline had HEAD `abb16671b641378c0fc3c4d855f8d126498e754b` and uncommitted changes. The script pins its original five word-index cases, original threshold formula, fixed-word positions and exact original source hashes; the audit report's manifest identifies the complete reviewed tree. It requires only Python's standard library and performs no wallet derivation, Argon2, build, network request or source mutation.
 
 Baseline source identities:

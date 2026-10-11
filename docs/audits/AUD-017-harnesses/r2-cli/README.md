@@ -1,5 +1,9 @@
 # AUD-017 R2 harnesses: the command line
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 - `static_cli_rules.py` reads `src/bin/mhfe` and runs four checks:
   - S1: one source for the "built-in check finds N words" message.
   - S2: the rekey front end does not decide owner eligibility itself.

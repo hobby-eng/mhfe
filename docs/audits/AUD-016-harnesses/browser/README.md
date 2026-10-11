@@ -1,5 +1,9 @@
 # AUD-016 browser review harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These read-only production probes support the browser portion of AUD-016. The reviewed mhfe
 checkout is based on `3c60594479302827fe40975b04fd07f9f6fd4b3b` with uncommitted changes and code
 fingerprint `0c282ddd47edbe418644f19a5ae136fedd68fc13cb1e3b61972dc7f7e6d74f41`.

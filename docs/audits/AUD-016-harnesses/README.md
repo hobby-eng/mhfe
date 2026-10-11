@@ -1,5 +1,9 @@
 # AUD-016 harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These scripts belong to the 2026-10-09 UTC baseline audit of MHFE 0.5.1, HEAD
 `3c60594479302827fe40975b04fd07f9f6fd4b3b` plus its existing uncommitted changes.
 The reviewed non-audit source-manifest SHA-256 is

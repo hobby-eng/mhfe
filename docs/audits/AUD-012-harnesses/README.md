@@ -1,5 +1,9 @@
 # AUD-012 harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Read-only full-scope follow-up of the uncommitted MHFE clone-elimination refactor and
 AUD-011 fixes. Use public fixtures only, the existing checkout and its pinned toolchains.
 The report identifies the exact dirty source fingerprint; HEAD alone is insufficient.

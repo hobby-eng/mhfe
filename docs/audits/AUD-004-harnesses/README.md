@@ -1,5 +1,9 @@
 # AUD-004 reproduction harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These scripts accompany [AUD-004](../audit-04-2026-10-01.md), reviewing MHFE
 `da417285ba94ff1ff2fec552dce8669e88b4323e` against released suite 3. They
 exercise only public fixtures or synthetic data. They do not replay full-cost

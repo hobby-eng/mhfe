@@ -1,5 +1,9 @@
 # AUD-007 retained harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 ## Independent remediation recheck
 
 The follow-up of 2026-10-05 reviewed the initially clean commit

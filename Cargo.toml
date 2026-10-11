@@ -6,7 +6,7 @@ rust-version = "1.99.0"
 authors = ["Sergei Semenov"]
 description = "Experimental Memory-Hard Feistel Encryption for BIP39 Mnemonics"
 repository = "https://github.com/hobby-eng/mhfe"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 publish = false
 
 [lib]

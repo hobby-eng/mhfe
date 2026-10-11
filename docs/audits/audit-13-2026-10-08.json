@@ -1101,15 +1101,15 @@
     "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
   },
   "harnessHashes": {
-    "docs/audits/AUD-013-harnesses/README.md": "00ab53d01fd65cb567c8ca13823662cb98cbf2a8e89351df7b7ec71a35bffd1c",
-    "docs/audits/AUD-013-harnesses/browser/README.md": "f48c34ac2d87ade79987a15856cc7f24dfd15cdbedc47224e5c5da80d5ebaf20",
+    "docs/audits/AUD-013-harnesses/README.md": "13b1ad420d0b0cd6ba2b4c926b6fcd42fee551c7a6d7c101af266ffa74f9fefd",
+    "docs/audits/AUD-013-harnesses/browser/README.md": "936d1a4ef3c3e054cb0c175938df1feaf41f1f1dd52abaa83abc9cbbb1176e78",
     "docs/audits/AUD-013-harnesses/browser/draw-setup.mjs": "5021563e452b360abd36d66b6bccd75fd6699019d349725610c5e597d7fde3ba",
     "docs/audits/AUD-013-harnesses/browser/draw-utf8.mjs": "263116e8acdbc61df31cccbfad5b72a17844c3d662bc13ab987f37445385c342",
     "docs/audits/AUD-013-harnesses/memory-guard.py": "ecc77d6f0919e7518b312596a8aa01a82bbb3c4d7899055f2dbb5e244538d8e7",
-    "docs/audits/AUD-013-harnesses/quality/README.md": "ccbc1a57986f3a0476e50ac943518c8139da815cd9feff53a501c572de40e99d",
+    "docs/audits/AUD-013-harnesses/quality/README.md": "95f3dbce682691ce7e45dc9f8909458695b300702a2fc708517acff16deb4408",
     "docs/audits/AUD-013-harnesses/quality/clone-controls.mjs": "8ed7113a7850034a768cbe42c4751ba5c625f69193a0b58b7e6ccfcbdbd10c4f",
     "docs/audits/AUD-013-harnesses/record.mjs": "3924dcfa8ec65a32959458f0fec059e3af29cc43ba282e8b4f231f347fd8d4b1",
-    "docs/audits/AUD-013-harnesses/rust/README.md": "3ecf925e092292696b4bd97bbd02af0d63b144a2d1451a98b1696a0bc2baa459",
+    "docs/audits/AUD-013-harnesses/rust/README.md": "49691ac812538b29bf88f5ef68db1c16d22dcceafdefd1aa82f570b1ad3a7dad",
     "docs/audits/AUD-013-harnesses/rust/address-search-boundary.rs": "c9cbb24edc5575b841354e1140ad4a49399c52f7c7531858121e5b1a5226fc2c",
     "docs/audits/AUD-013-harnesses/rust/recovered-read-consume.rs": "5a64cbda6aa66eb55f19f5dba7d803f80766a48a4fa71a289bf0bdb982e33327",
     "docs/audits/AUD-013-harnesses/validate.py": "df46b95186c1b94ffeacf54d020aec9dd8b14fe2c784cf61b8e2798294d27ebf",
@@ -3003,53 +3003,38 @@
     "newAudit": false,
     "documentBindings": [
       {
-        "keyPath": [
-          "harnessHashes",
-          "docs/audits/AUD-013-harnesses/browser/README.md"
-        ],
+        "keyPath": ["harnessHashes", "docs/audits/AUD-013-harnesses/browser/README.md"],
         "document": "docs/audits/AUD-013-harnesses/browser/README.md",
         "originalSha256": "f48c34ac2d87ade79987a15856cc7f24dfd15cdbedc47224e5c5da80d5ebaf20",
-        "redactedSha256": "2b8259887f8cd5f1850b5a7d13c6e553f048cc3f79d5e7db9e76bd83e11e3729",
+        "redactedSha256": "936d1a4ef3c3e054cb0c175938df1feaf41f1f1dd52abaa83abc9cbbb1176e78",
         "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": [
-          "harnessHashes",
-          "docs/audits/AUD-013-harnesses/quality/README.md"
-        ],
+        "keyPath": ["harnessHashes", "docs/audits/AUD-013-harnesses/quality/README.md"],
         "document": "docs/audits/AUD-013-harnesses/quality/README.md",
         "originalSha256": "ccbc1a57986f3a0476e50ac943518c8139da815cd9feff53a501c572de40e99d",
-        "redactedSha256": "9b88b46c7950cb4138ff29b128cd66d05b0d399d68a207e486f2975cbf22648e",
+        "redactedSha256": "95f3dbce682691ce7e45dc9f8909458695b300702a2fc708517acff16deb4408",
         "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": [
-          "harnessHashes",
-          "docs/audits/AUD-013-harnesses/rust/README.md"
-        ],
+        "keyPath": ["harnessHashes", "docs/audits/AUD-013-harnesses/rust/README.md"],
         "document": "docs/audits/AUD-013-harnesses/rust/README.md",
         "originalSha256": "3ecf925e092292696b4bd97bbd02af0d63b144a2d1451a98b1696a0bc2baa459",
-        "redactedSha256": "27e4e6cd82b560b79ff4827d2771dab10356daa8f655a84b0fc87f4afc3b8ec9",
+        "redactedSha256": "49691ac812538b29bf88f5ef68db1c16d22dcceafdefd1aa82f570b1ad3a7dad",
         "change": "privacy-only harness documentation; no executable or audit rerun"
       },
       {
-        "keyPath": [
-          "harnessHashes",
-          "docs/audits/AUD-011-harnesses/feature-clippy.sh"
-        ],
+        "keyPath": ["harnessHashes", "docs/audits/AUD-011-harnesses/feature-clippy.sh"],
         "document": "docs/audits/AUD-011-harnesses/feature-clippy.sh",
         "originalSha256": "4d60121c41ae7ed875899fa078836d038476caf44523bf40f4e125765788dcb5",
         "redactedSha256": "3d578091dde7b6d6c6c8996d00c6d4e34fc77c01b5e3981f6f3e9fe31bb8dfd6",
         "change": "privacy-only runtime path portability; the original execution digest is retained; no audit checks were rerun"
       },
       {
-        "keyPath": [
-          "harnessHashes",
-          "docs/audits/AUD-013-harnesses/README.md"
-        ],
+        "keyPath": ["harnessHashes", "docs/audits/AUD-013-harnesses/README.md"],
         "document": "docs/audits/AUD-013-harnesses/README.md",
         "originalSha256": "00ab53d01fd65cb567c8ca13823662cb98cbf2a8e89351df7b7ec71a35bffd1c",
-        "redactedSha256": "6b5a172cffcc33e2ca0ce4c9e15c8c9dae0dd949de1b017dff235115a2bcda08",
+        "redactedSha256": "13b1ad420d0b0cd6ba2b4c926b6fcd42fee551c7a6d7c101af266ffa74f9fefd",
         "change": "privacy-only harness documentation (history rewrite and amendment of 2026-10-09); no executable or audit rerun; amended again on 2026-10-09"
       }
     ],
@@ -3057,9 +3042,7 @@
       {
         "dateUtc": "2026-10-09",
         "authorizedBy": "repository owner",
-        "changes": [
-          "The interruption described as the session interrupted (host out of memory)."
-        ],
+        "changes": ["The interruption described as the session interrupted (host out of memory)."],
         "note": "Documentation-only edit; no check was rerun."
       },
       {
@@ -3083,7 +3066,85 @@
           "b2395276bba3c593c518714caa29409b69f45961": "2cd5e4c96a2bf2cc177f8b99b81fa7427bdf1b86"
         },
         "note": "Documentation-only edit; no check was rerun."
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [
+          {
+            "keyPath": ["harnessHashes", "docs/audits/AUD-013-harnesses/README.md"],
+            "document": "docs/audits/AUD-013-harnesses/README.md",
+            "previousSha256": "00ab53d01fd65cb567c8ca13823662cb98cbf2a8e89351df7b7ec71a35bffd1c",
+            "previousDocumentSha256": "6b5a172cffcc33e2ca0ce4c9e15c8c9dae0dd949de1b017dff235115a2bcda08",
+            "redactedSha256": "13b1ad420d0b0cd6ba2b4c926b6fcd42fee551c7a6d7c101af266ffa74f9fefd",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessHashes", "docs/audits/AUD-013-harnesses/browser/README.md"],
+            "document": "docs/audits/AUD-013-harnesses/browser/README.md",
+            "previousSha256": "f48c34ac2d87ade79987a15856cc7f24dfd15cdbedc47224e5c5da80d5ebaf20",
+            "previousDocumentSha256": "2b8259887f8cd5f1850b5a7d13c6e553f048cc3f79d5e7db9e76bd83e11e3729",
+            "redactedSha256": "936d1a4ef3c3e054cb0c175938df1feaf41f1f1dd52abaa83abc9cbbb1176e78",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessHashes", "docs/audits/AUD-013-harnesses/quality/README.md"],
+            "document": "docs/audits/AUD-013-harnesses/quality/README.md",
+            "previousSha256": "ccbc1a57986f3a0476e50ac943518c8139da815cd9feff53a501c572de40e99d",
+            "previousDocumentSha256": "9b88b46c7950cb4138ff29b128cd66d05b0d399d68a207e486f2975cbf22648e",
+            "redactedSha256": "95f3dbce682691ce7e45dc9f8909458695b300702a2fc708517acff16deb4408",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessHashes", "docs/audits/AUD-013-harnesses/rust/README.md"],
+            "document": "docs/audits/AUD-013-harnesses/rust/README.md",
+            "previousSha256": "3ecf925e092292696b4bd97bbd02af0d63b144a2d1451a98b1696a0bc2baa459",
+            "previousDocumentSha256": "27e4e6cd82b560b79ff4827d2771dab10356daa8f655a84b0fc87f4afc3b8ec9",
+            "redactedSha256": "49691ac812538b29bf88f5ef68db1c16d22dcceafdefd1aa82f570b1ad3a7dad",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "0", "redactedSha256"],
+            "document": "docs/audits/AUD-013-harnesses/browser/README.md",
+            "previousSha256": "2b8259887f8cd5f1850b5a7d13c6e553f048cc3f79d5e7db9e76bd83e11e3729",
+            "previousDocumentSha256": "2b8259887f8cd5f1850b5a7d13c6e553f048cc3f79d5e7db9e76bd83e11e3729",
+            "redactedSha256": "936d1a4ef3c3e054cb0c175938df1feaf41f1f1dd52abaa83abc9cbbb1176e78",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "1", "redactedSha256"],
+            "document": "docs/audits/AUD-013-harnesses/quality/README.md",
+            "previousSha256": "9b88b46c7950cb4138ff29b128cd66d05b0d399d68a207e486f2975cbf22648e",
+            "previousDocumentSha256": "9b88b46c7950cb4138ff29b128cd66d05b0d399d68a207e486f2975cbf22648e",
+            "redactedSha256": "95f3dbce682691ce7e45dc9f8909458695b300702a2fc708517acff16deb4408",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "2", "redactedSha256"],
+            "document": "docs/audits/AUD-013-harnesses/rust/README.md",
+            "previousSha256": "27e4e6cd82b560b79ff4827d2771dab10356daa8f655a84b0fc87f4afc3b8ec9",
+            "previousDocumentSha256": "27e4e6cd82b560b79ff4827d2771dab10356daa8f655a84b0fc87f4afc3b8ec9",
+            "redactedSha256": "49691ac812538b29bf88f5ef68db1c16d22dcceafdefd1aa82f570b1ad3a7dad",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "4", "redactedSha256"],
+            "document": "docs/audits/AUD-013-harnesses/README.md",
+            "previousSha256": "6b5a172cffcc33e2ca0ce4c9e15c8c9dae0dd949de1b017dff235115a2bcda08",
+            "previousDocumentSha256": "6b5a172cffcc33e2ca0ce4c9e15c8c9dae0dd949de1b017dff235115a2bcda08",
+            "redactedSha256": "13b1ad420d0b0cd6ba2b4c926b6fcd42fee551c7a6d7c101af266ffa74f9fefd",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          }
+        ],
+        "reportDocument": {
+          "document": "docs/audits/audit-13-2026-10-08.md",
+          "previousSha256": "0a6a6fcd5dc90ad75d8fc5b4fd3418c4dbcc5ed1b3af56d5bfc3dcc42b798b7d",
+          "redactedSha256": "84cbca5a26692c8ae5093a58f06fef1c9bd0b6840e018a9da71baa7e6995b5af"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

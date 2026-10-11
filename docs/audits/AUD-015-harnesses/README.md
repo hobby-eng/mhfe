@@ -1,5 +1,9 @@
 # AUD-015 harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Scripts of audit AUD-015 ([report](../audit-15-2026-10-09.md)), a full audit of mhfe with a compact
 team. The reviewed source is commit `ca0086acf545d07bfe008ae340554124a48442bf` (before the privacy
 rewrite during the review `4c3a6909bced0f0907f61ae291b11bb6bb419689`, with the same source files;

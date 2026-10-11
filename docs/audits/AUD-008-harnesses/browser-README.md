@@ -1,5 +1,9 @@
 # AUD-008 browser state probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This contribution reviews MHFE HEAD `b6993bb1c11834a01847d1812b31a24145ab1f18` and the current dirty source bytes recorded in the local-only `AUD-008-evidence/browser-source-manifest.json`. Owner changes remain in place. It is a second scoped contribution from reviewer2, not an additional independent reviewer.
 
 From the authoritative MHFE repository root, run:

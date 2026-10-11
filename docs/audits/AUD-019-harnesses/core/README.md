@@ -1,5 +1,9 @@
 # AUD-019 core probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These probes belong to MHFE AUD-019, reviewed commit
 `66f142566464255e331763966b00ea1681c2dabd`. They use public or synthetic inputs only.
 They do not construct an Argon2 engine or claim that the construction is secure.

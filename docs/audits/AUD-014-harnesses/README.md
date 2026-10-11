@@ -1,5 +1,9 @@
 # AUD-014 chosen-word audit harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This targeted review covers MHFE bit insertion, checksum boundaries, constrained
 sampling, statistical/unit tests and startup/full self-check wiring. The reviewed
 base commit and dirty source hashes are recorded in the paired report. Only public

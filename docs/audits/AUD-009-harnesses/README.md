@@ -1,5 +1,9 @@
 # AUD-009 reproduction harness
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This harness checks four confirmed browser API and cleanup defects in the dirty MHFE refactor on
 HEAD `d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0`. The report records the source hashes.
 It uses only synthetic values, reads the real JavaScript sources, rewrites the runtime import to an

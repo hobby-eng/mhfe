@@ -1,5 +1,9 @@
 # AUD-006 reproduction harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These scripts belong to the final MHFE code, suite 3 conformance and prepared 0.4.0
 artifact review of commit `bda39d7f3098dba04f36f3b188998267d6e2d115`.
 See the [report](../audit-06-2026-10-01.md) for exact executed commands, outcomes,

@@ -3489,20 +3489,20 @@
     "skeptic-review.json": "ea0625440df949356220ce1fa9f4fd8746af4ffa265e50729bb533b6071979bb"
   },
   "harnessBindings": {
-    "docs/audits/AUD-016-harnesses/README.md": "b8dce37951f31a4089117d4107959653fd44c3e64214a49bfb1cba47cb800a4c",
+    "docs/audits/AUD-016-harnesses/README.md": "a15cd408cacc02881e7e08b42a15ba5a1c12db5d2caf7dec54b2bb76d5184424",
     "docs/audits/AUD-016-harnesses/artifact-bindings.py": "77a34a5ac9f30aaa2989f5780f0aa0da986c0d636a45de7823bae5d24f73f42e",
     "docs/audits/AUD-016-harnesses/assemble.py": "14332fe861b6594aee638bd788667872a3bb199585105213b95f9b85697fffa6",
     "docs/audits/AUD-016-harnesses/baseline.py": "1b41ad8f58d8125474f1d3e0fe0043ae3a41624368caf450a6911b0b0a94f084",
-    "docs/audits/AUD-016-harnesses/browser/README.md": "902dafb69d81acb33b7a5fa04ed51e317f38e5ffd839fc9476871156b6627518",
+    "docs/audits/AUD-016-harnesses/browser/README.md": "8b9e89962ec6c73eab7de02bf0bccd0e4118eb7703272ac8cce1231bdbc80aab",
     "docs/audits/AUD-016-harnesses/browser/page-protocol.mjs": "b393e9f7bdbb14efae0bfd0317df91f7412e0019d1992da708a8216a4e850b32",
     "docs/audits/AUD-016-harnesses/browser/real-wasm-api.mjs": "1788007fb23f9febd489d5b8189c8ec01f9974911c523937682289c2f9119103",
     "docs/audits/AUD-016-harnesses/browser/worker-cleanup.mjs": "f1897b6b800f8e93b582cb5087f0b68009ccb34213784c859260a29c79d04f94",
-    "docs/audits/AUD-016-harnesses/core/README.md": "bb6e81b57de054610f46e25dd257695c445af917d6a5f73575998d88bbc2fb03",
+    "docs/audits/AUD-016-harnesses/core/README.md": "f1ec88430386734e6e7af80a13f76e2e733f6deed25a14ff27fbdcecfbe2a583",
     "docs/audits/AUD-016-harnesses/core/address_table.mjs": "68ed5bc48922113a83c650639fcadd23f9327678b8e279b5068c4811ac603b50",
     "docs/audits/AUD-016-harnesses/core/cancel_watchdog.py": "cb5b1f3713ad0ea8ddd3e0ab8cbc4584850689cb2bdc293643992255d00de6e3",
     "docs/audits/AUD-016-harnesses/core/public_probe.rs": "6cf69e3a00fbc8ec3c729ba645d44e1e0cfd7c6fa125f3f40119478756d4f71d",
     "docs/audits/AUD-016-harnesses/environment.py": "4af38dfef7af242eeec2804435cd5863e6dea374f4a0cf5271c98246567fc69e",
-    "docs/audits/AUD-016-harnesses/native/README.md": "90c77e170bece9b1622e98ff5c3a6fe49d424017b7f18ed80b5741dacfe3eb58",
+    "docs/audits/AUD-016-harnesses/native/README.md": "97d4b31e47f798abb610a14ba5d1e1199b95450b4eb63f2bb923e36891539460",
     "docs/audits/AUD-016-harnesses/native/boundary-probes.py": "df3915cbb907163f8ca973b59a325b9f633887bdc072125982e342363e9a9def",
     "docs/audits/AUD-016-harnesses/native/lock-claim.rs": "99fa21b16e682bffb5f3d0b8117c7ba285711a789b50ec631bb353739098a5c6",
     "docs/audits/AUD-016-harnesses/provenance.py": "155e4be4113afff6423f54a28c8784c4134fac7f214c3672041ffa18bfeac8f9",
@@ -3897,7 +3897,54 @@
           }
         ],
         "note": "Documentation-only edit; no check was rerun."
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [
+          {
+            "keyPath": ["harnessBindings", "docs/audits/AUD-016-harnesses/README.md"],
+            "document": "docs/audits/AUD-016-harnesses/README.md",
+            "previousSha256": "b8dce37951f31a4089117d4107959653fd44c3e64214a49bfb1cba47cb800a4c",
+            "previousDocumentSha256": "b8dce37951f31a4089117d4107959653fd44c3e64214a49bfb1cba47cb800a4c",
+            "redactedSha256": "a15cd408cacc02881e7e08b42a15ba5a1c12db5d2caf7dec54b2bb76d5184424",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessBindings", "docs/audits/AUD-016-harnesses/browser/README.md"],
+            "document": "docs/audits/AUD-016-harnesses/browser/README.md",
+            "previousSha256": "902dafb69d81acb33b7a5fa04ed51e317f38e5ffd839fc9476871156b6627518",
+            "previousDocumentSha256": "902dafb69d81acb33b7a5fa04ed51e317f38e5ffd839fc9476871156b6627518",
+            "redactedSha256": "8b9e89962ec6c73eab7de02bf0bccd0e4118eb7703272ac8cce1231bdbc80aab",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessBindings", "docs/audits/AUD-016-harnesses/core/README.md"],
+            "document": "docs/audits/AUD-016-harnesses/core/README.md",
+            "previousSha256": "bb6e81b57de054610f46e25dd257695c445af917d6a5f73575998d88bbc2fb03",
+            "previousDocumentSha256": "bb6e81b57de054610f46e25dd257695c445af917d6a5f73575998d88bbc2fb03",
+            "redactedSha256": "f1ec88430386734e6e7af80a13f76e2e733f6deed25a14ff27fbdcecfbe2a583",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessBindings", "docs/audits/AUD-016-harnesses/native/README.md"],
+            "document": "docs/audits/AUD-016-harnesses/native/README.md",
+            "previousSha256": "90c77e170bece9b1622e98ff5c3a6fe49d424017b7f18ed80b5741dacfe3eb58",
+            "previousDocumentSha256": "90c77e170bece9b1622e98ff5c3a6fe49d424017b7f18ed80b5741dacfe3eb58",
+            "redactedSha256": "97d4b31e47f798abb610a14ba5d1e1199b95450b4eb63f2bb923e36891539460",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          }
+        ],
+        "reportDocument": {
+          "document": "docs/audits/audit-16-2026-10-09.md",
+          "previousSha256": "1a61b3ff5cb7716c3f72b31b9618fd74f2ad08eb0a9a57faf61cf5c424abd655",
+          "redactedSha256": "1b299312ce9d273484c1dd69fb4b2a9828e368472a19bf1adaf2c46c63d099ae"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)",
+    "timestampsUTC": true
   }
 }

@@ -1,5 +1,9 @@
 # AUD-008 focused security remediation verification
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These new probes recheck SEC001–SEC004 after signed remediation commit
 `711c8f596a7f5548270288de4f07c5011c5784cb` and namespace commit
 `50044269f5fb02aaa901c8ff7d20b7b1b975e95c`. They preserve the original audit harnesses and

@@ -1,5 +1,9 @@
 # AUD-015 R5: build, release, architecture, documentation and audit records
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Audit-only probes of reviewer R5 of AUD-015, an ordinary audit of mhfe. The reviewed source is
 the uncommitted working tree on commit `4c3a6909bced0f0907f61ae291b11bb6bb419689` (source
 fingerprint `f79444dc…2a93`); during the review an owner-authorized privacy rewrite replaced

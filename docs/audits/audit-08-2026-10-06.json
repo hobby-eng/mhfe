@@ -2833,7 +2833,7 @@
       "aggregateSchemaValidation": "Coordinator-owned; not performed by this reviewer."
     },
     "harnessHashes": {
-      "research-README.md": "2d4c849f2484624d36ebb23ee72934bf34c047ad699663ab902d978c08459ef0",
+      "research-README.md": "075a42e7ece6642bcd671d8f7f4fbf152f2dd05f746dd062f65c7b0c25fd038b",
       "research-static.py": "fa90973b14f81de25b639a07d171773c08f16b187e8e164fb7213d541ce0c0c8"
     }
   },
@@ -3546,18 +3546,18 @@
       "/home/user/.codex/skills/wallet-release-verification/SKILL.md": "df44131aea57818cc4193c07319242716fa295f1620111b826f7cd29cd66fed1"
     },
     "harnessHashes": {
-      "docs/audits/AUD-008-harnesses/remediation-contract-README.md": "22a5bdb2ac10c50df85c0f4515388d1190805fb2c7afb265bf66a5b8842b49b4",
+      "docs/audits/AUD-008-harnesses/remediation-contract-README.md": "1e6bc857f2297a923d3090cf67eda45ac05b1e507d7ba53f3009b2ce87b3f819",
       "docs/audits/AUD-008-harnesses/remediation-contract-check.py": "69259ffc702b9df6731aedeb42714d7a245300ce5bfccf49a277b15dfc5ad7ee",
       "docs/audits/AUD-008-harnesses/remediation-doc-contract.py": "57016d6fcf336bcd5be5c5e3f8b7b73fc5a78b6a11349c47d2624dcc59c23ce1",
       "docs/audits/AUD-008-harnesses/remediation-package-guide.py": "a6d9f0d468a05c0dcbb545391296a06956904cee3f346e5452444eb734447290",
       "docs/audits/AUD-008-harnesses/remediation-public-contract.rs": "61e0c63c74d322cada739cfefca6cb0ec5cdda14df81eaa07ee0c92d09d89e5b",
-      "docs/audits/AUD-008-harnesses/remediation-security-README.md": "28e020639d72396b8165e9d8182321c67454a7e93c19a85b0c3ac236df7efcc0",
+      "docs/audits/AUD-008-harnesses/remediation-security-README.md": "bc9e511ca954a35d5ac370a51d3aaab04e36f35e86508f51c8e4382b9f3e38a1",
       "docs/audits/AUD-008-harnesses/remediation-security.py": "1abd76ae77dca6280a904b253b2e79204fce6fcca7c71fa15d6e6ed11eb85edb",
       "docs/audits/AUD-008-harnesses/remediation-security.rs": "f4e41e1c918bc30fa901b6cb8286bf5968ca0b630d132ea3e791c58ce48d8364",
       "docs/audits/AUD-008-harnesses/remediation-serve.py": "f92556f52bfbbd320a8b02f1ce5e918ae78a1437dce64319adde61050bfc982d",
       "docs/audits/AUD-008-harnesses/remediation-validate.py": "b9b976ca1c8e4db0df90cdfd6278a2020d712ef14c02f694cfe34cec18be865f",
       "docs/audits/AUD-008-harnesses/remediation-validator-negative.py": "54adc269563fad4c76cb24d7e40ff4fa6349f92f79854cd60a9c4d3c59cad611",
-      "docs/audits/AUD-008-harnesses/README.md": "c620587041f62750ea0b9a997ff4c65a5814610dd57bc4e20cf2010027f4385c"
+      "docs/audits/AUD-008-harnesses/README.md": "239e0b7ecac4f9304e7834e37f69ecf04a42f8ae64b16a62e8a6744ff0f7836d"
     },
     "commands": [
       {
@@ -4180,7 +4180,7 @@
         ],
         "document": "docs/audits/AUD-008-harnesses/README.md",
         "originalSha256": "c620587041f62750ea0b9a997ff4c65a5814610dd57bc4e20cf2010027f4385c",
-        "redactedSha256": "e48f44a255be7840d092ace31a856ffd998912ea14833597ccdaa7e798adaf52",
+        "redactedSha256": "239e0b7ecac4f9304e7834e37f69ecf04a42f8ae64b16a62e8a6744ff0f7836d",
         "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
@@ -4215,7 +4215,7 @@
         ],
         "document": "docs/audits/AUD-008-harnesses/remediation-contract-README.md",
         "originalSha256": "22a5bdb2ac10c50df85c0f4515388d1190805fb2c7afb265bf66a5b8842b49b4",
-        "redactedSha256": "2a795d1ca78617c33f94bfec902aed5f0f9fd3ddb6ca6175fbdb2f36a59a01db",
+        "redactedSha256": "1e6bc857f2297a923d3090cf67eda45ac05b1e507d7ba53f3009b2ce87b3f819",
         "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun"
       },
       {
@@ -4226,7 +4226,7 @@
         ],
         "document": "docs/audits/AUD-008-harnesses/remediation-security-README.md",
         "originalSha256": "28e020639d72396b8165e9d8182321c67454a7e93c19a85b0c3ac236df7efcc0",
-        "redactedSha256": "9bde6454cd17bbb974078bd62ab7985cdff19844c5f65bbae28aeb10dac6b0c3",
+        "redactedSha256": "bc9e511ca954a35d5ac370a51d3aaab04e36f35e86508f51c8e4382b9f3e38a1",
         "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun"
       }
     ],
@@ -4254,9 +4254,9 @@
         ],
         "note": "Documentation-only edit; no check was rerun.",
         "commitMap": {
+          "5004426": "161e1a7",
           "00e4d1072b56d56293e11d8ad3204626b8f93dc7": "9106eba9f40b69d68d3a2d22b06c95b23e8b2cc0",
           "18ebc8345cfe5134761947d40eaa11e268434e11": "c8d6c9a465c6710481cbe185af6f53150686d98b",
-          "5004426": "161e1a7",
           "50044269f5fb02aaa901c8ff7d20b7b1b975e95c": "161e1a7b866e7f0960a29e5f0c7e5a682d82040e",
           "711c8f5": "1c9c572",
           "711c8f596a7f5548270288de4f07c5011c5784cb": "1c9c572c902e2be1dc7143de4d43c2d9d56f9d17",
@@ -4296,7 +4296,95 @@
             "nearestHasReviewedTree": false
           }
         }
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "0", "redactedSha256"],
+            "document": "docs/audits/AUD-008-harnesses/README.md",
+            "previousSha256": "e48f44a255be7840d092ace31a856ffd998912ea14833597ccdaa7e798adaf52",
+            "previousDocumentSha256": "e48f44a255be7840d092ace31a856ffd998912ea14833597ccdaa7e798adaf52",
+            "redactedSha256": "239e0b7ecac4f9304e7834e37f69ecf04a42f8ae64b16a62e8a6744ff0f7836d",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "3", "redactedSha256"],
+            "document": "docs/audits/AUD-008-harnesses/remediation-contract-README.md",
+            "previousSha256": "2a795d1ca78617c33f94bfec902aed5f0f9fd3ddb6ca6175fbdb2f36a59a01db",
+            "previousDocumentSha256": "2a795d1ca78617c33f94bfec902aed5f0f9fd3ddb6ca6175fbdb2f36a59a01db",
+            "redactedSha256": "1e6bc857f2297a923d3090cf67eda45ac05b1e507d7ba53f3009b2ce87b3f819",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "4", "redactedSha256"],
+            "document": "docs/audits/AUD-008-harnesses/remediation-security-README.md",
+            "previousSha256": "9bde6454cd17bbb974078bd62ab7985cdff19844c5f65bbae28aeb10dac6b0c3",
+            "previousDocumentSha256": "9bde6454cd17bbb974078bd62ab7985cdff19844c5f65bbae28aeb10dac6b0c3",
+            "redactedSha256": "bc9e511ca954a35d5ac370a51d3aaab04e36f35e86508f51c8e4382b9f3e38a1",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": [
+              "remediationVerification",
+              "harnessHashes",
+              "docs/audits/AUD-008-harnesses/README.md"
+            ],
+            "document": "docs/audits/AUD-008-harnesses/README.md",
+            "previousSha256": "c620587041f62750ea0b9a997ff4c65a5814610dd57bc4e20cf2010027f4385c",
+            "previousDocumentSha256": "e48f44a255be7840d092ace31a856ffd998912ea14833597ccdaa7e798adaf52",
+            "redactedSha256": "239e0b7ecac4f9304e7834e37f69ecf04a42f8ae64b16a62e8a6744ff0f7836d",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": [
+              "remediationVerification",
+              "harnessHashes",
+              "docs/audits/AUD-008-harnesses/remediation-contract-README.md"
+            ],
+            "document": "docs/audits/AUD-008-harnesses/remediation-contract-README.md",
+            "previousSha256": "22a5bdb2ac10c50df85c0f4515388d1190805fb2c7afb265bf66a5b8842b49b4",
+            "previousDocumentSha256": "2a795d1ca78617c33f94bfec902aed5f0f9fd3ddb6ca6175fbdb2f36a59a01db",
+            "redactedSha256": "1e6bc857f2297a923d3090cf67eda45ac05b1e507d7ba53f3009b2ce87b3f819",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": [
+              "remediationVerification",
+              "harnessHashes",
+              "docs/audits/AUD-008-harnesses/remediation-security-README.md"
+            ],
+            "document": "docs/audits/AUD-008-harnesses/remediation-security-README.md",
+            "previousSha256": "28e020639d72396b8165e9d8182321c67454a7e93c19a85b0c3ac236df7efcc0",
+            "previousDocumentSha256": "9bde6454cd17bbb974078bd62ab7985cdff19844c5f65bbae28aeb10dac6b0c3",
+            "redactedSha256": "bc9e511ca954a35d5ac370a51d3aaab04e36f35e86508f51c8e4382b9f3e38a1",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["researchOpportunities", "harnessHashes", "research-README.md"],
+            "document": "docs/audits/AUD-008-harnesses/research-README.md",
+            "previousSha256": "2d4c849f2484624d36ebb23ee72934bf34c047ad699663ab902d978c08459ef0",
+            "previousDocumentSha256": "7887ee2d36f8642abd0c5fa087501856077c6e02fddfdb3fb8cf86a45e1e108d",
+            "redactedSha256": "075a42e7ece6642bcd671d8f7f4fbf152f2dd05f746dd062f65c7b0c25fd038b",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          }
+        ],
+        "reportDocument": {
+          "document": "docs/audits/audit-08-2026-10-06.md",
+          "previousSha256": "9f622a7289e0bc6c024c7746d8f14a95240c2df55e0c7c6414feab2f752ac158",
+          "redactedSha256": "a6ea86ad75c2aebd81785db520a0682ea1c2aca2d16703e4e482d4d8dc0db989"
+        },
+        "publicationGenerator": {
+          "path": "docs/audits/AUD-008-harnesses/assemble-report.py",
+          "previousSha256": "d7a13b79524bc3aef4eb8e7a1e3c01896a00b71bd4b1a249d3018f0bd70e196c",
+          "sha256": "1b77d00244aea75a056065edf84bd70ef990d16addb76d13dc8ddcded2503330",
+          "change": "Home-path anonymization at JSON and Markdown publication boundaries only; runtime paths and retained raw evidence are unchanged. No historical report was regenerated."
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

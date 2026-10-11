@@ -1,5 +1,9 @@
 # Browser Lifecycle Probe
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This AUD-012 probe independently checks the AUD-011-SEC001 repair against current source. The audit report binds the reviewed commit and dirty-source fingerprint. It uses only synthetic byte arrays, synthetic text and an unpaired surrogate, and prints no wallet material.
 
 From the MHFE repository root, with its pinned Node.js, run:

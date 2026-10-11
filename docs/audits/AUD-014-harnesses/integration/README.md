@@ -1,5 +1,9 @@
 # AUD-014 integration harness
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 `worker-lifecycle.mjs` checks the current `web/runtime.js` and `web/wallet.js` from this checkout against a controlled Worker. It belongs to AUD-014, whose reviewed dirty source snapshot is recorded by the coordinator in the audit evidence; the script prints the SHA-256 of both source files it actually imports. It needs Node.js 26.10.0 and no installed package, generated browser artifact, network access, or private input.
 
 Run from the MHFE repository root:

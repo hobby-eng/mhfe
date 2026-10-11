@@ -56,7 +56,7 @@ add_common_files() {
   else
     cp README.md "$folder/"
   fi
-  cp LICENSE THIRD_PARTY_NOTICES.md "$folder/"
+  cp LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md "$folder/"
   mkdir -p "$folder/licenses"
   cp vendor/phc-winner-argon2/LICENSE "$folder/licenses/argon2-LICENSE"
   cp vendor/eff-large-wordlist.md "$folder/licenses/eff-large-wordlist.md"
@@ -148,7 +148,8 @@ for package in "${packages[@]}"; do
   esac
 done
 
-# Every archive must carry the licence files: LICENSE and THIRD_PARTY_NOTICES.md with its crate list.
+# Every archive must carry the licence files: LICENSE-MIT, LICENSE-APACHE and THIRD_PARTY_NOTICES.md
+# with its crate list.
 scripts/check-release-artifacts.sh --archives "${archives[@]}"
 
 (cd "$output" && sha256sum -- *.tar.gz *.zip 2>/dev/null > SHA256SUMS || true)

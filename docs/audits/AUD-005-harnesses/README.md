@@ -1,5 +1,9 @@
 # AUD-005 reproduction harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These scripts belong to [AUD-005](../audit-05-2026-10-01.md), the full audit of MHFE at
 `5eed93c06b6e2c9107e20290dc318d9efbcbe829` (`main`, tag `v0.4.0`) against suite 3. They use only
 public test data: the BIP39 phrases `abandon ... about` and `legal winner ...`, the public test

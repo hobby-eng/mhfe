@@ -1,5 +1,9 @@
 # AUD-015 R2: native command-line tool probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Probes of reviewer R2 of AUD-015 (the `mhfe` command-line tool, `src/bin/mhfe/`), against the
 reviewed snapshot: HEAD `4c3a6909bced0f0907f61ae291b11bb6bb419689` plus the uncommitted tree whose
 source fingerprint is recorded in the audit's snapshot. They drive the built tool in a Linux

@@ -354,9 +354,7 @@
       {
         "dateUtc": "2026-10-09",
         "authorizedBy": "repository owner",
-        "changes": [
-          "Local clock times replaced by UTC (11:27, 13:24 and 10:32 UTC)."
-        ],
+        "changes": ["Local clock times replaced by UTC (11:27, 13:24 and 10:32 UTC)."],
         "note": "Documentation-only edit; no check was rerun."
       },
       {
@@ -380,9 +378,7 @@
         "note": "Documentation-only edit; no check was rerun (AUD-015-DOC001; AUD-018 recorded the four fields as unresolved).",
         "unavailableCommits": {
           "e87eb5cdbd02b41c15aa512cd32055d56d3bd760": {
-            "fields": [
-              "/snapshot/companionSpecification/commit"
-            ],
+            "fields": ["/snapshot/companionSpecification/commit"],
             "sameTreeInCurrentHistory": false,
             "reviewedCommit": "4e7d03a1e1cbf68b407c3affd93c786884cd6ed1",
             "lineage": [
@@ -393,7 +389,20 @@
             "nearestHasReviewedTree": false
           }
         }
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [],
+        "reportDocument": {
+          "document": "docs/audits/audit-02-2026-09-22.md",
+          "previousSha256": "338f9dcf4187e7d7805c4d16705ea2d187ad00a2db71a1915b410fb20e72d1da",
+          "redactedSha256": "18bf620ecb326d3f03a22bab7a8d7181d7049b89034178bfb4ed502fdcc6e8df"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

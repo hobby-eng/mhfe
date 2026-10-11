@@ -1,5 +1,9 @@
 # AUD-012 quality probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 `clone-checker.mjs` executes the unchanged `scripts/verify-no-copies.mjs` in a Node VM with in-memory synthetic source files. Only the imports and `import.meta.url` are adapted to inject file-system functions. No project directory or production file is copied, edited or created by the probe.
 
 The reviewed checkout is the uncommitted MHFE AUD-012 source snapshot rooted at commit `abb16671b641378c0fc3c4d855f8d126498e754b`; the coordinator's source fingerprint identifies the exact reviewed bytes. Inputs are generated public arithmetic functions. No dependencies beyond the pinned Node runtime are needed.

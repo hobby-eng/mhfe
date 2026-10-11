@@ -1,5 +1,9 @@
 # AUD-016 core review harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These audit-only probes cover missing-word search input handling, native cancellation, and three
 published wallet addresses. They belong to AUD-016, reviewed HEAD
 `3c60594479302827fe40975b04fd07f9f6fd4b3b` plus the current working tree with code fingerprint

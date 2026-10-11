@@ -5,7 +5,9 @@ authors:
   - family-names: "Semenov"
     given-names: "Sergei"
 version: 0.6.0
-license: MIT
+license:
+  - MIT
+  - Apache-2.0
 repository-code: "https://github.com/hobby-eng/mhfe"
 url: "https://github.com/hobby-eng/mhfe"
 keywords:

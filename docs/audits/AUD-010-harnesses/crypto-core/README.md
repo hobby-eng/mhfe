@@ -1,5 +1,9 @@
 # AUD-010 crypto-core harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Audit-only scripts of the AUD-010 crypto-core review (CHECK-FUN-001, CHECK-FUN-002, CHECK-FUN-006,
 CHECK-API-004, CHECK-ARC-003) of mhfe at HEAD `d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0` plus the
 uncommitted working tree with source fingerprint

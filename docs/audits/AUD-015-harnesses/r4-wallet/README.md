@@ -1,5 +1,9 @@
 # AUD-015 R4 harnesses: wallet and word features
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Audit AUD-015 of mhfe, reviewer R4 (wallet and word features). Reviewed tree: commit
 `4c3a6909bced0f0907f61ae291b11bb6bb419689` plus the uncommitted working tree with source fingerprint
 `f79444dc9884d11a54c2c0b316ce31bf3a3a734e5bb604e9667df09cf0482a93`. Run everything from the

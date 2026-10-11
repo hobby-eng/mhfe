@@ -1281,14 +1281,14 @@
   ],
   "assessment": "AUD-011's three issues are verified within stated scopes. Current refactor direction and module cohesion are sound; further mechanical class/module splitting is not required. Four new Low findings remain (two lifecycle/ownership issues and two clone-gate defects). No Critical/High/Medium or release blocker was confirmed in this bounded review. Optimization ideas are optional and unbenchmarked; no release acceptance or proof of zero duplicates.",
   "harnessHashes": {
-    "docs/audits/AUD-012-harnesses/README.md": "34b9b285bc05b3c272db5f26938aeb101abe785507a5ac5841a5baddd4ce833d",
-    "docs/audits/AUD-012-harnesses/browser/README.md": "7e7af8bdfb2a27bcbf5f86dbcad86b0d51c2d91670f50a57808ba7c4e8c07ef0",
+    "docs/audits/AUD-012-harnesses/README.md": "a3364b68c985d2f293d24a99937722647c24f1b11cc6755a0d3b2641d4fefa7d",
+    "docs/audits/AUD-012-harnesses/browser/README.md": "93f24c95942c22dcc96c54cfcdee0bdc6799e67ec039708eb563a55335d22839",
     "docs/audits/AUD-012-harnesses/browser/draw-refusal.mjs": "1666d080fab0ded1b958578c97ade71c82da33cc9bd7dff8d578284abe2d4ee1",
     "docs/audits/AUD-012-harnesses/browser/lifecycle.mjs": "c664d00442865038a4685514469b7bef200719ef0c3ae648892f016f54133ace",
-    "docs/audits/AUD-012-harnesses/quality/README.md": "2864177e2e1caffdab7c16d96be5824160f5629c9f858397986f236eb3c1eb70",
+    "docs/audits/AUD-012-harnesses/quality/README.md": "ca3701292eb83d35f9a72bba40a4a69dfb2129609474f6a57d510dc3e91c7d86",
     "docs/audits/AUD-012-harnesses/quality/clone-checker.mjs": "4ecea569d0604cbc03d82a7a842c7cbe2e8d76d3c469d39901fceaa45df2ffaf",
     "docs/audits/AUD-012-harnesses/record.mjs": "353b6d27d23b5c7b5b68b9541f228cf84eccc2de57ec87e7e1816e913922d7ff",
-    "docs/audits/AUD-012-harnesses/rust/README.md": "d450a8029774e93481b5e2a156d41f54f012797e57d11c6f5697ef505b909677",
+    "docs/audits/AUD-012-harnesses/rust/README.md": "88eaae1d2cdba79a3995c076a05269e85a13a3d3753750fae7cdf352a60f0efb",
     "docs/audits/AUD-012-harnesses/rust/public-mutation.rs": "f3d8c347934cfe38b0397fbb55955411bc99212da49bc20c961bd5c8903716c9",
     "docs/audits/AUD-012-harnesses/validate.py": "95302d99b848e8a971ba0bfc5810b9626fa8a75ec59086a5f9762035ccb69821"
   },
@@ -1433,43 +1433,31 @@
     "newAudit": false,
     "documentBindings": [
       {
-        "keyPath": [
-          "harnessHashes",
-          "docs/audits/AUD-012-harnesses/quality/README.md"
-        ],
+        "keyPath": ["harnessHashes", "docs/audits/AUD-012-harnesses/quality/README.md"],
         "document": "docs/audits/AUD-012-harnesses/quality/README.md",
         "originalSha256": "2864177e2e1caffdab7c16d96be5824160f5629c9f858397986f236eb3c1eb70",
-        "redactedSha256": "56140430e6eb9cf50941fcf08a52e95b851a01f1602ef9a1d3e0293e8d71c504",
+        "redactedSha256": "ca3701292eb83d35f9a72bba40a4a69dfb2129609474f6a57d510dc3e91c7d86",
         "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": [
-          "sourceHashes",
-          "docs/measurements/c-engine-2026-09-29.json"
-        ],
+        "keyPath": ["sourceHashes", "docs/measurements/c-engine-2026-09-29.json"],
         "document": "docs/measurements/c-engine-2026-09-29.json",
         "originalSha256": "1017997e8fcea18d674ed039846381a3fdc67381eca374ed6aa0f3177b0a9ad9",
         "redactedSha256": "bdc7bec25249ee4850ad83df01a890abc732fff5ce66ea15fb27b4e1273728e4",
         "change": "owner-authorized amendment of 2026-10-09: time-of-day keys renamed series_1 and series_2; no measurement changed"
       },
       {
-        "keyPath": [
-          "sourceHashes",
-          "docs/measurements/full-operation-2026-09-30.json"
-        ],
+        "keyPath": ["sourceHashes", "docs/measurements/full-operation-2026-09-30.json"],
         "document": "docs/measurements/full-operation-2026-09-30.json",
         "originalSha256": "082818a6db92dc275f2252d34bcea82dfa38cf967a2e95b3b2245e49835ac727",
         "redactedSha256": "f274124b0beee5c9ef34d9dbde293fc7081d43daf2db9f074fc6ead294e92196",
         "change": "its commit reference names the commit that replaced it in the history rewrite of 2026-10-09; no measurement changed; amended again on 2026-10-09"
       },
       {
-        "keyPath": [
-          "harnessHashes",
-          "docs/audits/AUD-012-harnesses/rust/README.md"
-        ],
+        "keyPath": ["harnessHashes", "docs/audits/AUD-012-harnesses/rust/README.md"],
         "document": "docs/audits/AUD-012-harnesses/rust/README.md",
         "originalSha256": "d450a8029774e93481b5e2a156d41f54f012797e57d11c6f5697ef505b909677",
-        "redactedSha256": "bc63468d1ff287f6d2521f01a0b9c9829f4a7238ab54059e13c8cd03e9c4464a",
+        "redactedSha256": "88eaae1d2cdba79a3995c076a05269e85a13a3d3753750fae7cdf352a60f0efb",
         "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun; amended again on 2026-10-09"
       }
     ],
@@ -1484,7 +1472,69 @@
         "commitMap": {
           "ca0086acf545d07bfe008ae340554124a48442bf": "abb16671b641378c0fc3c4d855f8d126498e754b"
         }
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [
+          {
+            "keyPath": ["harnessHashes", "docs/audits/AUD-012-harnesses/README.md"],
+            "document": "docs/audits/AUD-012-harnesses/README.md",
+            "previousSha256": "34b9b285bc05b3c272db5f26938aeb101abe785507a5ac5841a5baddd4ce833d",
+            "previousDocumentSha256": "34b9b285bc05b3c272db5f26938aeb101abe785507a5ac5841a5baddd4ce833d",
+            "redactedSha256": "a3364b68c985d2f293d24a99937722647c24f1b11cc6755a0d3b2641d4fefa7d",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessHashes", "docs/audits/AUD-012-harnesses/browser/README.md"],
+            "document": "docs/audits/AUD-012-harnesses/browser/README.md",
+            "previousSha256": "7e7af8bdfb2a27bcbf5f86dbcad86b0d51c2d91670f50a57808ba7c4e8c07ef0",
+            "previousDocumentSha256": "7e7af8bdfb2a27bcbf5f86dbcad86b0d51c2d91670f50a57808ba7c4e8c07ef0",
+            "redactedSha256": "93f24c95942c22dcc96c54cfcdee0bdc6799e67ec039708eb563a55335d22839",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessHashes", "docs/audits/AUD-012-harnesses/quality/README.md"],
+            "document": "docs/audits/AUD-012-harnesses/quality/README.md",
+            "previousSha256": "2864177e2e1caffdab7c16d96be5824160f5629c9f858397986f236eb3c1eb70",
+            "previousDocumentSha256": "56140430e6eb9cf50941fcf08a52e95b851a01f1602ef9a1d3e0293e8d71c504",
+            "redactedSha256": "ca3701292eb83d35f9a72bba40a4a69dfb2129609474f6a57d510dc3e91c7d86",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessHashes", "docs/audits/AUD-012-harnesses/rust/README.md"],
+            "document": "docs/audits/AUD-012-harnesses/rust/README.md",
+            "previousSha256": "d450a8029774e93481b5e2a156d41f54f012797e57d11c6f5697ef505b909677",
+            "previousDocumentSha256": "bc63468d1ff287f6d2521f01a0b9c9829f4a7238ab54059e13c8cd03e9c4464a",
+            "redactedSha256": "88eaae1d2cdba79a3995c076a05269e85a13a3d3753750fae7cdf352a60f0efb",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "0", "redactedSha256"],
+            "document": "docs/audits/AUD-012-harnesses/quality/README.md",
+            "previousSha256": "56140430e6eb9cf50941fcf08a52e95b851a01f1602ef9a1d3e0293e8d71c504",
+            "previousDocumentSha256": "56140430e6eb9cf50941fcf08a52e95b851a01f1602ef9a1d3e0293e8d71c504",
+            "redactedSha256": "ca3701292eb83d35f9a72bba40a4a69dfb2129609474f6a57d510dc3e91c7d86",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "3", "redactedSha256"],
+            "document": "docs/audits/AUD-012-harnesses/rust/README.md",
+            "previousSha256": "bc63468d1ff287f6d2521f01a0b9c9829f4a7238ab54059e13c8cd03e9c4464a",
+            "previousDocumentSha256": "bc63468d1ff287f6d2521f01a0b9c9829f4a7238ab54059e13c8cd03e9c4464a",
+            "redactedSha256": "88eaae1d2cdba79a3995c076a05269e85a13a3d3753750fae7cdf352a60f0efb",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          }
+        ],
+        "reportDocument": {
+          "document": "docs/audits/audit-12-2026-10-08.md",
+          "previousSha256": "271f8c27acffc8076bc6c4106f6fa29c3e240540a476fde5e41de8dabe539320",
+          "redactedSha256": "6479c9f9e14fe39b783d1c18bfe9bffdcdd0dbe862ca511948f75d290159bb4b"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

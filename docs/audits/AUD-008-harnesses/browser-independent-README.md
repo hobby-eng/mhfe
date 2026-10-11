@@ -1,5 +1,9 @@
 # AUD-008 independent browser seam probe
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 The two `browser-independent-wasm-*.mjs` harnesses supplement the earlier ten production-JavaScript stand-in groups with the real shipped WASM glue and Rust callbacks. They belong to AUD-008 at reviewed commit `b6993bb1c11834a01847d1812b31a24145ab1f18`, including the dirty source bytes captured by the coordinator in `AUD-008-evidence/snapshot.json`. The initial seams probe compares each source hash with that snapshot and verifies that the assembled worker contains the current glue, Argon2 bridge and worker sources byte for byte.
 
 The inputs are the public `abandon … about` BIP39 phrase, an explicitly public password marker and a synthetic constant key marker. It does not compute Argon2, build an artifact or start a browser. The synthetic engine exists only in this audit harness, so its container is not an MHFE vector. Fresh `dist/` and `target/wasm-bindgen/` output from the reviewed source are prerequisites; the coordinator owns their build.

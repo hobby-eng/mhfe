@@ -1,5 +1,9 @@
 # AUD-018 native remediation verification
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These bounded public-data probes verify native CLI findings from AUD-015, AUD-016 and AUD-017 against the AUD-018 release candidate. Reviewed HEAD is `3c60594479302827fe40975b04fd07f9f6fd4b3b`; the dirty code fingerprint is `3ef3c5720216af0ed5dc7328c07d910bb82f99a90b28683ef88310af1a31c2b3`. HEAD alone does not contain the fixes. Local source manifests and fresh build records bind the reviewed bytes; verified source behavior does not close a finding on a signed remediation commit.
 
 The script requires Linux, Python 3, PTYs, `/proc`, a host locale with Unicode character widths, the freshly built `target/release/mhfe`, and `tests/fixtures/suite3-vectors/zero-12.json`. It imports the retained AUD-016 PTY/input helpers in place without changing their source or writing bytecode. Inputs are the published zero-12 container and BIP39 phrase, synthetic passwords, and individual Unicode characters. No KDF completes. Child address spaces are capped at 512 MiB, core files at zero, and terminal sessions cancel with SIGINT and verify restored settings. The low-lock probe sets a 4096-byte memory-lock quota.

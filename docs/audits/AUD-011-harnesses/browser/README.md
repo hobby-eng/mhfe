@@ -1,5 +1,9 @@
 # Browser Refusal Probe
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This AUD-011 harness checks the live browser class's hidden-session request encoding. The audit report records the reviewed dirty-source fingerprint. Inputs are synthetic text and one unpaired surrogate; no real wallet data or secret bytes are printed.
 
 Run from the MHFE repository root using the configured Node.js:

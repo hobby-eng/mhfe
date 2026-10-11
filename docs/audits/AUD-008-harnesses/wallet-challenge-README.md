@@ -1,5 +1,9 @@
 # AUD-008 independent wallet challenge
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This supplement challenges Dash Platform address parsing and BIP32 path/count boundaries in the
 dirty source snapshot at `b6993bb1c11834a01847d1812b31a24145ab1f18`. The audit snapshot and
 `wallet-independent-review.json` bind the reviewed source bytes; the commit alone does not.

@@ -1,5 +1,9 @@
 # AUD-016 native boundary probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These small, public-data probes review the native CLI, terminal input and memory-locking status. They belong to AUD-016, reviewed HEAD `3c60594479302827fe40975b04fd07f9f6fd4b3b` and the pre-existing dirty source fingerprint `0c282ddd47edbe418644f19a5ae136fedd68fc13cb1e3b61972dc7f7e6d74f41`. No production, test or fixture file was changed by this reviewer.
 
 The coordinator rebuilt the release CLI from that source. Its SHA-256 is `8f114cd22a6aa6d7cfc4df03f65ac6cb526f23d5ff1c21820ac05c3e8914e4a1` and `--version` reports `mhfe 0.5.1`. Earlier artifact probes had the same binary hash; repeated probes add no independent coverage. The fresh build record is local-only in `docs/audits/AUD-016-evidence/build-native.command.json`.

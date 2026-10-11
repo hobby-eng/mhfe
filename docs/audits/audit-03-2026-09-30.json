@@ -1608,7 +1608,7 @@
     }
   ],
   "harnessHashes": {
-    "README.md": "5e709d1a0ecd818d87615cc0acfb8e6459e668390118611ae0e3afce039cb959",
+    "README.md": "f60df3dc039f82880a65b7c358918bcf18eebbfb021d068bf34fc52ccf2c0a8d",
     "browser.mjs": "4f19963d104355e70292aae7c81a33b2800447859cc5932aecd6ba7d36fd79c5",
     "layout32.mjs": "5bf1dd0ce38a31efd16c57f6f47a5627ed4efd9dc0d73d6475d0e8579e699c6c",
     "layout32.rs": "1f53965dbc047018a2b11c0473cc5e158594976c97c909cd669686e1c426227e",
@@ -1642,11 +1642,7 @@
           "Commit references of the history replaced by the privacy rewrite of 2026-10-09 now name the commits that replaced them (AUD-015-DOC001): 61c928e -> 63dd042, bc51499 -> b6401c8, ea263ec -> e0e7b62."
         ],
         "note": "Documentation-only edit; no check was rerun.",
-        "commitMap": {
-          "61c928e": "63dd042",
-          "bc51499": "b6401c8",
-          "ea263ec": "e0e7b62"
-        }
+        "commitMap": { "61c928e": "63dd042", "bc51499": "b6401c8", "ea263ec": "e0e7b62" }
       },
       {
         "dateUtc": "2026-10-09",
@@ -1663,7 +1659,29 @@
           "fcf3876": "e0e7b62",
           "fcf38769706c371a08077b859a65ce7526fac990": "e0e7b622f4c29835bcf3e655db230d674fba7ecf"
         }
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [
+          {
+            "keyPath": ["harnessHashes", "README.md"],
+            "document": "docs/audits/AUD-003-harnesses/README.md",
+            "previousSha256": "5e709d1a0ecd818d87615cc0acfb8e6459e668390118611ae0e3afce039cb959",
+            "previousDocumentSha256": "3e9f5fdc1b01551e6eeb89113f7bf4aefc0ebd305e520a2b7df215bf4b89e294",
+            "redactedSha256": "f60df3dc039f82880a65b7c358918bcf18eebbfb021d068bf34fc52ccf2c0a8d",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          }
+        ],
+        "reportDocument": {
+          "document": "docs/audits/audit-03-2026-09-30.md",
+          "previousSha256": "ae15df4a7d4f7c8c79c65d225e784ca1fae115a2c5fe7e58ebbd619e9b88d130",
+          "redactedSha256": "b2830babe968c0861fdb2d265b86a7135151b4fd74b5deb36770c44588b0a246"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

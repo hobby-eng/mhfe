@@ -1,5 +1,9 @@
 # AUD-018 browser remediation probes and static review
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This wrapper supports AUD-018 at dirty HEAD `3c60594479302827fe40975b04fd07f9f6fd4b3b`.
 The coordinator's source/code fingerprints and per-file hashes identify the reviewed remediation
 bytes. It reruns the unchanged AUD-016 `page-protocol.mjs` and `worker-cleanup.mjs` harnesses.

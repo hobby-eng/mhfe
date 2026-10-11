@@ -1,5 +1,7 @@
 # MHFE audit records
 
+Time zone: UTC (+00:00)
+
 These files record reviews of the experimental MHFE implementation. They are evidence reports, not
 cryptographic proofs or independent security certifications.
 
@@ -59,7 +61,7 @@ The AUD-019 machine-readable companion is [audit-19-2026-10-10.json](audit-19-20
 
 ## Privacy metadata
 
-Privacy-only metadata redaction: home paths use /home/user, location-specific annotations are omitted, and timestamps use UTC. Recorded findings, outcomes and reviewed-source hashes are unchanged; this is not a new audit.
+Privacy-only metadata redaction: home paths use /home/user, location-specific annotations are omitted, and timestamps use UTC. Recorded findings, outcomes and reviewed-source hashes are unchanged; this is not a new audit. No checks were rerun for this documentation-only update.
 
 Owner-authorized documentation-only amendment of 2026-10-09: commit references of the history replaced by the privacy rewrite now name the commits that replaced them (AUD-015-DOC001): 6b349ce -> bda39d7, a3b44c3 -> d343789.
 

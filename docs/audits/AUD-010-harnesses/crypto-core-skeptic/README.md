@@ -1,5 +1,9 @@
 # AUD-010 crypto-core skeptic harness
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Audit-only script of the AUD-010 skeptic who challenged the two crypto-core findings (the wallet
 check on short readings and an empty passphrase; the strict phrase reading of fingerprints and
 address searches) of mhfe at HEAD `d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0` plus the uncommitted

@@ -1,5 +1,9 @@
 # AUD-008 native secret and isolation probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These bounded probes belong to the MHFE pre-release review at HEAD `b6993bb1c11834a01847d1812b31a24145ab1f18` and the recorded dirty source bytes. They use only public BIP39 reference entropy or synthetic passwords/datagrams. They execute no Argon2 operation or full vector replay. Source hashes and actual compile commands are retained in the local `../AUD-008-evidence/secrets-*` records.
 
 Run from the authoritative MHFE repository root. Existing matching pinned Rust dependency `.rlib` files under `target/debug/deps` are required; the scripts select the newest library for each needed crate and use the repository's Rust toolchain homes. They do not invoke Cargo or download dependencies.

@@ -1,5 +1,9 @@
 # AUD-017 R4: build, release, architecture, documentation and audit records
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Audit-only probes of reviewer R4 of AUD-017, an ordinary compact-team audit of mhfe. The reviewed
 source is the uncommitted 0.5.1 working tree on commit `3c60594` (source fingerprint
 `b2addb36…cbc7`). The probes only read the repository (and, for the commit and procedure checks, the

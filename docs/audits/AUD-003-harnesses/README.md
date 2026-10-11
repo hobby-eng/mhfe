@@ -1,5 +1,9 @@
 # AUD-003 implementation audit harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These scripts belong to the review of MHFE branch `suite-3-c-engine`, implementation commit
 `cc91b0bab58f51c08a3562a5ef441e7faab726b4`, against specification commit
 `7bda5b3d0be275578434411c587fb9e7532a89d1`. They use public test data only.

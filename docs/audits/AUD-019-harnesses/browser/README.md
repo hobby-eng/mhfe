@@ -1,5 +1,9 @@
 # AUD-019 browser harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These harnesses belong to AUD-019, MHFE 0.6.0 at reviewed commit
 `66f142566464255e331763966b00ea1681c2dabd`. They use public synthetic data and the authoritative
 checkouts in place. They do not run Argon2, replay vectors, build packages or launch browsers.

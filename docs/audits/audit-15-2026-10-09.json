@@ -2732,5 +2732,25 @@
     "Residual memory was not measured: the native tool is non-dumpable; findings about unwiped copies are source-traced.",
     "This is a compact-team audit with automated probes and independent oracles; it is not a certification and does not show that no defect remains."
   ],
-  "assessment": "28 findings: 4 medium and 24 low; no critical or high. Four are release blocking: FUN001 (a specification MUST in rekey), SEC001 (a mistyped secret can reach the scrollback), and BLD001 and DOC001, which block publishing the rewritten history rather than the code. The cipher, its formats and profiles, BIP39 reading, the wallet derivations and the browser package's secret handling agreed with independent references in every probed case."
+  "assessment": "28 findings: 4 medium and 24 low; no critical or high. Four are release blocking: FUN001 (a specification MUST in rekey), SEC001 (a mistyped secret can reach the scrollback), and BLD001 and DOC001, which block publishing the rewritten history rather than the code. The cipher, its formats and profiles, BIP39 reading, the wallet derivations and the browser package's secret handling agreed with independent references in every probed case.",
+  "privacyRedaction": {
+    "timeZone": "UTC (+00:00)",
+    "timestampsUTC": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [],
+        "reportDocument": {
+          "document": "docs/audits/audit-15-2026-10-09.md",
+          "previousSha256": "72d90938c6c037f887e30500c491041bba33ed0115c545b878ee247c1ea369ed",
+          "redactedSha256": "d2966b34febe81d6388a808ef821e0319e3c03fdeab9a1c8be8a4744480dd198"
+        }
+      }
+    ],
+    "kind": "privacy-only-metadata-redaction"
+  }
 }

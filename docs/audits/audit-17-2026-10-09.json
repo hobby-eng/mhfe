@@ -1219,5 +1219,25 @@
     "Repair-word changes in src/repair.rs were only skimmed.",
     "Model and reasoning effort are recorded as reported by the client."
   ],
-  "assessment": "12 findings: 2 medium and 10 low; one release blocking (BLD001)."
+  "assessment": "12 findings: 2 medium and 10 low; one release blocking (BLD001).",
+  "privacyRedaction": {
+    "timeZone": "UTC (+00:00)",
+    "timestampsUTC": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [],
+        "reportDocument": {
+          "document": "docs/audits/audit-17-2026-10-09.md",
+          "previousSha256": "350e6a0add5c2e6867c6ff30ff52f74f714d3dfe2028a1a13138166150153109",
+          "redactedSha256": "72a490f8b407b795a48ce103f04261fe5c57374b05bf8eb4f24651fbd28fa99c"
+        }
+      }
+    ],
+    "kind": "privacy-only-metadata-redaction"
+  }
 }

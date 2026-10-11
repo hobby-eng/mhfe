@@ -410,7 +410,20 @@
         "commitMap": {
           "f4f7b017d21cbda51283f9eaa973a0cc161b95d6": "d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0"
         }
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [],
+        "reportDocument": {
+          "document": "docs/audits/audit-09-2026-10-06.md",
+          "previousSha256": "8fd05716ee86bf791c2f98968e884dcfa9d3069a27dec685dd7eee86b1878dfb",
+          "redactedSha256": "14d86a52f9a1bf6fb3dcc56e2df09135b61d8e5af94ea672d53b0a948702e23b"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

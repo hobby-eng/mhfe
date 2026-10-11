@@ -1,5 +1,9 @@
 # AUD-008 option, documentation and terminal remediation checks
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These focused follow-ups check fixes after `50044269f5fb02aaa901c8ff7d20b7b1b975e95c`.
 The final UI patch is uncommitted and is bound by the source hashes in the new evidence.
 They use public fixtures only, call no Argon2, do not rebuild the project, and never overwrite

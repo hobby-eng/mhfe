@@ -1,5 +1,9 @@
 # AUD-008 scoped research ranking
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This harness belongs to reviewer 11's optional-improvement contribution to AUD-008. It binds seven ranked opportunities to exact source lines and shared audit evidence. It confirms record consistency only; it does not test the proposed implementations or establish release acceptance.
 
 The reviewed commit is `b6993bb1c11834a01847d1812b31a24145ab1f18`, with the coordinator's dirty-source fingerprint `9e5357c0b085c7f68ec3c30b6940147b2aaaf89bb8f6dcbf9ea0d2d6593c790a`. Existing owner fixes in `wallet.rs` and `hidden_input.rs` are part of that baseline. The read-only specification pin is `28e50e049d48cf1d5a8a529380192b6371458a57`.

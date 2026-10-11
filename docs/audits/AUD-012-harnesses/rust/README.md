@@ -1,5 +1,9 @@
 # Public recovered-result mutation witness
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 AUD-012 reviews dirty MHFE source on HEAD `abb16671b641378c0fc3c4d855f8d126498e754b`;
 use the report's fingerprint for exact identity. `public-mutation.rs` demonstrates that
 safe external Rust code can grow the public recovered phrase while the private lock guard

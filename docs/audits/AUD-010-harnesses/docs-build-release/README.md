@@ -1,5 +1,9 @@
 # AUD-010 probes: documentation, build and release
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Probes of the docs-build-release reviewer of AUD-010, for the MHFE working tree on HEAD
 `d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0` with source fingerprint
 `372da577dd586932d6b3fa47711d97bc25b8fa908a980cd2373b704724ec796b` (227 paths,

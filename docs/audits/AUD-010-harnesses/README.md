@@ -1,5 +1,9 @@
 # AUD-010 harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Audit-only scripts of [AUD-010](../audit-10-2026-10-07.md), the full-scope audit of the uncommitted
 modular refactor and the AUD-009 remediation. They were written for the MHFE working tree on HEAD
 `d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0` with source fingerprint

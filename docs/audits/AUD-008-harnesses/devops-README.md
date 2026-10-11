@@ -1,5 +1,9 @@
 # AUD-008 DevOps probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These bounded probes belong to the review of MHFE commit
 `b6993bb1c11834a01847d1812b31a24145ab1f18` with its captured dirty source fingerprint
 `9e5357c0b085c7f68ec3c30b6940147b2aaaf89bb8f6dcbf9ea0d2d6593c790a`.

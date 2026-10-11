@@ -1,5 +1,9 @@
 # AUD-015 R1 harnesses: cryptographic core and formats
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Audit-only probes of reviewer R1 of AUD-015 (CHECK-SEC-004, CHECK-FUN-001, CHECK-FUN-006). They
 were run against HEAD `4c3a6909bced0f0907f61ae291b11bb6bb419689` plus the uncommitted working tree
 of source fingerprint `f79444dc9884d11a54c2c0b316ce31bf3a3a734e5bb604e9667df09cf0482a93`, with the

@@ -4842,7 +4842,7 @@
   "harnesses": {
     "readme": "docs/audits/AUD-010-harnesses/README.md",
     "files": {
-      "docs/audits/AUD-010-harnesses/README.md": "3f57738ea3c24cf7bba2384a5075184c6d753339757c0922b54796415552225d",
+      "docs/audits/AUD-010-harnesses/README.md": "94a5d3b1ba5939e861fa4468bdf3cdd019d6693c9336c0260d3976851de635a2",
       "docs/audits/AUD-010-harnesses/browser-package/inputs.mjs": "078ecabaf1a81fbb9c9a708990be617cd0fd2ade545ce8fc6bb2447090d3f7f6",
       "docs/audits/AUD-010-harnesses/browser-package/lib.mjs": "2c0d843509fc1364a496f3c61d2955675d9516a637cbf44c25bd4fa56507d604",
       "docs/audits/AUD-010-harnesses/browser-package/static-scan.mjs": "80083cbcbbcfdb5638fe482f57044e22843d0f4dc1562ed71b0be8e3dc9f0bf5",
@@ -4854,15 +4854,15 @@
       "docs/audits/AUD-010-harnesses/cli-terminal/new-check-default.py": "b4c16af9d14469c3d553bf8db090a80e1a10a1f76d5d189ed01c637865f87b36",
       "docs/audits/AUD-010-harnesses/cli-terminal/ptyrun.py": "23ea4190326e0f56036b497d6fe0ae3ea135b90cefce1a3a6a14d97afcadcd5b",
       "docs/audits/AUD-010-harnesses/cli-terminal/scripts-mode.py": "1be656ae5f9faf5cd78f816517c1466b27dd48cc0d92eaccce1ebca45f92b0e1",
-      "docs/audits/AUD-010-harnesses/crypto-core/README.md": "bc6dc7ebc780ec82f436492c865f16fb3317ee9f585dc552fd1e9dedc04512c5",
+      "docs/audits/AUD-010-harnesses/crypto-core/README.md": "32a6f0abd023c35fdfd0aa8a126526284b38e230bc079f78fa7aa793c60958c6",
       "docs/audits/AUD-010-harnesses/crypto-core/oracle.py": "00636ef35d4c2295e2c0ce94acc19963f699792e120bd76a4b13d3d58fa010f6",
       "docs/audits/AUD-010-harnesses/crypto-core/probe/Cargo.toml": "939412c4c087f64097c38e6d52646c293e9047dbcf779c0740c6c7a6b34bf04a",
       "docs/audits/AUD-010-harnesses/crypto-core/probe/src/main.rs": "9c297255e2c47beb23e83c9ef82664761945ed06f2d7080710574f3427220a5c",
       "docs/audits/AUD-010-harnesses/crypto-core/probe.py": "8609ac1bdbe05892bfdfe2deaaea6de15a078cf3752514427dc4533a41785d34",
       "docs/audits/AUD-010-harnesses/crypto-core/short_reading_wallet_check.py": "f31acdf5228d70c407f48da2bc4a0ae4faceb1c4d82bb046906190ec8b8fbfcf",
-      "docs/audits/AUD-010-harnesses/crypto-core-skeptic/README.md": "dcd738ab56f8afe76c629e515d27c79c5649ba68097f35c87dfb1fe42880f071",
+      "docs/audits/AUD-010-harnesses/crypto-core-skeptic/README.md": "bdc14a4eb1557d26092758dccafca9bef3a3859d613dda5d8121c542d9cb41eb",
       "docs/audits/AUD-010-harnesses/crypto-core-skeptic/challenge.py": "cd0a6ac2fa15b3520de722d2f04a6fbee889e2c2cb1d932fd6cac41f9df39e3b",
-      "docs/audits/AUD-010-harnesses/docs-build-release/README.md": "958d681c06d49aac91c1a2f141d1b39647cbb7e1e1e8af3552a90d7c9a4fe3df",
+      "docs/audits/AUD-010-harnesses/docs-build-release/README.md": "7e2c2ac02545fd44bca82e9171fce19623039a5b8f4b8faa01ece60d77d32a82",
       "docs/audits/AUD-010-harnesses/docs-build-release/argon2-vs-canonical.sh": "c8d7bd154e26a686e1962944d5c9281e3e7fe9b70763d9d7a9db85d7cd4b493c",
       "docs/audits/AUD-010-harnesses/docs-build-release/audit-records.py": "ab1708d2dfbd2a49e7c4d1548e7406dc5d7c958ffc39de52baac2dce456c225f",
       "docs/audits/AUD-010-harnesses/docs-build-release/cli-options-in-docs.mjs": "a0946b6f24a82fc1a40ac8a9c7eb8956b50f420b8686a112d7e8c379f3edea61",
@@ -4877,7 +4877,7 @@
       "docs/audits/AUD-010-harnesses/remediation/source-bytes.py": "42fb2cd188e89b7b818bbe7fbcaf9b486fadf66cc2984fffcf25dd7af17b9e0a",
       "docs/audits/AUD-010-harnesses/run-capped.sh": "ad1ad53de923ef69c67f4a6bb2ee4406df5ea6b48709a55e5f5e1a3d02908e76",
       "docs/audits/AUD-010-harnesses/run-logged.sh": "39f9ebf0ce35df78207b02e14542858d205f0d17688cdf18122efa707281d1eb",
-      "docs/audits/AUD-010-harnesses/secrets-security/README.md": "29cdeceed810d57c1b57458f0a35accca3c820f364582125cc36c848307dfaf4",
+      "docs/audits/AUD-010-harnesses/secrets-security/README.md": "7ce7e0215a26441c49e6da73aa66a6f27a81644c67b55396f45d6e21579d4208",
       "docs/audits/AUD-010-harnesses/secrets-security/builder-paths.mjs": "d96e1d4afd0d3d60fcb6f9d2ddd8c02954594982dd90ea9f378c6184fa7172ea",
       "docs/audits/AUD-010-harnesses/secrets-security/cli-process-protection.py": "8b5e60f7403944465d32c08626b1e9a4edf3e54ef1c1e3af86d6a52d9a5fe381",
       "docs/audits/AUD-010-harnesses/secrets-security/client-lifecycle.mjs": "04de93697090bf89a5098639d871f82c31c72ba8852b5d5358dedfa3a08ef399",
@@ -4920,44 +4920,28 @@
     "newAudit": false,
     "documentBindings": [
       {
-        "keyPath": [
-          "harnesses",
-          "files",
-          "docs/audits/AUD-010-harnesses/README.md"
-        ],
+        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/README.md"],
         "document": "docs/audits/AUD-010-harnesses/README.md",
         "originalSha256": "3f57738ea3c24cf7bba2384a5075184c6d753339757c0922b54796415552225d",
-        "redactedSha256": "9219b319116c911c26cc6049247afc11162183878d0883bb2c7f955279a0c2b3",
+        "redactedSha256": "94a5d3b1ba5939e861fa4468bdf3cdd019d6693c9336c0260d3976851de635a2",
         "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": [
-          "harnesses",
-          "files",
-          "docs/audits/AUD-010-harnesses/crypto-core/README.md"
-        ],
+        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/crypto-core/README.md"],
         "document": "docs/audits/AUD-010-harnesses/crypto-core/README.md",
         "originalSha256": "bc6dc7ebc780ec82f436492c865f16fb3317ee9f585dc552fd1e9dedc04512c5",
-        "redactedSha256": "fa80bb113d929eda5047c0d9e2b238fdefe63644cfc1fdeca07d363851dea1dc",
+        "redactedSha256": "32a6f0abd023c35fdfd0aa8a126526284b38e230bc079f78fa7aa793c60958c6",
         "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": [
-          "harnesses",
-          "files",
-          "docs/audits/AUD-010-harnesses/crypto-core/oracle.py"
-        ],
+        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/crypto-core/oracle.py"],
         "document": "docs/audits/AUD-010-harnesses/crypto-core/oracle.py",
         "originalSha256": "00636ef35d4c2295e2c0ce94acc19963f699792e120bd76a4b13d3d58fa010f6",
         "redactedSha256": "d2c56ba0403891e9387d09789e73fa698c0e4964c980cbb10a614ba900e057f9",
         "change": "privacy-only runtime path portability; the original execution digest is retained; no audit checks were rerun"
       },
       {
-        "keyPath": [
-          "harnesses",
-          "files",
-          "docs/audits/AUD-010-harnesses/crypto-core/probe.py"
-        ],
+        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/crypto-core/probe.py"],
         "document": "docs/audits/AUD-010-harnesses/crypto-core/probe.py",
         "originalSha256": "8609ac1bdbe05892bfdfe2deaaea6de15a078cf3752514427dc4533a41785d34",
         "redactedSha256": "92bd6a99d6153a17fc74a9e1634b2ab5a704415e18b3906a5c1bbd7c796dd8cd",
@@ -4982,7 +4966,7 @@
         ],
         "document": "docs/audits/AUD-010-harnesses/crypto-core-skeptic/README.md",
         "originalSha256": "dcd738ab56f8afe76c629e515d27c79c5649ba68097f35c87dfb1fe42880f071",
-        "redactedSha256": "55df15e38676bb1703bc27fa8639b9012b94c9a288b22673384f435a8b51cba5",
+        "redactedSha256": "bdc14a4eb1557d26092758dccafca9bef3a3859d613dda5d8121c542d9cb41eb",
         "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
@@ -4993,18 +4977,14 @@
         ],
         "document": "docs/audits/AUD-010-harnesses/docs-build-release/README.md",
         "originalSha256": "958d681c06d49aac91c1a2f141d1b39647cbb7e1e1e8af3552a90d7c9a4fe3df",
-        "redactedSha256": "30376be5b81eb4fb94433857304f7c403890b4d4148cc02550e5fa4221a5d2b9",
+        "redactedSha256": "7e2c2ac02545fd44bca82e9171fce19623039a5b8f4b8faa01ece60d77d32a82",
         "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": [
-          "harnesses",
-          "files",
-          "docs/audits/AUD-010-harnesses/secrets-security/README.md"
-        ],
+        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/secrets-security/README.md"],
         "document": "docs/audits/AUD-010-harnesses/secrets-security/README.md",
         "originalSha256": "29cdeceed810d57c1b57458f0a35accca3c820f364582125cc36c848307dfaf4",
-        "redactedSha256": "75fa60489de5bc28e7fd6fcbe08b91cfe8494f31a0c116d56a43cb774e1455ad",
+        "redactedSha256": "7ce7e0215a26441c49e6da73aa66a6f27a81644c67b55396f45d6e21579d4208",
         "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun; amended again on 2026-10-09"
       }
     ],
@@ -5017,10 +4997,7 @@
           "A session scratchpad path replaced by <scratchpad>."
         ],
         "note": "Documentation-only edit; no check was rerun.",
-        "commitMap": {
-          "52b6b36": "dd43975",
-          "a38a044": "d7af4b1"
-        }
+        "commitMap": { "52b6b36": "dd43975", "a38a044": "d7af4b1" }
       },
       {
         "dateUtc": "2026-10-09",
@@ -5047,7 +5024,113 @@
           "b2395276bba3c593c518714caa29409b69f45961": "2cd5e4c96a2bf2cc177f8b99b81fa7427bdf1b86"
         },
         "note": "Documentation-only edit; no check was rerun."
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [
+          {
+            "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/README.md"],
+            "document": "docs/audits/AUD-010-harnesses/README.md",
+            "previousSha256": "3f57738ea3c24cf7bba2384a5075184c6d753339757c0922b54796415552225d",
+            "previousDocumentSha256": "9219b319116c911c26cc6049247afc11162183878d0883bb2c7f955279a0c2b3",
+            "redactedSha256": "94a5d3b1ba5939e861fa4468bdf3cdd019d6693c9336c0260d3976851de635a2",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": [
+              "harnesses",
+              "files",
+              "docs/audits/AUD-010-harnesses/crypto-core-skeptic/README.md"
+            ],
+            "document": "docs/audits/AUD-010-harnesses/crypto-core-skeptic/README.md",
+            "previousSha256": "dcd738ab56f8afe76c629e515d27c79c5649ba68097f35c87dfb1fe42880f071",
+            "previousDocumentSha256": "55df15e38676bb1703bc27fa8639b9012b94c9a288b22673384f435a8b51cba5",
+            "redactedSha256": "bdc14a4eb1557d26092758dccafca9bef3a3859d613dda5d8121c542d9cb41eb",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/crypto-core/README.md"],
+            "document": "docs/audits/AUD-010-harnesses/crypto-core/README.md",
+            "previousSha256": "bc6dc7ebc780ec82f436492c865f16fb3317ee9f585dc552fd1e9dedc04512c5",
+            "previousDocumentSha256": "fa80bb113d929eda5047c0d9e2b238fdefe63644cfc1fdeca07d363851dea1dc",
+            "redactedSha256": "32a6f0abd023c35fdfd0aa8a126526284b38e230bc079f78fa7aa793c60958c6",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": [
+              "harnesses",
+              "files",
+              "docs/audits/AUD-010-harnesses/docs-build-release/README.md"
+            ],
+            "document": "docs/audits/AUD-010-harnesses/docs-build-release/README.md",
+            "previousSha256": "958d681c06d49aac91c1a2f141d1b39647cbb7e1e1e8af3552a90d7c9a4fe3df",
+            "previousDocumentSha256": "30376be5b81eb4fb94433857304f7c403890b4d4148cc02550e5fa4221a5d2b9",
+            "redactedSha256": "7e2c2ac02545fd44bca82e9171fce19623039a5b8f4b8faa01ece60d77d32a82",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": [
+              "harnesses",
+              "files",
+              "docs/audits/AUD-010-harnesses/secrets-security/README.md"
+            ],
+            "document": "docs/audits/AUD-010-harnesses/secrets-security/README.md",
+            "previousSha256": "29cdeceed810d57c1b57458f0a35accca3c820f364582125cc36c848307dfaf4",
+            "previousDocumentSha256": "75fa60489de5bc28e7fd6fcbe08b91cfe8494f31a0c116d56a43cb774e1455ad",
+            "redactedSha256": "7ce7e0215a26441c49e6da73aa66a6f27a81644c67b55396f45d6e21579d4208",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "0", "redactedSha256"],
+            "document": "docs/audits/AUD-010-harnesses/README.md",
+            "previousSha256": "9219b319116c911c26cc6049247afc11162183878d0883bb2c7f955279a0c2b3",
+            "previousDocumentSha256": "9219b319116c911c26cc6049247afc11162183878d0883bb2c7f955279a0c2b3",
+            "redactedSha256": "94a5d3b1ba5939e861fa4468bdf3cdd019d6693c9336c0260d3976851de635a2",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "1", "redactedSha256"],
+            "document": "docs/audits/AUD-010-harnesses/crypto-core/README.md",
+            "previousSha256": "fa80bb113d929eda5047c0d9e2b238fdefe63644cfc1fdeca07d363851dea1dc",
+            "previousDocumentSha256": "fa80bb113d929eda5047c0d9e2b238fdefe63644cfc1fdeca07d363851dea1dc",
+            "redactedSha256": "32a6f0abd023c35fdfd0aa8a126526284b38e230bc079f78fa7aa793c60958c6",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "5", "redactedSha256"],
+            "document": "docs/audits/AUD-010-harnesses/crypto-core-skeptic/README.md",
+            "previousSha256": "55df15e38676bb1703bc27fa8639b9012b94c9a288b22673384f435a8b51cba5",
+            "previousDocumentSha256": "55df15e38676bb1703bc27fa8639b9012b94c9a288b22673384f435a8b51cba5",
+            "redactedSha256": "bdc14a4eb1557d26092758dccafca9bef3a3859d613dda5d8121c542d9cb41eb",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "6", "redactedSha256"],
+            "document": "docs/audits/AUD-010-harnesses/docs-build-release/README.md",
+            "previousSha256": "30376be5b81eb4fb94433857304f7c403890b4d4148cc02550e5fa4221a5d2b9",
+            "previousDocumentSha256": "30376be5b81eb4fb94433857304f7c403890b4d4148cc02550e5fa4221a5d2b9",
+            "redactedSha256": "7e2c2ac02545fd44bca82e9171fce19623039a5b8f4b8faa01ece60d77d32a82",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["privacyRedaction", "documentBindings", "7", "redactedSha256"],
+            "document": "docs/audits/AUD-010-harnesses/secrets-security/README.md",
+            "previousSha256": "75fa60489de5bc28e7fd6fcbe08b91cfe8494f31a0c116d56a43cb774e1455ad",
+            "previousDocumentSha256": "75fa60489de5bc28e7fd6fcbe08b91cfe8494f31a0c116d56a43cb774e1455ad",
+            "redactedSha256": "7ce7e0215a26441c49e6da73aa66a6f27a81644c67b55396f45d6e21579d4208",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          }
+        ],
+        "reportDocument": {
+          "document": "docs/audits/audit-10-2026-10-07.md",
+          "previousSha256": "0c559c4b873ce3a5c0550b676eb227b6db1b3e720268e025b810512ad566c8c7",
+          "redactedSha256": "6af90601cee28fb7e254d3416041134c9ed138dc4d2323727317fb5b4add8e41"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

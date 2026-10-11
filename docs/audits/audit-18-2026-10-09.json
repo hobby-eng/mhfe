@@ -2303,21 +2303,21 @@
     "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
   },
   "harnessBindings": {
-    "docs/audits/AUD-018-harnesses/README.md": "c453c380f58ab42c35f80c491276c27489c59311886ea0b0d8b7ab296def7a77",
+    "docs/audits/AUD-018-harnesses/README.md": "80ab6bc5999ef7dcf95883e118277c41f4d65ce118509c6aa1cfc0552d0aa326",
     "docs/audits/AUD-018-harnesses/artifacts.py": "56bcdf4d4355e081ec34317b740689fe5ff23b8f0ccc2d969c22ec8270a3e31f",
     "docs/audits/AUD-018-harnesses/assemble.py": "f458d2b771d20d0ee61abca4627a54b4ceaba223b396430e097ab1b1a5ae6230",
     "docs/audits/AUD-018-harnesses/bounded.sh": "567d03dd6c804fc4840232df5a6f4e6aac57e0e84190b4e4e08b384e317b0b19",
-    "docs/audits/AUD-018-harnesses/browser/README.md": "f62edf0a5b0a51875f3ec2a2983ecc890aac622598bd6bc634a0a5a76dfebe26",
+    "docs/audits/AUD-018-harnesses/browser/README.md": "148235d1ee31da2ab28f155bb2ff432e652042f5fccaaf9cff559715d4e20433",
     "docs/audits/AUD-018-harnesses/browser/bounded.sh": "4b925546ebd2ad9e2ce61b87aa09e6032078ad6b82b90c3d2c6058845fc91bf0",
     "docs/audits/AUD-018-harnesses/browser/loader-source-bindings.py": "0e7866b7e07aa1aaa09496e755b3a968eb4b689cc7c8bcecd675493dfc74b56d",
     "docs/audits/AUD-018-harnesses/browser/static-malicious-scan.py": "25f57ac980c31439108ca25c4dd1d059abade5ae235bde4f1383ba2811912241",
     "docs/audits/AUD-018-harnesses/canonical.sh": "06a1ea3a1a5c98290448ed35ab72a5c645cf240af90e3e3322348490fd89a3ba",
     "docs/audits/AUD-018-harnesses/compare-canonical.py": "47883ded7be82287f904019204ed780ef35869d8a13b8aac8ef3ea5a77fed4a5",
-    "docs/audits/AUD-018-harnesses/core/README.md": "6d64f04836263840adba69ae9028abd1a0f4c47f4f50aa016d4c62120bcfaddb",
+    "docs/audits/AUD-018-harnesses/core/README.md": "c7c257c96029f926ed1f55b01730c13c636d325873d3fc0dc0b26cc628650f5b",
     "docs/audits/AUD-018-harnesses/core/source_identity.py": "f537c69fac133422257af3e9da7d83a5283ddc03ff65fdb8e399fb1523399a88",
     "docs/audits/AUD-018-harnesses/docker-cgroup.py": "20a0e76d9038f348b6c8c55998eb3c21c75e6bbf78bb4e5a0530dc29117ca544",
     "docs/audits/AUD-018-harnesses/metadata.py": "ae2b1a93b87a8366c2ebe5aef29b4bfa7325962bebb67aae2ef74d250efe4027",
-    "docs/audits/AUD-018-harnesses/native/README.md": "85142978469b9d326f16c726f7f23171ce25d2be8b92e08a817e3e58894691c7",
+    "docs/audits/AUD-018-harnesses/native/README.md": "f62a2c708446bdb8e05d3564f4486237b2180716143471c18bc6a7935faf5220",
     "docs/audits/AUD-018-harnesses/native/verify-boundaries.py": "d1487eb5cfb7e1f45bc9f53e932354da321193005a5c35fede1c4bbd3e24b9d4",
     "docs/audits/AUD-018-harnesses/native/verify-python-path-controls.py": "b896e9c411736743ca4119cabefcd1b0dc8f96034f4803016afe72ba1cc3f23b",
     "docs/audits/AUD-018-harnesses/run.py": "89cee6f71ba06fcf516f4334a424d6f8a51306c70815e5b2955f963d3925f485",
@@ -2649,5 +2649,58 @@
     "homePaths": "/home/user",
     "times": "UTC",
     "localOriginalEvidencePreserved": true
+  },
+  "privacyRedaction": {
+    "timeZone": "UTC (+00:00)",
+    "timestampsUTC": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [
+          {
+            "keyPath": ["harnessBindings", "docs/audits/AUD-018-harnesses/README.md"],
+            "document": "docs/audits/AUD-018-harnesses/README.md",
+            "previousSha256": "c453c380f58ab42c35f80c491276c27489c59311886ea0b0d8b7ab296def7a77",
+            "previousDocumentSha256": "c453c380f58ab42c35f80c491276c27489c59311886ea0b0d8b7ab296def7a77",
+            "redactedSha256": "80ab6bc5999ef7dcf95883e118277c41f4d65ce118509c6aa1cfc0552d0aa326",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessBindings", "docs/audits/AUD-018-harnesses/browser/README.md"],
+            "document": "docs/audits/AUD-018-harnesses/browser/README.md",
+            "previousSha256": "f62edf0a5b0a51875f3ec2a2983ecc890aac622598bd6bc634a0a5a76dfebe26",
+            "previousDocumentSha256": "f62edf0a5b0a51875f3ec2a2983ecc890aac622598bd6bc634a0a5a76dfebe26",
+            "redactedSha256": "148235d1ee31da2ab28f155bb2ff432e652042f5fccaaf9cff559715d4e20433",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessBindings", "docs/audits/AUD-018-harnesses/core/README.md"],
+            "document": "docs/audits/AUD-018-harnesses/core/README.md",
+            "previousSha256": "6d64f04836263840adba69ae9028abd1a0f4c47f4f50aa016d4c62120bcfaddb",
+            "previousDocumentSha256": "6d64f04836263840adba69ae9028abd1a0f4c47f4f50aa016d4c62120bcfaddb",
+            "redactedSha256": "c7c257c96029f926ed1f55b01730c13c636d325873d3fc0dc0b26cc628650f5b",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          },
+          {
+            "keyPath": ["harnessBindings", "docs/audits/AUD-018-harnesses/native/README.md"],
+            "document": "docs/audits/AUD-018-harnesses/native/README.md",
+            "previousSha256": "85142978469b9d326f16c726f7f23171ce25d2be8b92e08a817e3e58894691c7",
+            "previousDocumentSha256": "85142978469b9d326f16c726f7f23171ce25d2be8b92e08a817e3e58894691c7",
+            "redactedSha256": "f62a2c708446bdb8e05d3564f4486237b2180716143471c18bc6a7935faf5220",
+            "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
+          }
+        ],
+        "reportDocument": {
+          "document": "docs/audits/audit-18-2026-10-09.md",
+          "previousSha256": "2b7da5c7e0fbe5699f5226e3e942a7349d59bc412b654f7cf290b39f02c06812",
+          "redactedSha256": "aa0a4f07eef63daf8002269bf4d6ffba7808c3a50324cf915b23473c8f0d3d2e"
+        }
+      }
+    ],
+    "kind": "privacy-only-metadata-redaction"
   }
 }

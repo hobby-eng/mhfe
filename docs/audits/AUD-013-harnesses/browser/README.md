@@ -1,5 +1,9 @@
 # AUD-013 browser probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These audit-only probes belong to the read-only AUD-013 review of commit
 `abb16671b641378c0fc3c4d855f8d126498e754b` plus the dirty source snapshot recorded in the report.
 They use public synthetic input only and make no production changes.

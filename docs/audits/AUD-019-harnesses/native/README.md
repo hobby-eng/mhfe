@@ -1,5 +1,9 @@
 # AUD-019 native review probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These review-only probes belong to AUD-019 and the clean MHFE 0.6.0 commit `66f142566464255e331763966b00ea1681c2dabd`. They inspect native Rust/C source, the Python fast-mode fallback, terminal rendering and original AUD-015/AUD-016 findings. They edit no production, test, fixture, dependency or workflow file. Evidence remains local-only under the ignored `docs/audits/AUD-019-evidence/` folder. The exact reviewer model and reasoning effort are unknown.
 
 Run from the repository root with Python 3 on Linux. `probes.py` imports retained AUD-018/AUD-016 terminal helpers in place without changing their bytes or writing bytecode. PTY probes require the published fixture `tests/fixtures/suite3-vectors/zero-12.json`, `/proc`, a UTF-8 host locale and a terminal width policy giving U+754C and U+1F680 two cells. Subprocesses use public/synthetic inputs, cap address space at 512 MiB, disable core dumps and stop before any KDF completes. Python refusal probes also cap CPU time at five seconds and apply a six-second deadline.

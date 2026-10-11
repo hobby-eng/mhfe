@@ -1,5 +1,9 @@
 # AUD-019 harnesses
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These harnesses belong to the final full-scope audit of MHFE v0.6.0 at signed commit `66f142566464255e331763966b00ea1681c2dabd`. The report is `../audit-19-2026-10-10.md`, with a JSON companion. They use only public vectors and synthetic inputs. They do not modify product source, publish a release or repeat the full-cost vectors.
 
 Run from the authoritative MHFE checkout with the workspace toolchains: Rust/Cargo 1.99.0, wasm-bindgen 0.2.129, Node 26.10.0 and Docker. Set `CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo` and `RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup` to the corresponding runtime locations. Home paths in this README are anonymized; executable tools resolve their real checkout paths themselves.

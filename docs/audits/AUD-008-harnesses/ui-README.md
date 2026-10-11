@@ -1,5 +1,9 @@
 # AUD-008 CLI interface probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 `ui-terminal-probe.py` reviews CLI help, color handling, menu redraw and return paths, and
 private-screen routing. It belongs to AUD-008 at commit
 `b6993bb1c11834a01847d1812b31a24145ab1f18` plus the captured dirty-tree snapshot. It does not

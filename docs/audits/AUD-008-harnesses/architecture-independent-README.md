@@ -1,5 +1,9 @@
 # AUD-008 independent architecture source probe
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 This bounded probe belongs to the independent ARC review of commit
 `b6993bb1c11834a01847d1812b31a24145ab1f18` and the dirty source bytes recorded in its output.
 It uses only the authoritative checkout's source, documentation and public EFF wordlist.

@@ -46,6 +46,17 @@ def normalized(raw, number, severity=None):
     return record
 
 
+def public_text(value):
+    # Keep this historical emitter standalone; redact publication copies, never runtime evidence.
+    if isinstance(value, str):
+        return re.sub(r"/home/[A-Za-z0-9_.-]+(?=/|\b)", "/home/user", value)
+    if isinstance(value, list):
+        return [public_text(item) for item in value]
+    if isinstance(value, dict):
+        return {public_text(key): public_text(item) for key, item in value.items()}
+    return value
+
+
 def table_text(value):
     if isinstance(value, (dict, list)):
         value = json.dumps(value, ensure_ascii=True)
@@ -183,7 +194,7 @@ def main():
         ],
         "assessment": {"verdict": "FAIL", "releaseReady": False, "reason": "AUD-008-SEC001: mandatory Linux isolation bypass; full release scope also retains explicitly stated execution gaps."},
     }
-    (AUDITS / (STEM + ".json")).write_text(json.dumps(record, indent=2) + "\n")
+    (AUDITS / (STEM + ".json")).write_text(json.dumps(public_text(record), indent=2) + "\n")
     lines = ["# AUD-008 — Expanded eleven-reviewer pre-release audit of MHFE 0.5.0", "", "## Record metadata", "",
              "- **Audit number:**8; **Completed (UTC):**2026-10-06.",
              "- **Reviewer:**Codex coordinator plus eleven distinct scoped reviewer agents. Exact model and reasoning effort are unknown, recorded as null.",
@@ -254,7 +265,7 @@ def main():
     # Keep generated report labels and numerical prose readable without reformatting
     # any retained specialist harness or evidence.
     markdown = re.sub(r"(\*\*[^\n]*?:\*\*)(?=\S)", r"\1 ", markdown)
-    (AUDITS / (STEM + ".md")).write_text(markdown)
+    (AUDITS / (STEM + ".md")).write_text(public_text(markdown))
     print(json.dumps({"findings": len(findings), "reviewers": len(roster), "coverage": len(coverage), "verdict": "FAIL"}))
 
 

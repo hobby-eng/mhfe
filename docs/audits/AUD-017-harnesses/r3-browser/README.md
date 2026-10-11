@@ -1,5 +1,9 @@
 # AUD-017 R3 harnesses: WASM bindings and the browser package
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 Audit-only probes of reviewer R3 of AUD-017, for the reviewed tree HEAD `3c60594` with its
 uncommitted 0.5.1 changes (source fingerprint
 `b2addb366a3bda36ed23bb84f68a2c92550b0c0f7c533d366894a8664963cbc7`) and the browser package in

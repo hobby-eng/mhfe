@@ -1077,10 +1077,7 @@
           "Commit references of the history replaced by the privacy rewrite of 2026-10-09 now name the commits that replaced them (AUD-015-DOC001): d54ab95 -> 2547a26, df70ca5 -> 5eed93c."
         ],
         "note": "Documentation-only edit; no check was rerun.",
-        "commitMap": {
-          "d54ab95": "2547a26",
-          "df70ca5": "5eed93c"
-        }
+        "commitMap": { "d54ab95": "2547a26", "df70ca5": "5eed93c" }
       },
       {
         "dateUtc": "2026-10-09",
@@ -1096,7 +1093,20 @@
           "d4de5e8": "5eed93c",
           "d4de5e8a3da0a41bc31c6b9c40a91cbdf0d36124": "5eed93c06b6e2c9107e20290dc318d9efbcbe829"
         }
+      },
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [],
+        "reportDocument": {
+          "document": "docs/audits/audit-04-2026-10-01.md",
+          "previousSha256": "fe428a615bf17aa0aa78c9725ff4f7d0dd622ce48556fb042392c23a9869ebf3",
+          "redactedSha256": "ea9c51d2aa5587ab80a8b6d9484a8219bae38201a2e8f3541ff9f676d253a243"
+        }
       }
-    ]
+    ],
+    "timeZone": "UTC (+00:00)"
   }
 }

@@ -1,5 +1,9 @@
 # AUD-013 quality probes
 
+Time zone: UTC (+00:00)
+
+Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
+
 These audit-only probes review the current dirty source of MHFE, based on commit
 `abb16671b641378c0fc3c4d855f8d126498e754b`. They do not change production source, run
 Argon2, or create a second working tree. Their inputs are synthetic code only.
