@@ -1,0 +1,400 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-022",
+  "auditNumber": 22,
+  "date": "2026-10-12",
+  "title": "Current-source security review",
+  "reviewer": {
+    "name": "Codex with independent baseline and focused investigators",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": "low",
+    "metadataSource": "Codex Security scan context"
+  },
+  "snapshot": {
+    "commit": "0155c951ab9deee0301b7e37b42ebc994cbd28b7",
+    "commitComplete": true,
+    "workingTree": " M docs/audits/README.md\n M docs/releases/unreleased.md\n M src/bin/mhfe/made_password.rs\n M src/bin/mhfe/protect.rs\n M src/bin/mhfe/settings.rs\n M src/bin/mhfe/terminal.rs\n?? docs/audits/AUD-020-2026-10-12.json\n?? docs/audits/AUD-020-2026-10-12.md\n?? docs/audits/AUD-020-harnesses/\n?? docs/audits/AUD-021-2026-10-12.json\n?? docs/audits/AUD-021-2026-10-12.md\n?? docs/audits/AUD-021-harnesses/\n",
+    "sourceFingerprint": "c74379162756041f58b151aa23d5c8a917dd847b55268fb1513ff55533124bab",
+    "fingerprintMethod": "SHA256 sorted git-tracked path NUL SHA256(file bytes), excluding docs/audits"
+  },
+  "scope": {
+    "summary": "Security-focused whole current MHFE checkout, including pre-existing uncommitted edits; runtime execution incomplete.",
+    "procedureHashes": {
+      "docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+      "docs/audits/AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+      "docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+      "docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+    },
+    "coverageLedger": [
+      {
+        "id": "CHECK-SEC-001",
+        "label": "Threat model and secret ownership",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-SEC-002",
+        "label": "Secret Vault, CSP, sandbox, and transport",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-SEC-003",
+        "label": "Network egress and secret guards",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-SEC-004",
+        "label": "Randomness, encryption, and authentication",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-SEC-005",
+        "label": "Secret lifecycle and exceptional paths",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-SEC-006",
+        "label": "Browser injection, persistence, and sensitive APIs",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-SEC-007",
+        "label": "Read-only guarantees and availability bounds",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-FUN-001",
+        "label": "BIP39, entropy, and seed interpretation",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-FUN-002",
+        "label": "HD derivation and every coin/profile",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-FUN-003",
+        "label": "BIP85, BIP38, messages, and Silent Payments",
+        "outcome": "not-applicable",
+        "evidence": "No BIP85/BIP38/message/Silent Payments feature in MHFE."
+      },
+      {
+        "id": "CHECK-FUN-004",
+        "label": "Scripts, descriptors, Miniscript, and multisig",
+        "outcome": "not-applicable",
+        "evidence": "No descriptor/Miniscript/multisig feature."
+      },
+      {
+        "id": "CHECK-FUN-005",
+        "label": "Transactions, PSBT version context, and commitments",
+        "outcome": "not-applicable",
+        "evidence": "No transaction/PSBT processing."
+      },
+      {
+        "id": "CHECK-FUN-006",
+        "label": "Recovery and backup formats",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-FUN-007",
+        "label": "Discovery, providers, proofs, and accounting",
+        "outcome": "not-applicable",
+        "evidence": "No provider/discovery/accounting workflow."
+      },
+      {
+        "id": "CHECK-API-001",
+        "label": "Actual dependency call contracts",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-API-002",
+        "label": "Async state, cancellation, and revisions",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-API-003",
+        "label": "Public export schema and monetary fidelity",
+        "outcome": "not-applicable",
+        "evidence": "No monetary export schema."
+      },
+      {
+        "id": "CHECK-API-004",
+        "label": "Encoding and import/export interoperability",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-BLD-001",
+        "label": "Manifest, flags, and feature composition",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-BLD-002",
+        "label": "Matrix depth and runtime sampling",
+        "outcome": "not-run",
+        "evidence": "Browser and native multi-platform runtime matrix not executed."
+      },
+      {
+        "id": "CHECK-BLD-003",
+        "label": "Lockfiles, source provenance, and licenses",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-BLD-004",
+        "label": "Canonical WASM and Docker bytes",
+        "outcome": "not-run",
+        "evidence": "No canonical Docker or WASM reproducibility build; release-level work not requested."
+      },
+      {
+        "id": "CHECK-BLD-005",
+        "label": "Artifacts, CI, and release workflows",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-UI-001",
+        "label": "Real files and representative viewports",
+        "outcome": "not-run",
+        "evidence": "No actual browser viewport inspection; repository provides package classes rather than a standalone production wallet page."
+      },
+      {
+        "id": "CHECK-UI-002",
+        "label": "Navigation, inputs, and state preservation",
+        "outcome": "not-run",
+        "evidence": "Host application navigation not part of this repository; package async flow reviewed statically."
+      },
+      {
+        "id": "CHECK-UI-003",
+        "label": "Secret visibility, help, QR, and accessibility",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-ARC-001",
+        "label": "Ownership, imports, and composition seams",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-ARC-002",
+        "label": "Dead code, duplication, and false positives",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-ARC-003",
+        "label": "Comments, tests, and production-path fidelity",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-DOC-001",
+        "label": "User-facing capability and safety descriptions",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-DOC-002",
+        "label": "Commands, metadata, links, and legal materials",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      },
+      {
+        "id": "CHECK-DOC-003",
+        "label": "Audit records and evidence consistency",
+        "outcome": "partial",
+        "evidence": "Source review and applicable native tests; not exhaustive end-to-end or every-file verification."
+      }
+    ],
+    "threatModel": {
+      "summary": "Experimental offline BIP39 mnemonic encryption/recovery library, native CLI, browser classes and WASM bindings. Native and browser engines use vendored Argon2 C. Local terminal/stdin/page input; optional Rust/Python launcher serves a checked HTML page on loopback without processing wallet secrets. Conditional build/release jobs prepare drafts. Evidence: src/lib.rs:1, build.rs:1, src/bin/mhfe/main.rs:224, src/bin/mhfe/serve.rs:219, packaging/mhfe-fast-mode.py:307, .github/workflows/release.yml:100.",
+      "assets": [
+        "Passwords, mnemonic phrases, BIP39 passphrases, entropy, recovered states and wallet keys (src/password.rs:23; src/memory.rs:35).",
+        "Encryption/recovery and rekey confirmation integrity (src/rekey.rs:226-260).",
+        "Browser package and release integrity (web/runtime.js:266; src/bin/mhfe/serve.rs:169; .github/workflows/release.yml:120)."
+      ],
+      "trustBoundaries": [
+        "Direct CLI: main hardens/isolate before startup and prompts; menu uses isolated command threads, with no separate network namespace (src/bin/mhfe/main.rs:224-246,289; src/bin/mhfe/menu.rs:277,312-333). Existing stdin/stdout/terminal descriptors remain usable; explicitly exported plaintext goes to chosen stdout recipient. Linux seccomp limits sockets/io_uring and Landlock new filesystem mutation; inherited descriptors are not revoked (src/bin/mhfe/protect.rs:268,574,611). Serve requires network/writes and vector generation writes (src/bin/mhfe/main.rs:322).",
+        "Rust to native C: checked lengths and layout, bounded allocation callback, synchronous pointer lifetimes and error wipe; library callers do not acquire CLI sandboxing (src/engine/ffi.rs:43-192,365-380; src/lib.rs:32,39; build.rs:9,22). WorkFactor PIM 0..1023/memory 0..21 defaults to 2 GiB reusable area and twelve rounds (src/suite.rs:85,87,120; src/engine/native.rs:63).",
+        "Page to workers: page supplies worker source/WASM; checked startup/build identifiers, owned Uint8Array copies transferred, failed transports wipe copies, workers terminated after completion/cancel (web/runtime.js:173,206,266,475,508,665,697). Page/browser retain authority over secrets; workers are responsiveness/lifetime boundaries.",
+        "Explicit Rust serve file selects parent/mhfe-fast-mode.sha256, requires plain listed basename matching selected file and digest before reading once into RAM (src/bin/mhfe/serve.rs:120,142,169,219). Menu discovery uses actual executable parent plus checked listed HTML (src/bin/mhfe/serve.rs:107). Python chooses explicit file or script parent/listed HTML, reads checksum beside selected page (packaging/mhfe-fast-mode.py:278,320,330,333).",
+        "Rust/Python servers bind 127.0.0.1 port 0, permit only GET/HEAD '/', exact single Host 127.0.0.1:<port>, 16 connections/16 KiB heads/10 second request and response deadlines. Browser launch receives public URL only (src/bin/mhfe/serve.rs:41,55,227,275,400; packaging/mhfe-fast-mode.py:35,124,192,342).",
+        "Browser build assembles dist/runtime WASM/worker/runtime, dist/core engine/client and independent classes then stamps identifier/manifest (scripts/build-wasm.sh:94-112). Docker stages validated repository-local canonical-output[-suffix]/release, verifies SHA256SUMS before replacement (scripts/build-reproducible.sh:4,17,30,40,51). Release job depends on checks/builds, verifies release/* archive checksum coverage, attests and creates --draft --verify-tag with docs/releases/<tag>.md; write/OIDC/attest authority is separate from PR CI ( .github/workflows/release.yml:100-135)."
+      ],
+      "attackerCapabilities": [
+        "May tamper with container, repair input and public API settings without knowing password or owning trusted deployment files.",
+        "Local programs/websites can attempt loopback requests, but only public static page is served (src/bin/mhfe/serve.rs:400).",
+        "Embedding page already receives secrets; hostile code with page authority is not independently contained by worker.",
+        "Trusted build/maintainer compromise requires additional authority; adjacent checksums/build identifiers cannot authenticate against replacement of both."
+      ],
+      "securityObjectives": [
+        "Bound/validate password and work parameters (src/password.rs:23,56; src/suite.rs:120).",
+        "Require supported confirmation before rekey sealing (src/rekey.rs:233,260).",
+        "Reduce native secret exposure via hardening, wiping, bounded buffers, best-effort locks and accurately reported restrictions (src/bin/mhfe/main.rs:226; src/memory.rs:170; src/bin/mhfe/protect.rs:268).",
+        "Restrict loopback serving and reject mixed package/release artifacts (src/bin/mhfe/serve.rs:169,227,400; web/runtime.js:266; .github/workflows/release.yml:120)."
+      ],
+      "assumptions": [
+        "Generated model from independent architecture review verified against consumers; no user-supplied model.",
+        "Experimental construction lacks independent cryptographic review; test results do not establish construction security (SECURITY.md).",
+        "Native mlock failure warns and operations continue; Windows/browser have no locking; dependency/compiler/browser-string copies and abrupt termination remain best effort (src/memory.rs:4,170; SECURITY.md).",
+        "Linux/platform/kernel restrictions limit new access; inherited descriptors and prior threads remain usable, library hosts own sandboxing.",
+        "Same-length and 24-word original recovery lacks built-in authentication; 16-bit source check is weak confirmation and not accepted alone for rekey.",
+        "Loopback CSP only frame-ancestors 'none'; stronger script/connect policy is embedding-page responsibility (src/bin/mhfe/serve.rs:55).",
+        "No remote service or tenant boundary established; terminal logging, kernel availability and embedding integrity are environmental prerequisites.",
+        "Checksums/build identifiers detect consistency only; maintainer OpenPGP signing/publication is separate and not runtime verified."
+      ]
+    }
+  },
+  "checks": [
+    {
+      "id": "initial-toolchain-attempt",
+      "command": "cargo test --offline --locked --manifest-path <repo>/Cargo.toml --lib",
+      "outcome": "failed",
+      "result": "Initial invocation from another cwd selected rustc 1.98.1; package requires 1.99.0. Corrected using explicit +1.99.0 and repository cwd; no source/toolchain change."
+    },
+    {
+      "id": "native-library-tests",
+      "command": "cargo +1.99.0 test --offline --locked --lib",
+      "outcome": "passed",
+      "exitCode": 0,
+      "result": "344 passed; 0 failed; 2 ignored; 54.35 seconds. Full log was not retained; terminal result excerpt retained.",
+      "evidence": "local only: AUD-022-evidence/native-library-tests.log",
+      "logSha256": "f0e4b5f0cd4c84ce28d08505bc6285a01630f531bec42893d9fdb7d76c0c876d"
+    },
+    {
+      "id": "native-cli-tests",
+      "command": "cargo +1.99.0 test --offline --locked --bin mhfe",
+      "outcome": "failed",
+      "exitCode": 101,
+      "result": "125 passed; 3 failed; 3 ignored. Sandbox prevents baseline loopback bind; original failures retained.",
+      "evidence": "local only: AUD-022-evidence/native-cli-tests.log",
+      "logSha256": "df9407de41473ec6c037ff76b2e10985a1539dd40375daf19ba679787b0a534c"
+    },
+    {
+      "id": "isolation-rerun",
+      "command": "cargo +1.99.0 test --offline --locked --bin mhfe an_isolated_thread_cannot_open_a_socket_or_write_a_file",
+      "outcome": "passed",
+      "exitCode": 0,
+      "result": "1 passed; 130 filtered; outside socket-restricted sandbox.",
+      "evidence": "local only: AUD-022-evidence/isolation-rerun.log",
+      "logSha256": "a942ff1fd4028097ac49e273f49fa9f7249c3509cd53bccaa9ac737a9c87a176"
+    },
+    {
+      "id": "server-rerun",
+      "command": "cargo +1.99.0 test --offline --locked --bin mhfe serve::tests::a_",
+      "outcome": "passed",
+      "exitCode": 0,
+      "result": "3 passed; 128 filtered; outside socket-restricted sandbox. Includes one already passing path test; do not add overlapping counts.",
+      "evidence": "local only: AUD-022-evidence/server-rerun.log",
+      "logSha256": "1652aa92bb682830b44159641a41c9809adc1ee266d8d55ed20b32e4a58fc1f5"
+    },
+    {
+      "id": "wasm-check",
+      "command": "cargo +1.99.0 check --offline --locked --lib --target wasm32-unknown-unknown --features wasm",
+      "outcome": "passed",
+      "exitCode": 0,
+      "result": "All browser feature bindings compile; not browser runtime evidence.",
+      "evidence": "local only: AUD-022-evidence/wasm-check.log",
+      "logSha256": "253772df8bfcfddb477ad30780a1ff6b21d2f1db6628abf55c44a505f67444c3"
+    },
+    {
+      "id": "native-build",
+      "command": "cargo +1.99.0 build --offline --locked --bin mhfe",
+      "outcome": "passed",
+      "exitCode": 0,
+      "result": "Debug binary used for terminal checks; not a release artifact.",
+      "evidence": "local only: AUD-022-evidence/native-build.log",
+      "logSha256": "6bcb6fb168b1418aa98d7c253127e8f7ebf02d739802fee1dc5c784ca4632161"
+    },
+    {
+      "id": "python-launcher-tests",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-fast-mode-script.py Routing ChecksumFile",
+      "outcome": "passed",
+      "exitCode": 0,
+      "result": "14 tests; routing/checksum subset only; socket Server class omitted.",
+      "evidence": "local only: AUD-022-evidence/python-launcher-tests.log",
+      "logSha256": "eea1a84951e67d1b01ec94c6e7fc8adb8e8dbc7846c3580795fc06b9d06f6bda"
+    },
+    {
+      "id": "terminal-regressions",
+      "command": "python3 scripts/verify-hidden-input.py <external-target>/debug/mhfe",
+      "outcome": "stopped",
+      "exitCode": 143,
+      "result": "Security checks through the first decoy missing-word search passed; stopped audit-owned process during expensive two-missing-word debug search. Full suite not passed.",
+      "evidence": "local only: AUD-022-evidence/terminal-regressions.log",
+      "logSha256": "c2e09ed28a4e4f6e81a1276e1820a6307f00c603c9d765fcbd0ba54c7ac40d73"
+    },
+    {
+      "id": "terminal-tail-tests",
+      "command": "Python runpy of verify-hidden-input.py: check_password_sizes, check_usage_errors_and_help, check_script_messages, check_quiet_start, check_self_test, check_damaged_copies",
+      "outcome": "passed",
+      "exitCode": 0,
+      "result": "Selected remaining bounded terminal/self-check regression functions passed; not a complete suite.",
+      "evidence": "local only: AUD-022-evidence/terminal-tail-tests.log",
+      "logSha256": "850ff5d41d0dcfee1c0fff196f6b81b900c80024e16ebb5f5a9681e0cb0a5468"
+    }
+  ],
+  "findings": [],
+  "observations": [],
+  "remediation": [],
+  "limitations": [
+    "Security-focused full-scope audit with incomplete execution; no security certification, complete-source claim or release acceptance.",
+    "No independent cryptographic analysis of the experimental construction.",
+    "Full-cost Argon2/vector replays, real-browser runtime, Windows/macOS tests, canonical builds, live advisory lookup, external pin authentication and published release verification not executed.",
+    "Most production boundaries reviewed; some large wallet helper/test/vector bodies, vendored headers, developer-only tools and historical documentation were not fully audited. Exact remaining scope is retained in coverage.",
+    "Native memory locks and isolation are platform/kernel dependent and best effort; inherited descriptors remain usable. Browser strings cannot be reliably erased.",
+    "Same-length containers and 24-word originals lack built-in recovery authentication. The 16-bit source check is a filter, not strong wallet identity confirmation.",
+    "Original library test log was truncated in tool output; its exact summary is retained as an excerpt. Command start/end UTC timestamps were not independently captured.",
+    "Initial wrong-toolchain failure and sandbox socket failures retained separately from corrected checks. Reruns are not added to overlapping totals."
+  ],
+  "privacyRedaction": {
+    "timeZone": "UTC (+00:00)",
+    "timestampsUTC": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [],
+        "reportDocument": {
+          "document": "docs/audits/AUD-022-2026-10-12.md",
+          "previousSha256": "dea21dabc1c0afc8fe4e8685825778f74217b0b761d0f35ca1a398ecd29b18d0",
+          "redactedSha256": "7ce38bd60ee27a6797234ecc3f9149bd914dd2f2fea30bcacaeb2b3a4a626993"
+        },
+        "commitMap": {
+          "0155c951ab9deee0301b7e37b42ebc994cbd28b7": "e8dca53a5d17cb80f1f5ac1f5a40b351f939e7e7"
+        },
+        "commitRewrite": {
+          "kind": "owner-authorized-signed-privacy-amend",
+          "originalCommit": "0155c951ab9deee0301b7e37b42ebc994cbd28b7",
+          "originalTree": "21c1c8ca3742a236694935ba398266a5e99956d8",
+          "replacementCommit": "e8dca53a5d17cb80f1f5ac1f5a40b351f939e7e7",
+          "replacementTree": "ed5a650ac07c3d41907f4310277b90f08fd84b79",
+          "originalCommitRetention": "local audit-snapshot ref; no checkout or published tag",
+          "productFilesOutsideAuditsUnchanged": true,
+          "fullTreesIdentical": false,
+          "historicalReviewedCommitFieldsPreserved": true,
+          "historicalSourceHashesPreserved": true,
+          "checksRerun": false,
+          "note": "Full trees differ only within docs/audits/ (publication metadata and the historical report emitter). Original snapshots and evidence describe the original bytes. The replacement commit is not a new audit or an exact full-tree equivalence claim."
+        }
+      }
+    ],
+    "kind": "privacy-only-metadata-redaction"
+  }
+}

@@ -3546,7 +3546,7 @@
         "reportDocument": {
           "document": "docs/audits/audit-14-2026-10-08.md",
           "previousSha256": "5d95e6ef2afcfb8a5c514ed6c2b340d2a9a7b848cf47db93e7516d4eb1c61a3e",
-          "redactedSha256": "38bd7aa2e5ad004d652b878bd5dd760c684978e40dfe6217a316324567962b5d"
+          "redactedSha256": "2492c0d79b118eee858d0c86e5514a754dd41065e6f2a8c8fa656b6bbab6841a"
         }
       }
     ],

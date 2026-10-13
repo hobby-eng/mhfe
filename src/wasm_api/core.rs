@@ -13,25 +13,28 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use super::{
-    call_page, js_error, json, repair_capacities, review_choice, run_self_check, secret_json,
-    whole_number, CapacityJson, SecretText,
+    call_page, container_fingerprint_text, js_error, json, repair_capacities, review_choice,
+    run_self_check, secret_json, whole_number, CapacityJson, SecretText,
 };
 use crate::check_word;
 use crate::engine::browser::{BrowserEngine, JsArgon2, HIGHEST_BROWSER_MEMORY_LEVEL};
 use crate::engine::{BrowserArgon2Check, BrowserArgon2SizesCheck};
 use crate::mhfe::RecoveredPhrase;
-use crate::operation::{Encryption, Sealed, Stage, StageCallback, WalletPassphrase};
-use crate::rekey::{ConfirmedPhrase, Rekey};
+use crate::operation::{
+    Encryption, Keep, KeepItem, Sealed, Stage, StageCallback, WalletPassphrase,
+};
+use crate::rekey::{ConfirmedPhrase, Rekey, ReplacementRehearsal};
 use crate::repair::{PROFILE as REPAIR_PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS};
 use crate::search::{ContainerSearch, Found, DECOY_SCAN_GAP};
 use crate::self_check::{sets, ComponentCheck, SelfCheck};
 use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
 use crate::{
-    Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets, Mhfe, MhfeError,
-    OriginalFacts, Password, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
-    RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS,
-    MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
+    container_fingerprint, Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets, Mhfe,
+    MhfeError, OriginalFacts, PassedCheck, Password, PhraseLength, RecoveredForCheck,
+    RecoveredForRekey, Recovery, RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor,
+    BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
+    WORD_COUNTS,
 };
 
 #[derive(Serialize)]
@@ -202,6 +205,69 @@ enum KeepJson {
     Pim { value: u32 },
     MemoryLevel { value: u32 },
     WordCount { words: usize },
+    OldContainer,
+    OldPasswords,
+}
+
+/// The library's keep list as the page reads it.
+fn keep_json(keep: &Keep) -> Vec<KeepJson> {
+    keep.items()
+        .iter()
+        .map(|item| match *item {
+            KeepItem::ContainerWords(words) => KeepJson::ContainerWords { words },
+            KeepItem::Password => KeepJson::Password,
+            KeepItem::Passphrase => KeepJson::Passphrase,
+            KeepItem::PassphraseIfAny => KeepJson::PassphraseIfAny,
+            KeepItem::RepairWords => KeepJson::RepairWords,
+            KeepItem::Pim(value) => KeepJson::Pim { value },
+            KeepItem::MemoryLevel(value) => KeepJson::MemoryLevel { value },
+            KeepItem::WordCount(words) => KeepJson::WordCount { words },
+            KeepItem::OldContainer => KeepJson::OldContainer,
+            KeepItem::OldPasswords => KeepJson::OldPasswords,
+        })
+        .collect()
+}
+
+/// What to keep of the old container of a rekey made at `pim` and `memory_level` until the funds
+/// of the wallets that other passwords open on it are moved, as JSON `[{ item, value? }]`:
+/// "oldContainer", "oldPasswords", and "pim" or "memoryLevel" where it is not 0
+/// ([`Keep::old_container`]). A page says it before every rekey, whatever the container.
+#[wasm_bindgen(js_name = keepOldContainer)]
+pub fn keep_old_container(pim: f64, memory_level: f64) -> Result<String, JsError> {
+    json(&keep_json(&Keep::old_container(work_from(
+        pim,
+        memory_level,
+    )?)))
+}
+
+/// What the rehearsal of a rekey's new container compares ([`ReplacementRehearsal`]).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+enum RehearsalJson {
+    BuiltInCheck,
+    ConfirmingReference,
+    Fingerprint { fingerprint: String },
+}
+
+impl From<&ReplacementRehearsal> for RehearsalJson {
+    fn from(rehearsal: &ReplacementRehearsal) -> Self {
+        match rehearsal {
+            ReplacementRehearsal::BuiltInCheck => Self::BuiltInCheck,
+            ReplacementRehearsal::ConfirmingReference => Self::ConfirmingReference,
+            ReplacementRehearsal::Fingerprint(fingerprint) => Self::Fingerprint {
+                fingerprint: fingerprint_text(*fingerprint),
+            },
+        }
+    }
+}
+
+/// A rekey's result: the sealed container as `encrypt` gives it, and what its rehearsal compares.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResealedJson<'a> {
+    #[serde(flatten)]
+    sealed: SealedJson<'a>,
+    rehearsal: RehearsalJson,
 }
 
 #[derive(Serialize)]
@@ -218,37 +284,29 @@ struct SealedJson<'a> {
 }
 
 /// The result of an encryption or a rekey: the checked container and what to keep.
+fn sealed_view(
+    sealed: &Sealed,
+    work: WorkFactor,
+    passphrase: WalletPassphrase,
+) -> Result<SealedJson<'_>, JsError> {
+    Ok(SealedJson {
+        container: sealed.container(),
+        suite_id: sealed.suite().id(),
+        container_fingerprint: container_fingerprint_text(sealed.container())?,
+        built_in_check: sealed.built_in_check(),
+        other_lengths: sealed.other_lengths(),
+        repair_words: sealed.repair_words(),
+        repair_profile: sealed.repair_words().map(|_| REPAIR_PROFILE),
+        keep: keep_json(&sealed.keep(work, passphrase)),
+    })
+}
+
 fn sealed_json(
     sealed: &Sealed,
     work: WorkFactor,
     passphrase: WalletPassphrase,
 ) -> Result<String, JsError> {
-    use crate::operation::KeepItem;
-    let keep = sealed
-        .keep(work, passphrase)
-        .items()
-        .iter()
-        .map(|item| match *item {
-            KeepItem::ContainerWords(words) => KeepJson::ContainerWords { words },
-            KeepItem::Password => KeepJson::Password,
-            KeepItem::Passphrase => KeepJson::Passphrase,
-            KeepItem::PassphraseIfAny => KeepJson::PassphraseIfAny,
-            KeepItem::RepairWords => KeepJson::RepairWords,
-            KeepItem::Pim(value) => KeepJson::Pim { value },
-            KeepItem::MemoryLevel(value) => KeepJson::MemoryLevel { value },
-            KeepItem::WordCount(words) => KeepJson::WordCount { words },
-        })
-        .collect();
-    json(&SealedJson {
-        container: sealed.container(),
-        suite_id: sealed.suite().id(),
-        container_fingerprint: master_fingerprint_text(sealed.container(), "").map_err(js_error)?,
-        built_in_check: sealed.built_in_check(),
-        other_lengths: sealed.other_lengths(),
-        repair_words: sealed.repair_words(),
-        repair_profile: sealed.repair_words().map(|_| REPAIR_PROFILE),
-        keep,
-    })
+    json(&sealed_view(sealed, work, passphrase)?)
 }
 
 /// Encrypts the phrase, its UTF-8 bytes `phrase_utf8`, and returns JSON `{ container, suiteId,
@@ -408,7 +466,8 @@ fn candidate_json<'a>(
 
 #[derive(Serialize)]
 struct CheckJson {
-    matches: bool,
+    /// [`mhfe::CheckOutcome::id`].
+    outcome: &'static str,
     /// Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise.
     path: Option<String>,
     /// The original seed phrase's own checks, from the same recovery.
@@ -418,13 +477,38 @@ struct CheckJson {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EvidenceJson {
-    /// The length of a 12- to 21-word original seed phrase whose built-in check passes, or null.
+    /// The length of the one verified reading, a 12- to 21-word original seed phrase whose
+    /// built-in check passes, or null ([`mhfe::CheckEvidence::built_in_check`]).
     built_in_check: Option<usize>,
+    /// Every 12- to 21-word length whose built-in check passes, in ascending order.
+    matching_lengths: Vec<usize>,
+    /// The original seed phrase's own checks that passed, as a page lists them beside the result
+    /// ([`mhfe::CheckEvidence::own_checks_passed`]).
+    passed: Vec<PassedJson>,
     /// Whether the 24-word reading passes the 16-bit phrase + passphrase check, with the
     /// passphrase given or the empty one when none was given. Null for a stated length, for a
     /// same-length container, and when exactly one shorter length passes its built-in check and
     /// the reference did not match the 24-word reading.
     wallet_check: Option<bool>,
+}
+
+/// One of the original seed phrase's own checks that passed ([`PassedCheck`]).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", tag = "check")]
+enum PassedJson {
+    BuiltInCheck { words: usize },
+    BuiltInChecks { lengths: Vec<usize> },
+    WalletCheck,
+}
+
+impl From<PassedCheck> for PassedJson {
+    fn from(passed: PassedCheck) -> Self {
+        match passed {
+            PassedCheck::BuiltInCheck(words) => Self::BuiltInCheck { words },
+            PassedCheck::BuiltInChecks(lengths) => Self::BuiltInChecks { lengths },
+            PassedCheck::WalletCheck => Self::WalletCheck,
+        }
+    }
 }
 
 /// A reference as the page passes it: `kind` is "address", "fingerprint", "words" or
@@ -522,8 +606,9 @@ impl CheckSession {
     }
 
     /// Compares the recovery with a reference given as for [`CheckSession::new`], as JSON
-    /// `{"matches": bool, "path": string | null, "evidence": {...}}`: only whether it matches
-    /// comes out, and for a matched address the path where it was found.
+    /// `{"outcome": "matches" | "notVerified" | "doesNotMatch", "path": string | null,
+    /// "evidence": {...}}`: only the outcome comes out, with the facts beside it that reveal no
+    /// word, and for a matched address the path where it was found.
     pub fn compare(
         &self,
         reference_kind: &str,
@@ -540,10 +625,16 @@ impl CheckSession {
             .compare(&wallet.with(passphrase))
             .map_err(js_error)?;
         json(&CheckJson {
-            matches: evidence.outcome.matches(),
+            outcome: evidence.outcome.id(),
             path: evidence.outcome.path().map(ToString::to_string),
             evidence: EvidenceJson {
+                passed: evidence
+                    .own_checks_passed()
+                    .into_iter()
+                    .map(PassedJson::from)
+                    .collect(),
                 built_in_check: evidence.built_in_check,
+                matching_lengths: evidence.matching_lengths,
                 wallet_check: evidence.wallet_check,
             },
         })
@@ -608,7 +699,7 @@ fn search_json(search: &ContainerSearch, found: Option<Found>) -> Result<String,
             candidates: search.count(),
         });
     };
-    let fingerprint = master_fingerprint_text(&found.container, "").map_err(js_error)?;
+    let fingerprint = container_fingerprint_text(&found.container)?;
     json(&SearchJson {
         found: true,
         container: Some(found.container.to_string()),
@@ -618,7 +709,7 @@ fn search_json(search: &ContainerSearch, found: Option<Found>) -> Result<String,
             .iter()
             .map(|&(position, word)| FoundWordJson { position, word })
             .collect(),
-        path: found.outcome.path().map(ToString::to_string),
+        path: found.path.as_ref().map(ToString::to_string),
         candidates: search.count(),
     })
 }
@@ -782,6 +873,8 @@ pub struct RekeySession {
     /// The lengths at which the owner may confirm after the refusal (`ownerLengths`).
     owner_lengths: Vec<usize>,
     confirmed: Option<ConfirmedPhrase>,
+    /// What the new container's rehearsal compares, known before it is sealed.
+    rehearsal: Option<ReplacementRehearsal>,
     step: RekeyStep,
 }
 
@@ -820,6 +913,9 @@ struct RecoveredJson<'a> {
     /// The 16-bit source check of a 24-word reading, with the reference's passphrase, or the empty
     /// one; null for other lengths. It never confirms a rekey: 16 bits are too few.
     wallet_check: Option<bool>,
+    /// Whether the owner's yes must come with the wallet's BIP39 passphrase, for the fingerprint
+    /// the new container's rehearsal compares ([`ConfirmedPhrase::rehearsal_needs_passphrase`]).
+    rehearsal_needs_passphrase: bool,
 }
 
 /// Why a confirmation on the recovered state did not confirm the phrase: a refusal that another
@@ -885,8 +981,8 @@ fn with_rekey_confirmation<T>(
 impl RekeySession {
     /// A rekey of `container` with the old password and settings. `words` is the phrase's word
     /// count, 0 to detect it (a same-length container's own length). A page tells every user
-    /// first that wallets other passwords open on the old container do not move to the new one,
-    /// so the old container, its passwords and settings are kept until their funds are moved.
+    /// first what to keep of the old container until the funds of the wallets that other
+    /// passwords open on it are moved ([`keep_old_container`]).
     #[allow(clippy::too_many_arguments)]
     #[wasm_bindgen(constructor)]
     pub fn new(
@@ -914,6 +1010,7 @@ impl RekeySession {
             wallet_has_passphrase: None,
             owner_lengths: Vec::new(),
             confirmed: None,
+            rehearsal: None,
             step: RekeyStep::Made,
         })
     }
@@ -1053,9 +1150,17 @@ impl RekeySession {
     }
 
     /// The owner's answer after comparing the shown phrase with their backup: anything but yes
-    /// ends the rekey (NOT_CONFIRMED_BY_OWNER) and drops the phrase.
+    /// ends the rekey (NOT_CONFIRMED_BY_OWNER) and drops the phrase. With the yes comes
+    /// `passphrase_utf8`, the wallet's BIP39 passphrase where the recovery said that the
+    /// rehearsal needs it (`rehearsalNeedsPassphrase`), empty otherwise: the fingerprint the new
+    /// container's rehearsal compares is made from it before the seal.
     #[wasm_bindgen(js_name = ownerAnswer)]
-    pub fn owner_answer(&mut self, confirmed: JsValue) -> Result<(), JsError> {
+    pub fn owner_answer(
+        &mut self,
+        confirmed: JsValue,
+        passphrase_utf8: Vec<u8>,
+    ) -> Result<(), JsError> {
+        let passphrase = SecretText::new(passphrase_utf8);
         self.expect(RekeyStep::AwaitingOwner)?;
         // Only the value true is a yes: a bool of the ABI would take 1, "1" or [1] as one.
         if confirmed.as_bool() != Some(true) {
@@ -1063,10 +1168,20 @@ impl RekeySession {
             return Err(js_error(MhfeError::NotConfirmedByOwner));
         }
         // The library seals an owner's phrase only once it has the yes.
-        self.confirmed = self
+        let confirmed = self
             .confirmed
             .take()
             .map(ConfirmedPhrase::confirmed_by_owner);
+        let rehearsal = match &confirmed {
+            Some(confirmed) => passphrase
+                .text(MhfeError::InvalidPassphrase)
+                .and_then(|text| confirmed.replacement_rehearsal(text).map_err(js_error)),
+            None => Err(js_error(MhfeError::Internal(
+                "an owner's answer without a phrase".to_owned(),
+            ))),
+        };
+        self.confirmed = confirmed;
+        self.rehearsal = Some(self.or_end(rehearsal)?);
         self.step = RekeyStep::Confirmed;
         Ok(())
     }
@@ -1080,10 +1195,11 @@ impl RekeySession {
     ) -> Result<String, JsError> {
         self.expect(RekeyStep::Confirmed)?;
         self.step = RekeyStep::Ended;
-        let (Some(confirmed), Some(password), Some(work)) = (
+        let (Some(confirmed), Some(password), Some(work), Some(rehearsal)) = (
             self.confirmed.take(),
             self.new_password.take(),
             self.new_work,
+            self.rehearsal.take(),
         ) else {
             return Err(js_error(MhfeError::Internal(
                 "a confirmed rekey lacks its phrase or new password".to_owned(),
@@ -1100,7 +1216,10 @@ impl RekeySession {
                     .seal(mhfe, &confirmed, &password, repair_words, progress, shown)
             },
         )?;
-        sealed_json(&sealed, work, confirmed.wallet_has_passphrase().into())
+        json(&ResealedJson {
+            sealed: sealed_view(&sealed, work, confirmed.wallet_has_passphrase().into())?,
+            rehearsal: RehearsalJson::from(&rehearsal),
+        })
     }
 }
 
@@ -1123,6 +1242,10 @@ impl RekeySession {
                 self.step = if confirmed.awaits_owner() {
                     RekeyStep::AwaitingOwner
                 } else {
+                    // A reference or the built-in check confirmed it: the rehearsal needs no
+                    // passphrase of its own.
+                    let rehearsal = confirmed.replacement_rehearsal("").map_err(js_error);
+                    self.rehearsal = Some(self.or_end(rehearsal)?);
                     RekeyStep::Confirmed
                 };
                 self.confirmed = Some(confirmed);
@@ -1190,6 +1313,7 @@ impl RekeySession {
                 let result = secret_json(&RecoveredJson {
                     owner_check,
                     wallet_check,
+                    rehearsal_needs_passphrase: confirmed.rehearsal_needs_passphrase(),
                 })?;
                 Ok((confirmed, result))
             },
@@ -1557,7 +1681,7 @@ fn report(
 
 /// Gives the page the container before its check, with its own fingerprint.
 fn unverified(on_unverified: &js_sys::Function, container: &str) -> Result<(), MhfeError> {
-    let fingerprint = master_fingerprint_text(container, "")?;
+    let fingerprint = fingerprint_text(container_fingerprint(container)?);
     let text = serde_json::to_string(&UnverifiedJson {
         container,
         container_fingerprint: fingerprint,

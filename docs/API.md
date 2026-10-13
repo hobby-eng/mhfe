@@ -92,12 +92,20 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   receiving address (the strong check), read with `wallet::Address::parse(coin, text)` for one of
   the twelve `wallet::Coin`s, whose standard paths `Address::search_roots` and
   `Address::hardened_chains` describe (BIP44-style, or DIP17 for a Dash Platform payment address),
-  or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. As in
-  recovery, a built-in check that passes at another 12- to 21-word length than `words` takes
-  precedence: `BuiltInCheck` then matches, and `CheckEvidence::built_in_check` names the length
-  found. It returns a `CheckOutcome`: `Matches { path }` or `DoesNotMatch`, where `path` is the
-  derivation path at which a matched address was found (`None` for the other references). No part
-  of the recovered phrase comes out. `Reference::passphrase()` gives the BIP39 passphrase a
+  or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. It returns a
+  `CheckOutcome` under the length rules of recovery (the specification's rehearsal check):
+  `Matches { path }` for exactly one verified reading or a wallet reference that matches,
+  `NotVerified` for readings that nothing verifies, and `DoesNotMatch` for no reading or a
+  reference that does not match. `path` is the derivation path at which a matched address was
+  found (`None` for the other references); `CheckOutcome::text()` gives the specification's words,
+  `id()` the browser package's. A built-in check that passes at another 12- to 21-word length than
+  `words` takes precedence: `BuiltInCheck` then matches, and `CheckEvidence::built_in_check` names
+  the length found; several other lengths that pass leave it `NotVerified`, and
+  `CheckEvidence::matching_lengths` lists every length that passes. With the length detected
+  (`OwnChecks`), a 24-word reading is `NotVerified`, as a wrong password gives one too; a pass of
+  the 16-bit phrase + passphrase check is evidence beside it (`CheckEvidence::wallet_check`), not a
+  verification. `WalletCheck` is `NotVerified` where it passes and `DoesNotMatch` where it fails, as
+  the owner says the phrase was drawn with it. No part of the recovered phrase comes out. `Reference::passphrase()` gives the BIP39 passphrase a
   reference is compared with, empty when it is compared with the wallet without one, and `None` for
   `BuiltInCheck` and for `OwnChecks` without a passphrase, which say nothing about one;
   `Reference::given_passphrase()` gives it only when it is not empty, the case that shows that the
@@ -328,6 +336,16 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   wallet's BIP39 passphrase"), as the specification compares a wallet with its passphrase. All these
   refusals come before any Argon2 work. `recover` returns a `ConfirmedPhrase`: `phrase()`, the
   recovered phrase, and `wallet_has_passphrase()`, the answer that holds.
+  `replacement_rehearsal(passphrase)` says what the new container's rehearsal compares, known
+  before it is sealed as the specification requires: `ReplacementRehearsal::BuiltInCheck` for a
+  phrase with one, `ConfirmingReference` for one a reference confirmed, and `Fingerprint` for one
+  the owner confirmed alone, the master key fingerprint of the phrase with `passphrase`, the
+  wallet's BIP39 passphrase, which `rehearsal_needs_passphrase()` says is required and which is
+  refused for a wallet stated to have none (`INVALID_REQUEST`).
+  `operation::Keep::old_container(old_work)` lists what to keep of the old container until the
+  funds of the wallets that other passwords open on it are moved: `KeepItem::OldContainer`,
+  `OldPasswords`, and a PIM or memory level that is not 0. A front end says it before every rekey,
+  whatever the container.
   `seal(mhfe, &confirmed, new_password, repair_word_count, progress, on_unverified)` encrypts that
   phrase again, in a container of the old kind, at the settings of the engine it is given, which
   `check_new` judges; `keep(work, confirmed.wallet_has_passphrase().into())` of the result lists

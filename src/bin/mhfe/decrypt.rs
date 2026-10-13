@@ -3,7 +3,7 @@
 use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::memory::LockedText;
-use mhfe::{PhraseLength, RecoveredPhrase, Recovery, RecoveryStatus};
+use mhfe::{PhraseLength, RecoveredPhrase, Recovery, RecoveryStatus, WorkFactor, ROUNDS};
 
 use crate::check;
 use crate::container_repair::RepairOption;
@@ -14,6 +14,7 @@ use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, HEADING, STRONG};
 use crate::terminal::{self, Input, Progress, Wallet};
+use crate::time_text;
 
 #[derive(Args)]
 pub struct Options {
@@ -71,9 +72,11 @@ fn stdin_help() -> String {
 pub fn about() -> String {
     style::command_about(&[
         "Recover the original seed phrase from a container",
-        "Runs 12 rounds, one to two minutes at the default settings, and shows the recovered seed \
-         phrase. Use the PIM and memory level of the encryption; at the defaults no option is \
-         needed.",
+        &format!(
+            "Runs 12 rounds, {} at the default settings, and shows the recovered seed phrase. Use \
+             the PIM and memory level of the encryption; at the defaults no option is needed.",
+            time_text::of_rounds(WorkFactor::default(), ROUNDS)
+        ),
     ])
 }
 

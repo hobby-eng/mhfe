@@ -139,7 +139,19 @@ export type MhfeKeepItem =
   | { item: "repairWords" }
   | { item: "pim"; value: number }
   | { item: "memoryLevel"; value: number }
-  | { item: "wordCount"; words: WordCount };
+  | { item: "wordCount"; words: WordCount }
+  /** Of a rekey's old container (keepOldContainer()). */
+  | { item: "oldContainer" }
+  | { item: "oldPasswords" };
+
+/** What the rehearsal of a rekey's new container compares. */
+export type MhfeReplacementRehearsal =
+  /** The phrase's built-in check, which the new container carries. */
+  | { kind: "builtInCheck" }
+  /** The receiving address or the fingerprint that confirmed the phrase. */
+  | { kind: "confirmingReference" }
+  /** The master key fingerprint of the phrase the owner confirmed alone. */
+  | { kind: "fingerprint"; fingerprint: string };
 
 /** A new container whose check has passed. */
 export interface MhfeSealed {
@@ -280,6 +292,37 @@ export type MhfeReference =
       words?: never;
     };
 
+/** The result of a rehearsal check. */
+export type MhfeCheckOutcome = "matches" | "notVerified" | "doesNotMatch";
+
+/**
+ * The original seed phrase's own checks, from the same recovery as a check, facts that reveal no
+ * word. `builtInCheck` is the length of the one verified reading, a 12- to 21-word original whose
+ * built-in check passes: the stated length where it passes, else the one other length that does;
+ * null where none passes or several do with none stated. `matchingLengths` lists every length
+ * whose built-in check passes, in ascending order. `walletCheck` is whether the 24-word reading
+ * passes the 16-bit phrase + passphrase check with the passphrase given, or with none if none
+ * was given; null for `{ words }` with a length stated, for a same-length container, and when
+ * exactly one shorter length passes its check and the reference did not match the 24-word
+ * reading. A phrase drawn without that check fails it, so that only a pass says anything, and a
+ * pass does not verify the reading.
+ */
+export interface MhfeCheckEvidence {
+  builtInCheck: number | null;
+  matchingLengths: number[];
+  /**
+   * The original seed phrase's own checks that passed, in the order to list them beside the
+   * result: the built-in check of the verified reading, or those of several lengths, then the
+   * 16-bit check where it passes.
+   */
+  passed: (
+    | { check: "builtInCheck"; words: number }
+    | { check: "builtInChecks"; lengths: number[] }
+    | { check: "walletCheck" }
+  )[];
+  walletCheck: boolean | null;
+}
+
 /** The page's answer when a check's detection found no length: a length, or for 24 words the wallet. */
 export type MhfeNoLengthAnswer =
   | { words: 12 | 15 | 18 | 21 }
@@ -299,7 +342,9 @@ export type MhfeConfirmation =
   | { builtInCheck: true; address?: never; fingerprint?: never; owner?: never }
   | {
       /**
-       * Shows the phrase to its owner to compare with the written backup; true goes on. With 24
+       * Shows the phrase to its owner to compare with the written backup; true goes on, or
+       * `{ passphrase }` with the wallet's BIP39 passphrase where `rehearsalNeedsPassphrase` says
+       * that the fingerprint the new container's rehearsal compares needs it. With 24
        * words stated, one 12- to 21-word length whose check passes rejects it with
        * LENGTH_DIFFERS: the owner cannot tell the two readings apart, and an address or the
        * fingerprint confirms one. Several lengths that pass by accident reject it with
@@ -315,7 +360,8 @@ export type MhfeConfirmation =
          */
         statedWords?: WordCount;
         fingerprintWithoutPassphrase: string;
-      }) => boolean | Promise<boolean>;
+        rehearsalNeedsPassphrase: boolean;
+      }) => boolean | { passphrase: MhfeSecret } | Promise<boolean | { passphrase: MhfeSecret }>;
       builtInCheck?: never;
       address?: never;
       fingerprint?: never;
@@ -525,28 +571,26 @@ export class MhfeClient {
       reference: MhfeReference;
       passphrase?: MhfeSecret;
       /**
-       * With `{ words: 0 }`: called when detection found no length; the length or a wallet
-       * reference for 24 words, compared on the same recovery, or null.
+       * With `{ words: 0 }`: called when detection found no verified length, none or several,
+       * with what it found; the length or a wallet reference for 24 words, compared on the same
+       * recovery, or null.
        */
-      onNoLength?: () =>
-        MhfeNoLengthAnswer | null | undefined | Promise<MhfeNoLengthAnswer | null | undefined>;
+      onNoLength?: (
+        evidence: MhfeCheckEvidence,
+      ) => MhfeNoLengthAnswer | null | undefined | Promise<MhfeNoLengthAnswer | null | undefined>;
     },
   ): Promise<{
-    matches: boolean;
+    /**
+     * Under the specification's length rules: "matches" for exactly one verified reading or a
+     * wallet reference that matches; "doesNotMatch" for no reading (a stated short length that
+     * nothing passes) or a reference that does not match; "notVerified" for readings that
+     * nothing verifies, a 24-word reading without a wallet reference or several lengths that pass
+     * with none stated.
+     */
+    outcome: MhfeCheckOutcome;
     /** Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise. */
     path: string | null;
-    /**
-     * The original seed phrase's own checks, from the same recovery, to list with the match.
-     * `builtInCheck` is the length of a 12- to 21-word one whose built-in check passes, the
-     * stated one where it passes; with `{ words }` a check that passes at another length takes
-     * precedence and matches, and this names that length. `walletCheck` is whether the 24-word
-     * reading passes the 16-bit phrase + passphrase check with the passphrase given, or with none
-     * if none was given; null for `{ words }` with a length stated, for a same-length container,
-     * and when exactly one shorter length passes its check and the reference did not match the
-     * 24-word reading. A phrase drawn without that check fails it, so that only a pass says
-     * anything.
-     */
-    evidence: { builtInCheck: number | null; walletCheck: boolean | null };
+    evidence: MhfeCheckEvidence;
   }>;
   /** The candidates of a container phrase with words typed as "?"; see client.js. */
   searchCandidates(options: { container: string }): Promise<{
@@ -618,8 +662,15 @@ export class MhfeClient {
        * or none; null for other lengths. It never confirms a rekey.
        */
       walletCheck: boolean | null;
+      /** What the new container phrase is rehearsed with; show it with the result. */
+      rehearsal: MhfeReplacementRehearsal;
     }
   >;
+  /**
+   * What to keep of the old container of a rekey made at `pim` and `memoryLevel` until the funds
+   * of the wallets that other passwords open on it are moved; see client.js.
+   */
+  keepOldContainer(options?: { pim?: number; memoryLevel?: number }): Promise<MhfeKeepItem[]>;
   openHiddenWallets(options: {
     container: string;
     pim?: number;

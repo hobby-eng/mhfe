@@ -242,11 +242,6 @@ mod tests {
         }
     }
 
-    /// The startup set of the command-line tool stays within its budget: well under half a second
-    /// in a release build, where it takes a few tens of milliseconds. A debug build runs the hashes
-    /// and the curve arithmetic unoptimized, many times slower, so its bound is generous. Run
-    /// `cargo test --release --lib the_startup_set_stays_within_its_budget -- --nocapture` to see
-    /// the time of each check.
     /// Runs `set` at `tier` and prints the time of each check and of all, under `name`.
     fn timed(
         mut set: SelfCheck<'_>,
@@ -270,13 +265,19 @@ mod tests {
         (report, total)
     }
 
+    /// The startup set of the command-line tool stays within its budget: a quarter of a second in
+    /// a release build, where it takes a few tens of milliseconds, so that a fixed wait such as the
+    /// one AUD-023-DOC002 found fails it. A debug build runs the hashes
+    /// and the curve arithmetic unoptimized, many times slower, so its bound is generous. Run
+    /// `cargo test --release --lib the_startup_set_stays_within_its_budget -- --nocapture` to see
+    /// the time of each check.
     #[test]
     fn the_startup_set_stays_within_its_budget() {
         use std::time::Duration;
         let budget = if cfg!(debug_assertions) {
             Duration::from_secs(30)
         } else {
-            Duration::from_millis(500)
+            Duration::from_millis(250)
         };
         let (report, total) = timed(native(None), Tier::Startup, "startup set");
         assert!(report.passed(), "{:?}", report.first_failure());

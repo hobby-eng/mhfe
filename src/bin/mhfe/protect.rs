@@ -815,25 +815,36 @@ pub struct SwapArea {
     pub unknown: bool,
 }
 
+/// An inspected swap inventory, or an unavailable Linux inventory that must still warn.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SwapInventory {
+    Available(Vec<SwapArea>),
+    Unavailable,
+}
+
 /// The swap areas that are not encrypted by dm-crypt, or whose encryption cannot be told. An
-/// area in memory (zram) is safe. Empty when there is no swap or this is not Linux.
-pub fn unprotected_swap() -> Vec<SwapArea> {
+/// area in memory (zram) is safe. A readable empty inventory is distinct from a failed read.
+pub fn unprotected_swap() -> SwapInventory {
     if cfg!(target_os = "linux") {
         unprotected_swap_under(Path::new("/"))
     } else {
         // macOS encrypts its swap; Windows keeps its page file without telling.
-        Vec::new()
+        SwapInventory::Available(Vec::new())
     }
 }
 
 /// [`unprotected_swap`] with /proc and /sys under `root`, so that a test can supply its own.
-fn unprotected_swap_under(root: &Path) -> Vec<SwapArea> {
-    let Ok(swaps) = fs::read_to_string(root.join("proc/swaps")) else {
-        return Vec::new();
+fn unprotected_swap_under(root: &Path) -> SwapInventory {
+    swap_inventory(fs::read_to_string(root.join("proc/swaps")), root)
+}
+
+fn swap_inventory(read: std::io::Result<String>, root: &Path) -> SwapInventory {
+    let Ok(swaps) = read else {
+        return SwapInventory::Unavailable;
     };
     // "Filename Type Size Used Priority", one line per area after the heading; spaces in a name
     // are written as \040.
-    swaps
+    let areas = swaps
         .lines()
         .skip(1)
         .filter_map(|line| {
@@ -860,7 +871,8 @@ fn unprotected_swap_under(root: &Path) -> Vec<SwapArea> {
                 }),
             }
         })
-        .collect()
+        .collect();
+    SwapInventory::Available(areas)
 }
 
 /// The kernel's name of the block device at a path such as /dev/sda2 or /dev/mapper/swap.
@@ -962,7 +974,10 @@ mod tests {
         }
 
         fn unprotected(&self) -> Vec<SwapArea> {
-            unprotected_swap_under(&self.0)
+            let SwapInventory::Available(areas) = unprotected_swap_under(&self.0) else {
+                panic!("the synthetic inventory could not be read");
+            };
+            areas
         }
     }
 
@@ -1021,6 +1036,41 @@ mod tests {
     #[test]
     fn no_swap_needs_no_warning() {
         assert_eq!(FakeSystem::new("").unprotected(), []);
+    }
+
+    #[test]
+    fn a_missing_swap_inventory_is_not_confirmed_empty() {
+        let empty = FakeSystem::new("");
+        let missing = FakeSystem::new("");
+        fs::remove_file(missing.0.join("proc/swaps")).unwrap();
+        assert_ne!(
+            unprotected_swap_under(&missing.0),
+            unprotected_swap_under(&empty.0),
+            "AUD-020-SEC001: unknown inventory must not suppress the warning"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_swap_inventory_is_not_confirmed_empty() {
+        let empty = FakeSystem::new("");
+        let unreadable = FakeSystem::new("");
+        let path = unreadable.0.join("proc/swaps");
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(path).unwrap();
+        assert_ne!(
+            unprotected_swap_under(&unreadable.0),
+            unprotected_swap_under(&empty.0),
+            "AUD-020-SEC001: failed inventory read must remain unknown"
+        );
+    }
+
+    #[test]
+    fn a_denied_swap_inventory_remains_unavailable() {
+        let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            swap_inventory(Err(denied), Path::new("/synthetic")),
+            SwapInventory::Unavailable
+        );
     }
 
     /// In a thread of its own, so that the other tests stay free: a socket cannot be opened and a

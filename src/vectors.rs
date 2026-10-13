@@ -423,9 +423,12 @@ impl PublicInput {
     }
 }
 
-const ZERO_12: &str =
+/// BIP39's all-zero 12-word phrase.
+pub(crate) const ZERO_12: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-const ZERO_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+/// BIP39's all-zero 24-word phrase.
+pub(crate) const ZERO_24: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                        abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                        abandon abandon abandon abandon abandon art";
 const ZERO_15: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
@@ -435,14 +438,19 @@ const ZERO_18: &str = "abandon abandon abandon abandon abandon abandon abandon a
 const ZERO_21: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                        abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                        abandon abandon admit";
-const NONZERO_12: &str =
+/// BIP39's 12-word phrase of 0x7f bytes.
+pub(crate) const NONZERO_12: &str =
     "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const NONZERO_21: &str = "letter advice cage absurd amount doctor acoustic avoid letter advice \
                           cage absurd amount doctor acoustic avoid letter advice cage absurd apart";
 /// NFKD changes all but the spaces and the emoji: e + U+0301, "fi", "P", "A" + U+030A, "1",
 /// and U+0438 U+0306.
 const UNICODE_PASSWORD: &str = "Caf\u{E9} \u{FB01} \u{FF30}\u{212B}\u{2460} \u{1F510} \u{439}";
-const TEST_PASSWORD: &str = "public test password";
+/// The password of the public test vectors.
+pub(crate) const TEST_PASSWORD: &str = "public test password";
+/// A 12-word phrase whose packed state passes the 21-word built-in check too, by chance.
+pub(crate) const AMBIGUOUS_12_21: &str =
+    "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
 const OTHER_PASSWORD: &str = "audit probe password 2026";
 
 const fn input(
@@ -511,13 +519,7 @@ pub const PUBLIC_INPUTS: [PublicInput; 17] = [
     ),
     // Its state passes both the 12- and the 21-word check, so recovery lists both and the
     // 24-word reading.
-    input(
-        "ambiguous-12-21",
-        "essence drama mule dolphin bitter rain abandon abandon able human mule relax",
-        TEST_PASSWORD,
-        0,
-        0,
-    ),
+    input("ambiguous-12-21", AMBIGUOUS_12_21, TEST_PASSWORD, 0, 0),
 ];
 
 /// A negative case: a recovery of the container of the positive vector that `container_of`

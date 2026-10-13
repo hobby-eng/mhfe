@@ -6,7 +6,7 @@ Privacy-only documentation update: this is not a new audit. No checks were rerun
 
 The audit and its remediation ran unattended on 2026-10-01. Wherever more than one option was
 reasonable, this file says what was chosen and why. The report is
-[audit-05-2026-10-01.md](audit-05-2026-10-01.md). Nothing was pushed or tagged.
+[AUD-005-2026-10-01.md](AUD-005-2026-10-01.md). Nothing was pushed or tagged.
 
 ## Choices made
 

@@ -171,11 +171,29 @@ wallet check (`NO_WALLET_CHECK`). On a 24-word container the wallet check withou
 refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says which apply
 (`builtInCheckLengths`, `offersWalletCheck`).
 
+`outcome` follows the length rules of recovery, as the specification's rehearsal check does:
+
+- `"matches"`: exactly one verified reading, at the stated length or at the detected one that takes
+  precedence over it, or a wallet reference, an address or a fingerprint, that matches;
+- `"notVerified"`: only readings that nothing verifies. A 24-word reading without a wallet
+  reference is one, and a wrong password gives one too; a pass of the 16-bit check does not verify
+  it. Several lengths that pass with none stated, or beside a stated one that does not, are
+  another: `evidence.matchingLengths` lists them, and the page says so;
+- `"doesNotMatch"`: no reading, as for a stated short length that nothing passes, or a reference
+  that does not match. `{ walletCheck: true }` that fails does not match, as the owner says the
+  phrase was drawn with it.
+
 `evidence` is what the same recovery shows of the original seed phrase's own checks:
 
-- `builtInCheck` is the 12- to 21-word length whose built-in check passes, the stated one where it
+- `builtInCheck` is the length of the one verified reading, the stated one where its built-in check
   passes, or null. With `{ words }`, a check that passes at another length takes precedence and
   matches, and `builtInCheck` names that length: say so, as the command-line tool does.
+- `matchingLengths` lists every 12- to 21-word length whose built-in check passes, in ascending
+  order: one for a short original, none for a 24-word one, several only by chance.
+- `passed` lists the checks that passed, in the order to show them beside the result, as the
+  command-line tool does: `{ check: "builtInCheck", words }` for the verified reading,
+  `{ check: "builtInChecks", lengths }` for several lengths, and `{ check: "walletCheck" }` where
+  the 16-bit check passes.
 - `walletCheck` says whether the 24-word reading passes the 16-bit phrase + passphrase check with
   the `passphrase` given, or with none if none was given. It is null for `{ words }` with a length
   stated, for a same-length container, and when exactly one shorter length passes its check and the
@@ -185,8 +203,10 @@ refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says which apply
 `{ words: 0 }` detects the length: the built-in check of whichever 12- to 21-word length passes it,
 or with a `passphrase`, the phrase + passphrase check of a 24-word phrase drawn with it. Ask the
 user whether a BIP39 passphrase is used with the original seed phrase first. When detection finds
-no length, `onNoLength` is called: ask how many words the original seed phrase has, and return
-`{ words }` for 12 to 21 words, which then does not match, or for 24 words
+no verified length, none or several, `onNoLength(evidence)` is called with what it found: say
+which lengths pass, if any, and whether the 24-word reading passes the 16-bit check, ask how many
+words the original seed phrase has, and return
+`{ words }` for 12 to 21 words, compared under the same length rules, or for 24 words
 `{ address, coin, path?, passphrase? }` or `{ fingerprint, passphrase? }`, compared on the same
 recovery without its rounds again; `null` keeps the result. `onNoLength` with another reference is
 a `TypeError`.
@@ -266,10 +286,12 @@ recovery reports it, and it never confirms a rekey.
   tool does. The rekey waits for its answer; anything but `true` stops it with
   `NOT_CONFIRMED_BY_OWNER`, and the library seals nothing before that yes. Offer `{ owner }` only to
   a user who knows neither a receiving address nor the fingerprint, as the specification allows
-  it only then, and ask for the answer with nothing preselected. For a phrase without a built-in
-  check (`words` 24, or a same-length container), keep a fingerprint of the confirmed phrase for
-  the rehearsal of the new container before sealing: `fingerprintWithoutPassphrase`, or
-  `MhfeWallet.fingerprint()` with the wallet's passphrase.
+  it only then, and ask for the answer with nothing preselected. Where `rehearsalNeedsPassphrase`
+  is true, a phrase without a built-in check of a wallet with a BIP39 passphrase, the yes is
+  `{ passphrase }` with the wallet's passphrase: the library makes from it the fingerprint the new
+  container's rehearsal compares, before it seals. The result's `rehearsal` says what the new
+  container phrase is rehearsed with: its built-in check, the reference that confirmed it, or that
+  fingerprint; show it with the result.
 - `walletHasPassphrase` says whether the wallet has a BIP39 passphrase, so that the new
   container's `keep` names it, as after `encrypt()`. Only an address or a fingerprint compared with
   a `passphrase` that is not empty shows that the wallet has one: there the answer may be left out,
@@ -885,17 +907,18 @@ do for them:
   with the check, as a phrase made without it fails. When the user is done,
   remove the phrase from the screen, say so, and ask the user to close the page;
 - offer a check only where `readContainer()` says it applies, and show what an address check will
-  search (`MhfeWallet.describeAddress()`) before it runs. Beside a match, list each of the original
-  seed phrase's own checks that `evidence` shows passing, as the command-line tool does, and when
-  `{ words }` matched at another length, say that the check found `evidence.builtInCheck` words;
-- before a rekey, tell every user, whatever the container, in one plain sentence: wallets that
-  other passwords open on the old container do not move to the new one, so keep the old container,
-  its passwords, and a PIM or memory level that is not 0, until you have moved their funds. Your
-  own wallet's addresses do not change. Ask nothing about such wallets, as an answer
+  search (`MhfeWallet.describeAddress()`) before it runs. Show the three outcomes apart, as the
+  command-line tool does: never "does not match" for "notVerified". Beside the result, list
+  `evidence.passed`, and when `{ words }` matched at another length, say that the check found
+  `evidence.builtInCheck` words;
+- before a rekey, tell every user, whatever the container, in one plain sentence that wallets that
+  other passwords open on the old container do not move to the new one, so that the user keeps
+  what `keepOldContainer()` lists until their funds are moved, and that the user's own wallet's
+  addresses do not change. Ask nothing about such wallets, as an answer
   would be a record of one. Show the phrase of an owner confirmation concealed, ask the owner to
   compare it with a written record, not with memory, and remove it after the answer. Say afterwards
   that the old container phrase and password still open the wallet, and that the new container
-  phrase is rehearsed with a check;
+  phrase is rehearsed with what the result's `rehearsal` names;
 - before hidden wallets, say every time that nothing is created or stored and that the container and
   each password give the same wallet every time; ask for the main wallet's BIP39 passphrase every
   time; show no list or count of the wallets opened, as the command-line tool shows them only on its

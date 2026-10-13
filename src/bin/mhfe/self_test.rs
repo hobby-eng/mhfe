@@ -19,7 +19,7 @@ use mhfe::self_check::{ComponentOutcome, ComponentResult, SelfCheckReport, Tier}
 use mhfe::self_test::SelfTest;
 #[cfg(test)]
 use mhfe::self_test::SelfTestFault;
-use mhfe::{WorkFactor, ROUNDS};
+use mhfe::{WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
 
 use crate::exit::{Failure, INTERNAL_ERROR, SUCCESS};
 use crate::flow::{self, Flow, Kind};
@@ -28,7 +28,8 @@ use crate::settings;
 use crate::startup;
 use crate::style::{self, paint, BAD, GOOD, MUTED, WARNING};
 use crate::system_random::SystemRandom;
-use crate::terminal::{self, Input, Progress};
+use crate::terminal::{Input, Progress};
+use crate::time_text;
 
 #[derive(Args)]
 pub struct Options {
@@ -40,7 +41,7 @@ pub struct Options {
 /// The top of `mhfe self-test --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Test every part of this program",
+        "Run the self-test",
         "Compares every part of this program with its known answers on this computer: the \
          hashes, Argon2id at 1, 64 and 256 MiB, the rounds of the cipher with the published test \
          vectors, the formats, passwords, word lists, repair words, check words, wallet keys and \
@@ -82,16 +83,12 @@ pub fn help() -> String {
 /// What the published vectors cost: "about 2 to 4 minutes, 2 GiB", for the help, the report and
 /// the menu.
 pub fn vectors_cost() -> String {
-    const MINUTE: u64 = 60;
-    /// An encryption of 12 rounds and a recovery of 12, each estimated as one operation.
-    const OPERATIONS: u64 = 2;
-    // Both vectors use the default settings, PIM 0 and memory level 0.
+    // Both vectors use the default settings, PIM 0 and memory level 0: an encryption of 12
+    // rounds and a recovery of 12.
     let work = WorkFactor::default();
-    let (low, high) = work.estimated_seconds();
     format!(
-        "about {} to {} minutes, {}",
-        (OPERATIONS * low).div_ceil(MINUTE),
-        (OPERATIONS * high).div_ceil(MINUTE),
+        "about {}, {}",
+        time_text::of_rounds(work, ENCRYPTION_ROUNDS),
         work.memory_text()
     )
 }
@@ -214,7 +211,7 @@ fn seconds(took: Duration) -> String {
     if took < SHORT {
         format!("{:.1} s", took.as_secs_f64())
     } else {
-        terminal::duration(took.as_secs())
+        time_text::duration(took.as_secs())
     }
 }
 

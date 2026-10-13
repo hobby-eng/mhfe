@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 use crate::exit::{Failure, SUCCESS};
 use crate::settings;
 use crate::style::{self, paint, MUTED};
-use crate::terminal::duration;
+use crate::time_text::duration;
 
 /// The negative cases file without its ".json" extension; also the --only text that selects it.
 const NEGATIVE_CASES_STEM: &str = "negative-cases";

@@ -8,9 +8,9 @@
 use anstream::eprintln;
 use clap::{Args, ValueEnum};
 use mhfe::memory::LockedText;
-use mhfe::operation::Stage;
-use mhfe::rekey::Rekey;
-use mhfe::wallet::{fingerprint_text, master_fingerprint};
+use mhfe::operation::{Keep, Stage};
+use mhfe::rekey::{Rekey, ReplacementRehearsal};
+use mhfe::wallet::fingerprint_text;
 use mhfe::{
     Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, Password,
     PhraseLength, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
@@ -295,22 +295,16 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         recovered
     };
     let phrase = recovered.phrase();
-    // A replacement of a source without a built-in check, confirmed by the owner alone, needs the
-    // reference its rehearsal compares before it is made (the specification's re-encryption
-    // rules): the fingerprint of the confirmed phrase, with the wallet's passphrase if it has one.
-    let rehearsal_fingerprint = if by_owner && !phrase.verified() {
-        let passphrase = if wallet_passphrase {
-            check::read_passphrase_named(&mut input, Operation::Rekey, check::ORIGINAL_SEED_PHRASE)?
-        } else {
-            LockedText::copy_of("")
-        };
-        Some(fingerprint_text(master_fingerprint(
-            phrase.phrase(),
-            &passphrase,
-        )?))
+    // The reference the replacement's rehearsal compares, known before it is made (the
+    // specification's re-encryption rules), with the wallet's passphrase where the library needs
+    // it.
+    let passphrase = if recovered.rehearsal_needs_passphrase() {
+        check::read_passphrase_named(&mut input, Operation::Rekey, check::ORIGINAL_SEED_PHRASE)?
     } else {
-        None
+        LockedText::copy_of("")
     };
+    let rehearsal = recovered.replacement_rehearsal(&passphrase)?;
+    drop(passphrase);
 
     let new_settings = Settings {
         pim: options.new_pim,
@@ -356,22 +350,25 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         "Old backup",
         "the old container phrase still opens the wallet with the old password",
     );
-    style::fact_wrapped(
-        "Next",
-        &match &rehearsal_fingerprint {
-            Some(fingerprint) => format!(
-                "rehearse the new container phrase with {} and fingerprint {}",
-                paint(ACCENT, "mhfe check --fingerprint"),
-                paint(ACCENT, fingerprint)
-            ),
-            None => format!(
-                "rehearse the new container phrase with {}",
-                paint(ACCENT, "mhfe check")
-            ),
-        },
-    );
+    style::fact_wrapped("Next", &next_rehearsal(&rehearsal));
     style::more(readme::REKEY);
     Ok(SUCCESS)
+}
+
+/// What the summary says to do next: rehearse the new container phrase, with the fingerprint the
+/// library names where the owner confirmed the phrase alone.
+fn next_rehearsal(rehearsal: &ReplacementRehearsal) -> String {
+    match rehearsal {
+        ReplacementRehearsal::Fingerprint(fingerprint) => format!(
+            "rehearse the new container phrase with {} and fingerprint {}",
+            paint(ACCENT, "mhfe check --fingerprint"),
+            paint(ACCENT, fingerprint_text(*fingerprint))
+        ),
+        ReplacementRehearsal::BuiltInCheck | ReplacementRehearsal::ConfirmingReference => format!(
+            "rehearse the new container phrase with {}",
+            paint(ACCENT, "mhfe check")
+        ),
+    }
 }
 
 /// How a recovery is confirmed before it is encrypted again.
@@ -427,22 +424,13 @@ enum Kind {
 }
 
 /// The warning about the wallets other passwords open on the old container, one plain sentence
-/// (the owner's wording of 2026-10-09, the specification's): they do not move to the new container,
-/// so the old container, its passwords and the settings they open it with are kept until their
-/// funds are moved. Your own wallet's addresses do not change. A PIM or memory level is named only
-/// when it is not 0, as nothing else needs to be kept for the defaults.
+/// (the owner's wording of 2026-10-09, the specification's), naming what the library says to keep
+/// of the old container ([`Keep::old_container`]).
 fn keep_until_funds_moved(old_work: WorkFactor) -> String {
-    let mut kept = vec!["the old container".to_owned(), "its passwords".to_owned()];
-    if old_work.pim() != 0 {
-        kept.push(format!("PIM {}", old_work.pim()));
-    }
-    if old_work.memory_level() != 0 {
-        kept.push(format!("memory level {}", old_work.memory_level()));
-    }
     format!(
         "Wallets that other passwords open on the old container do not move to the new one: keep \
          {} until you have moved their funds.",
-        style::and_list(&kept)
+        encrypt::what_to_keep(&Keep::old_container(old_work))
     )
 }
 

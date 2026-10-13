@@ -208,6 +208,12 @@ fn show(
     check_word: bool,
 ) -> Result<(), Failure> {
     let screen = PrivateScreen::enter(input, operation.title());
+    // Capability may disappear after preflight; an enclosing private screen is sufficient.
+    if !screen.shows_privately() {
+        return Err(Failure::internal(
+            "No private screen to show the generated password on.",
+        ));
+    }
     eprintln!();
     eprintln!("  {STRONG}{password}{STRONG:#}");
     eprintln!();
@@ -226,6 +232,48 @@ fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Public synthetic sentinel only; the child has no terminal and no enclosing private flow.
+    const PUBLIC_DISPLAY_SENTINEL: &str = "AUD-020-SEC002-public-display-sentinel";
+
+    #[test]
+    fn a_generated_password_never_prints_without_a_private_screen() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "made_password::tests::refuse_generated_password_child",
+                "--ignored",
+                "--nocapture",
+            ])
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains(PUBLIC_DISPLAY_SENTINEL),
+            "the generated password reached stderr without a private screen"
+        );
+        assert!(
+            !String::from_utf8_lossy(&output.stdout).contains(PUBLIC_DISPLAY_SENTINEL),
+            "the generated password reached stdout without a private screen"
+        );
+        assert!(output.status.success(), "the private-screen refusal failed");
+    }
+
+    #[test]
+    #[ignore = "isolated no-terminal child, executed by the parent regression"]
+    fn refuse_generated_password_child() {
+        let result = show(
+            &Input::terminal_only(),
+            Operation::Encrypt,
+            PUBLIC_DISPLAY_SENTINEL,
+            "public synthetic strength",
+            false,
+        );
+        let Err(failure) = result else {
+            panic!("a generated password was shown without a private screen");
+        };
+        assert!(!failure.message.contains(PUBLIC_DISPLAY_SENTINEL));
+    }
 
     #[test]
     fn the_kinds_show_whole() {

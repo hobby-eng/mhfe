@@ -15,6 +15,10 @@ pub const NO_MATCH: i32 = 3;
 /// The computer cannot run the request: not enough memory for the memory level, memory that could
 /// not be reserved, or a level beyond what this environment can use.
 pub const NOT_ENOUGH_RESOURCES: i32 = 4;
+/// `check` recovered only readings that nothing verifies: a 24-word reading without a wallet
+/// reference, which a wrong password gives too, or several lengths whose built-in checks pass with
+/// none of them stated.
+pub const NOT_VERIFIED: i32 = 5;
 /// Stopped by the person: Ctrl+C (128 + SIGINT, as shells report it), and as it Ctrl+\, Ctrl+Z,
 /// SIGTERM or a closed terminal, Escape or q at a question, or Ctrl+D at an empty prompt.
 pub const CANCELLED: i32 = 130;

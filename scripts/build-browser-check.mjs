@@ -114,8 +114,8 @@ async function main() {
     const candidate = recovery.candidates[0];
     expect(recovery.kind === 'phrase' && candidate.phrase === PHRASE && candidate.words === 12 && candidate.verified,
       'full-size decryption recovers the verified 12-word phrase (' + seconds() + ')');
-    const { matches } = await client.check({ container, password: PASSWORD, reference: { address: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu', coin: 'bitcoin' }, onProgress });
-    expect(matches === true, 'rehearsal check with the address matches (' + seconds() + ')');
+    const { outcome } = await client.check({ container, password: PASSWORD, reference: { address: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu', coin: 'bitcoin' }, onProgress });
+    expect(outcome === 'matches', 'rehearsal check with the address matches (' + seconds() + ')');
   }
 }
 

@@ -227,8 +227,10 @@ separate password for each phrase.
 
 ### `mhfe check`
 
-Rehearse recovery without showing the original phrase. The result is "matches" or "does not match";
-a matched address also shows its path, such as `m/84'/0'/0'/0/5`. The terminal summary names every
+Rehearse recovery without showing the original phrase. The result is "matches", "does not match" or
+"not verified"; a matched address also shows its path, such as `m/84'/0'/0'/0/5`. "Not verified"
+means that nothing tells a right password from a wrong one: a 24-word reading without an address or
+fingerprint, or several lengths that pass their built-in checks by chance, which MHFE lists. The terminal summary names every
 check the recovery passed, including a missing-word search's container-wallet reference when used.
 Enter the container from your written copy.
 
@@ -249,10 +251,11 @@ phrase drawn with it. The latter checks only the 24-word reading, requires a non
 and does not identify the wallet.
 
 For the built-in check, "Detect automatically" (`--words auto`) finds a passing short length and
-asks whether the original wallet has a passphrase, so a 24-word reading with the optional check can
-also be tested. If no length is found, a stated short length does not match; for 24 words, an address
-or fingerprint can confirm the same recovery without repeating the rounds. A detected short length
-takes precedence over a stated one, and the summary reports it.
+asks whether the original wallet has a passphrase, so that a pass of the optional check of a 24-word
+reading is reported; it does not verify the reading. If no single length is found, MHFE asks for
+it: a stated short length that does not pass does not match, and for 24 words an address or
+fingerprint confirms the same recovery without repeating the rounds. A detected short length takes
+precedence over a stated one, and the summary reports it.
 
 A mismatch cannot identify which input is wrong: the password, settings, container, passphrase or
 reference. Script input and its default coin are in [For scripts](#for-scripts).
@@ -565,6 +568,7 @@ The exit code tells what happened:
 | 2    | Invalid input: phrase, container, password, setting, address or option                              |
 | 3    | Does not match: wrong password, PIM, memory level, container or selected length                     |
 | 4    | Not enough memory for the memory level                                                              |
+| 5    | Not verified (`check`): no address or fingerprint for a 24-word reading, or several lengths pass    |
 | 130  | Cancelled: Ctrl+C, Escape or q at a list, Ctrl+D at a secret's prompt, SIGTERM or a closed terminal |
 
 A command is cancelled with Ctrl+C at any moment, with Escape, or q, at a list of answers, and with

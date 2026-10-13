@@ -155,10 +155,13 @@ ROOT = Path(__file__).resolve().parent.parent
 PROGRAM = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "target/debug/mhfe")
 ZERO_12 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-12.json").read_text())
 CONTAINER, PHRASE = ZERO_12["container"], ZERO_12["inputs"]["phrase"]
+ZERO_24 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-24.json").read_text())
 # Exit codes of the tool when the person cancels, when an answer or the setup is refused, when
 # the memory for Argon2 cannot be reserved and when a part of the program fails its known answers
 # (src/bin/mhfe/exit.rs).
 CANCELLED, INVALID_INPUT, NOT_ENOUGH_RESOURCES, INTERNAL_ERROR = 130, 2, 4, 1
+# The exit codes of a check's three outcomes.
+MATCHES, NO_MATCH, NOT_VERIFIED = 0, 3, 5
 # What the tool prints next after each kind of answer. An accepted one leads to the fingerprint.
 # A refused password is asked again ("Please type it again").
 REFUSED = b"again"
@@ -1551,6 +1554,36 @@ def check_length_detection():
     print("rekey: detection asks how a 24-word phrase is confirmed")
 
 
+# Each outcome of a check in a script: its word on standard output, its exit code, and the reason
+# on standard error (check.rs in the tool). A full recovery each: about a minute in a release build.
+CHECK_OUTCOMES = (
+    (ZERO_12, ("--words", "auto"), True, b"matches\n", MATCHES, None),
+    (ZERO_24, ("--words", "auto"), True, b"not verified\n", NOT_VERIFIED,
+     b"No length of 12 to 21 words passes its built-in check"),
+    (ZERO_24, ("--words", "12"), False, b"does not match\n", NO_MATCH,
+     b"No length's built-in check passes"),
+)
+
+
+def check_script_outcomes():
+    """`mhfe check --stdin` writes the specification's word and its own exit code for each outcome
+    (AUD-023-FUN002): the 12-word original with the length detected matches; the 24-word original
+    with the length detected is not verified, as a wrong password would be; and with 12 stated
+    words it does not match."""
+    for vector, words, asks_passphrase, word, code, reason in CHECK_OUTCOMES:
+        lines = [vector["container"].encode(), vector["inputs"]["password"].encode()]
+        if asks_passphrase:
+            lines.append(b"")
+        label = f"check --stdin {' '.join(words)}, {vector['name']}"
+        result = run_plainly(("check", "--stdin", *words), b"\n".join(lines) + b"\n",
+                             timeout=600)
+        assert (result.stdout, result.returncode) == (word, code), (
+            f"{label}: {result.stdout!r}, exit code {result.returncode}")
+        if reason is not None:
+            assert reason in result.stderr, f"{label}: {result.stderr!r}"
+    print("check --stdin: matches (0), not verified (5) and does not match (3), each with its word")
+
+
 # The search for missing words without the repair words (container_search.rs in the tool). The
 # decoy fingerprint of zero-12's container phrase, computed by an independent Python
 # implementation (src/search/known_answers.rs), finds its last word in seconds.
@@ -1685,9 +1718,10 @@ def check_container_search():
     print("search: nothing known says how long it takes; \"Not now\" asks again")
 
 
-def run_plainly(arguments, data=b"", colour=False, capped=False):
+def run_plainly(arguments, data=b"", colour=False, capped=False, timeout=30):
     """Runs the tool with `data` on standard input and both outputs in pipes, without a terminal;
-    `colour` forces colour on, and `capped` limits the address space as for a Session."""
+    `colour` forces colour on, `capped` limits the address space as for a Session, and `timeout`
+    is in seconds."""
     environment = tool_environment(colour)
     if colour:
         environment["CLICOLOR_FORCE"] = "1"
@@ -1696,7 +1730,7 @@ def run_plainly(arguments, data=b"", colour=False, capped=False):
         def limit():
             resource.setrlimit(resource.RLIMIT_AS, (ADDRESS_SPACE_CAP, ADDRESS_SPACE_CAP))
     return subprocess.run([PROGRAM, *arguments], input=data, capture_output=True, env=environment,
-                          timeout=30, preexec_fn=limit)
+                          timeout=timeout, preexec_fn=limit)
 
 
 def check_password_sizes():
@@ -2108,6 +2142,7 @@ def main():
     check_container_repair()
     check_repair_command()
     check_length_detection()
+    check_script_outcomes()
     check_search_reference_is_recorded_once_read()
     check_container_search()
     check_password_sizes()

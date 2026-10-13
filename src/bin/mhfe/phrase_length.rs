@@ -6,6 +6,7 @@ use mhfe::{PhraseLength, WordCount, WORD_COUNTS};
 
 use crate::choice::{Answer, Question};
 use crate::exit::Failure;
+use crate::style;
 use crate::terminal::Input;
 
 /// The value of `--words` that detects the length.
@@ -27,6 +28,12 @@ pub fn parse(text: &str) -> Result<PhraseLength, String> {
 pub fn length_list() -> String {
     let counts: Vec<String> = WORD_COUNTS.iter().map(ToString::to_string).collect();
     counts.join(", ")
+}
+
+/// Word counts in running text: "12", "12 and 21", "12, 15 and 21".
+pub fn listed(lengths: &[usize]) -> String {
+    let counts: Vec<String> = lengths.iter().map(ToString::to_string).collect();
+    style::and_list(&counts)
 }
 
 /// The question about the length, in every command that asks it.

@@ -89,8 +89,9 @@ const CORE_OPERATIONS = {
           ),
         );
       const result = compare(request);
-      if (result.matches || !request.asksLength) return result;
-      const next = await host.ask("noLength", null);
+      // Detection that found no verified length, none or several, asks the page for the length.
+      if (result.outcome !== "notVerified" || !request.asksLength) return result;
+      const next = await host.ask("noLength", result.evidence);
       if (next === null) return result;
       try {
         return compare(next);
@@ -103,6 +104,9 @@ const CORE_OPERATIONS = {
   },
 
   searchCandidates: (request) => JSON.parse(mhfe.searchCandidates(request.container)),
+
+  keepOldContainer: (request) =>
+    JSON.parse(mhfe.keepOldContainer(request.pim, request.memoryLevel)),
 
   searchDecoy: (request, host) =>
     JSON.parse(
@@ -210,8 +214,15 @@ const CORE_OPERATIONS = {
       );
       const recovered = await recoverConfirmed(session, request, host);
       if (recovered.ownerCheck !== null) {
-        const confirmed = await host.ask("ownerCheck", recovered.ownerCheck);
-        session.ownerAnswer(confirmed === true);
+        const answer = await host.ask("ownerCheck", {
+          ...recovered.ownerCheck,
+          rehearsalNeedsPassphrase: recovered.rehearsalNeedsPassphrase,
+        });
+        try {
+          session.ownerAnswer(answer?.confirmed === true, answer?.passphrase ?? new Uint8Array());
+        } finally {
+          wipeSecrets(answer);
+        }
       }
       const sealed = JSON.parse(
         session.seal(host.progress, (json) => host.post("unverified", JSON.parse(json))),

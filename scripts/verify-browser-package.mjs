@@ -427,31 +427,45 @@ for (const [name, createModule] of Object.entries(builds)) {
 
   steps.length = 0;
   assert.equal(
-    operations.check(created.container, PASSWORD, reduced, "words", "12", { onRound }).matches,
-    true,
+    operations.check(created.container, PASSWORD, reduced, "words", "12", { onRound }).outcome,
+    "matches",
   );
   assert.deepEqual(steps.slice(-2), ["recover 12/12", "compare 12/12"]);
   // A check at a stated length that the built-in check contradicts matches at the length found,
   // which the evidence names (AUD-015-FUN001).
   const checkedOther = operations.check(created.container, PASSWORD, reduced, "words", "15");
-  assert.deepEqual([checkedOther.matches, checkedOther.evidence.builtInCheck], [true, 12]);
+  assert.deepEqual([checkedOther.outcome, checkedOther.evidence.builtInCheck], ["matches", 12]);
   assert.equal(
     operations.check(created.container, PASSWORD, reduced, "fingerprint", PHRASE_FINGERPRINT)
-      .matches,
-    true,
+      .outcome,
+    "matches",
   );
   assert.deepEqual(
     operations.check(created.container, PASSWORD, reduced, "address", PHRASE_ADDRESS, {
       coin: "bitcoin",
     }),
-    { matches: true, path: "m/84'/0'/0'/0/0", evidence: { builtInCheck: 12, walletCheck: null } },
+    {
+      outcome: "matches",
+      path: "m/84'/0'/0'/0/0",
+      evidence: {
+        builtInCheck: 12,
+        matchingLengths: [12],
+        passed: [{ check: "builtInCheck", words: 12 }],
+        walletCheck: null,
+      },
+    },
   );
   // The length detected: the 12-word original passes its own checks, and one recovery is
   // compared again, as a page that asks for the length when detection finds none compares it.
   assert.deepEqual(operations.check(created.container, PASSWORD, reduced, "words", "0"), {
-    matches: true,
+    outcome: "matches",
     path: null,
-    evidence: { builtInCheck: 12, walletCheck: null },
+    evidence: {
+      builtInCheck: 12,
+      matchingLengths: [12],
+      passed: [{ check: "builtInCheck", words: 12 }],
+      walletCheck: null,
+    },
   });
   const checkSession = new core.CheckSession(
     created.container,
@@ -471,14 +485,14 @@ for (const [name, createModule] of Object.entries(builds)) {
   // A stated length the built-in check contradicts matches at the length found (AUD-015-FUN001);
   // a fingerprint of another wallet does not.
   const atFifteen = JSON.parse(checkSession.compare("words", "15", "", "", noBytes()));
-  assert.deepEqual([atFifteen.matches, atFifteen.evidence.builtInCheck], [true, 12]);
+  assert.deepEqual([atFifteen.outcome, atFifteen.evidence.builtInCheck], ["matches", 12]);
   assert.equal(
-    JSON.parse(checkSession.compare("fingerprint", "00000000", "", "", noBytes())).matches,
-    false,
+    JSON.parse(checkSession.compare("fingerprint", "00000000", "", "", noBytes())).outcome,
+    "doesNotMatch",
   );
   assert.equal(
-    JSON.parse(checkSession.compare("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes())).matches,
-    true,
+    JSON.parse(checkSession.compare("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes())).outcome,
+    "matches",
     "a recovery is compared again without its rounds",
   );
   checkSession.free();
@@ -577,13 +591,22 @@ for (const [name, createModule] of Object.entries(builds)) {
       "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
       { coin: "ethereum" },
     ),
-    { matches: true, path: "m/44'/60'/0'/0/0", evidence: { builtInCheck: 12, walletCheck: null } },
+    {
+      outcome: "matches",
+      path: "m/44'/60'/0'/0/0",
+      evidence: {
+        builtInCheck: 12,
+        matchingLengths: [12],
+        passed: [{ check: "builtInCheck", words: 12 }],
+        walletCheck: null,
+      },
+    },
   );
   assert.equal(
     operations.check(created.container, PASSWORD, reduced, "fingerprint", PHRASE_FINGERPRINT, {
       passphrase: encode("TREZOR"),
-    }).matches,
-    false,
+    }).outcome,
+    "doesNotMatch",
   );
   expectCode("INVALID_COIN", () =>
     operations.check(created.container, PASSWORD, reduced, "address", "bc1q", { coin: "doge" }),
@@ -819,17 +842,41 @@ for (const [name, createModule] of Object.entries(builds)) {
       fingerprintWithoutPassphrase: PHRASE_FINGERPRINT,
     },
   );
-  ownerAgain.ownerAnswer(true);
+  ownerAgain.ownerAnswer(true, noBytes());
+  const resealed = JSON.parse(
+    ownerAgain.seal(
+      () => {},
+      () => {},
+    ),
+  );
   assert.deepEqual(
-    JSON.parse(
-      ownerAgain.seal(
-        () => {},
-        () => {},
-      ),
-    ).keep,
+    resealed.keep,
     [{ item: "containerWords", words: 24 }, { item: "password" }, { item: "passphrase" }],
     "the wallet stated with the first confirmation to have a passphrase keeps it",
   );
+  assert.deepEqual(
+    resealed.rehearsal,
+    { kind: "builtInCheck" },
+    "a short phrase is rehearsed with its built-in check",
+  );
+  // What to keep of a rekey's old container: a PIM or memory level only where it is not 0
+  // (AUD-023-ARC016).
+  const oldKept = [{ item: "oldContainer" }, { item: "oldPasswords" }];
+  for (const [pim, level, settings] of [
+    [0, 0, []],
+    [3, 0, [{ item: "pim", value: 3 }]],
+    [0, 2, [{ item: "memoryLevel", value: 2 }]],
+    [
+      3,
+      2,
+      [
+        { item: "pim", value: 3 },
+        { item: "memoryLevel", value: 2 },
+      ],
+    ],
+  ]) {
+    assert.deepEqual(JSON.parse(core.keepOldContainer(pim, level)), [...oldKept, ...settings]);
+  }
   ownerAgain.free();
   // What ends a rekey after a refusal: a length the owner cannot confirm, a length with another
   // kind, a reference that does not match. Before a refusal there is nothing to confirm again.
@@ -1099,7 +1146,7 @@ for (const [name, createModule] of Object.entries(builds)) {
     words: 12,
     fingerprintWithoutPassphrase: PHRASE_FINGERPRINT,
   });
-  expectCode("NOT_CONFIRMED_BY_OWNER", () => owner.ownerAnswer(false));
+  expectCode("NOT_CONFIRMED_BY_OWNER", () => owner.ownerAnswer(false, noBytes()));
   owner.free();
   // Only the value true is a yes, never 1, "1" or [1], which a bool of the ABI would take, and
   // nothing is sealed before the answer (the specification's re-encryption rules).
@@ -1122,7 +1169,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   unanswered.free();
   for (const notTrue of [1, "1", [1], "true", {}]) {
     const asked = askedOwner();
-    expectCode("NOT_CONFIRMED_BY_OWNER", () => asked.ownerAnswer(notTrue));
+    expectCode("NOT_CONFIRMED_BY_OWNER", () => asked.ownerAnswer(notTrue, noBytes()));
     asked.free();
   }
   // 24 words stated for this 12-word phrase: the owner cannot tell the two readings apart, and

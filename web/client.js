@@ -374,15 +374,22 @@ export class MhfeClient {
    * (quick, weaker), `{ words }` (built-in check of a 12- to 21-word original; 0 detects the
    * length, and with `passphrase` a 24-word phrase drawn with the phrase + passphrase check is
    * found too) or `{ walletCheck: true }` (the phrase and passphrase check of a 24-word container,
-   * with a passphrase). Resolves to `{ matches, path, evidence }`, `path` being where a matched
-   * address was found and null otherwise, `evidence` `{ builtInCheck, walletCheck }` the original
-   * seed phrase's own checks from the same recovery, and never to any part of the phrase.
-   * Progress: "recover" 1 to 12, then once "compare".
+   * with a passphrase). Resolves to `{ outcome, path, evidence }` and never to any part of the
+   * phrase. `outcome` is "matches", "doesNotMatch" or "notVerified" under the specification's
+   * length rules: exactly one verified reading or a wallet reference that matches; no reading or a
+   * wallet reference that does not match; only readings nothing verifies, a 24-word reading
+   * without a wallet reference (a wrong password gives one too, and a pass of the 16-bit check
+   * does not verify it) or several lengths that pass with none of them stated. `path` is where a
+   * matched address was found and null otherwise. `evidence` `{ builtInCheck, matchingLengths,
+   * passed, walletCheck }` holds the original seed phrase's own checks from the same recovery: the
+   * length of the one verified reading, every length whose built-in check passes, the checks that
+   * passed as a page lists them, and the 16-bit check of the 24-word reading. Progress: "recover" 1 to 12, then once "compare".
    *
-   * With `{ words: 0 }`, `onNoLength` is called when detection found no length: ask the user how
-   * many words the original seed phrase has, and return `{ words }` (12 to 21) or for 24 words
-   * `{ address, coin, path?, passphrase? }` or `{ fingerprint, passphrase? }`, compared on the
-   * same recovery without its rounds again; null keeps the result.
+   * With `{ words: 0 }`, `onNoLength(evidence)` is called when detection found no verified
+   * length, none or several (`evidence.matchingLengths`): ask the user how many words the original
+   * seed phrase has, and return `{ words }` (12 to 21) or for 24 words `{ address, coin, path?,
+   * passphrase? }` or `{ fingerprint, passphrase? }`, compared on the same recovery without its
+   * rounds again; null keeps the result.
    */
   async check({
     container,
@@ -421,7 +428,9 @@ export class MhfeClient {
         memoryLevel,
         onProgress,
         passphrase,
-        handlers: asksLength ? { noLength: () => answerNoLength(onNoLength) } : {},
+        handlers: asksLength
+          ? { noLength: (evidence) => answerNoLength(onNoLength, evidence) }
+          : {},
       },
     );
   }
@@ -436,6 +445,20 @@ export class MhfeClient {
    * search (searchDecoy()) is always offered. More than two missing words reject with
    * TOO_MANY_MISSING_WORDS.
    */
+  /**
+   * What to keep of the old container of a rekey until the funds of the wallets that other
+   * passwords open on it are moved, as the library lists it: `[{ item }]` with "oldContainer" and
+   * "oldPasswords", then `{ item: "pim", value }` and `{ item: "memoryLevel", value }` where
+   * `pim` or `memoryLevel`, the old container's settings, is not 0. Say it to every user before a
+   * rekey, whatever the container, so that it says nothing about one: those wallets do not move to
+   * the new container, and the user's own wallet's addresses do not change.
+   */
+  async keepOldContainer({ pim = 0, memoryLevel = 0 } = {}) {
+    requireSettings(pim, memoryLevel);
+    await this.#ready();
+    return this.#quick({ operation: "keepOldContainer", pim, memoryLevel });
+  }
+
   async searchCandidates({ container } = {}) {
     requireText(container, "container");
     await this.#ready();
@@ -526,9 +549,9 @@ export class MhfeClient {
 
   /**
    * Re-encrypts a container with a new password or settings: rounds 1 to 12 recover it with the old
-   * ones, 13 to 36 seal it again. Tell every user first: wallets that other passwords open on the
-   * old container do not move to the new one, so keep the old container, its passwords and its
-   * settings until their funds are moved (nothing is destroyed here). `pim` and `memoryLevel` are
+   * ones, 13 to 36 seal it again. Nothing is destroyed here: tell every user first what to keep of
+   * the old container until the funds of the wallets that other passwords open on it are moved
+   * (keepOldContainer()). `pim` and `memoryLevel` are
    * the old container's settings; `newPim`, `newMemoryLevel`, `newPasswordRepair` and
    * `repairWordCount` those of the new one, and `onProgress` and `onUnverified` work as for
    * encrypt().
@@ -563,15 +586,21 @@ export class MhfeClient {
    * again.
    *
    * `confirmation` is exactly one of `{ builtInCheck: true }`, `{ address, coin, path? }`,
-   * `{ fingerprint }` or `{ owner: (check) => boolean | Promise<boolean> }`
+   * `{ fingerprint }` or `{ owner: (check) => true | { passphrase } | Promise<...> }`
    * (readContainer().confirmationFor says which a length needs, "0" for detection). The wallet
    * check, 16 bits, never confirms a phrase to encrypt again. The owner callback receives
-   * `{ phrase, words, statedWords?, fingerprintWithoutPassphrase }` to compare with the written
-   * backup, `statedWords` only where the built-in check found another length than the one stated,
-   * which the page says first; anything but true stops the rekey with NOT_CONFIRMED_BY_OWNER.
-   * Resolves as encrypt does, with `walletCheck`, the 16-bit source check of a recovered 24-word
-   * reading with the reference's passphrase or none (null for other lengths), which every recovery
-   * reports and which never confirms a rekey.
+   * `{ phrase, words, statedWords?, fingerprintWithoutPassphrase, rehearsalNeedsPassphrase }` to
+   * compare with the written backup, `statedWords` only where the built-in check found another
+   * length than the one stated, which the page says first. Its yes is true, or, where
+   * `rehearsalNeedsPassphrase` says so, `{ passphrase }` with the wallet's BIP39 passphrase, from
+   * which the fingerprint the new container's rehearsal compares is made; anything else stops the
+   * rekey with NOT_CONFIRMED_BY_OWNER. Resolves as encrypt does, with `walletCheck`, the 16-bit
+   * source check of a recovered 24-word reading with the reference's passphrase or none (null for
+   * other lengths), which every recovery reports and which never confirms a rekey, and
+   * `rehearsal`, what the new container phrase is rehearsed with: `{ kind: "builtInCheck" }`,
+   * `{ kind: "confirmingReference" }` (the address or fingerprint that confirmed it) or
+   * `{ kind: "fingerprint", fingerprint }` where the owner confirmed it alone. Show it with the
+   * result, as the specification requires that reference before the replacement is used.
    *
    * `walletHasPassphrase` is the user's answer whether the wallet has a BIP39 passphrase, which
    * the new container's keep list names. An address or a fingerprint compared with a non-empty
@@ -640,7 +669,10 @@ export class MhfeClient {
       walletHasPassphrase,
       confirmsAgain: onConfirmAgain !== undefined,
     };
-    const handlers = { unverified: onUnverified, ownerCheck: (check) => owner(check) };
+    const handlers = {
+      unverified: onUnverified,
+      ownerCheck: (check) => answerOwner(owner, check),
+    };
     if (onConfirmAgain !== undefined) handlers.confirmAgain = confirmAgain;
     return this.#long(request, {
       password,
@@ -1118,12 +1150,28 @@ function describeReference(reference) {
 }
 
 /**
- * The page's answer when detection found no length (check's onNoLength): another reference with
- * its passphrase, sent to the worker as a secret, or null. The answer is checked as a reference
- * is; detection again is refused.
+ * The owner's answer to the phrase shown in a rekey: true, or `{ passphrase }` with the wallet's
+ * BIP39 passphrase for the rehearsal's fingerprint, sent to the worker as a secret. Anything else
+ * is a no.
  */
-async function answerNoLength(onNoLength) {
-  const answer = await onNoLength();
+async function answerOwner(owner, check) {
+  const answer = await owner(check);
+  const withPassphrase = typeof answer === "object" && answer !== null;
+  const passphrase = withPassphrase ? answer.passphrase : "";
+  const message = {
+    confirmed: answer === true || (withPassphrase && passphrase !== undefined),
+    passphrase: encodeSecret(passphrase ?? "", "passphrase"),
+  };
+  return { message, transfer: secretBuffers(message) };
+}
+
+/**
+ * The page's answer when detection found no verified length (check's onNoLength), told what
+ * detection found: another reference with its passphrase, sent to the worker as a secret, or null.
+ * The answer is checked as a reference is; detection again is refused.
+ */
+async function answerNoLength(onNoLength, evidence) {
+  const answer = await onNoLength(evidence);
   if (answer === null || answer === undefined) return null;
   const { passphrase = "", ...reference } = answer;
   if (reference.words === 0) {

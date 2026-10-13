@@ -13,14 +13,11 @@ pub(crate) const REDUCED_COST: Argon2Cost = Argon2Cost {
     memory_kib: 256,
     passes: 1,
 };
-/// BIP39's all-zero 12-word phrase.
-pub(crate) const ABANDON_12: &str =
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-/// BIP39's 12-word phrase of 0x7f bytes.
-pub(crate) const LEGAL_12: &str =
-    "legal winner thank year wave sausage worth useful legal winner thank yellow";
-/// The password of the public test vectors.
-pub(crate) const TEST_PASSWORD: &str = "public test password";
+// The public phrases and password of the vectors, under the names the tests use.
+pub(crate) use crate::vectors::{
+    AMBIGUOUS_12_21, NONZERO_12 as LEGAL_12, TEST_PASSWORD, ZERO_12 as ABANDON_12,
+    ZERO_24 as ABANDON_24,
+};
 /// One letter off [`TEST_PASSWORD`].
 pub(crate) const WRONG_PASSWORD: &str = "public test passwore";
 /// The master key fingerprint of [`ABANDON_12`] without a passphrase (BIP32 test vectors).
@@ -64,6 +61,24 @@ pub(crate) fn container_of(
     mhfe.encrypt(phrase, &test_password(), suite, &mut |_, _| Ok(()))
         .unwrap()
 }
+
+/// Entropies of 32 bytes with `counter` in the last eight, as a deterministic stand-in for a
+/// random generator: the wallet check's public vectors.
+pub(crate) fn counted(counter: u64) -> [u8; 32] {
+    let mut entropy = [0u8; 32];
+    entropy[24..].copy_from_slice(&counter.to_be_bytes());
+    entropy
+}
+
+/// The first counter whose phrase passes with the public test passphrase "TREZOR": entropy of
+/// 24 zero bytes and 76,562, "abandon" 21 times, "above proof fatigue". Found once with the
+/// release build, about 65,536 BIP39 seeds, and confirmed by an independent computation.
+pub(crate) const TREZOR_COUNTER: u64 = 76_562;
+
+/// The first counter whose phrase passes with an empty passphrase: 24 zero bytes and 98,918,
+/// "abandon" 21 times, "absorb another spoil". Found with an independent Python computation
+/// (digest 0000ede7…), which also confirmed that it fails with "TREZOR" (8d2b97fb…).
+pub(crate) const EMPTY_COUNTER: u64 = 98_918;
 
 /// The public container of the suite 3 vector zero-12: [`ABANDON_12`] under [`TEST_PASSWORD`] at
 /// full cost.

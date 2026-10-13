@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use anstream::{eprintln, println};
 use clap::Args;
 use mhfe::operation::{Encryption, Keep, KeepItem, Sealed, StageCallback, WalletPassphrase};
-use mhfe::{MhfeError, OriginalFacts, Password, Suite, WorkFactor};
+use mhfe::{MhfeError, OriginalFacts, Password, Suite, WorkFactor, ENCRYPTION_ROUNDS};
 
 use crate::check_word;
 use crate::choice;
@@ -19,6 +19,7 @@ use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
 use crate::terminal::{self, Input, Progress, Wallet};
+use crate::time_text;
 use mhfe::strength::Strength;
 use mhfe::word_hints::WordList;
 
@@ -71,7 +72,11 @@ pub fn about() -> String {
          21-word phrase, if you choose so, as many words as the phrase. With the default settings \
          the container and the password are all that recovery needs. Encryption runs 24 rounds: 12 \
          to encrypt, then 12 that decrypt the new container again and compare the result with the \
-         original seed phrase. At the default settings this takes about two to four minutes.",
+         original seed phrase.",
+        &format!(
+            "At the default settings this takes about {}.",
+            time_text::of_rounds(WorkFactor::default(), ENCRYPTION_ROUNDS)
+        ),
     ])
 }
 
@@ -314,6 +319,8 @@ pub fn what_to_keep(keep: &Keep) -> String {
             KeepItem::Pim(pim) => format!("PIM {pim}"),
             KeepItem::MemoryLevel(level) => format!("memory level {level}"),
             KeepItem::WordCount(words) => format!("the word count, {words}"),
+            KeepItem::OldContainer => "the old container".to_owned(),
+            KeepItem::OldPasswords => "its passwords".to_owned(),
         })
         .collect();
     style::and_list(&items)

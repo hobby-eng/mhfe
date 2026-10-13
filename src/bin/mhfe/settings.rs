@@ -13,6 +13,7 @@ use crate::flow;
 use crate::readme;
 use crate::style::{self, paint, ACCENT, MUTED, WARNING};
 use crate::terminal::Input;
+use crate::time_text;
 
 #[derive(Args, Clone, Copy)]
 pub struct Settings {
@@ -135,9 +136,26 @@ pub fn choose(
 
 /// Warns, before any secret is typed, when swap could write memory to a disk unencrypted.
 fn warn_about_swap() {
-    let areas = crate::protect::unprotected_swap();
-    if areas.is_empty() {
+    let Some(headline) = swap_warning(&crate::protect::unprotected_swap()) else {
         return;
+    };
+    // Why it matters, Argon2's work area on a disk for years, is in the README.
+    style::warn(
+        &headline,
+        "Use encrypted swap or none, best a live system from a USB stick.",
+    );
+    style::more(readme::SAFE_COMPUTER);
+    eprintln!();
+}
+
+fn swap_warning(inventory: &crate::protect::SwapInventory) -> Option<String> {
+    let crate::protect::SwapInventory::Available(areas) = inventory else {
+        return Some(
+            "MHFE cannot read the Linux swap inventory, so its encryption is unknown.".into(),
+        );
+    };
+    if areas.is_empty() {
+        return None;
     }
     // A device name is the system's text: shown escaped, as every path is.
     let names: Vec<String> = areas
@@ -155,13 +173,7 @@ fn warn_about_swap() {
             names.join(", ")
         )
     };
-    // Why it matters, Argon2's work area on a disk for years, is in the README.
-    style::warn(
-        &headline,
-        "Use encrypted swap or none, best a live system from a USB stick.",
-    );
-    style::more(readme::SAFE_COMPUTER);
-    eprintln!();
+    Some(headline)
 }
 
 /// Asks whether to keep the defaults; true when the person wants to give their own settings. The
@@ -171,9 +183,10 @@ fn ask_for_own(
     operation: Operation,
     defaults: WorkFactor,
 ) -> Result<bool, Failure> {
-    let (low, high) = defaults.estimated_seconds();
-    let scale = u64::from(rounds_of(operation) / ROUNDS);
-    let time = format!("about {}", time_range(low * scale, high * scale));
+    let time = format!(
+        "about {}",
+        time_text::of_rounds(defaults, rounds_of(operation))
+    );
     let (text, answers) = match operation {
         Operation::Encrypt | Operation::RekeyNew | Operation::New => (
             "Which settings should protect the phrase?",
@@ -303,9 +316,6 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         Operation::Wallets => "12 rounds a wallet",
         Operation::Repair => "12 rounds a candidate",
     };
-    // The estimate is for the twelve rounds of one pass through the cipher.
-    let (low, high) = work.estimated_seconds();
-    let scale = u64::from(rounds / ROUNDS);
     let gray = |text: String| paint(MUTED, text);
 
     let memory = format!("({})", work.memory_text());
@@ -336,7 +346,7 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         "Time",
         format!(
             "about {} {}",
-            time_range(low * scale, high * scale),
+            time_text::of_rounds(work, rounds),
             gray("on a current computer".into())
         ),
     );
@@ -481,25 +491,40 @@ pub fn level_range() -> String {
     format!("0 to {MAX_MEMORY_LEVEL}")
 }
 
-/// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the
-/// longer one, rounded to whole units.
-pub fn time_range(low_seconds: u64, high_seconds: u64) -> String {
-    const MINUTE: u64 = 60;
-    const HOUR: u64 = 60 * MINUTE;
-    const DAY: u64 = 24 * HOUR;
-    let (unit_seconds, unit) = match high_seconds {
-        s if s < 2 * HOUR => (MINUTE, "minutes"),
-        s if s < 3 * DAY => (HOUR, "hours"),
-        _ => (DAY, "days"),
-    };
-    let low = (low_seconds / unit_seconds).max(1);
-    let high = (high_seconds / unit_seconds).max(low);
-    format!("{low} to {high} {unit}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unavailable_swap_warns_while_confirmed_empty_does_not() {
+        use crate::protect::SwapInventory;
+
+        assert_eq!(
+            swap_warning(&SwapInventory::Unavailable).as_deref(),
+            Some("MHFE cannot read the Linux swap inventory, so its encryption is unknown.")
+        );
+        assert_eq!(swap_warning(&SwapInventory::Available(Vec::new())), None);
+    }
+
+    #[test]
+    fn visible_swap_warnings_keep_their_classification_and_escape_names() {
+        use crate::protect::{SwapArea, SwapInventory};
+
+        let areas = |unknown| {
+            SwapInventory::Available(vec![SwapArea {
+                name: "/swap\u{1b}file".into(),
+                unknown,
+            }])
+        };
+        assert_eq!(
+            swap_warning(&areas(true)).as_deref(),
+            Some("MHFE cannot tell whether swap is encrypted: /swap\\u{1b}file.")
+        );
+        assert_eq!(
+            swap_warning(&areas(false)).as_deref(),
+            Some("Swap on this computer is not encrypted: /swap\\u{1b}file.")
+        );
+    }
     use mhfe::MhfeError;
 
     const GIB: u64 = 1 << 30;
@@ -561,18 +586,5 @@ mod tests {
             not_enough.message.contains(LEVEL_HINT),
             highest_available_level().is_some()
         );
-    }
-
-    #[test]
-    fn time_ranges_use_one_readable_unit() {
-        assert_eq!(time_range(60, 120), "1 to 2 minutes");
-        let highest_pim = WorkFactor::new(1023, 0).unwrap().estimated_seconds();
-        assert_eq!(time_range(highest_pim.0, highest_pim.1), "17 to 34 hours");
-        let highest_memory = WorkFactor::new(0, 21).unwrap().estimated_seconds();
-        assert_eq!(
-            time_range(highest_memory.0, highest_memory.1),
-            "25 to 51 hours"
-        );
-        assert_eq!(time_range(3 * 86_400, 6 * 86_400), "3 to 6 days");
     }
 }

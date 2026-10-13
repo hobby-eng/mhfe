@@ -1365,16 +1365,22 @@ function pageScript() {
         ...options,
       });
     const check = async (reference, options = {}) =>
-      fieldsOf(await fullCheck(reference, options), ["matches", "path"]);
+      fieldsOf(await fullCheck(reference, options), ["outcome", "path"]);
     // The original seed phrase's own checks come with a match: the built-in check of the 12-word
     // phrase, and the phrase + passphrase check, which a phrase drawn without it fails.
     expectEqual(
       (await fullCheck({ fingerprint: FINGERPRINT })).evidence,
-      { builtInCheck: 12, walletCheck: null },
+      {
+        builtInCheck: 12,
+        matchingLengths: [12],
+        passed: [{ check: "builtInCheck", words: 12 }],
+        walletCheck: null,
+      },
       "a check lists the built-in check of a 12-word phrase, no wallet check without a passphrase",
     );
-    const matched = (path = null) => ({ matches: true, path });
-    const notMatched = { matches: false, path: null };
+    const matched = (path = null) => ({ outcome: "matches", path });
+    const notMatched = { outcome: "doesNotMatch", path: null };
+    const notVerified = { outcome: "notVerified", path: null };
     const log = progressLog();
     expectEqual(
       await check({ fingerprint: FINGERPRINT }, { onProgress: log.onProgress }),
@@ -1442,12 +1448,25 @@ function pageScript() {
     // stated one, so 15 stated words match, and the evidence names the 12 found (AUD-015-FUN001).
     expectEqual(
       await fullCheck({ words: 15 }),
-      { matches: true, path: null, evidence: { builtInCheck: 12, walletCheck: null } },
+      {
+        outcome: "matches",
+        path: null,
+        evidence: {
+          builtInCheck: 12,
+          matchingLengths: [12],
+          passed: [{ check: "builtInCheck", words: 12 }],
+          walletCheck: null,
+        },
+      },
       "the built-in check of 15 stated words matches at the 12 found, which the evidence names",
     );
     expectEqual(
       await fullCheck({ words: 15 }, { password: WRONG_PASSWORD }),
-      { matches: false, path: null, evidence: { builtInCheck: null, walletCheck: null } },
+      {
+        outcome: "doesNotMatch",
+        path: null,
+        evidence: { builtInCheck: null, matchingLengths: [], passed: [], walletCheck: null },
+      },
       "where no short check passes, as with the wrong password, the built-in check of 15 words " +
         "does not match",
     );
@@ -1464,7 +1483,7 @@ function pageScript() {
           passwordRepair: { repair: 3 },
           reference: { fingerprint: FINGERPRINT },
         }),
-        ["matches", "path"],
+        ["outcome", "path"],
       ),
       matched(),
       "passwordRepair { repair: 3 } restores the password of a check",
@@ -1476,21 +1495,62 @@ function pageScript() {
           password: PASSWORD,
           reference: { address: BIP84_ADDRESS, coin: "bitcoin" },
         }),
-        ["matches", "path"],
+        ["outcome", "path"],
       ),
       matched(BIP84_PATH),
       "a same-length container is checked against an address",
+    );
+    // Several lengths pass and none is stated, or a stated one does not: not verified, with every
+    // length that passes; a stated length among them matches (AUD-023-FUN002).
+    const onAmbiguous = (reference) =>
+      client.check({ container: made.ambiguous, password: PASSWORD, reference });
+    for (const words of [0, 15]) {
+      expectEqual(
+        await onAmbiguous({ words }),
+        {
+          outcome: "notVerified",
+          path: null,
+          evidence: {
+            builtInCheck: null,
+            matchingLengths: [12, 21],
+            passed: [{ check: "builtInChecks", lengths: [12, 21] }],
+            walletCheck: null,
+          },
+        },
+        `the ambiguous phrase with ${words === 0 ? "the length detected" : "15 stated words"} ` +
+          "is not verified and names 12 and 21",
+      );
+    }
+    expectEqual(
+      fieldsOf(await onAmbiguous({ words: 21 }), ["outcome", "path"]),
+      matched(),
+      "the ambiguous phrase with 21 stated words matches",
     );
 
     const onChecked = async (reference, options) =>
       fieldsOf(
         await client.check({ container: made.checked, password: PASSWORD, reference, ...options }),
-        ["matches", "path"],
+        ["outcome", "path"],
       );
+    // A pass of the 16-bit check is a fact beside the result, not a verification of the reading.
     expectEqual(
-      await onChecked({ walletCheck: true }, { passphrase: "TREZOR" }),
-      matched(),
-      "the wallet check with its passphrase passes",
+      await client.check({
+        container: made.checked,
+        password: PASSWORD,
+        reference: { walletCheck: true },
+        passphrase: "TREZOR",
+      }),
+      {
+        outcome: "notVerified",
+        path: null,
+        evidence: {
+          builtInCheck: null,
+          matchingLengths: [],
+          passed: [{ check: "walletCheck" }],
+          walletCheck: true,
+        },
+      },
+      "the wallet check with its passphrase passes and leaves the reading not verified",
     );
     expectEqual(
       await onChecked({ walletCheck: true }, { passphrase: "trezor" }),
@@ -1505,22 +1565,25 @@ function pageScript() {
       matched(),
       "a 24-word phrase's passphrase wallet matches its fingerprint",
     );
-    // The length detected: the passphrase finds the 24-word phrase drawn with its check; without
-    // it the page is asked for the length and its fingerprint is compared on the same recovery.
+    // The length detected: a 24-word reading is not verified, its 16-bit pass with the passphrase
+    // a fact beside it; the page is asked for the length, with what detection found, and the
+    // fingerprint it gives is compared on the same recovery.
     expectEqual(
       await onChecked({ words: 0 }, { passphrase: "TREZOR" }),
-      matched(),
-      "the length detected finds a 24-word phrase by the phrase + passphrase check",
+      notVerified,
+      "the length detected leaves a 24-word phrase drawn with the 16-bit check not verified",
     );
     let lengthAsked = 0;
+    let detected = null;
     const askedLog = progressLog();
     expectEqual(
       await onChecked(
         { words: 0 },
         {
           onProgress: askedLog.onProgress,
-          onNoLength: () => {
+          onNoLength: (evidence) => {
             lengthAsked += 1;
+            detected = evidence;
             return { fingerprint: FINGERPRINTS.checkedPhraseWithTrezor, passphrase: "TREZOR" };
           },
         },
@@ -1534,8 +1597,13 @@ function pageScript() {
       "the page is asked once, and the recovery runs once",
     );
     expectEqual(
+      detected,
+      { builtInCheck: null, matchingLengths: [], passed: [], walletCheck: false },
+      "the page is told what detection found",
+    );
+    expectEqual(
       await onChecked({ words: 0 }, { onNoLength: () => null }),
-      notMatched,
+      notVerified,
       "without an answer the result stays",
     );
     const refusalLog = progressLog();
@@ -1836,9 +1904,14 @@ function pageScript() {
     /**
      * What a rekey resolves to: what encrypt gives for the confirmed phrase, with `walletCheck`,
      * the 16-bit source check of a recovered 24-word reading with the reference's passphrase or
-     * none, null for every other length.
+     * none, null for every other length, and `rehearsal`, what the new container is rehearsed
+     * with: the built-in check of a short phrase unless said otherwise (AUD-023-ARC010).
      */
-    const asRekeyResult = (sealed, walletCheck = null) => ({ ...sealed, walletCheck });
+    const asRekeyResult = (sealed, walletCheck = null, rehearsal = { kind: "builtInCheck" }) => ({
+      ...sealed,
+      walletCheck,
+      rehearsal,
+    });
     const sealedWithNew = await sealWithNew(PHRASE);
     const log = progressLog();
     const shown = [];
@@ -1935,7 +2008,12 @@ function pageScript() {
     });
     expectEqual(
       detectedOwnerSaw,
-      { phrase: PHRASE, words: 12, fingerprintWithoutPassphrase: FINGERPRINT },
+      {
+        phrase: PHRASE,
+        words: 12,
+        fingerprintWithoutPassphrase: FINGERPRINT,
+        rehearsalNeedsPassphrase: false,
+      },
       "with the length detected the owner is shown the 12 words found, and no length stated",
     );
     expect(
@@ -1990,6 +2068,7 @@ function pageScript() {
           phrase: AMBIGUOUS_12_WORDS,
           words: 12,
           fingerprintWithoutPassphrase: FINGERPRINTS.ambiguous12Words,
+          rehearsalNeedsPassphrase: false,
         },
       ],
       "the page was given both lengths, and the owner was shown the reading of the one stated",
@@ -2076,6 +2155,7 @@ function pageScript() {
         phrase: CHECKED_PHRASE,
         words: 24,
         fingerprintWithoutPassphrase: FINGERPRINTS.checkedPhrase,
+        rehearsalNeedsPassphrase: false,
       },
       "the owner is shown the recovered phrase and its fingerprint",
     );
@@ -2088,7 +2168,10 @@ function pageScript() {
     // checks before the page runs.
     expectEqual(
       ownerSealed,
-      asRekeyResult(await sealWithNew(CHECKED_PHRASE), false),
+      asRekeyResult(await sealWithNew(CHECKED_PHRASE), false, {
+        kind: "fingerprint",
+        fingerprint: FINGERPRINTS.checkedPhrase,
+      }),
       "the container the owner confirmed is what encrypt gives with the new password, with the " +
         "24-word reading's wallet check, every field",
     );
@@ -2100,15 +2183,38 @@ function pageScript() {
       ownerRecovery.candidates[0].phrase === CHECKED_PHRASE,
       "the container the owner confirmed opens with the new password",
     );
+    // A wallet with a passphrase: the owner's yes brings it, for the fingerprint the new
+    // container's rehearsal compares, which is known before the seal (AUD-023-ARC010).
+    let needsPassphrase = null;
     const ownerWithPassphrase = await client.rekey({
       ...ownerBase,
       walletHasPassphrase: true,
-      confirmation: { owner: () => true },
+      confirmation: {
+        owner: (check) => {
+          needsPassphrase = check.rehearsalNeedsPassphrase;
+          return { passphrase: "TREZOR" };
+        },
+      },
     });
     expectEqual(
-      fieldsOf(ownerWithPassphrase, ["container", "keep"]),
-      { container: ownerSealed.container, keep: [...KEEP_24, PASSPHRASE] },
-      "the owner's rekey stated to have a passphrase keeps it; the container is the same",
+      fieldsOf(ownerWithPassphrase, ["container", "keep", "rehearsal"]),
+      {
+        container: ownerSealed.container,
+        keep: [...KEEP_24, PASSPHRASE],
+        rehearsal: { kind: "fingerprint", fingerprint: FINGERPRINTS.checkedPhraseWithTrezor },
+      },
+      "the owner's rekey stated to have a passphrase keeps it, and its rehearsal compares the " +
+        "fingerprint with it; the container is the same",
+    );
+    expect(needsPassphrase === true, "the owner is told that the rehearsal needs the passphrase");
+    await expectRejection(
+      client.rekey({
+        ...ownerBase,
+        walletHasPassphrase: true,
+        confirmation: { owner: () => true },
+      }),
+      "INVALID_REQUEST",
+      "a yes without the passphrase the rehearsal needs stops the rekey before the seal",
     );
     // A stated short length that the check contradicts: the owner may confirm the reading the
     // check found, and is shown the length stated beside it, which the page names first.
@@ -2129,7 +2235,15 @@ function pageScript() {
     );
     expectEqual(
       ownerNo,
-      [{ phrase: PHRASE, words: 12, statedWords: 15, fingerprintWithoutPassphrase: FINGERPRINT }],
+      [
+        {
+          phrase: PHRASE,
+          words: 12,
+          statedWords: 15,
+          fingerprintWithoutPassphrase: FINGERPRINT,
+          rehearsalNeedsPassphrase: false,
+        },
+      ],
       "the owner of 15 stated words saw the 12-word reading the check found, with the 15 stated",
     );
     // 24 words stated beside a 12-word reading whose check passes: the owner cannot tell the two
@@ -2282,7 +2396,7 @@ function pageScript() {
     );
     expectEqual(
       sameRekey,
-      asRekeyResult(sameSealed),
+      asRekeyResult(sameSealed, null, { kind: "confirmingReference" }),
       "it is what encrypt with sameLength gives with the new password, every field, and no " +
         "wallet check",
     );
@@ -2430,10 +2544,20 @@ function pageScript() {
     });
     expectEqual(
       sameOwnerSaw,
-      { phrase: PHRASE, words: 12, fingerprintWithoutPassphrase: FINGERPRINT },
+      {
+        phrase: PHRASE,
+        words: 12,
+        fingerprintWithoutPassphrase: FINGERPRINT,
+        rehearsalNeedsPassphrase: false,
+      },
       "the owner of a same-length container is shown its 12-word phrase",
     );
     expect(sameContainer(bySameOwner), "the owner's yes seals the same container");
+    expectEqual(
+      bySameOwner.rehearsal,
+      { kind: "fingerprint", fingerprint: FINGERPRINT },
+      "a same-length phrase the owner confirmed is rehearsed with its fingerprint",
+    );
     const mismatchLog = progressLog();
     await expectRejection(
       client.rekey({

@@ -10,8 +10,8 @@ use super::{
 };
 use crate::check_word::{self, Correction, PasswordReview, Reading, PROFILE};
 use crate::new_password::{
-    PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS, MILLIBITS_PER_BIT, MOST_CHARACTERS,
-    MOST_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
+    PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS,
+    RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
 };
 use crate::self_check::sets;
 use crate::strength::{Strength, WEAK_BELOW_BITS};
@@ -193,7 +193,7 @@ pub fn make_password(
     .map_err(js_error)?;
     secret_json(&NewPasswordJson {
         password: password.text(),
-        bits: recipe.millibits() as f64 / f64::from(MILLIBITS_PER_BIT),
+        bits: recipe.bits(),
         weak: recipe.is_weak(),
         check_word: recipe.has_check_word(),
     })

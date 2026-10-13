@@ -30,6 +30,7 @@ use crate::readme;
 use crate::settings;
 use crate::style::{self, paint, GOOD, HEADING, STRONG};
 use crate::terminal::{self, Input, Progress};
+use crate::time_text;
 
 /// What the person knows, to tell the right candidate.
 #[derive(Clone, Copy)]
@@ -304,8 +305,8 @@ fn with_container_wallet(
         Some(found) => {
             // Listed among the matches of a check: what the container phrase was found by.
             let at = found
-                .outcome
-                .path()
+                .path
+                .as_ref()
                 .map(|path| format!(" at {path}"))
                 .unwrap_or_default();
             let found_by = format!("the container's own wallet: {}{at}", reference.shown());
@@ -427,7 +428,7 @@ fn starts_long_search(
     let took = format!(
         "{} candidates, each a full recovery: about {} at these settings.",
         search.count(),
-        settings::time_range(low * count, high * count)
+        time_text::range(low * count, high * count)
     );
     eprintln!();
     style::warn_here(&took, "");

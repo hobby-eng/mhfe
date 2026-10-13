@@ -4,12 +4,14 @@
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-use super::{js_error, json, repair_capacities, run_self_check, whole_number, CapacityJson};
+use super::{
+    container_fingerprint_text, js_error, json, repair_capacities, run_self_check, whole_number,
+    CapacityJson,
+};
 use crate::repair::{
     self, ContainerReading, Repaired, PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS,
 };
 use crate::self_check::sets;
-use crate::wallet::master_fingerprint_text;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,7 +87,7 @@ struct RepairedJson<'a> {
 #[wasm_bindgen(js_name = repairContainer)]
 pub fn repair_container(written: &str, card: &str) -> Result<String, JsError> {
     let repaired: Repaired = repair::repair(written, card).map_err(js_error)?;
-    let fingerprint = master_fingerprint_text(&repaired.container, "").map_err(js_error)?;
+    let fingerprint = container_fingerprint_text(&repaired.container)?;
     json(&RepairedJson {
         container: &repaired.container,
         container_fingerprint: fingerprint,

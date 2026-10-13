@@ -151,12 +151,18 @@ impl ContainerFacts {
         }
     }
 
-    /// The master key fingerprint of the wallet that the container's own words open without a
-    /// BIP39 passphrase. A container is a valid phrase too, but that wallet is not the owner's.
-    /// It costs one PBKDF2-HMAC-SHA512 of 2,048 iterations, as BIP39 seeds do.
+    /// The container's fingerprint ([`container_fingerprint`]).
     pub fn fingerprint(&self) -> Result<[u8; 4], MhfeError> {
-        wallet::master_fingerprint(&self.words, "")
+        container_fingerprint(&self.words)
     }
+}
+
+/// The master key fingerprint of the wallet that a container's own words open without a BIP39
+/// passphrase, shown under every container so that the decoy wallet can be found again. A
+/// container is a valid phrase too, but that wallet is not the owner's. It costs one
+/// PBKDF2-HMAC-SHA512 of 2,048 iterations, as BIP39 seeds do. Every front end takes it from here.
+pub fn container_fingerprint(container: &str) -> Result<[u8; 4], MhfeError> {
+    wallet::master_fingerprint(container, "")
 }
 
 /// An original seed phrase as read, with what it tells before it is encrypted: its length, the
@@ -265,6 +271,20 @@ impl ContainerChoice {
 mod tests {
     use super::*;
     use crate::WordCount;
+
+    /// The container's fingerprint has one rule, which its facts use too: for the published
+    /// zero-12 container it is the decoy fingerprint of the search's known answers, computed by an
+    /// independent implementation (AUD-023-ARC009).
+    #[test]
+    fn a_containers_fingerprint_has_one_rule() {
+        let container = crate::test_support::zero_12_container();
+        let expected = crate::search::known_answers::ZERO_12_DECOY_FINGERPRINT;
+        assert_eq!(container_fingerprint(&container), Ok(expected));
+        assert_eq!(
+            ContainerFacts::read(&container).unwrap().fingerprint(),
+            Ok(expected)
+        );
+    }
 
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";

@@ -37,6 +37,7 @@ mod style;
 mod system_random;
 mod terminal;
 mod test_tools;
+mod time_text;
 mod typed_line;
 mod wallets;
 
@@ -114,7 +115,7 @@ enum Command {
     /// Make a strong password of words or characters
     #[command(long_about = diceware::about(), after_help = diceware::help())]
     Password(diceware::Options),
-    /// Test every part of this program
+    /// Run the self-test
     #[command(long_about = self_test::about(), after_help = self_test::help())]
     SelfTest(self_test::Options),
     /// Serve a browser tool on this computer in fast mode
@@ -173,7 +174,7 @@ fn main_help() -> String {
             ),
             (
                 "mhfe self-test",
-                "Test every part of this program, in seconds",
+                "Run the self-test of every part, in seconds",
             ),
             (
                 "mhfe self-test --vectors",

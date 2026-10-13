@@ -14,6 +14,21 @@ use crate::packing::{self, State, STATE_WORDS};
 use crate::wallet_check;
 use crate::MhfeError;
 
+/// The readings the length rules of recovery give (specification: recovery, step 3 and the stated
+/// length after it), as word counts: a recovery reads them, and a check takes its outcome from
+/// them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Readings {
+    /// A short length was stated and no short length passes its built-in check: a wrong password
+    /// or setting, or a 24-word phrase.
+    NoReading,
+    /// One reading: verified where it is a short length, whose built-in check then passes.
+    One(usize),
+    /// Several, which only a wallet reference or a stated length among them tells apart: the
+    /// checked ones first and the 24-word one last.
+    Several(Vec<usize>),
+}
+
 /// What detection finds in one recovered state `X` of a 24-word container.
 pub(crate) struct LengthDetection<'a> {
     state: &'a State,
@@ -46,6 +61,36 @@ impl<'a> LengthDetection<'a> {
     /// match hides the real phrase.
     pub(crate) fn readings(&self) -> impl Iterator<Item = usize> + '_ {
         self.short.iter().copied().chain([STATE_WORDS])
+    }
+
+    /// The readings of the length rules for a `stated` length or none. Every short length's
+    /// built-in check is tested, also when a length is stated, and a check that passes takes
+    /// precedence over the stated length.
+    pub(crate) fn under_length_rules(&self, stated: Option<usize>) -> Readings {
+        match (stated, &self.short[..]) {
+            // A stated length whose check passes is the result, also among others that pass by
+            // chance.
+            (Some(words), short) if short.contains(&words) => Readings::One(words),
+            // No check passes: the 24-word reading, unless a short length was stated, whose check
+            // then fails.
+            (None | Some(STATE_WORDS), []) => Readings::One(STATE_WORDS),
+            (Some(_), []) => Readings::NoReading,
+            // One check passes, at another short length than the one stated, or with none stated.
+            (None, [words]) => Readings::One(*words),
+            (Some(stated), [words]) if stated != STATE_WORDS => Readings::One(*words),
+            // Several checks pass, or one beside 24 stated words, which pass a short check by
+            // chance about once in 2^32: every reading.
+            _ => Readings::Several(self.readings().collect()),
+        }
+    }
+
+    /// The length of the one verified reading the length rules give for `stated`: a short length
+    /// whose built-in check passes. `None` for a 24-word reading, for several and for none.
+    pub(crate) fn verified_length(&self, stated: Option<usize>) -> Option<usize> {
+        match self.under_length_rules(stated) {
+            Readings::One(words) if self.passes_built_in_check(words) => Some(words),
+            _ => None,
+        }
     }
 
     /// Whether the 24-word reading passes the phrase + passphrase check with `passphrase`, which
@@ -103,6 +148,7 @@ mod tests {
     use super::*;
     use crate::packing::tests::{entropy, state_from_hex, state_of, AMBIGUOUS_STATES};
     use crate::packing::{pack, STATE_BYTES};
+    use crate::test_support::{counted, EMPTY_COUNTER, TREZOR_COUNTER};
 
     #[test]
     fn detection_finds_the_packed_length() {
@@ -141,10 +187,7 @@ mod tests {
     /// phrase was drawn with, and an empty passphrase is refused as the check refuses it.
     #[test]
     fn a_24_word_reading_passes_its_own_checks_only_with_its_passphrase() {
-        // The public fixture of the wallet check's tests: 24 zero bytes and the counter 76,562,
-        // the first whose phrase passes with "TREZOR".
-        let mut state: State = [0; STATE_BYTES];
-        state[24..].copy_from_slice(&76_562u64.to_be_bytes());
+        let state = counted(TREZOR_COUNTER);
         let detection = LengthDetection::of(&state);
         assert!(detection.short_lengths().is_empty());
         assert!(detection.passes_wallet_check("TREZOR").unwrap());
@@ -160,9 +203,7 @@ mod tests {
     /// A hidden wallet's state is refused when a recovery would read it as checked (rule I29).
     #[test]
     fn a_state_that_passes_the_wallet_check_reads_as_checked() {
-        // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
-        let mut state: State = [0; STATE_BYTES];
-        state[24..].copy_from_slice(&76_562u64.to_be_bytes());
+        let mut state = counted(TREZOR_COUNTER);
         let reads = |state: &State, passphrase| {
             LengthDetection::of(state)
                 .reads_as_checked(passphrase)
@@ -171,11 +212,11 @@ mod tests {
         assert!(reads(&state, "TREZOR"));
         // The same reading with the main wallet's empty passphrase is another seed, which fails.
         assert!(!reads(&state, ""));
-        state[24..].copy_from_slice(&76_561u64.to_be_bytes());
+        state = counted(TREZOR_COUNTER - 1);
         assert!(!reads(&state, "TREZOR"));
         // A reading that passes the check without a passphrase is refused as well, also when the
         // main wallet has one: mhfe decrypt would report that pass.
-        state[24..].copy_from_slice(&98_918u64.to_be_bytes());
+        state = counted(EMPTY_COUNTER);
         assert!(reads(&state, ""));
         assert!(reads(&state, "TREZOR"));
         // A short reading that passes its built-in check reads as checked with any passphrase.
