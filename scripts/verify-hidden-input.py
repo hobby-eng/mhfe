@@ -1,13 +1,19 @@
 """Checks the terminal input of the mhfe tool in a pseudo-terminal (Linux and macOS).
 
-    python3 scripts/verify-hidden-input.py [path/to/mhfe]
+    python3 scripts/verify-hidden-input.py [--full] [path/to/mhfe]
 
-The default is target/debug/mhfe. At a terminal every step of a command has a screen of its own on
-the terminal's alternate screen, and the main screen gets only the summary, when the command ends.
-It drives `mhfe check --fingerprint --pim 0`, which reads the container on a step of its own, taken
-at once, and then the container password on another, and stops the tool before a fingerprint is
-given, so no memory is reserved and Argon2 never runs; the PIM given skips the question of the
-settings. Only the public zero-12 test container is used.
+The default is target/debug/mhfe. --full adds the cases that run Argon2 at full size, 2 GiB at the
+default settings, which take minutes: one encryption by `mhfe encrypt --stdin --repair-words 4`,
+which writes the container and its card, and the three outcomes of `mhfe check --stdin`. Without
+it they are left out, and the script names them: a push runs the fast checks only (CI-04), and
+scripts/check.sh and CI on a release tag pass --full.
+
+At a terminal every step of a command has a screen of its own on the terminal's alternate screen,
+and the main screen gets only the summary, when the command ends. It drives
+`mhfe check --fingerprint --pim 0`, which reads the container on a step of its own, taken at once,
+and then the container password on another, and stops the tool before a fingerprint is given, so no
+memory is reserved and Argon2 never runs; the PIM given skips the question of the settings. Only
+the public zero-12 test container is used.
 
 It checks that
 - every control character in a password reaches the password check and is refused, including
@@ -83,7 +89,8 @@ two passwords that differ, which end the tool with exit code 2 before Argon2. A 
 redraw a list (TERM=dumb) gets the hidden password of `mhfe encrypt --pim 0` right after the hidden
 phrase, with no question between them, and Ctrl+C there ends the tool. The phrase is never shown
 there. The Keep line itself appears only after the encryption's Argon2 at 2 GiB, which this script
-never runs; its wording is checked by the unit tests of src/bin/mhfe/encrypt.rs.
+runs only with --full and never at a terminal; its wording is checked by the unit tests of
+src/bin/mhfe/encrypt.rs.
 
 Finally it checks that a phrase the person did not ask to export is shown only on a private screen
 (AUD-007-SEC001): `mhfe new` and `mhfe wallets` refuse to start, before anything is asked and with
@@ -136,14 +143,19 @@ part and what differed, and exit code 1; their self-test names the part too. The
 in a temporary folder (TMPDIR), signed again on macOS, and deleted afterwards.
 """
 
+import argparse
+import contextlib
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import resource
 import select
+import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -152,7 +164,22 @@ import textwrap
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
-PROGRAM = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "target/debug/mhfe")
+
+
+def parse_arguments():
+    """The program to check, and whether to run the cases that need Argon2 at full size."""
+    parser = argparse.ArgumentParser(
+        description="Checks the terminal input of the mhfe tool in a pseudo-terminal."
+    )
+    parser.add_argument("program", nargs="?", default=str(ROOT / "target/debug/mhfe"),
+                        help="the mhfe program to check (default: target/debug/mhfe)")
+    parser.add_argument("--full", action="store_true",
+                        help="also run the cases that need Argon2 at 2 GiB, which take minutes")
+    return parser.parse_args()
+
+
+ARGUMENTS = parse_arguments()
+PROGRAM, FULL = ARGUMENTS.program, ARGUMENTS.full
 ZERO_12 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-12.json").read_text())
 CONTAINER, PHRASE = ZERO_12["container"], ZERO_12["inputs"]["phrase"]
 ZERO_24 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-24.json").read_text())
@@ -468,8 +495,7 @@ class Session:
         """Types `keys` and reads until every one of `expected` has appeared after them. A list
         and its question arrive together, so each is looked for in all that followed the keys."""
         start = len(self.output)
-        time.sleep(ANSWER_DELAY)
-        self.type(keys)
+        self.press(keys)
         end = time.monotonic() + limit
         while not all(needle in self.output[start:] for needle in expected):
             if time.monotonic() > end:
@@ -493,6 +519,12 @@ class Session:
                 except OSError:
                     time.sleep(0.05)
         return self.output[start:]
+
+    def press(self, keys):
+        """Types `keys` as a person answers what appeared: after ANSWER_DELAY, so that the tool
+        does not take them for keys typed ahead, Escape and q included."""
+        time.sleep(ANSWER_DELAY)
+        self.type(keys)
 
     def type(self, data, limit=10):
         """Writes `data` as pasted text; the line only ends at the carriage return.
@@ -750,7 +782,7 @@ def check_menu():
     # The menu keeps the password entry highlighted after it.
     session.answer(DOWN * HELP_FROM_PASSWORD + ENTER, BACK_TO_MENU)
     session.answer(ENTER, MENU_SHOWN)
-    session.type(b"q")
+    session.press(b"q")
     # The tool needs a moment to end; close() would send Ctrl+C to a tool that is still running.
     assert session.drain_until_exit(10), "menu: q did not end the tool"
     code, settings = session.close()
@@ -771,7 +803,7 @@ def check_menu():
     # Escape alone: the tool waits a moment for the rest of an arrow key's sequence, then quits.
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
-    session.type(ESCAPE)
+    session.press(ESCAPE)
     assert session.drain_until_exit(10), "menu: Escape did not end the tool"
     code, settings = session.close()
     assert code == 0, f"menu: Escape gave exit code {code}"
@@ -1394,13 +1426,17 @@ def check_dumb_terminal_has_no_hints():
 
 
 def check_typed_ahead_keys_answer_nothing():
-    """An Enter typed before a screen that waits to be left appeared, during the start or with the
-    line before it, does not clear it: a made password and a repair card stay until a key is
-    pressed after they appeared (AUD-023-UI003)."""
+    """A key typed before a screen that waits to be left appeared, during the start or with the
+    line before it, does not clear it, Enter, q and Escape alike: a made password and a repair
+    card stay until a key is pressed after they appeared (AUD-023-UI003)."""
     cases = (
         ("password", ("password", "--words", "6"), None, b"\r"),
+        ("password", ("password", "--words", "6"), None, b"q"),
+        ("password", ("password", "--words", "6"), None, ESCAPE),
         ("repair card", ("repair-words", "--count", "4"), CONTAINER_ASKED,
          CONTAINER.encode() + b"\r\r"),
+        ("repair card", ("repair-words", "--count", "4"), CONTAINER_ASKED,
+         CONTAINER.encode() + b"\rq"),
     )
     for name, arguments, prompt, typed in cases:
         session = Session(arguments)
@@ -1409,13 +1445,14 @@ def check_typed_ahead_keys_answer_nothing():
         session.type(typed)
         session.wait_for(b"Write it down now")
         time.sleep(1)
-        assert session.process.poll() is None, f"{name}: the Enter typed ahead cleared it"
+        key = repr(typed[-1:])
+        assert session.process.poll() is None, f"{name}: the {key} typed ahead cleared it"
         session.answer(ENTER, b"")
         assert session.drain_until_exit(10), f"{name}: Enter after it appeared did not leave"
         code, _ = session.close()
         assert code == 0, f"{name}: exit code {code}"
-    print("typed ahead: an Enter typed before a made password or a repair card appeared clears "
-          "neither")
+    print("typed ahead: an Enter, q or Escape typed before a made password or a repair card "
+          "appeared clears neither")
 
 
 def check_answers_given_as_options():
@@ -1455,6 +1492,28 @@ def check_answers_given_as_options():
     assert ORIGINAL_PASSPHRASE_ASKED not in session.output, (
         "check --passphrase-used no: asked about the passphrase")
 
+    # --wallet-check yes asks again for a passphrase given empty: the check needs one.
+    session = Session(("new", "--pim", "0", "--wallet-check", "yes", "--choose-word", "no",
+                       "--repair-words", "0"))
+    session.wait_for(b"passphrase of the new wallet")
+    start = len(session.output)
+    session.answer(b"\r", b"needs a BIP39 passphrase", b"passphrase of the new wallet")
+    assert session.process.poll() is None, "new --wallet-check yes: an empty passphrase ended it"
+    session.type(CTRL_C)
+    assert session.drain_until_exit(10), "new --wallet-check yes: it did not end"
+    session.close()
+    assert CHECK_ASKED not in session.output[start:], "new --wallet-check yes: asked the check"
+
+    # --passphrase-used answers only the question of --words auto at a terminal.
+    for arguments, refusal in (
+            (("check", "--fingerprint", "--passphrase-used", "no"),
+             b"--passphrase-used belongs only to --words auto"),
+            (("check", "--words", "auto", "--passphrase-used", "no", "--stdin"),
+             b"--passphrase-used belongs only to a terminal")):
+        result = run_plainly(arguments)
+        assert result.returncode == INVALID_INPUT, f"{arguments}: exit code {result.returncode}"
+        assert refusal in b" ".join(result.stderr.split()), f"{arguments}: {result.stderr!r}"
+
     for arguments in (("new", "--wallet-check", "maybe"), ("new", "--choose-word", "maybe"),
                       ("encrypt", "--same-length", "maybe"),
                       ("check", "--words", "auto", "--passphrase-used", "maybe")):
@@ -1464,31 +1523,55 @@ def check_answers_given_as_options():
         refusal = b" ".join(result.stderr.split())
         assert b"give yes or no" in refusal, f"{arguments}: {result.stderr!r}"
     print("new, encrypt and check: answers given as options are not asked; maybe is refused")
+    print("new --wallet-check yes: an empty passphrase is asked again")
+    print("check: --passphrase-used is refused without --words auto and with --stdin")
+
+
+# The page `mhfe serve` is given, public, and the line that says it serves it.
+SERVED_PAGE = b"<!doctype html><title>public test page</title>"
+SERVE_RUNNING = "Fast mode is running"
+# How long `mhfe serve` is left without a file descriptor for a connection, and the processor time
+# it may take in that while: a pause between attempts keeps it near zero, a loop that spins takes
+# all of it.
+WITHOUT_DESCRIPTORS_SECONDS = 2
+SPIN_LIMIT_SECONDS = 0.5
+# utime and stime, the processor time in user and kernel mode in clock ticks of
+# os.sysconf("SC_CLK_TCK"): fields 14 and 15 of /proc/<pid>/stat (proc(5)), counted here from the
+# third, the first after the ")" that ends the command name, which may itself hold spaces.
+UTIME_FIELD, STIME_FIELD = 11, 12
+
+
+@contextlib.contextmanager
+def serving(folder, arguments=("--no-browser",), prefix=(), environment=None):
+    """Runs `mhfe serve` with `arguments` on a public page in `folder`, with the checksum file it
+    needs beside it, after the command `prefix` (such as prlimit), until it says it is running;
+    yields the process, the lines it wrote on standard error until then and the page's SHA-256,
+    and stops it afterwards."""
+    page = Path(folder) / "tool.html"
+    page.write_bytes(SERVED_PAGE)
+    digest = hashlib.sha256(SERVED_PAGE).hexdigest()
+    (Path(folder) / "mhfe-fast-mode.sha256").write_text(f"{digest}  tool.html\n")
+    process = subprocess.Popen([*prefix, PROGRAM, "serve", *arguments, str(page)],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.PIPE, env=environment or tool_environment())
+    try:
+        lines = []
+        for raw in process.stderr:
+            lines.append(raw.decode().rstrip("\n"))
+            if SERVE_RUNNING in lines[-1]:
+                break
+        yield process, lines, digest
+    finally:
+        process.terminate()
+        process.wait(10)
 
 
 def check_serve_output():
     """`mhfe serve` starts with its title line, says the page's SHA-256 was verified and shows
     the digest on a line of its own, never split, every line within 78 columns
     (AUD-023-UI007)."""
-    import hashlib
-    import tempfile
-    with tempfile.TemporaryDirectory() as folder:
-        page = Path(folder) / "tool.html"
-        page.write_bytes(b"<!doctype html><title>public test page</title>")
-        digest = hashlib.sha256(page.read_bytes()).hexdigest()
-        (Path(folder) / "mhfe-fast-mode.sha256").write_text(f"{digest}  tool.html\n")
-        process = subprocess.Popen([PROGRAM, "serve", "--no-browser", str(page)],
-                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.PIPE, env=tool_environment())
-        lines = []
-        try:
-            for raw in process.stderr:
-                lines.append(raw.decode().rstrip("\n"))
-                if "Fast mode is running" in lines[-1]:
-                    break
-        finally:
-            process.terminate()
-            process.wait(10)
+    with tempfile.TemporaryDirectory() as folder, serving(folder) as (_, lines, digest):
+        pass
     shown = [line for line in lines if line]
     assert shown[0] == "MHFE · Fast mode", f"serve: the first line is {shown[0]!r}"
     assert any(line.split() == ["SHA-256", digest] for line in shown), f"serve: {shown!r}"
@@ -1504,73 +1587,36 @@ def check_serve_without_descriptors():
     """With no file descriptor left for a connection, `mhfe serve` pauses between attempts rather
     than spinning at full processor time (AUD-023-FUN003): under prlimit --nofile=4 a request
     cannot be accepted, and the server's processor time stays small."""
-    import hashlib
-    import re as pattern
-    import shutil
-    import socket
-    import tempfile
     if shutil.which("prlimit") is None:
         print("serve without descriptors: prlimit is missing, not checked")
         return
-    with tempfile.TemporaryDirectory() as folder:
-        page = Path(folder) / "tool.html"
-        page.write_bytes(b"<!doctype html><title>public test page</title>")
-        digest = hashlib.sha256(page.read_bytes()).hexdigest()
-        (Path(folder) / "mhfe-fast-mode.sha256").write_text(f"{digest}  tool.html\n")
-        process = subprocess.Popen(["prlimit", "--nofile=4", PROGRAM, "serve", "--no-browser",
-                                    str(page)], stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                                   env=tool_environment())
-        try:
-            port = None
-            for raw in process.stderr:
-                found = pattern.search(rb"127\.0\.0\.1:(\d+)", raw)
-                if found:
-                    port = int(found.group(1))
-                if b"Fast mode is running" in raw:
-                    break
-            assert port is not None, "serve without descriptors: no address"
-            for _ in range(3):
-                try:
-                    socket.create_connection(("127.0.0.1", port), timeout=1).close()
-                except OSError:
-                    pass
-            time.sleep(2)
-            fields = Path(f"/proc/{process.pid}/stat").read_text().rsplit(")", 1)[1].split()
-            ticks = int(fields[11]) + int(fields[12])
-            assert ticks < 50, f"serve without descriptors: {ticks} ticks of processor time"
-        finally:
-            process.terminate()
-            process.wait(10)
+    limit = SPIN_LIMIT_SECONDS * os.sysconf("SC_CLK_TCK")
+    with tempfile.TemporaryDirectory() as folder, \
+            serving(folder, prefix=("prlimit", "--nofile=4")) as (process, lines, _):
+        found = re.search(r"127\.0\.0\.1:(\d+)", "\n".join(lines))
+        assert found is not None, f"serve without descriptors: no address in {lines!r}"
+        for _ in range(3):
+            try:
+                socket.create_connection(("127.0.0.1", int(found.group(1))), timeout=1).close()
+            except OSError:
+                pass
+        time.sleep(WITHOUT_DESCRIPTORS_SECONDS)
+        fields = Path(f"/proc/{process.pid}/stat").read_text().rsplit(")", 1)[1].split()
+        ticks = int(fields[UTIME_FIELD]) + int(fields[STIME_FIELD])
+    assert ticks < limit, f"serve without descriptors: {ticks} ticks of processor time"
     print("serve without descriptors: it waits between attempts instead of spinning")
 
 
 def check_serve_address_with_a_failing_opener():
     """An opener that starts but fails still leaves the address on the screen (AUD-023-UI010):
     xdg-open is a stand-in that exits with code 3."""
-    import hashlib
-    import tempfile
     with tempfile.TemporaryDirectory() as folder:
         opener = Path(folder) / "xdg-open"
         opener.write_text("#!/bin/sh\nexit 3\n")
         opener.chmod(0o755)
-        page = Path(folder) / "tool.html"
-        page.write_bytes(b"<!doctype html><title>public test page</title>")
-        digest = hashlib.sha256(page.read_bytes()).hexdigest()
-        (Path(folder) / "mhfe-fast-mode.sha256").write_text(f"{digest}  tool.html\n")
         environment = {**tool_environment(), "PATH": folder}
-        process = subprocess.Popen([PROGRAM, "serve", str(page)], stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                                   env=environment)
-        lines = []
-        try:
-            for raw in process.stderr:
-                lines.append(raw.decode())
-                if "Fast mode is running" in lines[-1]:
-                    break
-        finally:
-            process.terminate()
-            process.wait(10)
+        with serving(folder, arguments=(), environment=environment) as (_, lines, _):
+            pass
     assert any("http://127.0.0.1:" in line for line in lines), f"serve: no address in {lines!r}"
     print("serve: the address is shown when the browser opener fails")
 
@@ -1779,28 +1825,36 @@ def check_repair_command():
 # What a result that cannot be written gives (style::out in src/bin/mhfe/style.rs): one error
 # line and exit code 1, never a panic or a success (AUD-023-FUN001).
 OUTPUT_FAILED = b"Error: Input or output failed: "
+# The device on which every write fails with "no space left". Linux has it; macOS, where CI runs
+# this script too, does not.
+FULL_DEVICE = "/dev/full"
+
+
+def unwritable_output(target):
+    """A descriptor every write to which fails: the writing end of a pipe whose reader is closed,
+    or the full device."""
+    if target == FULL_DEVICE:
+        return os.open(FULL_DEVICE, os.O_WRONLY)
+    reader, writer = os.pipe()
+    os.close(reader)
+    return writer
 
 
 def check_unwritable_results():
-    """A result written to a pipe whose reader has gone, or to a full device, fails with one error
-    line and exit code 1, for each command whose result needs no Argon2 work: password,
-    repair-words and repair. encrypt, decrypt and check write theirs through the same function."""
+    """A result written to a pipe whose reader has gone, or to a full device where the system has
+    one, fails with one error line and exit code 1, for each command whose result needs no Argon2
+    work: password, repair-words and repair. encrypt, decrypt and check write theirs through the
+    same function."""
     container = container_with({3: "?", 17: "?"})
     commands = (
         (("password", "--words", "6"), b""),
         (("repair-words", "--count", "4", "--stdin"), CONTAINER.encode() + b"\n"),
         (("repair", "--stdin"), container + b"\n" + ZERO_12_CARD + b"\n"),
     )
+    targets = ("closed pipe", FULL_DEVICE) if os.path.exists(FULL_DEVICE) else ("closed pipe",)
     for arguments, data in commands:
-        for target in ("closed pipe", "/dev/full"):
-            reader, writer = os.pipe()
-            if target == "closed pipe":
-                os.close(reader)
-                output = writer
-            else:
-                os.close(reader)
-                os.close(writer)
-                output = os.open("/dev/full", os.O_WRONLY)
+        for target in targets:
+            output = unwritable_output(target)
             try:
                 result = subprocess.run([PROGRAM, *arguments], input=data, stdout=output,
                                         stderr=subprocess.PIPE, env=tool_environment(),
@@ -1811,7 +1865,8 @@ def check_unwritable_results():
             assert result.returncode == 1, f"{label}: exit code {result.returncode}"
             assert result.stderr.count(OUTPUT_FAILED) == 1, f"{label}: {result.stderr!r}"
             assert b"panicked" not in result.stderr, f"{label}: {result.stderr!r}"
-        print(f"{arguments[0]}: a result that cannot be written fails with exit code 1")
+        print(f"{arguments[0]}: a result that cannot be written to a {' or a '.join(targets)} "
+              "fails with exit code 1")
 
 
 # The length of the original seed phrase detected (src/detection.rs in the library): the last
@@ -2288,7 +2343,7 @@ def check_self_test():
     # The menu leaves a blank line before its wait.
     expected = self_test_report(SELF_TEST_PARTS) + passed() + [""]
     assert shown == expected, f"menu, every part: the screen shows {shown!r}"
-    session.type(ESCAPE)
+    session.press(ESCAPE)
     assert session.drain_until_exit(10), "menu: Escape after the self-test did not end the tool"
     code, settings = session.close()
     assert code == 0, f"menu: Escape after the self-test gave exit code {code}"
@@ -2316,7 +2371,7 @@ def check_quiet_start():
     session.wait_for(MENU_SHOWN)
     before = session.output[:session.output.find(MENU_TITLE)]
     assert before == b"\r\n", f"menu: {before!r} before its title"
-    session.type(b"q")
+    session.press(b"q")
     assert session.drain_until_exit(10), "menu: q did not end the tool"
     code, _ = session.close()
     assert code == 0, f"menu: q gave exit code {code}"
@@ -2414,6 +2469,14 @@ def check_damaged_copies():
             print(f"damaged {part}: the self-test names it and raises the alarm, exit code 1")
 
 
+# The checks that run Argon2 at full size, 2 GiB at the default settings, minutes each: only with
+# --full (CI-04).
+FULL_SIZE_CHECKS = {
+    "encrypt --stdin --repair-words 4 at the default settings": check_encrypt_script_output,
+    "the three outcomes of check --stdin": check_script_outcomes,
+}
+
+
 def main():
     # Each result is shown at once, so that a CI log shows how far the checks came.
     sys.stdout.reconfigure(line_buffering=True)
@@ -2461,12 +2524,10 @@ def main():
     check_typed_ahead_keys_answer_nothing()
     check_answers_given_as_options()
     check_serve_output()
-    check_encrypt_script_output()
     check_container_repair()
     check_repair_command()
     check_unwritable_results()
     check_length_detection()
-    check_script_outcomes()
     check_search_reference_is_recorded_once_read()
     check_container_search()
     check_password_sizes()
@@ -2475,6 +2536,12 @@ def main():
     check_quiet_start()
     check_self_test()
     check_damaged_copies()
+    if FULL:
+        for check in FULL_SIZE_CHECKS.values():
+            check()
+    else:
+        print("left out without --full, as they run Argon2 at 2 GiB: "
+              f"{'; '.join(FULL_SIZE_CHECKS)}")
 
 
 if __name__ == "__main__":

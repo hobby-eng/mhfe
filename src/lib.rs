@@ -89,9 +89,10 @@ pub use phrase::{
 };
 pub use rehearsal::{
     refuse_unused_passphrase, require_built_in_check_length, CheckEvidence, CheckOutcome,
-    Confirmation, PassedCheck, RecoveredForCheck, RecoveredForRekey, Reference, ReferenceTarget,
+    Confirmation, PassedCheck, PassphraseReferences, RecoveredForCheck, RecoveredForRekey,
+    Reference, ReferenceTarget,
 };
 pub use suite::{
-    memory_text, Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID,
-    SUITE_ID,
+    memory_text, Settings, Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS,
+    SAME_LENGTH_SUITE_ID, SUITE_ID,
 };

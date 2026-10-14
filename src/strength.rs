@@ -8,7 +8,7 @@
 use std::sync::OnceLock;
 
 use crate::eff::{EffList, MILLIBITS_PER_WORD};
-use crate::new_password::{bits_of, MILLIBITS_PER_BIT};
+use crate::new_password::bits_of;
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 pub(crate) mod known_answers;
@@ -103,8 +103,9 @@ impl Strength {
     }
 
     /// The estimate in whole millibits, as the known answers compare it.
-    pub fn millibits(self) -> u32 {
-        (self.bits * f64::from(MILLIBITS_PER_BIT)).round() as u32
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
+    pub(crate) fn millibits(self) -> u32 {
+        (self.bits * f64::from(crate::new_password::MILLIBITS_PER_BIT)).round() as u32
     }
 
     /// Whether the password deserves a warning before it protects a phrase.

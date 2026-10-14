@@ -35,6 +35,7 @@
 import { createECDH, createHash, createHmac, pbkdf2Sync } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { chromium, firefox } from "playwright";
@@ -65,6 +66,7 @@ const inline = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
 // target/browser-check/ keeps (CI uploads them when the step fails). PAGE_LIMIT_MS ends a page
 // that keeps reporting but never ends.
 const DRAW_BUDGET = 16;
+const STALL_MS = 120_000;
 const PAGE_LIMIT_MS = 3_600_000;
 /** How often the script asks the page how far it is. */
 const POLL_MS = 2_000;
@@ -295,8 +297,8 @@ function pageScript() {
   // built-in check contradicts (src/error.rs), exactly as the page gets them.
   const WALLET_PASSPHRASE_REQUIRED =
     "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase.";
-  const PASSPHRASE_ONLY_WITH_REFERENCE =
-    "passphrase belongs only to an address, a fingerprint or the wallet check.";
+  const REKEY_PASSPHRASE_ONLY_WITH_REFERENCE =
+    "passphrase belongs only to an address or a fingerprint.";
   const PASSPHRASE_UNSTATED = "Invalid request: say whether the wallet has a BIP39 passphrase";
   const PASSPHRASE_CONTRADICTED =
     "Invalid request: the wallet's BIP39 passphrase is stated otherwise than the reference shows";
@@ -2814,7 +2816,7 @@ function pageScript() {
       for (const passphrase of ["TREZOR", encode("TREZOR")]) {
         await expectExactTypeError(
           client.rekey({ ...options, passphrase, walletHasPassphrase: true }),
-          PASSPHRASE_ONLY_WITH_REFERENCE,
+          REKEY_PASSPHRASE_ONLY_WITH_REFERENCE,
           `a passphrase${typeof passphrase === "string" ? "" : " as bytes"} with ${description} ` +
             "is refused",
         );
@@ -2884,7 +2886,7 @@ function pageScript() {
     );
     await expectTypeError(
       client.rekey({ ...sameBase, confirmation: { fingerprint: FINGERPRINT, path: BIP84_PATH } }),
-      "reference.path belongs only to an address reference.",
+      "confirmation.path belongs only to an address confirmation.",
       "a path without an address is refused in a confirmation",
     );
 
@@ -4416,7 +4418,9 @@ function pageScript() {
     const workerRate = stoppedSeconds > 0 ? (stoppedReports.length * 1024) / stoppedSeconds / 2 : 0;
     const drawWithin = async (workers, draw) => {
       if (workerRate === 0) return draw();
-      const seconds = Math.ceil((DRAW_BUDGET * expectedDraws) / (workerRate * Math.min(workers, 2)));
+      const seconds = Math.ceil(
+        (DRAW_BUDGET * expectedDraws) / (workerRate * Math.min(workers, 2)),
+      );
       let late = false;
       const deadline = setTimeout(() => {
         late = true;
@@ -4641,8 +4645,8 @@ const classes = bundleClasses(root, [
 ]);
 const script = classes + sources + checks;
 
-// The policy of scripts/build-browser-check.mjs and the offline wallet tools: nothing but this
-// one script, WebAssembly and Blob workers.
+// The policy of the offline wallet tools, which scripts/build-browser-check.mjs shares
+// (pagePolicy of scripts/bundle-browser-classes.mjs).
 const policy = pagePolicy(script);
 const page = `<!doctype html>
 <html lang="en">
@@ -4701,39 +4705,86 @@ async function checkPage(browser, browserName, mode, address) {
   const page = await browser.newPage();
   const strayRequests = [];
   const pageErrors = [];
+  const consoleLines = [];
   // The page itself and its Blob workers are the only things it may load.
   page.on("request", (request) => {
     const url = request.url();
     if (url !== address && !url.startsWith("blob:")) strayRequests.push(url);
   });
   page.on("pageerror", (error) => pageErrors.push(String(error)));
+  page.on("console", (message) => consoleLines.push(`${message.type()}: ${message.text()}`));
   try {
     await page.goto(address);
-    const finished = page.waitForFunction(() => window.mhfeCheck !== undefined, null, {
-      timeout: PAGE_TIMEOUT_MS,
-    });
-    finished.catch(() => {});
-    // An error that stops the page's script, such as a SyntaxError, would otherwise wait out the
-    // timeout; every uncaught error fails the check anyway.
-    const stopped = new Promise((resolve) => page.once("pageerror", resolve));
-    await Promise.race([finished, stopped]);
-    const {
-      mode: clientMode,
-      results,
-      failures,
-    } = (await page.evaluate(() => window.mhfeCheck)) ?? {
-      mode: null,
-      results: [],
-      failures: ["the page's script stopped"],
-    };
+    const { mode: clientMode, results, failures } = await pageOutcome(page, pageErrors);
     if (clientMode !== mode) failures.push(`the client ran in ${clientMode} mode, not ${mode}`);
     for (const url of strayRequests) failures.push(`a request left the page: ${url}`);
     for (const error of pageErrors) failures.push(`uncaught page error: ${error}`);
-    console.log(`${browserName} ${browser.version()}, ${mode} mode:`);
-    for (const line of results) console.log(`  ${line}`);
-    for (const failure of failures) console.log(`  FAIL ${failure}`);
+    const lines = [
+      `${browserName} ${browser.version()}, ${mode} mode:`,
+      ...results.map((line) => `  ${line}`),
+      ...failures.map((failure) => `  FAIL ${failure}`),
+    ];
+    console.log(lines.join("\n"));
+    // The console messages go to the log alone, which CI keeps when the step fails.
+    const log = [
+      ...lines,
+      "Console messages of the page:",
+      ...consoleLines.map((line) => `  ${line}`),
+    ];
+    writeFileSync(
+      new URL(`target/browser-check/${browserName}-${mode}.log`, root),
+      log.join("\n") + "\n",
+    );
     return failures.length === 0;
   } finally {
     await page.close();
+  }
+}
+
+/**
+ * Waits for the page's results. A page that stops (an uncaught error, STALL_MS without a result or
+ * a drawing report, or PAGE_LIMIT_MS in all) gives its partial results instead, with the check it
+ * was in as a failure.
+ */
+async function pageOutcome(page, pageErrors) {
+  const start = Date.now();
+  for (;;) {
+    const state = await ask(page, () => ({
+      finished: window.mhfeCheck !== undefined,
+      quietMs: window.mhfeProgress === undefined ? 0 : Date.now() - window.mhfeProgress.updated,
+    }));
+    if (state?.finished) return page.evaluate(() => window.mhfeCheck);
+    let stopped = null;
+    if (pageErrors.length > 0) stopped = "an uncaught error stopped the page's script";
+    else if (state === null) stopped = `the page did not answer for ${STALL_MS / 1000} s`;
+    else if (state.quietMs > STALL_MS) {
+      stopped = `no result or drawing report for ${Math.round(state.quietMs / 1000)} s`;
+    } else if (Date.now() - start > PAGE_LIMIT_MS) {
+      stopped = `the page did not end within ${PAGE_LIMIT_MS / 60_000} minutes`;
+    }
+    if (stopped !== null) return partialOutcome(page, stopped);
+    await sleep(POLL_MS);
+  }
+}
+
+/** The results a stopped page has given so far, and why and where it stopped as a failure. */
+async function partialOutcome(page, stopped) {
+  const progress = await ask(page, () => {
+    const { results = [], failures = [], running = "starting" } = window.mhfeProgress ?? {};
+    return { results: [...results], failures: [...failures], running };
+  });
+  if (progress === null) return { mode: null, results: [], failures: [stopped] };
+  const { results, failures, running } = progress;
+  return { mode: null, results, failures: [...failures, `${stopped}, in "${running}"`] };
+}
+
+/** What `question` gives in the page, or null when the page does not answer within STALL_MS. */
+async function ask(page, question) {
+  const answered = new AbortController();
+  const silence = sleep(STALL_MS, null, { signal: answered.signal }).catch(() => null);
+  try {
+    return await Promise.race([page.evaluate(question), silence]);
+  } finally {
+    answered.abort();
   }
 }

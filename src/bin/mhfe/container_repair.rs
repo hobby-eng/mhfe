@@ -12,10 +12,11 @@ use mhfe::wallet::SearchLimits;
 use mhfe::word_hints::WordList;
 use mhfe::{ContainerFacts, Password, WorkFactor};
 
-use crate::choice::{self, Answer, Question};
+use crate::choice::{Answer, Question};
 use crate::container_search;
 use crate::exit::{refused, Failure, SUCCESS};
 use crate::flow::Flow;
+use crate::hidden_input;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
@@ -648,7 +649,7 @@ fn repair_words_help() -> String {
 /// At a terminal, asks whether a new container gets repair words; a script, whose answers come in
 /// a documented order, gets none.
 fn ask_when_creating(input: &mut Input) -> Result<Option<usize>, Failure> {
-    if input.is_script() || !choice::can_run() {
+    if input.is_script() || !hidden_input::can_redraw() {
         return Ok(None);
     }
     ask_count(input, true)
@@ -775,11 +776,11 @@ mod tests {
     /// No note of a list here is cut with "…".
     #[test]
     fn the_lists_show_whole() {
-        assert!(choice::answers_fit(&use_answers()));
+        assert!(crate::choice::answers_fit(&use_answers()));
     }
 
     #[test]
     fn the_question_fits_the_screen() {
-        assert!(choice::fits(REPAIR_EXPLAINED));
+        assert!(crate::choice::fits(REPAIR_EXPLAINED));
     }
 }

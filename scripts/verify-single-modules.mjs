@@ -7,14 +7,13 @@
 //   node scripts/verify-single-modules.mjs
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 import { PHRASE, SELF_CHECK_PARTS } from "./public-test-data.mjs";
-import { isVectorText, rustStrings } from "./rust-strings.mjs";
+import { damagedCopies, isVectorText, rustStrings } from "./rust-strings.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root));
-const target = process.env.CARGO_TARGET_DIR ?? new URL("target", root).pathname;
 
 /**
  * The known-answers files and the modules whose set holds their parts (src/self_check/sets.rs).
@@ -38,6 +37,7 @@ const OWNERS = {
   "src/phrase/known_answers.rs": ["core", "repair", "wallet"],
   "src/repair/known_answers.rs": ["core", "repair"],
   "src/wallet/known_answers.rs": ["core", "repair", "wallet"],
+  "src/wallet/known_answers/addresses.rs": ["core", "wallet"],
 };
 
 /** Texts that a module holds for its own reason, which a foreign part's vector happens to be. */
@@ -84,60 +84,20 @@ function foreignVectors(module) {
   );
 }
 
-/** Builds and binds `module` alone, and returns its wasm-bindgen glue and WebAssembly. */
+/**
+ * Builds and binds `module` alone, as the package's build does (scripts/bind-wasm.sh), and returns
+ * its wasm-bindgen glue and WebAssembly.
+ */
 function build(module) {
-  execFileSync(
-    "cargo",
-    [
-      "rustc",
-      "--locked",
-      "--release",
-      "--lib",
-      "--target",
-      "wasm32-unknown-unknown",
-      "--no-default-features",
-      "--features",
-      `browser-${module}`,
-      "--crate-type",
-      "cdylib",
-    ],
-    { cwd: root, stdio: "inherit" },
-  );
   const out = new URL(`target/single-modules/${module}/`, root);
-  mkdirSync(out, { recursive: true });
-  execFileSync(
-    "wasm-bindgen",
-    [
-      `${target}/wasm32-unknown-unknown/release/mhfe.wasm`,
-      "--target",
-      "no-modules",
-      "--no-modules-global",
-      "mhfe",
-      "--no-typescript",
-      "--out-dir",
-      out.pathname,
-      "--out-name",
-      "mhfe",
-    ],
-    { cwd: root, stdio: "inherit" },
-  );
+  execFileSync("scripts/bind-wasm.sh", [`browser-${module}`, out.pathname], {
+    cwd: root,
+    stdio: "inherit",
+  });
   return {
     glue: readFileSync(new URL("mhfe.js", out)).toString(),
     wasm: readFileSync(new URL("mhfe_bg.wasm", out)),
   };
-}
-
-/** The WebAssembly with the last byte of every copy of `text` changed. */
-function damaged(wasm, text) {
-  const bytes = Buffer.from(wasm);
-  const needle = Buffer.from(text);
-  let copies = 0;
-  for (let at = bytes.indexOf(needle); at !== -1; at = bytes.indexOf(needle, at + 1)) {
-    bytes[at + needle.length - 1] ^= 1;
-    copies += 1;
-  }
-  assert.ok(copies > 0, `the WebAssembly holds ${text}`);
-  return bytes;
 }
 
 const random = { fill: (bytes) => globalThis.crypto.getRandomValues(bytes) };
@@ -182,9 +142,10 @@ for (const [module, { check, vector, holds = [], lacks = [] }] of Object.entries
     report.components.every(({ outcome }) => outcome !== "failed"),
     `${module}: its startup self-check passes`,
   );
-  assert.equal(run(damaged(wasm, vector)).passed, false, `${module}: a damaged vector fails`);
+  assert.equal(run(damagedCopies(wasm, vector)).passed, false, `${module}: a damaged vector fails`);
   const text = wasm.toString("latin1");
-  for (const marker of holds) assert.ok(text.includes(marker), `${module}: it holds ${marker}`);
+  // Each message says what failed: a marker it should hold that is missing, or one it holds.
+  for (const marker of holds) assert.ok(text.includes(marker), `${module}: it lacks ${marker}`);
   for (const marker of lacks) assert.ok(!text.includes(marker), `${module}: it holds ${marker}`);
   const carried = foreignVectors(module).filter((foreign) => text.includes(foreign));
   assert.deepEqual(carried, [], `${module}: it carries vectors of parts outside its set`);

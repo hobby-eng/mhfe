@@ -31,10 +31,11 @@ use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
 use crate::{
     container_fingerprint, refuse_unused_passphrase, Confirmation, ConfirmationNeeded,
-    ContainerFacts, HiddenWallets, Mhfe, MhfeError, OriginalFacts, PassedCheck, Password,
-    PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery, RecoveryStatus, ReferenceTarget,
-    Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS,
-    SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
+    ContainerFacts, HiddenWallets, Mhfe, MhfeError, OriginalFacts, PassedCheck,
+    PassphraseReferences, Password, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
+    RecoveryStatus, ReferenceTarget, Settings, Suite, WordCount, WorkFactor,
+    BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
+    WORD_COUNTS,
 };
 
 #[derive(Serialize)]
@@ -201,34 +202,42 @@ enum KeepJson {
     Password,
     Passphrase,
     PassphraseIfAny,
-    RepairWords { apart: bool },
+    RepairWords,
     Pim { value: u32 },
     MemoryLevel { value: u32 },
-    WordCount { words: usize, apart: bool },
+    WordCount { words: usize },
     OldContainer,
     OldPasswords,
 }
 
+/// An item to keep as the page reads it, with `apart: true` where the library keeps it apart from
+/// the container phrase ([`KeepItem::kept_apart`]).
+#[derive(Serialize)]
+struct KeptJson {
+    #[serde(flatten)]
+    item: KeepJson,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    apart: bool,
+}
+
 /// The library's keep list as the page reads it.
-fn keep_json(keep: &Keep) -> Vec<KeepJson> {
+fn keep_json(keep: &Keep) -> Vec<KeptJson> {
     keep.items()
         .iter()
-        .map(|item| match *item {
-            KeepItem::ContainerWords(words) => KeepJson::ContainerWords { words },
-            KeepItem::Password => KeepJson::Password,
-            KeepItem::Passphrase => KeepJson::Passphrase,
-            KeepItem::PassphraseIfAny => KeepJson::PassphraseIfAny,
-            KeepItem::RepairWords => KeepJson::RepairWords {
-                apart: item.kept_apart(),
+        .map(|item| KeptJson {
+            item: match *item {
+                KeepItem::ContainerWords(words) => KeepJson::ContainerWords { words },
+                KeepItem::Password => KeepJson::Password,
+                KeepItem::Passphrase => KeepJson::Passphrase,
+                KeepItem::PassphraseIfAny => KeepJson::PassphraseIfAny,
+                KeepItem::RepairWords => KeepJson::RepairWords,
+                KeepItem::Pim(value) => KeepJson::Pim { value },
+                KeepItem::MemoryLevel(value) => KeepJson::MemoryLevel { value },
+                KeepItem::WordCount(words) => KeepJson::WordCount { words },
+                KeepItem::OldContainer => KeepJson::OldContainer,
+                KeepItem::OldPasswords => KeepJson::OldPasswords,
             },
-            KeepItem::Pim(value) => KeepJson::Pim { value },
-            KeepItem::MemoryLevel(value) => KeepJson::MemoryLevel { value },
-            KeepItem::WordCount(words) => KeepJson::WordCount {
-                words,
-                apart: item.kept_apart(),
-            },
-            KeepItem::OldContainer => KeepJson::OldContainer,
-            KeepItem::OldPasswords => KeepJson::OldPasswords,
+            apart: item.kept_apart(),
         })
         .collect()
 }
@@ -285,7 +294,7 @@ struct SealedJson<'a> {
     other_lengths: &'a [usize],
     repair_words: Option<&'a str>,
     repair_profile: Option<&'static str>,
-    keep: Vec<KeepJson>,
+    keep: Vec<KeptJson>,
 }
 
 /// The result of an encryption or a rekey: the checked container and what to keep.
@@ -804,7 +813,7 @@ pub fn search_wallet(
     }
     let compared = match reference_kind {
         "builtInCheck" => {
-            refuse_unused_passphrase(passphrase).map_err(js_error)?;
+            refuse_unused_passphrase(passphrase, PassphraseReferences::Check).map_err(js_error)?;
             Compared::OwnChecks(None)
         }
         "walletCheck" => Compared::OwnChecks(Some(passphrase)),
@@ -969,7 +978,7 @@ fn with_rekey_confirmation<T>(
     // The wallet check (16 bits) and a word count never confirm a phrase to seal again.
     let wallet = match kind {
         "builtInCheck" | "owner" => {
-            refuse_unused_passphrase(text).map_err(js_error)?;
+            refuse_unused_passphrase(text, PassphraseReferences::Rekey).map_err(js_error)?;
             None
         }
         "address" | "fingerprint" => Some(reference_target(kind, reference, coin, path)?),
@@ -1046,7 +1055,7 @@ impl RekeySession {
         self.expect(RekeyStep::Made)?;
         let outcome = (|| {
             let password = new_password_from(&typed, &repeat, choice, position)?;
-            let work = settings_from(pim, memory_level, true)?;
+            let work = settings_from(pim, memory_level, Settings::New)?;
             self.rekey.check_new(&password, work).map_err(js_error)?;
             let repair = repair_count(repair_word_count)?;
             Ok((password, work, repair))
@@ -1649,29 +1658,22 @@ fn repair_count(count: f64) -> Result<Option<usize>, JsError> {
 }
 
 fn work_from(pim: f64, memory_level: f64) -> Result<WorkFactor, JsError> {
-    settings_from(pim, memory_level, false)
+    settings_from(pim, memory_level, Settings::Current)
 }
 
-/// The settings `pim` and `memory_level`; `new` for the new ones of a rekey, which a refusal names
-/// so ([`WorkFactor::new_settings`]).
-fn settings_from(pim: f64, memory_level: f64, new: bool) -> Result<WorkFactor, JsError> {
-    let side = if new { "new " } else { "" };
+/// The settings `settings` from `pim` and `memory_level`, which a refusal names.
+fn settings_from(pim: f64, memory_level: f64, settings: Settings) -> Result<WorkFactor, JsError> {
     let pim = whole_number(
         pim,
-        MhfeError::InvalidPim { pim: 0, new }.code(),
-        &format!("the {side}PIM"),
+        MhfeError::InvalidPim { pim: 0, settings }.code(),
+        &format!("{settings} PIM"),
     )?;
     let memory_level = whole_number(
         memory_level,
-        MhfeError::InvalidMemoryLevel { level: 0, new }.code(),
-        &format!("the {side}memory level"),
+        MhfeError::InvalidMemoryLevel { level: 0, settings }.code(),
+        &format!("{settings} memory level"),
     )?;
-    if new {
-        WorkFactor::new_settings(pim, memory_level)
-    } else {
-        WorkFactor::new(pim, memory_level)
-    }
-    .map_err(js_error)
+    WorkFactor::of(settings, pim, memory_level).map_err(js_error)
 }
 
 fn mhfe_for(

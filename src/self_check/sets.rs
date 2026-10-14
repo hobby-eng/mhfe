@@ -35,6 +35,7 @@ pub struct NotChecked {
 }
 
 impl NotChecked {
+    /// A part `id`, named `label`, that this run leaves out for `reason`: reported as not run.
     pub fn new(id: &'static str, label: &'static str, reason: &'static str) -> Self {
         Self {
             id,
@@ -301,6 +302,22 @@ mod tests {
         let report = core.run_quietly(Tier::Startup);
         assert!(report.passed(), "{:?}", report.first_failure());
         assert_eq!(report.results()[1].outcome().name(), "notRun");
+    }
+
+    #[test]
+    fn the_browser_process_set_reports_each_process_part_as_not_available() {
+        let mut set = browser_process();
+        assert_eq!(
+            set.ids(),
+            ["memory-locking", "core-dumps", "isolation", "hidden-input"]
+        );
+        // The memory lock is probed where the set runs; a browser cannot check the others.
+        let report = set.run_quietly(Tier::Startup);
+        let outcomes: Vec<&str> = report.results()[1..]
+            .iter()
+            .map(|result| result.outcome().name())
+            .collect();
+        assert_eq!(outcomes, ["notAvailable"; 3]);
     }
 
     #[test]

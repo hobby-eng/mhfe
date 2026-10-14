@@ -920,7 +920,9 @@ fn protected(root: &Path, device: &str, depth: usize) -> Option<bool> {
             .join(device)
             .join("backing_dev");
         return match fs::read_to_string(backing) {
-            Err(_) => Some(true),
+            // No attribute: no writeback. Any other error leaves the device unknown.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some(true),
+            Err(_) => None,
             Ok(text) if matches!(text.trim(), "" | "none") => Some(true),
             Ok(text) if depth < MAX_DEVICE_DEPTH => {
                 protected(root, &device_of_node(root, text.trim())?, depth + 1)
@@ -1060,6 +1062,11 @@ mod tests {
         assert_eq!(zram(Some("/dev/sdb2\n")), area(false));
         assert_eq!(zram(Some("/dev/dm-4\n")), []);
         assert_eq!(zram(Some("/dev/missing\n")), area(true));
+        // An attribute that is there but cannot be read leaves the device unknown.
+        let system = FakeSystem::new("/dev/zram0 partition 1024 0 100\n");
+        system.device("zram0", None, &[]);
+        fs::create_dir(system.0.join("sys/class/block/zram0/backing_dev")).unwrap();
+        assert_eq!(system.unprotected(), area(true));
     }
 
     #[test]

@@ -179,8 +179,8 @@ pub fn make_password(
     };
     let recipe = match kind {
         "words" => PasswordRecipe::words(size(DEFAULT_WORDS)?),
-        // In the same words as the class's TypeError (web/passwords.js), with the count from
-        // the library (AUD-023-ARC007).
+        // The class's TypeError (web/passwords.js) is a deliberate copy of this refusal, made
+        // before a worker starts; scripts/verify-browser-package.mjs keeps both equal.
         "checkWord" if count.is_some() => Err(MhfeError::InvalidRequest(format!(
             "count belongs only to the kinds \"words\" and \"characters\": \"checkWord\" always \
              gives {} words and their check word",

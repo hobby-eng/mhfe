@@ -13,8 +13,10 @@ use crate::choice;
 use crate::container_repair::{self, RepairWordsOption};
 use crate::exit::{refused, Failure, SUCCESS};
 use crate::flow::{self, Flow};
+use crate::hidden_input;
 use crate::length_choice;
 use crate::made_password::{self, NewPasswordOption, PasswordKind};
+use crate::phrase_length;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
@@ -34,7 +36,7 @@ pub struct Options {
         value_name = "yes|no",
         num_args = 0..=1,
         default_missing_value = "yes",
-        value_parser = crate::check::parse_yes_no,
+        value_parser = crate::choice::parse_yes_no,
         long_help = same_length_help()
     )]
     same_length: Option<bool>,
@@ -51,8 +53,11 @@ pub struct Options {
 
 fn same_length_help() -> String {
     style::option_help(&[
-        "Keep the length of a 12- to 21-word phrase instead of making 24 words: --same-length \
-         alone or --same-length yes; --same-length no makes 24 words without asking.",
+        &format!(
+            "Keep the length of a {} phrase instead of making 24 words: --same-length alone or \
+             --same-length yes; --same-length no makes 24 words without asking.",
+            phrase_length::short_range_words()
+        ),
         "Without it, a person at a terminal is asked, and 24 words is the default. A container \
          of the phrase's own length looks like any other phrase, but nothing detects a wrong \
          password: it opens another, empty wallet. The container also shows the phrase's \
@@ -320,15 +325,20 @@ fn choose_suite(
 ) -> Result<Suite, Failure> {
     let words = original.word_count();
     if same_length == Some(false) {
-        // The choices come with the recommended 24 words first.
+        // The choices come with the recommended one, 24 words, first; it is the only one of a
+        // 24-word phrase, which has nothing to record.
         let choices = original.container_choices();
+        let recommended = choices
+            .first()
+            .copied()
+            .ok_or_else(|| Failure::internal("The library offered no container for the phrase."))?;
         if choices.len() > 1 {
             choice::record(
                 "Container",
-                &format!("{} words (--same-length no)", choices[0].word_count()),
+                &format!("{} words (--same-length no)", recommended.word_count()),
             );
         }
-        return Ok(Suite::TwentyFourWords);
+        return Ok(recommended.suite());
     }
     if same_length == Some(true) {
         Suite::SameLength.require_original(words)?;
@@ -340,7 +350,7 @@ fn choose_suite(
         return Ok(Suite::SameLength);
     }
     // A 24-word phrase has one container; a script and a terminal without lists take the first.
-    if original.container_choices().len() == 1 || input.is_script() || !choice::can_run() {
+    if original.container_choices().len() == 1 || input.is_script() || !hidden_input::can_redraw() {
         return Ok(Suite::TwentyFourWords);
     }
     length_choice::choose(original)
@@ -375,6 +385,7 @@ fn item_text(item: KeepItem) -> String {
         KeepItem::RepairWords => "the repair words".to_owned(),
         KeepItem::Pim(pim) => format!("PIM {pim}"),
         KeepItem::MemoryLevel(level) => format!("memory level {level}"),
+        // The second comma closes "15": a word count is always kept apart, so that suffix follows.
         KeepItem::WordCount(words) => format!("the word count, {words},"),
         KeepItem::OldContainer => "the old container".to_owned(),
         KeepItem::OldPasswords => "its passwords".to_owned(),
@@ -485,7 +496,10 @@ pub fn read_new_password(
         Some(kind) => kind,
         // As the repair words, the question is a list, which a script or a terminal that
         // cannot redraw lines does not get, and a made password needs a private screen.
-        None if input.is_script() || !choice::can_run() || !terminal::can_show_privately(input) => {
+        None if input.is_script()
+            || !hidden_input::can_redraw()
+            || !terminal::can_show_privately(input) =>
+        {
             PasswordKind::Own
         }
         None => made_password::ask_kind(input, operation)?,

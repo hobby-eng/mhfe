@@ -510,7 +510,7 @@ export class MhfeClient {
   } = {}) {
     requireText(container, "container");
     const [referenceKind, referenceValue, coin, path] = describeSearchReference(reference, true);
-    requirePassphraseFits(referenceKind, passphrase);
+    requirePassphraseFits(referenceKind, passphrase, CHECK_PASSPHRASE_REFERENCES);
     const [choice, position] = describeChoice(passwordRepair, "passwordRepair");
     return this.#long(
       {
@@ -621,7 +621,7 @@ export class MhfeClient {
     requireCallback(onUnverified, "onUnverified");
     requireCallback(onConfirmAgain, "onConfirmAgain");
     const [confirmKind, reference, coin, path, firstOwner] = describeConfirmation(confirmation);
-    requirePassphraseFits(confirmKind, passphrase);
+    requirePassphraseFits(confirmKind, passphrase, REKEY_PASSPHRASE_REFERENCES);
     // The owner callback of the confirmation being judged: an answer of onConfirmAgain may give
     // another.
     let owner = firstOwner;
@@ -1025,9 +1025,10 @@ function requireRepetition(password, passwordRepeat, name) {
 
 /**
  * The PIM and memory level, including the browser's memory limit; `isNew` for the new settings of
- * a rekey. Each refusal is the library's sentence for the same code and value (MhfeError's
- * InvalidPim and InvalidMemoryLevel, WorkFactor::new_settings), which
- * scripts/verify-browser-package.mjs keeps in step, before any secret reaches a worker.
+ * a rekey. Each refusal of a number is the library's sentence for the same code and value
+ * (MhfeError's InvalidPim and InvalidMemoryLevel, WorkFactor::new_settings), which
+ * scripts/verify-browser-package.mjs keeps in step, before any secret reaches a worker; a value of
+ * another type is not repeated (shownNumber).
  */
 function requireSettings(pim, memoryLevel, isNew = false) {
   const side = isNew ? "new " : "";
@@ -1049,9 +1050,17 @@ function requireSetting(value, highest, code, name) {
   if (!Number.isSafeInteger(value) || value < 0 || value > highest) {
     throw new MhfeError(
       code,
-      `The ${name} must be a whole number from 0 to ${highest}, not ${String(value)}`,
+      `The ${name} must be a whole number from 0 to ${highest}, not ${shownNumber(value)}`,
     );
   }
+}
+
+/**
+ * A value a page gave for a number, as a refusal names it: a number as it is, anything else only
+ * as "a number" it is not, as a text pasted into the wrong field may be a secret (CORE-24).
+ */
+function shownNumber(value) {
+  return typeof value === "number" ? String(value) : "a number";
 }
 
 /**
@@ -1062,7 +1071,8 @@ function requireWordCount(words) {
   if (words !== 0 && !WORD_COUNTS.includes(words)) {
     throw new MhfeError(
       "INVALID_WORD_COUNT",
-      `The original seed phrase must have ${countsText(WORD_COUNTS)} words, not ${String(words)}`,
+      `The original seed phrase must have ${countsText(WORD_COUNTS)} words, not ` +
+        shownNumber(words),
     );
   }
 }
@@ -1073,7 +1083,7 @@ function requireRepairWordCount(count) {
     throw new MhfeError(
       "INVALID_REPAIR_WORDS",
       `The repair words cannot be used: a card has ${countsText(REPAIR_WORD_COUNTS.slice(1))} ` +
-        `repair words, not ${String(count)}`,
+        `repair words, not ${shownNumber(count)}`,
     );
   }
 }
@@ -1112,7 +1122,8 @@ function describeReference(reference, name = "reference") {
   const kinds = isObject ? REFERENCE_KINDS.filter(given) : [];
   if (kinds.length !== 1) {
     throw new TypeError(
-      "reference must be exactly one of { address, coin, path? }, { fingerprint }, { words } or { walletCheck: true }.",
+      `${name} must be exactly one of { address, coin, path? }, { fingerprint }, { words } or ` +
+        "{ walletCheck: true }.",
     );
   }
   const unknown = Object.keys(reference).find((key) => given(key) && !REFERENCE_KEYS.includes(key));
@@ -1122,27 +1133,26 @@ function describeReference(reference, name = "reference") {
   if (unknown !== undefined) throw new TypeError(`${name}.${unknown} is not a key of a ${name}.`);
   for (const key of ["coin", "path"]) {
     if (reference[key] !== undefined && kinds[0] !== "address") {
-      throw new TypeError(`reference.${key} belongs only to an address reference.`);
+      throw new TypeError(`${name}.${key} belongs only to an address ${name}.`);
     }
   }
   switch (kinds[0]) {
     case "address":
-      requireText(reference.address, "reference.address");
-      if (reference.path !== undefined) requireText(reference.path, "reference.path");
+      requireText(reference.address, `${name}.address`);
+      if (reference.path !== undefined) requireText(reference.path, `${name}.path`);
       // No coin is the default, so that a page for one coin names no other.
       if (reference.coin === undefined) {
         throw new TypeError(
-          "reference.coin must name the coin of the address, an id of MhfeWallet.parameters().coins.",
+          `${name}.coin must name the coin of the address, an id of MhfeWallet.parameters().coins.`,
         );
       }
-      requireText(reference.coin, "reference.coin");
+      requireText(reference.coin, `${name}.coin`);
       return ["address", reference.address, reference.coin, reference.path ?? ""];
     case "fingerprint":
-      requireText(reference.fingerprint, "reference.fingerprint");
+      requireText(reference.fingerprint, `${name}.fingerprint`);
       return ["fingerprint", reference.fingerprint, "", ""];
     case "walletCheck":
-      if (reference.walletCheck !== true)
-        throw new TypeError("reference.walletCheck must be true.");
+      if (reference.walletCheck !== true) throw new TypeError(`${name}.walletCheck must be true.`);
       return ["walletCheck", "", "", ""];
     default:
       // 0 detects the length (the library's detection).
@@ -1169,14 +1179,18 @@ function describeReference(reference, name = "reference") {
  */
 async function answerOwner(owner, check) {
   const answer = await owner(check);
-  const withPassphrase = typeof answer === "object" && answer !== null;
-  const passphrase = withPassphrase ? answer.passphrase : "";
+  const withPassphrase =
+    typeof answer === "object" && answer !== null && answer.passphrase !== undefined;
+  // A passphrase answered is checked as any other: null is a TypeError, not an empty passphrase.
   const message = {
-    confirmed: answer === true || (withPassphrase && passphrase !== undefined),
-    passphrase: encodeSecret(passphrase ?? "", "passphrase"),
+    confirmed: answer === true || withPassphrase,
+    passphrase: encodeSecret(withPassphrase ? answer.passphrase : "", "passphrase"),
   };
   return { message, transfer: secretBuffers(message) };
 }
+
+/** What onNoLength may give instead of detection, which found no verified length. */
+const NO_LENGTH_ANSWERS = "a length, an address or a fingerprint";
 
 /**
  * The page's answer when detection found no verified length (check's onNoLength), told what
@@ -1188,14 +1202,12 @@ async function answerNoLength(onNoLength, evidence) {
   if (answer === null || answer === undefined) return null;
   const { passphrase = "", ...reference } = answer;
   if (reference.words === 0) {
-    throw new TypeError("onNoLength gives a length or a wallet reference, not detection again.");
+    throw new TypeError(`onNoLength gives ${NO_LENGTH_ANSWERS}, not detection again.`);
   }
   // The wallet check (16 bits) tells a right password from a wrong one, not which length or
   // wallet it is: the check already reports it beside a reading that is not verified.
   if (reference.walletCheck !== undefined) {
-    throw new TypeError(
-      "onNoLength gives a length, an address or a fingerprint, not the wallet check.",
-    );
+    throw new TypeError(`onNoLength gives ${NO_LENGTH_ANSWERS}, not the wallet check.`);
   }
   const [referenceKind, value, coin, path] = describeReference(reference);
   const message = {
@@ -1222,7 +1234,7 @@ async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths 
   if (answer === null || answer === undefined) return null;
   const { passphrase = "", words, ...confirmation } = answer;
   const [confirmKind, reference, coin, path, owner] = describeConfirmation(confirmation);
-  requirePassphraseFits(confirmKind, passphrase);
+  requirePassphraseFits(confirmKind, passphrase, REKEY_PASSPHRASE_REFERENCES);
   let stated = 0;
   if (owner !== undefined) {
     stated = words ?? (ownerLengths.length === 1 ? ownerLengths[0] : undefined);
@@ -1249,19 +1261,23 @@ async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths 
   return { message: next, transfer: secretBuffers(next) };
 }
 
+// The references that take a passphrase in a check and in a rekey, in the words of the core's
+// refusal (rehearsal::PassphraseReferences). Deliberate copy: the class refuses before any secret
+// reaches a worker; scripts/verify-browser-package.mjs keeps both wordings equal.
+const CHECK_PASSPHRASE_REFERENCES = "an address, a fingerprint or the wallet check";
+const REKEY_PASSPHRASE_REFERENCES = "an address or a fingerprint";
+
 /**
- * A passphrase belongs only to an address, a fingerprint or the wallet check: a non-empty one with
- * the built-in check or the owner is a TypeError, before any secret reaches a worker (the core
- * refuses it too, rehearsal::refuse_unused_passphrase).
+ * A passphrase belongs only to the `references` that take one: a non-empty one with the built-in
+ * check or the owner is a TypeError, before any secret reaches a worker (the core refuses it too,
+ * rehearsal::refuse_unused_passphrase).
  */
-function requirePassphraseFits(confirmKind, passphrase) {
+function requirePassphraseFits(confirmKind, passphrase, references) {
   // Only a string or bytes has a length here; any other type is refused when it is encoded.
   const givenPassphrase =
     (typeof passphrase === "string" || passphrase instanceof Uint8Array) && passphrase.length > 0;
   if (givenPassphrase && (confirmKind === "builtInCheck" || confirmKind === "owner")) {
-    throw new TypeError(
-      "passphrase belongs only to an address, a fingerprint or the wallet check.",
-    );
+    throw new TypeError(`passphrase belongs only to ${references}.`);
   }
 }
 
@@ -1312,6 +1328,9 @@ function describeConfirmation(confirmation) {
       "confirmation must be one of { builtInCheck: true }, { address, coin, path? }, " +
         "{ fingerprint } or { owner }.",
     );
+  }
+  if (given.includes("address") && given.includes("fingerprint")) {
+    throw new TypeError("confirmation must be exactly one kind: an address or a fingerprint.");
   }
   const [kind, reference, coin, path] = describeReference(confirmation, "confirmation");
   return [kind, reference, coin, path, undefined];

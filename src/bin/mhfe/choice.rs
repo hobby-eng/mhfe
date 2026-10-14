@@ -78,9 +78,13 @@ pub struct Help<'a> {
     pub show: &'a dyn Fn(),
 }
 
-/// Whether a list can be shown: it reads single keys from a terminal and redraws on one.
-pub fn can_run() -> bool {
-    hidden_input::can_redraw()
+/// The value of an option that answers a yes-or-no question of a menu: yes or no.
+pub fn parse_yes_no(text: &str) -> Result<bool, String> {
+    match text {
+        "yes" => Ok(true),
+        "no" => Ok(false),
+        _ => Err("give yes or no".to_owned()),
+    }
 }
 
 /// Asks `question` and returns the index of the chosen answer, or `None` when the person pressed

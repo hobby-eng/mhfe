@@ -11,6 +11,7 @@ use mhfe::memory::LockedText;
 use mhfe::operation::{Keep, Stage};
 use mhfe::rekey::{Rekey, ReplacementRehearsal};
 use mhfe::wallet::fingerprint_text;
+use mhfe::wallet_check::WALLET_CHECK_BITS;
 use mhfe::{
     Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, Password,
     PhraseLength, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
@@ -281,8 +282,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         How::BuiltInCheck | How::Owner => String::new(),
     });
     let source_check = match phrase.passes_wallet_check(&source_passphrase)? {
-        Some(true) => ", passes the 16-bit check",
-        _ => "",
+        Some(true) => format!(", passes the {WALLET_CHECK_BITS}-bit check"),
+        _ => String::new(),
     };
     let by_owner = matches!(how, How::Owner);
     let confirmed = match how {

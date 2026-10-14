@@ -146,7 +146,11 @@ const NO_PRIVATE_SCREEN: &str = "mhfe wallets shows wallets only on a private sc
 /// Shows a wallet below its progress, on the step's private screen.
 fn show_wallet(input: &Input, number: usize, phrase: &str) -> Result<(), Failure> {
     eprintln!();
-    eprintln!("{}", paint(HEADING, format!("Wallet {number}, 24 words")));
+    let words = phrase.split_whitespace().count();
+    eprintln!(
+        "{}",
+        paint(HEADING, format!("Wallet {number}, {words} words"))
+    );
     // The main wallet's passphrase, asked only to refuse wallets that pass its check, is not the
     // hidden wallet's: a hidden wallet should have a passphrase of its own, or none.
     terminal::print_phrase(phrase, Wallet::NoPassphrase, input)?;

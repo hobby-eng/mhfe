@@ -303,7 +303,9 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
         "TEST ONLY: timing one encryption and one recovery with public test data.",
         "",
     );
-    let work = options.settings.work_factor()?;
+    let work = options
+        .settings
+        .work_factor_for(settings::Operation::Encrypt)?;
     let input = &PUBLIC_INPUTS[0];
     let password = Password::new(input.password())?;
 

@@ -5,7 +5,8 @@
 //! words. Secrets are only ever typed at a terminal or read from standard input, never taken from
 //! command-line arguments.
 // No unsafe code, except the few operating-system calls in hidden_input.rs, which switch the
-// terminal's echo off, and in protect.rs, which forbid core dumps.
+// terminal's echo off, and in protect.rs, which forbid core dumps, and the test binary's
+// allocator in typed_line.rs, which looks for unwiped copies.
 #![deny(unsafe_code)]
 
 mod cell_widths;
@@ -240,7 +241,7 @@ fn main() {
     // start run once, before the menu and before any isolation: the menu enters no network
     // namespace of its own, and its commands, which run in threads of it, cannot. --help and
     // --version, which clap answers in Cli::try_parse, handle nothing secret and run none.
-    let result = if std::env::args_os().len() == 1 && choice::can_run() {
+    let result = if std::env::args_os().len() == 1 && hidden_input::can_redraw() {
         menu::start()
     } else {
         let command = Cli::try_parse()
@@ -454,8 +455,9 @@ mod tests {
         assert!(!password.contains("at a hidden prompt"));
     }
 
-    /// Every limit, list and default a help states is its constant's: a help that typed one
-    /// again would fail here when the constant changes (AUD-023-ARC007).
+    /// The settings' limits, the password sizes, the repair word counts and the length ranges
+    /// that the helps state are their constants': a help that typed one of them again would fail
+    /// here when the constant changes (AUD-023-ARC007).
     #[test]
     fn every_help_states_the_limits_of_the_constants() {
         use clap::CommandFactory;
@@ -475,8 +477,12 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(" ")
         };
-        let first_last =
-            |counts: &[usize]| format!("{} to {}", counts[0], counts[counts.len() - 1]);
+        // Built here from the constants, apart from the helpers that write the helps.
+        let ends = |counts: &[usize]| (counts[0], *counts.last().unwrap());
+        let first_last = |counts: &[usize]| {
+            let (first, last) = ends(counts);
+            format!("{first} to {last}")
+        };
         let cards: Vec<String> = mhfe::repair::REPAIR_WORD_COUNTS
             .iter()
             .map(ToString::to_string)
@@ -502,11 +508,9 @@ mod tests {
         }
         // The short helps of the length; the long ones list every length.
         assert!(help("decrypt", false).contains(&first_last(&mhfe::WORD_COUNTS)));
-        assert!(help("check", false).contains(&format!(
-            "{}- to {}-word",
-            mhfe::BUILT_IN_CHECK_WORD_COUNTS[0],
-            mhfe::BUILT_IN_CHECK_WORD_COUNTS[3]
-        )));
+        let (first, last) = ends(&mhfe::BUILT_IN_CHECK_WORD_COUNTS);
+        assert!(help("check", false).contains(&format!("{first}- to {last}-word")));
+        assert!(help("check", true).contains(&format!("{first}- to {last}-word")));
         assert!(help("password", true).contains(&format!("1 to {MOST_CHARACTERS}")));
         assert!(help("encrypt", true).contains(&format!("none, or {cards} for a card")));
     }

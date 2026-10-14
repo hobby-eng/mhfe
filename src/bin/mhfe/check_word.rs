@@ -5,8 +5,9 @@
 use mhfe::check_word::{Correction, PasswordReview, Reading, Repair, ReviewChoice};
 use mhfe::memory::LockedText;
 
-use crate::choice::{self, Answer, Question};
+use crate::choice::{Answer, Question};
 use crate::exit::Failure;
+use crate::hidden_input;
 use crate::readme;
 use crate::terminal::{Input, PrivateScreen};
 
@@ -67,7 +68,7 @@ pub fn review(
     typed: LockedText,
     screen: &PrivateScreen,
 ) -> Result<Reviewed, Failure> {
-    if input.is_script() || !screen.is_active() || !choice::can_run() {
+    if input.is_script() || !screen.is_active() || !hidden_input::can_redraw() {
         return Ok(Reviewed::Use(typed, Outcome::NotChecked));
     }
     let review = PasswordReview::of(&typed);

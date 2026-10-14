@@ -982,8 +982,9 @@ do for them:
   was rehearsed; the card that `encrypt()` and `rekey()` return comes from the container their own
   check has verified, and may be shown with it. Write a card as the command-line tool prints it:
   under the profile's name (`MhfeRepair.parameters().profile`, "MHFE-REPAIR-1"), each word with
-  its number, "1/8" to "8/8", so that the card tells how many words it has; and ask the user to
-  keep it apart from the container phrase and to guard it like the container phrase;
+  its number, "1/n" to "n/n" for a card of n words, so that the card tells how many words it has;
+  and ask the user to keep it apart from the container phrase and to guard it like the container
+  phrase;
 - show the PIM and the memory level with their defaults, 0, or as empty fields that mean 0, and
   before accepting another value say how long a recovery takes and how much memory it needs, as
   the command-line tool offers "PIM 0 and memory level 0 (recommended)" with its time. Say that a

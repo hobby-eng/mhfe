@@ -25,8 +25,8 @@ use crate::self_check::{
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
 use crate::{
-    Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WordCount, WorkFactor,
-    SAME_LENGTH_SUITE_ID, SUITE_ID,
+    ContainerFacts, Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WordCount,
+    WorkFactor, SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
 
 /// One published vector as the checks replay it.
@@ -756,6 +756,9 @@ impl FormatsCheck {
                     .encrypt(text, &password, Suite::SameLength, &mut |_, _| Ok(()))
                     .map(|_| ()),
                 "decrypt" => {
+                    // A container that does not read would be refused with the same error code as
+                    // one of a length the suite does not have: only a readable one can count.
+                    ContainerFacts::read(text).map_err(|_| damaged())?;
                     let length = match case.get("words") {
                         Some(_) => {
                             let words = usize::try_from(fixtures::number(case, "words")?)

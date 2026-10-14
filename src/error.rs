@@ -4,6 +4,8 @@
 
 use std::fmt;
 
+use crate::suite::Settings;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MhfeError {
     /// The original seed phrase is not a valid English BIP39 phrase.
@@ -57,24 +59,24 @@ pub enum MhfeError {
         repair_words: usize,
     },
     /// More words are missing from a container phrase than a search without its repair words
-    /// looks for: each further word multiplies the candidates by about 2,048.
+    /// looks for: each further word multiplies the candidates by about the size of the word list.
     TooManyMissingWords {
         missing: usize,
         limit: usize,
     },
-    /// A PIM above [`crate::MAX_PIM`]; `new` for the new settings of a rekey, so that the message
-    /// tells them from the old ones.
+    /// A PIM above [`crate::MAX_PIM`], of the settings that the message names.
     InvalidPim {
         pim: u32,
-        new: bool,
+        settings: Settings,
     },
-    /// A memory level above [`crate::MAX_MEMORY_LEVEL`]; `new` as for [`MhfeError::InvalidPim`].
+    /// A memory level above [`crate::MAX_MEMORY_LEVEL`], of the settings that the message names.
     InvalidMemoryLevel {
         level: u32,
-        new: bool,
+        settings: Settings,
     },
     EmptyPassword,
-    /// The normalized password is longer than 1024 bytes; the value is its length.
+    /// The normalized password is longer than [`crate::MAX_PASSWORD_BYTES`]; the value is its
+    /// length in bytes.
     PasswordTooLong(usize),
     InvalidPasswordUtf8,
     /// The password contains a control character (General_Category Cc), U+2028 or U+2029, which
@@ -252,7 +254,7 @@ impl fmt::Display for MhfeError {
                  check of a shorter phrase, as the container's own password of a 12- to 21-word \
                  phrase does, or the wallet check of a new phrase, by chance once in {}; \
                  recovery would take it for a verified or main wallet, so choose another password",
-                crate::phrase::grouped(u128::from(crate::wallet_check::WALLET_CHECK_ODDS))
+                crate::phrase::grouped(crate::wallet_check::WALLET_CHECK_ODDS)
             ),
             Self::InvalidWordWish(reason) => {
                 write!(f, "the wishes for the new phrase cannot be used: {reason}")
@@ -269,26 +271,26 @@ impl fmt::Display for MhfeError {
             Self::TooManyMissingWords { missing, limit } => write!(
                 f,
                 "{missing} words of the container phrase are missing, but this search finds at \
-                 most {limit}: each further word multiplies the candidates by about 2,048; only \
-                 the repair words repair more"
+                 most {limit}: each further word multiplies the candidates by about {}; only \
+                 the repair words repair more",
+                crate::phrase::grouped(crate::phrase::LIST_SIZE)
             ),
-            Self::InvalidPim { pim, new } => write!(
+            Self::InvalidPim { pim, settings } => write!(
                 f,
-                "the {}PIM must be a whole number from 0 to {}, not {pim}",
-                if *new { "new " } else { "" },
+                "{settings} PIM must be a whole number from 0 to {}, not {pim}",
                 crate::MAX_PIM
             ),
-            Self::InvalidMemoryLevel { level, new } => write!(
+            Self::InvalidMemoryLevel { level, settings } => write!(
                 f,
-                "the {}memory level must be a whole number from 0 to {}, not {level}",
-                if *new { "new " } else { "" },
+                "{settings} memory level must be a whole number from 0 to {}, not {level}",
                 crate::MAX_MEMORY_LEVEL
             ),
             Self::EmptyPassword => write!(f, "the password is empty"),
             Self::PasswordTooLong(bytes) => write!(
                 f,
                 "the password is too long: {bytes} bytes after Unicode normalization, \
-                 but at most 1024 are allowed"
+                 but at most {} are allowed",
+                crate::MAX_PASSWORD_BYTES
             ),
             Self::InvalidPasswordUtf8 => write!(f, "the password is not valid UTF-8 text"),
             Self::ControlCharacterInPassword => write!(

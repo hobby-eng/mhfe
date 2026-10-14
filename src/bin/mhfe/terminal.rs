@@ -191,7 +191,7 @@ impl Input {
         question: &Question,
         answers: &[Answer],
     ) -> Result<usize, Failure> {
-        if !self.is_script() && choice::can_run() {
+        if !self.is_script() && hidden_input::can_redraw() {
             return choice::choose_here(question, answers, None)?
                 .ok_or_else(|| MhfeError::Cancelled.into());
         }
@@ -216,7 +216,7 @@ impl Input {
         question: &Question,
         answers: &[Answer],
     ) -> Result<usize, Failure> {
-        if !self.is_script() && choice::can_run() {
+        if !self.is_script() && hidden_input::can_redraw() {
             return choice::choose_here_without_default(question, answers, None)?
                 .ok_or_else(|| MhfeError::Cancelled.into());
         }
@@ -297,7 +297,7 @@ impl Step {
         eprintln!();
         Self {
             lines: 1,
-            erasable: choice::can_run(),
+            erasable: hidden_input::can_redraw(),
         }
     }
 

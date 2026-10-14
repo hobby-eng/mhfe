@@ -1,6 +1,7 @@
 // What the checks of the browser package read from the Rust sources: their string literals, and
 // those that are vectors, which no script of the package and no module built without their part
-// may carry (scripts/verify-browser-package.mjs, scripts/verify-single-modules.mjs).
+// may carry; and a WebAssembly with one of them damaged, whose self-check must fail
+// (scripts/verify-browser-package.mjs, scripts/verify-single-modules.mjs).
 
 /** The string literals of Rust source text, with their escapes resolved. */
 export function rustStrings(source) {
@@ -53,4 +54,20 @@ export function isVectorText(text) {
     text.length >= 8 &&
     ((/[0-9]/u.test(text) && !text.includes(" ")) || text.split(" ").length >= 12)
   );
+}
+
+/**
+ * The bytes of `wasm` with the last byte of every copy of `text` changed, as a fault of the
+ * download, the disk or the memory would damage a vector. Throws when `wasm` holds no copy.
+ */
+export function damagedCopies(wasm, text) {
+  const bytes = Buffer.from(wasm);
+  const needle = Buffer.from(text);
+  let copies = 0;
+  for (let at = bytes.indexOf(needle); at !== -1; at = bytes.indexOf(needle, at + 1)) {
+    bytes[at + needle.length - 1] ^= 1;
+    copies += 1;
+  }
+  if (copies === 0) throw new Error(`the WebAssembly holds no copy of ${text}`);
+  return bytes;
 }

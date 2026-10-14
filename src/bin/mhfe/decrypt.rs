@@ -47,18 +47,25 @@ fn words_help() -> String {
             "Length of the original seed phrase if known: {}, or auto.",
             phrase_length::length_list()
         ),
-        "Without it, or with auto, the length is detected: a 12- to 21-word original seed phrase carries a \
-         built-in check, and the length whose check passes is shown as verified. When no check \
-         passes, the 24-word reading is shown, not verified. When several pass, every candidate is \
-         shown.",
+        &format!(
+            "Without it, or with auto, the length is detected: a {} original seed phrase carries \
+             a built-in check, and the length whose check passes is shown as verified. When no \
+             check passes, the 24-word reading is shown, not verified. When several pass, every \
+             candidate is shown.",
+            phrase_length::short_range_words()
+        ),
         "A stated length does not replace detection: a built-in check that passes takes \
          precedence, and the tool says so. A stated short length that no check passes is \
          refused: the password or a setting is probably wrong, or the phrase has 24 words. With \
          24 stated and a short check that passes, both readings are shown, the checked one \
          first; a 24-word original seed phrase reads as shorter about once in four billion, and \
          encryption says so when it happens.",
-        "A container of 12 to 21 words keeps the length of its original seed phrase: it accepts \
-         only its own length here, and any other length is refused before anything is computed.",
+        &format!(
+            "A container of {} words keeps the length of its original seed phrase: it accepts \
+             only its own length here, and any other length is refused before anything is \
+             computed.",
+            phrase_length::short_range()
+        ),
     ])
 }
 
@@ -257,11 +264,13 @@ fn tell_source_check(phrase: &RecoveredPhrase, passphrase: &str) -> Result<(), F
         "with this BIP39 passphrase"
     };
     match phrase.passes_wallet_check(passphrase)? {
-        Some(true) => style::ok(format!("It passes the 16-bit check {with}.")),
+        Some(true) => style::ok(format!(
+            "It passes the {WALLET_CHECK_BITS}-bit check {with}."
+        )),
         Some(false) => {
             style::hint(&format!(
-                "It does not pass the 16-bit check {with}. If this phrase was made to pass it, \
-                 the password, a setting or the passphrase is wrong."
+                "It does not pass the {WALLET_CHECK_BITS}-bit check {with}. If this phrase was \
+                 made to pass it, the password, a setting or the passphrase is wrong."
             ));
         }
         None => {}

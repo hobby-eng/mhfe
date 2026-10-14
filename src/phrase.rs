@@ -173,8 +173,8 @@ pub(crate) fn word_counts_text() -> String {
 
 /// A count with its thousands grouped, as messages write it: "65,536". The one formatter of the
 /// library and the command-line tool.
-pub fn grouped(count: u128) -> String {
-    let digits = count.to_string();
+pub fn grouped(count: impl Into<u128>) -> String {
+    let digits = count.into().to_string();
     let mut text = String::new();
     for (index, digit) in digits.chars().enumerate() {
         if index > 0 && (digits.len() - index).is_multiple_of(3) {
@@ -261,6 +261,16 @@ mod tests {
 
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+
+    #[test]
+    fn counts_are_grouped_by_thousands() {
+        assert_eq!(grouped(0u32), "0");
+        assert_eq!(grouped(999u32), "999");
+        assert_eq!(grouped(1_000u32), "1,000");
+        assert_eq!(grouped(65_536u32), "65,536");
+        assert_eq!(grouped(1_234_567u32), "1,234,567");
+        assert_eq!(grouped(1u128 << 64), "18,446,744,073,709,551,616");
+    }
 
     #[test]
     fn accepts_spacing_case_and_four_letter_prefixes() {

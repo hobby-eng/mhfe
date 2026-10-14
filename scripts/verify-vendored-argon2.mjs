@@ -167,21 +167,28 @@ function selfTest() {
       rmSync(scratch, { recursive: true, force: true });
     }
   }
-  for (const [what, edit] of [
-    ["a list without its block", (text) => text.replace("```text", "```")],
-    ["a path listed twice", (text) => text.replace(/^(.*  LICENSE)$/mu, "$1\n$1")],
+  // Each damaged list must be refused for its own reason, not for any error.
+  for (const [what, edit, reason] of [
+    [
+      "a list without its block",
+      (text) => text.replace("```text", "```"),
+      /exactly one ```text block/u,
+    ],
+    ["a path listed twice", (text) => text.replace(/^(.*  LICENSE)$/mu, "$1\n$1"), /listed twice/u],
     [
       "a line of another form",
       (text) => text.replace(/^([0-9a-f]{64}) {2}LICENSE$/mu, "$1 LICENSE"),
+      /not a "<SHA-256>  <path>" line/u,
     ],
   ]) {
-    let refused = false;
+    let refusal = null;
     try {
       listedFiles(edit(document));
-    } catch {
-      refused = true;
+    } catch (error) {
+      refusal = error.message;
     }
-    if (!refused) throw new Error(`self-test: ${what} is accepted`);
+    if (refusal === null) throw new Error(`self-test: ${what} is accepted`);
+    if (!reason.test(refusal)) throw new Error(`self-test: ${what} is refused as ${refusal}`);
   }
   console.log(
     `The vendored Argon2 gate refuses every change of its ${cases.length - 1} test cases.`,

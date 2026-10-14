@@ -26,6 +26,7 @@ use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE
 use crate::choice::{self, Answer, Question};
 use crate::container_repair::{Reviewed, SearchContext};
 use crate::exit::{refused, Failure};
+use crate::phrase_length;
 use crate::readme;
 use crate::settings;
 use crate::style::{self, paint, GOOD, HEADING, STRONG};
@@ -154,7 +155,10 @@ fn what_is_known_answers(offered: Offered) -> (Vec<Known>, Vec<Answer>) {
         ));
         known.push((
             Known::Nothing,
-            Answer::new("Nothing", "12- to 21-word phrases; slow"),
+            Answer::new(
+                "Nothing",
+                format!("{} phrases; slow", phrase_length::short_range_words()),
+            ),
         ));
     }
     known.push((Known::TypeAgain, Answer::new(TYPE_AGAIN, "no search")));

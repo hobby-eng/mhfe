@@ -32,14 +32,15 @@ The Rust standard library and the crates it is built from are in every program t
 hand from the pinned toolchain's sources. `--check` also compares it with the installed toolchain:
 it must name the channel of rust-toolchain.toml and the SHA-256 of the toolchain's own notice
 file, and list, in the versions their libraries name, the crates from outside the Rust repository
-that the toolchain's libraries for the release targets are built from. `--binaries` reads
+that the toolchain's libraries are built from, for each release target whose standard library is
+installed. It names the release targets it compared and those it left out. `--binaries` reads
 programs, WebAssembly files and release archives (a .tar.gz or .zip, with the notices they carry)
 and refuses one that names, in a path of the form /rust/deps/<crate>-<version>/ with either kind
 of slash, a crate that the section does not list.
 """
 
+from collections import namedtuple
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
@@ -351,8 +352,8 @@ STD_IN_TREE = {
     "unwind",
 }
 STD_NOT_LINKED = {"getopts", "rustc_literal_escaper"}
-# The release targets whose standard library a program or the WebAssembly links.
-STD_TARGETS = (*NATIVE_TARGETS, "wasm32-unknown-unknown")
+# The release targets whose standard library a program or the WebAssembly links: those of TREES.
+STD_TARGETS = tuple(target for target, _ in TREES)
 # The toolchain's own notice for the standard library, under its root.
 STD_NOTICE = Path("share/doc/rust/COPYRIGHT-library.html")
 
@@ -387,12 +388,19 @@ def std_crates_named(data):
     }
 
 
-def toolchain_differences(notices, channel, sysroot):
-    """What the standard library section of `notices` lacks for the toolchain `channel` installed
-    at `sysroot`, one line each."""
+# What a comparison of the standard library section with the installed toolchain found: what the
+# section lacks, one line each, the release targets whose libraries were compared, and those left
+# out because their standard library is not installed, so that a partial comparison never reads as
+# a full one.
+Comparison = namedtuple("Comparison", ("differences", "compared", "not_installed"))
+
+
+def toolchain_comparison(notices, channel, sysroot):
+    """The Comparison of the standard library section of `notices` with the toolchain `channel`
+    installed at `sysroot`."""
     section = std_section(notices)
     if section is None:
-        return [f"{OUTPUT.name} has no section {STD_HEADING!r}"]
+        return Comparison([f"{OUTPUT.name} has no section {STD_HEADING!r}"], [], [])
     found = []
     if f"Rust {channel}" not in section:
         found.append(f"the standard library section does not name Rust {channel}")
@@ -407,10 +415,13 @@ def toolchain_differences(notices, channel, sysroot):
             )
     listed = listed_std_crates(notices)
     libraries = 0
+    compared, not_installed = [], []
     for target in STD_TARGETS:
         folder = sysroot / "lib" / "rustlib" / target / "lib"
         if not folder.is_dir():
+            not_installed.append(target)
             continue
+        compared.append(target)
         for library in sorted(folder.glob("lib*.rlib")):
             name = library.name[len("lib") :].rsplit("-", 1)[0]
             if name in STD_IN_TREE or name in STD_NOT_LINKED:
@@ -426,7 +437,7 @@ def toolchain_differences(notices, channel, sysroot):
                     found.append(f"{target}: {name} is {version}, but {listed[name]} is listed")
     if libraries == 0:
         found.append(f"no library of the standard library found under {sysroot}")
-    return found
+    return Comparison(found, compared, not_installed)
 
 
 def pinned_toolchain():
@@ -532,16 +543,27 @@ def self_test():
             ("hashbrown", b"/rust/deps/hashbrown-0.17.1/src"),
         ):
             (libraries / f"lib{name}-0123abcd.rlib").write_bytes(data)
-        expect("the matching toolchain", toolchain_differences(notices, "9.9.9", sysroot), [])
-        expect("another channel", len(toolchain_differences(notices, "9.9.10", sysroot)), 1)
+        # Only the WebAssembly target is installed: the native ones are named as not compared.
+        matching = Comparison([], ["wasm32-unknown-unknown"], list(NATIVE_TARGETS))
+        expect("the matching toolchain", toolchain_comparison(notices, "9.9.9", sysroot), matching)
+
+        def differences(notices=notices, channel="9.9.9"):
+            return len(toolchain_comparison(notices, channel, sysroot).differences)
+
+        expect("another channel", differences(channel="9.9.10"), 1)
         (sysroot / STD_NOTICE).write_bytes(b"another notice")
-        expect("another notice", len(toolchain_differences(notices, "9.9.9", sysroot)), 1)
+        expect("another notice", differences(), 1)
         (sysroot / STD_NOTICE).write_bytes(b"notice")
         (libraries / "libhashbrown-0123abcd.rlib").write_bytes(b"/rust/deps/hashbrown-0.18.0/src")
         (libraries / "libdlmalloc-0123abcd.rlib").write_bytes(b"")
-        differences = toolchain_differences(notices, "9.9.9", sysroot)
-        expect("a new version and a new crate", len(differences), 2)
-        expect("no section", len(toolchain_differences("# Notices\n", "9.9.9", sysroot)), 1)
+        expect("a new version and a new crate", differences(), 2)
+        expect("no section", differences(notices="# Notices\n"), 1)
+        # No release target installed: nothing compared, which fails rather than passes.
+        empty = Path(scratch, "empty")
+        (empty / STD_NOTICE).parent.mkdir(parents=True)
+        (empty / STD_NOTICE).write_bytes(b"notice")
+        nothing = toolchain_comparison(notices, "9.9.9", empty)
+        expect("no target installed", (len(nothing.differences), nothing.compared), (1, []))
     print("The standard library checks find every gap in their test cases.")
     return 0
 
@@ -555,6 +577,32 @@ def check_binaries(paths):
         print(f"List them in the section {STD_HEADING!r} of {OUTPUT.name}.", file=sys.stderr)
         return 1
     print(f"Every crate of the standard library in {len(paths)} files is listed ({named} paths).")
+    return 0
+
+
+def check_toolchain(notices):
+    """`--check`, second part: compares the standard library section of `notices` with the
+    installed toolchain and says which release targets it compared and which it left out."""
+    channel, sysroot = pinned_toolchain()
+    comparison = toolchain_comparison(notices, channel, sysroot)
+    for line in comparison.differences:
+        print(line, file=sys.stderr)
+    if comparison.differences:
+        print(
+            f"Review the section {STD_HEADING!r} of {OUTPUT.name} for Rust {channel}.",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        f"{OUTPUT.name} matches the shipped crates. Its standard library section matches the "
+        f"notice of the installed Rust {channel} and the crates of its libraries for "
+        f"{', '.join(comparison.compared)}."
+    )
+    if comparison.not_installed:
+        print(
+            "Not compared, as their standard library is not installed: "
+            f"{', '.join(comparison.not_installed)}."
+        )
     return 0
 
 
@@ -595,20 +643,7 @@ def main(arguments):
                 file=sys.stderr,
             )
             return 1
-        channel, sysroot = pinned_toolchain()
-        differences = toolchain_differences(written, channel, sysroot)
-        for line in differences:
-            print(line, file=sys.stderr)
-        if differences:
-            print(
-                f"Review the section {STD_HEADING!r} of {OUTPUT.name} for Rust {channel}.",
-                file=sys.stderr,
-            )
-            return 1
-        print(
-            f"{OUTPUT.name} matches the shipped crates and the standard library of Rust {channel}."
-        )
-        return 0
+        return check_toolchain(written)
     OUTPUT.write_text(content, encoding="utf-8")
     print(f"Wrote {OUTPUT.name}.")
     return 0

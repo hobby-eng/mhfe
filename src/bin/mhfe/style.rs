@@ -174,7 +174,7 @@ pub fn ok(text: impl Display) {
 }
 
 /// The lines of [`ok`]: wrapped to the text width, the tick on the first and the others indented
-/// under the text, as a warning is (AUD-023-UI007).
+/// under its text (AUD-023-UI007).
 fn ok_lines(text: &str) -> Vec<String> {
     wrap(text, TEXT_WIDTH - 2)
         .iter()
@@ -200,11 +200,6 @@ pub fn gives(text: &str) {
 /// A line of what a choice costs, indented under its name: a yellow "!", then `text`.
 pub fn costs(text: &str) {
     eprintln!("  {} {text}", paint(WARNING, "!"));
-}
-
-/// A count with thousands separated by commas, such as "2,000".
-pub fn grouped(count: impl Into<u128>) -> String {
-    mhfe::grouped(count.into())
 }
 
 /// Advice that can be read and passed over, in grey, wrapped to the text width. Returns the lines
@@ -703,14 +698,6 @@ pub fn plain(line: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn counts_are_grouped_by_thousands() {
-        assert_eq!(grouped(999u32), "999");
-        assert_eq!(grouped(2_000u32), "2,000");
-        assert_eq!(grouped(1_234_567u32), "1,234,567");
-        assert_eq!(grouped(1u128 << 64), "18,446,744,073,709,551,616");
-    }
 
     #[test]
     fn every_line_of_the_frame_has_the_same_width() {

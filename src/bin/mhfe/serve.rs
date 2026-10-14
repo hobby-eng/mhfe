@@ -35,8 +35,9 @@ use crate::style::{self, paint, ACCENT, MUTED};
 /// text mode, `*` in binary mode) and the page's file name.
 pub const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
 /// What a checksum file must hold, in words rather than a pattern with two spaces, which the
-/// wrapping of a message would join into one (AUD-023-UI009). The Python launcher
-/// (packaging/mhfe-fast-mode.py) says the same.
+/// wrapping of a message would join into one (AUD-023-UI009). Deliberate copy: the Python launcher
+/// (packaging/mhfe-fast-mode.py), which ships alone beside the browser package, says the same, and
+/// scripts/verify-fast-mode-script.py keeps both equal.
 const MALFORMED: &str = "must hold exactly one line: the page's SHA-256, two spaces and its file \
                          name, or one space and * before the name; nothing was served.";
 

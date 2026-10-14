@@ -69,7 +69,7 @@ fn vectors_help() -> String {
     ])
 }
 
-/// The answer of the menu and the example of the help for the quick self-test.
+/// The answer of the menu and the example of the help for the full self-test.
 pub const EVERY_PART: &str = "Every part";
 /// The same for the self-test with the published vectors.
 pub const WITH_VECTORS: &str = "Every part and the published vectors";

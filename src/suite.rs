@@ -1,6 +1,8 @@
 //! The two suites and their two settings (specification: "Suite parameters", "Suite 4" and
 //! "Work factor").
 
+use std::fmt;
+
 use crate::engine::Argon2Cost;
 use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
 use crate::MhfeError;
@@ -53,7 +55,8 @@ impl Suite {
     }
 
     /// The suite the specification numbers `number`, as its fixtures name it: 3 or 4.
-    pub fn of_number(number: u64) -> Option<Self> {
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+    pub(crate) fn of_number(number: u64) -> Option<Self> {
         match number {
             3 => Some(Self::TwentyFourWords),
             4 => Some(Self::SameLength),
@@ -63,7 +66,8 @@ impl Suite {
 
     /// Whether `error` is one of the refusals the length rules give a suite 4 phrase or container
     /// before any Argon2 work: a 24-word original, a length choice that does not apply to the
-    /// suite, or a container whose length the suite does not have. Suite 4's validation fixture
+    /// suite, or a container whose length the suite does not have. The last has the code of any
+    /// unreadable container, so the caller reads the container first. Suite 4's validation fixture
     /// names these cases "rejected" without an error code.
     #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
     pub(crate) fn is_length_refusal(error: &MhfeError) -> bool {
@@ -139,26 +143,47 @@ pub fn memory_text(bytes: u64) -> String {
     format!("{}.{} GiB", tenths / 10, tenths % 10)
 }
 
+/// Which settings a PIM or a memory level belongs to: those of the operation, or the new ones of a
+/// rekey, which a refusal names as such so that they are not taken for the old container's. Its
+/// [`fmt::Display`] gives the words that name the settings in a message: "the" or "the new".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Settings {
+    /// The settings of an encryption, a recovery or any other operation on one container.
+    Current,
+    /// The new settings of a rekey.
+    New,
+}
+
+impl fmt::Display for Settings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Current => "the",
+            Self::New => "the new",
+        })
+    }
+}
+
 impl WorkFactor {
     /// Accepts PIM `0..=1023` and memory level `0..=21`, before any memory is allocated.
     pub fn new(pim: u32, memory_level: u32) -> Result<Self, MhfeError> {
-        Self::checked(pim, memory_level, false)
+        Self::of(Settings::Current, pim, memory_level)
     }
 
     /// [`WorkFactor::new`] for the new settings of a rekey: a refusal names them as the new PIM or
     /// the new memory level, so that it is not taken for one of the old container's.
     pub fn new_settings(pim: u32, memory_level: u32) -> Result<Self, MhfeError> {
-        Self::checked(pim, memory_level, true)
+        Self::of(Settings::New, pim, memory_level)
     }
 
-    fn checked(pim: u32, memory_level: u32, new: bool) -> Result<Self, MhfeError> {
+    /// [`WorkFactor::new`] for the settings `settings`, which a refusal names.
+    pub(crate) fn of(settings: Settings, pim: u32, memory_level: u32) -> Result<Self, MhfeError> {
         if pim > MAX_PIM {
-            return Err(MhfeError::InvalidPim { pim, new });
+            return Err(MhfeError::InvalidPim { pim, settings });
         }
         if memory_level > MAX_MEMORY_LEVEL {
             return Err(MhfeError::InvalidMemoryLevel {
                 level: memory_level,
-                new,
+                settings,
             });
         }
         Ok(Self { pim, memory_level })
@@ -318,7 +343,7 @@ mod tests {
             WorkFactor::new(1024, 0),
             Err(MhfeError::InvalidPim {
                 pim: 1024,
-                new: false
+                settings: Settings::Current
             })
         );
         assert_eq!(
@@ -329,14 +354,14 @@ mod tests {
             WorkFactor::new(0, 22),
             Err(MhfeError::InvalidMemoryLevel {
                 level: 22,
-                new: false
+                settings: Settings::Current
             })
         );
         assert_eq!(
             WorkFactor::new(u32::MAX, u32::MAX),
             Err(MhfeError::InvalidPim {
                 pim: u32::MAX,
-                new: false
+                settings: Settings::Current
             })
         );
     }

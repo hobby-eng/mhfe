@@ -23,9 +23,10 @@ use crate::terminal::{Input, PrivateScreen};
 // 2026-10-08); more typed at once go to the library, which refuses them.
 const _: () = assert!(MAX_CHOSEN_WORDS == 1 && MAX_NEVER_USE_WORDS == 1);
 
-/// `--never-use` of `mhfe new`.
+/// `--choose-word` and `--never-use` of `mhfe new`: whether a word of the new phrase is chosen,
+/// and a word it must not hold.
 #[derive(Args)]
-pub struct NeverUseOption {
+pub struct WordWishOptions {
     /// A word the new phrase must not hold
     #[arg(long = "never-use", value_name = "WORD", long_help = never_use_help())]
     never_use: Option<String>,
@@ -34,7 +35,7 @@ pub struct NeverUseOption {
     #[arg(
         long = "choose-word",
         value_name = "yes|no",
-        value_parser = crate::check::parse_yes_no,
+        value_parser = crate::choice::parse_yes_no,
         long_help = choose_word_help()
     )]
     choose_word: Option<bool>,
@@ -56,7 +57,7 @@ fn never_use_help() -> String {
     ])
 }
 
-impl NeverUseOption {
+impl WordWishOptions {
     /// Refuses, before any question, a word the library would refuse whatever word is chosen: a
     /// word not on the list, or more than it takes. Asking for a chosen word again could never
     /// mend it (AUD-015-UI002).
@@ -87,7 +88,7 @@ fn split_words(text: &str) -> Vec<String> {
 pub fn ask(
     input: &mut Input,
     draw: PhraseDraw,
-    option: &NeverUseOption,
+    option: &WordWishOptions,
 ) -> Result<PhraseDraw, Failure> {
     let given = option.words();
     loop {
@@ -132,7 +133,7 @@ pub fn ask(
 }
 
 /// The random bits of a new phrase, as the summary names them (AUD-023-ARC007).
-const STATE_BITS: usize = mhfe::wallet_check::NEW_ENTROPY_BYTES * 8;
+const STATE_BITS: usize = mhfe::wallet_check::NEW_ENTROPY_BITS;
 
 /// Whether the person wants to choose a word.
 fn ask_whether(input: &mut Input) -> Result<bool, Failure> {

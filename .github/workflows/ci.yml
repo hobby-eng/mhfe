@@ -76,12 +76,23 @@ jobs:
           scripts/check.sh
       # The browser package that check.sh built, in real Chromium and Firefox at a reduced Argon2
       # cost: Blob workers under the wallet tools' Content-Security-Policy, standard and fast mode,
-      # cancellation and failing callbacks. The browsers are the ones Playwright 1.64.0 pins.
+      # cancellation and failing callbacks. The browsers are the ones Playwright 1.64.0 pins. Each
+      # of the four pages ends by itself within the hour of PAGE_LIMIT_MS in
+      # scripts/verify-browsers.mjs, so that the step's own limit never cuts a page off before it
+      # reports (AUD-023-BLD005).
       - name: Check the browser package in Chromium and Firefox
-        timeout-minutes: 20
+        timeout-minutes: 245
         run: |
           npx playwright install --with-deps chromium firefox
           node scripts/verify-browsers.mjs
+      # The results and console messages of each page, for a run that failed or stopped.
+      - name: Keep the browser logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-check-${{ github.sha }}
+          path: target/browser-check/*.log
+          retention-days: 7
 
   # The fast tests on Windows and macOS, and the hidden password input in each system's own
   # pseudo-terminal, with public test data only. The release builds for these systems come from

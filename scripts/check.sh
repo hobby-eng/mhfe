@@ -49,11 +49,11 @@ RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo build --locked --release
 # The terminal in a pseudo-terminal: hidden input (control characters refused, editing keys,
 # Ctrl+C), the self-test report, a start that prints nothing, and damaged copies of the program
-# that stop before any prompt.
+# that stop before any prompt, with the cases that run Argon2 at full size.
 # The program the release build above made, wherever CARGO_TARGET_DIR puts it.
 target_dir="$(cargo metadata --locked --no-deps --format-version 1 |
   python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')"
-python3 scripts/verify-hidden-input.py "$target_dir/release/mhfe"
+python3 scripts/verify-hidden-input.py --full "$target_dir/release/mhfe"
 
 scripts/build-wasm.sh
 node scripts/verify-argon2-wasm.mjs

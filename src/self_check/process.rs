@@ -6,7 +6,9 @@
 /// A part that checks the program's own process, with why a web page cannot check it.
 #[derive(Clone, Copy, Debug)]
 pub struct ProcessPart {
+    /// The stable id of the part in a self-check report.
     pub id: &'static str,
+    /// The name the report shows for the part.
     pub label: &'static str,
     /// Why a web page cannot check it: the detail of its outcome there, not available.
     pub in_browser: &'static str,

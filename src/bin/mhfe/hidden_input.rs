@@ -140,9 +140,11 @@ const TYPED_AHEAD: std::time::Duration = std::time::Duration::from_millis(200);
 
 /// Switches the terminal to single keys without echo, as for a hidden line, runs `choose` with a
 /// function that reads the next key, and restores the terminal, also when `choose` fails. A key
-/// typed before the first wait, other than one that quits, is dropped: every list, with a default
-/// answer or without, and every screen that waits to be left take only keys pressed after they
-/// appeared, so that a key typed during long work answers nothing (AUD-018, AUD-023-UI003).
+/// that arrives within [`TYPED_AHEAD`] of the first wait counts as typed before it and is dropped,
+/// Escape and q too: every list, with a default answer or without, and every screen that waits to
+/// be left, such as one that shows a secret once, take only keys pressed after they appeared, so
+/// that a key typed during long work answers nothing (AUD-018, AUD-023-UI003). Only the end of the
+/// input ends the wait at once, as no key can follow it.
 pub fn with_keys<T>(
     choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
 ) -> Result<T, Failure> {
@@ -152,7 +154,7 @@ pub fn with_keys<T>(
         choose(&mut || loop {
             let since = *waits_since.get_or_insert_with(std::time::Instant::now);
             let key = read_key(&mut keys)?;
-            if key == Key::Quit || since.elapsed() >= TYPED_AHEAD {
+            if keys.ended || since.elapsed() >= TYPED_AHEAD {
                 return Ok(key);
             }
         })
@@ -323,6 +325,8 @@ struct TerminalKeys<'a> {
     /// Bytes taken over and not yet read; wiped when dropped, as they could be typed-ahead text.
     pending: Zeroizing<Vec<u8>>,
     next: usize,
+    /// Whether the input has ended: no key can come any more.
+    ended: bool,
 }
 
 impl<'a> TerminalKeys<'a> {
@@ -333,6 +337,7 @@ impl<'a> TerminalKeys<'a> {
             // whole, so that it is never reallocated and leaves no unwiped copy.
             pending: Zeroizing::new(Vec::with_capacity(crate::terminal::LINE_CAPACITY)),
             next: 0,
+            ended: false,
         }
     }
 }
@@ -355,6 +360,7 @@ impl KeySource for TerminalKeys<'_> {
         }
         let byte = self.pending.get(self.next).copied();
         self.next += usize::from(byte.is_some());
+        self.ended = byte.is_none();
         Ok(byte)
     }
 

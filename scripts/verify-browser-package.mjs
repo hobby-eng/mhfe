@@ -32,7 +32,7 @@ import vm from "node:vm";
 
 import { bundleClasses } from "./bundle-browser-classes.mjs";
 import { checkNetworkCodeList, networkCodeIn } from "./network-code.mjs";
-import { isVectorText, rustStrings } from "./rust-strings.mjs";
+import { damagedCopies, isVectorText, rustStrings } from "./rust-strings.mjs";
 import {
   AMBIGUOUS_12_WORDS,
   FULL_SIZE_CONTAINER,
@@ -79,11 +79,14 @@ const PASSPHRASE_NOT_COMPARED =
 const PASSPHRASE_ANSWER_NOT_BOOLEAN =
   "INVALID_REQUEST: invalid request: walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase";
 /**
- * The refusal of a passphrase with the built-in check or the owner, in a rekey and a search
+ * The refusal of a passphrase with the built-in check in a search, and with the built-in check or
+ * the owner in a rekey, naming the references that take one there
  * (rehearsal::refuse_unused_passphrase).
  */
-const PASSPHRASE_WITHOUT_REFERENCE =
+const SEARCH_PASSPHRASE_WITHOUT_REFERENCE =
   "INVALID_REQUEST: invalid request: a BIP39 passphrase belongs only to an address, a fingerprint or the wallet check";
+const REKEY_PASSPHRASE_WITHOUT_REFERENCE =
+  "INVALID_REQUEST: invalid request: a BIP39 passphrase belongs only to an address or a fingerprint";
 /**
  * The refusal of a count with the check word, one wording in the WebAssembly and in the class,
  * which adds a period (AUD-023-ARC007).
@@ -100,9 +103,15 @@ const REFERENCE_REQUIRED =
  */
 const WALLET_PASSPHRASE_REQUIRED =
   "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase.";
-/** The client's TypeError for a passphrase with the built-in check or the owner (web/client.js). */
-const PASSPHRASE_ONLY_WITH_REFERENCE =
+/**
+ * The client's TypeErrors for a passphrase with the built-in check in a search and with the
+ * built-in check or the owner in a rekey (web/client.js), in the words of the core's refusals
+ * above, which they copy.
+ */
+const SEARCH_PASSPHRASE_ONLY_WITH_REFERENCE =
   "passphrase belongs only to an address, a fingerprint or the wallet check.";
+const REKEY_PASSPHRASE_ONLY_WITH_REFERENCE =
+  "passphrase belongs only to an address or a fingerprint.";
 /** Values that are not a boolean, which no answer whether the wallet has a passphrase may be. */
 const NOT_BOOLEAN_ANSWERS = ["no", "true", 1, 0, {}];
 /**
@@ -597,7 +606,7 @@ for (const [name, createModule] of Object.entries(builds)) {
     ),
   );
   // The built-in check compares no passphrase: one given is refused, not dropped (AUD-023-API001).
-  expectMessage(PASSPHRASE_WITHOUT_REFERENCE, () =>
+  expectMessage(SEARCH_PASSPHRASE_WITHOUT_REFERENCE, () =>
     core.searchWallet(
       missingLast,
       PASSWORD,
@@ -1128,7 +1137,7 @@ for (const [name, createModule] of Object.entries(builds)) {
       [builtInCheck, ownerCheck].map((confirmation) => ({
         confirmation: { ...confirmation, passphrase: "TREZOR" },
         answer,
-        message: PASSPHRASE_WITHOUT_REFERENCE,
+        message: REKEY_PASSPHRASE_WITHOUT_REFERENCE,
       })),
     ),
     // A length without a built-in check refuses that check first, before the answer is judged:
@@ -1809,6 +1818,26 @@ const noArgon2 = {
 };
 // The classes give these refusals of the library early, before a secret reaches a worker; they
 // must give them with the library's code and in its words, as the command-line tool does.
+/** The library's refusal, with `code`, of the new settings `newPim` and `newMemoryLevel` of a rekey. */
+function newSettingsMessage(code, newPim, newMemoryLevel) {
+  return pageMessageOf(code, () => {
+    const session = new core.RekeySession(
+      FULL_SIZE_CONTAINER,
+      0,
+      encode("p"),
+      "",
+      0,
+      0,
+      0,
+      noArgon2,
+    );
+    try {
+      session.setNew(encode("n"), encode("n"), "", 0, newPim, newMemoryLevel, 0);
+    } finally {
+      session.free();
+    }
+  });
+}
 const LIBRARY_MESSAGES = {
   MEMORY_LEVEL_NOT_SUPPORTED_HERE: pageMessageOf("MEMORY_LEVEL_NOT_SUPPORTED_HERE", () =>
     operations.encrypt(PHRASE, encode("p"), noArgon2, { memoryLevel: 1 }),
@@ -1836,40 +1865,8 @@ const LIBRARY_MESSAGES = {
   INVALID_REPAIR_WORDS: pageMessageOf("INVALID_REPAIR_WORDS", () =>
     operations.encrypt(PHRASE, encode("p"), noArgon2, { repairWordCount: 3 }),
   ),
-  NEW_PIM: pageMessageOf("INVALID_PIM", () => {
-    const session = new core.RekeySession(
-      FULL_SIZE_CONTAINER,
-      0,
-      encode("p"),
-      "",
-      0,
-      0,
-      0,
-      noArgon2,
-    );
-    try {
-      session.setNew(encode("n"), encode("n"), "", 0, 1024, 0, 0);
-    } finally {
-      session.free();
-    }
-  }),
-  NEW_MEMORY_LEVEL: pageMessageOf("INVALID_MEMORY_LEVEL", () => {
-    const session = new core.RekeySession(
-      FULL_SIZE_CONTAINER,
-      0,
-      encode("p"),
-      "",
-      0,
-      0,
-      0,
-      noArgon2,
-    );
-    try {
-      session.setNew(encode("n"), encode("n"), "", 0, 0, 22, 0);
-    } finally {
-      session.free();
-    }
-  }),
+  NEW_PIM: newSettingsMessage("INVALID_PIM", 1024, 0),
+  NEW_MEMORY_LEVEL: newSettingsMessage("INVALID_MEMORY_LEVEL", 0, 22),
 };
 assert.equal(
   LIBRARY_MESSAGES.INVALID_PIM,
@@ -2360,17 +2357,7 @@ for (const [tier, check] of [
 // address, then of what an address check states it searches. Each must fail its own part, named
 // by its place only.
 /** The package's WebAssembly with the last letter of every copy of `text` changed. */
-function damaged(text) {
-  const bytes = Buffer.from(packageWasm);
-  const needle = Buffer.from(text);
-  let copies = 0;
-  for (let at = bytes.indexOf(needle); at !== -1; at = bytes.indexOf(needle, at + 1)) {
-    bytes[at + needle.length - 1] ^= 1;
-    copies += 1;
-  }
-  assert.ok(copies > 0, `the WebAssembly holds ${text}`);
-  return bytes;
-}
+const damaged = (text) => damagedCopies(packageWasm, text);
 const damagedCard = bindingsOver(damaged("shaft pupil patient jewel"));
 const cardFailed = (detail) => ({ "repair-words": part("repair-words", "failed", detail) });
 expectReport(
@@ -3035,7 +3022,11 @@ for (const script of scripts) {
 // details of the parts are not vectors.
 const vectorTexts = [
   ...new Set(
-    ["src/wallet/known_answers.rs", "src/rehearsal/known_answers.rs"]
+    [
+      "src/wallet/known_answers.rs",
+      "src/wallet/known_answers/addresses.rs",
+      "src/rehearsal/known_answers.rs",
+    ]
       .flatMap((path) => rustStrings(read(path).toString()))
       .filter(isVectorText),
   ),
@@ -3580,7 +3571,14 @@ const rekeyWith = (options) =>
 /** The TypeError of a walletHasPassphrase that is not a boolean, with its exact message. */
 const walletPassphraseRequired = { name: "TypeError", message: WALLET_PASSPHRASE_REQUIRED };
 /** The TypeError of a passphrase with the built-in check or the owner, with its exact message. */
-const passphraseOnlyWithReference = { name: "TypeError", message: PASSPHRASE_ONLY_WITH_REFERENCE };
+const searchPassphraseOnlyWithReference = {
+  name: "TypeError",
+  message: SEARCH_PASSPHRASE_ONLY_WITH_REFERENCE,
+};
+const rekeyPassphraseOnlyWithReference = {
+  name: "TypeError",
+  message: REKEY_PASSPHRASE_ONLY_WITH_REFERENCE,
+};
 // Every error rejects the promise, the checks of the arguments included: none is thrown.
 const refusals = [
   // encrypt may be given no answer, but one given is a boolean.
@@ -3610,6 +3608,26 @@ const refusals = [
   [
     () => encrypt({ password: "p", repairWordCount: 3 }),
     { code: "INVALID_REPAIR_WORDS", message: LIBRARY_MESSAGES.INVALID_REPAIR_WORDS },
+  ],
+  // A value that is not a number, such as text pasted into the wrong field, is never repeated.
+  [
+    () => encrypt({ password: "p", pim: "abandon ability able" }),
+    { code: "INVALID_PIM", message: "The PIM must be a whole number from 0 to 1023, not a number" },
+  ],
+  [
+    () => encrypt({ password: "p", repairWordCount: "abandon" }),
+    {
+      code: "INVALID_REPAIR_WORDS",
+      message:
+        "The repair words cannot be used: a card has 2, 4, 6 or 8 repair words, not a number",
+    },
+  ],
+  [
+    () => client.decrypt({ container: "c", password: "p", words: "abandon" }),
+    {
+      code: "INVALID_WORD_COUNT",
+      message: "The original seed phrase must have 12, 15, 18, 21 or 24 words, not a number",
+    },
   ],
   // A rekey names its new settings, and the old ones as the container's.
   [
@@ -3670,7 +3688,7 @@ const refusals = [
   ...[{ builtInCheck: true }, { owner: () => true }].flatMap((confirmation) =>
     ["TREZOR", encode("TREZOR")].map((passphrase) => [
       () => rekeyWith({ confirmation, passphrase, walletHasPassphrase: true }),
-      passphraseOnlyWithReference,
+      rekeyPassphraseOnlyWithReference,
     ]),
   ),
   [() => client.openHiddenWallets({ container: "c" }), TypeError],
@@ -3764,7 +3782,7 @@ misplaced.push([
       reference: { builtInCheck: true },
       passphrase: "TREZOR",
     }),
-  passphraseOnlyWithReference,
+  searchPassphraseOnlyWithReference,
 ]);
 for (const [call, expected] of misplaced) await assert.rejects(call(), expected);
 assert.equal(StandInWorker.started.length, startedBeforeMisplaced, "no worker was started");
@@ -3899,6 +3917,26 @@ for (const [answer, confirmed, passphrase] of [
   worker.reply({ type: "result", result: { container: "n" } });
   await answered;
 }
+// A passphrase answered as null is refused as any passphrase that is not text or bytes, never
+// taken for an empty one (AUD-016-API003): the callback's answer fails, with that as the cause.
+const answeredNull = client.rekey({
+  container: "c",
+  words: 15,
+  password: "old",
+  newPassword: "new",
+  newPasswordRepeat: "new",
+  confirmation: { owner: () => ({ passphrase: null }) },
+  walletHasPassphrase: true,
+});
+worker = await started();
+worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
+await assert.rejects(
+  answeredNull,
+  (error) =>
+    error.code === "CALLBACK_FAILED" &&
+    error.cause instanceof TypeError &&
+    error.cause.message === "passphrase must be a string or a Uint8Array.",
+);
 // After a refusal that allows another confirmation the worker asks the page (AUD-017-UI002): the
 // page gets the refusal as an MhfeError with the owner's lengths, and its answer goes back with
 // its passphrase as bytes, or with the length the owner compares; the owner callback of the
@@ -3978,7 +4016,7 @@ for (const [answer, ownerLengths, message] of [
   ],
   [{ owner: () => true }, [12, 21], "words must name the reading the owner compares: 12 or 21."],
   [{ fingerprint: "00000000", words: 15 }, [15], "words belongs only to the owner's confirmation."],
-  [{ owner: () => true, passphrase: "TREZOR" }, [15], PASSPHRASE_ONLY_WITH_REFERENCE],
+  [{ owner: () => true, passphrase: "TREZOR" }, [15], REKEY_PASSPHRASE_ONLY_WITH_REFERENCE],
   [
     { walletCheck: true },
     [15],

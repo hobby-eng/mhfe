@@ -227,17 +227,42 @@ impl ReferenceTarget {
     }
 }
 
+/// The references that take a BIP39 passphrase in an operation, which a refusal of an unused one
+/// names: a rehearsal check's wallet check takes one too, while a rekey is confirmed only by the
+/// wallet's address or fingerprint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PassphraseReferences {
+    /// The references of a rehearsal check.
+    Check,
+    /// The confirmations of a rekey.
+    Rekey,
+}
+
+impl PassphraseReferences {
+    /// The references, as a message names them.
+    fn names(self) -> &'static str {
+        match self {
+            Self::Check => "an address, a fingerprint or the wallet check",
+            Self::Rekey => "an address or a fingerprint",
+        }
+    }
+}
+
 /// Refuses a BIP39 `passphrase` that is not empty where the comparison takes none: the built-in
 /// check, and the owner's comparison with the backup in a rekey. Dropped without a word, it would
-/// let a person believe the wallet with that passphrase was compared (`INVALID_REQUEST`).
-pub fn refuse_unused_passphrase(passphrase: &str) -> Result<(), MhfeError> {
+/// let a person believe the wallet with that passphrase was compared (`INVALID_REQUEST`, naming
+/// the `references` that take one).
+pub fn refuse_unused_passphrase(
+    passphrase: &str,
+    references: PassphraseReferences,
+) -> Result<(), MhfeError> {
     if passphrase.is_empty() {
         Ok(())
     } else {
-        Err(MhfeError::InvalidRequest(
-            "a BIP39 passphrase belongs only to an address, a fingerprint or the wallet check"
-                .to_owned(),
-        ))
+        Err(MhfeError::InvalidRequest(format!(
+            "a BIP39 passphrase belongs only to {}",
+            references.names()
+        )))
     }
 }
 
@@ -1481,6 +1506,35 @@ mod tests {
             Some(MhfeError::NoWalletCheck {
                 container_words: 12
             })
+        );
+    }
+
+    #[test]
+    fn an_unused_passphrase_is_refused_naming_the_references_that_take_one() {
+        assert_eq!(
+            refuse_unused_passphrase("TREZOR", PassphraseReferences::Check),
+            Err(MhfeError::InvalidRequest(
+                "a BIP39 passphrase belongs only to an address, a fingerprint or the wallet check"
+                    .to_owned()
+            ))
+        );
+        assert_eq!(
+            refuse_unused_passphrase("TREZOR", PassphraseReferences::Rekey),
+            Err(MhfeError::InvalidRequest(
+                "a BIP39 passphrase belongs only to an address or a fingerprint".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn an_empty_passphrase_is_no_passphrase_and_passes() {
+        assert_eq!(
+            refuse_unused_passphrase("", PassphraseReferences::Check),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_unused_passphrase("", PassphraseReferences::Rekey),
+            Ok(())
         );
     }
 }

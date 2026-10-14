@@ -603,7 +603,7 @@ The parts, by identifier and label, and what each compares:
 - `password-strength`, "Password strength estimate": at both tiers, the exact estimate in millibits
   of five passwords: four read part by part (a common password with substitutions, one with a
   capital, a year and a sign, characters with a keyboard run, and letters of another alphabet) and
-  four dice words.
+  one of four dice words.
 - `word-hints`, "Word hints": the hints of eight typed lines, four from the BIP39 list and four from
   the EFF list: a count after one letter, the words from two letters, a whole word that begins
   longer ones, and no word for an unknown prefix or for a word one letter longer than the EFF
@@ -1025,7 +1025,7 @@ strictly: `encrypt` and `RekeySession.recover` as a boolean or, when no answer i
 or `null`, for which `encrypt` lists `{ item: "passphraseIfAny" }`. Anything else is refused with
 `INVALID_REQUEST` ("walletHasPassphrase must be true or false: whether the wallet has a BIP39
 passphrase"). `RekeySession.recover` also refuses a passphrase that is not empty with
-`"builtInCheck"` or `"owner"` (`INVALID_REQUEST`, "a BIP39 passphrase belongs only to an address, a fingerprint or the wallet check", `refuse_unused_passphrase`), as `searchWallet` does with `"builtInCheck"`; both come before the library judges the answer as above. After a refusal that
+`"builtInCheck"` or `"owner"` (`INVALID_REQUEST`, "a BIP39 passphrase belongs only to an address or a fingerprint", `refuse_unused_passphrase` with `PassphraseReferences::Rekey`), as `searchWallet` does with `"builtInCheck"` ("… to an address, a fingerprint or the wallet check", `PassphraseReferences::Check`); both come before the library judges the answer as above. After a refusal that
 allows another confirmation (`AMBIGUOUS_LENGTH`, `LENGTH_DIFFERS`) the session keeps the recovered
 state: `RekeySession.ownerLengths()` returns JSON, the lengths the owner may compare (empty where
 only an address or the fingerprint confirms it) or null when the rekey has ended, and

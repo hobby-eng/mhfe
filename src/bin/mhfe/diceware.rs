@@ -156,7 +156,15 @@ pub fn help() -> String {
         style::number_word(DEFAULT_WORDS, true),
         word_bits(DEFAULT_WORDS)
     );
-    let six = format!("Six words, about {} bits", word_bits(6));
+    let more = DEFAULT_WORDS + 1;
+    let six = format!(
+        "{} words, about {} bits",
+        style::number_word(more, true),
+        word_bits(more)
+    );
+    let more_command = format!("mhfe password --words {more}");
+    let more_dice_command = format!("mhfe password --dice --words {more}");
+    let more_dice = format!("{} words from real dice", style::number_word(more, true));
     let checked = format!(
         "{} words and a check word, about {} bits",
         style::number_word(DRAWN_WORDS, true),
@@ -170,12 +178,12 @@ pub fn help() -> String {
     style::examples_with_note(
         &[
             ("mhfe password", &five),
-            ("mhfe password --words 6", &six),
+            (&more_command, &six),
             (
                 "mhfe password --dice",
                 "Roll real dice instead of using the computer",
             ),
-            ("mhfe password --dice --words 6", "Six words from real dice"),
+            (&more_dice_command, &more_dice),
             ("mhfe password --check-word", &checked),
             ("mhfe password --chars", &characters),
         ],

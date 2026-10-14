@@ -64,7 +64,6 @@ pub struct Options {
     #[arg(long, value_name = "PATH", requires = "address", long_help = path_help())]
     path: Option<DerivationPath>,
 
-    /// With --words auto: whether the original seed phrase has a BIP39 passphrase, for its check
     #[command(flatten)]
     passphrase_used: PassphraseUsedOption,
 
@@ -116,14 +115,23 @@ fn fingerprint_help() -> String {
 
 fn words_help() -> String {
     style::option_help(&[
-        "The container's built-in check, of a 12- to 21-word original seed phrase.",
-        "N is the length of the original seed phrase: 12, 15, 18 or 21, or auto to detect it. \
-         A check that passes at another length takes precedence and matches, and the tool says \
-         so; several other lengths that pass leave it not verified. A match confirms the password and the settings only, not the wallet or a BIP39 \
-         passphrase. A 24-word original seed phrase and a container as long as its original seed \
-         phrase have no built-in check; compare them with an address or the fingerprint. With \
-         auto, the BIP39 passphrase of the original seed phrase is asked too, which finds a \
-         24-word phrase drawn with the phrase + passphrase check of mhfe new.",
+        &format!(
+            "The container's built-in check, of a {} original seed phrase.",
+            phrase_length::short_range_words()
+        ),
+        &format!(
+            "N is the length of the original seed phrase: {}, or {} to detect it. A check that \
+             passes at another length takes precedence and matches, and the tool says so; \
+             several other lengths that pass leave it not verified. A match confirms the \
+             password and the settings only, not the wallet or a BIP39 passphrase. A 24-word \
+             original seed phrase and a container as long as its original seed phrase have no \
+             built-in check; compare them with an address or the fingerprint. With {1}, the BIP39 \
+             passphrase of the original seed phrase is asked too, which finds a 24-word phrase \
+             drawn with the phrase + passphrase check of mhfe new; --passphrase-used answers \
+             whether it has one.",
+            phrase_length::short_lengths(),
+            phrase_length::AUTO
+        ),
     ])
 }
 
@@ -248,6 +256,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     if let Some(PhraseLength::Words(words)) = options.words {
         mhfe::require_built_in_check_length(words)?;
     }
+    refuse_misplaced_passphrase_used(&options)?;
     let mut input = Input::new(options.stdin).reading_secrets()?;
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Check.title());
@@ -449,7 +458,7 @@ fn not_verified_reason(choice: Choice, evidence: &CheckEvidence) -> String {
             "A wrong password passes the {WALLET_CHECK_BITS}-bit phrase + passphrase check about \
              once in {}: only a receiving address (--address) or the fingerprint proves the \
              wallet.",
-            style::grouped(1u32 << WALLET_CHECK_BITS)
+            mhfe::grouped(wallet_check::WALLET_CHECK_ODDS)
         ),
         _ => format!(
             "No length of {} words passes its built-in check, so the recovery reads 24 words, as \
@@ -499,7 +508,7 @@ fn show_search(address: &Address, path: Option<&DerivationPath>, limits: SearchL
         format!(
             "{}, {} addresses",
             search.pattern(),
-            style::grouped(search.addresses())
+            mhfe::grouped(search.addresses())
         )
     };
     style::fact_before_work("Search", text);
@@ -994,7 +1003,7 @@ pub fn read_passphrase_named(
 #[derive(Args)]
 pub struct PassphraseUsedOption {
     /// Whether a BIP39 passphrase is used: yes or no
-    #[arg(long = "passphrase-used", value_name = "yes|no", value_parser = parse_yes_no)]
+    #[arg(long = "passphrase-used", value_name = "yes|no", value_parser = choice::parse_yes_no)]
     used: Option<bool>,
 }
 
@@ -1002,15 +1011,6 @@ impl PassphraseUsedOption {
     /// The answer given, or `None` to ask at a terminal.
     pub fn given(&self) -> Option<bool> {
         self.used
-    }
-}
-
-/// The value of an option that answers a yes-or-no question: yes or no.
-pub fn parse_yes_no(text: &str) -> Result<bool, String> {
-    match text {
-        "yes" => Ok(true),
-        "no" => Ok(false),
-        _ => Err("give yes or no".to_owned()),
     }
 }
 
@@ -1080,8 +1080,31 @@ fn passphrase_answers(whose: &str) -> [Answer; 2] {
     ]
 }
 
-/// The BIP39 passphrase of the original seed phrase for its own checks: a person is asked
-/// whether one is used, and a script gives a line, empty for none.
+/// `--passphrase-used` answers the question of the original seed phrase's own checks
+/// (`--words auto`) at a terminal: a script gives that passphrase on its line, empty for none, and
+/// the other references never ask it, so the option is refused there instead of ignored.
+fn refuse_misplaced_passphrase_used(options: &Options) -> Result<(), Failure> {
+    if options.passphrase_used.given().is_none() {
+        return Ok(());
+    }
+    if options.words != Some(PhraseLength::Detect) {
+        return Err(Failure::invalid_input(format!(
+            "--passphrase-used belongs only to --words {}, the original seed phrase's own checks.",
+            phrase_length::AUTO
+        )));
+    }
+    if options.stdin {
+        return Err(Failure::invalid_input(
+            "--passphrase-used belongs only to a terminal: with --stdin the BIP39 passphrase of \
+             the original seed phrase is a line of its own, empty if none.",
+        ));
+    }
+    Ok(())
+}
+
+/// The BIP39 passphrase of the original seed phrase for its own checks: a script gives a line,
+/// empty for none; at a terminal `given` (`--passphrase-used`) answers whether one is used, or
+/// the person is asked.
 fn read_own_checks_passphrase(
     input: &mut Input,
     operation: Operation,

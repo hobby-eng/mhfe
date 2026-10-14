@@ -10,6 +10,7 @@ use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, MAX_MEMORY_LEVEL, ROUNDS};
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
 use crate::flow;
+use crate::hidden_input;
 use crate::readme;
 use crate::style::{self, paint, ACCENT, MUTED, WARNING};
 use crate::terminal::Input;
@@ -69,16 +70,9 @@ fn memory_level_help() -> String {
 }
 
 impl Settings {
-    pub fn work_factor(self) -> Result<WorkFactor, Failure> {
-        Ok(WorkFactor::new(
-            self.pim.unwrap_or(0),
-            self.memory_level.unwrap_or(0),
-        )?)
-    }
-
     /// The settings given for `operation`: those of a rekey's new container are refused as the
     /// new PIM or memory level ([`WorkFactor::new_settings`]).
-    fn work_factor_for(self, operation: Operation) -> Result<WorkFactor, Failure> {
+    pub fn work_factor_for(self, operation: Operation) -> Result<WorkFactor, Failure> {
         let (pim, level) = (self.pim.unwrap_or(0), self.memory_level.unwrap_or(0));
         Ok(match operation {
             Operation::RekeyNew => WorkFactor::new_settings(pim, level)?,
@@ -299,7 +293,7 @@ fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
             }
         }
     };
-    if choice::can_run() && !flow::is_active() {
+    if hidden_input::can_redraw() && !flow::is_active() {
         choice::write_control(&choice::redraw_from(drawn_lines))?;
     }
     Ok(work)

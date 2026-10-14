@@ -47,7 +47,7 @@ impl ConfirmationNeeded {
     /// confirmation that cannot apply before the container is typed.
     pub fn of_any_container(length: PhraseLength) -> Option<Self> {
         match length {
-            PhraseLength::Words(words) if packing::SHORT_WORD_COUNTS.contains(&words.get()) => None,
+            PhraseLength::Words(words) if BUILT_IN_CHECK_WORD_COUNTS.contains(&words.get()) => None,
             _ => Some(Self::WalletOrOwner),
         }
     }
@@ -150,17 +150,16 @@ impl ContainerFacts {
         length: PhraseLength,
     ) -> Result<ConfirmationNeeded, MhfeError> {
         self.require_length(length)?;
-        let words = match (length, self.suite) {
-            (PhraseLength::Words(words), _) => words.get(),
-            (PhraseLength::Detect, Suite::SameLength) => self.word_count,
-            (PhraseLength::Detect, Suite::TwentyFourWords) => {
-                return Ok(ConfirmationNeeded::WalletOrOwner)
+        // What the length alone decides holds on every container; only a 12- to 21-word length
+        // asks the container whether it has the built-in check.
+        match (ConfirmationNeeded::of_any_container(length), length) {
+            (Some(needed), _) => Ok(needed),
+            (None, PhraseLength::Words(words))
+                if self.built_in_check_lengths().contains(&words.get()) =>
+            {
+                Ok(ConfirmationNeeded::BuiltInCheck)
             }
-        };
-        if self.built_in_check_lengths().contains(&words) {
-            Ok(ConfirmationNeeded::BuiltInCheck)
-        } else {
-            Ok(ConfirmationNeeded::WalletOrOwner)
+            (None, _) => Ok(ConfirmationNeeded::WalletOrOwner),
         }
     }
 

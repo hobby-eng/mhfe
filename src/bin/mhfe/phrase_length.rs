@@ -42,12 +42,27 @@ pub fn short_range() -> String {
 
 /// The same as an adjective: "12- to 21-word".
 pub fn short_range_words() -> String {
-    let counts = mhfe::BUILT_IN_CHECK_WORD_COUNTS;
-    format!("{}- to {}-word", counts[0], counts[counts.len() - 1])
+    let (first, last) = ends(&mhfe::BUILT_IN_CHECK_WORD_COUNTS);
+    format!("{first}- to {last}-word")
+}
+
+/// The lengths that have a built-in check, as choices: "12, 15, 18 or 21".
+pub fn short_lengths() -> String {
+    let counts: Vec<String> = mhfe::BUILT_IN_CHECK_WORD_COUNTS
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    style::or_list(&counts)
 }
 
 fn range_of(counts: &[usize]) -> String {
-    format!("{} to {}", counts[0], counts[counts.len() - 1])
+    let (first, last) = ends(counts);
+    format!("{first} to {last}")
+}
+
+/// The shortest and the longest of `counts`, which list lengths from the shortest.
+fn ends(counts: &[usize]) -> (usize, usize) {
+    (counts[0], counts[counts.len() - 1])
 }
 
 /// Word counts in running text: "12", "12 and 21", "12, 15 and 21".

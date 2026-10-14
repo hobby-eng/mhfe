@@ -397,10 +397,11 @@ DEALINGS IN THE SOFTWARE.
 - This follows the toolchain's own notice, `share/doc/rust/COPYRIGHT-library.html`, which for
   Rust 1.99.0 has the SHA-256
   `5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27`.
-  `scripts/third-party-licenses.py --check` compares that SHA-256 and the crates below with the
-  installed toolchain, so that a new toolchain fails the check until this section is reviewed,
-  and `scripts/check-release-artifacts.sh` refuses a program or WebAssembly that names a crate of
-  the standard library this section does not list.
+  `scripts/third-party-licenses.py --check` compares that SHA-256 with the installed toolchain,
+  and the crates below with its libraries for each release target whose standard library is
+  installed, and names the targets it left out, so that a new toolchain fails the check until
+  this section is reviewed; `scripts/check-release-artifacts.sh` refuses a program or
+  WebAssembly that names a crate of the standard library this section does not list.
 
 ### Crates of the standard library
 

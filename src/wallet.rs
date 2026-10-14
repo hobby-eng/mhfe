@@ -48,14 +48,6 @@ use crate::{phrase, MhfeError};
     feature = "browser-repair",
     feature = "browser-wallet"
 ))]
-// The repair module checks only the parts of the master key fingerprint, not the addresses.
-#[cfg_attr(
-    all(
-        target_arch = "wasm32",
-        not(any(feature = "browser-core", feature = "browser-wallet"))
-    ),
-    allow(dead_code)
-)]
 pub(crate) mod known_answers;
 
 type HmacSha512 = Hmac<Sha512>;
@@ -1274,12 +1266,12 @@ mod tests {
         );
     }
 
-    /// Every address of the startup and full self-checks' table (known_answers::ADDRESSES, the
+    /// Every address of the startup and full self-checks' table (known_answers::addresses::ADDRESSES, the
     /// one copy, with where its values come from), at its path and by the search (AUD-015-ARC002).
     #[test]
     fn addresses_are_found_where_their_wallets_put_them() {
         let one = SearchLimits::new(1, 1).unwrap();
-        for case in known_answers::ADDRESSES {
+        for case in known_answers::addresses::ADDRESSES {
             let (coin, passphrase, path_text, text) =
                 (case.coin, case.passphrase, case.path, case.address);
             let address = Address::parse(coin, text).unwrap();

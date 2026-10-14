@@ -159,9 +159,8 @@ impl<'a> LineScreen<'a> {
     }
 
     /// The rows that show `hint`, each narrower than the terminal so that none wraps. A row may
-    /// hold the list words that match a typed seed phrase or password, so each is built in one
-    /// buffer reserved at its final size and wiped when dropped, with no copy on the way
-    /// (AUD-023-SEC001).
+    /// hold the list words that match a typed seed phrase or password, so every buffer it is
+    /// built in is reserved at its final size and wiped when dropped (AUD-023-SEC001).
     fn rows_of(&self, hints: Hints, hint: Hint) -> Vec<Zeroizing<String>> {
         let name = hints.list.name();
         match hint {
@@ -496,8 +495,8 @@ mod tests {
     }
 
     /// The test binary's allocator, which counts the blocks freed on a watching thread that still
-    /// hold [`WATCHED`]: a copy of a hint word that was not wiped (AUD-023-SEC001). A global
-    /// allocator is unsafe code by nature; it exists only in the test binary.
+    /// hold [`WATCHED`]: a copy of a hint word that was not wiped (AUD-023-SEC001).
+    // A global allocator is unsafe code by nature; it exists only in the test binary.
     #[allow(unsafe_code)]
     mod freed {
         use std::alloc::{GlobalAlloc, Layout, System};
@@ -518,6 +517,7 @@ mod tests {
         // the block it is given before it is freed.
         unsafe impl GlobalAlloc for Inspecting {
             unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+                // SAFETY: the caller's layout goes to the system allocator unchanged.
                 unsafe { System.alloc(layout) }
             }
 
@@ -529,6 +529,7 @@ mod tests {
                         UNWIPED.fetch_add(1, Ordering::SeqCst);
                     }
                 }
+                // SAFETY: the block came from System.alloc with this layout and is freed once.
                 unsafe { System.dealloc(block, layout) }
             }
         }

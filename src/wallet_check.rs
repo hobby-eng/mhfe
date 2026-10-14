@@ -64,6 +64,8 @@ pub const WALLET_CHECK_ODDS: u64 = 1 << WALLET_CHECK_BITS;
 const DOMAIN: &[u8] = b"MHFE-WALLET-CHECK-SEED-1";
 /// The entropy of a new 24-word phrase: 256 bits, the whole state of a container.
 pub const NEW_ENTROPY_BYTES: usize = crate::packing::STATE_BYTES;
+/// [`NEW_ENTROPY_BYTES`] in bits.
+pub const NEW_ENTROPY_BITS: usize = NEW_ENTROPY_BYTES * u8::BITS as usize;
 
 /// Whether `entropy` passes the criterion of the wallet check with `passphrase`, which may be empty
 /// here; of any length BIP39 takes. A program that checks a recovery uses [`verify`] or

@@ -23,9 +23,9 @@ header against DNS rebinding, ignores request bodies and logs nothing.
 import argparse
 import hashlib
 import os
+import re
 import socket
 import sys
-import textwrap
 import threading
 import time
 import unicodedata
@@ -78,13 +78,20 @@ INVALID_INPUT = 2
 # The terminal style of mhfe (src/bin/mhfe/style.rs), with the standard library alone
 # (AUD-023-UI011): a title line, a tick before what went right, "✗ Error:" before a refusal, lines
 # of at most 78 columns, and colours only for a terminal that shows them.
+# Deliberate copy of the constants of style.rs: this launcher ships beside the browser package for
+# computers without the mhfe program, so it cannot import the Rust code.
+# test_the_style_constants_match_the_rust_launcher in scripts/verify-fast-mode-script.py reads
+# them from style.rs and keeps both in step.
 TEXT_WIDTH = 78
+HELP_WIDTH = 80
+FACT_LABEL_WIDTH = 10
 TICK = "✓"
 ERROR_MARK = "✗ Error:"
+# The SGR codes of style::HEADING, ACCENT, STRONG, MUTED, GOOD and BAD.
 HEADING, ACCENT, STRONG, MUTED, GOOD, BAD = "1;36", "36", "1", "90", "1;32", "1;31"
-# What a fact's label is padded to, as style::fact pads it.
-FACT_LABEL_WIDTH = 10
 TITLE = "Fast mode"
+# A colour code as paint() writes it, which takes no column.
+COLOUR_CODE = re.compile("\x1b\\[[0-9;]*m")
 
 
 class Refused(Exception):
@@ -100,30 +107,66 @@ RUST_WHITESPACE = (
 )
 
 
-def colours():
-    """Whether standard error shows colours, by the rules mhfe follows (anstream): never on
-    Windows, whose console this script cannot switch to them; CLICOLOR_FORCE turns them on, and
-    NO_COLOR, TERM=dumb or CLICOLOR=0 off; otherwise only on a terminal."""
+def colours(stream):
+    """Whether `stream` shows colours, by the rule of anstream 1.0.0 (auto.rs, with
+    anstyle-query 1.1.5), which mhfe writes through, in its order: NO_COLOR, when not empty, turns
+    them off; then CLICOLOR_FORCE, when not empty, even "0", turns them on; then CLICOLOR=0 turns
+    them off; otherwise only a terminal shows them, and only with TERM set and not "dumb", with
+    CLICOLOR set or with CI set. Deliberate copy, as this script cannot use anstream;
+    test_colours_follow_anstream in scripts/verify-fast-mode-script.py holds anstream's answers.
+    Never on Windows, whose console this script cannot switch to colours."""
     environment = os.environ
     if os.name == "nt":
         return False
-    if environment.get("CLICOLOR_FORCE", "0") not in ("", "0"):
+    if environment.get("NO_COLOR", ""):
+        return False
+    if environment.get("CLICOLOR_FORCE", ""):
         return True
-    if environment.get("NO_COLOR", "") != "" or environment.get("TERM") == "dumb":
+    clicolor = environment.get("CLICOLOR")
+    if clicolor == "0":
         return False
-    if environment.get("CLICOLOR") == "0":
-        return False
-    return sys.stderr.isatty()
+    term = environment.get("TERM")
+    capable = term is not None and term != "dumb"
+    return stream.isatty() and (capable or clicolor is not None or "CI" in environment)
 
 
-def paint(style, text):
-    """`text` in `style`, an SGR code, where colours are shown."""
-    return "\x1b[{}m{}\x1b[0m".format(style, text) if colours() else text
+def coloured(style, text):
+    """`text` in `style`, an SGR code."""
+    return "\x1b[{}m{}\x1b[0m".format(style, text)
+
+
+def paint(style, text, stream=None):
+    """`text` in `style` where `stream`, standard error unless given, shows colours."""
+    return coloured(style, text) if colours(sys.stderr if stream is None else stream) else text
+
+
+def visible_width(text):
+    """The columns of `text` without its colour codes, as style::visible_width counts them, but in
+    characters: a wide character, which only a file name may hold here, counts as one."""
+    return len(COLOUR_CODE.sub("", text))
 
 
 def wrapped(text, width):
-    """`text` in lines of at most `width` columns, words never split, as style::wrap does."""
-    return textwrap.wrap(text, width, break_long_words=False, break_on_hyphens=False) or [""]
+    """`text` in lines of at most `width` visible columns, broken at spaces and never inside a
+    word, a line break kept: style::wrap. Colour codes take no column, so a coloured text breaks
+    where its plain text does."""
+    if not text:
+        return [""]
+    lines = []
+    for paragraph in text.split("\n"):
+        line, line_width = "", 0
+        for word in (word for word in paragraph.split(" ") if word):
+            word_width = visible_width(word)
+            if line_width > 0 and line_width + 1 + word_width > width:
+                lines.append(line)
+                line, line_width = "", 0
+            if line_width > 0:
+                line += " "
+                line_width += 1
+            line += word
+            line_width += word_width
+        lines.append(line)
+    return lines
 
 
 def say(lines):
@@ -155,41 +198,71 @@ def error(text):
     say(["", first] + [" " * indent + line for line in lines[1:]])
 
 
-# The help, in the sections and words of `mhfe serve --help`.
-HELP = """Serve an MHFE browser tool on this computer in fast mode
+# The closing note of the help, the safety line of `mhfe serve --help`.
+HELP_NOTE = (
+    "The page is served only when {} lies next to it and holds its SHA-256, and only to this "
+    "computer (127.0.0.1). It sees none of your secrets: all the work happens in the page."
+).format(CHECKSUM_FILE)
+
+
+def help_text(colour):
+    """The help, in the sections, words and colours of `mhfe serve --help` (style::help_styles and
+    style::help_note): headings in bold cyan, the command, options and examples in cyan,
+    placeholders and the closing note in grey; plain text when `colour` is false."""
+
+    def look(style, text):
+        return coloured(style, text) if colour else text
+
+    command = "python3 mhfe-fast-mode.py"
+    note = "".join(look(MUTED, line) + "\n" for line in wrapped(HELP_NOTE, HELP_WIDTH))
+    return """Serve an MHFE browser tool on this computer in fast mode
 
 A browser runs the faster, multi-threaded Argon2 only on a page served with
 special headers. This script serves one page from this computer (127.0.0.1)
 with those headers and opens it in the browser, as mhfe serve does.
 
-Usage: python3 mhfe-fast-mode.py [OPTIONS] [FILE]
+{usage} {command} {options} {file}
 
-Arguments:
-  [FILE]        The HTML file of the browser tool; mhfe-fast-mode.sha256 must
+{arguments}
+  {file}        The HTML file of the browser tool; mhfe-fast-mode.sha256 must
                 lie next to it. Without it, the page that mhfe-fast-mode.sha256
                 next to this script names.
 
-Options:
-  --no-browser  Print the address instead of opening the browser
-  -h, --help    Print help
+{options_heading}
+  {no_browser}  Print the address instead of opening the browser
+  {short_help}, {long_help}    Print help
 
-Examples:
-  python3 mhfe-fast-mode.py
+{examples}
+  {command}
       Serve the page next to this script, as a double-click does
 
-  python3 mhfe-fast-mode.py --no-browser tool.html
+  {example}
       Serve the page and print its address to open by hand
 
-The page is served only when mhfe-fast-mode.sha256 lies next to it and holds its
-SHA-256, and only to this computer (127.0.0.1). It sees none of your secrets:
-all the work happens in the page.
-"""
+{note}""".format(
+        usage=look(HEADING, "Usage:"),
+        command=look(ACCENT, command),
+        options=look(MUTED, "[OPTIONS]"),
+        file=look(MUTED, "[FILE]"),
+        arguments=look(HEADING, "Arguments:"),
+        options_heading=look(HEADING, "Options:"),
+        no_browser=look(ACCENT, "--no-browser"),
+        short_help=look(ACCENT, "-h"),
+        long_help=look(ACCENT, "--help"),
+        examples=look(HEADING, "Examples:"),
+        example=look(ACCENT, command + " --no-browser tool.html"),
+        note=note,
+    )
+
+
+# The help without colours, as a pipe or a file gets it.
+HELP = help_text(False)
 
 
 class Parser(argparse.ArgumentParser):
     """argparse, with its error messages shown as every other message is: a mistyped argument may
-    hold control characters (AUD-018); and its help in mhfe's sections, without argparse's own
-    colours (Python 3.14 adds them)."""
+    hold control characters (AUD-018); and its help in mhfe's sections and colours, without
+    argparse's own colours (Python 3.14 adds them)."""
 
     def __init__(self, **options):
         try:
@@ -198,7 +271,8 @@ class Parser(argparse.ArgumentParser):
             super().__init__(**options)
 
     def format_help(self):
-        return HELP
+        # argparse prints the help to standard output, so that stream decides the colours.
+        return help_text(colours(sys.stdout))
 
     def error(self, message):
         error(shown(message))
@@ -352,6 +426,9 @@ def read_checksum_file(directory):
                 CHECKSUM_FILE, shown(directory), shown(getattr(error, "strerror", None) or error)
             )
         )
+    # Deliberate copy of MALFORMED in src/bin/mhfe/serve.rs, as this script cannot import the Rust
+    # code; test_the_checksum_format_is_said_as_mhfe_serve_says_it in
+    # scripts/verify-fast-mode-script.py keeps the two alike.
     malformed = Refused(
         "{} must hold exactly one line: the page's SHA-256, two spaces and its file name, or one "
         "space and * before the name; nothing was served.".format(shown(path))
