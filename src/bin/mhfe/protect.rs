@@ -640,6 +640,7 @@ pub enum SwapInventory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
     use std::fs;
 
     /// In a thread of its own, so that the other tests stay free: a socket cannot be opened and a
