@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The fast checks of the repository: what CI runs on every push and pull request (CI-04) and what
-# a change passes before it is called done (CORE-43). Formatting, the copy gate, clippy for the
-# native program and for every WebAssembly build, the fast tests, the browser package's types, the
-# lint and Prettier, in a few minutes.
+# a change passes before it is called done (CORE-43). Formatting, the copy and code-rules gates,
+# clippy for the native program and for every WebAssembly build, the fast tests, the browser
+# package's types, the lint and Prettier, in a few minutes.
 # scripts/check.sh runs them first, then the slow checks of a release.
 #
 # Needs the pinned Rust toolchain and Node.js with the tools of `pnpm install --frozen-lockfile`.
@@ -20,6 +20,11 @@ cargo fmt --check
 # classes: each rule lives in one function that every front end calls (CORE-10).
 node scripts/verify-no-copies.mjs --self-test
 node scripts/verify-no-copies.mjs
+# The guide's rules the other gates cannot see: the length of Rust, Python and shell files, script
+# headers, hashed Python requirements, exact versions, one lockfile, doc comments on the browser
+# package's exports and reasons on lint exceptions.
+node scripts/verify-code-rules.mjs --self-test
+node scripts/verify-code-rules.mjs
 cargo clippy --locked --all-targets --all-features -- -D warnings
 cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings
 # Each browser module builds alone, so that another program can take one part without the rest.
