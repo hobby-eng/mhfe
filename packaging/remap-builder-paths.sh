@@ -19,6 +19,9 @@
 # scripts/verify-browser-package.mjs refuses a WebAssembly with any absolute source path other than
 # rustc's own. rustc names its standard library /rustc/<commit>/ itself. Cargo's trim-paths would
 # make such paths relative on its own, but Cargo 1.99.0 still refuses it as unstable.
+#
+# no set -euo pipefail: sourced, not run; the scripts that source it set their own options, and
+# dash, the Dockerfile's /bin/sh, may have no pipefail.
 
 # The release targets whose rustflags get the remapping, the computer's own target among them for
 # a build without --target.
