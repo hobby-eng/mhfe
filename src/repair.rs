@@ -53,8 +53,10 @@ pub fn capacity(count: usize) -> (usize, usize) {
     (count, count / 2)
 }
 
-/// Elements of GF(2^11): 2,048, as many as the words of the BIP39 list.
+/// Elements of GF(2^11): 2,048, as many as the words of the BIP39 list, which [`POLYNOMIAL`]
+/// fixes too, so that the size is checked against the list rather than derived from it.
 const FIELD_SIZE: usize = 2048;
+const _: () = assert!(FIELD_SIZE == crate::phrase::LIST_SIZE as usize);
 /// The order of the multiplicative group, 2^11 - 1.
 const ORDER: usize = FIELD_SIZE - 1;
 /// x^11 + x^2 + 1, a primitive polynomial of degree 11.

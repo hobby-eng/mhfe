@@ -249,8 +249,6 @@ fn draw(entries: &[Entry], selected: usize) -> usize {
     entry_lines + 1 + hint_lines
 }
 
-/// Runs a command in a thread of its own, isolated as a command started directly would be: the
-/// isolation cannot be undone, and the menu must stay free to start the fast mode later.
 /// Runs the command a question of the menu chose, or shows why it could not ask; false when the
 /// person went back with Escape and no command runs.
 fn run_asked(asked: Result<Option<Vec<OsString>>, Failure>) -> bool {
@@ -269,6 +267,8 @@ fn run_shown(arguments: &[OsString]) {
     }
 }
 
+/// Runs a command in a thread of its own, isolated as a command started directly would be: the
+/// isolation cannot be undone, and the menu must stay free to start the fast mode later.
 fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
     let typed = std::iter::once(OsString::from("mhfe")).chain(arguments.iter().cloned());
     let cli = Cli::try_parse_from(typed)
@@ -358,11 +358,8 @@ fn which_self_test() -> Result<Option<Vec<OsString>>, Failure> {
         record: None,
     };
     let answers = [
-        Answer::new("Every part", "a few seconds"),
-        Answer::new(
-            "Every part and the published vectors",
-            self_test::vectors_cost(),
-        ),
+        Answer::new(self_test::EVERY_PART, "a few seconds"),
+        Answer::new(self_test::WITH_VECTORS, self_test::vectors_cost()),
     ];
     let Some(answer) = choice::choose(&question, &answers, None)? else {
         return Ok(None);
@@ -394,7 +391,7 @@ fn wait_for_enter(prompt: &str) -> Result<bool, Failure> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::choice::LINE_WIDTH;
+    use crate::style::TEXT_WIDTH as LINE_WIDTH;
 
     #[test]
     fn every_entry_is_a_valid_command() {

@@ -8,7 +8,7 @@ use bip39::Language;
 use sha2::Digest;
 
 use crate::self_check::{
-    expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
+    damaged, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
 
 /// SHA-256 of english.txt of BIP-0039 (the words, each followed by a line feed), recomputed with
@@ -153,8 +153,7 @@ impl WordListCheck {
     }
 
     fn vector(vector: &TrezorVector) -> Result<(), String> {
-        let entropy =
-            hex::decode(vector.entropy).map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let entropy = hex::decode(vector.entropy).map_err(|_| damaged())?;
         let phrase = crate::phrase_from_entropy(&entropy).map_err(stopped)?;
         expect(*phrase == *vector.phrase, "gives other words")?;
         let parsed = super::parse(vector.phrase).map_err(|_| "is refused".to_owned())?;

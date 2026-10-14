@@ -26,10 +26,12 @@ use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE
 use crate::choice::{self, Answer, Question};
 use crate::container_repair::{Reviewed, SearchContext};
 use crate::exit::{refused, Failure};
+use crate::phrase_length;
 use crate::readme;
 use crate::settings;
 use crate::style::{self, paint, GOOD, HEADING, STRONG};
 use crate::terminal::{self, Input, Progress};
+use crate::time_text;
 
 /// What the person knows, to tell the right candidate.
 #[derive(Clone, Copy)]
@@ -153,13 +155,13 @@ fn what_is_known_answers(offered: Offered) -> (Vec<Known>, Vec<Answer>) {
         ));
         known.push((
             Known::Nothing,
-            Answer::new("Nothing", "12- to 21-word phrases; slow"),
+            Answer::new(
+                "Nothing",
+                format!("{} phrases; slow", phrase_length::short_range_words()),
+            ),
         ));
     }
-    known.push((
-        Known::TypeAgain,
-        Answer::new("Type the container phrase again", "no search"),
-    ));
+    known.push((Known::TypeAgain, Answer::new(TYPE_AGAIN, "no search")));
     known.into_iter().unzip()
 }
 
@@ -304,8 +306,8 @@ fn with_container_wallet(
         Some(found) => {
             // Listed among the matches of a check: what the container phrase was found by.
             let at = found
-                .outcome
-                .path()
+                .path
+                .as_ref()
                 .map(|path| format!(" at {path}"))
                 .unwrap_or_default();
             let found_by = format!("the container's own wallet: {}{at}", reference.shown());
@@ -427,7 +429,7 @@ fn starts_long_search(
     let took = format!(
         "{} candidates, each a full recovery: about {} at these settings.",
         search.count(),
-        settings::time_range(low * count, high * count)
+        time_text::range(low * count, high * count)
     );
     eprintln!();
     style::warn_here(&took, "");
@@ -468,11 +470,23 @@ fn run_long(
     Ok(found)
 }
 
-fn found_answers() -> [Answer; 2] {
+/// The answer that leaves a container phrase and asks for it again.
+const TYPE_AGAIN: &str = "Type the container phrase again";
+
+/// Whether to use a container phrase that a search or a repair found: `used` says what using it
+/// asks of the owner, `not_used` what typing it again leaves.
+pub fn use_or_type_again(used: &'static str, not_used: &'static str) -> [Answer; 2] {
     [
-        Answer::new("Use it", "and write the found words on your copy"),
-        Answer::new("Type the container phrase again", "the search is not used"),
+        Answer::new("Use it", used),
+        Answer::new(TYPE_AGAIN, not_used),
     ]
+}
+
+fn found_answers() -> [Answer; 2] {
+    use_or_type_again(
+        "and write the found words on your copy",
+        "the search is not used",
+    )
 }
 
 /// Shows the container phrase found, each missing word as found, and asks before it is used.

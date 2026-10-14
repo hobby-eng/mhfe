@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Packs release archives with fixed timestamps, owners and file order, so that two builds of the
-# same source give identical bytes.
+# Packs release archives with fixed timestamps, owners, permission bits and file order
+# (packaging/pack-archives.sh), so that two builds of the same source give identical bytes.
 #
 #   scripts/package-release.sh <version> <output folder> [package ...]
 #
@@ -25,6 +25,7 @@ if [[ ${#packages[@]} -eq 0 ]]; then
 fi
 . packaging/remap-builder-paths.sh
 remap_builder_paths "$repo_root"
+. packaging/pack-archives.sh
 # CARGO_TARGET_DIR may move the programs out of target/.
 target_dir="$(
   cargo metadata --locked --no-deps --format-version 1 |
@@ -69,23 +70,15 @@ add_common_files() {
   } > "$folder/BUILD-INFO.txt"
 }
 
-pack_tar() {
+# Packs `folder` into the archive named `archive` in the output folder, by its kind, with the
+# permission bits, times, owners and order fixed by packaging/pack-archives.sh.
+pack() {
   local folder="$1" archive="$2"
-  "$tar_command" --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-    --mode='u+rwX,go+rX,go-w' \
-    -C "$folder" -cf - . | gzip -n > "$output/$archive"
-  archives+=("$output/$archive")
-}
-
-pack_zip() {
-  local folder="$1" archive="$2"
-  # zip stores local times from 1980 on; UTC and one fixed time make it reproducible.
-  (
-    cd "$folder"
-    export TZ=UTC
-    find . -exec touch -d '1980-01-01 00:00:00' {} +
-    find . -type f | LC_ALL=C sort | zip -X -q "$output/$archive" -@
-  )
+  if [[ "$archive" == *.zip ]]; then
+    pack_zip "$folder" "$output/$archive"
+  else
+    pack_tar "$folder" "$output/$archive"
+  fi
   archives+=("$output/$archive")
 }
 
@@ -105,11 +98,11 @@ cli_package() {
   cp "$binary" "$folder/"
   cp "$launcher" "$folder/"
   add_common_files "$folder"
+  local kind=tar.gz
   if [[ "$name" == windows-* ]]; then
-    pack_zip "$folder" "mhfe-$version-$name.zip"
-  else
-    pack_tar "$folder" "mhfe-$version-$name.tar.gz"
+    kind=zip
   fi
+  pack "$folder" "mhfe-$version-$name.$kind"
 }
 
 for package in "${packages[@]}"; do
@@ -139,7 +132,7 @@ for package in "${packages[@]}"; do
       (cd "$folder" && sed -n '/^## SHA-256 of this build$/,$p' README.md | grep -E '^[0-9a-f]{64}  ' |
         sha256sum --check --quiet --strict -)
       echo "Emscripten 6.0.12" >> "$folder/BUILD-INFO.txt"
-      pack_tar "$folder" "mhfe-$version-browser.tar.gz"
+      pack "$folder" "mhfe-$version-browser.tar.gz"
       ;;
     *)
       echo "Unknown package $package" >&2

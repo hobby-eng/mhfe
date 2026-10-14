@@ -1,21 +1,28 @@
 """Tests of packaging/mhfe-fast-mode.py, the Python version of `mhfe serve`.
 
 They check the same cases as the tests in src/bin/mhfe/serve.rs, so that both launchers behave
-alike, and run a real server on a free port of 127.0.0.1. Only the standard library is used.
+alike, compare the limits, messages and style constants the launcher copies with the Rust sources,
+and run a real server on a free port of 127.0.0.1. Only the standard library is used.
 
 Usage: python3 scripts/verify-fast-mode-script.py
 """
 
+import contextlib
 import importlib.util
+import io
 import os
+import re
 import socket
 import sys
 import tempfile
+import textwrap
 import threading
 import time
 import unittest
+from unittest import mock
 
-SCRIPT = os.path.join(os.path.dirname(__file__), "..", "packaging", "mhfe-fast-mode.py")
+ROOT = os.path.join(os.path.dirname(__file__), "..")
+SCRIPT = os.path.join(ROOT, "packaging", "mhfe-fast-mode.py")
 # Loaded under a plain name, because the file name has hyphens; no bytecode is written next to it.
 sys.dont_write_bytecode = True
 _spec = importlib.util.spec_from_file_location("fast_mode", SCRIPT)
@@ -24,6 +31,51 @@ _spec.loader.exec_module(fast_mode)
 
 HOST = "127.0.0.1:43210"
 PAGE = b"<!doctype html><title>tool</title>"
+# The variables that decide colours (anstream); each test sets the ones it needs.
+COLOUR_VARIABLES = ("NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "TERM", "CI")
+# A colour code, as the launcher and mhfe write them.
+COLOUR_CODE = re.compile("\x1b\\[[0-9;]*m")
+# The SGR foreground codes of anstyle's AnsiColor: 30 to 37, and 90 to 97 for the bright ones
+# (ECMA-48 and the aixterm extension).
+ANSI_COLOURS = {
+    name: code
+    for code, name in enumerate(
+        ("Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"), 30
+    )
+}
+ANSI_COLOURS.update({"Bright" + name: code + 60 for name, code in list(ANSI_COLOURS.items())})
+
+
+def rust_source(name):
+    """The text of src/bin/mhfe/`name`, a module of the mhfe program."""
+    with open(os.path.join(ROOT, "src", "bin", "mhfe", name), encoding="utf-8") as source:
+        return source.read()
+
+
+def rust_constant(text, name):
+    """The value of the Rust constant `name` in `text`, as written there."""
+    return re.search(r"const {}: [^=]+= ([^;]+);".format(name), text).group(1)
+
+
+def sgr(style):
+    """The SGR code of an anstyle Style as style.rs writes it, such as "1;36" for
+    `AnsiColor::Cyan.on_default().bold()`."""
+    found = re.fullmatch(r"(?:AnsiColor::(\w+)\.on_default\(\)|Style::new\(\))(\.bold\(\))?", style)
+    if found is None:
+        raise ValueError("not a style of style.rs: {}".format(style))
+    colour, bold = found.groups()
+    return ";".join((["1"] if bold else []) + ([str(ANSI_COLOURS[colour])] if colour else []))
+
+
+class Screen(io.StringIO):
+    """Text written to a stream that is a terminal, or not, as `terminal` says."""
+
+    def __init__(self, terminal):
+        super().__init__()
+        self.terminal = terminal
+
+    def isatty(self):
+        return self.terminal
 
 
 def request(method, target, host):
@@ -51,13 +103,29 @@ class Routing(unittest.TestCase):
         self.assertTrue(reply.endswith(b"\r\n\r\n"))
 
     def test_the_security_headers_match_the_rust_launcher(self):
-        with open(os.path.join(os.path.dirname(SCRIPT), "..", "src", "bin", "mhfe", "serve.rs"),
-                  encoding="utf-8") as source:
-            rust = source.read()
+        rust = rust_source("serve.rs")
         for name, value in fast_mode.SECURITY_HEADERS:
             self.assertIn('("{}", "{}")'.format(name, value), rust)
-        self.assertIn("SECURITY_HEADERS: [(&str, &str); {}]".format(len(fast_mode.SECURITY_HEADERS)),
-                      rust)
+        count = len(fast_mode.SECURITY_HEADERS)
+        self.assertIn("SECURITY_HEADERS: [(&str, &str); {}]".format(count), rust)
+
+    def test_the_limits_match_the_rust_launcher(self):
+        # The limits of serve.rs, read from its source, so that a change to either launcher alone
+        # fails here (AUD-023-ARC017).
+        text = rust_source("serve.rs")
+
+        def constant(name):
+            return rust_constant(text, name)
+
+        def seconds(value):
+            match = re.fullmatch(r"Duration::from_(secs|millis)\((\d+)\)", value)
+            return int(match.group(2)) / (1 if match.group(1) == "secs" else 1000)
+
+        self.assertEqual(eval(constant("MAX_REQUEST_HEAD"), {}), fast_mode.MAX_REQUEST_HEAD)
+        self.assertEqual(seconds(constant("REQUEST_DEADLINE")), fast_mode.REQUEST_DEADLINE)
+        self.assertEqual(seconds(constant("RESPONSE_DEADLINE")), fast_mode.RESPONSE_DEADLINE)
+        self.assertEqual(int(constant("MAX_CONNECTIONS")), fast_mode.MAX_CONNECTIONS)
+        self.assertEqual(seconds(constant("ACCEPT_ERROR_PAUSE")), fast_mode.ACCEPT_ERROR_PAUSE)
 
     def test_refuses_other_hosts_against_dns_rebinding(self):
         for host in ["localhost:43210", "127.0.0.1", "127.0.0.1:1", "evil.example:43210", ""]:
@@ -158,6 +226,21 @@ class Server(unittest.TestCase):
             pass
         self.assertEqual(status_line(reply), "HTTP/1.1 400 Bad Request")
 
+    def test_a_client_that_does_not_read_is_dropped_at_the_response_deadline(self):
+        # The counterpart of serve.rs's test: a large page to a client that never reads
+        # (AUD-023-ARC017).
+        server, client = socket.socketpair()
+        self.addCleanup(client.close)
+        client.sendall((request("GET", "/", HOST) + "\r\n").encode("ascii"))
+        original = fast_mode.RESPONSE_DEADLINE
+        fast_mode.RESPONSE_DEADLINE = 0.5
+        try:
+            started = time.monotonic()
+            fast_mode.answer(server, HOST, b"x" * (64 * 1024 * 1024), 5.0)
+            self.assertLess(time.monotonic() - started, 3.0, "dropped at the response deadline")
+        finally:
+            fast_mode.RESPONSE_DEADLINE = original
+
     def test_connections_beyond_the_limit_are_closed_at_once(self):
         # Every slot is taken by a client that sends nothing until its deadline.
         idle = [self.connect() for _ in range(fast_mode.MAX_CONNECTIONS)]
@@ -172,6 +255,232 @@ class Server(unittest.TestCase):
         self.assertEqual(data, b"", "the extra connection was closed without an answer")
         self.assertLess(time.monotonic() - started, 0.4, "closed at once, not at a deadline")
         self.assertEqual(len(idle), fast_mode.MAX_CONNECTIONS)
+
+
+class Style(unittest.TestCase):
+    """The launcher writes as mhfe serve does: its help in the same sections, colours and safety
+    line, a title, marked success and error lines within 78 columns, and colours by the same
+    environment rules (AUD-023-UI011)."""
+
+    # anstream 1.0.0's answers (auto.rs, with anstyle-query 1.1.5), which mhfe writes through, as
+    # (environment, a terminal, colours): NO_COLOR first, then CLICOLOR_FORCE with any value but
+    # an empty one, then CLICOLOR=0, then a terminal with TERM set and not dumb, CLICOLOR or CI.
+    ANSTREAM_ANSWERS = (
+        ({"TERM": "xterm-256color"}, True, True),
+        ({"TERM": "xterm-256color"}, False, False),
+        ({}, True, False),
+        ({"TERM": "dumb"}, True, False),
+        ({"TERM": "dumb", "CLICOLOR": "1"}, True, True),
+        ({"CLICOLOR": "1"}, True, True),
+        ({"CLICOLOR": "1"}, False, False),
+        ({"CI": "true"}, True, True),
+        ({"CI": "true"}, False, False),
+        ({"TERM": "xterm", "CLICOLOR": "0"}, True, False),
+        ({"TERM": "xterm", "NO_COLOR": "1"}, True, False),
+        ({"TERM": "xterm", "NO_COLOR": ""}, True, True),
+        ({"CLICOLOR_FORCE": "1"}, False, True),
+        ({"CLICOLOR_FORCE": "0"}, False, True),
+        ({"CLICOLOR_FORCE": ""}, False, False),
+        ({"CLICOLOR_FORCE": "1", "NO_COLOR": "1"}, True, False),
+        ({"CLICOLOR_FORCE": "1", "CLICOLOR": "0"}, False, True),
+        ({"CLICOLOR_FORCE": "1", "TERM": "dumb"}, False, True),
+    )
+
+    def run_script(self, arguments, environment, terminal):
+        """Runs the script with standard error on a pseudo-terminal or a pipe; its bytes."""
+        import pty
+        import subprocess
+
+        env = {key: value for key, value in os.environ.items() if key not in COLOUR_VARIABLES}
+        env.update(environment)
+        if terminal:
+            leader, follower = pty.openpty()
+            process = subprocess.Popen([sys.executable, SCRIPT, *arguments],
+                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                       stderr=follower, env=env)
+            os.close(follower)
+            output = b""
+            while True:
+                try:
+                    chunk = os.read(leader, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                output += chunk
+            process.wait(10)
+            os.close(leader)
+            return output
+        return subprocess.run([sys.executable, SCRIPT, *arguments], stdin=subprocess.DEVNULL,
+                              capture_output=True, env=env, timeout=10).stderr
+
+    def test_the_style_constants_match_the_rust_launcher(self):
+        # The constants the launcher copies from style.rs, read from its source, so that a change
+        # to either alone fails here (CORE-10).
+        style = rust_source("style.rs")
+        self.assertEqual(int(rust_constant(style, "TEXT_WIDTH")), fast_mode.TEXT_WIDTH)
+        self.assertEqual(int(rust_constant(style, "FACT_LABEL_WIDTH")), fast_mode.FACT_LABEL_WIDTH)
+        self.assertEqual(rust_constant(style, "TICK"), '"{}"'.format(fast_mode.TICK))
+        self.assertEqual(rust_constant(style, "ERROR_MARK"), '"{}"'.format(fast_mode.ERROR_MARK))
+        self.assertEqual(rust_constant(style, "HELP_WIDTH"), "hidden_input::DEFAULT_COLUMNS")
+        self.assertEqual(int(rust_constant(rust_source("hidden_input.rs"), "DEFAULT_COLUMNS")),
+                         fast_mode.HELP_WIDTH)
+        for name in ("HEADING", "ACCENT", "STRONG", "MUTED", "GOOD", "BAD"):
+            self.assertEqual(sgr(rust_constant(style, name)), getattr(fast_mode, name), name)
+
+    def test_the_help_has_the_sections_and_safety_line_of_mhfe_serve(self):
+        text = rust_source("serve.rs")
+        start = text.index('"The page is served only when {CHECKSUM_FILE}')
+        literal = text[start + 1:text.index('"', start + 1)]
+        safety = " ".join(re.sub(r"\\\n\s*", "", literal).replace(
+            "{CHECKSUM_FILE}", fast_mode.CHECKSUM_FILE).split())
+        self.assertIn(safety, " ".join(fast_mode.HELP.split()))
+        for section in ("Usage:", "Arguments:", "Options:", "Examples:"):
+            self.assertIn("\n{}".format(section), fast_mode.HELP)
+        self.assertTrue(all(len(line) <= 80 for line in fast_mode.HELP.splitlines()))
+
+    def help_shown(self, terminal):
+        """The help as argparse prints it, at a terminal that shows colours, with standard output
+        on that terminal or not, as `terminal` says, and standard error the other way."""
+        with mock.patch.dict(os.environ, {"TERM": "xterm"}, clear=True), \
+                contextlib.redirect_stdout(Screen(terminal)), \
+                contextlib.redirect_stderr(Screen(not terminal)):
+            return fast_mode.Parser().format_help()
+
+    def test_the_help_has_the_colours_of_mhfe_serve_on_a_terminal(self):
+        # argparse prints the help to standard output, so that stream decides (CORE-37, CORE-38):
+        # bold cyan headings, cyan command and options, grey placeholders and closing note, as
+        # `mhfe serve --help` shows them; plain text when standard output is not a terminal.
+        shown, plain = self.help_shown(True), self.help_shown(False)
+        self.assertEqual(plain, fast_mode.HELP)
+        self.assertEqual(COLOUR_CODE.sub("", shown), fast_mode.HELP)
+        for heading in ("Usage:", "Arguments:", "Options:", "Examples:"):
+            self.assertIn("\n\x1b[1;36m{}\x1b[0m".format(heading), shown)
+        for option in ("python3 mhfe-fast-mode.py", "--no-browser", "-h", "--help"):
+            self.assertIn("\x1b[36m{}\x1b[0m".format(option), shown)
+        self.assertIn("\x1b[90m[OPTIONS]\x1b[0m \x1b[90m[FILE]\x1b[0m", shown)
+        note = "".join("\x1b[90m{}\x1b[0m\n".format(line)
+                       for line in fast_mode.HELP.rstrip("\n").split("\n\n")[-1].split("\n"))
+        self.assertTrue(shown.endswith(note), shown)
+
+    def test_messages_are_marked_and_wrapped_as_mhfe_shows_them(self):
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            fast_mode.error("There is no readable {} in {}: No such file or directory. The fast "
+                            "mode serves a page only when its checksum file lies next to it; "
+                            "nothing was served.".format(fast_mode.CHECKSUM_FILE, "/a/b" * 10))
+            fast_mode.ok("SHA-256 of tool.html verified")
+        lines = error.getvalue().splitlines()
+        self.assertEqual(lines[0], "")
+        self.assertTrue(lines[1].startswith("✗ Error: "), lines)
+        self.assertTrue(all(line.startswith(" " * 9) for line in lines[2:-1]), lines)
+        self.assertEqual(lines[-1], "✓ SHA-256 of tool.html verified")
+        self.assertTrue(all(len(line) <= 78 for line in lines), lines)
+
+    def test_a_coloured_text_wraps_where_its_plain_text_does(self):
+        # Colour codes take no column (style::wrap): the running line fits 78 columns on a colour
+        # terminal too, with no lone "stop." under it.
+        words = "Serve the page and print its address to open by hand, as mhfe serve does".split()
+        painted = " ".join(fast_mode.coloured(fast_mode.MUTED, word) for word in words)
+        independent = textwrap.wrap(" ".join(words), 20)
+        self.assertEqual([COLOUR_CODE.sub("", line) for line in fast_mode.wrapped(painted, 20)],
+                         independent)
+        screen = Screen(True)
+        with tempfile.TemporaryDirectory() as folder:
+            page = os.path.join(folder, "tool.html")
+            with open(page, "wb") as file:
+                file.write(PAGE)
+            with open(os.path.join(folder, fast_mode.CHECKSUM_FILE), "w", encoding="utf-8") as file:
+                file.write("{}  tool.html\n".format(fast_mode.sha256_of(PAGE)))
+            original = fast_mode.serve
+            fast_mode.serve = stopped_by_ctrl_c
+            try:
+                with mock.patch.dict(os.environ, {"TERM": "xterm"}, clear=True), \
+                        contextlib.redirect_stderr(screen):
+                    self.assertEqual(fast_mode.main(["--no-browser", page]), fast_mode.SUCCESS)
+            finally:
+                fast_mode.serve = original
+        self.assertIn("\x1b[", screen.getvalue())
+        lines = [COLOUR_CODE.sub("", line) for line in screen.getvalue().splitlines()]
+        running = "✓ Fast mode is running. Close this window or press Ctrl+C to stop."
+        self.assertIn(running, lines)
+        self.assertNotIn("stop.", [line.strip() for line in lines])
+        self.assertTrue(all(len(line) <= fast_mode.TEXT_WIDTH for line in lines), lines)
+
+    @unittest.skipIf(os.name == "nt", "the launcher never colours the Windows console")
+    def test_colours_follow_anstream(self):
+        # The rule was copied from these versions; a new one may answer otherwise.
+        with open(os.path.join(ROOT, "Cargo.lock"), encoding="utf-8") as lock:
+            locked = lock.read()
+        for crate, version in (("anstream", "1.0.0"), ("anstyle-query", "1.1.5")):
+            self.assertIn('name = "{}"\nversion = "{}"\n'.format(crate, version), locked,
+                          "compare colours() with the new {} and this table".format(crate))
+        for environment, terminal, expected in self.ANSTREAM_ANSWERS:
+            with mock.patch.dict(os.environ, environment, clear=True):
+                answer = fast_mode.colours(Screen(terminal))
+            self.assertEqual(answer, expected, (environment, terminal))
+
+    def test_colours_follow_the_environment(self):
+        # The same rule through the script itself, on a pseudo-terminal or a pipe.
+        missing = os.path.join(tempfile.gettempdir(), "mhfe-no-such-folder", "tool.html")
+        for environment, terminal, coloured in (
+            ({"TERM": "xterm"}, True, True),
+            ({}, True, False),
+            ({"TERM": "xterm", "NO_COLOR": "1"}, True, False),
+            ({"TERM": "xterm", "NO_COLOR": "1", "CLICOLOR_FORCE": "1"}, True, False),
+            ({"TERM": "xterm", "CLICOLOR": "0"}, True, False),
+            ({"TERM": "dumb"}, True, False),
+            ({"CLICOLOR_FORCE": "1"}, False, True),
+            ({"CLICOLOR_FORCE": "0"}, False, True),
+            ({}, False, False),
+        ):
+            output = self.run_script([missing], environment, terminal)
+            self.assertIn("Error:".encode(), output)
+            self.assertEqual(b"\x1b[" in output, coloured, (environment, terminal, output))
+
+
+def stopped_by_ctrl_c(*arguments, **options):
+    """A stand-in for serve() that the person stops at once."""
+    raise KeyboardInterrupt
+
+
+class AcceptErrors(unittest.TestCase):
+    """serve() keeps serving after a connection it could not accept, pausing rather than spinning,
+    and ends only when its listener is closed (AUD-023-FUN003)."""
+
+    class StandIn:
+        def __init__(self, errors):
+            self.errors = list(errors)
+            self.calls = []
+            self.closed = False
+
+        def settimeout(self, seconds):
+            pass
+
+        def fileno(self):
+            return -1 if self.closed else 3
+
+        def accept(self):
+            self.calls.append(time.monotonic())
+            if self.errors:
+                raise self.errors.pop(0)
+            self.closed = True
+            raise OSError(9, "Bad file descriptor")
+
+    def test_an_accept_error_does_not_end_serving(self):
+        for error in (ConnectionAbortedError(103, "aborted"), ConnectionResetError(104, "reset"),
+                      OSError(24, "Too many open files"), OSError(23, "Too many open files in system"),
+                      OSError(105, "No buffer space available"), InterruptedError(4, "interrupted")):
+            listener = self.StandIn([error])
+            fast_mode.serve(listener, HOST, PAGE)
+            self.assertEqual(len(listener.calls), 2, "{!r}: serve() looked again".format(error))
+            self.assertTrue(listener.closed)
+
+    def test_the_loop_pauses_rather_than_spins(self):
+        listener = self.StandIn([OSError(24, "Too many open files")] * 3)
+        fast_mode.serve(listener, HOST, PAGE)
+        gaps = [later - earlier for earlier, later in zip(listener.calls, listener.calls[1:])]
+        self.assertTrue(all(gap >= fast_mode.ACCEPT_ERROR_PAUSE * 0.9 for gap in gaps), gaps)
 
 
 class ChecksumFile(unittest.TestCase):
@@ -196,9 +505,8 @@ class ChecksumFile(unittest.TestCase):
         return str(caught.exception)
 
     def test_the_name_matches_the_rust_launcher(self):
-        with open(os.path.join(os.path.dirname(SCRIPT), "..", "src", "bin", "mhfe", "serve.rs"),
-                  encoding="utf-8") as source:
-            self.assertIn('CHECKSUM_FILE: &str = "{}"'.format(fast_mode.CHECKSUM_FILE), source.read())
+        self.assertIn('CHECKSUM_FILE: &str = "{}"'.format(fast_mode.CHECKSUM_FILE),
+                      rust_source("serve.rs"))
 
     def test_serves_a_page_named_with_its_sha256(self):
         self.write_checksum_file("{}  tool.html\n".format(self.digest))
@@ -267,6 +575,16 @@ class ChecksumFile(unittest.TestCase):
         self.write_checksum_file("{}  to\x1bol.html\n".format(self.digest))
         self.assertIn("must hold exactly one line", self.refusal())
 
+    def test_the_checksum_format_is_said_as_mhfe_serve_says_it(self):
+        # The format in words, as MALFORMED in src/bin/mhfe/serve.rs says it, not as a pattern
+        # with two spaces that wrapping would join (AUD-023-UI009).
+        source = rust_source("serve.rs")
+        start = source.index('const MALFORMED: &str = "') + len('const MALFORMED: &str = "')
+        literal = source[start:source.index('";', start)]
+        malformed = re.sub(r"\\\n\s*", "", literal)
+        self.write_checksum_file("{}\ttool.html\n".format(self.digest))
+        self.assertTrue(self.refusal().endswith(malformed), self.refusal())
+
     def test_a_checksum_file_that_is_not_utf8_is_refused(self):
         with open(os.path.join(self.folder, fast_mode.CHECKSUM_FILE), "wb") as file:
             file.write(b"\xff\xfe  tool.html\n")
@@ -274,9 +592,6 @@ class ChecksumFile(unittest.TestCase):
 
     def test_a_mistyped_argument_is_shown_escaped(self):
         # argparse repeats an unknown argument; its control characters reach no terminal.
-        import contextlib
-        import io
-
         error = io.StringIO()
         with contextlib.redirect_stderr(error), self.assertRaises(SystemExit) as caught:
             fast_mode.main(["--x\x1b]52;c;QUFB\x07", "--\x9b2J"])
@@ -292,22 +607,55 @@ class ChecksumFile(unittest.TestCase):
         path = "/tmp/x\u001b]0;TITLE\u0007y/tool.html"
         expected = "/tmp/x\\u{1b}]0;TITLE\\u{7}y/tool.html"
         self.assertEqual(fast_mode.shown(path), expected)
-        with open(os.path.join(os.path.dirname(SCRIPT), "..", "src", "bin", "mhfe", "serve.rs"),
-                  encoding="utf-8") as source:
-            self.assertIn(expected.replace("\\", "\\\\"), source.read())
+        self.assertIn(expected.replace("\\", "\\\\"), rust_source("serve.rs"))
+
+    def test_the_address_is_shown_whatever_the_opener_does(self):
+        # An opener that starts but fails, or opens an unwanted browser, still leaves the address
+        # on the screen, as mhfe serve does (AUD-023-UI010).
+        self.write_checksum_file("{}  tool.html\n".format(self.digest))
+        for opened in (True, False):
+            error = io.StringIO()
+            original_open, original_serve = fast_mode.webbrowser.open, fast_mode.serve
+            fast_mode.webbrowser.open = lambda address, opened=opened: opened
+            fast_mode.serve = stopped_by_ctrl_c
+            try:
+                with contextlib.redirect_stderr(error):
+                    self.assertEqual(fast_mode.main([self.page]), fast_mode.SUCCESS)
+            finally:
+                fast_mode.webbrowser.open, fast_mode.serve = original_open, original_serve
+            self.assertIn("http://127.0.0.1:", error.getvalue(), repr(error.getvalue()))
 
     def test_without_arguments_the_page_next_to_the_script_is_served(self):
         original = fast_mode.__file__
         fast_mode.__file__ = os.path.join(self.folder, "mhfe-fast-mode.py")
+        served = []
+
+        def serve_once(listener, host, page, *rest):
+            # What a browser gets from the server main() started, then Ctrl+C (AUD-023-ARC017).
+            served.append(fast_mode.respond(request("GET", "/", host) + "\r\n", host, page))
+            raise KeyboardInterrupt
+
+        original_serve = fast_mode.serve
         try:
             # No checksum file: an explanation and the invalid-input exit code.
-            self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.INVALID_INPUT)
-            # A wrong checksum: refused before any socket is opened.
-            self.write_checksum_file("{}  tool.html\n".format("00" * 32))
-            self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.INVALID_INPUT)
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.INVALID_INPUT)
+                # A wrong checksum: refused before any socket is opened.
+                self.write_checksum_file("{}  tool.html\n".format("00" * 32))
+                self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.INVALID_INPUT)
+                # The right one: the page next to the script is served.
+                self.write_checksum_file("{}  tool.html\n".format(self.digest))
+                fast_mode.serve = serve_once
+                self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.SUCCESS)
         finally:
             fast_mode.__file__ = original
+            fast_mode.serve = original_serve
+        self.assertEqual(status_line(served[0]), "HTTP/1.1 200 OK")
+        self.assertTrue(served[0].endswith(PAGE))
 
 
 if __name__ == "__main__":
+    # Each test sets the colour variables it needs; none comes from the shell that runs them.
+    for variable in COLOUR_VARIABLES:
+        os.environ.pop(variable, None)
     unittest.main(verbosity=1)

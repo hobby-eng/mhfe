@@ -4,11 +4,12 @@
 
 use std::io::IsTerminal;
 
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use clap::Args;
+use mhfe::check_word::DRAWN_WORDS;
 use mhfe::new_password::{
     character_bits, word_bits, word_index_of_rolls, PasswordRecipe, CHARACTERS, DEFAULT_CHARACTERS,
-    DEFAULT_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
+    DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
 };
 use zeroize::Zeroizing;
 
@@ -21,12 +22,12 @@ use crate::terminal::{self, Input};
 
 #[derive(Args)]
 pub struct Options {
-    /// Number of words, 1 to 32 (default 5; fewer than 4 are weak)
     #[arg(
         long,
         value_name = "N",
         default_value_t = DEFAULT_WORDS,
         hide_default_value = true,
+        help = words_short_help(),
         long_help = words_help()
     )]
     words: usize,
@@ -35,12 +36,16 @@ pub struct Options {
     #[arg(long, long_help = dice_help())]
     dice: bool,
 
-    /// Five words and a check word that repairs one mistyped word
-    #[arg(long, conflicts_with_all = ["words", "chars"], long_help = check_word_help())]
+    #[arg(
+        long,
+        conflicts_with_all = ["words", "chars"],
+        help = check_word_short_help(),
+        long_help = check_word_help()
+    )]
     check_word: bool,
 
-    /// Random characters instead of words, N of them (default 16)
     #[arg(
+        help = chars_short_help(),
         long,
         value_name = "N",
         num_args = 0..=1,
@@ -55,39 +60,69 @@ pub struct Options {
 /// test keeps equal to the library's number.
 const CHARS_ALONE: &str = "16";
 
+/// The short helps, built from the library's limits and defaults (AUD-023-ARC007).
+fn words_short_help() -> String {
+    format!(
+        "Number of words, 1 to {MOST_WORDS} (default {DEFAULT_WORDS}; fewer than \
+         {RECOMMENDED_WORDS} are weak)"
+    )
+}
+
+fn check_word_short_help() -> String {
+    format!(
+        "{} words and a check word that repairs one mistyped word",
+        style::number_word(DRAWN_WORDS, true)
+    )
+}
+
+fn chars_short_help() -> String {
+    format!("Random characters instead of words, N of them (default {DEFAULT_CHARACTERS})")
+}
+
 fn words_help() -> String {
     style::option_help(&[
-        "Number of words, 1 to 32 (default 5; fewer than 4 are weak).",
+        &format!("{}.", words_short_help()),
         &format!(
-            "Each word adds about {} bits: four words give about {} bits, five about {}, six \
-             about {}. Fewer than four get a warning.",
+            "Each word adds about {} bits: {} words give about {} bits, {} about {}, {} about \
+             {}. Fewer than {} get a warning.",
             word_bits(1),
-            word_bits(4),
-            word_bits(5),
-            word_bits(6)
+            style::number_word(RECOMMENDED_WORDS, false),
+            word_bits(RECOMMENDED_WORDS),
+            style::number_word(DEFAULT_WORDS, false),
+            word_bits(DEFAULT_WORDS),
+            style::number_word(DEFAULT_WORDS + 1, false),
+            word_bits(DEFAULT_WORDS + 1),
+            style::number_word(RECOMMENDED_WORDS, false)
         ),
     ])
 }
 
 fn check_word_help() -> String {
     style::option_help(&[
-        "Five words and a check word that repairs one mistyped word.",
-        "The sixth word is computed from the five before it (MHFE-PASSWORD-CHECK-1). When the \
-         password is typed, it restores one word that is missing or misspelt and notices one \
-         wrong word, before the long wait. It adds no strength: the password keeps about the \
-         bits of its five words, and the check word must stay as secret as the rest.",
+        &format!("{}.", check_word_short_help()),
+        &format!(
+            "The last word is computed from the {drawn} before it (MHFE-PASSWORD-CHECK-1). When \
+             the password is typed, it restores one word that is missing or misspelt and notices \
+             one wrong word, before the long wait. It adds no strength: the password keeps about \
+             the bits of its {drawn} words, and the check word must stay as secret as the rest.",
+            drawn = style::number_word(DRAWN_WORDS, false)
+        ),
     ])
 }
 
 fn chars_help() -> String {
     style::option_help(&[
-        "Random characters instead of words, N of them, 1 to 64 (default 16).",
+        &format!(
+            "Random characters instead of words, N of them, 1 to {MOST_CHARACTERS} (default \
+             {DEFAULT_CHARACTERS})."
+        ),
         &format!(
             "Digits and letters without those easily confused, such as 0 and O or 1 and l: {} \
-             characters, about {} bits each. Sixteen give about {} bits, but words are easier to \
+             characters, about {} bits each. {} give about {} bits, but words are easier to \
              type correctly years later.",
             CHARACTERS.len(),
             character_bits(1),
+            style::number_word(DEFAULT_CHARACTERS, true),
             character_bits(DEFAULT_CHARACTERS)
         ),
     ])
@@ -96,15 +131,19 @@ fn chars_help() -> String {
 fn dice_help() -> String {
     style::option_help(&[
         "Roll real dice instead of using the computer's randomness.",
-        "For each word, roll five dice and type the five numbers, 1 to 6, at a hidden prompt. \
-         The computer's random generator is then not used at all.",
+        "For each word, roll five dice and type the five numbers, 1 to 6: they are shown on the \
+         private screen, which is cleared afterwards, or hidden where there is none. The \
+         computer's random generator is then not used at all.",
     ])
 }
+
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Make a strong password of words or characters";
 
 /// The top of `mhfe password --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Make a strong password of words or characters",
+        SUMMARY,
         "Each word is drawn from the EFF large word list of 7,776 words, the same list that \
          five dice select from. Every word is equally likely.",
     ])
@@ -112,22 +151,39 @@ pub fn about() -> String {
 
 /// The end of `mhfe password -h` and `--help`.
 pub fn help() -> String {
-    let five = format!("Five random words, about {} bits", word_bits(5));
-    let six = format!("Six words, about {} bits", word_bits(6));
-    let checked = format!("Five words and a check word, about {} bits", word_bits(5));
+    let five = format!(
+        "{} random words, about {} bits",
+        style::number_word(DEFAULT_WORDS, true),
+        word_bits(DEFAULT_WORDS)
+    );
+    let more = DEFAULT_WORDS + 1;
+    let six = format!(
+        "{} words, about {} bits",
+        style::number_word(more, true),
+        word_bits(more)
+    );
+    let more_command = format!("mhfe password --words {more}");
+    let more_dice_command = format!("mhfe password --dice --words {more}");
+    let more_dice = format!("{} words from real dice", style::number_word(more, true));
+    let checked = format!(
+        "{} words and a check word, about {} bits",
+        style::number_word(DRAWN_WORDS, true),
+        word_bits(DRAWN_WORDS)
+    );
     let characters = format!(
-        "Sixteen random characters, about {} bits",
+        "{} random characters, about {} bits",
+        style::number_word(DEFAULT_CHARACTERS, true),
         character_bits(DEFAULT_CHARACTERS)
     );
     style::examples_with_note(
         &[
             ("mhfe password", &five),
-            ("mhfe password --words 6", &six),
+            (&more_command, &six),
             (
                 "mhfe password --dice",
                 "Roll real dice instead of using the computer",
             ),
-            ("mhfe password --dice --words 6", "Six words from real dice"),
+            (&more_dice_command, &more_dice),
             ("mhfe password --check-word", &checked),
             ("mhfe password --chars", &characters),
         ],
@@ -209,10 +265,10 @@ const TITLE: &str = "Make a password";
 fn show(password: &str, strength: &str, notes: &[&str], flow: Flow) -> Result<i32, Failure> {
     flow::step();
     if std::io::stdout().is_terminal() {
-        println!("  {STRONG}{password}{STRONG:#}");
+        style::out(format_args!("  {STRONG}{password}{STRONG:#}"))?;
         eprintln!();
     } else {
-        println!("{password}");
+        style::out(format_args!("{password}"))?;
     }
     style::ok(strength);
     for note in notes {
@@ -240,8 +296,8 @@ fn run_characters(count: usize) -> Result<i32, Failure> {
     )
 }
 
-/// Reads five dice digits, hidden, for each of `words` words; the list indexes are wiped when
-/// dropped.
+/// Reads five dice digits for each of `words` words, shown on the private screen or hidden where
+/// there is none; the list indexes are wiped when dropped.
 fn read_dice(input: &mut Input, words: usize) -> Result<Zeroizing<Vec<usize>>, Failure> {
     let mut indexes = Zeroizing::new(Vec::with_capacity(words));
     for number in 1..=words {
@@ -250,7 +306,8 @@ fn read_dice(input: &mut Input, words: usize) -> Result<Zeroizing<Vec<usize>>, F
     Ok(indexes)
 }
 
-/// Reads five dice digits for one word, hidden, and returns the word's index.
+/// Reads five dice digits for one word, shown on the private screen or hidden where there is
+/// none, and returns the word's index.
 fn index_from_dice(input: &mut Input, number: usize) -> Result<usize, Failure> {
     loop {
         let typed = input.secret(&format!(

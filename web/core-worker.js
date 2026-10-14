@@ -77,7 +77,7 @@ const CORE_OPERATIONS = {
       argon2,
       host.progress,
     );
-    try {
+    return withSession(session, async () => {
       const compare = (reference) =>
         JSON.parse(
           session.compare(
@@ -89,20 +89,22 @@ const CORE_OPERATIONS = {
           ),
         );
       const result = compare(request);
-      if (result.matches || !request.asksLength) return result;
-      const next = await host.ask("noLength", null);
+      // Detection that found no verified length, none or several, asks the page for the length.
+      if (result.outcome !== "notVerified" || !request.asksLength) return result;
+      const next = await host.ask("noLength", result.evidence);
       if (next === null) return result;
       try {
         return compare(next);
       } finally {
         wipeSecrets(next);
       }
-    } finally {
-      session.free();
-    }
+    });
   },
 
   searchCandidates: (request) => JSON.parse(mhfe.searchCandidates(request.container)),
+
+  keepOldContainer: (request) =>
+    JSON.parse(mhfe.keepOldContainer(request.pim, request.memoryLevel)),
 
   searchDecoy: (request, host) =>
     JSON.parse(
@@ -169,6 +171,15 @@ const CORE_OPERATIONS = {
     return { ...report, parameters };
   },
 
+  /**
+   * The process parts of the command-line tool's self-test as a page reports them: the memory
+   * lock from the library's probe and the parts a page cannot check, not available.
+   */
+  selfCheckProcess: (request, host) =>
+    host.selfCheck(request.tier, (onStart, onResult) =>
+      mhfe.selfCheckProcess(request.tier, request.skip, onStart, onResult),
+    ),
+
   /** The self-check of the Argon2 build in front of the worker alone. */
   async selfCheckArgon2(request, host) {
     const start = await argon2ForCheck(request);
@@ -198,7 +209,7 @@ const CORE_OPERATIONS = {
       request.memoryLevel,
       argon2,
     );
-    try {
+    return withSession(session, async () => {
       session.setNew(
         request.newPassword,
         request.newPasswordRepeat,
@@ -210,17 +221,22 @@ const CORE_OPERATIONS = {
       );
       const recovered = await recoverConfirmed(session, request, host);
       if (recovered.ownerCheck !== null) {
-        const confirmed = await host.ask("ownerCheck", recovered.ownerCheck);
-        session.ownerAnswer(confirmed === true);
+        const answer = await host.ask("ownerCheck", {
+          ...recovered.ownerCheck,
+          rehearsalNeedsPassphrase: recovered.rehearsalNeedsPassphrase,
+        });
+        try {
+          session.ownerAnswer(answer?.confirmed === true, answer?.passphrase ?? new Uint8Array());
+        } finally {
+          wipeSecrets(answer);
+        }
       }
       const sealed = JSON.parse(
         session.seal(host.progress, (json) => host.post("unverified", JSON.parse(json))),
       );
       // The 16-bit source check of the recovered 24-word reading, reported beside the result.
       return { ...sealed, walletCheck: recovered.walletCheck };
-    } finally {
-      session.free();
-    }
+    });
   },
 
   /**
@@ -237,7 +253,7 @@ const CORE_OPERATIONS = {
       request.mainPassphrase,
       argon2,
     );
-    try {
+    return withSession(session, async () => {
       const keepsSessionOpen = new Set(JSON.parse(mhfe.suiteParameters()).hiddenWalletRefusals);
       let next = await host.ask("ready", null);
       while (next !== null && next?.close !== true) {
@@ -264,9 +280,7 @@ const CORE_OPERATIONS = {
         next = await host.ask(...reply);
       }
       return { closed: true };
-    } finally {
-      session.free();
-    }
+    });
   },
 };
 
@@ -292,6 +306,8 @@ async function recoverConfirmed(session, request, host) {
     try {
       return JSON.parse(confirm());
     } catch (error) {
+      // After a trap the session is not asked anything more (withSession).
+      if (error instanceof WebAssembly.RuntimeError) throw error;
       refusal = error;
     }
     const ownerLengths = JSON.parse(session.ownerLengths());

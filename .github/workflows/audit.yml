@@ -1,9 +1,10 @@
 name: RustSec audit
 
 on:
-  # Branches only, as for CI: a release tag adds nothing to check.
+  # Branches, as for CI, Dependabot's through their pull requests alone (AUD-023-BLD006). A
+  # release tag is audited by release.yml, which calls this workflow.
   push:
-    branches: ["**"]
+    branches: ["**", "!dependabot/**"]
     paths:
       - Cargo.toml
       - Cargo.lock
@@ -15,10 +16,17 @@ on:
       - .github/workflows/audit.yml
   schedule:
     - cron: "17 4 * * 1"
+  # The release workflow audits the tagged commit in a job of its own, apart from the job that
+  # builds the attested archives (AUD-023-BLD007).
+  workflow_call:
   workflow_dispatch:
 
+# As in ci.yml: a branch of this repository and its pull request share one group.
 concurrency:
-  group: rustsec-${{ github.ref }}
+  group: >-
+    rustsec-${{ github.ref_type }}
+    ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+    ${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:

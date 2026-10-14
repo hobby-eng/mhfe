@@ -179,7 +179,11 @@ pub fn describe_address(
     scan_gap: f64,
 ) -> Result<String, JsError> {
     // 0 is the usual search; a gap is where the decoy search of two missing words looks.
-    let limits = match whole_number(scan_gap, "INVALID_REQUEST", "scanGap")? {
+    let limits = match whole_number(
+        scan_gap,
+        MhfeError::InvalidRequest(String::new()).code(),
+        "scanGap",
+    )? {
         0 => SearchLimits::default(),
         gap => SearchLimits::first_account(gap).map_err(js_error)?,
     };

@@ -1,4 +1,5 @@
-//! Compiles the vendored reference Argon2 code for native builds.
+//! Compiles the vendored reference Argon2 code for native builds, and cuts the password cases
+//! out of the suite 3 validation fixture for every build.
 //!
 //! The browser package does not use this: it compiles the same C code with Emscripten
 //! (`scripts/build-argon2-wasm.sh`) and the WebAssembly core calls it through JavaScript.
@@ -19,8 +20,34 @@ const COMMON_SOURCES: [&str; 5] = [
     "src/blake2/blake2b.c",
 ];
 
+/// The suite 3 validation fixture, whose `passwords` section the passwords module reads alone.
+const VALIDATION_FIXTURE: &str = "tests/fixtures/validation-cases.json";
+
+/// Writes the `passwords` section of [`VALIDATION_FIXTURE`] as a fixture of its own to
+/// `OUT_DIR/validation-passwords.json`, so that a build with the passwords module alone carries
+/// the password cases and none of the cases of the formats check (AUD-023-BLD009). The fixture is
+/// written with two spaces per level, so the section ends at the first `]` at its own level.
+fn write_password_cases() {
+    println!("cargo:rerun-if-changed={VALIDATION_FIXTURE}");
+    let fixture = std::fs::read_to_string(VALIDATION_FIXTURE).expect("the fixture is readable");
+    let start = fixture
+        .find("\n  \"passwords\": [")
+        .expect("the fixture has a passwords section");
+    let length = fixture[start..]
+        .find("\n  ]")
+        .expect("the passwords section ends")
+        + "\n  ]".len();
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
+    std::fs::write(
+        out_dir.join("validation-passwords.json"),
+        format!("{{{}\n}}\n", &fixture[start..start + length]),
+    )
+    .expect("OUT_DIR is writable");
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    write_password_cases();
     println!("cargo:rerun-if-changed={ARGON2_DIR}");
     println!("cargo:rerun-if-changed={SIMD_CHOICE}");
 

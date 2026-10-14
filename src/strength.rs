@@ -8,6 +8,10 @@
 use std::sync::OnceLock;
 
 use crate::eff::{EffList, MILLIBITS_PER_WORD};
+use crate::new_password::bits_of;
+
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
+pub(crate) mod known_answers;
 
 /// About 50 bits, a little under four different dice words (51.7 bits), the least the README
 /// recommends: a weaker password gets a warning before it protects a phrase.
@@ -98,6 +102,12 @@ impl Strength {
         self.bits
     }
 
+    /// The estimate in whole millibits, as the known answers compare it.
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
+    pub(crate) fn millibits(self) -> u32 {
+        (self.bits * f64::from(crate::new_password::MILLIBITS_PER_BIT)).round() as u32
+    }
+
     /// Whether the password deserves a warning before it protects a phrase.
     pub fn is_weak(self) -> bool {
         self.bits < WEAK_BELOW_BITS
@@ -107,7 +117,7 @@ impl Strength {
 fn estimated_bits(password: &str) -> f64 {
     let dice_words = EffList::get().different_dice_words(password);
     if dice_words > 0 {
-        return (dice_words * MILLIBITS_PER_WORD) as f64 / 1000.0;
+        return bits_of(dice_words * MILLIBITS_PER_WORD);
     }
     let end = password
         .char_indices()

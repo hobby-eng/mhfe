@@ -35,41 +35,9 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-expected_bindgen="wasm-bindgen 0.2.129"
-actual_bindgen="$(wasm-bindgen --version)"
-if [[ "$actual_bindgen" != "$expected_bindgen" ]]; then
-  echo "Expected $expected_bindgen, found $actual_bindgen" >&2
-  exit 1
-fi
-
 bindgen_dir="target/wasm-bindgen"
 rm -rf "$bindgen_dir"
-mkdir -p "$bindgen_dir"
-# Cargo's target folder, relative to the repository root as cargo reads it from here.
-target_dir="${CARGO_TARGET_DIR:-target}"
-
-# The folders of this machine that would be compiled into the WebAssembly, such as the panic
-# locations of the dependencies under CARGO_HOME, are written under the fixed names of
-# packaging/remap-builder-paths.sh, the one remapping of every build: cargo/registry/src/...
-# instead of /home/<account>/.../registry/src/..., the same names as in the native programs and in
-# the canonical build. A caller that already remapped, as scripts/check.sh and the Dockerfile do,
-# gets nothing twice. It refuses RUSTFLAGS and CARGO_ENCODED_RUSTFLAGS, which would replace the
-# remapping; extra flags go into CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS instead.
-# scripts/verify-browser-package.mjs refuses a WebAssembly that names any other absolute source
-# path.
-. packaging/remap-builder-paths.sh
-remap_builder_paths "$repo_root"
-
-# "no-modules" makes the glue a classic script that defines the global `mhfe`, to be joined into
-# the worker.
-cargo rustc --locked --release --lib --target wasm32-unknown-unknown --no-default-features \
-  --features wasm --crate-type cdylib
-wasm-bindgen "$target_dir/wasm32-unknown-unknown/release/mhfe.wasm" \
-  --target no-modules \
-  --no-modules-global mhfe \
-  --no-typescript \
-  --out-dir "$bindgen_dir" \
-  --out-name mhfe
+scripts/bind-wasm.sh wasm "$bindgen_dir"
 # The glue's asynchronous loader fetches the WebAssembly by URL; the worker uses initSync instead.
 node scripts/remove-network-code.mjs glue "$bindgen_dir/mhfe.js"
 

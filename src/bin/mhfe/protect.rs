@@ -23,7 +23,7 @@ use std::cell::Cell;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
+use mhfe::self_check::{process, ComponentCheck, ComponentOutcome, Tier};
 
 /// Forbids core dumps of this process and, on Linux, makes it non-dumpable, which also keeps
 /// other processes of the same user from attaching to it (ptrace) or reading /proc/PID/mem. A
@@ -87,7 +87,7 @@ pub fn interrupt_on_quit_and_suspend() -> bool {
 }
 
 /// The identifier of [`CoreDumpCheck`] in a self-check report.
-pub const CORE_DUMPS_ID: &str = "core-dumps";
+pub const CORE_DUMPS_ID: &str = process::CORE_DUMPS.id;
 
 /// How one protection reads back from the kernel.
 // Windows reads nothing back: there, only the tests construct every variant.
@@ -200,7 +200,7 @@ impl ComponentCheck for CoreDumpCheck {
     }
 
     fn label(&self) -> &'static str {
-        "Core dumps"
+        process::CORE_DUMPS.label
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
@@ -493,7 +493,7 @@ mod platform_probes {
 }
 
 /// The identifier of [`IsolationCheck`] in a self-check report.
-pub const ISOLATION_ID: &str = "isolation";
+pub const ISOLATION_ID: &str = process::ISOLATION.id;
 
 /// The `isolation` check: whether what [`isolate`] reported for the calling thread holds. It is not
 /// a failure when it does not: the summary of the command then states only what holds, with a
@@ -532,7 +532,7 @@ impl ComponentCheck for IsolationCheck {
     }
 
     fn label(&self) -> &'static str {
-        "Isolation"
+        process::ISOLATION.label
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
@@ -815,25 +815,37 @@ pub struct SwapArea {
     pub unknown: bool,
 }
 
+/// An inspected swap inventory, or an unavailable Linux inventory that must still warn.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SwapInventory {
+    Available(Vec<SwapArea>),
+    Unavailable,
+}
+
 /// The swap areas that are not encrypted by dm-crypt, or whose encryption cannot be told. An
-/// area in memory (zram) is safe. Empty when there is no swap or this is not Linux.
-pub fn unprotected_swap() -> Vec<SwapArea> {
+/// area in memory (zram) is safe only without a writeback device, or with an encrypted one. A
+/// readable empty inventory is distinct from a failed read.
+pub fn unprotected_swap() -> SwapInventory {
     if cfg!(target_os = "linux") {
         unprotected_swap_under(Path::new("/"))
     } else {
         // macOS encrypts its swap; Windows keeps its page file without telling.
-        Vec::new()
+        SwapInventory::Available(Vec::new())
     }
 }
 
 /// [`unprotected_swap`] with /proc and /sys under `root`, so that a test can supply its own.
-fn unprotected_swap_under(root: &Path) -> Vec<SwapArea> {
-    let Ok(swaps) = fs::read_to_string(root.join("proc/swaps")) else {
-        return Vec::new();
+fn unprotected_swap_under(root: &Path) -> SwapInventory {
+    swap_inventory(fs::read_to_string(root.join("proc/swaps")), root)
+}
+
+fn swap_inventory(read: std::io::Result<String>, root: &Path) -> SwapInventory {
+    let Ok(swaps) = read else {
+        return SwapInventory::Unavailable;
     };
     // "Filename Type Size Used Priority", one line per area after the heading; spaces in a name
     // are written as \040.
-    swaps
+    let areas = swaps
         .lines()
         .skip(1)
         .filter_map(|line| {
@@ -848,19 +860,20 @@ fn unprotected_swap_under(root: &Path) -> Vec<SwapArea> {
                 "partition" => device_of_node(root, &name),
                 _ => device_of_file(root, &name),
             };
-            match device {
-                Some(device) if encrypted(root, &device, 0) => None,
-                Some(_) => Some(SwapArea {
+            match device.map(|device| protected(root, &device, 0)) {
+                Some(Some(true)) => None,
+                Some(Some(false)) => Some(SwapArea {
                     name,
                     unknown: false,
                 }),
-                None => Some(SwapArea {
+                Some(None) | None => Some(SwapArea {
                     name,
                     unknown: true,
                 }),
             }
         })
-        .collect()
+        .collect();
+    SwapInventory::Available(areas)
 }
 
 /// The kernel's name of the block device at a path such as /dev/sda2 or /dev/mapper/swap.
@@ -894,12 +907,35 @@ fn device_of_file(root: &Path, file: &str) -> Option<String> {
 /// Deepest stack of devices followed: LUKS under LVM under RAID is three.
 const MAX_DEVICE_DEPTH: usize = 8;
 
-/// Whether a block device is encrypted with dm-crypt, directly or through the devices it is
-/// built on (LVM on LUKS), or lies in memory (zram).
-fn encrypted(root: &Path, device: &str, depth: usize) -> bool {
+/// Whether memory swapped to a block device stays off a disk unencrypted: it is encrypted with
+/// dm-crypt, directly or through the devices it is built on (LVM on LUKS), or lies in memory
+/// (zram) without a writeback device or with a protected one. `None` when that cannot be told,
+/// as for a zram writeback device that cannot be resolved (AUD-023-SEC002).
+fn protected(root: &Path, device: &str, depth: usize) -> Option<bool> {
     if device.starts_with("zram") {
-        return true;
+        // zram writes idle or incompressible pages to its backing device, if it has one; the
+        // attribute is world-readable, and absent where writeback is not built in.
+        let backing = root
+            .join("sys/class/block")
+            .join(device)
+            .join("backing_dev");
+        return match fs::read_to_string(backing) {
+            // No attribute: no writeback. Any other error leaves the device unknown.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some(true),
+            Err(_) => None,
+            Ok(text) if matches!(text.trim(), "" | "none") => Some(true),
+            Ok(text) if depth < MAX_DEVICE_DEPTH => {
+                protected(root, &device_of_node(root, text.trim())?, depth + 1)
+            }
+            Ok(_) => None,
+        };
     }
+    Some(encrypted(root, device, depth))
+}
+
+/// Whether a block device is encrypted with dm-crypt, directly or through the devices it is
+/// built on (LVM on LUKS).
+fn encrypted(root: &Path, device: &str, depth: usize) -> bool {
     let sysfs = root.join("sys/class/block").join(device);
     // dm-crypt gives its devices a UUID starting with CRYPT-.
     if let Ok(uuid) = fs::read_to_string(sysfs.join("dm/uuid")) {
@@ -962,7 +998,10 @@ mod tests {
         }
 
         fn unprotected(&self) -> Vec<SwapArea> {
-            unprotected_swap_under(&self.0)
+            let SwapInventory::Available(areas) = unprotected_swap_under(&self.0) else {
+                panic!("the synthetic inventory could not be read");
+            };
+            areas
         }
     }
 
@@ -998,6 +1037,38 @@ mod tests {
         assert_eq!(system.unprotected(), []);
     }
 
+    /// zram is in memory unless it writes back to a device: then that device decides, and one that
+    /// cannot be resolved is unknown (AUD-023-SEC002).
+    #[test]
+    fn zram_is_protected_only_without_a_plaintext_writeback_device() {
+        let zram = |backing: Option<&str>| {
+            let system = FakeSystem::new("/dev/zram0 partition 1024 0 100\n");
+            system.device("zram0", None, &[]);
+            system.device("sdb2", None, &[]);
+            system.device("dm-4", Some("CRYPT-LUKS2-abc-swap"), &["sdb3"]);
+            if let Some(backing) = backing {
+                fs::write(system.0.join("sys/class/block/zram0/backing_dev"), backing).unwrap();
+            }
+            system.unprotected()
+        };
+        let area = |unknown| {
+            vec![SwapArea {
+                name: "/dev/zram0".into(),
+                unknown,
+            }]
+        };
+        assert_eq!(zram(None), []);
+        assert_eq!(zram(Some("none\n")), []);
+        assert_eq!(zram(Some("/dev/sdb2\n")), area(false));
+        assert_eq!(zram(Some("/dev/dm-4\n")), []);
+        assert_eq!(zram(Some("/dev/missing\n")), area(true));
+        // An attribute that is there but cannot be read leaves the device unknown.
+        let system = FakeSystem::new("/dev/zram0 partition 1024 0 100\n");
+        system.device("zram0", None, &[]);
+        fs::create_dir(system.0.join("sys/class/block/zram0/backing_dev")).unwrap();
+        assert_eq!(system.unprotected(), area(true));
+    }
+
     #[test]
     fn lvm_without_encryption_is_unprotected() {
         let system = FakeSystem::new("/dev/dm-3 partition 1024 0 -2\n");
@@ -1021,6 +1092,41 @@ mod tests {
     #[test]
     fn no_swap_needs_no_warning() {
         assert_eq!(FakeSystem::new("").unprotected(), []);
+    }
+
+    #[test]
+    fn a_missing_swap_inventory_is_not_confirmed_empty() {
+        let empty = FakeSystem::new("");
+        let missing = FakeSystem::new("");
+        fs::remove_file(missing.0.join("proc/swaps")).unwrap();
+        assert_ne!(
+            unprotected_swap_under(&missing.0),
+            unprotected_swap_under(&empty.0),
+            "AUD-020-SEC001: unknown inventory must not suppress the warning"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_swap_inventory_is_not_confirmed_empty() {
+        let empty = FakeSystem::new("");
+        let unreadable = FakeSystem::new("");
+        let path = unreadable.0.join("proc/swaps");
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(path).unwrap();
+        assert_ne!(
+            unprotected_swap_under(&unreadable.0),
+            unprotected_swap_under(&empty.0),
+            "AUD-020-SEC001: failed inventory read must remain unknown"
+        );
+    }
+
+    #[test]
+    fn a_denied_swap_inventory_remains_unavailable() {
+        let denied = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            swap_inventory(Err(denied), Path::new("/synthetic")),
+            SwapInventory::Unavailable
+        );
     }
 
     /// In a thread of its own, so that the other tests stay free: a socket cannot be opened and a

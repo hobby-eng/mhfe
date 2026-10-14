@@ -11,13 +11,13 @@ use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::operation::WalletPassphrase;
 use mhfe::wallet_check::{
-    self, NewPhrase, PhraseDraw, NEW_ENTROPY_BYTES, WALLET_CHECK_BITS, WALLET_CHECK_ODDS,
+    self, NewPhrase, PhraseDraw, NEW_ENTROPY_BITS, WALLET_CHECK_BITS, WALLET_CHECK_ODDS,
 };
 use mhfe::{OriginalFacts, Suite};
 
 use crate::check;
 use crate::choice::{self, Answer, Help, Question};
-use crate::chosen_words::{self, NeverUseOption};
+use crate::chosen_words::{self, WordWishOptions};
 use crate::container_repair::RepairWordsOption;
 use crate::encrypt;
 use crate::exit::{self, Failure, SUCCESS};
@@ -43,13 +43,33 @@ pub struct Options {
     repair_words: RepairWordsOption,
 
     #[command(flatten)]
-    never_use: NeverUseOption,
+    word_wishes: WordWishOptions,
+
+    /// A check with the BIP39 passphrase: yes or no
+    #[arg(
+        long = "wallet-check",
+        value_name = "yes|no",
+        value_parser = crate::choice::parse_yes_no,
+        long_help = wallet_check_help()
+    )]
+    wallet_check: Option<bool>,
 }
+
+fn wallet_check_help() -> String {
+    style::option_help(&[
+        "Whether the new phrase is drawn to pass a check with its BIP39 passphrase: yes or no.",
+        "Without it, a person who types a passphrase is asked, with nothing preselected. yes \
+         needs a passphrase; the check's costs are in the README.",
+    ])
+}
+
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Generate a new wallet and its container";
 
 /// The top of `mhfe new --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Generate a new wallet and its container",
+        SUMMARY,
         "Draws a new 24-word seed phrase from the operating system's random generator, shows it \
          once for your wallet, and encrypts it into a container under your password. If you \
          choose, the phrase is drawn so that it passes a check with your BIP39 passphrase, \
@@ -84,7 +104,7 @@ pub fn help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    options.never_use.check()?;
+    options.word_wishes.check()?;
     options.repair_words.check()?;
     // Every answer is a choice at the terminal; the new phrase is shown only on a private screen,
     // so the command does not start where there can be none (AUD-007-SEC001).
@@ -96,8 +116,21 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let flow = Flow::start(&input, Operation::New.title());
     let work = settings::choose(options.settings, &mut input, Operation::New)?;
     // A wallet check exists only with a passphrase, so its question comes only after one.
-    let passphrase = read_new_passphrase(&mut input)?;
-    let checked = !passphrase.is_empty() && ask_for_check()?;
+    let passphrase = read_new_passphrase(&mut input, options.wallet_check == Some(true))?;
+    let checked = match options.wallet_check {
+        Some(checked) => {
+            choice::record(
+                "Check",
+                if checked {
+                    CHECK_ANSWERS[1]
+                } else {
+                    CHECK_ANSWERS[0]
+                },
+            );
+            checked
+        }
+        None => !passphrase.is_empty() && ask_for_check()?,
+    };
     if checked {
         let strength = Strength::of(&passphrase);
         let bits = strength.bits();
@@ -122,7 +155,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     } else {
         PhraseDraw::unchecked()
     };
-    let draw = chosen_words::ask(&mut input, draw, &options.never_use)?;
+    let draw = chosen_words::ask(&mut input, draw, &options.word_wishes)?;
     let repair_count = options.repair_words.choose(&mut input)?;
     // Held locked from here on; the drawn phrase is wiped at once.
     let phrase = LockedText::copy_of(draw_phrase(draw)?.phrase());
@@ -163,21 +196,28 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     Ok(SUCCESS)
 }
 
+/// The answers whether the new phrase gets a wallet check, as asked and as recorded.
+const CHECK_ANSWERS: [&str; 2] = ["No check", "A phrase + passphrase check"];
+
+/// The bits of entropy a new phrase keeps with the wallet check.
+const BITS_LEFT_WITH_CHECK: usize = NEW_ENTROPY_BITS - WALLET_CHECK_BITS as usize;
+
 /// Asks whether the new phrase gets a wallet check with the passphrase. Nothing is preselected
 /// (AUD-010): each choice has its costs, which `?` shows, and a hurried Enter, perhaps typed ahead
 /// after the repeated passphrase, must not decide a property the phrase keeps for ever.
 fn ask_for_check() -> Result<bool, Failure> {
     let answers = [
-        Answer::new("No check", "every password opens a valid wallet"),
-        Answer::new(
-            "A phrase + passphrase check",
-            "a recovery recognises a wrong password",
-        ),
+        Answer::new(CHECK_ANSWERS[0], "every password opens a valid wallet"),
+        Answer::new(CHECK_ANSWERS[1], "a recovery recognises a wrong password"),
     ];
+    // The cost in entropy, stated calmly above both answers: 240 bits are far beyond any search.
+    let cost = format!(
+        "A check takes {WALLET_CHECK_BITS} of the {NEW_ENTROPY_BITS} bits of entropy; \
+         {BITS_LEFT_WITH_CHECK} remain, still plenty."
+    );
     let question = Question {
         text: "Do you want a check that confirms the password at recovery?",
-        // The cost in entropy, stated calmly above both answers: 240 bits are far beyond any search.
-        explanation: &["A check takes 16 of the 256 bits of entropy; 240 remain, still plenty."],
+        explanation: &[&cost],
         more: Some(readme::NEW),
         record: Some("Check"),
     };
@@ -197,8 +237,7 @@ fn ask_for_check() -> Result<bool, Failure> {
 
 /// What each choice gives and costs, shown when the person presses ?.
 fn explain() {
-    let odds = style::grouped(WALLET_CHECK_ODDS);
-    let bits = NEW_ENTROPY_BYTES as u32 * 8;
+    let odds = mhfe::grouped(WALLET_CHECK_ODDS);
     eprintln!("{}", paint(STRONG, "No check"));
     style::gives("Every password gives an equally valid wallet; decoys work.");
     style::costs("A recovery cannot tell a wrong password.");
@@ -209,8 +248,8 @@ fn explain() {
     ));
     style::gives("A password guess is tested only with a passphrase guess.");
     style::gives(&format!(
-        "About {} of the {bits} bits remain: far beyond any search.",
-        bits - WALLET_CHECK_BITS
+        "About {BITS_LEFT_WITH_CHECK} of the {NEW_ENTROPY_BITS} bits remain: far beyond any \
+         search."
     ));
     style::costs("Keep all funds under it; the wallet without it stays unused.");
     style::costs(&format!(
@@ -222,13 +261,21 @@ fn explain() {
 }
 
 /// The BIP39 passphrase of the new wallet on the private screen: Enter alone for none, otherwise
-/// typed twice.
-fn read_new_passphrase(input: &mut Input) -> Result<LockedText, Failure> {
+/// typed twice. With `checked`, the wallet check given as an option, none is refused and asked
+/// again, as the check needs one.
+fn read_new_passphrase(input: &mut Input, checked: bool) -> Result<LockedText, Failure> {
     let screen = check::passphrase_screen(input, Operation::New, "the new wallet");
     let passphrase = loop {
         let passphrase = input.secret("BIP39 passphrase of the new wallet, or Enter for none")?;
         if passphrase.is_empty() {
-            break passphrase;
+            match wallet_check::require_passphrase(&passphrase) {
+                // The check, which --wallet-check yes asked for, needs a passphrase.
+                Err(error) if checked => {
+                    style::retry(exit::refused(&error, "Please type one."));
+                    continue;
+                }
+                _ => break passphrase,
+            }
         }
         let repeated = input.secret("Repeat the passphrase")?;
         match wallet_check::require_same_passphrase(&passphrase, &repeated) {
@@ -264,7 +311,7 @@ fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
         };
         style::hint(&format!(
             "Drawing {what}, about {} draws.",
-            style::grouped(expected)
+            mhfe::grouped(expected)
         ));
     }
     let drawn = draw.draw_on_every_core(|| SystemRandom, &mut |_| Ok(()))?;
@@ -287,8 +334,12 @@ fn show_new_phrase(input: &Input, phrase: &str, passphrase: &str) -> Result<(), 
         style::title(Operation::New.title());
     }
     eprintln!();
-    eprintln!("{}", paint(HEADING, "New seed phrase, 24 words"));
-    terminal::print_phrase(phrase, Wallet::NewPassphrase(passphrase), input);
+    let words = phrase.split_whitespace().count();
+    eprintln!(
+        "{}",
+        paint(HEADING, format!("New seed phrase, {words} words"))
+    );
+    terminal::print_phrase(phrase, Wallet::NewPassphrase(passphrase), input)?;
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }

@@ -73,6 +73,11 @@ CONTROLS = {
 # refuses it is covered by the library tests and by scripts/verify-hidden-input.py in a Unix PTY.
 SECRET = "synthetic"
 LONGEST = "\U0001d400" * 1024
+# How long a person takes at least to answer what appeared: longer than the window in which the
+# tool drops keys typed before a list or a screen waited for them, Escape and q included
+# (TYPED_AHEAD in src/bin/mhfe/hidden_input.rs, 200 ms), so that an answer is not taken for one
+# typed ahead. pywinpty's read waits without a limit, so a dropped key would hang the check.
+ANSWER_DELAY = 0.25
 
 
 class Session:
@@ -99,6 +104,8 @@ class Session:
         raise AssertionError(f"none of {needles} in {self.output[start:]!r}")
 
     def type(self, text):
+        """Types `text` as a person answers what appeared: after ANSWER_DELAY."""
+        time.sleep(ANSWER_DELAY)
         self.process.write(text)
 
     def close(self):

@@ -59,8 +59,6 @@ pub mod strength;
 mod suite;
 #[cfg(test)]
 mod test_support;
-#[cfg(test)]
-mod validation_cases;
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
@@ -76,7 +74,8 @@ pub mod word_hints;
 pub mod word_wishes;
 
 pub use container::{
-    ConfirmationNeeded, ContainerChoice, ContainerFacts, OriginalFacts, BUILT_IN_CHECK_WORD_COUNTS,
+    container_fingerprint, ConfirmationNeeded, ContainerChoice, ContainerFacts, OriginalFacts,
+    BUILT_IN_CHECK_WORD_COUNTS,
 };
 pub use error::MhfeError;
 pub use hidden::HiddenWallets;
@@ -85,12 +84,15 @@ pub use mhfe::{
     Recovery, RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
 };
 pub use password::{Password, MAX_PASSWORD_BYTES};
-pub use phrase::{check_container, check_phrase, phrase_from_entropy, read_phrase, WORD_COUNTS};
+pub use phrase::{
+    check_container, check_phrase, grouped, phrase_from_entropy, read_phrase, WORD_COUNTS,
+};
 pub use rehearsal::{
-    require_built_in_check_length, CheckEvidence, CheckOutcome, Confirmation, RecoveredForCheck,
-    RecoveredForRekey, Reference, ReferenceTarget,
+    refuse_unused_passphrase, require_built_in_check_length, CheckEvidence, CheckOutcome,
+    Confirmation, PassedCheck, PassphraseReferences, RecoveredForCheck, RecoveredForRekey,
+    Reference, ReferenceTarget,
 };
 pub use suite::{
-    memory_text, Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID,
-    SUITE_ID,
+    memory_text, Settings, Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS,
+    SAME_LENGTH_SUITE_ID, SUITE_ID,
 };

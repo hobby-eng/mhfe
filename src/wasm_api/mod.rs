@@ -90,6 +90,14 @@ pub(crate) fn js_error(error: MhfeError) -> JsError {
     JsError::new(&format!("{}: {error}", error.code()))
 }
 
+/// A container's own fingerprint as a page shows it, eight hex digits ([`crate::container_fingerprint`]).
+#[cfg(any(feature = "browser-core", feature = "browser-repair"))]
+pub(crate) fn container_fingerprint_text(container: &str) -> Result<String, JsError> {
+    crate::container_fingerprint(container)
+        .map(crate::wallet::fingerprint_text)
+        .map_err(js_error)
+}
+
 pub(crate) fn serialization_error(error: serde_json::Error) -> JsError {
     JsError::new(&format!("INTERNAL_ERROR: {error}"))
 }
@@ -319,7 +327,11 @@ pub(crate) fn review_choice(
         "" | "asTyped" => Ok(None),
         "corrected" => Ok(Some(ReviewChoice::Corrected)),
         "repair" => {
-            let position = whole_number(position, "INVALID_REQUEST", "the repair position")?;
+            let position = whole_number(
+                position,
+                MhfeError::InvalidRequest(String::new()).code(),
+                "the repair position",
+            )?;
             Ok(Some(ReviewChoice::Repair(position as usize)))
         }
         other => Err(js_error(MhfeError::InvalidRequest(format!(

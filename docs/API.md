@@ -92,12 +92,20 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   receiving address (the strong check), read with `wallet::Address::parse(coin, text)` for one of
   the twelve `wallet::Coin`s, whose standard paths `Address::search_roots` and
   `Address::hardened_chains` describe (BIP44-style, or DIP17 for a Dash Platform payment address),
-  or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. As in
-  recovery, a built-in check that passes at another 12- to 21-word length than `words` takes
-  precedence: `BuiltInCheck` then matches, and `CheckEvidence::built_in_check` names the length
-  found. It returns a `CheckOutcome`: `Matches { path }` or `DoesNotMatch`, where `path` is the
-  derivation path at which a matched address was found (`None` for the other references). No part
-  of the recovered phrase comes out. `Reference::passphrase()` gives the BIP39 passphrase a
+  or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. It returns a
+  `CheckOutcome` under the length rules of recovery (the specification's rehearsal check):
+  `Matches { path }` for exactly one verified reading or a wallet reference that matches,
+  `NotVerified` for readings that nothing verifies, and `DoesNotMatch` for no reading or a
+  reference that does not match. `path` is the derivation path at which a matched address was
+  found (`None` for the other references); `CheckOutcome::text()` gives the specification's words,
+  `id()` the browser package's. A built-in check that passes at another 12- to 21-word length than
+  `words` takes precedence: `BuiltInCheck` then matches, and `CheckEvidence::built_in_check` names
+  the length found; several other lengths that pass leave it `NotVerified`, and
+  `CheckEvidence::matching_lengths` lists every length that passes. With the length detected
+  (`OwnChecks`), a 24-word reading is `NotVerified`, as a wrong password gives one too; a pass of
+  the 16-bit phrase + passphrase check is evidence beside it (`CheckEvidence::wallet_check`), not a
+  verification. `WalletCheck` is `NotVerified` where it passes and `DoesNotMatch` where it fails, as
+  the owner says the phrase was drawn with it. No part of the recovered phrase comes out. `Reference::passphrase()` gives the BIP39 passphrase a
   reference is compared with, empty when it is compared with the wallet without one, and `None` for
   `BuiltInCheck` and for `OwnChecks` without a passphrase, which say nothing about one;
   `Reference::given_passphrase()` gives it only when it is not empty, the case that shows that the
@@ -328,6 +336,16 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   wallet's BIP39 passphrase"), as the specification compares a wallet with its passphrase. All these
   refusals come before any Argon2 work. `recover` returns a `ConfirmedPhrase`: `phrase()`, the
   recovered phrase, and `wallet_has_passphrase()`, the answer that holds.
+  `replacement_rehearsal(passphrase)` says what the new container's rehearsal compares, known
+  before it is sealed as the specification requires: `ReplacementRehearsal::BuiltInCheck` for a
+  phrase with one, `ConfirmingReference` for one a reference confirmed, and `Fingerprint` for one
+  the owner confirmed alone, the master key fingerprint of the phrase with `passphrase`, the
+  wallet's BIP39 passphrase, which `rehearsal_needs_passphrase()` says is required and which is
+  refused for a wallet stated to have none (`INVALID_REQUEST`).
+  `operation::Keep::old_container(old_work)` lists what to keep of the old container until the
+  funds of the wallets that other passwords open on it are moved: `KeepItem::OldContainer`,
+  `OldPasswords`, and a PIM or memory level that is not 0. A front end says it before every rekey,
+  whatever the container.
   `seal(mhfe, &confirmed, new_password, repair_word_count, progress, on_unverified)` encrypts that
   phrase again, in a container of the old kind, at the settings of the engine it is given, which
   `check_new` judges; `keep(work, confirmed.wallet_has_passphrase().into())` of the result lists
@@ -432,7 +450,9 @@ Every buffer and binding this crate owns that holds a password, phrase, passphra
 private scalar or mask is wiped when dropped. Short-lived working buffers inside dependencies, such
 as those of Unicode normalization, BIP39 word parsing and elliptic-curve arithmetic, copies that
 the compiler makes in registers or on the stack, and immutable JavaScript strings in the browser
-are outside its control.
+are outside its control. In a browser those stack copies, such as the BIP39 seed and BIP32 master
+key of a fingerprint and the passphrase in BIP39's PBKDF2 salt block, stay in the worker until
+later calls overwrite them or the worker ends, and no memory is locked.
 
 ### Self-checks
 
@@ -483,11 +503,12 @@ report.require_passed()?;                       // MhfeError::SelfCheckFailed fo
 - `self_check::sets` holds the set of each front end, each built only with the parts it checks:
   `hashes()` the cipher's hashes alone; `core(argon2)` everything encryption, recovery, the
   rehearsal check, rekey and hidden wallets compute, with the Argon2 check the caller gives (`None`
-  lists `argon2` as not run, "this check leaves Argon2 out"); `repair()`; `passwords(random)`;
+  lists `argon2` as not run, "this check leaves Argon2 out"); `repair()`, which holds the master
+  key fingerprint's parts `wallet-hashes`, `bip39-seed` and `bip32` too; `passwords(random)`;
   `wallet(random)`, which holds `address-search` too; and, natively, `native(random)`, the core
-  with `NativeArgon2Check` followed by `argon2-sizes`, `password-generator`, `word-hints`,
-  `random-source`, `address-search`, `word-wishes` and `memory-locking`. `random` is the generator
-  the full self-test tries, `None` at start.
+  with `NativeArgon2Check` followed by `argon2-sizes`, `password-generator`, `password-strength`,
+  `word-hints`, `random-source`, `address-search`, `word-wishes` and `memory-locking`. `random` is
+  the generator the full self-test tries, `None` at start.
   `sets::NotChecked::new(id, label, reason)` lists a part as not run.
 
 The parts, by identifier and label, and what each compares:
@@ -578,8 +599,11 @@ The parts, by identifier and label, and what each compares:
 - `rehearsal`, "Rehearsal": `Mhfe::check` of a published container with a fingerprint, an address at
   its path and the built-in check, and a fingerprint one bit off that must not match.
 - `password-generator`, "Password generator": scripted bytes through the unbiased draw, the
-  characters, words and check word of new passwords, and a stuck source refused. Full: the strength
-  estimate.
+  characters, words and check word of new passwords, and a stuck source refused.
+- `password-strength`, "Password strength estimate": at both tiers, the exact estimate in millibits
+  of five passwords: four read part by part (a common password with substitutions, one with a
+  capital, a year and a sign, characters with a keyboard run, and letters of another alphabet) and
+  one of four dice words.
 - `word-hints`, "Word hints": the hints of eight typed lines, four from the BIP39 list and four from
   the EFF list: a count after one letter, the words from two letters, a whole word that begins
   longer ones, and no word for an unknown prefix or for a word one letter longer than the EFF
@@ -589,6 +613,12 @@ The parts, by identifier and label, and what each compares:
   source through `check_source` and `check_spread`; not run without one.
 - `memory-locking`, "Locked memory": passed when memory locks, a warning when the system refuses,
   not available in WebAssembly and outside Unix.
+
+`self_check::process` holds the ids, labels and browser reasons of the command-line tool's own
+process parts, `core-dumps`, `isolation` and `hidden-input` (`PROCESS_PARTS`), which the tool's
+checks use; `sets::browser_process()` is what a web page reports of them, `LockProbe` first, each
+not available with its reason, which the binding `selfCheckProcess(tier, skipIds, onStart,
+onResult)` runs for `MhfeClient.fullCheck()`.
 
 The Argon2 checks are closed: their inputs are private constants, they take no cost and no password
 and give only an outcome, so they cannot encrypt anything, and no release build holds an engine
@@ -807,9 +837,9 @@ await client.rekey({
 // is refused before the first round (REFERENCE_REQUIRED): an address, the fingerprint or the owner
 // confirms the phrase, as readContainer().confirmationFor["0"], "walletOrOwner", says.
 // keep lists { item: "containerWords", words }, { item: "password" }, then where needed
-// { item: "passphrase" } or { item: "passphraseIfAny" }, { item: "repairWords" },
-// { item: "pim", value }, { item: "memoryLevel", value } and { item: "wordCount", words }, in this
-// order.
+// { item: "passphrase" } or { item: "passphraseIfAny" }, { item: "repairWords", apart: true },
+// { item: "pim", value }, { item: "memoryLevel", value } and
+// { item: "wordCount", words, apart: true }, in this order.
 const session = await client.openHiddenWallets({ container, pim, memoryLevel, mainPassphrase });
 await session.open({ password, passwordRepeat, passwordRepair, onProgress });
 // { phrase, words, fingerprintWithoutPassphrase }
@@ -914,7 +944,7 @@ object is not run again and is listed as that class found it. `fullCheck()` runs
 `argon2-sizes-single-threaded` and `argon2-sizes-threaded` (not run on a page that is not
 cross-origin isolated), and lists `published-vectors` as not run, since `selfTest()` runs them, and
 `memory-locking`, `core-dumps`, `isolation` and `hidden-input` as not available, each with the
-reason. `onProgress` receives `{ id, label, running: true }` as a part starts and its result with
+reason, as the WebAssembly reports them from the library (`selfCheckProcess`). `onProgress` receives `{ id, label, running: true }` as a part starts and its result with
 `running: false` as it ends.
 
 An Argon2 build that does not start, as when the browser refuses its memory or its lane workers,
@@ -995,15 +1025,15 @@ strictly: `encrypt` and `RekeySession.recover` as a boolean or, when no answer i
 or `null`, for which `encrypt` lists `{ item: "passphraseIfAny" }`. Anything else is refused with
 `INVALID_REQUEST` ("walletHasPassphrase must be true or false: whether the wallet has a BIP39
 passphrase"). `RekeySession.recover` also refuses a passphrase that is not empty with
-`"builtInCheck"` or `"owner"` (`INVALID_REQUEST`, "a passphrase belongs to an address or fingerprint
-confirmation"); both come before the library judges the answer as above. After a refusal that
+`"builtInCheck"` or `"owner"` (`INVALID_REQUEST`, "a BIP39 passphrase belongs only to an address or a fingerprint", `refuse_unused_passphrase` with `PassphraseReferences::Rekey`), as `searchWallet` does with `"builtInCheck"` ("… to an address, a fingerprint or the wallet check", `PassphraseReferences::Check`); both come before the library judges the answer as above. After a refusal that
 allows another confirmation (`AMBIGUOUS_LENGTH`, `LENGTH_DIFFERS`) the session keeps the recovered
 state: `RekeySession.ownerLengths()` returns JSON, the lengths the owner may compare (empty where
 only an address or the fingerprint confirms it) or null when the rekey has ended, and
 `RekeySession.confirmAgain(kind, reference, coin, path, passphrase, words, onRound)` confirms on
 the same state without the rounds again, `words` one of those lengths for `"owner"` and 0 for every
 other kind (`INVALID_REQUEST` otherwise), with the answer about the passphrase given to `recover`;
-any other failure ends the rekey and wipes the state. Secrets are UTF-8 bytes,
+any other failure ends the rekey and wipes the state, except a trap of the WebAssembly, after which
+nothing can be called and the worker is terminated with the state unwiped. Secrets are UTF-8 bytes,
 which the bindings wipe: passwords, BIP39 passphrases, dice rolls, the phrase of `describePhrase`,
 `encrypt`, `walletCheck` and `walletFingerprint`, whose bytes are `INVALID_PHRASE` when they are not
 UTF-8, the chosen words of `describeDraw` and `drawPhrase`, and the line of `wordHints`, which may

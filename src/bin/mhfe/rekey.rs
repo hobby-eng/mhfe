@@ -8,9 +8,10 @@
 use anstream::eprintln;
 use clap::{Args, ValueEnum};
 use mhfe::memory::LockedText;
-use mhfe::operation::Stage;
-use mhfe::rekey::Rekey;
-use mhfe::wallet::{fingerprint_text, master_fingerprint};
+use mhfe::operation::{Keep, Stage};
+use mhfe::rekey::{Rekey, ReplacementRehearsal};
+use mhfe::wallet::fingerprint_text;
+use mhfe::wallet_check::WALLET_CHECK_BITS;
 use mhfe::{
     Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, Password,
     PhraseLength, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
@@ -105,10 +106,13 @@ fn confirm_help() -> String {
     ])
 }
 
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Change the password or settings of a container";
+
 /// The top of `mhfe rekey --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Change the password or settings of a container",
+        SUMMARY,
         "Recovers the seed phrase from the old container, confirms it, by its built-in check, by \
          a receiving address or the master key fingerprint of the wallet, or by showing it to you \
          to compare with your backup, and encrypts it under a new password or new settings. The \
@@ -138,12 +142,26 @@ pub fn help() -> String {
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; no script reads a phrase back and forth.
-    let mut input = Input::terminal_only();
+    let mut input = Input::terminal_only().reading_secrets()?;
     options.new_password.check(&input)?;
     options.repair_words.check()?;
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Rekey.title());
     let old_work = settings::choose(options.old, &mut input, Operation::Rekey)?;
+    let new_settings = Settings {
+        pim: options.new_pim,
+        memory_level: options.new_memory_level,
+    };
+    new_settings.check_given(Operation::RekeyNew)?;
+    // A --confirm that the length given cannot use is refused before anything is typed, by the
+    // library's rule (AUD-023-UI002); one that depends on the container, once it is read.
+    let refuse_confirm = |needed| match options.confirm {
+        Some(Kind::BuiltInCheck) => Confirmation::BuiltInCheck.refuse_for(needed),
+        _ => Ok(()),
+    };
+    if let Some(needed) = options.words.and_then(ConfirmationNeeded::of_any_container) {
+        refuse_confirm(needed)?;
+    }
     // Shown to everyone, so that it says nothing about this container (specification: a hidden
     // wallet behind an honest disclosure). Nothing is destroyed here: the old container keeps
     // opening every wallet with its passwords, so the warning heads the next screen instead of a
@@ -157,6 +175,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     )?;
     let container = read.facts;
     let length = phrase_length(&mut input, options.words, &container)?;
+    refuse_confirm(container.confirmation_needed(length)?)?;
     // A search for missing words asked for the old password already.
     let password = match read.password {
         Some(password) => password,
@@ -263,8 +282,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         How::BuiltInCheck | How::Owner => String::new(),
     });
     let source_check = match phrase.passes_wallet_check(&source_passphrase)? {
-        Some(true) => ", passes the 16-bit check",
-        _ => "",
+        Some(true) => format!(", passes the {WALLET_CHECK_BITS}-bit check"),
+        _ => String::new(),
     };
     let by_owner = matches!(how, How::Owner);
     let confirmed = match how {
@@ -295,27 +314,17 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         recovered
     };
     let phrase = recovered.phrase();
-    // A replacement of a source without a built-in check, confirmed by the owner alone, needs the
-    // reference its rehearsal compares before it is made (the specification's re-encryption
-    // rules): the fingerprint of the confirmed phrase, with the wallet's passphrase if it has one.
-    let rehearsal_fingerprint = if by_owner && !phrase.verified() {
-        let passphrase = if wallet_passphrase {
-            check::read_passphrase_named(&mut input, Operation::Rekey, check::ORIGINAL_SEED_PHRASE)?
-        } else {
-            LockedText::copy_of("")
-        };
-        Some(fingerprint_text(master_fingerprint(
-            phrase.phrase(),
-            &passphrase,
-        )?))
+    // The reference the replacement's rehearsal compares, known before it is made (the
+    // specification's re-encryption rules), with the wallet's passphrase where the library needs
+    // it.
+    let passphrase = if recovered.rehearsal_needs_passphrase() {
+        check::read_passphrase_named(&mut input, Operation::Rekey, check::ORIGINAL_SEED_PHRASE)?
     } else {
-        None
+        LockedText::copy_of("")
     };
+    let rehearsal = recovered.replacement_rehearsal(&passphrase)?;
+    drop(passphrase);
 
-    let new_settings = Settings {
-        pim: options.new_pim,
-        memory_level: options.new_memory_level,
-    };
     let new_work = settings::choose(new_settings, &mut input, Operation::RekeyNew)?;
     // A 24-word original too can, by rare chance, read as a shorter phrase after recovery.
     let original = OriginalFacts::read(phrase.phrase())?;
@@ -356,22 +365,25 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         "Old backup",
         "the old container phrase still opens the wallet with the old password",
     );
-    style::fact_wrapped(
-        "Next",
-        &match &rehearsal_fingerprint {
-            Some(fingerprint) => format!(
-                "rehearse the new container phrase with {} and fingerprint {}",
-                paint(ACCENT, "mhfe check --fingerprint"),
-                paint(ACCENT, fingerprint)
-            ),
-            None => format!(
-                "rehearse the new container phrase with {}",
-                paint(ACCENT, "mhfe check")
-            ),
-        },
-    );
+    style::fact_wrapped("Next", &next_rehearsal(&rehearsal));
     style::more(readme::REKEY);
     Ok(SUCCESS)
+}
+
+/// What the summary says to do next: rehearse the new container phrase, with the fingerprint the
+/// library names where the owner confirmed the phrase alone.
+fn next_rehearsal(rehearsal: &ReplacementRehearsal) -> String {
+    match rehearsal {
+        ReplacementRehearsal::Fingerprint(fingerprint) => format!(
+            "rehearse the new container phrase with {} and fingerprint {}",
+            paint(ACCENT, "mhfe check --fingerprint"),
+            paint(ACCENT, fingerprint_text(*fingerprint))
+        ),
+        ReplacementRehearsal::BuiltInCheck | ReplacementRehearsal::ConfirmingReference => format!(
+            "rehearse the new container phrase with {}",
+            paint(ACCENT, "mhfe check")
+        ),
+    }
 }
 
 /// How a recovery is confirmed before it is encrypted again.
@@ -427,22 +439,13 @@ enum Kind {
 }
 
 /// The warning about the wallets other passwords open on the old container, one plain sentence
-/// (the owner's wording of 2026-10-09, the specification's): they do not move to the new container,
-/// so the old container, its passwords and the settings they open it with are kept until their
-/// funds are moved. Your own wallet's addresses do not change. A PIM or memory level is named only
-/// when it is not 0, as nothing else needs to be kept for the defaults.
+/// (the owner's wording of 2026-10-09, the specification's), naming what the library says to keep
+/// of the old container ([`Keep::old_container`]).
 fn keep_until_funds_moved(old_work: WorkFactor) -> String {
-    let mut kept = vec!["the old container".to_owned(), "its passwords".to_owned()];
-    if old_work.pim() != 0 {
-        kept.push(format!("PIM {}", old_work.pim()));
-    }
-    if old_work.memory_level() != 0 {
-        kept.push(format!("memory level {}", old_work.memory_level()));
-    }
     format!(
         "Wallets that other passwords open on the old container do not move to the new one: keep \
          {} until you have moved their funds.",
-        style::and_list(&kept)
+        encrypt::what_to_keep(&Keep::old_container(old_work))
     )
 }
 
@@ -520,7 +523,7 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
     }
     eprintln!();
     eprintln!("{}", paint(HEADING, "Recovered seed phrase"));
-    terminal::print_phrase(phrase, Wallet::NoPassphrase, input);
+    terminal::print_phrase(phrase, Wallet::NoPassphrase, input)?;
     let question = Question {
         text: "Does it match your written record, word for word?",
         explanation: OWNER_CHECKS,

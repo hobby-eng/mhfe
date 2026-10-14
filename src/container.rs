@@ -40,6 +40,19 @@ pub enum ConfirmationNeeded {
     WalletOrOwner,
 }
 
+impl ConfirmationNeeded {
+    /// What a recovery at `length` needs whatever the container, where the length alone decides:
+    /// a detected length and 24 words need a wallet or the owner on every container. A 12- to
+    /// 21-word length depends on the container's suite (`None`). A front end can refuse a
+    /// confirmation that cannot apply before the container is typed.
+    pub fn of_any_container(length: PhraseLength) -> Option<Self> {
+        match length {
+            PhraseLength::Words(words) if BUILT_IN_CHECK_WORD_COUNTS.contains(&words.get()) => None,
+            _ => Some(Self::WalletOrOwner),
+        }
+    }
+}
+
 impl ContainerFacts {
     /// Reads a container, refusing anything but a valid English BIP39 phrase of 12, 15, 18, 21
     /// or 24 words with [`MhfeError::InvalidContainer`]. Any spacing and letter case and the first
@@ -137,26 +150,31 @@ impl ContainerFacts {
         length: PhraseLength,
     ) -> Result<ConfirmationNeeded, MhfeError> {
         self.require_length(length)?;
-        let words = match (length, self.suite) {
-            (PhraseLength::Words(words), _) => words.get(),
-            (PhraseLength::Detect, Suite::SameLength) => self.word_count,
-            (PhraseLength::Detect, Suite::TwentyFourWords) => {
-                return Ok(ConfirmationNeeded::WalletOrOwner)
+        // What the length alone decides holds on every container; only a 12- to 21-word length
+        // asks the container whether it has the built-in check.
+        match (ConfirmationNeeded::of_any_container(length), length) {
+            (Some(needed), _) => Ok(needed),
+            (None, PhraseLength::Words(words))
+                if self.built_in_check_lengths().contains(&words.get()) =>
+            {
+                Ok(ConfirmationNeeded::BuiltInCheck)
             }
-        };
-        if self.built_in_check_lengths().contains(&words) {
-            Ok(ConfirmationNeeded::BuiltInCheck)
-        } else {
-            Ok(ConfirmationNeeded::WalletOrOwner)
+            (None, _) => Ok(ConfirmationNeeded::WalletOrOwner),
         }
     }
 
-    /// The master key fingerprint of the wallet that the container's own words open without a
-    /// BIP39 passphrase. A container is a valid phrase too, but that wallet is not the owner's.
-    /// It costs one PBKDF2-HMAC-SHA512 of 2,048 iterations, as BIP39 seeds do.
+    /// The container's fingerprint ([`container_fingerprint`]).
     pub fn fingerprint(&self) -> Result<[u8; 4], MhfeError> {
-        wallet::master_fingerprint(&self.words, "")
+        container_fingerprint(&self.words)
     }
+}
+
+/// The master key fingerprint of the wallet that a container's own words open without a BIP39
+/// passphrase, shown under every container so that the decoy wallet can be found again. A
+/// container is a valid phrase too, but that wallet is not the owner's. It costs one
+/// PBKDF2-HMAC-SHA512 of 2,048 iterations, as BIP39 seeds do. Every front end takes it from here.
+pub fn container_fingerprint(container: &str) -> Result<[u8; 4], MhfeError> {
+    wallet::master_fingerprint(container, "")
 }
 
 /// An original seed phrase as read, with what it tells before it is encrypted: its length, the
@@ -266,6 +284,20 @@ mod tests {
     use super::*;
     use crate::WordCount;
 
+    /// The container's fingerprint has one rule, which its facts use too: for the published
+    /// zero-12 container it is the decoy fingerprint of the search's known answers, computed by an
+    /// independent implementation (AUD-023-ARC009).
+    #[test]
+    fn a_containers_fingerprint_has_one_rule() {
+        let container = crate::test_support::zero_12_container();
+        let expected = crate::search::known_answers::ZERO_12_DECOY_FINGERPRINT;
+        assert_eq!(container_fingerprint(&container), Ok(expected));
+        assert_eq!(
+            ContainerFacts::read(&container).unwrap().fingerprint(),
+            Ok(expected)
+        );
+    }
+
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     const LEGAL_24: &str = "legal winner thank year wave sausage worth useful legal winner thank year \
@@ -342,6 +374,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Where the length alone decides the confirmation, every container agrees.
+    #[test]
+    fn the_length_alone_decides_for_24_words_and_detection() {
+        let lengths = WORD_COUNTS
+            .into_iter()
+            .map(words)
+            .chain([PhraseLength::Detect]);
+        for length in lengths {
+            for count in WORD_COUNTS {
+                let container = ContainerFacts::read(&zero_phrase(count)).unwrap();
+                if let (Some(needed), Ok(actual)) = (
+                    ConfirmationNeeded::of_any_container(length),
+                    container.confirmation_needed(length),
+                ) {
+                    assert_eq!(needed, actual, "{length:?} on {count} words");
+                }
+            }
+        }
+        assert_eq!(ConfirmationNeeded::of_any_container(words(12)), None);
     }
 
     /// The well-known fingerprint of the all-zero 12-word phrase without a passphrase.

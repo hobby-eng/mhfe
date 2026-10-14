@@ -14,7 +14,10 @@
 FROM emscripten/emsdk:6.0.12@sha256:77638e6c215a65f25a704c0c831d5c2463a8c0468a58c6cb82489dbe621dfa05 AS argon2-wasm
 WORKDIR /workspace
 COPY vendor/phc-winner-argon2 vendor/phc-winner-argon2
-COPY scripts/build-argon2-wasm.sh scripts/remove-network-code.mjs scripts/
+COPY vendor/phc-winner-argon2.md vendor/
+COPY scripts/build-argon2-wasm.sh scripts/remove-network-code.mjs scripts/network-code.mjs \
+     scripts/verify-vendored-argon2.mjs scripts/
+# The script checks the vendored files against their list before it compiles them.
 RUN scripts/build-argon2-wasm.sh
 
 FROM buildpack-deps:noble@sha256:e93e9fafe026efb1c7788c98f48b04a170d81f7adfd8ca81ff76b44624e71328 AS toolchain
@@ -96,7 +99,8 @@ COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
 # as a local build does, and scripts/check-release-artifacts.sh refuses a program or WebAssembly
 # that still names one; scripts/package-release.sh sets the same flags, so its builds below have
 # nothing to redo.
-RUN --network=none . packaging/remap-builder-paths.sh \
+RUN --network=none node scripts/verify-vendored-argon2.mjs \
+    && . packaging/remap-builder-paths.sh \
     && remap_builder_paths "$(pwd)" \
     && cargo fmt --all -- --check \
     && cargo clippy --locked --offline --all-targets --all-features -- -D warnings \

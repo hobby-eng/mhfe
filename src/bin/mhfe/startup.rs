@@ -202,9 +202,9 @@ mod tests {
         );
         assert_eq!(
             library.len(),
-            26,
+            27,
             "the plan's 22 parts of the library, the address search, the search for missing words, \
-             the chosen word of a new phrase and the word hints"
+             the chosen word of a new phrase, the word hints and the password strength estimate"
         );
     }
 

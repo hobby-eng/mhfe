@@ -6,9 +6,10 @@
 //! - [`core()`]: everything the encryption, recovery, rehearsal, rekey and hidden-wallet operations
 //!   compute, with Argon2 added by the caller: [`crate::engine::NativeArgon2Check`] natively, the
 //!   page's `BrowserArgon2Check` in a browser, or none for a quick check without Argon2.
-//! - [`repair`]: the repair words and the BIP39 word list they are written in.
-//! - [`passwords`]: the password encoding, the check word, the generator, the word hints and the
-//!   random source.
+//! - [`repair`]: the repair words, the BIP39 word list they are written in, and the wallet hashes,
+//!   seeds and BIP32 keys of the master key fingerprint a repair gives.
+//! - [`passwords`]: the password encoding, the check word, the generator, the strength estimate,
+//!   the word hints and the random source.
 //! - [`wallet`]: the word list, the wallet hashes, seeds, keys and addresses, the address search
 //!   an address check states, the wallet check, the chosen word, the word hints and the random
 //!   source.
@@ -24,16 +25,32 @@ use super::{ComponentCheck, ComponentOutcome, SelfCheck, Tier};
 ))]
 use crate::random::{RandomSource, RandomSourceCheck};
 
-/// A part that this run leaves out, with the reason, so that the report still names it.
+/// A part that this run leaves out, with the reason, so that the report still names it: not run,
+/// or not available where it cannot be checked at all.
 pub struct NotChecked {
     id: &'static str,
     label: &'static str,
     reason: &'static str,
+    available: bool,
 }
 
 impl NotChecked {
+    /// A part `id`, named `label`, that this run leaves out for `reason`: reported as not run.
     pub fn new(id: &'static str, label: &'static str, reason: &'static str) -> Self {
-        Self { id, label, reason }
+        Self {
+            id,
+            label,
+            reason,
+            available: true,
+        }
+    }
+
+    /// A part that cannot be checked here at all, such as a process part in a web page.
+    pub fn not_available(id: &'static str, label: &'static str, reason: &'static str) -> Self {
+        Self {
+            available: false,
+            ..Self::new(id, label, reason)
+        }
     }
 }
 
@@ -47,7 +64,11 @@ impl ComponentCheck for NotChecked {
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
-        ComponentOutcome::NotRun(self.reason.to_owned())
+        if self.available {
+            ComponentOutcome::NotRun(self.reason.to_owned())
+        } else {
+            ComponentOutcome::NotAvailable(self.reason.to_owned())
+        }
     }
 }
 
@@ -82,19 +103,30 @@ pub fn core<'a>(argon2: Option<Box<dyn ComponentCheck + 'a>>) -> SelfCheck<'a> {
         .with(crate::rehearsal::known_answers::RehearsalCheck::new())
 }
 
-/// The parts of a wallet's keys, which the core compares with and the wallet tools give: the wallet
-/// hashes, seeds, BIP32 keys and addresses.
+/// The parts of a wallet's keys, which the core compares with and the wallet tools give: the master
+/// key fingerprint's parts and the addresses.
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
     feature = "browser-wallet"
 ))]
 fn wallet_keys<'a>() -> SelfCheck<'a> {
+    master_key().with(crate::wallet::known_answers::AddressesCheck::new())
+}
+
+/// The parts of a master key fingerprint, which the repair of a container gives too: the wallet
+/// hashes, seeds and BIP32 keys.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-wallet"
+))]
+fn master_key<'a>() -> SelfCheck<'a> {
     SelfCheck::new()
         .with(crate::wallet::known_answers::WalletHashesCheck::new())
         .with(crate::wallet::known_answers::SeedCheck::new())
         .with(crate::wallet::known_answers::Bip32Check::new())
-        .with(crate::wallet::known_answers::AddressesCheck::new())
 }
 
 /// The hashes of the cipher alone, SHA-256, HMAC-SHA-256 and BLAKE2b-256: for a program that only
@@ -104,12 +136,14 @@ pub fn hashes<'a>() -> SelfCheck<'a> {
     SelfCheck::new().with(crate::mhfe::known_answers::CipherHashesCheck::new())
 }
 
-/// The parts of the repair words: MHFE-REPAIR-1 and the BIP39 word list.
+/// The parts of the repair words: MHFE-REPAIR-1 and the BIP39 word list, with the parts of the
+/// master key fingerprint that a repair gives to tell the container from another.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-repair"))]
 pub fn repair<'a>() -> SelfCheck<'a> {
     SelfCheck::new()
         .with(crate::phrase::known_answers::WordListCheck::new())
         .with(crate::repair::known_answers::RepairWordsCheck::new())
+        .merge(master_key())
 }
 
 /// The parts of the password tools. `random` is the source new passwords are drawn from, which
@@ -120,8 +154,8 @@ pub fn passwords<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> 
         .with(crate::password::known_answers::PasswordUnicodeCheck::new())
         .with(crate::check_word::known_answers::CheckWordCheck::new())
         .with(crate::new_password::known_answers::GeneratorCheck::new())
-        .with(crate::word_hints::known_answers::WordHintsCheck::new())
-        .with(RandomSourceCheck::new(random))
+        .with(crate::strength::known_answers::StrengthCheck::new())
+        .merge(typed_and_drawn(random))
 }
 
 /// The parts of the wallet tools. `random` is the source new phrases are drawn from, which the
@@ -134,8 +168,38 @@ pub fn wallet<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
         .with(crate::wallet::known_answers::AddressSearchCheck::new())
         .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
         .with(crate::word_wishes::known_answers::WordWishesCheck::new())
+        .merge(typed_and_drawn(random))
+}
+
+/// The parts that the password and the wallet tools share last: the word hints of what is typed
+/// and the random source of what is drawn.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-passwords",
+    feature = "browser-wallet"
+))]
+fn typed_and_drawn<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
+    SelfCheck::new()
         .with(crate::word_hints::known_answers::WordHintsCheck::new())
         .with(RandomSourceCheck::new(random))
+}
+
+/// What a web page reports of the process parts of the command-line tool: the memory lock, which
+/// [`crate::memory::LockProbe`] finds not available in WebAssembly, and core dumps, isolation and
+/// hidden input, which a page cannot check ([`super::process`]). The browser package's full
+/// self-check runs it.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+pub fn browser_process<'a>() -> SelfCheck<'a> {
+    super::process::PROCESS_PARTS.into_iter().fold(
+        SelfCheck::new().with(crate::memory::LockProbe::default()),
+        |set, part| {
+            set.with(NotChecked::not_available(
+                part.id,
+                part.label,
+                part.in_browser,
+            ))
+        },
+    )
 }
 
 /// Everything the command-line tool computes: the core with the native Argon2 engine and its
@@ -157,7 +221,7 @@ mod tests {
     use super::*;
 
     /// Every check of the plan, in the order the tool runs them, each once.
-    const NATIVE_IDS: [&str; 26] = [
+    const NATIVE_IDS: [&str; 27] = [
         "cipher-hashes",
         "argon2",
         "cipher-rounds",
@@ -179,6 +243,7 @@ mod tests {
         "rehearsal",
         "argon2-sizes",
         "password-generator",
+        "password-strength",
         "word-hints",
         "random-source",
         "address-search",
@@ -195,13 +260,23 @@ mod tests {
     #[test]
     fn the_browser_sets_hold_their_own_parts() {
         assert_eq!(hashes().ids(), ["cipher-hashes"]);
-        assert_eq!(repair().ids(), ["bip39-words", "repair-words"]);
+        assert_eq!(
+            repair().ids(),
+            [
+                "bip39-words",
+                "repair-words",
+                "wallet-hashes",
+                "bip39-seed",
+                "bip32"
+            ]
+        );
         assert_eq!(
             passwords(None).ids(),
             [
                 "password-unicode",
                 "password-check-word",
                 "password-generator",
+                "password-strength",
                 "word-hints",
                 "random-source"
             ]
@@ -230,6 +305,22 @@ mod tests {
     }
 
     #[test]
+    fn the_browser_process_set_reports_each_process_part_as_not_available() {
+        let mut set = browser_process();
+        assert_eq!(
+            set.ids(),
+            ["memory-locking", "core-dumps", "isolation", "hidden-input"]
+        );
+        // The memory lock is probed where the set runs; a browser cannot check the others.
+        let report = set.run_quietly(Tier::Startup);
+        let outcomes: Vec<&str> = report.results()[1..]
+            .iter()
+            .map(|result| result.outcome().name())
+            .collect();
+        assert_eq!(outcomes, ["notAvailable"; 3]);
+    }
+
+    #[test]
     fn every_set_passes_at_startup() {
         for (name, mut set) in [
             ("repair", repair()),
@@ -242,11 +333,6 @@ mod tests {
         }
     }
 
-    /// The startup set of the command-line tool stays within its budget: well under half a second
-    /// in a release build, where it takes a few tens of milliseconds. A debug build runs the hashes
-    /// and the curve arithmetic unoptimized, many times slower, so its bound is generous. Run
-    /// `cargo test --release --lib the_startup_set_stays_within_its_budget -- --nocapture` to see
-    /// the time of each check.
     /// Runs `set` at `tier` and prints the time of each check and of all, under `name`.
     fn timed(
         mut set: SelfCheck<'_>,
@@ -270,13 +356,19 @@ mod tests {
         (report, total)
     }
 
+    /// The startup set of the command-line tool stays within its budget: a quarter of a second in
+    /// a release build, where it takes a few tens of milliseconds, so that a fixed wait such as the
+    /// one AUD-023-DOC002 found fails it. A debug build runs the hashes
+    /// and the curve arithmetic unoptimized, many times slower, so its bound is generous. Run
+    /// `cargo test --release --lib the_startup_set_stays_within_its_budget -- --nocapture` to see
+    /// the time of each check.
     #[test]
     fn the_startup_set_stays_within_its_budget() {
         use std::time::Duration;
         let budget = if cfg!(debug_assertions) {
             Duration::from_secs(30)
         } else {
-            Duration::from_millis(500)
+            Duration::from_millis(250)
         };
         let (report, total) = timed(native(None), Tier::Startup, "startup set");
         assert!(report.passed(), "{:?}", report.first_failure());

@@ -36,10 +36,9 @@ jobs:
             echo "Missing release notes: docs/releases/$GITHUB_REF_NAME.md" >&2
             exit 1
           }
-      - name: Audit Cargo.lock against RustSec
-        uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1.2.7
-        with:
-          createIssues: false
+      # Nothing else runs in this job before the build: the RustSec audit, whose tool the audit
+      # action takes from a cache or installs unlocked, has a job of its own below
+      # (AUD-023-BLD007).
       # The container's own SHA256SUMS travels with the archives as canonical.sha256, so that the
       # publishing job can prove it received exactly the bytes this job built.
       - name: Build release assets in the canonical container
@@ -95,10 +94,15 @@ jobs:
   checks:
     uses: ./.github/workflows/ci.yml
 
+  # Cargo.lock against RustSec, on another runner than the canonical build, so that the audit
+  # tool can never touch the archives that are attested; a finding still stops the draft.
+  rustsec:
+    uses: ./.github/workflows/audit.yml
+
   # The full-size vectors are replayed for the same tag by vectors.yml, on its own, in about
   # three hours; the draft does not wait for them, and their result shows on the tag.
   publish:
-    needs: [checks, canonical, macos]
+    needs: [checks, rustsec, canonical, macos]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

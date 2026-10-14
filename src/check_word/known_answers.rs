@@ -10,7 +10,9 @@ use sha2::Digest;
 use super::{check_index, PasswordReview, Reading, DRAWN_WORDS};
 use crate::eff::{EffList, EFF_LIST, LIST_SIZE};
 use crate::new_password::PasswordRecipe;
-use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
+use crate::self_check::{
+    damaged, expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
+};
 
 /// SHA-256 of the vendored eff_large_wordlist.txt, as vendor/eff-large-wordlist.md records it for
 /// the file the EFF publishes. It confirms that the embedded bytes are that file; it is not an
@@ -82,9 +84,7 @@ impl CheckWordCheck {
                     .ok_or_else(|| "a built-in word is not in the list".to_owned())
             })
             .collect::<Result<_, _>>()?;
-        let drawn: [usize; DRAWN_WORDS] = drawn
-            .try_into()
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let drawn: [usize; DRAWN_WORDS] = drawn.try_into().map_err(|_| damaged())?;
         expect(
             check_index(&drawn) == vector.check_index,
             "gives another check index",

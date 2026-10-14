@@ -35,11 +35,12 @@
 import { createECDH, createHash, createHmac, pbkdf2Sync } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { chromium, firefox } from "playwright";
 
-import { bundleClasses } from "./bundle-browser-classes.mjs";
+import { bundleClasses, pagePolicy } from "./bundle-browser-classes.mjs";
 import {
   AMBIGUOUS_12_WORDS,
   FULL_SIZE_CONTAINER,
@@ -54,13 +55,21 @@ const read = (path) => readFileSync(new URL(path, root));
 /** JSON that is safe inside a script element: "</script" cannot appear in it. */
 const inline = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
 
-// How long one page may take. The page's other checks take under a minute; each of its two
-// drawings of a phrase that passes the wallet check takes about 65,536 BIP39 seeds on average,
-// half a minute on eight workers, but the number is random: more than N times the average happens
-// about once in e^N drawings (more than four times, once in 55). Ten minutes leave room for eight
-// times the average of both together, which two drawings exceed about once in 500,000 pages
-// (e^-16 x 17), so a page that times out has stopped, not drawn long.
-const PAGE_TIMEOUT_MS = 600_000;
+// How long a page may take (AUD-023-BLD005). Its checks take a minute or two, but each of its two
+// drawings of a phrase that passes the wallet check takes about 65,536 BIP39 seeds on average, a
+// number that is random: more than N times the average happens about once in e^N drawings. A page
+// therefore has no fixed time. Each drawing gets DRAW_BUDGET times its mean at the rate the page
+// measures on the computer it runs on, with the workers it really has, and fails once it takes
+// longer (once in e^16 drawings, nine million, by chance). Between two results or two drawing
+// reports a page takes seconds; one that goes STALL_MS without either has stopped, and fails with
+// its partial results, the check it was in and its console messages, which a log in
+// target/browser-check/ keeps (CI uploads them when the step fails). PAGE_LIMIT_MS ends a page
+// that keeps reporting but never ends.
+const DRAW_BUDGET = 16;
+const STALL_MS = 120_000;
+const PAGE_LIMIT_MS = 3_600_000;
+/** How often the script asks the page how far it is. */
+const POLL_MS = 2_000;
 
 // The public test data the page and this script share, beside scripts/public-test-data.mjs.
 // Passes the wallet check with the passphrase "TREZOR" (TREZOR_COUNTER in src/wallet_check.rs).
@@ -288,8 +297,8 @@ function pageScript() {
   // built-in check contradicts (src/error.rs), exactly as the page gets them.
   const WALLET_PASSPHRASE_REQUIRED =
     "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase.";
-  const PASSPHRASE_ONLY_WITH_REFERENCE =
-    "passphrase belongs only to an address or fingerprint confirmation.";
+  const REKEY_PASSPHRASE_ONLY_WITH_REFERENCE =
+    "passphrase belongs only to an address or a fingerprint.";
   const PASSPHRASE_UNSTATED = "Invalid request: say whether the wallet has a BIP39 passphrase";
   const PASSPHRASE_CONTRADICTED =
     "Invalid request: the wallet's BIP39 passphrase is stated otherwise than the reference shows";
@@ -305,24 +314,40 @@ function pageScript() {
 
   const results = [];
   const failures = [];
+  // What the page has done so far, which the script outside reads while it waits: a page that
+  // stops shows its partial results and the check it was in (AUD-023-BLD005). `updated` is the
+  // page's time of its last result or drawing report.
+  const progress = { results, failures, running: "starting", updated: Date.now() };
+  window.mhfeProgress = progress;
+  /** Notes that the page is still working, on `running` if given. */
+  function working(running = progress.running) {
+    progress.running = running;
+    progress.updated = Date.now();
+  }
   function expect(condition, description) {
     results.push((condition ? "ok   " : "FAIL ") + description);
     if (!condition) failures.push(description);
+    working();
   }
 
-  async function expectRejection(promise, code, description, cause) {
+  async function expectRejection(promise, code, description, cause, message) {
     try {
       await promise;
       expect(false, description + " (it resolved)");
     } catch (error) {
       const sameCause = cause === undefined || error.cause === cause;
-      expect(error.code === code && sameCause, description + " -> " + error.code);
+      const sameMessage = message === undefined || error.message === message;
+      expect(
+        error.code === code && sameCause && sameMessage,
+        description + " -> " + error.code + ": " + error.message,
+      );
     }
   }
 
   /** A heading in the results, one per class or method. */
   function group(title) {
     results.push("-- " + title);
+    working(title);
   }
 
   /** Like expect, but a failure shows the value that was received. */
@@ -770,7 +795,7 @@ function pageScript() {
         otherLengths: [],
         repairWords: cards[4],
         repairProfile: REPAIR_PROFILE,
-        keep: [...KEEP_24, { item: "repairWords" }],
+        keep: [...KEEP_24, { item: "repairWords", apart: true }],
       },
       "encrypt resolves to the native container with every field and the repair module's card",
     );
@@ -802,7 +827,7 @@ function pageScript() {
       {
         ...sealed,
         repairWords: cards[6],
-        keep: [...KEEP_24, { item: "passphrase" }, { item: "repairWords" }],
+        keep: [...KEEP_24, { item: "passphrase" }, { item: "repairWords", apart: true }],
       },
       "walletHasPassphrase adds the passphrase to what to keep; six repair words and their profile",
     );
@@ -897,7 +922,7 @@ function pageScript() {
         suiteId: SUITE_3,
         builtInCheck: true,
         otherLengths: [21],
-        keep: [...KEEP_24, { item: "wordCount", words: 12 }],
+        keep: [...KEEP_24, { item: "wordCount", words: 12, apart: true }],
       },
       "a phrase that detection could also read as 21 words adds its word count to what to keep",
     );
@@ -978,7 +1003,7 @@ function pageScript() {
         ),
         {
           container: REDUCED_COST_CONTAINER,
-          keep: [...KEEP_24, PASSPHRASE_IF_ANY, { item: "repairWords" }],
+          keep: [...KEEP_24, PASSPHRASE_IF_ANY, { item: "repairWords", apart: true }],
         },
         `encrypt with walletHasPassphrase ${description} names any passphrase of the wallet`,
       );
@@ -1020,16 +1045,27 @@ function pageScript() {
       "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
       "memory level 1 (4 GiB) is refused in a browser",
     );
+    // In the library's words for the same value, as the command-line tool prints them.
     await expectRejection(
       sealPhrase({ memoryLevel: 22 }),
       "INVALID_MEMORY_LEVEL",
       "memory level 22 is refused",
+      undefined,
+      "The memory level must be a whole number from 0 to 21, not 22",
     );
-    await expectRejection(sealPhrase({ pim: 1024 }), "INVALID_PIM", "PIM 1024 is refused");
+    await expectRejection(
+      sealPhrase({ pim: 1024 }),
+      "INVALID_PIM",
+      "PIM 1024 is refused",
+      undefined,
+      "The PIM must be a whole number from 0 to 1023, not 1024",
+    );
     await expectRejection(
       sealPhrase({ repairWordCount: 3 }),
       "INVALID_REPAIR_WORDS",
       "three repair words are refused",
+      undefined,
+      "The repair words cannot be used: a card has 2, 4, 6 or 8 repair words, not 3",
     );
     const pimError = await rejectionOf(sealPhrase({ pim: 1 }));
     expect(
@@ -1365,16 +1401,22 @@ function pageScript() {
         ...options,
       });
     const check = async (reference, options = {}) =>
-      fieldsOf(await fullCheck(reference, options), ["matches", "path"]);
+      fieldsOf(await fullCheck(reference, options), ["outcome", "path"]);
     // The original seed phrase's own checks come with a match: the built-in check of the 12-word
     // phrase, and the phrase + passphrase check, which a phrase drawn without it fails.
     expectEqual(
       (await fullCheck({ fingerprint: FINGERPRINT })).evidence,
-      { builtInCheck: 12, walletCheck: null },
+      {
+        builtInCheck: 12,
+        matchingLengths: [12],
+        passed: [{ check: "builtInCheck", words: 12 }],
+        walletCheck: null,
+      },
       "a check lists the built-in check of a 12-word phrase, no wallet check without a passphrase",
     );
-    const matched = (path = null) => ({ matches: true, path });
-    const notMatched = { matches: false, path: null };
+    const matched = (path = null) => ({ outcome: "matches", path });
+    const notMatched = { outcome: "doesNotMatch", path: null };
+    const notVerified = { outcome: "notVerified", path: null };
     const log = progressLog();
     expectEqual(
       await check({ fingerprint: FINGERPRINT }, { onProgress: log.onProgress }),
@@ -1442,12 +1484,25 @@ function pageScript() {
     // stated one, so 15 stated words match, and the evidence names the 12 found (AUD-015-FUN001).
     expectEqual(
       await fullCheck({ words: 15 }),
-      { matches: true, path: null, evidence: { builtInCheck: 12, walletCheck: null } },
+      {
+        outcome: "matches",
+        path: null,
+        evidence: {
+          builtInCheck: 12,
+          matchingLengths: [12],
+          passed: [{ check: "builtInCheck", words: 12 }],
+          walletCheck: null,
+        },
+      },
       "the built-in check of 15 stated words matches at the 12 found, which the evidence names",
     );
     expectEqual(
       await fullCheck({ words: 15 }, { password: WRONG_PASSWORD }),
-      { matches: false, path: null, evidence: { builtInCheck: null, walletCheck: null } },
+      {
+        outcome: "doesNotMatch",
+        path: null,
+        evidence: { builtInCheck: null, matchingLengths: [], passed: [], walletCheck: null },
+      },
       "where no short check passes, as with the wrong password, the built-in check of 15 words " +
         "does not match",
     );
@@ -1464,7 +1519,7 @@ function pageScript() {
           passwordRepair: { repair: 3 },
           reference: { fingerprint: FINGERPRINT },
         }),
-        ["matches", "path"],
+        ["outcome", "path"],
       ),
       matched(),
       "passwordRepair { repair: 3 } restores the password of a check",
@@ -1476,21 +1531,64 @@ function pageScript() {
           password: PASSWORD,
           reference: { address: BIP84_ADDRESS, coin: "bitcoin" },
         }),
-        ["matches", "path"],
+        ["outcome", "path"],
       ),
       matched(BIP84_PATH),
       "a same-length container is checked against an address",
+    );
+    // Several lengths pass and none is stated, or a stated one does not: not verified, with every
+    // length that passes; a stated length among them matches (AUD-023-FUN002).
+    const onAmbiguous = (reference) =>
+      client.check({ container: made.ambiguous, password: PASSWORD, reference });
+    for (const words of [0, 15]) {
+      expectEqual(
+        await onAmbiguous({ words }),
+        {
+          outcome: "notVerified",
+          path: null,
+          evidence: {
+            builtInCheck: null,
+            matchingLengths: [12, 21],
+            passed: [{ check: "builtInChecks", lengths: [12, 21] }],
+            // With the length detected the 24-word reading comes out too, and gets the 16-bit
+            // check, which this phrase, drawn without it, fails; a stated length has none.
+            walletCheck: words === 0 ? false : null,
+          },
+        },
+        `the ambiguous phrase with ${words === 0 ? "the length detected" : "15 stated words"} ` +
+          "is not verified and names 12 and 21",
+      );
+    }
+    expectEqual(
+      fieldsOf(await onAmbiguous({ words: 21 }), ["outcome", "path"]),
+      matched(),
+      "the ambiguous phrase with 21 stated words matches",
     );
 
     const onChecked = async (reference, options) =>
       fieldsOf(
         await client.check({ container: made.checked, password: PASSWORD, reference, ...options }),
-        ["matches", "path"],
+        ["outcome", "path"],
       );
+    // A pass of the 16-bit check is a fact beside the result, not a verification of the reading.
     expectEqual(
-      await onChecked({ walletCheck: true }, { passphrase: "TREZOR" }),
-      matched(),
-      "the wallet check with its passphrase passes",
+      await client.check({
+        container: made.checked,
+        password: PASSWORD,
+        reference: { walletCheck: true },
+        passphrase: "TREZOR",
+      }),
+      {
+        outcome: "notVerified",
+        path: null,
+        evidence: {
+          builtInCheck: null,
+          matchingLengths: [],
+          passed: [{ check: "walletCheck" }],
+          walletCheck: true,
+        },
+      },
+      "the wallet check with its passphrase passes and leaves the reading not verified",
     );
     expectEqual(
       await onChecked({ walletCheck: true }, { passphrase: "trezor" }),
@@ -1505,22 +1603,25 @@ function pageScript() {
       matched(),
       "a 24-word phrase's passphrase wallet matches its fingerprint",
     );
-    // The length detected: the passphrase finds the 24-word phrase drawn with its check; without
-    // it the page is asked for the length and its fingerprint is compared on the same recovery.
+    // The length detected: a 24-word reading is not verified, its 16-bit pass with the passphrase
+    // a fact beside it; the page is asked for the length, with what detection found, and the
+    // fingerprint it gives is compared on the same recovery.
     expectEqual(
       await onChecked({ words: 0 }, { passphrase: "TREZOR" }),
-      matched(),
-      "the length detected finds a 24-word phrase by the phrase + passphrase check",
+      notVerified,
+      "the length detected leaves a 24-word phrase drawn with the 16-bit check not verified",
     );
     let lengthAsked = 0;
+    let detected = null;
     const askedLog = progressLog();
     expectEqual(
       await onChecked(
         { words: 0 },
         {
           onProgress: askedLog.onProgress,
-          onNoLength: () => {
+          onNoLength: (evidence) => {
             lengthAsked += 1;
+            detected = evidence;
             return { fingerprint: FINGERPRINTS.checkedPhraseWithTrezor, passphrase: "TREZOR" };
           },
         },
@@ -1534,8 +1635,13 @@ function pageScript() {
       "the page is asked once, and the recovery runs once",
     );
     expectEqual(
+      detected,
+      { builtInCheck: null, matchingLengths: [], passed: [], walletCheck: false },
+      "the page is told what detection found",
+    );
+    expectEqual(
       await onChecked({ words: 0 }, { onNoLength: () => null }),
-      notMatched,
+      notVerified,
       "without an answer the result stays",
     );
     const refusalLog = progressLog();
@@ -1836,9 +1942,14 @@ function pageScript() {
     /**
      * What a rekey resolves to: what encrypt gives for the confirmed phrase, with `walletCheck`,
      * the 16-bit source check of a recovered 24-word reading with the reference's passphrase or
-     * none, null for every other length.
+     * none, null for every other length, and `rehearsal`, what the new container is rehearsed
+     * with: the built-in check of a short phrase unless said otherwise (AUD-023-ARC010).
      */
-    const asRekeyResult = (sealed, walletCheck = null) => ({ ...sealed, walletCheck });
+    const asRekeyResult = (sealed, walletCheck = null, rehearsal = { kind: "builtInCheck" }) => ({
+      ...sealed,
+      walletCheck,
+      rehearsal,
+    });
     const sealedWithNew = await sealWithNew(PHRASE);
     const log = progressLog();
     const shown = [];
@@ -1935,7 +2046,12 @@ function pageScript() {
     });
     expectEqual(
       detectedOwnerSaw,
-      { phrase: PHRASE, words: 12, fingerprintWithoutPassphrase: FINGERPRINT },
+      {
+        phrase: PHRASE,
+        words: 12,
+        fingerprintWithoutPassphrase: FINGERPRINT,
+        rehearsalNeedsPassphrase: false,
+      },
       "with the length detected the owner is shown the 12 words found, and no length stated",
     );
     expect(
@@ -1990,6 +2106,7 @@ function pageScript() {
           phrase: AMBIGUOUS_12_WORDS,
           words: 12,
           fingerprintWithoutPassphrase: FINGERPRINTS.ambiguous12Words,
+          rehearsalNeedsPassphrase: false,
         },
       ],
       "the page was given both lengths, and the owner was shown the reading of the one stated",
@@ -2021,7 +2138,7 @@ function pageScript() {
       {
         repairWords: card.words,
         repairProfile: REPAIR_PROFILE,
-        keep: [...KEEP_24, { item: "repairWords" }],
+        keep: [...KEEP_24, { item: "repairWords", apart: true }],
       },
       "a rekey with repairWordCount 4 gives the repair module's card",
     );
@@ -2046,7 +2163,7 @@ function pageScript() {
     });
     expectEqual(
       withPassphrase.keep,
-      [...KEEP_24, PASSPHRASE, { item: "repairWords" }],
+      [...KEEP_24, PASSPHRASE, { item: "repairWords", apart: true }],
       "a rekey stated to have a passphrase keeps it after the password, before the repair words",
     );
     expectEqual(
@@ -2076,6 +2193,7 @@ function pageScript() {
         phrase: CHECKED_PHRASE,
         words: 24,
         fingerprintWithoutPassphrase: FINGERPRINTS.checkedPhrase,
+        rehearsalNeedsPassphrase: false,
       },
       "the owner is shown the recovered phrase and its fingerprint",
     );
@@ -2088,7 +2206,10 @@ function pageScript() {
     // checks before the page runs.
     expectEqual(
       ownerSealed,
-      asRekeyResult(await sealWithNew(CHECKED_PHRASE), false),
+      asRekeyResult(await sealWithNew(CHECKED_PHRASE), false, {
+        kind: "fingerprint",
+        fingerprint: FINGERPRINTS.checkedPhrase,
+      }),
       "the container the owner confirmed is what encrypt gives with the new password, with the " +
         "24-word reading's wallet check, every field",
     );
@@ -2100,15 +2221,38 @@ function pageScript() {
       ownerRecovery.candidates[0].phrase === CHECKED_PHRASE,
       "the container the owner confirmed opens with the new password",
     );
+    // A wallet with a passphrase: the owner's yes brings it, for the fingerprint the new
+    // container's rehearsal compares, which is known before the seal (AUD-023-ARC010).
+    let needsPassphrase = null;
     const ownerWithPassphrase = await client.rekey({
       ...ownerBase,
       walletHasPassphrase: true,
-      confirmation: { owner: () => true },
+      confirmation: {
+        owner: (check) => {
+          needsPassphrase = check.rehearsalNeedsPassphrase;
+          return { passphrase: "TREZOR" };
+        },
+      },
     });
     expectEqual(
-      fieldsOf(ownerWithPassphrase, ["container", "keep"]),
-      { container: ownerSealed.container, keep: [...KEEP_24, PASSPHRASE] },
-      "the owner's rekey stated to have a passphrase keeps it; the container is the same",
+      fieldsOf(ownerWithPassphrase, ["container", "keep", "rehearsal"]),
+      {
+        container: ownerSealed.container,
+        keep: [...KEEP_24, PASSPHRASE],
+        rehearsal: { kind: "fingerprint", fingerprint: FINGERPRINTS.checkedPhraseWithTrezor },
+      },
+      "the owner's rekey stated to have a passphrase keeps it, and its rehearsal compares the " +
+        "fingerprint with it; the container is the same",
+    );
+    expect(needsPassphrase === true, "the owner is told that the rehearsal needs the passphrase");
+    await expectRejection(
+      client.rekey({
+        ...ownerBase,
+        walletHasPassphrase: true,
+        confirmation: { owner: () => true },
+      }),
+      "INVALID_REQUEST",
+      "a yes without the passphrase the rehearsal needs stops the rekey before the seal",
     );
     // A stated short length that the check contradicts: the owner may confirm the reading the
     // check found, and is shown the length stated beside it, which the page names first.
@@ -2129,7 +2273,15 @@ function pageScript() {
     );
     expectEqual(
       ownerNo,
-      [{ phrase: PHRASE, words: 12, statedWords: 15, fingerprintWithoutPassphrase: FINGERPRINT }],
+      [
+        {
+          phrase: PHRASE,
+          words: 12,
+          statedWords: 15,
+          fingerprintWithoutPassphrase: FINGERPRINT,
+          rehearsalNeedsPassphrase: false,
+        },
+      ],
       "the owner of 15 stated words saw the 12-word reading the check found, with the 15 stated",
     );
     // 24 words stated beside a 12-word reading whose check passes: the owner cannot tell the two
@@ -2282,7 +2434,7 @@ function pageScript() {
     );
     expectEqual(
       sameRekey,
-      asRekeyResult(sameSealed),
+      asRekeyResult(sameSealed, null, { kind: "confirmingReference" }),
       "it is what encrypt with sameLength gives with the new password, every field, and no " +
         "wallet check",
     );
@@ -2372,7 +2524,9 @@ function pageScript() {
         passphrase: "TREZOR",
         walletHasPassphrase: true,
       }),
-      asRekeyResult(sameSealedWithPassphrase),
+      // A same-length container has no built-in check: the fingerprint that confirmed it
+      // rehearses the new one too.
+      asRekeyResult(sameSealedWithPassphrase, null, { kind: "confirmingReference" }),
       "the fingerprint's passphrase, stated as well, gives what encrypt gives with it, every field",
     );
     const byTrezorAddress = await client.rekey({
@@ -2430,10 +2584,20 @@ function pageScript() {
     });
     expectEqual(
       sameOwnerSaw,
-      { phrase: PHRASE, words: 12, fingerprintWithoutPassphrase: FINGERPRINT },
+      {
+        phrase: PHRASE,
+        words: 12,
+        fingerprintWithoutPassphrase: FINGERPRINT,
+        rehearsalNeedsPassphrase: false,
+      },
       "the owner of a same-length container is shown its 12-word phrase",
     );
     expect(sameContainer(bySameOwner), "the owner's yes seals the same container");
+    expectEqual(
+      bySameOwner.rehearsal,
+      { kind: "fingerprint", fingerprint: FINGERPRINT },
+      "a same-length phrase the owner confirmed is rehearsed with its fingerprint",
+    );
     const mismatchLog = progressLog();
     await expectRejection(
       client.rekey({
@@ -2652,7 +2816,7 @@ function pageScript() {
       for (const passphrase of ["TREZOR", encode("TREZOR")]) {
         await expectExactTypeError(
           client.rekey({ ...options, passphrase, walletHasPassphrase: true }),
-          PASSPHRASE_ONLY_WITH_REFERENCE,
+          REKEY_PASSPHRASE_ONLY_WITH_REFERENCE,
           `a passphrase${typeof passphrase === "string" ? "" : " as bytes"} with ${description} ` +
             "is refused",
         );
@@ -2722,7 +2886,7 @@ function pageScript() {
     );
     await expectTypeError(
       client.rekey({ ...sameBase, confirmation: { fingerprint: FINGERPRINT, path: BIP84_PATH } }),
-      "reference.path belongs only to an address reference.",
+      "confirmation.path belongs only to an address confirmation.",
       "a path without an address is refused in a confirmation",
     );
 
@@ -3233,9 +3397,14 @@ function pageScript() {
     expect(report.passed && labelled(report), `MhfeClient: the full self-check took ${time} ms`);
     const ran = [...SELF_CHECK.core, "argon2-sizes-single-threaded"];
     if (fast) ran.push("argon2-sizes-threaded");
+    // The process parts come from the WebAssembly too, each not available.
+    const processParts = ["memory-locking", "core-dumps", "isolation", "hidden-input"];
     expectEqual(
       events.map(({ id, running, outcome }) => (running ? `start ${id}` : `end ${id} ${outcome}`)),
-      ran.flatMap((id) => [`start ${id}`, `end ${id} passed`]),
+      [
+        ...ran.flatMap((id) => [`start ${id}`, `end ${id} passed`]),
+        ...processParts.flatMap((id) => [`start ${id}`, `end ${id} notAvailable`]),
+      ],
       "MhfeClient: each part is reported as it starts and ends, one after the other",
     );
     if (fast) {
@@ -3274,6 +3443,10 @@ function pageScript() {
         "package-parts passed",
         "bip39-words passed",
         "repair-words failed: card 1 of 1 gives other words",
+        // The parts of the master key fingerprint that a repair gives (AUD-023-BLD010).
+        "wallet-hashes passed",
+        "bip39-seed passed",
+        "bip32 passed",
       ],
       "a damaged card fails the repair words at startup",
     );
@@ -3844,7 +4017,7 @@ function pageScript() {
     );
     await expectExactTypeError(
       passwords.make({ kind: "checkWord", count: 7 }),
-      'count belongs only to the kinds "words" and "characters": "checkWord" always gives five ' +
+      'count belongs only to the kinds "words" and "characters": "checkWord" always gives 5 ' +
         "words and their check word.",
       "the check word takes no count, as mhfe password refuses --check-word with --words",
     );
@@ -4169,56 +4342,32 @@ function pageScript() {
 
     /** Whether a drawn phrase passes the wallet check with "TREZOR" and has that fingerprint. */
     const passesWithTrezor = async (drawnPhrase) =>
+      drawnPhrase !== null &&
       drawnPhrase.words === 24 &&
       drawnPhrase.walletCheck === true &&
       (await wallet.walletCheck({ phrase: drawnPhrase.phrase, passphrase: "TREZOR" })) &&
       drawnPhrase.fingerprintWithPassphrase ===
         (await wallet.fingerprint({ phrase: drawnPhrase.phrase, passphrase: "TREZOR" }));
-    // The two checked drawings of the page, about 65,536 BIP39 seeds each: one on the default
-    // workers, one on a count given.
-    const reports = [];
-    const checked = await wallet.drawPhrase({
-      ...checkedDraw,
-      onProgress: (progress) => reports.push(progress),
-    });
-    const defaultWorkers = Math.min(navigator.hardwareConcurrency || 1, 8);
-    expect(
-      checked.workers === defaultWorkers && (await passesWithTrezor(checked)),
-      `a checked phrase passes the wallet check, drawn on the default ${defaultWorkers} workers`,
-    );
-    // Whether a report comes at all is chance here: the phrase may be found before 1,024 draws.
-    // The drawing stopped after three reports below checks that they come.
-    expect(
-      reports.every(
-        (report, index) => report.stage === "draw" && report.draws === (index + 1) * 1024,
-      ),
-      `each of the ${reports.length} reports of the drawing adds the 1,024 draws of one worker`,
-    );
-    const givenWorkers = defaultWorkers > 1 ? defaultWorkers - 1 : 2;
-    const { result: onGiven, workersStarted: givenStarted } = await countingWorkers(() =>
-      wallet.drawPhrase({ ...checkedDraw, workers: givenWorkers }),
-    );
-    expect(
-      onGiven.workers === givenWorkers &&
-        givenStarted === givenWorkers &&
-        (await passesWithTrezor(onGiven)),
-      `a checked phrase drawn on ${givenWorkers} workers, as asked, passes the wallet check`,
-    );
-
     // Each worker reports every 1,024 of its draws, so the total grows by 1,024 a report. A phrase
     // found before the third report (about one drawing in 21) ends the drawing first, so it is
-    // tried again.
+    // tried again. The time to the third report gives the rate of the checked drawings below.
     let stoppedReports = [];
     let stopped = null;
+    let stoppedSeconds = 0;
     for (let attempt = 0; attempt < 5 && !(stopped instanceof MhfeCancelledError); attempt += 1) {
       const seen = [];
+      const start = performance.now();
       stopped = await rejectionOf(
         wallet.drawPhrase({
           ...checkedDraw,
           workers: 2,
-          onProgress: (progress) => {
-            seen.push(progress);
-            if (seen.length === 3) wallet.cancel();
+          onProgress: (report) => {
+            seen.push(report);
+            working();
+            if (seen.length === 3) {
+              stoppedSeconds = (performance.now() - start) / 1000;
+              wallet.cancel();
+            }
           },
         }),
       );
@@ -4257,6 +4406,76 @@ function pageScript() {
         sameValue(firstReport, { stage: "draw", draws: 1024 }),
       "an onProgress whose promise rejects stops the drawing at the first report",
     );
+    // The two checked drawings of the page, about 65,536 BIP39 seeds each, as the library expects
+    // them: one on the default workers, one on a count given. How long one takes is chance: more
+    // than N times its mean happens about once in e^N drawings. Each gets DRAW_BUDGET times the
+    // mean that the rate of the stopped drawing above gives, counted as if it ran on at most the
+    // two workers measured, so that more workers than the computer runs at once take no time from
+    // it; a drawing still running then is cancelled and fails the check, which a drawing at that
+    // rate does about once in e^DRAW_BUDGET. Without a rate it has no deadline of its own. A
+    // drawing that stops reporting fails sooner, outside the page (STALL_MS).
+    const { expectedDraws } = await wallet.describeDraw({ walletCheck: true });
+    const workerRate = stoppedSeconds > 0 ? (stoppedReports.length * 1024) / stoppedSeconds / 2 : 0;
+    const drawWithin = async (workers, draw) => {
+      if (workerRate === 0) return draw();
+      const seconds = Math.ceil(
+        (DRAW_BUDGET * expectedDraws) / (workerRate * Math.min(workers, 2)),
+      );
+      let late = false;
+      const deadline = setTimeout(() => {
+        late = true;
+        wallet.cancel();
+      }, seconds * 1000);
+      try {
+        return await draw();
+      } catch (error) {
+        expect(
+          false,
+          `a checked drawing on ${workers} workers ends within ${seconds} s, ${DRAW_BUDGET} times ` +
+            `its mean at ${Math.round(workerRate)} draws a second a worker: ` +
+            (late ? "it was still running" : `${error.code}: ${error.message}`),
+        );
+        return null;
+      } finally {
+        clearTimeout(deadline);
+      }
+    };
+    const defaultWorkers = Math.min(navigator.hardwareConcurrency || 1, 8);
+    const reports = [];
+    const checked = await drawWithin(defaultWorkers, () =>
+      wallet.drawPhrase({
+        ...checkedDraw,
+        onProgress: (report) => {
+          reports.push(report);
+          working();
+        },
+      }),
+    );
+    expect(
+      checked?.workers === defaultWorkers && (await passesWithTrezor(checked)),
+      `a checked phrase passes the wallet check, drawn on the default ${defaultWorkers} workers`,
+    );
+    // Whether a report comes at all is chance here: the phrase may be found before 1,024 draws.
+    // The drawing stopped after three reports above checks that they come.
+    expect(
+      reports.every(
+        (report, index) => report.stage === "draw" && report.draws === (index + 1) * 1024,
+      ),
+      `each of the ${reports.length} reports of the drawing adds the 1,024 draws of one worker`,
+    );
+    const givenWorkers = defaultWorkers > 1 ? defaultWorkers - 1 : 2;
+    const { result: onGiven, workersStarted: givenStarted } = await countingWorkers(() =>
+      drawWithin(givenWorkers, () =>
+        wallet.drawPhrase({ ...checkedDraw, workers: givenWorkers, onProgress: () => working() }),
+      ),
+    );
+    expect(
+      onGiven?.workers === givenWorkers &&
+        givenStarted === givenWorkers &&
+        (await passesWithTrezor(onGiven)),
+      `a checked phrase drawn on ${givenWorkers} workers, as asked, passes the wallet check`,
+    );
+
     const after = await wallet.drawPhrase({
       passphrase: encode("TREZOR"),
       passphraseRepeat: "TREZOR",
@@ -4394,6 +4613,7 @@ function pageScript() {
 
 const { version, buildId } = JSON.parse(read("dist/modules.json").toString());
 const sources = `
+const DRAW_BUDGET = ${inline(DRAW_BUDGET)};
 const VERSION = ${inline(version)};
 const PACKAGE_BUILD_ID = ${inline(buildId)};
 const SELF_CHECK = ${inline(SELF_CHECK)};
@@ -4425,18 +4645,9 @@ const classes = bundleClasses(root, [
 ]);
 const script = classes + sources + checks;
 
-// The policy of scripts/build-browser-check.mjs and the offline wallet tools: nothing but this
-// one script, WebAssembly and Blob workers.
-const scriptHash = createHash("sha256").update(script, "utf8").digest("base64");
-const policy = [
-  "default-src 'none'",
-  `script-src 'sha256-${scriptHash}' 'wasm-unsafe-eval'`,
-  "connect-src 'none'",
-  "worker-src blob:",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-].join("; ");
+// The policy of the offline wallet tools, which scripts/build-browser-check.mjs shares
+// (pagePolicy of scripts/bundle-browser-classes.mjs).
+const policy = pagePolicy(script);
 const page = `<!doctype html>
 <html lang="en">
   <head>
@@ -4494,39 +4705,86 @@ async function checkPage(browser, browserName, mode, address) {
   const page = await browser.newPage();
   const strayRequests = [];
   const pageErrors = [];
+  const consoleLines = [];
   // The page itself and its Blob workers are the only things it may load.
   page.on("request", (request) => {
     const url = request.url();
     if (url !== address && !url.startsWith("blob:")) strayRequests.push(url);
   });
   page.on("pageerror", (error) => pageErrors.push(String(error)));
+  page.on("console", (message) => consoleLines.push(`${message.type()}: ${message.text()}`));
   try {
     await page.goto(address);
-    const finished = page.waitForFunction(() => window.mhfeCheck !== undefined, null, {
-      timeout: PAGE_TIMEOUT_MS,
-    });
-    finished.catch(() => {});
-    // An error that stops the page's script, such as a SyntaxError, would otherwise wait out the
-    // timeout; every uncaught error fails the check anyway.
-    const stopped = new Promise((resolve) => page.once("pageerror", resolve));
-    await Promise.race([finished, stopped]);
-    const {
-      mode: clientMode,
-      results,
-      failures,
-    } = (await page.evaluate(() => window.mhfeCheck)) ?? {
-      mode: null,
-      results: [],
-      failures: ["the page's script stopped"],
-    };
+    const { mode: clientMode, results, failures } = await pageOutcome(page, pageErrors);
     if (clientMode !== mode) failures.push(`the client ran in ${clientMode} mode, not ${mode}`);
     for (const url of strayRequests) failures.push(`a request left the page: ${url}`);
     for (const error of pageErrors) failures.push(`uncaught page error: ${error}`);
-    console.log(`${browserName} ${browser.version()}, ${mode} mode:`);
-    for (const line of results) console.log(`  ${line}`);
-    for (const failure of failures) console.log(`  FAIL ${failure}`);
+    const lines = [
+      `${browserName} ${browser.version()}, ${mode} mode:`,
+      ...results.map((line) => `  ${line}`),
+      ...failures.map((failure) => `  FAIL ${failure}`),
+    ];
+    console.log(lines.join("\n"));
+    // The console messages go to the log alone, which CI keeps when the step fails.
+    const log = [
+      ...lines,
+      "Console messages of the page:",
+      ...consoleLines.map((line) => `  ${line}`),
+    ];
+    writeFileSync(
+      new URL(`target/browser-check/${browserName}-${mode}.log`, root),
+      log.join("\n") + "\n",
+    );
     return failures.length === 0;
   } finally {
     await page.close();
+  }
+}
+
+/**
+ * Waits for the page's results. A page that stops (an uncaught error, STALL_MS without a result or
+ * a drawing report, or PAGE_LIMIT_MS in all) gives its partial results instead, with the check it
+ * was in as a failure.
+ */
+async function pageOutcome(page, pageErrors) {
+  const start = Date.now();
+  for (;;) {
+    const state = await ask(page, () => ({
+      finished: window.mhfeCheck !== undefined,
+      quietMs: window.mhfeProgress === undefined ? 0 : Date.now() - window.mhfeProgress.updated,
+    }));
+    if (state?.finished) return page.evaluate(() => window.mhfeCheck);
+    let stopped = null;
+    if (pageErrors.length > 0) stopped = "an uncaught error stopped the page's script";
+    else if (state === null) stopped = `the page did not answer for ${STALL_MS / 1000} s`;
+    else if (state.quietMs > STALL_MS) {
+      stopped = `no result or drawing report for ${Math.round(state.quietMs / 1000)} s`;
+    } else if (Date.now() - start > PAGE_LIMIT_MS) {
+      stopped = `the page did not end within ${PAGE_LIMIT_MS / 60_000} minutes`;
+    }
+    if (stopped !== null) return partialOutcome(page, stopped);
+    await sleep(POLL_MS);
+  }
+}
+
+/** The results a stopped page has given so far, and why and where it stopped as a failure. */
+async function partialOutcome(page, stopped) {
+  const progress = await ask(page, () => {
+    const { results = [], failures = [], running = "starting" } = window.mhfeProgress ?? {};
+    return { results: [...results], failures: [...failures], running };
+  });
+  if (progress === null) return { mode: null, results: [], failures: [stopped] };
+  const { results, failures, running } = progress;
+  return { mode: null, results, failures: [...failures, `${stopped}, in "${running}"`] };
+}
+
+/** What `question` gives in the page, or null when the page does not answer within STALL_MS. */
+async function ask(page, question) {
+  const answered = new AbortController();
+  const silence = sleep(STALL_MS, null, { signal: answered.signal }).catch(() => null);
+  try {
+    return await Promise.race([page.evaluate(question), silence]);
+  } finally {
+    answered.abort();
   }
 }

@@ -212,13 +212,16 @@ same container, make both in the same style, with a check word, so their forms d
 ### `mhfe encrypt`
 
 Enter the original phrase and confirm the password twice. For 12 to 21 words, choose the
-[container length](#24-words-or-the-same-length); `--same-length` selects it without asking.
+[container length](#24-words-or-the-same-length); `--same-length` selects it without asking, and
+`--same-length no` keeps 24 words without asking.
 The result names the suite. Copy the container while MHFE recovers it for comparison, and rely
 on it only after "Verified"; then clear the private screen.
 
 The summary lists what to keep: the container, password, any wallet BIP39 passphrase, and, where needed,
-repair words, changed settings or the original word count. MHFE encrypts only the phrase: it does not ask
-for its wallet passphrase, but always reminds you to keep one if used.
+repair words, changed settings or the original word count. Keep the repair words and a note of the
+word count apart from the container: the note tells which length the container hides. MHFE
+encrypts only the phrase: it does not ask for its wallet passphrase, but always reminds you to keep
+one if used.
 
 Before relying on the backup, run [`mhfe check`](#mhfe-check) with the words from your written
 copy, not the screen, and retain the original backup until it matches. Copy additional containers
@@ -227,8 +230,10 @@ separate password for each phrase.
 
 ### `mhfe check`
 
-Rehearse recovery without showing the original phrase. The result is "matches" or "does not match";
-a matched address also shows its path, such as `m/84'/0'/0'/0/5`. The terminal summary names every
+Rehearse recovery without showing the original phrase. The result is "matches", "does not match" or
+"not verified"; a matched address also shows its path, such as `m/84'/0'/0'/0/5`. "Not verified"
+means that nothing tells a right password from a wrong one: a 24-word reading without an address or
+fingerprint, or several lengths that pass their built-in checks by chance, which MHFE lists. The terminal summary names every
 check the recovery passed, including a missing-word search's container-wallet reference when used.
 Enter the container from your written copy.
 
@@ -249,10 +254,12 @@ phrase drawn with it. The latter checks only the 24-word reading, requires a non
 and does not identify the wallet.
 
 For the built-in check, "Detect automatically" (`--words auto`) finds a passing short length and
-asks whether the original wallet has a passphrase, so a 24-word reading with the optional check can
-also be tested. If no length is found, a stated short length does not match; for 24 words, an address
-or fingerprint can confirm the same recovery without repeating the rounds. A detected short length
-takes precedence over a stated one, and the summary reports it.
+asks whether the original wallet has a passphrase (`--passphrase-used yes|no` answers beforehand),
+so that a pass of the optional check of a 24-word reading is reported; it does not verify the
+reading. If no single length is found, MHFE asks for
+it: a stated short length that does not pass does not match, and for 24 words an address or
+fingerprint confirms the same recovery without repeating the rounds. A detected short length takes
+precedence over a stated one, and the summary reports it.
 
 A mismatch cannot identify which input is wrong: the password, settings, container, passphrase or
 reference. Script input and its default coin are in [For scripts](#for-scripts).
@@ -346,10 +353,11 @@ the backup in either case.
 #### Chosen words
 
 `mhfe new` can choose one word at a position from 1 to 24 or anywhere, and one word the phrase must
-never hold (`--never-use`). The chosen word is entered and shown only on private screens; the
-summary records only whether there was one. MHFE draws until both wishes hold, uniformly among
-phrases that meet them, rather than among all phrases. This is an application feature, outside the
-specification's uniform-source assumptions.
+never hold (`--never-use`); `--choose-word no` draws every word at random without asking, and
+`--wallet-check yes|no` answers the question about the check. The chosen word is entered and shown
+only on private screens; the summary records only whether there was one. MHFE draws until both
+wishes hold, uniformly among phrases that meet them, rather than among all phrases. This is an
+application feature, outside the specification's uniform-source assumptions.
 
 Before drawing, MHFE reports the remaining entropy for someone who knows the wishes:
 
@@ -565,6 +573,7 @@ The exit code tells what happened:
 | 2    | Invalid input: phrase, container, password, setting, address or option                              |
 | 3    | Does not match: wrong password, PIM, memory level, container or selected length                     |
 | 4    | Not enough memory for the memory level                                                              |
+| 5    | Not verified (`check`): no address or fingerprint for a 24-word reading, or several lengths pass    |
 | 130  | Cancelled: Ctrl+C, Escape or q at a list, Ctrl+D at a secret's prompt, SIGTERM or a closed terminal |
 
 A command is cancelled with Ctrl+C at any moment, with Escape, or q, at a list of answers, and with

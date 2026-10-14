@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-import { bundleClasses } from "./bundle-browser-classes.mjs";
+import { bundleClasses, pagePolicy } from "./bundle-browser-classes.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root));
@@ -114,8 +114,8 @@ async function main() {
     const candidate = recovery.candidates[0];
     expect(recovery.kind === 'phrase' && candidate.phrase === PHRASE && candidate.words === 12 && candidate.verified,
       'full-size decryption recovers the verified 12-word phrase (' + seconds() + ')');
-    const { matches } = await client.check({ container, password: PASSWORD, reference: { address: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu', coin: 'bitcoin' }, onProgress });
-    expect(matches === true, 'rehearsal check with the address matches (' + seconds() + ')');
+    const { outcome } = await client.check({ container, password: PASSWORD, reference: { address: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu', coin: 'bitcoin' }, onProgress });
+    expect(outcome === 'matches', 'rehearsal check with the address matches (' + seconds() + ')');
   }
 }
 
@@ -127,20 +127,7 @@ main()
   });
 `;
 const script = clientModule + "\n" + checks;
-const scriptHash = createHash("sha256").update(script, "utf8").digest("base64");
-const policy = [
-  "default-src 'none'",
-  `script-src 'sha256-${scriptHash}' 'wasm-unsafe-eval'`,
-  "style-src 'unsafe-inline'",
-  "img-src 'none'",
-  "font-src 'none'",
-  "connect-src 'none'",
-  "worker-src blob:",
-  "object-src 'none'",
-  "frame-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-].join("; ");
+const policy = pagePolicy(script);
 
 const page = `<!doctype html>
 <html lang="en">

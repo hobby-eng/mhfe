@@ -96,6 +96,11 @@ impl PasswordRecipe {
     }
 
     /// The strength in thousandths of a bit; the check word adds none.
+    /// The strength in bits ([`bits_of`] of [`PasswordRecipe::millibits`]).
+    pub fn bits(&self) -> f64 {
+        bits_of(self.millibits())
+    }
+
     pub fn millibits(&self) -> usize {
         match self.kind {
             Kind::Characters(count) => count * MILLIBITS_PER_CHARACTER,
@@ -249,10 +254,17 @@ pub fn character_bits(count: usize) -> String {
     bits_text(count * MILLIBITS_PER_CHARACTER)
 }
 
-/// "64.6" for 64,625 millibits: a strength in bits, rounded to one decimal.
+/// A strength of `millibits` in bits.
+pub fn bits_of(millibits: usize) -> f64 {
+    millibits as f64 / f64::from(MILLIBITS_PER_BIT)
+}
+
+/// "64.6" for 64,625 millibits: a strength in bits, rounded half up to one decimal.
 pub fn bits_text(millibits: usize) -> String {
-    let tenths = (millibits + 50) / 100;
-    format!("{}.{}", tenths / 10, tenths % 10)
+    const TENTHS_PER_BIT: usize = 10;
+    let per_tenth = MILLIBITS_PER_BIT as usize / TENTHS_PER_BIT;
+    let tenths = (millibits + per_tenth / 2) / per_tenth;
+    format!("{}.{}", tenths / TENTHS_PER_BIT, tenths % TENTHS_PER_BIT)
 }
 
 /// The list index of drawn word `number`, from 1, from its five dice digits as typed

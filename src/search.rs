@@ -19,11 +19,11 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::engine::Argon2Engine;
-use crate::packing;
+use crate::packing::{self, STATE_BYTES};
 use crate::phrase::{self, LIST_SIZE, WORD_BITS, WORD_COUNTS};
 use crate::rehearsal::{self, CheckOutcome, Reference};
 use crate::repair::ContainerReading;
-use crate::wallet::SearchLimits;
+use crate::wallet::{DerivationPath, SearchLimits};
 use crate::{Mhfe, MhfeError, Password, Suite};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
@@ -42,9 +42,9 @@ pub type CandidateProgress<'a> = &'a mut dyn FnMut(usize, usize) -> Result<(), M
 /// Hears every round of a search that recovers each candidate: `(candidate, count, round,
 /// rounds)`; an error stops it.
 pub type RecoveryProgress<'a> = &'a mut dyn FnMut(usize, usize, u32, u32) -> Result<(), MhfeError>;
-/// Compares candidate `index` with the reference, from any of the threads that share them.
-/// Compares one candidate; the second argument says when the search was stopped, which a long
-/// address search asks between its addresses.
+/// Compares candidate `index` with the reference, from any of the threads that share them; the
+/// second argument says when the search was stopped, which a long address search asks between its
+/// addresses.
 type CandidateCompare<'a> =
     &'a (dyn Fn(usize, &dyn Fn() -> bool) -> Result<CheckOutcome, MhfeError> + Sync);
 /// The most missing words a search with the owner's wallet looks for: each candidate takes a full
@@ -68,8 +68,8 @@ pub struct Found {
     pub container: Zeroizing<String>,
     /// Each missing word as found, with its position from 1.
     pub words: Vec<(usize, &'static str)>,
-    /// What the comparison found: for an address, the path where it was found.
-    pub outcome: CheckOutcome,
+    /// For an address, the path where it was found.
+    pub path: Option<DerivationPath>,
 }
 
 impl ContainerSearch {
@@ -147,13 +147,13 @@ impl ContainerSearch {
         let matched = compare_candidates(self.count(), &compare, on_progress)?;
         Ok(matched.map(|(index, outcome)| {
             let missing = &self.candidates[index];
-            self.found(self.container(missing), missing, outcome)
+            self.found(self.container(missing), missing, outcome.path().cloned())
         }))
     }
 
     /// Recovers every candidate with `password`, a full recovery each, until one matches
-    /// `reference` as [`Mhfe::check`] compares it: an address or a fingerprint of the wallet, or
-    /// the original seed phrase's own checks ([`ContainerSearch::search_own_checks`]). Only
+    /// `reference` as [`Mhfe::check`] compares it, an address or a fingerprint of the wallet, or
+    /// passes the original seed phrase's own checks ([`ContainerSearch::search_own_checks`]). Only
     /// [`MAX_MISSING_FOR_WALLET`] missing word is searched (`TOO_MANY_MISSING_WORDS`), and a
     /// reference that cannot tell the candidates apart is refused, both before any work.
     /// `on_progress(candidate, count, round, rounds)` hears of every round and stops the search
@@ -176,11 +176,21 @@ impl ContainerSearch {
         let count = self.count();
         for (index, missing) in self.candidates.iter().enumerate() {
             let container = self.container(missing);
-            let outcome = mhfe.check(&container, password, reference, &mut |round, rounds| {
-                on_progress(index + 1, count, round, rounds)
-            })?;
-            if outcome.matches() {
-                return Ok(Some(self.found(container, missing, outcome)));
+            let recovered =
+                mhfe.recover_for_check(&container, password, reference, &mut |round, rounds| {
+                    on_progress(index + 1, count, round, rounds)
+                })?;
+            let found = match reference {
+                Reference::OwnChecks { passphrase } => {
+                    recovered.passes_own_checks(*passphrase)?.then_some(None)
+                }
+                _ => {
+                    let outcome = recovered.compare(reference)?.outcome;
+                    outcome.matches().then(|| outcome.path().cloned())
+                }
+            };
+            if let Some(path) = found {
+                return Ok(Some(self.found(container, missing, path)));
             }
         }
         Ok(None)
@@ -243,7 +253,12 @@ impl ContainerSearch {
         Zeroizing::new(phrase::words_of(&numbers))
     }
 
-    fn found(&self, container: Zeroizing<String>, missing: &[u16], outcome: CheckOutcome) -> Found {
+    fn found(
+        &self,
+        container: Zeroizing<String>,
+        missing: &[u16],
+        path: Option<DerivationPath>,
+    ) -> Found {
         Found {
             container,
             words: self
@@ -252,7 +267,7 @@ impl ContainerSearch {
                 .zip(missing)
                 .map(|(&position, &number)| (position + 1, phrase::word(number)))
                 .collect(),
-            outcome,
+            path,
         }
     }
 }
@@ -268,7 +283,7 @@ fn compare_candidates(
     on_progress: CandidateProgress<'_>,
 ) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-    use std::sync::Mutex;
+    use std::sync::{Condvar, Mutex};
     use std::time::Duration;
 
     let workers = std::thread::available_parallelism()
@@ -276,7 +291,9 @@ fn compare_candidates(
         .min(count.max(1));
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
-    let finished = AtomicUsize::new(0);
+    // The workers that have ended, which wake this thread at once when the last one does.
+    let finished = Mutex::new(0);
+    let all_finished = Condvar::new();
     // `stop` ends the taking of candidates after a match, while the comparisons under way finish,
     // so that the lowest match wins; `abort`, after an error or a cancel, ends those too.
     let stop = AtomicBool::new(false);
@@ -313,13 +330,24 @@ fn compare_candidates(
                     }
                     done.fetch_add(1, Ordering::Relaxed);
                 }
-                finished.fetch_add(1, Ordering::Release);
+                *finished.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+                all_finished.notify_one();
             });
         }
-        // This thread tells how far the comparison has come; an error from it stops the workers.
-        // After an abort it is not asked again while the workers end.
-        while finished.load(Ordering::Acquire) < workers {
-            std::thread::sleep(Duration::from_millis(PROGRESS_INTERVAL_MS));
+        // This thread tells how far the comparison has come at every interval, and ends as soon as
+        // the last worker does, without waiting out an interval (AUD-023-DOC002); an error from
+        // it stops the workers. After an abort it is not asked again while the workers end.
+        let interval = Duration::from_millis(PROGRESS_INTERVAL_MS);
+        loop {
+            let ended = finished.lock().unwrap_or_else(|e| e.into_inner());
+            let (ended, _) = all_finished
+                .wait_timeout_while(ended, interval, |ended| *ended < workers)
+                .unwrap_or_else(|e| e.into_inner());
+            if *ended >= workers {
+                break;
+            }
+            // The workers that end meanwhile need the lock.
+            drop(ended);
             if abort.load(Ordering::Relaxed) {
                 continue;
             }
@@ -443,10 +471,10 @@ fn candidates(words: &[u16], missing: &[usize]) -> Vec<Vec<u16>> {
 }
 
 /// The bits of up to 24 words of 11 bits: 33 bytes, 32 of entropy and one of checksum.
-type WordBits = [u8; 33];
+type WordBits = [u8; STATE_BYTES + 1];
 
 fn pack(numbers: &[u16]) -> WordBits {
-    let mut bits = [0_u8; 33];
+    let mut bits = [0_u8; STATE_BYTES + 1];
     for (index, &number) in numbers.iter().enumerate() {
         set_word(&mut bits, index, number);
     }

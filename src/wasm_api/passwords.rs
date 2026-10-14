@@ -10,8 +10,8 @@ use super::{
 };
 use crate::check_word::{self, Correction, PasswordReview, Reading, PROFILE};
 use crate::new_password::{
-    PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS, MILLIBITS_PER_BIT, MOST_CHARACTERS,
-    MOST_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
+    PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS,
+    RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
 };
 use crate::self_check::sets;
 use crate::strength::{Strength, WEAK_BELOW_BITS};
@@ -170,13 +170,22 @@ pub fn make_password(
     let rolls = SecretText::new(rolls_utf8);
     let size = |default: usize| match count {
         None => Ok(default),
-        Some(count) => whole_number(count, "INVALID_PASSWORD_SIZE", "the size").map(|n| n as usize),
+        Some(count) => whole_number(
+            count,
+            MhfeError::InvalidPasswordSize(String::new()).code(),
+            "the size",
+        )
+        .map(|n| n as usize),
     };
     let recipe = match kind {
         "words" => PasswordRecipe::words(size(DEFAULT_WORDS)?),
-        "checkWord" if count.is_some() => Err(MhfeError::InvalidRequest(
-            "checkWord takes no count: it always makes five words and their check word".to_owned(),
-        )),
+        // The class's TypeError (web/passwords.js) is a deliberate copy of this refusal, made
+        // before a worker starts; scripts/verify-browser-package.mjs keeps both equal.
+        "checkWord" if count.is_some() => Err(MhfeError::InvalidRequest(format!(
+            "count belongs only to the kinds \"words\" and \"characters\": \"checkWord\" always \
+             gives {} words and their check word",
+            check_word::DRAWN_WORDS
+        ))),
         "checkWord" => Ok(PasswordRecipe::check_word()),
         "characters" => PasswordRecipe::characters(size(DEFAULT_CHARACTERS)?),
         other => Err(MhfeError::InvalidRequest(format!(
@@ -193,7 +202,7 @@ pub fn make_password(
     .map_err(js_error)?;
     secret_json(&NewPasswordJson {
         password: password.text(),
-        bits: recipe.millibits() as f64 / f64::from(MILLIBITS_PER_BIT),
+        bits: recipe.bits(),
         weak: recipe.is_weak(),
         check_word: recipe.has_check_word(),
     })

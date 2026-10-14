@@ -26,6 +26,22 @@ pub struct ConfirmedPhrase {
     phrase: RecoveredPhrase,
     wallet_has_passphrase: bool,
     awaits_owner: bool,
+    /// Whether the owner confirmed it alone, with no reference of the wallet.
+    by_owner: bool,
+}
+
+/// What the rehearsal of a rekey's new container compares (the specification's re-encryption
+/// rules): a replacement of a source without a built-in check is made only once the reference its
+/// rehearsal compares is known.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReplacementRehearsal {
+    /// The phrase's built-in check, which the new container carries.
+    BuiltInCheck,
+    /// The receiving address or the fingerprint that confirmed the phrase.
+    ConfirmingReference,
+    /// The master key fingerprint of the phrase that the owner confirmed alone, with the wallet's
+    /// BIP39 passphrase if it has one.
+    Fingerprint([u8; 4]),
 }
 
 impl ConfirmedPhrase {
@@ -52,6 +68,45 @@ impl ConfirmedPhrase {
     pub fn wallet_has_passphrase(&self) -> bool {
         self.wallet_has_passphrase
     }
+
+    /// Whether [`ConfirmedPhrase::replacement_rehearsal`] needs the wallet's BIP39 passphrase: a
+    /// phrase without a built-in check, confirmed by the owner alone, of a wallet that has one.
+    pub fn rehearsal_needs_passphrase(&self) -> bool {
+        self.rehearsed_by_fingerprint() && self.wallet_has_passphrase
+    }
+
+    /// What the rehearsal of the new container compares: the built-in check of a phrase that has
+    /// one; else the reference that confirmed it; else, as the owner confirmed it alone, the
+    /// master key fingerprint of the phrase with `passphrase`, the wallet's BIP39 passphrase,
+    /// which is required where [`ConfirmedPhrase::rehearsal_needs_passphrase`] says so and
+    /// refused for a wallet stated to have none (`INVALID_REQUEST`). Only the fingerprint uses
+    /// `passphrase`.
+    pub fn replacement_rehearsal(
+        &self,
+        passphrase: &str,
+    ) -> Result<ReplacementRehearsal, MhfeError> {
+        if self.phrase.verified() {
+            return Ok(ReplacementRehearsal::BuiltInCheck);
+        }
+        if !self.by_owner {
+            return Ok(ReplacementRehearsal::ConfirmingReference);
+        }
+        match (self.wallet_has_passphrase, passphrase.is_empty()) {
+            (true, true) => Err(MhfeError::InvalidRequest(
+                "the rehearsal's fingerprint needs the wallet's BIP39 passphrase".to_owned(),
+            )),
+            (false, false) => Err(MhfeError::InvalidRequest(
+                "the wallet is stated to have no BIP39 passphrase".to_owned(),
+            )),
+            _ => Ok(ReplacementRehearsal::Fingerprint(
+                crate::wallet::master_fingerprint(self.phrase.phrase(), passphrase)?,
+            )),
+        }
+    }
+
+    fn rehearsed_by_fingerprint(&self) -> bool {
+        self.by_owner && !self.phrase.verified()
+    }
 }
 
 /// One rekey of one container.
@@ -66,9 +121,9 @@ impl Rekey {
     /// A rekey of `container`, whose phrase has the given `length`: a stated word count, or
     /// [`PhraseLength::Detect`] to detect it after the recovery (`detection`). A
     /// same-length container has its own length only. Nothing is destroyed: the old container
-    /// keeps opening every wallet with its old passwords, so that a front end warns that funds at
-    /// the old addresses of the wallets other passwords open on it are moved before the old
-    /// container and its passwords are deleted. Everything is checked here, before any Argon2
+    /// keeps opening every wallet with its old passwords, so that a front end says what to keep of
+    /// it until the funds of the wallets other passwords open on it are moved
+    /// ([`crate::operation::Keep::old_container`]). Everything is checked here, before any Argon2
     /// work.
     pub fn new(
         container: &str,
@@ -235,10 +290,12 @@ impl Rekey {
         let phrase = recovered.confirm(self.length, confirmation, &mut || {
             rounds.report(Stage::Compare, ROUNDS, progress)
         })?;
+        let by_owner = matches!(confirmation, Confirmation::Owner);
         Ok(ConfirmedPhrase {
             phrase,
             wallet_has_passphrase,
-            awaits_owner: matches!(confirmation, Confirmation::Owner),
+            awaits_owner: by_owner,
+            by_owner,
         })
     }
 
@@ -313,6 +370,7 @@ fn wallet_passphrase(
 mod tests {
     use super::*;
     use crate::rehearsal::Reference;
+    use crate::test_support::{counted, ABANDON_12, AMBIGUOUS_12_21 as AMBIGUOUS, TREZOR_COUNTER};
 
     fn container_24() -> String {
         // Any valid 24-word phrase serves as a container's words for the checks before Argon2.
@@ -543,15 +601,15 @@ mod tests {
     #[test]
     fn a_wallet_with_a_passphrase_keeps_it_after_a_rekey() {
         use crate::operation::KeepItem;
-        const ABANDON: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
-                               abandon abandon abandon about";
         let work = WorkFactor::default();
         let old = password("public test password");
         let container = reduced(work)
-            .encrypt(ABANDON, &old, crate::Suite::SameLength, &mut |_, _| Ok(()))
+            .encrypt(ABANDON_12, &old, crate::Suite::SameLength, &mut |_, _| {
+                Ok(())
+            })
             .unwrap();
         let rekey = Rekey::new(&container, PhraseLength::Detect, old, work).unwrap();
-        let fingerprint = crate::wallet::master_fingerprint(ABANDON, "TREZOR").unwrap();
+        let fingerprint = crate::wallet::master_fingerprint(ABANDON_12, "TREZOR").unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
             passphrase: "TREZOR",
@@ -589,9 +647,6 @@ mod tests {
         }
     }
 
-    const ABANDON_12: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
-                              abandon abandon abandon about";
-
     /// A 24-word container of `phrase` under a public password at the reduced cost, with the
     /// rekey of it for `length`, stated or detected.
     fn rekey_of(phrase: &str, length: PhraseLength) -> Rekey {
@@ -602,6 +657,68 @@ mod tests {
             })
             .unwrap();
         Rekey::new(&container, length, old, WorkFactor::default()).unwrap()
+    }
+
+    /// The rehearsal of the new container: the built-in check of a short phrase, the reference
+    /// that confirmed a 24-word one, or the fingerprint of one the owner confirmed alone, with the
+    /// wallet's passphrase where it has one (AUD-023-ARC010).
+    #[test]
+    fn the_replacement_is_rehearsed_with_what_confirms_it() {
+        let work = WorkFactor::default();
+        let recover = |rekey: &Rekey, confirmation, has_passphrase| {
+            rekey
+                .recover(
+                    &mut reduced(work),
+                    confirmation,
+                    Some(has_passphrase),
+                    &mut |_, _, _| Ok(()),
+                )
+                .unwrap()
+                .confirmed_by_owner()
+        };
+        let short = recover(&stated(ABANDON_12, 12), Confirmation::BuiltInCheck, false);
+        assert!(!short.rehearsal_needs_passphrase());
+        assert_eq!(
+            short.replacement_rehearsal(""),
+            Ok(ReplacementRehearsal::BuiltInCheck)
+        );
+
+        let drawn = crate::phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
+        let full = stated(&drawn, 24);
+        let reference = Reference::Fingerprint {
+            fingerprint: crate::wallet::master_fingerprint(&drawn, "").unwrap(),
+            passphrase: "",
+        };
+        let by_reference = recover(&full, Confirmation::Wallet(&reference), false);
+        assert_eq!(
+            by_reference.replacement_rehearsal(""),
+            Ok(ReplacementRehearsal::ConfirmingReference)
+        );
+
+        let without = recover(&full, Confirmation::Owner, false);
+        assert!(!without.rehearsal_needs_passphrase());
+        assert_eq!(
+            without.replacement_rehearsal(""),
+            Ok(ReplacementRehearsal::Fingerprint(
+                crate::wallet::master_fingerprint(&drawn, "").unwrap()
+            ))
+        );
+        assert!(matches!(
+            without.replacement_rehearsal("TREZOR"),
+            Err(MhfeError::InvalidRequest(_))
+        ));
+        let with = recover(&full, Confirmation::Owner, true);
+        assert!(with.rehearsal_needs_passphrase());
+        assert_eq!(
+            with.replacement_rehearsal("TREZOR"),
+            Ok(ReplacementRehearsal::Fingerprint(
+                crate::wallet::master_fingerprint(&drawn, "TREZOR").unwrap()
+            ))
+        );
+        assert!(matches!(
+            with.replacement_rehearsal(""),
+            Err(MhfeError::InvalidRequest(_))
+        ));
     }
 
     fn detected(phrase: &str) -> Rekey {
@@ -772,8 +889,6 @@ mod tests {
     /// length stated among them; a fingerprint compares every reading and finds the phrase.
     #[test]
     fn an_ambiguous_detection_needs_the_wallet() {
-        const AMBIGUOUS: &str =
-            "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
         let fingerprint = Reference::Fingerprint {
             fingerprint: crate::wallet::master_fingerprint(AMBIGUOUS, "").unwrap(),
             passphrase: "",
@@ -821,8 +936,6 @@ mod tests {
     /// kind ends the rekey.
     #[test]
     fn a_refused_confirmation_is_followed_by_another_on_the_same_recovery() {
-        const AMBIGUOUS: &str =
-            "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
         let mut rekey = stated(AMBIGUOUS, 12);
         let state = rekey
             .recover_state(

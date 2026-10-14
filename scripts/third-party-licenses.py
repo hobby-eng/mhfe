@@ -2,6 +2,8 @@
 
     python3 scripts/third-party-licenses.py           write the part into THIRD_PARTY_NOTICES.md
     python3 scripts/third-party-licenses.py --check   fail if the committed file is out of date
+    python3 scripts/third-party-licenses.py --binaries FILE ...   fail on an unlisted std crate
+    python3 scripts/third-party-licenses.py --self-test           the checks against made-up input
 
 The crates are the union of `cargo tree --locked --offline -e normal,no-proc-macro` over every
 release target and feature set (TREES below). Build scripts, build dependencies and proc macros
@@ -24,14 +26,31 @@ How the licence of a crate is chosen, the same for every crate:
   such a rule stops the script.
 
 Crates with byte-identical texts share one text section, so no copyright line is ever dropped.
+
+The Rust standard library and the crates it is built from are in every program too, but no
+`cargo tree` lists them (AUD-023-BLD003). Their section, "Rust standard library", is written by
+hand from the pinned toolchain's sources. `--check` also compares it with the installed toolchain:
+it must name the channel of rust-toolchain.toml and the SHA-256 of the toolchain's own notice
+file, and list, in the versions their libraries name, the crates from outside the Rust repository
+that the toolchain's libraries are built from, for each release target whose standard library is
+installed. It names the release targets it compared and those it left out. `--binaries` reads
+programs, WebAssembly files and release archives (a .tar.gz or .zip, with the notices they carry)
+and refuses one that names, in a path of the form /rust/deps/<crate>-<version>/ with either kind
+of slash, a crate that the section does not list.
 """
 
+from collections import namedtuple
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
+import tomllib
+import zipfile
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = REPO_ROOT / "THIRD_PARTY_NOTICES.md"
@@ -303,10 +322,298 @@ def render(resolved):
     return "\n".join(lines)
 
 
+# The section of THIRD_PARTY_NOTICES.md on the Rust standard library, written by hand.
+STD_HEADING = "## Rust standard library"
+# A crate of the standard library in the section's list: "- `name` version: ...".
+STD_LISTED = re.compile(r"^- `([A-Za-z0-9_-]+)` (\d+\.\d+\.\d+\S*?):", re.MULTILINE)
+# A source path of a crate the standard library is built from, as rustc writes it into a program:
+# /rust/deps/<crate>-<version>/ with forward slashes, or backslashes in a Windows program.
+STD_PATH = re.compile(
+    rb"[/\\]rust[/\\]deps[/\\]([A-Za-z0-9_.-]+?)-(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)[/\\]"
+)
+# The toolchain's libraries that are part of the Rust repository itself, which the standard library
+# section covers as a whole, and those of the toolchain that no program links: libtest and the
+# proc_macro library, with the crates only they use.
+STD_IN_TREE = {
+    "alloc",
+    "compiler_builtins",
+    "core",
+    "panic_abort",
+    "panic_unwind",
+    "proc_macro",
+    "profiler_builtins",
+    "rustc_std_workspace_alloc",
+    "rustc_std_workspace_core",
+    "rustc_std_workspace_std",
+    "std",
+    "std_detect",
+    "sysroot",
+    "test",
+    "unwind",
+}
+STD_NOT_LINKED = {"getopts", "rustc_literal_escaper"}
+# The release targets whose standard library a program or the WebAssembly links: those of TREES.
+STD_TARGETS = tuple(target for target, _ in TREES)
+# The toolchain's own notice for the standard library, under its root.
+STD_NOTICE = Path("share/doc/rust/COPYRIGHT-library.html")
+
+
+def crate_key(name):
+    """A crate's name as its library file writes it: cfg-if and cfg_if are one crate."""
+    return name.replace("-", "_")
+
+
+def std_section(notices):
+    """The text of the standard library section of `notices`, or None when it has none."""
+    start = notices.find(f"\n{STD_HEADING}\n")
+    if start < 0:
+        return None
+    rest = notices[start + 1 :]
+    ends = [index for index in (rest.find("\n## ", 1), rest.find(MARKER)) if index >= 0]
+    return rest[: min(ends)] if ends else rest
+
+
+def listed_std_crates(notices):
+    """{crate key: version} of the crates the section of `notices` lists; None without it."""
+    section = std_section(notices)
+    if section is None:
+        return None
+    return {crate_key(name): version for name, version in STD_LISTED.findall(section)}
+
+
+def std_crates_named(data):
+    """{(crate key, version)} named by source paths of the standard library's crates in `data`."""
+    return {
+        (crate_key(name.decode()), version.decode()) for name, version in STD_PATH.findall(data)
+    }
+
+
+# What a comparison of the standard library section with the installed toolchain found: what the
+# section lacks, one line each, the release targets whose libraries were compared, and those left
+# out because their standard library is not installed, so that a partial comparison never reads as
+# a full one.
+Comparison = namedtuple("Comparison", ("differences", "compared", "not_installed"))
+
+
+def toolchain_comparison(notices, channel, sysroot):
+    """The Comparison of the standard library section of `notices` with the toolchain `channel`
+    installed at `sysroot`."""
+    section = std_section(notices)
+    if section is None:
+        return Comparison([f"{OUTPUT.name} has no section {STD_HEADING!r}"], [], [])
+    found = []
+    if f"Rust {channel}" not in section:
+        found.append(f"the standard library section does not name Rust {channel}")
+    notice = sysroot / STD_NOTICE
+    if not notice.is_file():
+        found.append(f"the toolchain has no {STD_NOTICE} to compare with")
+    else:
+        digest = hashlib.sha256(notice.read_bytes()).hexdigest()
+        if digest not in section:
+            found.append(
+                f"the standard library section does not give the SHA-256 {digest} of {STD_NOTICE}"
+            )
+    listed = listed_std_crates(notices)
+    libraries = 0
+    compared, not_installed = [], []
+    for target in STD_TARGETS:
+        folder = sysroot / "lib" / "rustlib" / target / "lib"
+        if not folder.is_dir():
+            not_installed.append(target)
+            continue
+        compared.append(target)
+        for library in sorted(folder.glob("lib*.rlib")):
+            name = library.name[len("lib") :].rsplit("-", 1)[0]
+            if name in STD_IN_TREE or name in STD_NOT_LINKED:
+                continue
+            libraries += 1
+            if name not in listed:
+                found.append(
+                    f"{target}: the standard library is built from {name}, which is not listed"
+                )
+                continue
+            for key, version in std_crates_named(library.read_bytes()):
+                if key == name and version != listed[name]:
+                    found.append(f"{target}: {name} is {version}, but {listed[name]} is listed")
+    if libraries == 0:
+        found.append(f"no library of the standard library found under {sysroot}")
+    return Comparison(found, compared, not_installed)
+
+
+def pinned_toolchain():
+    """The channel of rust-toolchain.toml and the root of that toolchain as rustup installed it."""
+    with open(REPO_ROOT / "rust-toolchain.toml", "rb") as source:
+        channel = tomllib.load(source)["toolchain"]["channel"]
+    sysroot = subprocess.run(
+        ["rustc", "--print", "sysroot"], cwd=REPO_ROOT, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    return channel, Path(sysroot)
+
+
+def archive_files(path):
+    """{name: bytes} of the files of a release archive, by path without a leading "./"."""
+    if path.endswith(".zip"):
+        with zipfile.ZipFile(path) as packed:
+            return {name.removeprefix("./"): packed.read(name) for name in packed.namelist()}
+    with tarfile.open(path) as packed:
+        return {
+            member.name.removeprefix("./"): packed.extractfile(member).read()
+            for member in packed.getmembers()
+            if member.isfile()
+        }
+
+
+def unlisted_std_crates(paths, notices):
+    """What the files at `paths` name that their notices do not list, one line each, and how many
+    crates of the standard library they name in all. An archive is read with the notices it
+    carries; any other file with `notices`."""
+    found = []
+    named = 0
+    for path in paths:
+        if path.endswith((".zip", ".tar.gz")):
+            files = {f"{path}: {name}": data for name, data in archive_files(path).items()}
+            carried = files.get(f"{path}: {OUTPUT.name}", b"").decode("utf-8")
+            source = f"{path}: {OUTPUT.name}"
+        else:
+            files = {path: Path(path).read_bytes()}
+            carried, source = notices, OUTPUT.name
+        listed = listed_std_crates(carried)
+        if listed is None:
+            found.append(f"{source} has no section {STD_HEADING!r}")
+            continue
+        for name, data in sorted(files.items()):
+            for key, version in sorted(std_crates_named(data)):
+                named += 1
+                if listed.get(key) != version:
+                    found.append(f"{name} holds {key} {version}, which is not listed")
+    return found, named
+
+
+def self_test():
+    """The standard library checks against made-up notices, programs and archives."""
+    notices = "\n".join(
+        [
+            "# Notices",
+            "",
+            STD_HEADING,
+            "",
+            "- Rust 9.9.9, notice SHA-256 " + hashlib.sha256(b"notice").hexdigest() + ".",
+            "- `cfg-if` 1.0.4: `MIT`.",
+            "- `hashbrown` 0.17.1: `MIT`.",
+            "",
+            MARKER,
+            "",
+            "- `serde` 1.0.0: `MIT`.",
+        ]
+    )
+
+    def expect(what, value, wanted):
+        if value != wanted:
+            sys.exit(f"self-test: {what} gives {value!r}")
+
+    expect("the list", listed_std_crates(notices), {"cfg_if": "1.0.4", "hashbrown": "0.17.1"})
+    expect("no section", listed_std_crates("# Notices\n"), None)
+    program = b"/rust/deps/hashbrown-0.17.1/src/raw.rs\0\\rust\\deps\\rustc-demangle-0.1.28\\src"
+    named = {("hashbrown", "0.17.1"), ("rustc_demangle", "0.1.28")}
+    expect("both slashes", std_crates_named(program), named)
+    with tempfile.TemporaryDirectory() as scratch:
+        listed_program = Path(scratch, "listed")
+        listed_program.write_bytes(b"/rust/deps/cfg-if-1.0.4/src/lib.rs")
+        other_program = Path(scratch, "other")
+        other_program.write_bytes(program)
+        expect("a listed crate", unlisted_std_crates([str(listed_program)], notices), ([], 1))
+        found, _ = unlisted_std_crates([str(other_program)], notices)
+        unlisted = [f"{other_program} holds rustc_demangle 0.1.28, which is not listed"]
+        expect("an unlisted crate", found, unlisted)
+        archive = Path(scratch, "lacking.zip")
+        with zipfile.ZipFile(archive, "w") as packed:
+            packed.writestr(OUTPUT.name, "# Notices\n")
+            packed.writestr("mhfe", b"/rust/deps/cfg-if-1.0.4/src/lib.rs")
+        found, _ = unlisted_std_crates([str(archive)], notices)
+        expect("an archive without the section", len(found), 1)
+        sysroot = Path(scratch, "sysroot")
+        (sysroot / STD_NOTICE).parent.mkdir(parents=True)
+        (sysroot / STD_NOTICE).write_bytes(b"notice")
+        libraries = sysroot / "lib" / "rustlib" / "wasm32-unknown-unknown" / "lib"
+        libraries.mkdir(parents=True)
+        for name, data in (
+            ("std", b""),
+            ("getopts", b""),
+            ("cfg_if", b"/rust/deps/cfg-if-1.0.4/src"),
+            ("hashbrown", b"/rust/deps/hashbrown-0.17.1/src"),
+        ):
+            (libraries / f"lib{name}-0123abcd.rlib").write_bytes(data)
+        # Only the WebAssembly target is installed: the native ones are named as not compared.
+        matching = Comparison([], ["wasm32-unknown-unknown"], list(NATIVE_TARGETS))
+        expect("the matching toolchain", toolchain_comparison(notices, "9.9.9", sysroot), matching)
+
+        def differences(notices=notices, channel="9.9.9"):
+            return len(toolchain_comparison(notices, channel, sysroot).differences)
+
+        expect("another channel", differences(channel="9.9.10"), 1)
+        (sysroot / STD_NOTICE).write_bytes(b"another notice")
+        expect("another notice", differences(), 1)
+        (sysroot / STD_NOTICE).write_bytes(b"notice")
+        (libraries / "libhashbrown-0123abcd.rlib").write_bytes(b"/rust/deps/hashbrown-0.18.0/src")
+        (libraries / "libdlmalloc-0123abcd.rlib").write_bytes(b"")
+        expect("a new version and a new crate", differences(), 2)
+        expect("no section", differences(notices="# Notices\n"), 1)
+        # No release target installed: nothing compared, which fails rather than passes.
+        empty = Path(scratch, "empty")
+        (empty / STD_NOTICE).parent.mkdir(parents=True)
+        (empty / STD_NOTICE).write_bytes(b"notice")
+        nothing = toolchain_comparison(notices, "9.9.9", empty)
+        expect("no target installed", (len(nothing.differences), nothing.compared), (1, []))
+    print("The standard library checks find every gap in their test cases.")
+    return 0
+
+
+def check_binaries(paths):
+    """`--binaries`: refuses a file that names a crate of the standard library its notices lack."""
+    found, named = unlisted_std_crates(paths, OUTPUT.read_text(encoding="utf-8"))
+    for line in found:
+        print(line, file=sys.stderr)
+    if found:
+        print(f"List them in the section {STD_HEADING!r} of {OUTPUT.name}.", file=sys.stderr)
+        return 1
+    print(f"Every crate of the standard library in {len(paths)} files is listed ({named} paths).")
+    return 0
+
+
+def check_toolchain(notices):
+    """`--check`, second part: compares the standard library section of `notices` with the
+    installed toolchain and says which release targets it compared and which it left out."""
+    channel, sysroot = pinned_toolchain()
+    comparison = toolchain_comparison(notices, channel, sysroot)
+    for line in comparison.differences:
+        print(line, file=sys.stderr)
+    if comparison.differences:
+        print(
+            f"Review the section {STD_HEADING!r} of {OUTPUT.name} for Rust {channel}.",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        f"{OUTPUT.name} matches the shipped crates. Its standard library section matches the "
+        f"notice of the installed Rust {channel} and the crates of its libraries for "
+        f"{', '.join(comparison.compared)}."
+    )
+    if comparison.not_installed:
+        print(
+            "Not compared, as their standard library is not installed: "
+            f"{', '.join(comparison.not_installed)}."
+        )
+    return 0
+
+
 def main(arguments):
+    if arguments == ["--self-test"]:
+        return self_test()
+    if arguments[:1] == ["--binaries"] and len(arguments) > 1:
+        return check_binaries(arguments[1:])
     check = arguments == ["--check"]
     if arguments and not check:
-        print("\n".join(__doc__.splitlines()[2:4]), file=sys.stderr)
+        print("\n".join(__doc__.splitlines()[2:6]), file=sys.stderr)
         return 2
     try:
         content = render(resolve(shipped_crates(), registry_packages()))
@@ -336,8 +643,7 @@ def main(arguments):
                 file=sys.stderr,
             )
             return 1
-        print(f"{OUTPUT.name} matches the shipped crates.")
-        return 0
+        return check_toolchain(written)
     OUTPUT.write_text(content, encoding="utf-8")
     print(f"Wrote {OUTPUT.name}.")
     return 0

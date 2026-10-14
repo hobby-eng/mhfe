@@ -1,18 +1,19 @@
 //! The rehearsal check (specification: "Application requirements"): a full recovery that answers
-//! "matches" or "does not match", and on a match with an address the path where it was found.
+//! "matches", "does not match" or "not verified", and on a match with an address the path where it
+//! was found.
 //! No part of the recovered phrase leaves the check, and a wrong password gives no hint of how
 //! close it was. The re-encryption guard uses the same comparison: a phrase recovered to be
 //! encrypted again comes out only once it is confirmed.
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
-use crate::detection::LengthDetection;
+use crate::detection::{LengthDetection, Readings};
 use crate::engine::Argon2Engine;
 use crate::memory::LockedBytes;
 use crate::mhfe::{
     read_as, read_same_length, recover, suite_3_state, PhraseLength, RecoveredPhrase, Recovery,
 };
 use crate::operation::{RoundCounter, Stage, StageCallback};
-use crate::packing::STATE_WORDS;
+use crate::packing::{State, STATE_WORDS};
 use crate::suite::{Suite, ROUNDS};
 use crate::wallet::{self, Address, DerivationPath, SearchLimits};
 use crate::wallet_check;
@@ -21,13 +22,40 @@ use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
 
-/// What a rehearsal found. A match on a receiving address names the path where the address was
-/// found, which tells the person which account and address of the wallet it is; it is not part of
-/// the phrase and is given only on a match.
+/// What a rehearsal found, under the length rules of recovery (specification: "Rehearsal
+/// check"). A match on a receiving address names the path where the address was found, which
+/// tells the person which account and address of the wallet it is; it is not part of the phrase
+/// and is given only on a match.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CheckOutcome {
+    /// Exactly one verified reading, at the stated length or at the detected one that takes
+    /// precedence over it, or a wallet reference that matches.
     Matches { path: Option<DerivationPath> },
+    /// Only readings that nothing verifies: a 24-word reading without a wallet reference, which
+    /// a pass of the 16-bit source check does not change, or several lengths that match with none
+    /// of them stated, which [`CheckEvidence::matching_lengths`] lists.
+    NotVerified,
+    /// No reading (a stated short length that nothing matches), or a reference that the recovery
+    /// does not match.
     DoesNotMatch,
+}
+
+impl CheckEvidence {
+    /// The original seed phrase's own checks that passed, in the order a front end lists them:
+    /// the built-in check of the verified reading or those of the several lengths that pass, then
+    /// the 16-bit check, only where it passes, as a phrase drawn without it fails it.
+    pub fn own_checks_passed(&self) -> Vec<PassedCheck> {
+        let mut passed = Vec::new();
+        match (self.built_in_check, &self.matching_lengths[..]) {
+            (Some(words), _) => passed.push(PassedCheck::BuiltInCheck(words)),
+            (None, []) => {}
+            (None, lengths) => passed.push(PassedCheck::BuiltInChecks(lengths.to_vec())),
+        }
+        if self.wallet_check == Some(true) {
+            passed.push(PassedCheck::WalletCheck);
+        }
+        passed
+    }
 }
 
 impl CheckOutcome {
@@ -39,7 +67,36 @@ impl CheckOutcome {
     pub fn path(&self) -> Option<&DerivationPath> {
         match self {
             Self::Matches { path } => path.as_ref(),
-            Self::DoesNotMatch => None,
+            Self::NotVerified | Self::DoesNotMatch => None,
+        }
+    }
+
+    /// The result as the browser package names it: "matches", "notVerified" or "doesNotMatch".
+    pub fn id(&self) -> &'static str {
+        match self {
+            Self::Matches { .. } => "matches",
+            Self::NotVerified => "notVerified",
+            Self::DoesNotMatch => "doesNotMatch",
+        }
+    }
+
+    /// The result in the specification's words, which scripts read.
+    pub fn text(&self) -> &'static str {
+        match self {
+            Self::Matches { .. } => "matches",
+            Self::NotVerified => "not verified",
+            Self::DoesNotMatch => "does not match",
+        }
+    }
+
+    /// The outcome of the length rules of recovery for a `stated` length or none: exactly one
+    /// verified reading matches, a 24-word reading alone or several readings are not verified, and
+    /// no reading does not match.
+    fn of_length_rules(detection: &LengthDetection<'_>, stated: Option<usize>) -> Self {
+        match detection.under_length_rules(stated) {
+            Readings::NoReading => Self::DoesNotMatch,
+            _ if detection.verified_length(stated).is_some() => Self::Matches { path: None },
+            Readings::One(_) | Readings::Several(_) => Self::NotVerified,
         }
     }
 
@@ -52,16 +109,33 @@ impl CheckOutcome {
     }
 }
 
+/// One of the original seed phrase's own checks that a recovery passed, as a front end lists it
+/// beside the result ([`CheckEvidence::own_checks_passed`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PassedCheck {
+    /// The built-in check of the one verified reading, of this many words.
+    BuiltInCheck(usize),
+    /// The built-in checks of several lengths, of which at most one is the phrase's.
+    BuiltInChecks(Vec<usize>),
+    /// The 16-bit phrase + passphrase check of the 24-word reading.
+    WalletCheck,
+}
+
 /// What a check found, its reference's outcome first, and what the same recovery shows beside it:
 /// a front end lists every check that passed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckEvidence {
     /// How the recovery compared with the reference.
     pub outcome: CheckOutcome,
-    /// The length of a 12- to 21-word original seed phrase whose built-in check passes, the
-    /// stated one where it passes; `None` for a 24-word one and for a same-length container,
-    /// which have none.
+    /// The length of the one verified reading the length rules give: the stated length where its
+    /// built-in check passes, else the one short length whose check passes. `None` where no
+    /// short length passes, where several do and none of them was stated, and for a same-length
+    /// container, which has no built-in check.
     pub built_in_check: Option<usize>,
+    /// Every 12- to 21-word length whose built-in check passes, in ascending order: one for a
+    /// short original, none for a 24-word one or a wrong password, and several only by chance,
+    /// about once in 2^32. Empty for a same-length container.
+    pub matching_lengths: Vec<usize>,
     /// Whether the 24-word reading passes the phrase + passphrase check of `mhfe new` (the 16-bit
     /// source check) with the reference's passphrase, or the empty one where it has none, where
     /// that reading comes out: no short length's check passes, several do, or the reference
@@ -74,11 +148,12 @@ pub struct CheckEvidence {
 /// What the recovered phrase is compared with.
 pub enum Reference<'a> {
     /// The built-in check value of a 12-, 15-, 18- or 21-word original in a 24-word container,
-    /// `words` the length the person states. As in recovery, a check that passes at another short
-    /// length takes precedence and matches, and [`CheckEvidence::built_in_check`] names that
-    /// length. It confirms that the recovery is consistent, not that it gives the same wallet, and
-    /// it says nothing about a BIP39 passphrase. A 24-word original and a same-length container
-    /// have no such check and are refused.
+    /// `words` the length the person states, under the length rules of recovery: a check that
+    /// passes at another short length takes precedence and matches, and
+    /// [`CheckEvidence::built_in_check`] names that length; several other lengths that pass are
+    /// not verified, and none gives "does not match". It confirms that the recovery is consistent,
+    /// not that it gives the same wallet, and it says nothing about a BIP39 passphrase. A 24-word
+    /// original and a same-length container have no such check and are refused.
     BuiltInCheck { words: WordCount },
     /// A receiving address of the wallet, the strong check. The address is searched on the
     /// standard paths of its type within `limits`, or only at `path` when given.
@@ -98,15 +173,16 @@ pub enum Reference<'a> {
     /// `passphrase`, which may not be empty (`WALLET_CHECK_NEEDS_PASSPHRASE`). Only the 24-word
     /// reading of the recovery is compared, as the profile defines the check for it alone
     /// ([`crate::wallet_check::verify_entropy`]). It tells a right password and passphrase from
-    /// wrong ones with 16 bits, not which wallet it is, so it never confirms a recovery to encrypt
-    /// again.
+    /// wrong ones with 16 bits, not which wallet it is: a pass leaves the reading not verified (the
+    /// specification's recovery rules), and a failure of a phrase the person says was drawn with
+    /// the check does not match. It never confirms a recovery to encrypt again.
     WalletCheck { passphrase: &'a str },
-    /// The original seed phrase's own checks, its length detected (`detection`): the
-    /// built-in check of whichever 12- to 21-word length passes it, or else, with a BIP39
-    /// `passphrase`, which may not be empty, the phrase + passphrase check of the 24-word reading.
-    /// Like those checks it tells a right password from a wrong one, not which wallet it is, and
-    /// it finds a 24-word phrase only if that phrase was drawn with the check. A same-length
-    /// container has neither and is refused.
+    /// The original seed phrase's own checks, its length detected (`detection`): the built-in
+    /// check of whichever 12- to 21-word length passes it, or else, with a BIP39 `passphrase`,
+    /// which may not be empty, the phrase + passphrase check of the 24-word reading, which a check
+    /// reports beside a "not verified" 24-word reading and a search for missing words takes as a
+    /// pass. Like those checks it tells a right password from a wrong one, not which wallet it is.
+    /// A same-length container has neither and is refused.
     OwnChecks { passphrase: Option<&'a str> },
 }
 
@@ -151,6 +227,45 @@ impl ReferenceTarget {
     }
 }
 
+/// The references that take a BIP39 passphrase in an operation, which a refusal of an unused one
+/// names: a rehearsal check's wallet check takes one too, while a rekey is confirmed only by the
+/// wallet's address or fingerprint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PassphraseReferences {
+    /// The references of a rehearsal check.
+    Check,
+    /// The confirmations of a rekey.
+    Rekey,
+}
+
+impl PassphraseReferences {
+    /// The references, as a message names them.
+    fn names(self) -> &'static str {
+        match self {
+            Self::Check => "an address, a fingerprint or the wallet check",
+            Self::Rekey => "an address or a fingerprint",
+        }
+    }
+}
+
+/// Refuses a BIP39 `passphrase` that is not empty where the comparison takes none: the built-in
+/// check, and the owner's comparison with the backup in a rekey. Dropped without a word, it would
+/// let a person believe the wallet with that passphrase was compared (`INVALID_REQUEST`, naming
+/// the `references` that take one).
+pub fn refuse_unused_passphrase(
+    passphrase: &str,
+    references: PassphraseReferences,
+) -> Result<(), MhfeError> {
+    if passphrase.is_empty() {
+        Ok(())
+    } else {
+        Err(MhfeError::InvalidRequest(format!(
+            "a BIP39 passphrase belongs only to {}",
+            references.names()
+        )))
+    }
+}
+
 impl<'a> Reference<'a> {
     /// The BIP39 passphrase the recovery is compared with; none for the built-in check, which
     /// says nothing about one.
@@ -161,6 +276,15 @@ impl<'a> Reference<'a> {
             | Self::Fingerprint { passphrase, .. }
             | Self::WalletCheck { passphrase } => Some(passphrase),
             Self::OwnChecks { passphrase } => *passphrase,
+        }
+    }
+
+    /// The length of the original seed phrase the person states: the built-in check's; `None`
+    /// for every other reference, with which the length rules detect it.
+    fn stated_words(&self) -> Option<usize> {
+        match self {
+            Self::BuiltInCheck { words } => Some(words.get()),
+            _ => None,
         }
     }
 
@@ -189,8 +313,8 @@ impl<'a> Reference<'a> {
 }
 
 impl<E: Argon2Engine> Mhfe<E> {
-    /// Runs a full recovery and compares it with `reference`. Returns whether it matches, and for
-    /// an address the path where it was found.
+    /// Runs a full recovery and compares it with `reference`. Returns the outcome, and on a match
+    /// with an address the path where it was found.
     pub fn check(
         &mut self,
         container: &str,
@@ -270,6 +394,15 @@ impl RecoveredForCheck {
         refuse_impossible(self.container_words, reference)?;
         evidence_of(self.suite, &self.state, reference)
     }
+
+    /// Whether any of the original seed phrase's own checks passes, its length detected: the
+    /// built-in check of a short length, or with `passphrase` the 16-bit phrase + passphrase check
+    /// of the 24-word reading, which a check reports only beside "not verified" but which a search
+    /// for missing words takes, since a wrong candidate passes it about once in 65,536.
+    pub(crate) fn passes_own_checks(&self, passphrase: Option<&str>) -> Result<bool, MhfeError> {
+        refuse_impossible(self.container_words, &Reference::OwnChecks { passphrase })?;
+        LengthDetection::of(suite_3_state(&self.state)?).passes_own_checks(passphrase)
+    }
 }
 
 /// Refuses, before a container is read, a built-in check at a length that has none in any container
@@ -321,15 +454,18 @@ fn evidence_of(
     x: &[u8],
     reference: &Reference<'_>,
 ) -> Result<CheckEvidence, MhfeError> {
-    let (outcome, matched_words) = compare_state(suite, x, reference)?;
     if suite == Suite::SameLength {
+        // The container's own length is the only reading, and it has no check of its own.
         return Ok(CheckEvidence {
-            outcome,
+            outcome: compare(read_same_length(x)?.phrase(), reference)?,
             built_in_check: None,
+            matching_lengths: Vec::new(),
             wallet_check: None,
         });
     }
-    let detection = LengthDetection::of(suite_3_state(x)?);
+    let x = suite_3_state(x)?;
+    let detection = LengthDetection::of(x);
+    let (outcome, matched_words) = compare_state(x, &detection, reference)?;
     // The 16-bit source check on the 24-word reading, with the passphrase compared or the empty
     // one, wherever that reading comes out: no short length passes, several do, or a reference
     // matched the 24-word reading beside one that passes (AUD-017). A built-in check states a
@@ -340,46 +476,38 @@ fn evidence_of(
         _ if !reads_24_words => None,
         other => Some(detection.source_check(other.passphrase().unwrap_or(""))?),
     };
-    // A stated length whose check passes is named, also among others that pass by chance.
-    let built_in_check = match reference {
-        Reference::BuiltInCheck { words } if detection.passes_built_in_check(words.get()) => {
-            Some(words.get())
-        }
-        _ => detection.short_lengths().first().copied(),
-    };
     Ok(CheckEvidence {
         outcome,
-        built_in_check,
+        built_in_check: detection.verified_length(reference.stated_words()),
+        matching_lengths: detection.short_lengths().to_vec(),
         wallet_check,
     })
 }
 
-/// The second part of a check: compares the state `x` recovered from a container of `suite` with
-/// `reference`, with the length of the reading that an address or the fingerprint matched.
+/// The second part of a check: compares the recovered state `x` of a 24-word container, which
+/// `detection` has read, with `reference`, with the length of the reading that an address or the
+/// fingerprint matched.
 fn compare_state(
-    suite: Suite,
-    x: &[u8],
+    x: &State,
+    detection: &LengthDetection<'_>,
     reference: &Reference<'_>,
 ) -> Result<(CheckOutcome, Option<usize>), MhfeError> {
-    if suite == Suite::SameLength {
-        // The container's own length is the only reading.
-        return Ok((compare(read_same_length(x)?.phrase(), reference)?, None));
-    }
-    let x = suite_3_state(x)?;
-    let detection = LengthDetection::of(x);
     match reference {
         // The length rules of recovery: a short length whose check passes takes precedence over
-        // the stated one, which the evidence then names (AUD-015-FUN001).
-        Reference::BuiltInCheck { .. } => Ok((
-            CheckOutcome::of(!detection.short_lengths().is_empty()),
+        // the stated one, which the evidence then names (AUD-015-FUN001), and several that pass
+        // with none of them stated are not verified (AUD-023-FUN002).
+        Reference::BuiltInCheck { .. } | Reference::OwnChecks { .. } => Ok((
+            CheckOutcome::of_length_rules(detection, reference.stated_words()),
             None,
         )),
+        // The owner says the phrase was drawn to pass the check, which leaves no reading where it
+        // fails; a pass is 16 bits, not the wallet's identity, and the reading stays not verified.
         Reference::WalletCheck { passphrase } => Ok((
-            CheckOutcome::of(detection.passes_wallet_check(passphrase)?),
-            None,
-        )),
-        Reference::OwnChecks { passphrase } => Ok((
-            CheckOutcome::of(detection.passes_own_checks(*passphrase)?),
+            if detection.passes_wallet_check(passphrase)? {
+                CheckOutcome::NotVerified
+            } else {
+                CheckOutcome::DoesNotMatch
+            },
             None,
         )),
         Reference::Address { .. } | Reference::Fingerprint { .. } => {
@@ -427,7 +555,7 @@ impl<'a> Confirmation<'a> {
     /// reading. With the length detected the built-in check alone is refused too: a 24-word
     /// original that passes a short check by chance, which encryption warns of, would be sealed
     /// again as that shorter phrase, another wallet (AUD-017-FUN001).
-    pub(crate) fn refuse_for(&self, needed: ConfirmationNeeded) -> Result<(), MhfeError> {
+    pub fn refuse_for(&self, needed: ConfirmationNeeded) -> Result<(), MhfeError> {
         let refused = match needed {
             ConfirmationNeeded::BuiltInCheck => false,
             ConfirmationNeeded::WalletOrOwner => {
@@ -694,8 +822,8 @@ mod tests {
     use super::*;
     use crate::phrase_from_entropy;
     use crate::test_support::{
-        container_of, reduced, test_password, wrong_password, ABANDON_12 as ABANDON,
-        ABANDON_12_FINGERPRINT,
+        container_of, counted, reduced, test_password, wrong_password, ABANDON_12 as ABANDON,
+        ABANDON_12_FINGERPRINT, ABANDON_24, AMBIGUOUS_12_21, TREZOR_COUNTER,
     };
 
     /// A check of `container` against `reference` with no progress to report.
@@ -787,9 +915,7 @@ mod tests {
         ));
 
         // A 24-word original has no check: refused without a reference, before any Argon2 call.
-        const ART: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
-            abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-            abandon abandon abandon abandon abandon art";
+        const ART: &str = ABANDON_24;
         let container = mhfe
             .encrypt(ART, &password, Suite::TwentyFourWords, none)
             .unwrap();
@@ -903,15 +1029,16 @@ mod tests {
         assert_eq!(phrase.phrase(), ABANDON);
     }
 
+    /// A wallet check that passes leaves a phrase drawn with it not verified, with the 16-bit
+    /// pass among the evidence; one that fails does not match (AUD-023-FUN002).
     #[test]
-    fn a_wallet_check_matches_a_phrase_made_with_it_and_never_confirms_a_rekey() {
+    fn a_wallet_check_leaves_a_phrase_made_with_it_not_verified_and_never_confirms_a_rekey() {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
         let password = test_password();
         let wrong = wrong_password();
         // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
-        let mut entropy = [0u8; 32];
-        entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
+        let entropy = counted(TREZOR_COUNTER);
         let phrase = phrase_from_entropy(&entropy).unwrap();
         let container = mhfe
             .encrypt(&phrase, &password, Suite::TwentyFourWords, none)
@@ -919,21 +1046,20 @@ mod tests {
         let reference = Reference::WalletCheck {
             passphrase: "TREZOR",
         };
-        assert!(mhfe
-            .check(&container, &password, &reference, none)
-            .unwrap()
-            .matches());
-        assert!(!mhfe
-            .check(&container, &wrong, &reference, none)
-            .unwrap()
-            .matches());
+        let evidence = evidence_for(&mut mhfe, &container, &reference);
+        assert_eq!(evidence.outcome, CheckOutcome::NotVerified);
+        assert_eq!(evidence.wallet_check, Some(true));
+        assert_eq!(
+            mhfe.check(&container, &wrong, &reference, none),
+            Ok(CheckOutcome::DoesNotMatch)
+        );
         let other = Reference::WalletCheck {
             passphrase: "trezor",
         };
-        assert!(!mhfe
-            .check(&container, &password, &other, none)
-            .unwrap()
-            .matches());
+        assert_eq!(
+            mhfe.check(&container, &password, &other, none),
+            Ok(CheckOutcome::DoesNotMatch)
+        );
         // Without a passphrase the check is not offered: refused before any Argon2 work, as the
         // browser and wallet_check::verify refuse it (AUD-010).
         let mut rounds = 0;
@@ -962,10 +1088,11 @@ mod tests {
         ));
     }
 
-    /// The phrase's own checks with its length detected: a 12-word original passes by its built-in
-    /// check with or without a passphrase, a 24-word one drawn with the wallet check passes only
-    /// with its passphrase, and a wrong password fails. An empty passphrase and a same-length
-    /// container are refused before any Argon2 work.
+    /// The phrase's own checks with its length detected, under the length rules of recovery: a
+    /// 12-word original matches by its built-in check with or without a passphrase; a 24-word
+    /// reading, of a right password or a wrong one, is not verified, and a pass of the 16-bit check
+    /// is evidence beside it, which a search for missing words takes. An empty passphrase and a
+    /// same-length container are refused before any Argon2 work (AUD-023-FUN002).
     #[test]
     fn the_own_checks_detect_the_length() {
         let none = &mut |_, _| Ok(());
@@ -977,40 +1104,39 @@ mod tests {
             .encrypt(ABANDON, &password, Suite::TwentyFourWords, none)
             .unwrap();
         for passphrase in [None, Some("TREZOR")] {
-            let evidence = mhfe
-                .recover_for_check(&short, &password, &own(passphrase), none)
-                .unwrap()
-                .compare(&own(passphrase))
-                .unwrap();
+            let evidence = evidence_for(&mut mhfe, &short, &own(passphrase));
             assert!(evidence.outcome.matches());
             assert_eq!(evidence.built_in_check, Some(12));
+            assert_eq!(evidence.matching_lengths, [12]);
         }
-        assert!(!mhfe
-            .check(&short, &wrong, &own(None), none)
-            .unwrap()
-            .matches());
-        // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
-        let mut entropy = [0u8; 32];
-        entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
-        let drawn = phrase_from_entropy(&entropy).unwrap();
+        assert_eq!(
+            mhfe.check(&short, &wrong, &own(None), none),
+            Ok(CheckOutcome::NotVerified)
+        );
+        let drawn = phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
         let full = mhfe
             .encrypt(&drawn, &password, Suite::TwentyFourWords, none)
             .unwrap();
-        let evidence = mhfe
+        let recovered = mhfe
             .recover_for_check(&full, &password, &own(Some("TREZOR")), none)
-            .unwrap()
-            .compare(&own(Some("TREZOR")))
             .unwrap();
-        assert!(evidence.outcome.matches());
+        let evidence = recovered.compare(&own(Some("TREZOR"))).unwrap();
+        assert_eq!(evidence.outcome, CheckOutcome::NotVerified);
         assert_eq!(
-            (evidence.built_in_check, evidence.wallet_check),
-            (None, Some(true))
+            (
+                evidence.built_in_check,
+                evidence.matching_lengths.as_slice(),
+                evidence.wallet_check
+            ),
+            (None, &[][..], Some(true))
         );
+        assert!(recovered.passes_own_checks(Some("TREZOR")).unwrap());
         for passphrase in [None, Some("trezor")] {
-            assert!(!mhfe
-                .check(&full, &password, &own(passphrase), none)
-                .unwrap()
-                .matches());
+            assert_eq!(
+                recovered.compare(&own(passphrase)).unwrap().outcome,
+                CheckOutcome::NotVerified
+            );
+            assert!(!recovered.passes_own_checks(passphrase).unwrap());
         }
         assert_eq!(
             mhfe.check(&full, &password, &own(Some("")), none),
@@ -1025,6 +1151,77 @@ mod tests {
                 container_words: 12
             })
         );
+    }
+
+    /// The published ambiguous-12-21 phrase passes the built-in checks of 12 and 21 words: with
+    /// no length stated, or a short length stated that does not pass, the check is not verified
+    /// and names both; a stated length among them matches; a wallet reference compares every
+    /// reading and matches. A stated short length that nothing passes does not match
+    /// (AUD-023-FUN002).
+    #[test]
+    fn several_matching_lengths_are_reported_and_not_verified() {
+        let mut mhfe = reduced();
+        let ambiguous = container_of(&mut mhfe, AMBIGUOUS_12_21, Suite::TwentyFourWords);
+        let built_in = |words| Reference::BuiltInCheck {
+            words: WordCount::new(words).unwrap(),
+        };
+        let recovered = mhfe
+            .recover_for_check(
+                &ambiguous,
+                &test_password(),
+                &Reference::own_checks(""),
+                &mut |_, _| Ok(()),
+            )
+            .unwrap();
+        for reference in [Reference::own_checks(""), built_in(15), built_in(18)] {
+            let evidence = recovered.compare(&reference).unwrap();
+            assert_eq!(evidence.outcome, CheckOutcome::NotVerified);
+            assert_eq!(evidence.built_in_check, None);
+            assert_eq!(evidence.matching_lengths, [12, 21]);
+        }
+        for words in [12, 21] {
+            let evidence = recovered.compare(&built_in(words)).unwrap();
+            assert!(evidence.outcome.matches());
+            assert_eq!(evidence.built_in_check, Some(words));
+            assert_eq!(evidence.matching_lengths, [12, 21]);
+        }
+        let fingerprint = Reference::Fingerprint {
+            fingerprint: wallet::master_fingerprint(AMBIGUOUS_12_21, "").unwrap(),
+            passphrase: "",
+        };
+        assert!(recovered.compare(&fingerprint).unwrap().outcome.matches());
+
+        // A 24-word original has no built-in check: a stated short length does not match.
+        let art = container_of(&mut mhfe, ABANDON_24, Suite::TwentyFourWords);
+        let evidence = evidence_for(&mut mhfe, &art, &built_in(12));
+        assert_eq!(evidence.outcome, CheckOutcome::DoesNotMatch);
+        assert!(evidence.matching_lengths.is_empty());
+    }
+
+    /// The checks a front end lists beside the result: the verified reading's built-in check or
+    /// those of several lengths, then the 16-bit check only where it passes (AUD-023-ARC016).
+    #[test]
+    fn the_passed_own_checks_are_listed_in_order() {
+        let evidence = |built_in_check, matching_lengths: &[usize], wallet_check| CheckEvidence {
+            outcome: CheckOutcome::NotVerified,
+            built_in_check,
+            matching_lengths: matching_lengths.to_vec(),
+            wallet_check,
+        };
+        assert_eq!(
+            evidence(Some(12), &[12], None).own_checks_passed(),
+            [PassedCheck::BuiltInCheck(12)]
+        );
+        assert_eq!(
+            evidence(None, &[12, 21], Some(true)).own_checks_passed(),
+            [
+                PassedCheck::BuiltInChecks(vec![12, 21]),
+                PassedCheck::WalletCheck
+            ]
+        );
+        assert!(evidence(None, &[], Some(false))
+            .own_checks_passed()
+            .is_empty());
     }
 
     /// A front end's reference gives the library's, with the passphrase it is given; the own
@@ -1309,6 +1506,35 @@ mod tests {
             Some(MhfeError::NoWalletCheck {
                 container_words: 12
             })
+        );
+    }
+
+    #[test]
+    fn an_unused_passphrase_is_refused_naming_the_references_that_take_one() {
+        assert_eq!(
+            refuse_unused_passphrase("TREZOR", PassphraseReferences::Check),
+            Err(MhfeError::InvalidRequest(
+                "a BIP39 passphrase belongs only to an address, a fingerprint or the wallet check"
+                    .to_owned()
+            ))
+        );
+        assert_eq!(
+            refuse_unused_passphrase("TREZOR", PassphraseReferences::Rekey),
+            Err(MhfeError::InvalidRequest(
+                "a BIP39 passphrase belongs only to an address or a fingerprint".to_owned()
+            ))
+        );
+    }
+
+    #[test]
+    fn an_empty_passphrase_is_no_passphrase_and_passes() {
+        assert_eq!(
+            refuse_unused_passphrase("", PassphraseReferences::Check),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_unused_passphrase("", PassphraseReferences::Rekey),
+            Ok(())
         );
     }
 }

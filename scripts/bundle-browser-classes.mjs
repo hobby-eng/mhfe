@@ -1,8 +1,9 @@
 // Joins the runtime and module classes of the browser package in dist/ into the text of one ES
 // module, as a page's build does when it inlines the package under its Content-Security-Policy:
 // each class file's imports of "../runtime/runtime.js" are dropped, since the runtime's exports
-// are then in the same module. Used by scripts/verify-browsers.mjs and
-// scripts/build-browser-check.mjs.
+// are then in the same module, and the Content-Security-Policy of such a page. Used by
+// scripts/verify-browsers.mjs and scripts/build-browser-check.mjs.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const runtimeImport = /^(?:import|export) \{[^}]*\} from "\.\.\/runtime\/runtime\.js";\n/gmu;
@@ -14,4 +15,26 @@ export function bundleClasses(root, paths) {
     read("runtime/runtime.js"),
     ...paths.map((path) => read(path).replace(runtimeImport, "")),
   ].join("\n");
+}
+
+/**
+ * The Content-Security-Policy of a page whose one inline module is `script`, as the offline wallet
+ * tools send it: nothing but that script, WebAssembly, Blob workers and inline styles. The one
+ * copy of the policy for the browser suite and the browser-check page (AUD-023-ARC018).
+ */
+export function pagePolicy(script) {
+  const scriptHash = createHash("sha256").update(script, "utf8").digest("base64");
+  return [
+    "default-src 'none'",
+    `script-src 'sha256-${scriptHash}' 'wasm-unsafe-eval'`,
+    "style-src 'unsafe-inline'",
+    "img-src 'none'",
+    "font-src 'none'",
+    "connect-src 'none'",
+    "worker-src blob:",
+    "object-src 'none'",
+    "frame-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
 }

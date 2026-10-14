@@ -9,7 +9,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use anstream::println;
 use clap::Args;
 use mhfe::vectors::{
     self, NegativeInput, PublicInput, NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS,
@@ -22,7 +21,7 @@ use sha2::{Digest, Sha256};
 use crate::exit::{Failure, SUCCESS};
 use crate::settings;
 use crate::style::{self, paint, MUTED};
-use crate::terminal::duration;
+use crate::time_text::duration;
 
 /// The negative cases file without its ".json" extension; also the --only text that selects it.
 const NEGATIVE_CASES_STEM: &str = "negative-cases";
@@ -304,7 +303,9 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
         "TEST ONLY: timing one encryption and one recovery with public test data.",
         "",
     );
-    let work = options.settings.work_factor()?;
+    let work = options
+        .settings
+        .work_factor_for(settings::Operation::Encrypt)?;
     let input = &PUBLIC_INPUTS[0];
     let password = Password::new(input.password())?;
 
@@ -342,7 +343,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     };
     let text = serde_json::to_string_pretty(&record)
         .map_err(|error| Failure::internal(error.to_string()))?;
-    println!("{text}");
+    style::out(format_args!("{text}"))?;
     Ok(SUCCESS)
 }
 

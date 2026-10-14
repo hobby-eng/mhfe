@@ -19,6 +19,8 @@ if [[ "$actual_emscripten" != "$expected_emscripten" ]]; then
 fi
 
 argon2="vendor/phc-winner-argon2"
+# Only the recorded upstream files are compiled: an added header would shadow a system one.
+node scripts/verify-vendored-argon2.mjs
 
 # ref.c is the portable implementation. The SIMD variant opt.c gave no speed-up in
 # WebAssembly and would exclude browsers without WebAssembly SIMD.

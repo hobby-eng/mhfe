@@ -16,7 +16,7 @@ use crate::self_check::{
 use crate::self_check::ZERO_12_CONTAINER as ZERO_12;
 /// The master key fingerprint of that container phrase as a wallet without a passphrase: the
 /// decoy wallet, as MHFE shows it under the container.
-const ZERO_12_DECOY_FINGERPRINT: [u8; 4] = [0x48, 0x7a, 0x15, 0x6e];
+pub(crate) const ZERO_12_DECOY_FINGERPRINT: [u8; 4] = [0x48, 0x7a, 0x15, 0x6e];
 
 /// A word of zero-12 typed as `?`, how many candidates the checksum leaves, the first of them and
 /// where the real word stands among them, from 1.

@@ -11,7 +11,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use super::{is_forbidden_in_password, Password};
 use crate::self_check::{
-    expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
+    damaged, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
 use crate::MhfeError;
@@ -34,7 +34,7 @@ pub(crate) struct PasswordUnicodeCheck {
 impl PasswordUnicodeCheck {
     pub(crate) fn new() -> Self {
         Self {
-            fixture: crate::validation_fixtures::SUITE_3,
+            fixture: crate::validation_fixtures::SUITE_3_PASSWORDS,
             unicode_nfkd: UNICODE_PASSWORD_NFKD,
         }
     }
@@ -43,8 +43,8 @@ impl PasswordUnicodeCheck {
     fn case(case: &serde_json::Value) -> Result<(), String> {
         let input = match case.get("repeat_utf8_hex") {
             Some(_) => {
-                let count = usize::try_from(fixtures::number(case, "count")?)
-                    .map_err(|_| "the built-in cases are damaged".to_owned())?;
+                let count =
+                    usize::try_from(fixtures::number(case, "count")?).map_err(|_| damaged())?;
                 fixtures::bytes(case, "repeat_utf8_hex")?.repeat(count)
             }
             None => fixtures::bytes(case, "input_utf8_hex")?,
@@ -54,11 +54,10 @@ impl PasswordUnicodeCheck {
             let code = fixtures::text(case, "expected_error")?;
             if case.get("expected_nfkd_bytes").is_some() {
                 let length = usize::try_from(fixtures::number(case, "expected_nfkd_bytes")?)
-                    .map_err(|_| "the built-in cases are damaged".to_owned())?;
-                return expect(
-                    matches!(&result, Err(MhfeError::PasswordTooLong(bytes)) if *bytes == length),
-                    "gives another length",
-                );
+                    .map_err(|_| damaged())?;
+                if let Err(MhfeError::PasswordTooLong(bytes)) = &result {
+                    expect(*bytes == length, "gives another length")?;
+                }
             }
             return expect_refusal(result, code);
         }
@@ -176,7 +175,7 @@ mod tests {
             ComponentOutcome::Failed("the published password gives other bytes".to_owned())
         );
         // The Hangul syllable decomposed otherwise.
-        let changed = crate::validation_fixtures::SUITE_3
+        let changed = crate::validation_fixtures::SUITE_3_PASSWORDS
             .replacen("e18492e185a1e186ab", "ed959c", 1)
             .leak();
         let mut check = PasswordUnicodeCheck {
@@ -189,25 +188,38 @@ mod tests {
         );
         // U+2028 expected to be refused as unassigned rather than as a separator.
         let separator = "\"input_utf8_hex\": \"61e280a862\",\n      \"expected_error\": ";
-        let changed = crate::validation_fixtures::SUITE_3
-            .replacen(
-                &format!("{separator}\"CONTROL_CHARACTER_IN_PASSWORD\""),
-                &format!("{separator}\"UNASSIGNED_CHARACTER\""),
-                1,
-            )
+        changed_case_fails(
+            &format!("{separator}\"CONTROL_CHARACTER_IN_PASSWORD\""),
+            &format!("{separator}\"UNASSIGNED_CHARACTER\""),
+            "case 26 of 33 is refused with CONTROL_CHARACTER_IN_PASSWORD instead of \
+             UNASSIGNED_CHARACTER",
+        );
+    }
+
+    #[test]
+    fn a_wrong_code_beside_a_length_fails() {
+        let length = "\"count\": 1025,\n      \"expected_error\": ";
+        changed_case_fails(
+            &format!("{length}\"PASSWORD_TOO_LONG\""),
+            &format!("{length}\"INVALID_PASSWORD\""),
+            "case 17 of 33 is refused with PASSWORD_TOO_LONG instead of INVALID_PASSWORD",
+        );
+    }
+
+    /// Asserts that the check fails at startup with `detail` once `from` in the password cases is
+    /// changed to `to`.
+    fn changed_case_fails(from: &str, to: &str, detail: &str) {
+        let changed = crate::validation_fixtures::SUITE_3_PASSWORDS
+            .replacen(from, to, 1)
             .leak();
-        assert_ne!(changed, crate::validation_fixtures::SUITE_3);
+        assert_ne!(changed, crate::validation_fixtures::SUITE_3_PASSWORDS);
         let mut check = PasswordUnicodeCheck {
             fixture: changed,
             ..PasswordUnicodeCheck::new()
         };
         assert_eq!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(
-                "case 26 of 33 is refused with CONTROL_CHARACTER_IN_PASSWORD instead of \
-                 UNASSIGNED_CHARACTER"
-                    .to_owned()
-            )
+            ComponentOutcome::Failed(detail.to_owned())
         );
     }
 }

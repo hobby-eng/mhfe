@@ -10,25 +10,43 @@ use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, MAX_MEMORY_LEVEL, ROUNDS};
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
 use crate::flow;
+use crate::hidden_input;
 use crate::readme;
 use crate::style::{self, paint, ACCENT, MUTED, WARNING};
 use crate::terminal::Input;
+use crate::time_text;
 
 #[derive(Args, Clone, Copy)]
 pub struct Settings {
     // Options rather than defaults, so that a command can tell whether the person gave them.
-    /// Pass multiplier, 0 to 1023 (default 0)
-    #[arg(long, value_name = "N", long_help = pim_help())]
+    #[arg(long, value_name = "N", help = pim_short_help(), long_help = pim_help())]
     pub pim: Option<u32>,
 
-    /// Memory level, 0 to 21 (default 0: 2 GiB)
-    #[arg(long = "mem", value_name = "LEVEL", long_help = memory_level_help())]
+    #[arg(
+        long = "mem",
+        value_name = "LEVEL",
+        help = memory_level_short_help(),
+        long_help = memory_level_help()
+    )]
     pub memory_level: Option<u32>,
+}
+
+/// The short helps, built from the limits and the default (AUD-023-ARC007).
+fn pim_short_help() -> String {
+    format!("Pass multiplier, {} (default 0)", pim_range())
+}
+
+fn memory_level_short_help() -> String {
+    format!(
+        "Memory level, {} (default 0: {})",
+        level_range(),
+        memory_text(0)
+    )
 }
 
 fn pim_help() -> String {
     style::option_help(&[
-        &format!("Pass multiplier, {} (default 0).", pim_range()),
+        &format!("{}.", pim_short_help()),
         "Every step adds the default work again: PIM 1 doubles the time of the encryption and \
          of every recovery, PIM 9 makes it ten times as long. Each guess of the password costs \
          an attacker the same extra time.",
@@ -40,11 +58,7 @@ fn pim_help() -> String {
 
 fn memory_level_help() -> String {
     style::option_help(&[
-        &format!(
-            "Memory level, {} (default 0: {}).",
-            level_range(),
-            memory_text(0)
-        ),
+        &format!("{}.", memory_level_short_help()),
         "The memory of every Argon2 call, doubling every two levels; the time grows in \
          proportion to it:",
         &memory_levels(),
@@ -56,11 +70,25 @@ fn memory_level_help() -> String {
 }
 
 impl Settings {
-    pub fn work_factor(self) -> Result<WorkFactor, Failure> {
-        Ok(WorkFactor::new(
-            self.pim.unwrap_or(0),
-            self.memory_level.unwrap_or(0),
-        )?)
+    /// The settings given for `operation`: those of a rekey's new container are refused as the
+    /// new PIM or memory level ([`WorkFactor::new_settings`]).
+    pub fn work_factor_for(self, operation: Operation) -> Result<WorkFactor, Failure> {
+        let (pim, level) = (self.pim.unwrap_or(0), self.memory_level.unwrap_or(0));
+        Ok(match operation {
+            Operation::RekeyNew => WorkFactor::new_settings(pim, level)?,
+            _ => WorkFactor::new(pim, level)?,
+        })
+    }
+
+    /// Refuses settings given on the command line that are out of range or that this computer
+    /// cannot run, before anything is typed: a rekey checks its new ones at its start, not after
+    /// the old container's recovery (AUD-023-UI002). Settings that are asked are checked when
+    /// they are answered.
+    pub fn check_given(self, operation: Operation) -> Result<(), Failure> {
+        if self.given() {
+            check_resources(self.work_factor_for(operation)?)?;
+        }
+        Ok(())
     }
 
     /// Whether the command line gives the PIM or the memory level; then nothing is asked.
@@ -120,7 +148,7 @@ pub fn choose(
     if !matches!(operation, Operation::RekeyNew) {
         style::title(operation.title());
     }
-    let defaults = settings.work_factor()?;
+    let defaults = settings.work_factor_for(operation)?;
     let asked = !settings.given() && input.can_ask_again();
     let work = if asked && ask_for_own(input, operation, defaults)? {
         ask_own(input)?
@@ -135,9 +163,26 @@ pub fn choose(
 
 /// Warns, before any secret is typed, when swap could write memory to a disk unencrypted.
 fn warn_about_swap() {
-    let areas = crate::protect::unprotected_swap();
-    if areas.is_empty() {
+    let Some(headline) = swap_warning(&crate::protect::unprotected_swap()) else {
         return;
+    };
+    // Why it matters, Argon2's work area on a disk for years, is in the README.
+    style::warn(
+        &headline,
+        "Use encrypted swap or none, best a live system from a USB stick.",
+    );
+    style::more(readme::SAFE_COMPUTER);
+    eprintln!();
+}
+
+fn swap_warning(inventory: &crate::protect::SwapInventory) -> Option<String> {
+    let crate::protect::SwapInventory::Available(areas) = inventory else {
+        return Some(
+            "MHFE cannot read the Linux swap inventory, so its encryption is unknown.".into(),
+        );
+    };
+    if areas.is_empty() {
+        return None;
     }
     // A device name is the system's text: shown escaped, as every path is.
     let names: Vec<String> = areas
@@ -155,13 +200,7 @@ fn warn_about_swap() {
             names.join(", ")
         )
     };
-    // Why it matters, Argon2's work area on a disk for years, is in the README.
-    style::warn(
-        &headline,
-        "Use encrypted swap or none, best a live system from a USB stick.",
-    );
-    style::more(readme::SAFE_COMPUTER);
-    eprintln!();
+    Some(headline)
 }
 
 /// Asks whether to keep the defaults; true when the person wants to give their own settings. The
@@ -171,9 +210,10 @@ fn ask_for_own(
     operation: Operation,
     defaults: WorkFactor,
 ) -> Result<bool, Failure> {
-    let (low, high) = defaults.estimated_seconds();
-    let scale = u64::from(rounds_of(operation) / ROUNDS);
-    let time = format!("about {}", time_range(low * scale, high * scale));
+    let time = format!(
+        "about {}",
+        time_text::of_rounds(defaults, rounds_of(operation))
+    );
     let (text, answers) = match operation {
         Operation::Encrypt | Operation::RekeyNew | Operation::New => (
             "Which settings should protect the phrase?",
@@ -253,7 +293,7 @@ fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
             }
         }
     };
-    if choice::can_run() && !flow::is_active() {
+    if hidden_input::can_redraw() && !flow::is_active() {
         choice::write_control(&choice::redraw_from(drawn_lines))?;
     }
     Ok(work)
@@ -303,9 +343,6 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         Operation::Wallets => "12 rounds a wallet",
         Operation::Repair => "12 rounds a candidate",
     };
-    // The estimate is for the twelve rounds of one pass through the cipher.
-    let (low, high) = work.estimated_seconds();
-    let scale = u64::from(rounds / ROUNDS);
     let gray = |text: String| paint(MUTED, text);
 
     let memory = format!("({})", work.memory_text());
@@ -336,7 +373,7 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         "Time",
         format!(
             "about {} {}",
-            time_range(low * scale, high * scale),
+            time_text::of_rounds(work, rounds),
             gray("on a current computer".into())
         ),
     );
@@ -481,25 +518,49 @@ pub fn level_range() -> String {
     format!("0 to {MAX_MEMORY_LEVEL}")
 }
 
-/// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the
-/// longer one, rounded to whole units.
-pub fn time_range(low_seconds: u64, high_seconds: u64) -> String {
-    const MINUTE: u64 = 60;
-    const HOUR: u64 = 60 * MINUTE;
-    const DAY: u64 = 24 * HOUR;
-    let (unit_seconds, unit) = match high_seconds {
-        s if s < 2 * HOUR => (MINUTE, "minutes"),
-        s if s < 3 * DAY => (HOUR, "hours"),
-        _ => (DAY, "days"),
-    };
-    let low = (low_seconds / unit_seconds).max(1);
-    let high = (high_seconds / unit_seconds).max(low);
-    format!("{low} to {high} {unit}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unavailable_swap_warns_while_confirmed_empty_does_not() {
+        use crate::protect::SwapInventory;
+
+        assert_eq!(
+            swap_warning(&SwapInventory::Unavailable).as_deref(),
+            Some("MHFE cannot read the Linux swap inventory, so its encryption is unknown.")
+        );
+        assert_eq!(swap_warning(&SwapInventory::Available(Vec::new())), None);
+    }
+
+    #[test]
+    fn visible_swap_warnings_keep_their_classification_and_escape_names() {
+        use crate::protect::{SwapArea, SwapInventory};
+
+        let areas = |unknown| {
+            SwapInventory::Available(vec![SwapArea {
+                name: "/swap\u{1b}file".into(),
+                unknown,
+            }])
+        };
+        assert_eq!(
+            swap_warning(&areas(true)).as_deref(),
+            Some("MHFE cannot tell whether swap is encrypted: /swap\\u{1b}file.")
+        );
+        assert_eq!(
+            swap_warning(&areas(false)).as_deref(),
+            Some("Swap on this computer is not encrypted: /swap\\u{1b}file.")
+        );
+        // zram that writes back to a plaintext device is named like any other (AUD-023-SEC002).
+        let zram = SwapInventory::Available(vec![SwapArea {
+            name: "/dev/zram0".into(),
+            unknown: false,
+        }]);
+        assert_eq!(
+            swap_warning(&zram).as_deref(),
+            Some("Swap on this computer is not encrypted: /dev/zram0.")
+        );
+    }
     use mhfe::MhfeError;
 
     const GIB: u64 = 1 << 30;
@@ -561,18 +622,5 @@ mod tests {
             not_enough.message.contains(LEVEL_HINT),
             highest_available_level().is_some()
         );
-    }
-
-    #[test]
-    fn time_ranges_use_one_readable_unit() {
-        assert_eq!(time_range(60, 120), "1 to 2 minutes");
-        let highest_pim = WorkFactor::new(1023, 0).unwrap().estimated_seconds();
-        assert_eq!(time_range(highest_pim.0, highest_pim.1), "17 to 34 hours");
-        let highest_memory = WorkFactor::new(0, 21).unwrap().estimated_seconds();
-        assert_eq!(
-            time_range(highest_memory.0, highest_memory.1),
-            "25 to 51 hours"
-        );
-        assert_eq!(time_range(3 * 86_400, 6 * 86_400), "3 to 6 days");
     }
 }

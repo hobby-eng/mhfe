@@ -129,8 +129,30 @@ pub enum KeepItem {
     RepairWords,
     Pim(u32),
     MemoryLevel(u32),
-    /// The original phrase's word count, to choose at recovery.
+    /// The original phrase's word count, to choose at recovery, kept apart from the container
+    /// phrase: it tells which length the container hides.
     WordCount(usize),
+    /// The old container of a rekey ([`Keep::old_container`]).
+    OldContainer,
+    /// The passwords that open wallets on the old container of a rekey.
+    OldPasswords,
+}
+
+impl KeepItem {
+    /// Whether it is kept apart from the container phrase, as the specification advises: the
+    /// repair words, which repair it without the password, and the note of the word count, which
+    /// tells which length it hides (AUD-023-UI008).
+    pub fn kept_apart(self) -> bool {
+        matches!(self, Self::RepairWords | Self::WordCount(_))
+    }
+}
+
+/// The settings of `work` that differ from their defaults, which the owner keeps: nothing else is
+/// needed for the defaults.
+fn changed_settings(work: WorkFactor) -> impl Iterator<Item = KeepItem> {
+    let pim = (work.pim() != 0).then_some(KeepItem::Pim(work.pim()));
+    let level = (work.memory_level() != 0).then_some(KeepItem::MemoryLevel(work.memory_level()));
+    pim.into_iter().chain(level)
 }
 
 impl Keep {
@@ -156,13 +178,19 @@ impl Keep {
         if repair_words {
             items.push(KeepItem::RepairWords);
         }
-        if work.pim() != 0 {
-            items.push(KeepItem::Pim(work.pim()));
-        }
-        if work.memory_level() != 0 {
-            items.push(KeepItem::MemoryLevel(work.memory_level()));
-        }
+        items.extend(changed_settings(work));
         items.extend(word_count_to_note.map(KeepItem::WordCount));
+        Self { items }
+    }
+
+    /// What the owner keeps of the old container of a rekey, made at `old_work`, until the funds
+    /// of the wallets that other passwords open on it are moved: they do not move to the new
+    /// container (the specification's re-encryption rules). The old container, its passwords and
+    /// a setting changed from its default. A front end says it before every rekey, whatever the
+    /// container, so that it says nothing about one; the wallet's own addresses do not change.
+    pub fn old_container(old_work: WorkFactor) -> Self {
+        let mut items = vec![KeepItem::OldContainer, KeepItem::OldPasswords];
+        items.extend(changed_settings(old_work));
         Self { items }
     }
 
@@ -294,6 +322,25 @@ impl Sealed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The old container of a rekey is kept with its passwords, and a PIM or memory level only
+    /// where it is not 0 (AUD-023-ARC016).
+    #[test]
+    fn the_old_container_is_kept_with_settings_that_are_not_the_defaults() {
+        let kept = |pim, level| {
+            Keep::old_container(WorkFactor::new(pim, level).unwrap())
+                .items()
+                .to_vec()
+        };
+        let old = [KeepItem::OldContainer, KeepItem::OldPasswords];
+        assert_eq!(kept(0, 0), old);
+        assert_eq!(kept(3, 0), [&old[..], &[KeepItem::Pim(3)]].concat());
+        assert_eq!(kept(0, 2), [&old[..], &[KeepItem::MemoryLevel(2)]].concat());
+        assert_eq!(
+            kept(3, 2),
+            [&old[..], &[KeepItem::Pim(3), KeepItem::MemoryLevel(2)]].concat()
+        );
+    }
 
     #[test]
     fn stages_have_the_names_of_the_browser_api() {

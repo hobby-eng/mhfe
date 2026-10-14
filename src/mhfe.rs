@@ -5,7 +5,7 @@ use bip39::Mnemonic;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::container::ContainerFacts;
-use crate::detection::LengthDetection;
+use crate::detection::{LengthDetection, Readings};
 use crate::engine::Argon2Engine;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::engine::NativeEngine;
@@ -72,6 +72,14 @@ impl PhraseLength {
         match count {
             0 => Ok(Self::Detect),
             words => WordCount::new(words).map(Self::Words),
+        }
+    }
+
+    /// The stated word count; `None` for detection.
+    pub(crate) fn stated(self) -> Option<usize> {
+        match self {
+            Self::Detect => None,
+            Self::Words(words) => Some(words.get()),
         }
     }
 }
@@ -466,34 +474,18 @@ pub(crate) fn suite_3_state(x: &[u8]) -> Result<&State, MhfeError> {
         .map_err(|_| MhfeError::Internal(format!("a suite 3 state has 32 bytes, not {}", x.len())))
 }
 
-/// Step 3 of recovery: reads `X` as the chosen length, or tests the short layouts.
 /// Reads the state `x` of a 24-word container as the specification's recovery does (step 3 and
-/// the stated length after it). Every short length's built-in check is tested, also when the
-/// person stated a length, and a check that passes takes precedence over the stated length.
+/// the stated length after it), under the length rules of [`LengthDetection::under_length_rules`].
 pub(crate) fn recover(x: &State, length: PhraseLength) -> Result<Recovery, MhfeError> {
     let detection = LengthDetection::of(x);
-    let short = detection.short_lengths();
-    let stated = match length {
-        PhraseLength::Words(words) => Some(words.get()),
-        PhraseLength::Detect => None,
-    };
-    let read = |words| Ok(read_as(x, words)?.compared_with(stated, short));
-    match (stated, short) {
-        // A stated length whose check passes is the result, also among others that pass by
-        // chance.
-        (Some(words), _) if short.contains(&words) => Ok(Recovery::Phrase(read(words)?)),
-        // No check passes: the 24-word reading, unless a short length was stated, whose check
-        // then fails: a wrong password or setting, or a 24-word phrase.
-        (None | Some(STATE_WORDS), []) => Ok(Recovery::Phrase(read(STATE_WORDS)?)),
-        (Some(_), []) => Err(MhfeError::VerifierMismatch),
-        // One check passes, at another short length than the one stated, or with none stated.
-        (None, [words]) => Ok(Recovery::Phrase(read(*words)?)),
-        (Some(stated), [words]) if stated != STATE_WORDS => Ok(Recovery::Phrase(read(*words)?)),
-        // Several checks pass, or one beside 24 stated words, which pass a short check by chance
-        // about once in 2^32: every reading, the checked ones first and the 24-word one last.
-        _ => Ok(Recovery::Ambiguous(
-            detection
-                .readings()
+    let stated = length.stated();
+    let read = |words| Ok(read_as(x, words)?.compared_with(stated, detection.short_lengths()));
+    match detection.under_length_rules(stated) {
+        Readings::NoReading => Err(MhfeError::VerifierMismatch),
+        Readings::One(words) => Ok(Recovery::Phrase(read(words)?)),
+        Readings::Several(lengths) => Ok(Recovery::Ambiguous(
+            lengths
+                .into_iter()
                 .map(read)
                 .collect::<Result<Vec<_>, MhfeError>>()?,
         )),
@@ -575,7 +567,7 @@ fn locked_entropy(phrase: &Mnemonic) -> LockedBytes {
 mod tests {
     use super::*;
     use crate::feistel::tests::HashEngine;
-    use crate::test_support::{reduced, test_password, wrong_password};
+    use crate::test_support::{counted, reduced, test_password, wrong_password, TREZOR_COUNTER};
 
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -823,9 +815,7 @@ mod tests {
     /// a passphrase (vectors/profiles, src/wallet_check/known_answers.rs).
     #[test]
     fn a_24_word_reading_offers_the_source_check() {
-        let mut entropy = [0u8; 32];
-        entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
-        let phrase = phrase_from_entropy(&entropy).unwrap();
+        let phrase = phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
         assert!(phrase.ends_with("abandon above proof fatigue"));
         let password = test_password();
         let mut mhfe = reduced();

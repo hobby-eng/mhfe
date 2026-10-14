@@ -64,6 +64,8 @@ pub const WALLET_CHECK_ODDS: u64 = 1 << WALLET_CHECK_BITS;
 const DOMAIN: &[u8] = b"MHFE-WALLET-CHECK-SEED-1";
 /// The entropy of a new 24-word phrase: 256 bits, the whole state of a container.
 pub const NEW_ENTROPY_BYTES: usize = crate::packing::STATE_BYTES;
+/// [`NEW_ENTROPY_BYTES`] in bits.
+pub const NEW_ENTROPY_BITS: usize = NEW_ENTROPY_BYTES * u8::BITS as usize;
 
 /// Whether `entropy` passes the criterion of the wallet check with `passphrase`, which may be empty
 /// here; of any length BIP39 takes. A program that checks a recovery uses [`verify`] or
@@ -373,24 +375,7 @@ impl NewPhrase {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Entropies of 32 bytes with `counter` in the last eight, as a deterministic stand-in for a
-    /// random generator.
-    fn counted(counter: u64) -> [u8; 32] {
-        let mut entropy = [0u8; 32];
-        entropy[24..].copy_from_slice(&counter.to_be_bytes());
-        entropy
-    }
-
-    /// The first counter whose phrase passes with the public test passphrase "TREZOR": entropy of
-    /// 24 zero bytes and 76,562, "abandon" 21 times, "above proof fatigue". Found once with the
-    /// release build, about 65,536 BIP39 seeds, and confirmed by an independent computation.
-    const TREZOR_COUNTER: u64 = 76_562;
-
-    /// The first counter whose phrase passes with an empty passphrase: 24 zero bytes and 98,918,
-    /// "abandon" 21 times, "absorb another spoil". Found with an independent Python computation
-    /// (digest 0000ede7…), which also confirmed that it fails with "TREZOR" (8d2b97fb…).
-    const EMPTY_COUNTER: u64 = 98_918;
+    use crate::test_support::{counted, EMPTY_COUNTER, TREZOR_COUNTER};
 
     #[test]
     fn about_one_seed_in_65536_passes() {

@@ -10,7 +10,7 @@ use std::io::{self, BufRead, IsTerminal, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use anstream::{eprint, eprintln, println};
+use anstream::{eprint, eprintln};
 use mhfe::memory::LockedText;
 use mhfe::word_hints::WordList;
 use mhfe::{ContainerFacts, MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
@@ -24,6 +24,7 @@ use crate::hidden_input::{self, Content};
 use crate::protect;
 use crate::settings::Operation;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
+use crate::time_text;
 
 /// Longest line accepted, line break included: the library's typed-line buffer, which its
 /// memory-locking check probes. The buffer is reserved at this size and reading stops there, so
@@ -74,6 +75,20 @@ impl Input {
     pub fn terminal_only() -> Self {
         Self::Terminal {
             command_reads_stdin: false,
+        }
+    }
+
+    /// The input of a command that reads a secret: without --stdin, standard input must be a
+    /// terminal, or the command says at once how to run it, before any question would take the
+    /// lines of a pipe as answers (AUD-023-UI006).
+    pub fn reading_secrets(self) -> Result<Self, Failure> {
+        match self {
+            Self::Terminal {
+                command_reads_stdin,
+            } if !io::stdin().is_terminal() => Err(Failure::invalid_input(no_terminal_advice(
+                command_reads_stdin,
+            ))),
+            input => Ok(input),
         }
     }
 
@@ -151,10 +166,7 @@ impl Input {
     /// that carries out control sequences the words of the list are hinted below them, Tab
     /// completes one and Ctrl+W deletes one; elsewhere as [`Input::visible`].
     pub fn visible_words(&mut self, prompt: &str, list: WordList) -> Result<LockedText, Failure> {
-        let hinted = matches!(self, Self::Terminal { .. })
-            && io::stdin().is_terminal()
-            && io::stderr().is_terminal()
-            && hidden_input::control_sequences();
+        let hinted = matches!(self, Self::Terminal { .. }) && hidden_input::can_redraw();
         if !hinted {
             return self.visible(prompt);
         }
@@ -179,7 +191,7 @@ impl Input {
         question: &Question,
         answers: &[Answer],
     ) -> Result<usize, Failure> {
-        if !self.is_script() && choice::can_run() {
+        if !self.is_script() && hidden_input::can_redraw() {
             return choice::choose_here(question, answers, None)?
                 .ok_or_else(|| MhfeError::Cancelled.into());
         }
@@ -204,7 +216,7 @@ impl Input {
         question: &Question,
         answers: &[Answer],
     ) -> Result<usize, Failure> {
-        if !self.is_script() && choice::can_run() {
+        if !self.is_script() && hidden_input::can_redraw() {
             return choice::choose_here_without_default(question, answers, None)?
                 .ok_or_else(|| MhfeError::Cancelled.into());
         }
@@ -285,7 +297,7 @@ impl Step {
         eprintln!();
         Self {
             lines: 1,
-            erasable: choice::can_run(),
+            erasable: hidden_input::can_redraw(),
         }
     }
 
@@ -297,7 +309,11 @@ impl Step {
     pub fn visible(&mut self, input: &mut Input, prompt: &str) -> Result<LockedText, Failure> {
         let answer = input.visible(prompt)?;
         if !input.is_script() {
-            self.lines += rows(prompt.chars().count() + answer.chars().count());
+            // The answer is measured in place: no copy of it is made.
+            self.lines += style::rows_of_cells(
+                style::visible_width(prompt) + style::visible_width(&answer),
+                hidden_input::columns_or_default(),
+            );
         }
         Ok(answer)
     }
@@ -309,14 +325,6 @@ impl Step {
         }
         Ok(())
     }
-}
-
-/// The lines that `characters` take on the terminal, the Enter after them included: a full line
-/// moves on only with the next character, so text that fills its last line exactly takes no more.
-fn rows(characters: usize) -> usize {
-    // When the width cannot be read, the usual 80 columns.
-    let columns = hidden_input::columns().unwrap_or(80);
-    characters.div_ceil(columns).max(1)
 }
 
 /// Set while a container is on the screen whose check has not finished, so that Ctrl+C can say so.
@@ -454,17 +462,17 @@ fn strip_line_ending(line: &mut String) {
 /// Prints a phrase to standard output. For a person: in a frame, numbered, for comparing with
 /// what was written down, and below it on one plain line, for copying. For a script: the plain
 /// line only.
-pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) {
+pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> Result<(), Failure> {
     if input.is_script() {
-        println!("{phrase}");
-        return;
+        return style::out(phrase);
     }
     for line in style::boxed_words(phrase) {
-        println!("{}", *line);
+        style::out(format_args!("{}", *line))?;
     }
     eprintln!("{}", paint(MUTED, "On one line, for copying:"));
-    println!("{phrase}");
+    style::out(phrase)?;
     print_fingerprint(phrase, wallet);
+    Ok(())
 }
 
 /// The wallet a phrase shown opens, whose master key fingerprint is shown under it.
@@ -493,9 +501,14 @@ fn print_fingerprint(phrase: &str, wallet: Wallet) {
         Wallet::NoPassphrase => ("", "if the wallet has no BIP39 passphrase"),
         Wallet::Container => ("", "of the container itself, not your wallet"),
     };
+    // A container's own fingerprint comes from the library's one rule for it.
+    let fingerprint = match wallet {
+        Wallet::Container => mhfe::container_fingerprint(phrase),
+        _ => mhfe::wallet::master_fingerprint(phrase, passphrase),
+    };
     // Every phrase shown is a valid BIP39 phrase. Should the fingerprint fail all the same, the
     // phrase above is what matters, so it stands without one.
-    let Ok(fingerprint) = mhfe::wallet::master_fingerprint_text(phrase, passphrase) else {
+    let Ok(fingerprint) = fingerprint.map(mhfe::wallet::fingerprint_text) else {
         return;
     };
     eprintln!(
@@ -573,8 +586,7 @@ impl PrivateScreen {
                 step: false,
             };
         }
-        let active =
-            output_allows && terminal_screen_possible(input) && hidden_input::control_sequences();
+        let active = output_allows && terminal_screen_possible(input);
         if active {
             // Written raw: anstream would drop control sequences when NO_COLOR is set.
             write_control(ENTER_ALTERNATE_SCREEN);
@@ -633,10 +645,7 @@ pub fn output_on_screen() -> bool {
 }
 
 fn terminal_screen_possible(input: &Input) -> bool {
-    !input.is_script()
-        && io::stdin().is_terminal()
-        && io::stderr().is_terminal()
-        && std::env::var("TERM").map_or(true, |term| term != "dumb")
+    !input.is_script() && hidden_input::can_redraw()
 }
 
 /// Asks the person to write down what the private screen shows, and waits for Enter or Escape,
@@ -711,10 +720,7 @@ impl Drop for PrivateScreen {
 /// Switches to the alternate screen for the steps of a command (flow.rs). False where they cannot
 /// be shown privately, or within a screen that is already private.
 pub fn enter_steps(input: &Input) -> bool {
-    if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
-        || !can_show_privately(input)
-        || !hidden_input::control_sequences()
-    {
+    if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst) || !can_show_privately(input) {
         return false;
     }
     write_control(ENTER_ALTERNATE_SCREEN);
@@ -874,7 +880,7 @@ impl Progress {
         let rounds_left = u64::from(ROUNDS - stage_round + 1);
         let elapsed = self.started.elapsed().as_secs();
         let note = match (elapsed * rounds_left).checked_div(finished_rounds) {
-            Some(seconds) => format!("about {} left", duration(seconds)),
+            Some(seconds) => format!("about {} left", time_text::duration(seconds)),
             None => String::new(),
         };
         self.draw(stage_round - 1, &note);
@@ -895,7 +901,7 @@ impl Progress {
         }
         let note = format!(
             "done in {}",
-            duration(self.stage_started.elapsed().as_secs())
+            time_text::duration(self.stage_started.elapsed().as_secs())
         );
         let line = self.draw(ROUNDS, &note);
         if self.same_line {
@@ -941,23 +947,6 @@ fn stage(round: u32, rounds: u32, single: &'static str) -> &'static str {
     }
 }
 
-/// "45 s", "3 min 20 s", "2 h 5 min", "1 day 3 h".
-pub fn duration(seconds: u64) -> String {
-    const MINUTE: u64 = 60;
-    const HOUR: u64 = 60 * MINUTE;
-    const DAY: u64 = 24 * HOUR;
-    match seconds {
-        s if s < MINUTE => format!("{s} s"),
-        s if s < HOUR => format!("{} min {} s", s / MINUTE, s % MINUTE),
-        s if s < DAY => format!("{} h {} min", s / HOUR, (s % HOUR) / MINUTE),
-        s => {
-            let days = s / DAY;
-            let unit = if days == 1 { "day" } else { "days" };
-            format!("{days} {unit} {} h", (s % DAY) / HOUR)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -970,15 +959,6 @@ mod tests {
         assert!(!without.contains("--stdin"), "{without}");
         assert!(without.contains("Run the command in a terminal"));
         assert!(Input::new(false).can_ask_again() && Input::terminal_only().can_ask_again());
-    }
-
-    #[test]
-    fn durations_read_naturally() {
-        assert_eq!(duration(45), "45 s");
-        assert_eq!(duration(200), "3 min 20 s");
-        assert_eq!(duration(7_500), "2 h 5 min");
-        assert_eq!(duration(97_200), "1 day 3 h");
-        assert_eq!(duration(3 * 86_400), "3 days 0 h");
     }
 
     #[test]

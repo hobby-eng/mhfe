@@ -20,13 +20,13 @@ use crate::feistel::{round_mask, round_message, round_salt, Geometry};
 use crate::operation::Encryption;
 use crate::packing::{self, STATE_WORDS};
 use crate::self_check::{
-    digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, DigestCase,
-    Findings, Tier,
+    damaged, digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome,
+    DigestCase, Findings, Tier, DAMAGED,
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
 use crate::{
-    Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WordCount, WorkFactor,
-    SAME_LENGTH_SUITE_ID, SUITE_ID,
+    ContainerFacts, Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WordCount,
+    WorkFactor, SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
 
 /// One published vector as the checks replay it.
@@ -269,12 +269,14 @@ const ZERO_12_REPAIR_WORDS: (&str, usize, &str) = ("zero-12", 4, "shaft pupil pa
 /// recovery, then the refusals, and suite 4's round message, salt and mask for each entropy size.
 pub(crate) struct CipherRoundsCheck {
     vectors: &'static [PublishedVector],
+    refusals: &'static [Refusal],
 }
 
 impl CipherRoundsCheck {
     pub(crate) fn new() -> Self {
         Self {
             vectors: published_table(),
+            refusals: &REFUSALS,
         }
     }
 
@@ -406,7 +408,7 @@ impl CipherRoundsCheck {
                     return Err("offers other readings beside 24 stated words".to_owned());
                 };
                 let [published] = vector.recovery else {
-                    return Err("the built-in cases are damaged".to_owned());
+                    return Err(damaged());
                 };
                 expect(
                     same_reading(checked, published)
@@ -423,41 +425,93 @@ impl CipherRoundsCheck {
     /// Refusals the cipher must give: a short length whose verifier does not match, a container
     /// changed before its check, and a round at settings no vector has.
     fn refusals(&self, findings: &mut Findings) {
-        /// One refusal, given the table of round keys to replay with.
-        type Refusal = fn(&'static [PublishedVector]) -> Result<(), String>;
-        let checks: [Refusal; 3] = [
-            // zero-24's container read as 12 words: no short length's check passes, so the stated
-            // one fails too.
-            |table| {
-                let result = find(table, "zero-24")?.recovery_at(table, 12)?;
-                expect_refusal(result.map(|_| ()), "VERIFIER_MISMATCH")
-            },
-            // zero-12's new container with its words replaced by zero-24's container, which has
-            // the same password and settings: the check recovers another state and refuses it.
-            |table| {
-                let vector = find(table, "zero-12")?;
-                let other = find(table, "zero-24")?;
+        let table = self.vectors;
+        findings.each("refusal", self.refusals, |refusal| refusal.run(table));
+    }
+}
+
+/// A case the cipher must refuse, with the error code it must refuse it with. The cases are data
+/// of [`CipherRoundsCheck`], so that a test can give one that is wrongly accepted.
+#[derive(Clone, Copy)]
+enum Refusal {
+    /// The container of `vector` recovered with `words` stated.
+    ReadAs {
+        vector: &'static str,
+        words: usize,
+        code: &'static str,
+    },
+    /// The new container of `vector` with its words replaced by the container of `other`, checked
+    /// as the encryption checks its own result.
+    Swapped {
+        vector: &'static str,
+        other: &'static str,
+        code: &'static str,
+    },
+    /// The container of `vector` recovered at the PIM `pim`.
+    AtPim {
+        vector: &'static str,
+        pim: u32,
+        code: &'static str,
+    },
+}
+
+const REFUSALS: [Refusal; 3] = [
+    // zero-24's container read as 12 words: no short length's check passes, so the stated one
+    // fails too.
+    Refusal::ReadAs {
+        vector: "zero-24",
+        words: 12,
+        code: "VERIFIER_MISMATCH",
+    },
+    // zero-12's new container with its words replaced by zero-24's container, which has the same
+    // password and settings: the check recovers another state and refuses it.
+    Refusal::Swapped {
+        vector: "zero-12",
+        other: "zero-24",
+        code: "VERIFICATION_FAILED",
+    },
+    // zero-12's container at PIM 1: the settings reach the salt, so no recorded round matches and
+    // the engine refuses the first call.
+    Refusal::AtPim {
+        vector: "zero-12",
+        pim: 1,
+        code: "INTERNAL_ERROR",
+    },
+];
+
+impl Refusal {
+    /// `Ok` when the case is refused with its code, its rounds answered by `table`.
+    fn run(&self, table: &'static [PublishedVector]) -> Result<(), String> {
+        match *self {
+            Self::ReadAs {
+                vector,
+                words,
+                code,
+            } => {
+                let result = find(table, vector)?.recovery_at(table, words)?;
+                expect_refusal(result.map(|_| ()), code)
+            }
+            Self::Swapped {
+                vector,
+                other,
+                code,
+            } => {
+                let vector = find(table, vector)?;
+                let other = find(table, other)?;
                 let password = vector.password()?;
                 let mut mhfe = vector.mhfe(table)?;
                 let mut new = mhfe
-                    .encrypt_unchecked(
-                        vector.phrase,
-                        &password,
-                        Suite::TwentyFourWords,
-                        &mut |_, _| Ok(()),
-                    )
+                    .encrypt_unchecked(vector.phrase, &password, vector.suite(), &mut |_, _| Ok(()))
                     .map_err(stopped)?;
                 new.words = zeroize::Zeroizing::new(other.container.to_owned());
                 expect_refusal(
                     mhfe.check_new_container(&new, &password, &mut |_, _| Ok(())),
-                    "VERIFICATION_FAILED",
+                    code,
                 )
-            },
-            // zero-12's container at PIM 1: the settings reach the salt, so no recorded round
-            // matches and the engine refuses the first call.
-            |table| {
-                let vector = find(table, "zero-12")?;
-                let work = WorkFactor::new(1, vector.memory_level).map_err(stopped)?;
+            }
+            Self::AtPim { vector, pim, code } => {
+                let vector = find(table, vector)?;
+                let work = WorkFactor::new(pim, vector.memory_level).map_err(stopped)?;
                 let mut mhfe = Mhfe::with_engine(work, PublishedRoundKeys::of(table));
                 let result = mhfe.decrypt(
                     vector.container,
@@ -465,11 +519,9 @@ impl CipherRoundsCheck {
                     PhraseLength::Detect,
                     &mut |_, _| Ok(()),
                 );
-                expect_refusal(result.map(|_| ()), "INTERNAL_ERROR")
-            },
-        ];
-        let table = self.vectors;
-        findings.each("refusal", &checks, |check| check(table));
+                expect_refusal(result.map(|_| ()), code)
+            }
+        }
     }
 }
 
@@ -509,8 +561,8 @@ fn entropy_separation(fixture: &Fixture, findings: &mut Findings) {
         Err(damaged) => return findings.one(|| Err(damaged)),
     };
     findings.each("entropy size", cases, |case| {
-        let entropy_bytes = usize::try_from(fixtures::number(case, "entropy_bits")? / 8)
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let entropy_bytes =
+            usize::try_from(fixtures::number(case, "entropy_bits")? / 8).map_err(|_| damaged())?;
         let geometry = Geometry::same_length(entropy_bytes).map_err(stopped)?;
         let work = WorkFactor::new(
             fixtures::number_u32(case, "pim")?,
@@ -527,9 +579,13 @@ fn entropy_separation(fixture: &Fixture, findings: &mut Findings) {
             round_salt(geometry, &message)[..] == fixtures::bytes(case, "salt_hex")?[..],
             "gives another salt",
         )?;
+        expect(
+            [geometry.ds_mask(), &message].concat() == fixtures::bytes(case, "mask_input_hex")?,
+            "gives another mask input",
+        )?;
         let key: [u8; KEY_BYTES] = fixtures::bytes(case, "key_hex")?
             .try_into()
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
+            .map_err(|_| damaged())?;
         expect(
             round_mask(geometry, &key, &message) == fixtures::bytes(case, "mask_hex")?,
             "gives another mask",
@@ -590,7 +646,8 @@ impl FormatsCheck {
         }
     }
 
-    fn suite_3(&self, findings: &mut Findings) -> Result<(), String> {
+    /// The suite 3 fixture; the phrase cases run with `engine`, which must not be reached.
+    fn suite_3(&self, findings: &mut Findings, engine: impl Argon2Engine) -> Result<(), String> {
         let fixture = Fixture::read(self.suite_3)?;
         expect(
             fixture.text("suite_id")? == SUITE_ID,
@@ -621,7 +678,7 @@ impl FormatsCheck {
             |case| {
                 let state: packing::State = fixtures::bytes(case, "state_hex")?
                     .try_into()
-                    .map_err(|_| "the built-in cases are damaged".to_owned())?;
+                    .map_err(|_| damaged())?;
                 if case.get("entropy_hex").is_some() {
                     let packed =
                         packing::pack(&fixtures::bytes(case, "entropy_hex")?).map_err(stopped)?;
@@ -636,14 +693,17 @@ impl FormatsCheck {
         );
         findings.one(|| {
             let case = fixture.case("verifier_serialization")?;
-            let state = packing::pack(&fixtures::bytes(case, "entropy_hex")?).map_err(stopped)?;
+            let entropy = fixtures::bytes(case, "entropy_hex")?;
+            let state = packing::pack(&entropy).map_err(stopped)?;
+            // The verifier follows the entropy.
             expect(
-                state[..] == fixtures::bytes(case, "state_hex")?[..],
+                state[..] == fixtures::bytes(case, "state_hex")?[..]
+                    && state[entropy.len()..] == fixtures::bytes(case, "verifier_hex")?[..],
                 "the verifier is written in another byte order",
             )
         });
         let password = Password::new("public test password").map_err(stopped)?;
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), PublishedRoundKeys::none());
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
         findings.each("phrase case", fixture.cases("phrases")?, |case| {
             let expected = fixtures::text(case, "expected_error")?;
             let result = match fixtures::text(case, "operation")? {
@@ -658,7 +718,7 @@ impl FormatsCheck {
                 "decrypt" => {
                     let length = match case.get("words") {
                         Some(_) => usize::try_from(fixtures::number(case, "words")?)
-                            .map_err(|_| "the built-in cases are damaged".to_owned())
+                            .map_err(|_| damaged())
                             .map(WordCount::new)?
                             .map(PhraseLength::Words),
                         None => Ok(PhraseLength::Detect),
@@ -676,53 +736,51 @@ impl FormatsCheck {
                         })
                         .map(|_| ())
                 }
-                _ => return Err("the built-in cases are damaged".to_owned()),
+                _ => return Err(damaged()),
             };
             expect_refusal(result, expected)
         });
         Ok(())
     }
 
-    fn suite_4(&self, findings: &mut Findings) -> Result<(), String> {
+    /// The refusals of the suite 4 fixture, with `engine`, which must not be reached.
+    fn suite_4(&self, findings: &mut Findings, engine: impl Argon2Engine) -> Result<(), String> {
         let fixture = Fixture::read(self.suite_4)?;
         let password = Password::new("public test password").map_err(stopped)?;
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), PublishedRoundKeys::none());
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
         findings.each("suite 4 refusal", fixture.cases("refusals")?, |case| {
-            expect(
-                fixtures::text(case, "expected")? == "rejected",
-                "the built-in cases are damaged",
-            )?;
+            expect(fixtures::text(case, "expected")? == "rejected", DAMAGED)?;
             let text = fixtures::text(case, "text")?;
             let result = match fixtures::text(case, "operation")? {
                 "encrypt-same-length" => mhfe
                     .encrypt(text, &password, Suite::SameLength, &mut |_, _| Ok(()))
                     .map(|_| ()),
                 "decrypt" => {
+                    // A container that does not read would be refused with the same error code as
+                    // one of a length the suite does not have: only a readable one can count.
+                    ContainerFacts::read(text).map_err(|_| damaged())?;
                     let length = match case.get("words") {
                         Some(_) => {
                             let words = usize::try_from(fixtures::number(case, "words")?)
-                                .map_err(|_| "the built-in cases are damaged".to_owned())?;
+                                .map_err(|_| damaged())?;
                             PhraseLength::Words(WordCount::new(words).map_err(stopped)?)
                         }
                         None => PhraseLength::Detect,
                     };
-                    let suite = match case.get("suite").map(|_| fixtures::number(case, "suite")) {
+                    let suite = match case.get("suite") {
                         None => None,
-                        Some(Ok(3)) => Some(Suite::TwentyFourWords),
-                        Some(Ok(4)) => Some(Suite::SameLength),
-                        Some(_) => return Err("the built-in cases are damaged".to_owned()),
+                        Some(_) => Some(
+                            Suite::of_number(fixtures::number(case, "suite")?)
+                                .ok_or_else(damaged)?,
+                        ),
                     };
                     mhfe.decrypt_as(text, &password, suite, length, &mut |_, _| Ok(()))
                         .map(|_| ())
                 }
-                _ => return Err("the built-in cases are damaged".to_owned()),
+                _ => return Err(damaged()),
             };
             match result {
-                Err(
-                    MhfeError::SameLengthNeedsShortPhrase
-                    | MhfeError::LengthChoiceNotApplicable { .. }
-                    | MhfeError::InvalidContainer(_),
-                ) => Ok(()),
+                Err(error) if Suite::is_length_refusal(&error) => Ok(()),
                 Err(error) => Err(format!("is refused with {}", error.code())),
                 Ok(()) => Err("is accepted".to_owned()),
             }
@@ -742,11 +800,11 @@ impl ComponentCheck for FormatsCheck {
 
     fn run(&mut self, tier: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        if let Err(damaged) = self.suite_3(&mut findings) {
+        if let Err(damaged) = self.suite_3(&mut findings, PublishedRoundKeys::none()) {
             findings.one(|| Err(damaged));
         }
         if tier == Tier::Full {
-            if let Err(damaged) = self.suite_4(&mut findings) {
+            if let Err(damaged) = self.suite_4(&mut findings, PublishedRoundKeys::none()) {
                 findings.one(|| Err(damaged));
             }
         }
@@ -1004,6 +1062,7 @@ mod tests {
         vectors[index].container = vectors[index].container.replacen("a", "b", 1).leak();
         let mut check = CipherRoundsCheck {
             vectors: leaked(vectors),
+            refusals: &REFUSALS,
         };
         assert_eq!(
             check.run(Tier::Startup),
@@ -1028,6 +1087,7 @@ mod tests {
             vectors[index].rounds[round].key[0] ^= 1;
             let mut check = CipherRoundsCheck {
                 vectors: leaked(vectors),
+                refusals: &REFUSALS,
             };
             assert_eq!(
                 check.run(Tier::Startup),
@@ -1051,6 +1111,7 @@ mod tests {
             b"Caf\xc3\xa9 fi PA\xcc\x8a1 \xf0\x9f\x94\x90 \xd0\xb8\xcc\x86";
         let mut check = CipherRoundsCheck {
             vectors: leaked(vectors),
+            refusals: &REFUSALS,
         };
         assert_eq!(
             check.run(Tier::Startup),
@@ -1070,6 +1131,7 @@ mod tests {
         vectors[index].recovery = &recovery[..2];
         let mut check = CipherRoundsCheck {
             vectors: leaked(vectors),
+            refusals: &REFUSALS,
         };
         assert_eq!(
             check.run(Tier::Startup),
@@ -1088,6 +1150,7 @@ mod tests {
         vectors[index].rounds[11].key[31] ^= 0x10;
         let mut check = CipherRoundsCheck {
             vectors: leaked(vectors),
+            refusals: &REFUSALS,
         };
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
         assert_eq!(
@@ -1138,10 +1201,110 @@ mod tests {
         assert_eq!(result.unwrap_err().code(), "INTERNAL_ERROR");
     }
 
+    /// The outcome of `refusal` alone, its rounds answered by the published table.
+    fn refusal_alone(refusal: Refusal) -> ComponentOutcome {
+        let check = CipherRoundsCheck {
+            vectors: published_table(),
+            refusals: Box::leak(Box::new([refusal])),
+        };
+        let mut findings = Findings::new();
+        check.refusals(&mut findings);
+        findings.outcome()
+    }
+
+    #[test]
+    fn each_refusal_passes_alone() {
+        for refusal in REFUSALS {
+            assert_eq!(refusal_alone(refusal), ComponentOutcome::Passed);
+        }
+    }
+
     #[test]
     fn a_refusal_that_is_accepted_fails() {
-        // Without zero-24 in the table, the changed container's check cannot run its rounds and
-        // stops with another error than VERIFICATION_FAILED.
+        let accepted = |code: &str| {
+            ComponentOutcome::Failed(format!(
+                "refusal 1 of 1 is accepted instead of refused with {code}"
+            ))
+        };
+        // zero-12's own container at its own length, its own container in place of another, and
+        // its own PIM: each is accepted, so each refusal must fail.
+        assert_eq!(
+            refusal_alone(Refusal::ReadAs {
+                vector: "zero-12",
+                words: 12,
+                code: "VERIFIER_MISMATCH",
+            }),
+            accepted("VERIFIER_MISMATCH")
+        );
+        assert_eq!(
+            refusal_alone(Refusal::Swapped {
+                vector: "zero-12",
+                other: "zero-12",
+                code: "VERIFICATION_FAILED",
+            }),
+            accepted("VERIFICATION_FAILED")
+        );
+        let zero_12 = published("zero-12").unwrap();
+        assert_eq!(
+            refusal_alone(Refusal::AtPim {
+                vector: "zero-12",
+                pim: zero_12.pim,
+                code: "INTERNAL_ERROR",
+            }),
+            accepted("INTERNAL_ERROR")
+        );
+    }
+
+    #[test]
+    fn a_refusal_with_another_code_fails() {
+        for (index, refusal) in REFUSALS.into_iter().enumerate() {
+            let (changed, code) = match refusal {
+                Refusal::ReadAs {
+                    vector,
+                    words,
+                    code,
+                } => (
+                    Refusal::ReadAs {
+                        vector,
+                        words,
+                        code: "LENGTH_DIFFERS",
+                    },
+                    code,
+                ),
+                Refusal::Swapped {
+                    vector,
+                    other,
+                    code,
+                } => (
+                    Refusal::Swapped {
+                        vector,
+                        other,
+                        code: "LENGTH_DIFFERS",
+                    },
+                    code,
+                ),
+                Refusal::AtPim { vector, pim, code } => (
+                    Refusal::AtPim {
+                        vector,
+                        pim,
+                        code: "LENGTH_DIFFERS",
+                    },
+                    code,
+                ),
+            };
+            assert_eq!(
+                refusal_alone(changed),
+                ComponentOutcome::Failed(format!(
+                    "refusal 1 of 1 is refused with {code} instead of LENGTH_DIFFERS"
+                )),
+                "refusal {}",
+                index + 1
+            );
+        }
+    }
+
+    #[test]
+    fn a_missing_vector_fails_the_refusals() {
         let vectors: Vec<PublishedVector> = PUBLISHED
             .iter()
             .filter(|vector| vector.name != "zero-24")
@@ -1149,9 +1312,27 @@ mod tests {
             .collect();
         let mut check = CipherRoundsCheck {
             vectors: leaked(vectors),
+            refusals: &REFUSALS,
         };
-        let outcome = check.run(Tier::Startup);
-        assert!(outcome.is_failure(), "{outcome:?}");
+        assert_eq!(
+            check.run(Tier::Startup),
+            ComponentOutcome::Failed("refusal 1 of 3 a built-in vector is missing".to_owned())
+        );
+    }
+
+    /// Asserts that the formats check fails at startup with `detail` once `from` in the suite 3
+    /// fixture is changed to `to`.
+    fn suite_3_changed_fails(from: &str, to: &str, detail: &str) {
+        let changed = crate::validation_fixtures::SUITE_3.replacen(from, to, 1);
+        assert_ne!(changed, crate::validation_fixtures::SUITE_3);
+        let mut check = FormatsCheck {
+            suite_3: changed.leak(),
+            suite_4: crate::validation_fixtures::SUITE_4,
+        };
+        assert_eq!(
+            check.run(Tier::Startup),
+            ComponentOutcome::Failed(detail.to_owned())
+        );
     }
 
     #[test]
@@ -1162,21 +1343,12 @@ mod tests {
         };
         assert_eq!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("the built-in cases are damaged".to_owned())
+            ComponentOutcome::Failed(damaged())
         );
-        let changed = crate::validation_fixtures::SUITE_3.replacen(
+        suite_3_changed_fails(
             "        15\n      ]",
             "        15,\n        21\n      ]",
-            1,
-        );
-        assert_ne!(changed, crate::validation_fixtures::SUITE_3);
-        let mut check = FormatsCheck {
-            suite_3: changed.leak(),
-            suite_4: crate::validation_fixtures::SUITE_4,
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("length detection case 2 of 8 differs".to_owned())
+            "length detection case 2 of 8 differs",
         );
         // A refusal that the fixture names otherwise.
         let changed = crate::validation_fixtures::SUITE_3.replacen(
@@ -1219,6 +1391,48 @@ mod tests {
             ComponentOutcome::Failed(
                 "suite 4 refusal 2 of 63 is refused with INTERNAL_ERROR".to_owned()
             )
+        );
+    }
+
+    /// The format checks with an engine that panics if Argon2 is reached, as the unit tests run
+    /// them: every refusal of both fixtures must come first.
+    #[test]
+    fn the_formats_refuse_before_argon2() {
+        use crate::test_support::NoArgon2Calls;
+        let check = FormatsCheck::new();
+        let mut findings = Findings::new();
+        check.suite_3(&mut findings, NoArgon2Calls).unwrap();
+        check.suite_4(&mut findings, NoArgon2Calls).unwrap();
+        assert_eq!(findings.outcome(), ComponentOutcome::Passed);
+    }
+
+    #[test]
+    fn a_wrong_verifier_or_mask_input_fails() {
+        suite_3_changed_fails(
+            "\"verifier_hex\": \"dc27f8e8\"",
+            "\"verifier_hex\": \"dc27f8e9\"",
+            "the verifier is written in another byte order",
+        );
+
+        let fixture = Fixture::read(crate::validation_fixtures::SUITE_4).unwrap();
+        let mask_input = fixtures::text(
+            &fixture.cases("ent_separation").unwrap()[1],
+            "mask_input_hex",
+        )
+        .unwrap()
+        .to_owned();
+        let mut wrong = mask_input.clone();
+        wrong.replace_range(
+            wrong.len() - 1..,
+            if wrong.ends_with('0') { "1" } else { "0" },
+        );
+        let changed = crate::validation_fixtures::SUITE_4.replacen(&mask_input, &wrong, 1);
+        assert_ne!(changed, crate::validation_fixtures::SUITE_4);
+        let mut findings = Findings::new();
+        entropy_separation(&Fixture::read(&changed).unwrap(), &mut findings);
+        assert_eq!(
+            findings.outcome(),
+            ComponentOutcome::Failed("entropy size 2 of 4 gives another mask input".to_owned())
         );
     }
 }
