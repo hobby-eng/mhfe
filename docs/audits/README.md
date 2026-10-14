@@ -77,6 +77,11 @@ replaced on main by `e8dca53a5d17cb80f1f5ac1f5a40b351f939e7e7` in the signed pri
 byte the same in both commits. Only the local ref `refs/audit-snapshots/AUD-020-reviewed-base` keeps
 the original commit.
 
+AUD-023 remediation addendum of 2026-10-14: all 58 findings are fixed in signed commits, most in
+`253ca3c38aef04f0f68c1cdb1130c14bfd2e7789`, and three of them (DOC003, DOC004, DOC005) are verified
+at `64a4b99980da945c4de9f4ae3a4621176c1dbbbe`. The record's "Remediation and follow-up" names each
+finding's commit and what was and was not run.
+
 ## File names
 
 Every record is named `AUD-NNN-<date>.md` with its `.json` companion, the date being the UTC
