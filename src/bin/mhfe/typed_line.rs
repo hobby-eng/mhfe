@@ -496,8 +496,10 @@ mod tests {
 
     /// The test binary's allocator, which counts the blocks freed on a watching thread that still
     /// hold [`WATCHED`]: a copy of a hint word that was not wiped (AUD-023-SEC001).
-    // A global allocator is unsafe code by nature; it exists only in the test binary.
-    #[allow(unsafe_code)]
+    #[allow(
+        unsafe_code,
+        reason = "a global allocator is unsafe code by nature; it exists only in the test binary"
+    )]
     mod freed {
         use std::alloc::{GlobalAlloc, Layout, System};
         use std::cell::Cell;

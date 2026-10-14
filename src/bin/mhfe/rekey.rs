@@ -8,13 +8,13 @@
 use anstream::eprintln;
 use clap::{Args, ValueEnum};
 use mhfe::memory::LockedText;
-use mhfe::operation::{Keep, Stage};
-use mhfe::rekey::{Rekey, ReplacementRehearsal};
+use mhfe::operation::{Keep, Sealed, Stage};
+use mhfe::rekey::{ConfirmedPhrase, Rekey, ReplacementRehearsal};
 use mhfe::wallet::fingerprint_text;
 use mhfe::wallet_check::WALLET_CHECK_BITS;
 use mhfe::{
     Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, Password,
-    PhraseLength, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
+    PhraseLength, RecoveredForRekey, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
 };
 use zeroize::Zeroizing;
 
@@ -153,14 +153,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         memory_level: options.new_memory_level,
     };
     new_settings.check_given(Operation::RekeyNew)?;
-    // A --confirm that the length given cannot use is refused before anything is typed, by the
-    // library's rule (AUD-023-UI002); one that depends on the container, once it is read.
-    let refuse_confirm = |needed| match options.confirm {
-        Some(Kind::BuiltInCheck) => Confirmation::BuiltInCheck.refuse_for(needed),
-        _ => Ok(()),
-    };
     if let Some(needed) = options.words.and_then(ConfirmationNeeded::of_any_container) {
-        refuse_confirm(needed)?;
+        refuse_confirm(options.confirm, needed)?;
     }
     // Shown to everyone, so that it says nothing about this container (specification: a hidden
     // wallet behind an honest disclosure). Nothing is destroyed here: the old container keeps
@@ -168,34 +162,94 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // question to answer (the owner's decision of 2026-10-08, in place of AUD-007-FUN002's).
     style::warn(&keep_until_funds_moved(old_work), "");
 
+    let (container, mut rekey) = read_old_container(&mut input, &options, old_work)?;
+    let (mut how, wallet_passphrase) = choose_confirmation(&mut input, &options, &rekey)?;
+    // The rounds run once; a confirmation that is refused is followed by another on the same
+    // recovery (AUD-017-UI002).
+    let state = recover(&rekey, old_work, &how)?;
+    let recovered = confirm(&mut input, &mut rekey, &state, &mut how, wallet_passphrase)?;
+    drop(state);
+    let recovered = record_recovery(&mut input, recovered, &how)?;
+    let rehearsal = replacement_rehearsal(&mut input, &recovered)?;
+
+    let new_work = settings::choose(new_settings, &mut input, Operation::RekeyNew)?;
+    // A 24-word original too can, by rare chance, read as a shorter phrase after recovery.
+    let phrase = recovered.phrase();
+    let original = OriginalFacts::read(phrase.phrase())?;
+    encrypt::warn_if_detection_would_mislead(
+        original.other_lengths_in(container.suite()),
+        phrase.words(),
+    );
+    drop(original);
+    let repair_count = options.repair_words.choose(&mut input)?;
+    let new_password =
+        read_different_password(&mut input, &rekey, new_work, options.new_password.kind())?;
+    let new = seal(
+        &input,
+        &rekey,
+        &recovered,
+        &new_password,
+        new_work,
+        repair_count,
+    )?;
+    flow.finish();
+    print_summary(&new, new_work, &recovered, &rehearsal);
+    Ok(SUCCESS)
+}
+
+/// Refuses a `--confirm` that a phrase needing `needed` cannot use, by the library's rule
+/// (AUD-023-UI002): before anything is typed for a length given, and for one that depends on the
+/// container once it is read.
+fn refuse_confirm(confirm: Option<Kind>, needed: ConfirmationNeeded) -> Result<(), MhfeError> {
+    match confirm {
+        Some(Kind::BuiltInCheck) => Confirmation::BuiltInCheck.refuse_for(needed),
+        _ => Ok(()),
+    }
+}
+
+/// Reads the old container, the length of its phrase and its password, and makes the rekey,
+/// whose own rules (length, confirmation, a new password that changes the container) are the
+/// library's.
+fn read_old_container(
+    input: &mut Input,
+    options: &Options,
+    old_work: WorkFactor,
+) -> Result<(ContainerFacts, Rekey), Failure> {
     let read = terminal::read_container(
-        &mut input,
+        input,
         Operation::Rekey.title(),
         options.repair.card(Operation::Rekey, old_work),
     )?;
     let container = read.facts;
-    let length = phrase_length(&mut input, options.words, &container)?;
-    refuse_confirm(container.confirmation_needed(length)?)?;
+    let length = phrase_length(input, options.words, &container)?;
+    refuse_confirm(options.confirm, container.confirmation_needed(length)?)?;
     // A search for missing words asked for the old password already.
     let password = match read.password {
         Some(password) => password,
-        None => terminal::read_password(&mut input, Operation::Rekey)?,
+        None => terminal::read_password(input, Operation::Rekey)?,
     };
-    // The rekey's own rules (length, confirmation, a new password that changes the container)
-    // are the library's.
     let rekey = Rekey::new(container.words(), length, password, old_work)?;
-    // A recovery without a built-in check needs another confirmation, and so does one whose length
-    // is detected. It is chosen, and a reference typed, before the long computation, so the user
-    // can walk away while it runs.
+    Ok((container, rekey))
+}
+
+/// How the recovery is confirmed, with the reference typed, and whether the wallet has a BIP39
+/// passphrase. A recovery without a built-in check needs another confirmation, and so does one
+/// whose length is detected. It is chosen, and a reference typed, before the long computation, so
+/// the user can walk away while it runs.
+fn choose_confirmation(
+    input: &mut Input,
+    options: &Options,
+    rekey: &Rekey,
+) -> Result<(How, bool), Failure> {
     let kind = match (options.confirm, rekey.confirmation_needed()) {
-        (Some(Kind::Owner), _) if !terminal::can_show_privately(&input) => {
+        (Some(Kind::Owner), _) if !terminal::can_show_privately(input) => {
             return Err(Failure::invalid_input(
                 "--confirm show needs a terminal that can show the phrase on a private screen.",
             ))
         }
         (Some(kind), _) => kind,
         (None, ConfirmationNeeded::BuiltInCheck) => Kind::BuiltInCheck,
-        (None, ConfirmationNeeded::WalletOrOwner) => ask_how_to_confirm(&mut input, true)?,
+        (None, ConfirmationNeeded::WalletOrOwner) => ask_how_to_confirm(input, true)?,
     };
     // The new container's keep list names the wallet's BIP39 passphrase, so the question is asked
     // once, before any reference: a reference without a passphrase would match the phrase's
@@ -203,48 +257,56 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // asked for it.
     let wallet_passphrase = match options.passphrase_used.given() {
         Some(used) => used,
-        None => ask_wallet_passphrase(&mut input)?,
+        None => ask_wallet_passphrase(input)?,
     };
-    let mut how = how_of(&mut input, kind, wallet_passphrase)?;
+    Ok((how_of(input, kind, wallet_passphrase)?, wallet_passphrase))
+}
 
+/// Runs the recovery's twelve rounds at the old settings. The old memory is released when it
+/// returns, before the new settings reserve theirs.
+fn recover(rekey: &Rekey, old_work: WorkFactor, how: &How) -> Result<RecoveredForRekey, Failure> {
     let mut mhfe = settings::reserve_memory(old_work)?;
-    let mut rekey = rekey;
-    // The rounds run once; a confirmation that is refused is followed by another on the same
-    // recovery (AUD-017-UI002).
-    let state = {
-        let reference = how.reference();
-        let mut progress = Progress::start();
-        // The terminal shows the twelve rounds of the recovery as before; a comparison with the
-        // wallet follows them without a round of its own.
-        let state = rekey.recover_state(
-            &mut mhfe,
-            how.confirmation(reference.as_ref()),
-            &mut |stage, round, _| {
-                if stage == Stage::Recover {
-                    progress.round_starts(round, ROUNDS);
-                }
-                Ok(())
-            },
-        );
-        progress.finish();
-        state?
-    };
-    // The old memory is released before the new settings reserve theirs.
-    drop(mhfe);
-    let recovered = loop {
+    let reference = how.reference();
+    let mut progress = Progress::start();
+    // The terminal shows the twelve rounds of the recovery as before; a comparison with the
+    // wallet follows them without a round of its own.
+    let state = rekey.recover_state(
+        &mut mhfe,
+        how.confirmation(reference.as_ref()),
+        &mut |stage, round, _| {
+            if stage == Stage::Recover {
+                progress.round_starts(round, ROUNDS);
+            }
+            Ok(())
+        },
+    );
+    progress.finish();
+    Ok(state?)
+}
+
+/// The phrase of `state`, once a confirmation confirms it: after a refusal that the library lets
+/// another confirmation follow, the person chooses again, on the same recovery.
+fn confirm(
+    input: &mut Input,
+    rekey: &mut Rekey,
+    state: &RecoveredForRekey,
+    how: &mut How,
+    wallet_passphrase: bool,
+) -> Result<ConfirmedPhrase, Failure> {
+    loop {
         let reference = how.reference();
         let refusal = match rekey.confirm(
-            &state,
+            state,
             how.confirmation(reference.as_ref()),
             Some(wallet_passphrase),
             &mut |_, _, _| Ok(()),
         ) {
-            Ok(confirmed) => break confirmed,
+            Ok(confirmed) => return Ok(confirmed),
             Err(refusal) => refusal,
         };
         // Whether another confirmation may follow, and at which lengths the owner may give it, is
         // the library's to say (AUD-017-ARC002); any other refusal ends the rekey.
-        let Some(owner_lengths) = rekey.owner_lengths_after(&state, &refusal)? else {
+        let Some(owner_lengths) = rekey.owner_lengths_after(state, &refusal)? else {
             return Err(refusal.into());
         };
         style::retry_next(match refusal {
@@ -260,24 +322,32 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             // rules). An address or the fingerprint compares every reading.
             _ => SEVERAL_LENGTHS.to_owned(),
         });
-        let kind = ask_how_to_confirm(&mut input, !owner_lengths.is_empty())?;
+        let kind = ask_how_to_confirm(input, !owner_lengths.is_empty())?;
         // The owner compares the reading of one of these lengths, stated where there is a choice.
         if kind == Kind::Owner {
             let stated = match owner_lengths[..] {
                 [only] => WordCount::new(only)?,
-                _ => phrase_length::ask_stated(&mut input, &owner_lengths, &[], "Phrase")?,
+                _ => phrase_length::ask_stated(input, &owner_lengths, &[], "Phrase")?,
             };
             rekey.set_length(PhraseLength::Words(stated))?;
         }
-        how = how_of(&mut input, kind, wallet_passphrase)?;
-    };
-    drop(state);
+        *how = how_of(input, kind, wallet_passphrase)?;
+    }
+}
+
+/// Records how the recovered phrase was confirmed, after the owner's comparison where the owner
+/// confirms it, and returns it ready to seal.
+fn record_recovery(
+    input: &mut Input,
+    recovered: ConfirmedPhrase,
+    how: &How,
+) -> Result<ConfirmedPhrase, Failure> {
     let phrase = recovered.phrase();
     // The 16-bit source check of a 24-word reading, which every recovery evaluates, with the
     // passphrase typed for the reference or the empty one; only a pass is said. It never
     // confirms a phrase to seal again: 16 bits are too few.
     // A copy of a secret, wiped when dropped.
-    let source_passphrase = Zeroizing::new(match &how {
+    let source_passphrase = Zeroizing::new(match how {
         How::Wallet(wallet) => wallet.reference().passphrase().unwrap_or("").to_owned(),
         How::BuiltInCheck | How::Owner => String::new(),
     });
@@ -295,7 +365,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             if let Some(stated) = phrase.stated_words() {
                 style::warn(&phrase_length::check_finds(phrase.words(), stated), "");
             }
-            owner_confirms(&mut input, phrase.phrase())?;
+            owner_confirms(input, phrase.phrase())?;
             if phrase.verified() {
                 "passed its built-in check, confirmed by you"
             } else {
@@ -308,52 +378,61 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         &format!("{} words, {confirmed}{source_check}", phrase.words()),
     );
     // The owner said yes, explicitly: only now may the library seal the phrase.
-    let recovered = if by_owner {
+    Ok(if by_owner {
         recovered.confirmed_by_owner()
     } else {
         recovered
-    };
-    let phrase = recovered.phrase();
-    // The reference the replacement's rehearsal compares, known before it is made (the
-    // specification's re-encryption rules), with the wallet's passphrase where the library needs
-    // it.
+    })
+}
+
+/// The reference the replacement's rehearsal compares, known before it is made (the
+/// specification's re-encryption rules), with the wallet's passphrase where the library needs it.
+fn replacement_rehearsal(
+    input: &mut Input,
+    recovered: &ConfirmedPhrase,
+) -> Result<ReplacementRehearsal, Failure> {
     let passphrase = if recovered.rehearsal_needs_passphrase() {
-        check::read_passphrase_named(&mut input, Operation::Rekey, check::ORIGINAL_SEED_PHRASE)?
+        check::read_passphrase_named(input, Operation::Rekey, check::ORIGINAL_SEED_PHRASE)?
     } else {
         LockedText::copy_of("")
     };
-    let rehearsal = recovered.replacement_rehearsal(&passphrase)?;
-    drop(passphrase);
+    Ok(recovered.replacement_rehearsal(&passphrase)?)
+}
 
-    let new_work = settings::choose(new_settings, &mut input, Operation::RekeyNew)?;
-    // A 24-word original too can, by rare chance, read as a shorter phrase after recovery.
-    let original = OriginalFacts::read(phrase.phrase())?;
-    encrypt::warn_if_detection_would_mislead(
-        original.other_lengths_in(container.suite()),
-        phrase.words(),
-    );
-    drop(original);
-    let repair_count = options.repair_words.choose(&mut input)?;
-    let new_password =
-        read_different_password(&mut input, &rekey, new_work, options.new_password.kind())?;
-
-    // Sealed by the library's rekey, which the browser package and the checks at start run too:
-    // a container of the old one's kind, and new settings or a new password that change it
-    // (AUD-010). The terminal shows it as any encryption.
+/// Seals the phrase by the library's rekey, which the browser package and the checks at start run
+/// too: a container of the old one's kind, and new settings or a new password that change it
+/// (AUD-010). The terminal shows it as any encryption.
+fn seal(
+    input: &Input,
+    rekey: &Rekey,
+    recovered: &ConfirmedPhrase,
+    new_password: &Password,
+    new_work: WorkFactor,
+    repair_count: Option<usize>,
+) -> Result<Sealed, Failure> {
     let mut mhfe = settings::reserve_memory(new_work)?;
-    let new = encrypt::show_sealing(&input, Operation::Rekey, |progress, on_unverified| {
+    encrypt::show_sealing(input, Operation::Rekey, |progress, on_unverified| {
         rekey.seal(
             &mut mhfe,
-            &recovered,
-            &new_password,
+            recovered,
+            new_password,
             repair_count,
             // The rekey numbers these rounds 13 to 36 of its 36; the bar shows the encryption's
             // own 1 to 24, as for any encryption.
             &mut |stage, round, _| progress(stage, round - ROUNDS, ENCRYPTION_ROUNDS),
             on_unverified,
         )
-    })?;
-    flow.finish();
+    })
+}
+
+/// The summary at the end: the new container's format, what to keep, the old backup, and the
+/// rehearsal to do next.
+fn print_summary(
+    new: &Sealed,
+    new_work: WorkFactor,
+    recovered: &ConfirmedPhrase,
+    rehearsal: &ReplacementRehearsal,
+) {
     style::fact("Format", paint(MUTED, new.suite().id()));
     style::fact_wrapped(
         "Keep",
@@ -365,9 +444,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         "Old backup",
         "the old container phrase still opens the wallet with the old password",
     );
-    style::fact_wrapped("Next", &next_rehearsal(&rehearsal));
+    style::fact_wrapped("Next", &next_rehearsal(rehearsal));
     style::more(readme::REKEY);
-    Ok(SUCCESS)
 }
 
 /// What the summary says to do next: rehearse the new container phrase, with the fingerprint the

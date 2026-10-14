@@ -1,7 +1,10 @@
 //! The only module with `unsafe` code: the calls into the vendored reference Argon2 C code, the
 //! operating-system queries for free memory, and the calls that keep secrets out of swap and core
 //! dumps. Every `unsafe` block states what it relies on.
-#![allow(unsafe_code)]
+#![allow(
+    unsafe_code,
+    reason = "C code and operating-system calls are reached only through unsafe foreign functions"
+)]
 
 use std::alloc::{self, Layout};
 use std::cell::Cell;
@@ -422,13 +425,18 @@ pub(super) fn available_memory_bytes() -> Option<u64> {
     // SAFETY: vm_statistics64 holds only integers, for which all zero bytes are a valid value.
     let mut statistics: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
     let mut count = libc::HOST_VM_INFO64_COUNT;
-    // libc points Mach calls to the mach2 crate; the Mach API itself is stable.
+    #[allow(
+        deprecated,
+        reason = "libc points Mach calls to mach2; the Mach API is stable"
+    )]
     // SAFETY: mach_host_self only returns a send right to the host port.
-    #[allow(deprecated)]
     let host = unsafe { libc::mach_host_self() };
+    #[allow(
+        deprecated,
+        reason = "libc points Mach calls to mach2; the Mach API is stable"
+    )]
     // SAFETY: host_statistics64 writes at most `count` 32-bit words, and HOST_VM_INFO64_COUNT
     // is the size of `vm_statistics64`.
-    #[allow(deprecated)]
     let result = unsafe {
         libc::host_statistics64(
             host,
@@ -439,8 +447,11 @@ pub(super) fn available_memory_bytes() -> Option<u64> {
     };
     // Each mach_host_self call adds a send right, which would otherwise pile up in a library
     // that checks the memory again and again. A failure to release it changes no result.
+    #[allow(
+        deprecated,
+        reason = "libc points Mach calls to mach2; the Mach API is stable"
+    )]
     // SAFETY: releases the one right this call obtained above; `host` is not used afterwards.
-    #[allow(deprecated)]
     let _ = unsafe { mach_port_deallocate(libc::mach_task_self(), host) };
     if result != libc::KERN_SUCCESS {
         return None;
@@ -667,11 +678,8 @@ mod tests {
     #[test]
     fn reuses_one_work_area_and_leaves_it_wiped() {
         // SAFETY: the C code only reads this global, which is 1 unless someone changes it.
-        assert_eq!(
-            unsafe { FLAG_clear_internal_memory },
-            1,
-            "C code would not wipe"
-        );
+        let clear_internal_memory = unsafe { FLAG_clear_internal_memory };
+        assert_eq!(clear_internal_memory, 1, "C code would not wipe");
         let password = b"public test password";
         let salt = b"0123456789abcdef";
         let mut work_area = WorkArea::allocate(64 * 1024).unwrap();

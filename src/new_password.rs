@@ -17,6 +17,7 @@ pub(crate) mod known_answers;
 pub const DEFAULT_WORDS: usize = 5;
 /// Fewer words are weak: four give about 51.7 bits.
 pub const RECOMMENDED_WORDS: usize = 4;
+/// The most words a generated password may have.
 pub const MOST_WORDS: usize = 32;
 /// The characters of a character password: digits, capital and small letters without those
 /// easily confused when read back from paper (0 and O, 1, l and I).
@@ -30,6 +31,7 @@ pub const DEFAULT_CHARACTERS: usize = 16;
 /// Fewer characters are weak: twelve give about 70.0 bits. The strength estimate counts a random
 /// letter as 4.7 bits rather than 5.8, so twelve also pass there.
 pub const RECOMMENDED_CHARACTERS: usize = 12;
+/// The most characters a generated character password may have.
 pub const MOST_CHARACTERS: usize = 64;
 
 /// What kind of password to make.
@@ -87,20 +89,22 @@ impl PasswordRecipe {
         }
     }
 
+    /// Whether the password ends with a check word (MHFE-PASSWORD-CHECK-1).
     pub fn has_check_word(&self) -> bool {
         self.kind == Kind::CheckWord
     }
 
+    /// Whether the password is made of random characters rather than words.
     pub fn is_characters(&self) -> bool {
         matches!(self.kind, Kind::Characters(_))
     }
 
-    /// The strength in thousandths of a bit; the check word adds none.
     /// The strength in bits ([`bits_of`] of [`PasswordRecipe::millibits`]).
     pub fn bits(&self) -> f64 {
         bits_of(self.millibits())
     }
 
+    /// The strength in thousandths of a bit; the check word adds none.
     pub fn millibits(&self) -> usize {
         match self.kind {
             Kind::Characters(count) => count * MILLIBITS_PER_CHARACTER,
@@ -235,10 +239,12 @@ pub struct NewPassword {
 }
 
 impl NewPassword {
+    /// The password, as it is written down.
     pub fn text(&self) -> &str {
         &self.text
     }
 
+    /// The recipe the password was made from.
     pub fn recipe(&self) -> PasswordRecipe {
         self.recipe
     }

@@ -34,6 +34,8 @@ extern "C" {
     fn reserve(this: &JsArgon2, memory_kib: u32) -> Result<(), JsValue>;
 }
 
+/// The [`Argon2Engine`] of the browser package: every round through the page's Argon2 build, at
+/// the cost of one work factor.
 pub struct BrowserEngine {
     argon2: JsArgon2,
     cost: Argon2Cost,

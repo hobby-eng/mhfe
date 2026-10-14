@@ -8,6 +8,10 @@
 //! Expensive, about an hour for the whole set: run on request with
 //! `cargo test --locked --release --test suite3_vectors -- --ignored --nocapture`.
 
+// The whole file is test code. Saying so lets it unwrap and panic as tests do (clippy.toml), since
+// clippy recognises test code by this attribute or by #[test].
+#![cfg(test)]
+
 use std::collections::HashSet;
 use std::fs;
 
@@ -19,6 +23,9 @@ use mhfe::{Mhfe, SUITE_ID};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+// In a folder, so that Cargo does not build it as a test of its own; named by its path, since
+// there are no mod.rs files (RUST-03).
+#[path = "vector_share/share.rs"]
 mod vector_share;
 
 const FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/suite3-vectors");

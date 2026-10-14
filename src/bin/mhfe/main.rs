@@ -411,9 +411,22 @@ mod tests {
     /// (AUD-023-FUN001): no other code of the tool prints to standard output.
     #[test]
     fn every_result_is_written_through_one_function() {
-        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bin/mhfe");
-        for entry in std::fs::read_dir(folder).unwrap() {
-            let path = entry.unwrap().path();
+        // Every module of the tool, its submodules in their folders included.
+        let mut folders =
+            vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bin/mhfe")];
+        let mut files = Vec::new();
+        while let Some(folder) = folders.pop() {
+            for entry in std::fs::read_dir(folder).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    folders.push(path);
+                } else {
+                    files.push(path);
+                }
+            }
+        }
+        assert!(files.len() > 30, "the tool's modules are read");
+        for path in files {
             let text = std::fs::read_to_string(&path).unwrap();
             // The code, not its tests, which may name the macros.
             let code = text.split("#[cfg(test)]").next().unwrap_or_default();

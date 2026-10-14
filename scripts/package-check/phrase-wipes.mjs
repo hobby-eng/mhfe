@@ -1,10 +1,10 @@
 // Part 2 of the checks of the browser package, continued (scripts/verify-browser-package.mjs).
 // Phrases reach the WebAssembly as UTF-8 bytes, which the bindings wipe (SecretText in
-// src/wasm_api/mod.rs), as they wipe passwords: wasm-bindgen's own copy of a text argument stays
-// in the module's memory after the call (AUD-010). Each case runs in a fresh instance with the
-// phrase as a person may type it, in capitals with two spaces between the words, a form the
-// library never writes itself, so that a copy found can only be the argument's. None may be left,
-// whether the call succeeds or is refused.
+// src/wasm_api.rs), as they wipe passwords: wasm-bindgen's own copy of a text argument stays in
+// the module's memory after the call (AUD-010). Each case runs in a fresh instance with the phrase
+// as a person may type it, in capitals with two spaces between the words, a form the library never
+// writes itself, so that a copy found can only be the argument's. None may be left, whether the
+// call succeeds or is refused.
 import assert from "node:assert/strict";
 
 import { PHRASE, REDUCED_COST_CONTAINER } from "../public-test-data.mjs";

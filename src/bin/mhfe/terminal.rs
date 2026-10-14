@@ -8,23 +8,31 @@
 
 use std::io::{self, BufRead, IsTerminal, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
 
-use anstream::{eprint, eprintln};
+use anstream::eprintln;
 use mhfe::memory::LockedText;
 use mhfe::word_hints::WordList;
-use mhfe::{ContainerFacts, MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe::{ContainerFacts, MhfeError, Password, Suite};
 
 use crate::check_word::{self, Reviewed};
 use crate::choice::{self, Answer, Question};
 use crate::container_repair::{self, CardAsked};
 use crate::exit::{self, Failure};
-use crate::flow::{self, Kind};
+use crate::flow;
 use crate::hidden_input::{self, Content};
 use crate::protect;
 use crate::settings::Operation;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
-use crate::time_text;
+
+mod private_screen;
+mod progress;
+
+use private_screen::leave_private_screen;
+pub use private_screen::{
+    can_show_privately, clear_screen, enter_steps, leave_steps, on_alternate_screen,
+    output_on_screen, private_input, wait_to_leave, PrivateScreen,
+};
+pub use progress::Progress;
 
 /// Longest line accepted, line break included: the library's typed-line buffer, which its
 /// memory-locking check probes. The buffer is reserved at this size and reading stops there, so
@@ -385,7 +393,7 @@ fn read_secret(
         )));
     }
     // Shown only where the screen is cleared once the person is done; hidden anywhere else.
-    let shown = PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst);
+    let shown = on_alternate_screen();
     let prompt = if shown {
         format!("{question}: ")
     } else {
@@ -522,151 +530,6 @@ fn print_fingerprint(phrase: &str, wallet: Wallet) {
 /// The name `mhfe check --fingerprint` asks for, so that the same number is recognised there.
 const FINGERPRINT_LABEL: &str = "Master key fingerprint";
 
-/// Switches to the terminal's alternate screen, clears it and moves to its top left (xterm
-/// control sequences, also understood by tmux and most terminals).
-const ENTER_ALTERNATE_SCREEN: &str = "\x1b[?1049h\x1b[2J\x1b[H";
-/// Clears the screen and puts the cursor at its top left (VT100 "erase in display" and "home").
-const CLEAR_SCREEN: &str = "\x1b[2J\x1b[H";
-/// Clears the alternate screen, then returns to the main screen with its earlier content. The
-/// clear comes first so that the words also vanish where the alternate screen is not supported,
-/// such as GNU screen without `altscreen on`.
-const LEAVE_ALTERNATE_SCREEN: &str = "\x1b[2J\x1b[H\x1b[?1049l";
-
-/// Set while secret words are on the alternate screen, so that Ctrl+C can leave it first.
-static PRIVATE_SCREEN_ACTIVE: AtomicBool = AtomicBool::new(false);
-
-/// Whether the tool writes on the alternate screen now, a private screen or the steps of a command.
-pub fn on_alternate_screen() -> bool {
-    PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
-}
-
-/// Secrets on the terminal's alternate screen, as `less` shows a file: they never reach the main
-/// screen or its scrollback, and dropping this clears them and returns to where the tool was. A
-/// script, a pipe or a file gets none of this.
-pub struct PrivateScreen {
-    active: bool,
-    /// A step of a command shown one step at a time (flow.rs), on the alternate screen it is
-    /// already on: dropping it only clears the screen.
-    step: bool,
-}
-
-impl PrivateScreen {
-    /// A screen for typing secrets, which are shown there as they are typed. It needs the
-    /// terminal on standard input and standard error only: the result may go to a file.
-    pub fn enter(input: &Input, title: &str) -> Self {
-        let screen = Self::enter_if(input, true);
-        if screen.active {
-            style::title(title);
-            style::hint("Cleared when you are done; until then anyone who sees it can read it.");
-        }
-        screen
-    }
-
-    /// A screen for showing a secret result, such as a recovered phrase, which goes to standard
-    /// output: it is used only when standard output is the terminal too.
-    pub fn enter_to_show(input: &Input) -> Self {
-        Self::enter_if(input, output_on_screen())
-    }
-
-    fn enter_if(input: &Input, output_allows: bool) -> Self {
-        // A command shown one step at a time is on the alternate screen throughout: a private
-        // screen is a step of its own there, cleared again when it ends.
-        if flow::is_active() {
-            flow::step();
-            return Self {
-                active: true,
-                step: true,
-            };
-        }
-        // Within a private screen, another one adds nothing: the outer one stays, and is left
-        // and cleared only when it ends, so that nothing reaches the main screen in between.
-        if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst) {
-            return Self {
-                active: false,
-                step: false,
-            };
-        }
-        let active = output_allows && terminal_screen_possible(input);
-        if active {
-            // Written raw: anstream would drop control sequences when NO_COLOR is set.
-            write_control(ENTER_ALTERNATE_SCREEN);
-            PRIVATE_SCREEN_ACTIVE.store(true, Ordering::SeqCst);
-        }
-        Self {
-            active,
-            step: false,
-        }
-    }
-
-    /// Whether the secrets are on the alternate screen, which then waits for the person.
-    pub fn is_active(&self) -> bool {
-        self.active
-    }
-
-    /// Whether what is printed now stays private: this screen is active, or it lies within one
-    /// that is.
-    pub fn shows_privately(&self) -> bool {
-        self.active || PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
-    }
-
-    /// Clears the screen for what comes next, such as another password in its place.
-    pub fn clear(&self) {
-        if self.active {
-            write_control(CLEAR_SCREEN);
-        }
-    }
-}
-
-/// Whether a person at a terminal can be shown a secret on a private screen: standard input,
-/// output and error are the terminal, output and error the same one, and it can switch screens.
-/// A command that must show a phrase only privately refuses otherwise, before anything secret is
-/// asked (AUD-007-SEC001).
-pub fn can_show_privately(input: &Input) -> bool {
-    output_on_screen() && terminal_screen_possible(input)
-}
-
-/// The input of a command that shows a phrase only on a private screen: the terminal, or the
-/// refusal `refused` where there can be none, before anything secret is asked (AUD-007-SEC001).
-pub fn private_input(refused: &str) -> Result<Input, Failure> {
-    let input = Input::terminal_only();
-    if !can_show_privately(&input) {
-        return Err(Failure::invalid_input(refused));
-    }
-    Ok(input)
-}
-
-/// Whether what goes to standard output appears on the terminal of standard error, on which the
-/// private screen is switched and cleared: both are terminals, and the same one. Output sent to
-/// another terminal counts as redirected (AUD-008-SEC004).
-pub fn output_on_screen() -> bool {
-    io::stdout().is_terminal()
-        && io::stderr().is_terminal()
-        && hidden_input::output_on_error_terminal()
-}
-
-fn terminal_screen_possible(input: &Input) -> bool {
-    !input.is_script() && hidden_input::can_redraw()
-}
-
-/// Asks the person to write down what the private screen shows, and waits for Enter or Escape,
-/// after which the screen is cleared: what it showed then leaves the terminal and its scrollback.
-/// Every other key is ignored, so that a stray one cannot clear the screen too early.
-pub fn wait_to_leave() -> Result<(), Failure> {
-    wait_to_leave_saying("Write it down now: Enter or Escape clears this screen.")
-}
-
-/// [`wait_to_leave`] with another line above the wait, for a screen that needs no writing down.
-pub fn wait_to_leave_saying(line: &str) -> Result<(), Failure> {
-    eprintln!();
-    style::warn_here(line, "");
-    hidden_input::with_keys(|next_key| loop {
-        match next_key()? {
-            hidden_input::Key::Enter | hidden_input::Key::Quit => return Ok(()),
-            _ => continue,
-        }
-    })
-}
-
 /// Reads a password on a private screen headed `title`, again until it is one that the
 /// specification allows, and records it in the summary.
 pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
@@ -704,52 +567,6 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
     drop(screen);
     choice::record("Password", &check.record("typed"));
     Ok(password)
-}
-
-impl Drop for PrivateScreen {
-    fn drop(&mut self) {
-        if self.step {
-            let _ = io::stdout().flush();
-            write_control(CLEAR_SCREEN);
-        } else if self.active {
-            leave_private_screen();
-        }
-    }
-}
-
-/// Switches to the alternate screen for the steps of a command (flow.rs). False where they cannot
-/// be shown privately, or within a screen that is already private.
-pub fn enter_steps(input: &Input) -> bool {
-    if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst) || !can_show_privately(input) {
-        return false;
-    }
-    write_control(ENTER_ALTERNATE_SCREEN);
-    PRIVATE_SCREEN_ACTIVE.store(true, Ordering::SeqCst);
-    true
-}
-
-/// Returns from the steps of a command to the main screen, clearing what they showed.
-pub fn leave_steps() {
-    leave_private_screen();
-}
-
-/// Clears the screen for the next step of a command.
-pub fn clear_screen() {
-    let _ = io::stdout().flush();
-    write_control(CLEAR_SCREEN);
-}
-
-fn leave_private_screen() {
-    if PRIVATE_SCREEN_ACTIVE.swap(false, Ordering::SeqCst) {
-        let _ = io::stdout().flush();
-        write_control(LEAVE_ALTERNATE_SCREEN);
-    }
-}
-
-fn write_control(sequence: &str) {
-    let mut terminal = io::stderr();
-    let _ = terminal.write_all(sequence.as_bytes());
-    let _ = terminal.flush();
 }
 
 /// The question for a container: 24 words, or 12 to 21 for a same-length container.
@@ -819,132 +636,6 @@ pub struct ReadContainer {
     pub found_by: Option<String>,
     /// What was repaired, by the repair words or a search, as the summary records it.
     pub repaired: Option<String>,
-}
-
-/// Shows a progress bar for each stage of an operation: "Encrypting" and "Checking" for an
-/// encryption, "Recovering" otherwise. Each stage has its own bar of 12 rounds, the time left for
-/// it and, at its end, the time it took. At a terminal the bar is redrawn on one line; otherwise
-/// a line is written per round.
-pub struct Progress {
-    started: Instant,
-    stage_started: Instant,
-    same_line: bool,
-    /// The widest line drawn so far; shorter lines are padded to wipe its end.
-    widest: usize,
-    /// The stage on screen; empty once it has been finished.
-    stage: &'static str,
-    /// The name of a 12-round operation: "Recovering", or "Opening" for a hidden wallet.
-    single: &'static str,
-}
-
-impl Progress {
-    pub fn start() -> Self {
-        // A stage of work is a step of its own in a command shown one step at a time.
-        flow::step();
-        eprintln!();
-        style::hint("Press Ctrl+C to cancel at any time.");
-        eprintln!();
-        Self {
-            started: Instant::now(),
-            stage_started: Instant::now(),
-            same_line: io::stderr().is_terminal(),
-            widest: 0,
-            stage: "",
-            single: "Recovering",
-        }
-    }
-
-    /// [`Progress::start`] for a 12-round operation shown under another name, such as "Opening"
-    /// for a hidden wallet, which recovers no phrase the person had.
-    pub fn start_as(single: &'static str) -> Self {
-        Self {
-            single,
-            ..Self::start()
-        }
-    }
-
-    /// Called before each round of an operation: `rounds` is 24 for an encryption, whose rounds
-    /// 13 to 24 are the check, and 12 otherwise.
-    pub fn round_starts(&mut self, round: u32, rounds: u32) {
-        let stage = stage(round, rounds, self.single);
-        if stage != self.stage {
-            self.finish();
-            self.stage = stage;
-            self.stage_started = Instant::now();
-        }
-        // The round within its stage, 1 to 12.
-        let stage_round = (round - 1) % ROUNDS + 1;
-        // From the second round on, the average time of the finished rounds of the whole
-        // operation gives the time left for this stage.
-        let finished_rounds = u64::from(round - 1);
-        let rounds_left = u64::from(ROUNDS - stage_round + 1);
-        let elapsed = self.started.elapsed().as_secs();
-        let note = match (elapsed * rounds_left).checked_div(finished_rounds) {
-            Some(seconds) => format!("about {} left", time_text::duration(seconds)),
-            None => String::new(),
-        };
-        self.draw(stage_round - 1, &note);
-    }
-
-    /// Finishes the stage on screen and starts the time estimate again, for a second operation
-    /// shown under the first.
-    pub fn next_operation(&mut self) {
-        self.finish();
-        self.started = Instant::now();
-    }
-
-    /// Shows the stage on screen as complete, with the time it took, and ends its line so that
-    /// other text can follow. Does nothing when no stage is on screen.
-    pub fn finish(&mut self) {
-        if self.stage.is_empty() {
-            return;
-        }
-        let note = format!(
-            "done in {}",
-            time_text::duration(self.stage_started.elapsed().as_secs())
-        );
-        let line = self.draw(ROUNDS, &note);
-        if self.same_line {
-            eprintln!();
-        }
-        // The finished stage belongs to the summary of a command shown one step at a time.
-        flow::keep(Kind::Result, &[line]);
-        self.stage = "";
-        self.widest = 0;
-    }
-
-    /// One line: the stage, a bar with `completed` of 12 rounds filled, the round and a note.
-    /// Returns the line as drawn.
-    fn draw(&mut self, completed: u32, note: &str) -> String {
-        let stage = format!("{:<10}", self.stage);
-        let count = format!("{:>2}/{ROUNDS}", (completed + 1).min(ROUNDS));
-        let bar = style::bar(completed, ROUNDS);
-        // The visible width: stage, space, bar, two spaces, count, two spaces, note.
-        let width = stage.len() + 1 + style::BAR_CELLS as usize + 2 + count.len() + 2 + note.len();
-        let line = format!(
-            "{} {bar}  {count}  {}",
-            paint(ACCENT, stage),
-            paint(MUTED, note)
-        );
-        if self.same_line {
-            self.widest = self.widest.max(width);
-            let padding = " ".repeat(self.widest - width);
-            eprint!("\r{line}{padding}");
-        } else {
-            eprintln!("{line}");
-        }
-        line
-    }
-}
-
-/// What the rounds of an operation do: an encryption encrypts in rounds 1 to 12 and checks in
-/// rounds 13 to 24.
-fn stage(round: u32, rounds: u32, single: &'static str) -> &'static str {
-    match (rounds, round) {
-        (ENCRYPTION_ROUNDS, round) if round <= ROUNDS => "Encrypting",
-        (ENCRYPTION_ROUNDS, _) => "Checking",
-        _ => single,
-    }
 }
 
 #[cfg(test)]

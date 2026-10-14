@@ -213,7 +213,10 @@ struct NewPhraseJson<'a> {
 /// (CANCELLED). The phrase meets the wishes given as for [`describe_draw`], refused as it says. A
 /// page may run it in several workers at once and take the first result. Returns JSON `{ phrase,
 /// words, walletCheck, fingerprintWithPassphrase }`.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the WebAssembly boundary takes every input as an argument of its own"
+)]
 #[wasm_bindgen(js_name = drawPhrase)]
 pub fn draw_phrase(
     passphrase_utf8: Vec<u8>,

@@ -43,6 +43,7 @@ impl WordCount {
         Ok(Self(words))
     }
 
+    /// The number of words.
     pub fn get(self) -> usize {
         self.0
     }
@@ -294,6 +295,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         (self.work, &mut self.engine)
     }
 
+    /// The PIM and memory level every round of this instance runs at.
     pub fn work_factor(&self) -> WorkFactor {
         self.work
     }

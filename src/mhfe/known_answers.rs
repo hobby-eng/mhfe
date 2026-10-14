@@ -12,10 +12,9 @@
 //! [`PublishedRoundKeys`] cannot encrypt anything but a published vector, so it is no reduced-cost
 //! engine: a release build may hold it.
 
-use super::published_rounds::PUBLISHED;
 use super::RecoveredPhrase;
 use crate::detection::LengthDetection;
-use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
+use crate::engine::{Argon2Engine, KEY_BYTES};
 use crate::feistel::{round_mask, round_message, round_salt, Geometry};
 use crate::operation::Encryption;
 use crate::packing::{self, STATE_WORDS};
@@ -25,150 +24,23 @@ use crate::self_check::{
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
 use crate::{
-    ContainerFacts, Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WordCount,
-    WorkFactor, SAME_LENGTH_SUITE_ID, SUITE_ID,
+    ContainerFacts, Mhfe, Password, PhraseLength, Recovery, Suite, WordCount, WorkFactor,
+    SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
 
-/// One published vector as the checks replay it.
-#[derive(Clone, Copy)]
-pub(crate) struct PublishedVector {
-    /// The file name of the vector, for the unit tests; a self-check names it only by its place.
-    pub(crate) name: &'static str,
-    /// Suite 4: the container keeps the length of its original.
-    pub(crate) same_length: bool,
-    /// Replayed at every start; the others in the full self-test only.
-    pub(crate) startup: bool,
-    pub(crate) phrase: &'static str,
-    pub(crate) password: &'static str,
-    /// The password after NFKD, as the vector records it: the bytes Argon2 receives.
-    pub(crate) password_nfkd: &'static [u8],
-    pub(crate) pim: u32,
-    pub(crate) memory_level: u32,
-    pub(crate) container: &'static str,
-    /// What a recovery with automatic detection gives, in order.
-    pub(crate) recovery: &'static [PublishedReading],
-    /// The salt and the Argon2id key of rounds 0 to 11 of the encryption.
-    pub(crate) rounds: [PublishedRound; crate::ROUNDS as usize],
-}
+mod published;
 
-#[derive(Clone, Copy)]
-pub(crate) struct PublishedReading {
-    pub(crate) words: usize,
-    pub(crate) verified: bool,
-    pub(crate) phrase: &'static str,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct PublishedRound {
-    pub(crate) salt: [u8; SALT_BYTES],
-    pub(crate) key: [u8; KEY_BYTES],
-}
-
-impl PublishedVector {
-    pub(crate) fn suite(&self) -> Suite {
-        if self.same_length {
-            Suite::SameLength
-        } else {
-            Suite::TwentyFourWords
-        }
-    }
-
-    pub(crate) fn work(&self) -> Result<WorkFactor, String> {
-        WorkFactor::new(self.pim, self.memory_level).map_err(stopped)
-    }
-
-    /// The password through the library's own encoding, which must give the recorded bytes for
-    /// the round keys to be found.
-    pub(crate) fn password(&self) -> Result<Password, String> {
-        Password::new(self.password).map_err(stopped)
-    }
-
-    /// The recovery of the vector's container with `words` stated, its rounds answered by
-    /// `table`: its own result, inside the refusal of damaged built-in cases.
-    pub(crate) fn recovery_at(
-        &self,
-        table: &'static [PublishedVector],
-        words: usize,
-    ) -> Result<Result<Recovery, MhfeError>, String> {
-        let words = WordCount::new(words).map_err(stopped)?;
-        Ok(self.mhfe(table)?.decrypt(
-            self.container,
-            &self.password()?,
-            PhraseLength::Words(words),
-            &mut |_, _| Ok(()),
-        ))
-    }
-
-    /// An `Mhfe` at the vector's settings that answers the rounds of `table`.
-    pub(crate) fn mhfe(
-        &self,
-        table: &'static [PublishedVector],
-    ) -> Result<Mhfe<PublishedRoundKeys>, String> {
-        Ok(Mhfe::with_engine(
-            self.work()?,
-            PublishedRoundKeys::of(table),
-        ))
-    }
-}
-
-/// The published vector named `name`.
-pub(crate) fn published(name: &str) -> Result<&'static PublishedVector, String> {
-    PUBLISHED
-        .iter()
-        .find(|vector| vector.name == name)
-        .ok_or_else(|| "a built-in vector is missing".to_owned())
-}
-
-/// The whole table of published vectors.
-pub(crate) fn published_table() -> &'static [PublishedVector] {
-    &PUBLISHED
-}
-
-/// An engine that answers only the rounds of published vectors, with the keys they record. It
-/// computes no Argon2: the salt and the password after NFKD must be a recorded pair, and anything
-/// else is refused with [`MhfeError::Internal`].
-pub(crate) struct PublishedRoundKeys {
-    vectors: &'static [PublishedVector],
-}
-
-impl PublishedRoundKeys {
-    pub(crate) fn of(vectors: &'static [PublishedVector]) -> Self {
-        Self { vectors }
-    }
-
-    /// An engine that answers nothing: any Argon2 call fails, for the refusals that must come
-    /// before the first one.
-    pub(crate) fn none() -> Self {
-        Self { vectors: &[] }
-    }
-}
-
-impl Argon2Engine for PublishedRoundKeys {
-    fn derive(
-        &mut self,
-        password: &[u8],
-        salt: &[u8; SALT_BYTES],
-        key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
-        let round = self
-            .vectors
-            .iter()
-            .filter(|vector| vector.password_nfkd == password)
-            .flat_map(|vector| vector.rounds.iter())
-            .find(|round| round.salt == *salt)
-            .ok_or_else(|| {
-                MhfeError::Internal("no published round has this password and salt".to_owned())
-            })?;
-        key.copy_from_slice(&round.key);
-        Ok(())
-    }
-}
+pub(crate) use published::{
+    published, published_table, PublishedReading, PublishedRound, PublishedRoundKeys,
+    PublishedVector,
+};
 
 fn sha256(_: &[u8], message: &[u8]) -> Vec<u8> {
     use sha2::Digest;
     sha2::Sha256::digest(message).to_vec()
 }
 
+#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
 fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
     use hmac::{KeyInit, Mac};
     let mut mac = <hmac::Hmac<sha2::Sha256> as KeyInit>::new_from_slice(key)
@@ -815,199 +687,11 @@ impl ComponentCheck for FormatsCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
+    use crate::engine::SALT_BYTES;
+    use crate::mhfe::published_rounds::PUBLISHED;
 
     fn leaked(vectors: Vec<PublishedVector>) -> &'static [PublishedVector] {
         Box::leak(vectors.into_boxed_slice())
-    }
-
-    /// Every value of the generated table against the fixtures it was generated from.
-    #[test]
-    fn published_round_table_equals_the_fixtures() {
-        /// A published vector file, read when the test is compiled.
-        macro_rules! fixture {
-            ($folder:literal, $name:literal) => {
-                include_str!(concat!(
-                    "../../tests/fixtures/",
-                    $folder,
-                    "/",
-                    $name,
-                    ".json"
-                ))
-            };
-        }
-        let files: [(&str, &str, bool); 27] = [
-            (
-                "ambiguous-12-21",
-                fixture!("suite3-vectors", "ambiguous-12-21"),
-                false,
-            ),
-            (
-                "nonzero-12",
-                fixture!("suite3-vectors", "nonzero-12"),
-                false,
-            ),
-            (
-                "nonzero-15",
-                fixture!("suite3-vectors", "nonzero-15"),
-                false,
-            ),
-            (
-                "nonzero-18",
-                fixture!("suite3-vectors", "nonzero-18"),
-                false,
-            ),
-            (
-                "nonzero-21",
-                fixture!("suite3-vectors", "nonzero-21"),
-                false,
-            ),
-            (
-                "nonzero-24",
-                fixture!("suite3-vectors", "nonzero-24"),
-                false,
-            ),
-            (
-                "spaces-password",
-                fixture!("suite3-vectors", "spaces-password"),
-                false,
-            ),
-            (
-                "unicode-password",
-                fixture!("suite3-vectors", "unicode-password"),
-                false,
-            ),
-            (
-                "zero-12-memory-level-1",
-                fixture!("suite3-vectors", "zero-12-memory-level-1"),
-                false,
-            ),
-            (
-                "zero-12-pim-1-memory-level-1",
-                fixture!("suite3-vectors", "zero-12-pim-1-memory-level-1"),
-                false,
-            ),
-            (
-                "zero-12-pim-1",
-                fixture!("suite3-vectors", "zero-12-pim-1"),
-                false,
-            ),
-            ("zero-12", fixture!("suite3-vectors", "zero-12"), false),
-            ("zero-15", fixture!("suite3-vectors", "zero-15"), false),
-            ("zero-18", fixture!("suite3-vectors", "zero-18"), false),
-            ("zero-21", fixture!("suite3-vectors", "zero-21"), false),
-            (
-                "zero-24-pim-1-memory-level-1",
-                fixture!("suite3-vectors", "zero-24-pim-1-memory-level-1"),
-                false,
-            ),
-            ("zero-24", fixture!("suite3-vectors", "zero-24"), false),
-            (
-                "same-length-nonzero-12",
-                fixture!("suite4-vectors", "same-length-nonzero-12"),
-                true,
-            ),
-            (
-                "same-length-nonzero-21",
-                fixture!("suite4-vectors", "same-length-nonzero-21"),
-                true,
-            ),
-            (
-                "same-length-unicode-password",
-                fixture!("suite4-vectors", "same-length-unicode-password"),
-                true,
-            ),
-            (
-                "same-length-zero-12-memory-level-1",
-                fixture!("suite4-vectors", "same-length-zero-12-memory-level-1"),
-                true,
-            ),
-            (
-                "same-length-zero-12-pim-1-memory-level-1",
-                fixture!("suite4-vectors", "same-length-zero-12-pim-1-memory-level-1"),
-                true,
-            ),
-            (
-                "same-length-zero-12-pim-1",
-                fixture!("suite4-vectors", "same-length-zero-12-pim-1"),
-                true,
-            ),
-            (
-                "same-length-zero-12",
-                fixture!("suite4-vectors", "same-length-zero-12"),
-                true,
-            ),
-            (
-                "same-length-zero-15",
-                fixture!("suite4-vectors", "same-length-zero-15"),
-                true,
-            ),
-            (
-                "same-length-zero-18",
-                fixture!("suite4-vectors", "same-length-zero-18"),
-                true,
-            ),
-            (
-                "same-length-zero-21",
-                fixture!("suite4-vectors", "same-length-zero-21"),
-                true,
-            ),
-        ];
-        assert_eq!(PUBLISHED.len(), files.len());
-        for (name, json, same_length) in files {
-            let fixture: Value = serde_json::from_str(json).unwrap();
-            let vector = published(name).unwrap();
-            assert_eq!(fixture["name"], name);
-            assert_eq!(vector.same_length, same_length, "{name}");
-            let inputs = &fixture["inputs"];
-            assert_eq!(vector.phrase, inputs["phrase"], "{name}");
-            assert_eq!(vector.password, inputs["password"], "{name}");
-            assert_eq!(
-                hex::encode(vector.password_nfkd),
-                inputs["password_nfkd_utf8_hex"],
-                "{name}"
-            );
-            assert_eq!(u64::from(vector.pim), inputs["pim"], "{name}");
-            assert_eq!(
-                u64::from(vector.memory_level),
-                inputs["memory_level"],
-                "{name}"
-            );
-            assert_eq!(vector.container, fixture["container"], "{name}");
-            let recovery = match &fixture["recovery"] {
-                Value::Array(readings) => readings.clone(),
-                reading => vec![reading.clone()],
-            };
-            assert_eq!(vector.recovery.len(), recovery.len(), "{name}");
-            for (reading, expected) in vector.recovery.iter().zip(&recovery) {
-                assert_eq!(reading.words as u64, expected["words"], "{name}");
-                assert_eq!(reading.verified, expected["verified"], "{name}");
-                assert_eq!(reading.phrase, expected["phrase"], "{name}");
-            }
-            let encryption = fixture["encryption"]["rounds"].as_array().unwrap();
-            assert_eq!(encryption.len(), 12);
-            for (round, expected) in vector.rounds.iter().zip(encryption) {
-                assert_eq!(hex::encode(round.salt), expected["salt_hex"], "{name}");
-                assert_eq!(hex::encode(round.key), expected["argon2_key_hex"], "{name}");
-            }
-            // A recovery runs the same rounds backwards: its salts are the encryption's.
-            for entry in fixture["decryption"]["rounds"].as_array().unwrap() {
-                let salt = entry["salt_hex"].as_str().unwrap();
-                assert!(
-                    vector
-                        .rounds
-                        .iter()
-                        .any(|round| hex::encode(round.salt) == salt),
-                    "{name}: a recovery salt is not an encryption salt"
-                );
-            }
-        }
-        let startup: Vec<&str> = PUBLISHED
-            .iter()
-            .filter(|vector| vector.startup)
-            .map(|vector| vector.name)
-            .collect();
-        assert_eq!(startup.len(), 10);
     }
 
     #[test]

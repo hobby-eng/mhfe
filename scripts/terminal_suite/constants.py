@@ -105,7 +105,7 @@ NUMBERED_ANSWERS = (b"1. No BIP39 passphrase", b"2. It has a BIP39 passphrase")
 NUMBERED_PROMPT, NUMBERED_REFUSED = b"Choice: ", b"Type a number from 1 to 2."
 # The prompt of the BIP39 passphrase of a wallet that the person said has one, which offers no
 # Enter for none; what an empty answer gets there; and a passphrase for it: the one of BIP39's
-# published test vectors (read_known_passphrase in src/bin/mhfe/check.rs).
+# published test vectors (read_passphrase_named in src/bin/mhfe/check/passphrase.rs).
 KNOWN_PASSPHRASE_ASKED = b"BIP39 passphrase of the wallet: "
 PASSPHRASE_REFUSED = b"Type the passphrase: you said the wallet has one."
 PUBLIC_PASSPHRASE = b"TREZOR"
@@ -273,7 +273,7 @@ COMMANDS = ("new", "encrypt", "decrypt", "check", "rekey", "wallets", "repair", 
 PUBLIC_ETHEREUM_ADDRESS = b"0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
 # What a command without a terminal says. What a script that compares with an address without
 # --coin records, and what the refusal of another coin's address then adds (SCRIPT_DEFAULT_COIN
-# in src/bin/mhfe/check.rs).
+# in src/bin/mhfe/check/wallet_reference.rs).
 NO_TERMINAL = "There is no terminal to type secrets into."
 COIN_ASSUMED = "  Coin       Bitcoin, as no --coin was given"
 NAMES_COIN = ("The address cannot be used for the check: without --coin a script compares with a "

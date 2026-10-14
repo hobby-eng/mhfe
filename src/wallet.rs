@@ -22,25 +22,18 @@
 //! # Ok::<(), mhfe::MhfeError>(())
 //! ```
 
-use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
 
-use bip39::Mnemonic;
 use bitcoin_hashes::{hash160, Hash};
-use hmac::{Hmac, KeyInit, Mac};
-use k256::elliptic_curve::group::Group;
-use k256::elliptic_curve::point::AffineCoordinates;
-use k256::elliptic_curve::sec1::ToSec1Point;
-use k256::elliptic_curve::PrimeField;
-use k256::{FieldBytes, ProjectivePoint, Scalar};
-use sha2::{Digest, Sha256, Sha512};
-use sha3::Keccak256;
-use unicode_normalization::UnicodeNormalization;
-use zeroize::{Zeroize, Zeroizing};
 
-use crate::memory::LockedText;
-use crate::{phrase, MhfeError};
+use crate::MhfeError;
+
+mod encodings;
+mod keys;
+
+pub(crate) use keys::bip39_seed;
+use keys::{program_for, ExtendedKey};
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -49,8 +42,6 @@ use crate::{phrase, MhfeError};
     feature = "browser-wallet"
 ))]
 pub(crate) mod known_answers;
-
-type HmacSha512 = Hmac<Sha512>;
 
 /// Indexes from 2^31 up are hardened (BIP32).
 pub const HARDENED: u32 = 1 << 31;
@@ -67,19 +58,29 @@ const DIP17_FEATURE: u32 = 17;
 /// Platform on DIP17 paths; they differ only in how a public key becomes an address.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Coin {
+    /// Bitcoin: "1...", "3...", "bc1q..." and "bc1p..." addresses.
     Bitcoin,
     /// Ethereum and every EVM network, which share its addresses.
     Ethereum,
+    /// XRP: "r..." addresses.
     Xrp,
+    /// Tron: "T..." addresses.
     Tron,
     /// Zcash transparent addresses; shielded ones are out of reach without its own cryptography.
     Zcash,
+    /// Dogecoin: "D..." addresses.
     Dogecoin,
+    /// Bitcoin Cash: "bitcoincash:q..." and "1..." addresses.
     BitcoinCash,
+    /// Litecoin: "L...", "M...", "3..." and "ltc1q..." addresses.
     Litecoin,
+    /// Ethereum Classic: "0x..." addresses.
     EthereumClassic,
+    /// Cosmos: "cosmos1..." addresses.
     Cosmos,
+    /// Injective: "inj1..." addresses.
     Injective,
+    /// Dash and Dash Platform: "X..." and "dash1k..." addresses.
     Dash,
 }
 
@@ -254,29 +255,15 @@ impl Address {
     /// Reads `text` as a single-key receiving address of `coin`. Multisignature and script
     /// addresses, Zcash shielded addresses and those of other coins are refused.
     pub fn parse(coin: Coin, text: &str) -> Result<Self, MhfeError> {
-        let text = text.trim();
-        let address = match coin {
-            Coin::Bitcoin if is_bech32(text, &["bc1", "tb1"]) => parse_segwit(coin, text)?,
-            Coin::Litecoin if is_bech32(text, &["ltc1"]) => parse_segwit(coin, text)?,
-            Coin::BitcoinCash if !text.starts_with('1') => parse_cashaddr(text)?,
-            Coin::Ethereum | Coin::EthereumClassic => parse_hex(coin, text)?,
-            Coin::Cosmos => parse_bech32_account(coin, text, "cosmos", AddressType::P2pkh)?,
-            Coin::Injective => parse_bech32_account(coin, text, "inj", AddressType::Keccak)?,
-            Coin::Dash if is_bech32(text, &["dash1", "tdash1"]) => parse_dash_platform(text)?,
-            Coin::Zcash if is_shielded_zcash(text) => {
-                return Err(invalid_address(
-                    "it is shielded; use a transparent t1… address of the same wallet",
-                ))
-            }
-            _ => parse_base58(coin, text)?,
-        };
-        Ok(address)
+        encodings::parse(coin, text.trim())
     }
 
+    /// The coin the address belongs to.
     pub fn coin(&self) -> Coin {
         self.coin
     }
 
+    /// The kind of address, which sets the paths it is searched on.
     pub fn address_type(&self) -> AddressType {
         self.address_type
     }
@@ -326,354 +313,6 @@ impl Address {
     pub fn hardened_chains(&self) -> bool {
         self.address_type == AddressType::DashPlatform
     }
-}
-
-fn invalid_address(reason: &str) -> MhfeError {
-    MhfeError::InvalidAddress(reason.to_owned())
-}
-
-/// The refusal of an address whose checksum or encoding does not decode.
-fn malformed_address() -> MhfeError {
-    invalid_address("its checksum or format is wrong")
-}
-
-fn not_of(coin: Coin) -> MhfeError {
-    MhfeError::InvalidAddress(format!(
-        // "an address of" reads right for every coin name ("a Ethereum address" would not).
-        "it is not an address of {} ({})",
-        coin.name(),
-        coin.address_forms()
-    ))
-}
-
-/// Prefixes of Zcash shielded addresses: Sapling (Bech32), unified (Bech32m) and Sprout (Base58),
-/// on mainnet and testnet. Deriving them needs Zcash's own curves and key tree (ZIP-32), so a
-/// check refuses them and asks for the wallet's transparent address instead of searching in vain.
-const ZCASH_SHIELDED_PREFIXES: &[&str] = &["zs1", "ztestsapling1", "u1", "utest1", "zc", "zt"];
-
-fn is_shielded_zcash(text: &str) -> bool {
-    let lowercase = text.to_ascii_lowercase();
-    ZCASH_SHIELDED_PREFIXES
-        .iter()
-        .any(|prefix| lowercase.starts_with(prefix))
-}
-
-/// The type byte that starts a Dash Platform address (DIP18): a payment address of a DIP17 key,
-/// or an Orchard shielded address.
-const DASH_PLATFORM_P2PKH: u8 = 0xb0;
-const DASH_ORCHARD: u8 = 0x10;
-
-/// Dash Platform addresses, Bech32m with the prefix "dash" or "tdash" (DIP18). A payment address
-/// of a single key is read; an Orchard address is refused, as its keys need Orchard's own
-/// cryptography, and so is any other kind.
-fn parse_dash_platform(text: &str) -> Result<Address, MhfeError> {
-    use bech32::primitives::decode::CheckedHrpstring;
-    let decoded =
-        CheckedHrpstring::new::<bech32::Bech32m>(text).map_err(|_| malformed_address())?;
-    let testnet = match decoded.hrp().as_str().to_ascii_lowercase().as_str() {
-        "dash" => false,
-        "tdash" => true,
-        _ => return Err(not_of(Coin::Dash)),
-    };
-    let data: Vec<u8> = decoded.byte_iter().collect();
-    match data.split_first() {
-        Some((&DASH_PLATFORM_P2PKH, hash)) if hash.len() != 20 => {
-            Err(invalid_address("it has the wrong length"))
-        }
-        Some((&DASH_PLATFORM_P2PKH, _)) if !whole_payment_payload(&decoded) => {
-            Err(malformed_address())
-        }
-        Some((&DASH_PLATFORM_P2PKH, hash)) => Ok(Address {
-            coin: Coin::Dash,
-            testnet,
-            address_type: AddressType::DashPlatform,
-            program: hash.to_vec(),
-        }),
-        Some((&DASH_ORCHARD, _)) => Err(invalid_address(
-            "it is shielded; use a Dash Core X… or Platform dash1k… address of the same wallet",
-        )),
-        _ => Err(invalid_address(
-            "it is not the Platform payment address of a single key",
-        )),
-    }
-}
-
-/// Whether a Platform payment address holds its 21 bytes, the type byte and the 160-bit hash, as
-/// the one encoding Bech32 allows: 34 five-bit groups, whose last two bits are padding and zero
-/// (BIP173). byte_iter alone would read the same bytes from another group added at the end or from
-/// padding bits set, and take such a string for the address (AUD-008-FUN001).
-fn whole_payment_payload(decoded: &bech32::primitives::decode::CheckedHrpstring) -> bool {
-    /// 21 bytes are 168 bits: 34 groups of five bits, 170 bits, the last two of them padding.
-    const GROUPS: usize = 34;
-    const PADDING_MASK: u8 = 0b11;
-    let groups = decoded.data_part_ascii_no_checksum();
-    let padding_is_zero = groups
-        .last()
-        .and_then(|&last| bech32::Fe32::from_char(char::from(last)).ok())
-        .is_some_and(|last| last.to_u8() & PADDING_MASK == 0);
-    groups.len() == GROUPS && padding_is_zero
-}
-
-/// Whether `text` starts with one of the Bech32 prefixes, in either case.
-fn is_bech32(text: &str, prefixes: &[&str]) -> bool {
-    let lowercase = text.to_ascii_lowercase();
-    prefixes.iter().any(|prefix| lowercase.starts_with(prefix))
-}
-
-/// SegWit addresses of Bitcoin and Litecoin, Bech32 and Bech32m (BIP173, BIP350).
-fn parse_segwit(coin: Coin, text: &str) -> Result<Address, MhfeError> {
-    let (hrp, version, program) = bech32::segwit::decode(text).map_err(|_| malformed_address())?;
-    // BIP173 allows an address written all in capitals, as in QR codes; the decoder has already
-    // refused mixed case, and keeps the prefix as written.
-    let testnet = match (coin, hrp.as_str().to_ascii_lowercase().as_str()) {
-        (Coin::Bitcoin, "bc") | (Coin::Litecoin, "ltc") => false,
-        (Coin::Bitcoin, "tb") => true,
-        _ => return Err(not_of(coin)),
-    };
-    let address_type =
-        match (version.to_u8(), program.len(), coin) {
-            (0, 20, _) => AddressType::P2wpkh,
-            (1, 32, Coin::Bitcoin) => AddressType::P2tr,
-            _ => return Err(invalid_address(
-                "only single-key addresses (bc1q with 42 characters, bc1p or ltc1q) can be checked",
-            )),
-        };
-    Ok(Address {
-        coin,
-        testnet,
-        address_type,
-        program,
-    })
-}
-
-/// The version prefixes of a coin's Base58Check addresses: prefix, type and whether it is a
-/// Bitcoin test network address. A "3..." Bitcoin or Litecoin address is taken as nested SegWit,
-/// the only single-key address of that form.
-fn base58_versions(coin: Coin) -> &'static [(&'static [u8], AddressType, bool)] {
-    use AddressType::{Keccak, P2pkh, P2shP2wpkh};
-    match coin {
-        Coin::Bitcoin => &[
-            (&[0x00], P2pkh, false),
-            (&[0x05], P2shP2wpkh, false),
-            (&[0x6f], P2pkh, true),
-            (&[0xc4], P2shP2wpkh, true),
-        ],
-        // "L..." and "M...", and the "3..." that Litecoin used before "M...".
-        Coin::Litecoin => &[
-            (&[0x30], P2pkh, false),
-            (&[0x32], P2shP2wpkh, false),
-            (&[0x05], P2shP2wpkh, false),
-        ],
-        Coin::Dogecoin => &[(&[0x1e], P2pkh, false)],
-        Coin::Dash => &[(&[0x4c], P2pkh, false)],
-        // "t1...": a two-byte prefix.
-        Coin::Zcash => &[(&[0x1c, 0xb8], P2pkh, false)],
-        // The legacy form "1...", the same as Bitcoin's.
-        Coin::BitcoinCash => &[(&[0x00], P2pkh, false)],
-        Coin::Xrp => &[(&[0x00], P2pkh, false)],
-        Coin::Tron => &[(&[0x41], Keccak, false)],
-        Coin::Ethereum | Coin::EthereumClassic | Coin::Cosmos | Coin::Injective => &[],
-    }
-}
-
-/// Base58Check addresses: a version prefix and a 20-byte hash. XRP writes them with its own
-/// alphabet.
-fn parse_base58(coin: Coin, text: &str) -> Result<Address, MhfeError> {
-    let alphabet = match coin {
-        Coin::Xrp => bs58::Alphabet::RIPPLE,
-        _ => bs58::Alphabet::BITCOIN,
-    };
-    let decoded = bs58::decode(text)
-        .with_alphabet(alphabet)
-        .with_check(None)
-        .into_vec()
-        .map_err(|_| malformed_address())?;
-    let &(prefix, address_type, testnet) = base58_versions(coin)
-        .iter()
-        .find(|(prefix, _, _)| decoded.starts_with(prefix))
-        .ok_or_else(|| not_of(coin))?;
-    let hash = &decoded[prefix.len()..];
-    if hash.len() != 20 {
-        return Err(invalid_address("it has the wrong length"));
-    }
-    Ok(Address {
-        coin,
-        testnet,
-        address_type,
-        program: hash.to_vec(),
-    })
-}
-
-/// Bech32 account addresses of Cosmos SDK chains, such as "cosmos1..." or "inj1...": a prefix and
-/// a 20-byte hash.
-fn parse_bech32_account(
-    coin: Coin,
-    text: &str,
-    prefix: &str,
-    address_type: AddressType,
-) -> Result<Address, MhfeError> {
-    const ACCOUNT_BYTES: usize = 20;
-    const ACCOUNT_DATA_GROUPS: usize = ACCOUNT_BYTES * 8 / 5;
-    // Cosmos SDK accounts use Bech32 (BIP173), never Bech32m: the same data with the other
-    // checksum is not a valid address (AUD-007-FUN001).
-    use bech32::primitives::decode::CheckedHrpstring;
-    let decoded = CheckedHrpstring::new::<bech32::Bech32>(text).map_err(|_| malformed_address())?;
-    if decoded.hrp().as_str().to_ascii_lowercase() != prefix {
-        return Err(not_of(coin));
-    }
-    // A 160-bit account has exactly 32 groups, with no padding. byte_iter alone discards
-    // incomplete trailing bytes and would accept an extra five-bit group (AUD-007-FUN003).
-    if decoded.data_part_ascii_no_checksum().len() != ACCOUNT_DATA_GROUPS {
-        return Err(invalid_address("it has the wrong length"));
-    }
-    let program: Vec<u8> = decoded.byte_iter().collect();
-    if program.len() != ACCOUNT_BYTES {
-        return Err(invalid_address("it has the wrong length"));
-    }
-    Ok(Address {
-        coin,
-        testnet: false,
-        address_type,
-        program,
-    })
-}
-
-/// Ethereum-style addresses: "0x" and 40 hexadecimal digits. In mixed case they carry the EIP-55
-/// checksum, which must hold; all in lower or upper case they carry none.
-fn parse_hex(coin: Coin, text: &str) -> Result<Address, MhfeError> {
-    let digits = text
-        .strip_prefix("0x")
-        .or_else(|| text.strip_prefix("0X"))
-        .ok_or_else(|| not_of(coin))?;
-    let program = hex::decode(digits)
-        .ok()
-        .filter(|bytes| bytes.len() == 20)
-        .ok_or_else(|| invalid_address("it is not 40 hexadecimal digits after 0x"))?;
-    let mixed_case = digits.chars().any(|c| c.is_ascii_lowercase())
-        && digits.chars().any(|c| c.is_ascii_uppercase());
-    if mixed_case && eip55(&program) != digits {
-        return Err(invalid_address(
-            "its EIP-55 checksum, the mix of capital and small letters, is wrong",
-        ));
-    }
-    Ok(Address {
-        coin,
-        testnet: false,
-        address_type: AddressType::Keccak,
-        program,
-    })
-}
-
-/// The 40 hexadecimal digits of an address with the EIP-55 checksum: a letter is a capital where
-/// the matching digit of Keccak-256 of the lowercase address is 8 or more.
-fn eip55(address: &[u8]) -> String {
-    let lowercase = hex::encode(address);
-    let hash = Keccak256::digest(lowercase.as_bytes());
-    lowercase
-        .chars()
-        .enumerate()
-        .map(|(position, character)| {
-            let byte = hash[position / 2];
-            let nibble = if position % 2 == 0 {
-                byte >> 4
-            } else {
-                byte & 0x0f
-            };
-            if nibble >= 8 {
-                character.to_ascii_uppercase()
-            } else {
-                character
-            }
-        })
-        .collect()
-}
-
-/// The CashAddr alphabet and the prefix of Bitcoin Cash addresses.
-const CASHADDR_CHARSET: &[u8; 32] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-const CASHADDR_PREFIX: &str = "bitcoincash";
-
-/// A Bitcoin Cash CashAddr address, with or without its "bitcoincash:" prefix, in either case. Only
-/// a P2PKH address with a 160-bit hash (version byte 0, "q...") is single-key.
-fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
-    let lowercase = text.to_ascii_lowercase();
-    if lowercase != text && text.to_ascii_uppercase() != text {
-        return Err(invalid_address(
-            "it mixes capital and small letters, which CashAddr does not allow",
-        ));
-    }
-    let payload = match lowercase.split_once(':') {
-        Some((CASHADDR_PREFIX, payload)) => payload,
-        Some(_) => return Err(not_of(Coin::BitcoinCash)),
-        None => lowercase.as_str(),
-    };
-    let values = payload
-        .bytes()
-        .map(|byte| {
-            CASHADDR_CHARSET
-                .iter()
-                .position(|&c| c == byte)
-                .map(|v| v as u8)
-        })
-        .collect::<Option<Vec<u8>>>()
-        .ok_or_else(|| not_of(Coin::BitcoinCash))?;
-    // The prefix enters the checksum as the low five bits of each character, then a zero.
-    let mut checked: Vec<u8> = CASHADDR_PREFIX.bytes().map(|byte| byte & 0x1f).collect();
-    checked.push(0);
-    checked.extend_from_slice(&values);
-    // Eight five-bit values of checksum follow the data.
-    if values.len() <= 8 || cashaddr_polymod(&checked) != 0 {
-        return Err(malformed_address());
-    }
-    let data = regroup_five_to_eight(&values[..values.len() - 8]).ok_or_else(malformed_address)?;
-    // Version byte 0: P2PKH with a 160-bit hash.
-    match data.split_first() {
-        Some((0, hash)) if hash.len() == 20 => Ok(Address {
-            coin: Coin::BitcoinCash,
-            testnet: false,
-            address_type: AddressType::P2pkh,
-            program: hash.to_vec(),
-        }),
-        _ => Err(invalid_address(
-            "only single-key addresses (bitcoincash:q…) can be checked",
-        )),
-    }
-}
-
-/// The CashAddr checksum function: zero for a valid address.
-fn cashaddr_polymod(values: &[u8]) -> u64 {
-    const GENERATORS: [u64; 5] = [
-        0x98_f2bc_8e61,
-        0x79_b76d_99e2,
-        0xf3_3e5f_b3c4,
-        0xae_2eab_e2a8,
-        0x1e_4f43_e470,
-    ];
-    let mut checksum: u64 = 1;
-    for &value in values {
-        let top = checksum >> 35;
-        checksum = ((checksum & 0x07_ffff_ffff) << 5) ^ u64::from(value);
-        for (bit, generator) in GENERATORS.iter().enumerate() {
-            if (top >> bit) & 1 == 1 {
-                checksum ^= generator;
-            }
-        }
-    }
-    checksum ^ 1
-}
-
-/// Five-bit values back to bytes; the padding at the end must be zero and shorter than five bits.
-fn regroup_five_to_eight(values: &[u8]) -> Option<Vec<u8>> {
-    let mut bytes = Vec::new();
-    let (mut accumulator, mut bits) = (0u32, 0u32);
-    for &value in values {
-        accumulator = (accumulator << 5) | u32::from(value);
-        bits += 5;
-        if bits >= 8 {
-            bits -= 8;
-            bytes.push((accumulator >> bits) as u8);
-        }
-    }
-    (bits < 5 && accumulator & ((1 << bits) - 1) == 0).then_some(bytes)
 }
 
 /// A BIP32 derivation path such as `m/84'/0'/0'/0/5`. Hardened steps end with `'` or `h`.
@@ -761,10 +400,12 @@ impl SearchLimits {
         Self::new(1, gap)
     }
 
+    /// The number of accounts searched, from account 0.
     pub fn accounts(self) -> u32 {
         self.accounts
     }
 
+    /// The number of addresses searched on each chain of each account, from index 0.
     pub fn indexes(self) -> u32 {
         self.indexes
     }
@@ -989,207 +630,9 @@ pub fn find_address_until(
     Ok(None)
 }
 
-/// What an address of `address_type` commits to for this key: HASH160 of the public key, of the
-/// P2WPKH script for nested SegWit, the tweaked output key for Taproot, or the last 20 bytes of
-/// Keccak-256 of the uncompressed public key.
-fn program_for(key: &ExtendedKey, address_type: AddressType) -> Result<Vec<u8>, MhfeError> {
-    let public_key = key.public_key()?;
-    Ok(match address_type {
-        AddressType::P2pkh | AddressType::P2wpkh | AddressType::DashPlatform => {
-            hash160::Hash::hash(&public_key).to_byte_array().to_vec()
-        }
-        AddressType::P2shP2wpkh => {
-            // The redeem script is OP_0 PUSH20 <HASH160(public key)>.
-            let mut script = vec![0x00, 0x14];
-            script.extend_from_slice(&hash160::Hash::hash(&public_key).to_byte_array());
-            hash160::Hash::hash(&script).to_byte_array().to_vec()
-        }
-        AddressType::P2tr => taproot_output_key(key)?.to_vec(),
-        AddressType::Keccak => {
-            // The 64 bytes of the uncompressed key without its 0x04 prefix (Ethereum yellow paper).
-            let uncompressed = key.uncompressed_public_key()?;
-            Keccak256::digest(&uncompressed[1..])[12..].to_vec()
-        }
-    })
-}
-
-/// BIP86: the key-path-only Taproot output key `Q = P + t*G`, where `P` is the public key with
-/// an even Y coordinate and `t = TaggedHash("TapTweak", x(P))` (BIP341).
-fn taproot_output_key(key: &ExtendedKey) -> Result<[u8; 32], MhfeError> {
-    let point = key.public_point()?;
-    let internal = if bool::from(point.to_affine().y_is_odd()) {
-        -point
-    } else {
-        point
-    };
-    let x_only = internal.to_affine().x();
-    let tweak_bytes = tagged_hash("TapTweak", &x_only);
-    let tweak = Option::<Scalar>::from(Scalar::from_repr(FieldBytes::from(tweak_bytes)))
-        .ok_or_else(|| MhfeError::Internal("Taproot tweak out of range".to_owned()))?;
-    let output = internal + ProjectivePoint::GENERATOR * tweak;
-    // BIP341 fails when Q is the point at infinity, which needs t = -p: probability about 2^-256.
-    if bool::from(output.is_identity()) {
-        return Err(MhfeError::Internal(
-            "BIP341 gives no Taproot output key for this key".to_owned(),
-        ));
-    }
-    Ok(output.to_affine().x().into())
-}
-
-/// `SHA256(SHA256(tag) || SHA256(tag) || data)`, the tagged hash of BIP340.
-fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
-    let tag_digest = Sha256::digest(tag.as_bytes());
-    Sha256::new()
-        .chain_update(tag_digest)
-        .chain_update(tag_digest)
-        .chain_update(data)
-        .finalize()
-        .into()
-}
-
-/// The largest growth of UTF-8 text under NFKD: U+FDFA, 3 bytes, decomposes into 33 bytes.
-const NFKD_MAX_GROWTH: usize = 11;
-
-/// The passphrase in NFKD, as BIP39 requires, in a buffer that is wiped when dropped. It is
-/// reserved at the largest size NFKD can produce, so it never grows and leaves no unwiped copy;
-/// `Mnemonic::to_seed` would normalize into an ordinary string instead.
-/// The BIP39 seed of a phrase and a passphrase: PBKDF2-HMAC-SHA512, 2,048 iterations, with the
-/// salt "mnemonic" and the passphrase in NFKD.
-pub(crate) fn bip39_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u8; 64]> {
-    let normalized = normalized_passphrase(passphrase);
-    Zeroizing::new(mnemonic.to_seed_normalized(&normalized))
-}
-
-/// Locked before the passphrase is written into it, as the passphrase it is made from is.
-fn normalized_passphrase(passphrase: &str) -> LockedText {
-    let Ok(normalized) =
-        LockedText::build::<Infallible>(passphrase.len() * NFKD_MAX_GROWTH, |normalized| {
-            normalized.extend(passphrase.nfkd());
-            Ok(())
-        });
-    normalized
-}
-
-/// A BIP32 extended private key. Both halves are wiped when dropped.
-struct ExtendedKey {
-    key: Zeroizing<[u8; 32]>,
-    chain_code: Zeroizing<[u8; 32]>,
-}
-
-impl ExtendedKey {
-    /// The master key of a BIP39 phrase and passphrase: `HMAC-SHA512("Bitcoin seed", seed)`.
-    /// The phrase is read by the library's one reader of phrases (AUD-010): any spacing and
-    /// letter case, and four letters of a word, as every other phrase input takes it.
-    fn master(phrase: &str, passphrase: &str) -> Result<Self, MhfeError> {
-        let mnemonic = phrase::parse(phrase).map_err(MhfeError::InvalidPhrase)?;
-        let seed = bip39_seed(&mnemonic, passphrase);
-        let master = Self::from_hmac(b"Bitcoin seed", &[&seed[..]])?;
-        // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
-        if bool::from(master.scalar()?.is_zero()) {
-            return Err(MhfeError::Internal(
-                "BIP32 gives no valid master key for this seed".to_owned(),
-            ));
-        }
-        Ok(master)
-    }
-
-    /// Splits `HMAC-SHA512(key, parts)` into a private key and a chain code (BIP32).
-    fn from_hmac(key: &[u8], parts: &[&[u8]]) -> Result<Self, MhfeError> {
-        let mut mac = <HmacSha512 as KeyInit>::new_from_slice(key).expect("HMAC takes any key");
-        for part in parts {
-            mac.update(part);
-        }
-        let mut digest = mac.finalize().into_bytes();
-        let mut extended = Self {
-            key: Zeroizing::new([0u8; 32]),
-            chain_code: Zeroizing::new([0u8; 32]),
-        };
-        extended.key.copy_from_slice(&digest[..32]);
-        extended.chain_code.copy_from_slice(&digest[32..]);
-        digest.zeroize();
-        Ok(extended)
-    }
-
-    fn derive(&self, path: &[u32]) -> Result<Self, MhfeError> {
-        let mut key = self.clone_key();
-        for &index in path {
-            key = key.child(index)?;
-        }
-        Ok(key)
-    }
-
-    /// Private child key derivation, CKDpriv of BIP32.
-    fn child(&self, index: u32) -> Result<Self, MhfeError> {
-        let index_bytes = index.to_be_bytes();
-        let mut child = if index >= HARDENED {
-            Self::from_hmac(&self.chain_code[..], &[&[0u8], &self.key[..], &index_bytes])?
-        } else {
-            Self::from_hmac(&self.chain_code[..], &[&self.public_key()?, &index_bytes])?
-        };
-        // The child key is IL + parent key (mod n). BIP32 declares the key at this index invalid
-        // when IL is not below n or the sum is zero, which happens with probability below 2^-127,
-        // and wallets then use the next index. This tool reports it instead of silently checking a
-        // different index than the path says.
-        let tweak = parse_scalar(&child.key)?;
-        let sum = Zeroizing::new(*tweak + *self.scalar()?);
-        if bool::from(sum.is_zero()) {
-            return Err(MhfeError::Internal(format!(
-                "BIP32 has no valid key at index {index} of this path; wallets use the next index"
-            )));
-        }
-        child
-            .key
-            .copy_from_slice(&Zeroizing::new(sum.to_repr())[..]);
-        Ok(child)
-    }
-
-    /// The private key as a scalar, wiped when dropped like every scalar binding here.
-    fn scalar(&self) -> Result<Zeroizing<Scalar>, MhfeError> {
-        parse_scalar(&self.key)
-    }
-
-    /// The public point `k*G` of the private key `k`.
-    fn public_point(&self) -> Result<ProjectivePoint, MhfeError> {
-        Ok(ProjectivePoint::GENERATOR * *self.scalar()?)
-    }
-
-    /// The compressed SEC1 public key, 33 bytes.
-    fn public_key(&self) -> Result<[u8; 33], MhfeError> {
-        let point = self.public_point()?.to_affine();
-        let encoded = point.to_sec1_point(true);
-        encoded
-            .as_bytes()
-            .try_into()
-            .map_err(|_| MhfeError::Internal("a public key is not 33 bytes".to_owned()))
-    }
-
-    /// The public key in SEC1 uncompressed form: 0x04 and both coordinates.
-    fn uncompressed_public_key(&self) -> Result<[u8; 65], MhfeError> {
-        let point = self.public_point()?.to_affine();
-        let encoded = point.to_sec1_point(false);
-        encoded
-            .as_bytes()
-            .try_into()
-            .map_err(|_| MhfeError::Internal("a public key is not 65 bytes".to_owned()))
-    }
-
-    fn clone_key(&self) -> Self {
-        Self {
-            key: self.key.clone(),
-            chain_code: self.chain_code.clone(),
-        }
-    }
-}
-
-fn parse_scalar(bytes: &[u8; 32]) -> Result<Zeroizing<Scalar>, MhfeError> {
-    let mut repr = FieldBytes::from(*bytes);
-    let scalar = Option::<Scalar>::from(Scalar::from_repr(repr)).map(Zeroizing::new);
-    repr.zeroize();
-    scalar.ok_or_else(|| MhfeError::Internal("BIP32 produced a key out of range".to_owned()))
-}
-
 #[cfg(test)]
 mod tests {
+    use super::encodings::DASH_PLATFORM_P2PKH;
     use super::*;
 
     #[test]
@@ -1623,41 +1066,6 @@ mod tests {
             master_fingerprint(&short, ""),
             Err(MhfeError::InvalidPhrase(_))
         ));
-    }
-
-    /// The wiping normalization gives the seed that bip39 itself computes, also for a passphrase
-    /// that NFKD changes, including one that grows the most.
-    #[test]
-    fn the_passphrase_is_normalized_as_bip39_does() {
-        let mnemonic = phrase::parse(ABANDON).unwrap();
-        for passphrase in ["", "TREZOR", "Caf\u{E9} \u{FB01}", "\u{FDFA}\u{FDFA}"] {
-            let normalized = normalized_passphrase(passphrase);
-            assert_eq!(
-                mnemonic.to_seed_normalized(&normalized),
-                mnemonic.to_seed(passphrase),
-                "{passphrase:?}"
-            );
-        }
-    }
-
-    /// Keys that BIP32 calls invalid give an error, never a panic. They cannot come from a real
-    /// phrase in practice, so they are made up here: zero, and the group order n.
-    #[test]
-    fn invalid_bip32_keys_are_errors() {
-        let with_key = |key: [u8; 32]| ExtendedKey {
-            key: Zeroizing::new(key),
-            chain_code: Zeroizing::new([7u8; 32]),
-        };
-        // secp256k1 group order n (SEC 2).
-        let order: [u8; 32] =
-            hex::decode("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
-                .unwrap()
-                .try_into()
-                .unwrap();
-        assert!(with_key([0u8; 32]).public_key().is_err());
-        assert!(with_key(order).public_key().is_err());
-        assert!(with_key(order).child(0).is_err());
-        assert!(with_key(order).child(HARDENED).is_err());
     }
 
     /// BIP173 and CashAddr: an address may be written all in lower or all in upper case, never

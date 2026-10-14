@@ -339,7 +339,8 @@ mod pages {
     }
 
     /// How many guards hold the page at `address`; only the Unix tests ask.
-    #[cfg(all(test, unix))]
+    #[cfg(test)]
+    #[cfg(unix)]
     pub(super) fn holders_of(address: usize) -> usize {
         let size = page_size().expect("a Unix system reports its page size");
         let holders = HOLDERS.lock().unwrap_or_else(PoisonError::into_inner);

@@ -29,10 +29,6 @@
 //! The menu that `mhfe` shows when it starts without arguments reads single keys in the same
 //! terminal mode: [`with_keys`].
 
-// Changing the terminal settings needs the operating system's terminal calls, which Rust offers
-// only through unsafe foreign functions.
-#![allow(unsafe_code)]
-
 use std::io::{self, BufRead, IsTerminal};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -665,300 +661,15 @@ fn last_cell(line: &[u8], entries: &[Entry]) -> Vec<(usize, usize)> {
     cell
 }
 
+// The terminal calls of each system, behind the same functions.
 #[cfg(unix)]
-mod platform {
-    use std::io;
-    use std::mem::MaybeUninit;
-    use std::ptr;
-    use std::time::Duration;
-
-    use super::terminal_error;
-    use crate::exit::Failure;
-
-    pub type Settings = libc::termios;
-
-    pub fn current() -> Result<Settings, Failure> {
-        current_on(libc::STDIN_FILENO)
-    }
-
-    /// The settings of the terminal on `descriptor`.
-    pub fn current_on(descriptor: libc::c_int) -> Result<Settings, Failure> {
-        let mut settings = MaybeUninit::<libc::termios>::uninit();
-        // SAFETY: tcgetattr fills the whole structure when it returns 0.
-        if unsafe { libc::tcgetattr(descriptor, settings.as_mut_ptr()) } != 0 {
-            return Err(terminal_error("read the settings of"));
-        }
-        // SAFETY: initialised by the successful tcgetattr above.
-        Ok(unsafe { settings.assume_init() })
-    }
-
-    pub fn hide(original: &Settings) -> Result<(), Failure> {
-        hide_on(libc::STDIN_FILENO, original)
-    }
-
-    /// The modes of the terminal's own echo and line editing, which a hidden prompt switches off.
-    const ECHO_AND_EDITING: libc::tcflag_t = libc::ECHO | libc::ICANON | libc::IEXTEN;
-
-    /// [`hide`] for the terminal on `descriptor`.
-    pub fn hide_on(descriptor: libc::c_int, original: &Settings) -> Result<(), Failure> {
-        let mut hidden = *original;
-        // No echo and no line mode: this module edits the line. ISIG keeps Ctrl+C as the
-        // interrupt key; quit and suspend become ordinary characters.
-        hidden.c_lflag &= !ECHO_AND_EDITING;
-        hidden.c_lflag |= libc::ISIG;
-        hidden.c_cc[libc::VQUIT] = libc::_POSIX_VDISABLE;
-        hidden.c_cc[libc::VSUSP] = libc::_POSIX_VDISABLE;
-        // A read returns as soon as one byte is there.
-        hidden.c_cc[libc::VMIN] = 1;
-        hidden.c_cc[libc::VTIME] = 0;
-        // No flow control (Ctrl+S, Ctrl+Q) and no changes to the bytes.
-        hidden.c_iflag &= !(libc::IXON | libc::ISTRIP | libc::INLCR | libc::IGNCR | libc::ICRNL);
-        // SAFETY: a valid termios for the terminal on `descriptor`.
-        if unsafe { libc::tcsetattr(descriptor, libc::TCSANOW, &hidden) } != 0 {
-            return Err(terminal_error("hide the input on"));
-        }
-        // tcsetattr succeeds when any one of the changes was made (POSIX), so the terminal is
-        // asked what it does now before anything is read.
-        if !echo_off(&current_on(descriptor)?) {
-            return Err(super::echo_stays_on());
-        }
-        Ok(())
-    }
-
-    /// Whether `settings` have neither the terminal's echo nor its own line editing.
-    pub fn echo_off(settings: &Settings) -> bool {
-        settings.c_lflag & ECHO_AND_EDITING == 0
-    }
-
-    /// The menu's keys need the same settings as a hidden line: every byte at once, no echo.
-    pub fn single_keys(original: &Settings) -> Result<(), Failure> {
-        hide(original)
-    }
-
-    /// A Unix terminal carries out control sequences as they come.
-    pub fn control_sequences() -> bool {
-        true
-    }
-
-    pub fn output_on_error_terminal() -> bool {
-        same_terminal(libc::STDOUT_FILENO, libc::STDERR_FILENO)
-    }
-
-    /// Whether two descriptors are the same terminal: character devices with the same device
-    /// number. Two terminals of one system, such as two pseudo-terminals, have different numbers.
-    pub fn same_terminal(first: libc::c_int, second: libc::c_int) -> bool {
-        let device = |descriptor| {
-            let mut status = MaybeUninit::<libc::stat>::zeroed();
-            // SAFETY: fstat fills the stat when it returns 0; it was zeroed before.
-            let read = unsafe { libc::fstat(descriptor, status.as_mut_ptr()) };
-            // SAFETY: all zero bytes are a valid stat, and a successful call filled it.
-            let status = unsafe { status.assume_init() };
-            (read == 0 && status.st_mode & libc::S_IFMT == libc::S_IFCHR).then_some(status.st_rdev)
-        };
-        matches!((device(first), device(second)), (Some(first), Some(second)) if first == second)
-    }
-
-    pub fn columns() -> Option<usize> {
-        let mut size = MaybeUninit::<libc::winsize>::zeroed();
-        // SAFETY: TIOCGWINSZ fills the winsize when it returns 0; it was zeroed before.
-        let read = unsafe { libc::ioctl(libc::STDERR_FILENO, libc::TIOCGWINSZ, size.as_mut_ptr()) };
-        // SAFETY: all zero bytes are a valid winsize, and a successful call filled it.
-        let columns = unsafe { size.assume_init() }.ws_col;
-        (read == 0 && columns > 0).then_some(usize::from(columns))
-    }
-
-    /// Whether a byte arrives on standard input within `delay`. select, not poll: macOS's poll
-    /// does not support terminals.
-    pub fn input_within(delay: Duration) -> Result<bool, Failure> {
-        loop {
-            // SAFETY: an fd_set and a timeval on the stack that select may change, for standard
-            // input only; all zero bytes are a valid fd_set.
-            let ready = unsafe {
-                let mut readable = MaybeUninit::<libc::fd_set>::zeroed().assume_init();
-                libc::FD_ZERO(&mut readable);
-                libc::FD_SET(libc::STDIN_FILENO, &mut readable);
-                let mut timeout = libc::timeval {
-                    tv_sec: delay.as_secs() as libc::time_t,
-                    tv_usec: delay.subsec_micros() as libc::suseconds_t,
-                };
-                libc::select(
-                    libc::STDIN_FILENO + 1,
-                    &mut readable,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                    &mut timeout,
-                )
-            };
-            match ready {
-                -1 if io::Error::last_os_error().kind() == io::ErrorKind::Interrupted => continue,
-                -1 => return Err(terminal_error("wait for a key from")),
-                count => return Ok(count > 0),
-            }
-        }
-    }
-
-    pub fn restore(original: &Settings) {
-        // SAFETY: the settings read from this terminal before. A failure cannot be reported
-        // usefully here; the shell restores the terminal when the tool ends in any case.
-        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, original) };
-    }
-}
-
+mod unix;
+#[cfg(unix)]
+use unix as platform;
 #[cfg(windows)]
-mod platform {
-    use std::time::{Duration, Instant};
-
-    use windows_sys::Win32::System::Console::{
-        GetConsoleMode, GetConsoleScreenBufferInfo, GetStdHandle, PeekConsoleInputW,
-        SetConsoleMode, CONSOLE_MODE, CONSOLE_SCREEN_BUFFER_INFO, ENABLE_ECHO_INPUT,
-        ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
-        ENABLE_VIRTUAL_TERMINAL_PROCESSING, INPUT_RECORD, KEY_EVENT, STD_ERROR_HANDLE,
-        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
-    };
-
-    use super::terminal_error;
-    use crate::exit::Failure;
-
-    pub type Settings = CONSOLE_MODE;
-
-    pub fn current() -> Result<Settings, Failure> {
-        let mut mode: CONSOLE_MODE = 0;
-        // SAFETY: a plain console call on the standard input handle.
-        if unsafe { GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mut mode) } == 0 {
-            return Err(terminal_error("read the settings of"));
-        }
-        Ok(mode)
-    }
-
-    pub fn hide(original: &Settings) -> Result<(), Failure> {
-        // No echo and no line mode: this module edits the line. Processed input keeps Ctrl+C as
-        // the cancel key; without line input the console acts on no other key.
-        let hidden = (original & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT)) | ENABLE_PROCESSED_INPUT;
-        // SAFETY: a plain console call on the standard input handle.
-        if unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), hidden) } == 0 {
-            return Err(terminal_error("hide the input on"));
-        }
-        read_back_echo_off()
-    }
-
-    /// Asks the console what it does now, before anything is read: neither echo nor its own line
-    /// editing may be left on.
-    fn read_back_echo_off() -> Result<(), Failure> {
-        if current()? & (ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT) != 0 {
-            return Err(super::echo_stays_on());
-        }
-        Ok(())
-    }
-
-    /// As for a hidden line, and the console sends the arrow keys as VT escape sequences, as a
-    /// Unix terminal does (Windows 10 and later). The menu redraws itself with VT cursor
-    /// sequences on standard error, so the console is also asked to carry those out there; that
-    /// output mode stays on, as for any program that writes colours.
-    pub fn single_keys(original: &Settings) -> Result<(), Failure> {
-        let keys = (original & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT))
-            | ENABLE_PROCESSED_INPUT
-            | ENABLE_VIRTUAL_TERMINAL_INPUT;
-        // SAFETY: plain console calls on the standard handles.
-        unsafe {
-            if SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), keys) == 0 {
-                return Err(terminal_error("read single keys from"));
-            }
-            let output = GetStdHandle(STD_ERROR_HANDLE);
-            let mut mode: CONSOLE_MODE = 0;
-            if GetConsoleMode(output, &mut mode) == 0
-                || SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0
-            {
-                return Err(terminal_error("draw the menu on"));
-            }
-        }
-        read_back_echo_off()
-    }
-
-    /// Asks the console to carry out the VT control sequences written to standard error, such as
-    /// switching to the alternate screen; whether it agreed. The mode stays on, as in single_keys.
-    pub fn control_sequences() -> bool {
-        // SAFETY: plain console calls on the standard error handle.
-        unsafe {
-            let output = GetStdHandle(STD_ERROR_HANDLE);
-            let mut mode: CONSOLE_MODE = 0;
-            GetConsoleMode(output, &mut mode) != 0
-                && SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0
-        }
-    }
-
-    /// A process has one console: standard output and standard error, when both are consoles,
-    /// are that one.
-    pub fn output_on_error_terminal() -> bool {
-        let mut mode: CONSOLE_MODE = 0;
-        // SAFETY: plain console calls on the standard output and error handles.
-        unsafe {
-            GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &mut mode) != 0
-                && GetConsoleMode(GetStdHandle(STD_ERROR_HANDLE), &mut mode) != 0
-        }
-    }
-
-    /// The width of the console window that standard error writes to.
-    pub fn columns() -> Option<usize> {
-        let mut info = CONSOLE_SCREEN_BUFFER_INFO::default();
-        // SAFETY: a plain console call that fills `info`.
-        let read = unsafe { GetConsoleScreenBufferInfo(GetStdHandle(STD_ERROR_HANDLE), &mut info) };
-        let width = i32::from(info.srWindow.Right) - i32::from(info.srWindow.Left) + 1;
-        (read != 0 && width > 0).then_some(width as usize)
-    }
-
-    /// Whether a typed character arrives within `delay`. The console has no wait for that alone:
-    /// its queue also holds events that give no character, such as the release of the Escape key
-    /// itself, so the queue is looked at every few milliseconds until the time is up.
-    pub fn input_within(delay: Duration) -> Result<bool, Failure> {
-        const LOOK_EVERY: Duration = Duration::from_millis(5);
-        let end = Instant::now() + delay;
-        loop {
-            if character_waiting()? {
-                return Ok(true);
-            }
-            if Instant::now() >= end {
-                return Ok(false);
-            }
-            std::thread::sleep(LOOK_EVERY);
-        }
-    }
-
-    /// Whether the console's queue holds a key press with a character. With VT input, the rest of
-    /// an arrow key's sequence arrives as such presses.
-    fn character_waiting() -> Result<bool, Failure> {
-        // More than the events of one key's sequence, with their releases.
-        const EVENTS: usize = 32;
-        let mut events = [INPUT_RECORD::default(); EVENTS];
-        let mut count = 0u32;
-        // SAFETY: room for EVENTS records; peeking leaves the events in the queue.
-        let peeked = unsafe {
-            PeekConsoleInputW(
-                GetStdHandle(STD_INPUT_HANDLE),
-                events.as_mut_ptr(),
-                EVENTS as u32,
-                &mut count,
-            )
-        };
-        if peeked == 0 {
-            return Err(terminal_error("look at the keys of"));
-        }
-        let typed = events[..count as usize].iter().any(|event| {
-            // SAFETY: the union holds a key event when EventType says so, and its character is
-            // read as the UTF-16 unit that the W function fills in.
-            event.EventType == KEY_EVENT as u16
-                && unsafe {
-                    event.Event.KeyEvent.bKeyDown != 0
-                        && event.Event.KeyEvent.uChar.UnicodeChar != 0
-                }
-        });
-        Ok(typed)
-    }
-
-    pub fn restore(original: &Settings) {
-        // SAFETY: the mode read from this console before.
-        unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), *original) };
-    }
-}
+mod windows;
+#[cfg(windows)]
+use windows as platform;
 
 /// Whether a typed character stays off the screen: a control character, which a terminal would
 /// carry out, and an invisible formatting character, such as U+202E, which turns the text after it
@@ -969,6 +680,10 @@ fn not_shown(character: char) -> bool {
             0x061C | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F | 0xFEFF)
 }
 
+#[allow(
+    unsafe_code,
+    reason = "the tests give the reader a pseudo-terminal, through the system's own calls"
+)]
 #[cfg(test)]
 mod tests {
     use super::*;
