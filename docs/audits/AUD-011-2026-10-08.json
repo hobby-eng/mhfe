@@ -962,7 +962,7 @@
         "reportDocument": {
           "document": "docs/audits/audit-11-2026-10-08.md",
           "previousSha256": "aa09d071e04db42762439c8348b072ca300b42017b184bc752763343f944afda",
-          "redactedSha256": "cacfc6b9ca417acb060f3d7220a2f0590a1e0727e5966f95064f2cbeb420cac2"
+          "redactedSha256": "9fca06668f6bc4d872721148168fe0cb37042bb9a7b14e7d6ba257a7a39efadb"
         }
       }
     ],

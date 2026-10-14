@@ -3940,7 +3940,7 @@
         "reportDocument": {
           "document": "docs/audits/audit-16-2026-10-09.md",
           "previousSha256": "1a61b3ff5cb7716c3f72b31b9618fd74f2ad08eb0a9a57faf61cf5c424abd655",
-          "redactedSha256": "1b299312ce9d273484c1dd69fb4b2a9828e368472a19bf1adaf2c46c63d099ae"
+          "redactedSha256": "83e0735eb51b11199f8f81ac98192eba352777ba0714095ea59824197cea37d1"
         }
       }
     ],

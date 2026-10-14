@@ -5127,7 +5127,7 @@
         "reportDocument": {
           "document": "docs/audits/audit-10-2026-10-07.md",
           "previousSha256": "0c559c4b873ce3a5c0550b676eb227b6db1b3e720268e025b810512ad566c8c7",
-          "redactedSha256": "6af90601cee28fb7e254d3416041134c9ed138dc4d2323727317fb5b4add8e41"
+          "redactedSha256": "03fb90f593cf735a9c10f63f9820e7a4143d0309c7b4891a34cb0e72e52a9159"
         }
       }
     ],

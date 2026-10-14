@@ -1,0 +1,1214 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-021",
+  "auditNumber": 21,
+  "date": "2026-10-12",
+  "completedUtc": "2026-10-12T18:29:09+00:00",
+  "title": "MHFE AUD-020 host-protection remediation follow-up",
+  "reviewer": {
+    "name": "Codex remediation coordinator and report reviewer",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": "ultra"
+  },
+  "snapshot": {
+    "commit": "0155c951ab9deee0301b7e37b42ebc994cbd28b7",
+    "commitComplete": true,
+    "workingTree": {
+      "state": "dirty",
+      "preExistingStatus": [
+        " M docs/audits/README.md",
+        "?? docs/audits/AUD-020-2026-10-12.json",
+        "?? docs/audits/AUD-020-2026-10-12.md",
+        "?? docs/audits/AUD-020-harnesses/",
+        "?? docs/audits/AUD-021-harnesses/"
+      ],
+      "note": "Product fixes and regression tests are uncommitted; pre-existing AUD-020 records are preserved."
+    },
+    "sourceFingerprint": "890bb277bf6575a387f2d5637df6e074a550788ba4810ec70f6fa972e4dd07e1",
+    "artifacts": "Scoped local debug binary/PTY harness only; no release or browser artifact acceptance."
+  },
+  "scope": {
+    "repository": "https://github.com/hobby-eng/mhfe",
+    "mode": "Scoped authorized remediation follow-up, not a new full security scan",
+    "findings": ["AUD-020-SEC001", "AUD-020-SEC002"],
+    "included": [
+      "src/bin/mhfe/protect.rs",
+      "src/bin/mhfe/settings.rs",
+      "src/bin/mhfe/terminal.rs",
+      "src/bin/mhfe/made_password.rs"
+    ],
+    "excluded": [
+      "Algorithm, vectors and public library/WASM/browser APIs",
+      "Fresh full security scan and historical audit conclusions",
+      "Full-cost Argon2, browser suites, canonical/release builds and publication"
+    ]
+  },
+  "procedureHashes": {
+    "FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "AUDIT_STANDARD.md": "9128a5e243ec5de86b58bde7b84f7d3bf6b9174346c056a34c5425957b27dc1f",
+    "AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "environment": {
+    "observedVersions": {
+      "python": "3.14.4",
+      "os": "Linux",
+      "architecture": "x86_64",
+      "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+      "node": "v26.10.0",
+      "browser": "not executed",
+      "windowsMacos": "not executed"
+    },
+    "localEvidence": "docs/audits/AUD-021-evidence/environment.log",
+    "localOnly": true,
+    "sha256": "b1897fdaba80463907c5cefd7f19d261b948a0b6bc6f835cca05bac4babb2108",
+    "formatter": "Prettier 3.9.9 from the pinned local package"
+  },
+  "sourceBinding": {
+    "fingerprintMethod": "SHA-256 of path-sorted file SHA-256 + two spaces + path + LF rows",
+    "fingerprintScope": "Initial non-audit source inventory, including release notes",
+    "files": 252,
+    "beforeSourceFingerprint": "f5fdea65ab9de1dae1d15992ae6a0ef76ce628d40b544699b470cd56d6b96197",
+    "afterSourceFingerprint": "890bb277bf6575a387f2d5637df6e074a550788ba4810ec70f6fa972e4dd07e1",
+    "initialSnapshotSha256": "2b01a3a2ee8056484eca57335354dfbaeeb7e1b22ab72469d1f2ddeb42752fb5",
+    "finalSnapshotSha256": "35c3f9ba1e7bd9801da86a53dcb78de80d152c11739d92707bea888bc4a9a062",
+    "localSourceManifests": {
+      "before": "docs/audits/AUD-021-evidence/before-source-manifest.txt",
+      "after": "docs/audits/AUD-021-evidence/after-source-manifest.txt",
+      "localOnly": true
+    },
+    "patchSha256": "ebc1f402895ebba9d17eb88b55925b722e3a1002c1365e9161706974af8d2a2e",
+    "patchLocalEvidence": "docs/audits/AUD-021-evidence/product.patch",
+    "patchCommand": "git diff --no-ext-diff -- docs/releases/unreleased.md src/bin/mhfe/protect.rs src/bin/mhfe/settings.rs src/bin/mhfe/terminal.rs src/bin/mhfe/made_password.rs",
+    "cliBinarySha256": "57e28adbe01abb8eb14b66e1370c63b8616a62b4c7284d791d6391a0e5875cd4",
+    "patchReview": {
+      "outcome": "no concrete bypass or regression",
+      "method": "fresh read-only independent diff/caller review",
+      "runtimeExecution": false
+    },
+    "changedFiles": [
+      {
+        "path": "docs/releases/unreleased.md",
+        "beforeSha256": "c67272e14633ef5d150bed9d1c9188271d1a5621492bf6992bbe6deefeaa873a",
+        "afterSha256": "5804ab92289185fc389976d8b53b945d07eba962c0662ed0d930d82dc3f9ebf5"
+      },
+      {
+        "path": "src/bin/mhfe/made_password.rs",
+        "beforeSha256": "9240335f441a3b723aa347e64732c90cfffe883fa9b894b73167146de36687ad",
+        "afterSha256": "9c1c2124334f3818a431e7c94c4eb7ee7d954ff5c5c8f472bf2a979a2338b6a4"
+      },
+      {
+        "path": "src/bin/mhfe/protect.rs",
+        "beforeSha256": "c8ce24394c08c9afedb605b72c2a1c2208a37093cb0f7a42c5b0a2f0a0977bb8",
+        "afterSha256": "94c103f1057bd5901564d506a4895c3b767baae35d00b6a5e69d6d4de2794e0f"
+      },
+      {
+        "path": "src/bin/mhfe/settings.rs",
+        "beforeSha256": "bffdc12567667c675f76a830c407edf1a26470230eb426a444e37423eb157563",
+        "afterSha256": "e7600572c563eb2c7bec2641051b4f47a3306b4bf006d994c5e4ff14a2f5399f"
+      },
+      {
+        "path": "src/bin/mhfe/terminal.rs",
+        "beforeSha256": "c51d0261227015570c6dd99e7a58d86dda8f094f64e0ca0dc7264c44d326667f",
+        "afterSha256": "ea0fb4dda2abd72930e33618daded38d836b29b719428015cd8d9e68e0e01a4a"
+      }
+    ],
+    "note": "The initial snapshot precedes added regression tests; original failed-command logs retain those tests' results. The final snapshot binds fixes and retained tests together. No signed fix or verification commit exists."
+  },
+  "originalAudit": {
+    "auditId": "AUD-020",
+    "commit": "0155c951ab9deee0301b7e37b42ebc994cbd28b7",
+    "sourceFingerprint": "92575423e77066be109519c6eb3e52d538cb3b6d7eb531eb1840375776150255",
+    "markdownSha256": "69d1a7c8ff752da7685ec609deb7431e391a6cd0e7708d99935a2256ebb40a6f",
+    "jsonSha256": "3c0c13d82736f099fe4d76b86745d9992535e3d9a62f25947c64923b5b88ba46",
+    "localReviewArtifacts": [
+      {
+        "name": "architecture-review.json",
+        "sha256": "94cc3432796229529f1723902b928ecf6faf9064a88784e8e2b6ce1b1ca30172",
+        "localOnly": true
+      },
+      {
+        "name": "browser-review.json",
+        "sha256": "574d9e903895a2db53dc8156ca049ed4a8f499934caeee49b97dbd319cd14c92",
+        "localOnly": true
+      },
+      {
+        "name": "baseline-review.json",
+        "sha256": "90b5eac256dca25035618f3113abf7ebc04693f60e12c3f3b06d2c627a4b3021",
+        "localOnly": true
+      },
+      {
+        "name": "packaging-review.json",
+        "sha256": "8ccf61fb8da55664d41fe73609d9fc01c6f99a3eb563f95bbea273da2b88d232",
+        "localOnly": true
+      },
+      {
+        "name": "cli-review.json",
+        "sha256": "e6debd2ed32067ac39698474bebe09ab73877b44e4af03397df5ea5e198f26a3",
+        "localOnly": true
+      },
+      {
+        "name": "cli-layout-review.json",
+        "sha256": "18c08dcd62c6780fad2ec55f11c8a3dc1cbce0d65b67e6f9acdb552fb4b16e2b",
+        "localOnly": true
+      },
+      {
+        "name": "windows-private-screen-challenge.json",
+        "sha256": "5c1f69dead2439a3675f58985bd276b370b0e42c02a42dac6d34074038fbe010",
+        "localOnly": true
+      },
+      {
+        "name": "source-coverage-reconciliation.json",
+        "sha256": "fbd117d6282d4c8b0e4aa18e72732edde601786c0d271649b984b947382d80ac",
+        "localOnly": true
+      },
+      {
+        "name": "validated-findings.json",
+        "sha256": "47b6dcef1a1f5f418eed65d3b5413347ffe863478029cc5ee6f407a1bbe1ca08",
+        "localOnly": true
+      }
+    ],
+    "sealedScanBindings": {
+      "scan-manifest.json": "a21c78e46ea42c76451c34584f234d112195b28077f42b885ea2cf5abcd7655b",
+      "findings.json": "8a45d8a7ac0492bafff57c46ed1d0bace61f66e3271624515af5e76b9256f966",
+      "coverage.json": "73fc7bb8155538ce736eabd231bac532fb720a225de905c0315bdac4b6c360e8",
+      "report.md": "3fb136fc921ff76b173e85bf48c0ca946c839b33e7ae6c09385efdc15ac41371",
+      "artifacts/validated-findings.json": "47b6dcef1a1f5f418eed65d3b5413347ffe863478029cc5ee6f407a1bbe1ca08",
+      "artifacts/windows-private-screen-challenge.json": "5c1f69dead2439a3675f58985bd276b370b0e42c02a42dac6d34074038fbe010"
+    },
+    "sealedScanLocalOnly": true,
+    "note": "Original findings and sealed scan artifacts are historical evidence, unchanged and not reopened or re-executed."
+  },
+  "checks": {
+    "coverageLedger": [
+      {
+        "checkId": "CHECK-SEC-001",
+        "category": "SEC",
+        "logicalGroup": "Threat model and secret ownership",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "Scoped source trace of pre-secret swap warning and shared generated-password display; broader ownership review not repeated."
+      },
+      {
+        "checkId": "CHECK-SEC-002",
+        "category": "SEC",
+        "logicalGroup": "Secret Vault, CSP, sandbox, and transport",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-SEC-003",
+        "category": "SEC",
+        "logicalGroup": "Network egress and secret guards",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-SEC-004",
+        "category": "SEC",
+        "logicalGroup": "Randomness, encryption, and authentication",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-SEC-005",
+        "category": "SEC",
+        "logicalGroup": "Secret lifecycle and exceptional paths",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "Retained pre-fix failures and post-fix swap/private-screen refusal regressions; actual swap paging and Windows VT failure not executed."
+      },
+      {
+        "checkId": "CHECK-SEC-006",
+        "category": "SEC",
+        "logicalGroup": "Browser injection, persistence, and sensitive APIs",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-SEC-007",
+        "category": "SEC",
+        "logicalGroup": "Read-only guarantees and availability bounds",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-FUN-001",
+        "category": "FUN",
+        "logicalGroup": "BIP39, entropy, and seed interpretation",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-FUN-002",
+        "category": "FUN",
+        "logicalGroup": "HD derivation and every coin/profile",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-FUN-003",
+        "category": "FUN",
+        "logicalGroup": "BIP85, BIP38, messages, and Silent Payments",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-applicable",
+        "evidence": "MHFE has no BIP85/BIP38/message-signing/Silent Payments feature."
+      },
+      {
+        "checkId": "CHECK-FUN-004",
+        "category": "FUN",
+        "logicalGroup": "Scripts, descriptors, Miniscript, and multisig",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-applicable",
+        "evidence": "MHFE has no descriptor/Miniscript/multisig/script-policy interpreter."
+      },
+      {
+        "checkId": "CHECK-FUN-005",
+        "category": "FUN",
+        "logicalGroup": "Transactions, PSBT version context, and commitments",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-applicable",
+        "evidence": "MHFE has no transaction or PSBT parser/signing coordinator."
+      },
+      {
+        "checkId": "CHECK-FUN-006",
+        "category": "FUN",
+        "logicalGroup": "Recovery and backup formats",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-FUN-007",
+        "category": "FUN",
+        "logicalGroup": "Discovery, providers, proofs, and accounting",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-applicable",
+        "evidence": "MHFE has no discovery/provider/proof/balance service."
+      },
+      {
+        "checkId": "CHECK-API-001",
+        "category": "API",
+        "logicalGroup": "Actual dependency call contracts",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "CLI-internal inventory enum and screen capability callers checked; public library/WASM APIs unchanged."
+      },
+      {
+        "checkId": "CHECK-API-002",
+        "category": "API",
+        "logicalGroup": "Async state, cancellation, and revisions",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-API-003",
+        "category": "API",
+        "logicalGroup": "Public export schema and monetary fidelity",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-applicable",
+        "evidence": "MHFE has no public monetary CSV/XLSX exports."
+      },
+      {
+        "checkId": "CHECK-API-004",
+        "category": "API",
+        "logicalGroup": "Encoding and import/export interoperability",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-BLD-001",
+        "category": "BLD",
+        "logicalGroup": "Manifest, flags, and feature composition",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-BLD-002",
+        "category": "BLD",
+        "logicalGroup": "Matrix depth and runtime sampling",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-BLD-003",
+        "category": "BLD",
+        "logicalGroup": "Lockfiles, source provenance, and licenses",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-BLD-004",
+        "category": "BLD",
+        "logicalGroup": "Canonical WASM and Docker bytes",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-BLD-005",
+        "category": "BLD",
+        "logicalGroup": "Artifacts, CI, and release workflows",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-UI-001",
+        "category": "UI",
+        "logicalGroup": "Real files and representative viewports",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-UI-002",
+        "category": "UI",
+        "logicalGroup": "Navigation, inputs, and state preservation",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-UI-003",
+        "category": "UI",
+        "logicalGroup": "Secret visibility, help, QR, and accessibility",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "Scoped terminal privacy/refusal and cleanup probes only; browser/viewport/accessibility matrix not run."
+      },
+      {
+        "checkId": "CHECK-ARC-001",
+        "category": "ARC",
+        "logicalGroup": "Ownership, imports, and composition seams",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "Swap state belongs to protection code; warning formatting and secret display use their existing owners."
+      },
+      {
+        "checkId": "CHECK-ARC-002",
+        "category": "ARC",
+        "logicalGroup": "Dead code, duplication, and false positives",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "VT capability check shared by preflight and screen entry; no full dead-code review."
+      },
+      {
+        "checkId": "CHECK-ARC-003",
+        "category": "ARC",
+        "logicalGroup": "Comments, tests, and production-path fidelity",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "Production helper/sink regressions fail before fixes and pass afterward; formatter and Clippy recorded separately."
+      },
+      {
+        "checkId": "CHECK-DOC-001",
+        "category": "DOC",
+        "logicalGroup": "User-facing capability and safety descriptions",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "Unreleased notes describe both corrections; no wider capability-claim review."
+      },
+      {
+        "checkId": "CHECK-DOC-002",
+        "category": "DOC",
+        "logicalGroup": "Commands, metadata, links, and legal materials",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Disposition only",
+        "outcome": "not-run",
+        "evidence": "Outside this two-finding remediation follow-up; AUD-020 baseline is preserved and not counted as new execution."
+      },
+      {
+        "checkId": "CHECK-DOC-003",
+        "category": "DOC",
+        "logicalGroup": "Audit records and evidence consistency",
+        "scope": "MHFE native CLI host-protection remediation only",
+        "method": "Scoped source review and retained command evidence",
+        "outcome": "passed",
+        "evidence": "Shared-schema validation, 32 dispositions, original IDs, paired report agreement and source/log hashes checked."
+      }
+    ],
+    "commands": [
+      {
+        "label": "after-display",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo test --locked --offline --bin mhfe made_password::tests -- --test-threads=2",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "mhfe",
+          "made_password::tests",
+          "--",
+          "--test-threads=2"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:24:27+00:00",
+        "endUtc": "2026-10-12T18:24:27+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [
+          {
+            "passed": 3,
+            "failed": 0,
+            "ignored": 1,
+            "measured": 0,
+            "filteredOut": 127
+          }
+        ],
+        "caseCounts": null,
+        "testNames": [
+          "made_password::tests::the_kinds_show_whole",
+          "made_password::tests::the_lines_fit_the_screen",
+          "made_password::tests::a_generated_password_never_prints_without_a_private_screen"
+        ],
+        "diagnostics": [],
+        "logSha256": "e70e35af1d3931969ca95e0bac4d8aa4cd6250e970eab88437d5e530f5f00529",
+        "recordSha256": "2b4133bdc5027db065f7f29f10b952bdbc1954b8eac0177258dd59ecf81ee456",
+        "localEvidence": "docs/audits/AUD-021-evidence/after-display.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "after-settings",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo test --locked --offline --bin mhfe settings::tests -- --test-threads=2",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "mhfe",
+          "settings::tests",
+          "--",
+          "--test-threads=2"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:24:27+00:00",
+        "endUtc": "2026-10-12T18:24:28+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [
+          {
+            "passed": 6,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filteredOut": 125
+          }
+        ],
+        "caseCounts": null,
+        "testNames": [
+          "settings::tests::the_isolation_line_fits_the_summary",
+          "settings::tests::the_locked_memory_line_fits_the_summary",
+          "settings::tests::time_ranges_use_one_readable_unit",
+          "settings::tests::unavailable_swap_warns_while_confirmed_empty_does_not",
+          "settings::tests::visible_swap_warnings_keep_their_classification_and_escape_names",
+          "settings::tests::only_a_free_memory_refusal_suggests_a_level"
+        ],
+        "diagnostics": [],
+        "logSha256": "9765bac406c26f04ec75ce30f6ee2aec270fc24630d1cd3f581dfb5f80c9f6e1",
+        "recordSha256": "185053506ddd45821d6c8c8cfd72f84816c2c59db69a41426b6c3e99e5407887",
+        "localEvidence": "docs/audits/AUD-021-evidence/after-settings.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "after-swap",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo test --locked --offline --bin mhfe swap -- --test-threads=2",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "mhfe",
+          "swap",
+          "--",
+          "--test-threads=2"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:24:00+00:00",
+        "endUtc": "2026-10-12T18:24:02+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [
+          {
+            "passed": 6,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filteredOut": 125
+          }
+        ],
+        "caseCounts": null,
+        "testNames": [
+          "protect::tests::a_denied_swap_inventory_remains_unavailable",
+          "protect::tests::a_missing_swap_inventory_is_not_confirmed_empty",
+          "protect::tests::an_unreadable_swap_inventory_is_not_confirmed_empty",
+          "settings::tests::unavailable_swap_warns_while_confirmed_empty_does_not",
+          "protect::tests::no_swap_needs_no_warning",
+          "settings::tests::visible_swap_warnings_keep_their_classification_and_escape_names"
+        ],
+        "diagnostics": [],
+        "logSha256": "a91d3ff7c633f51864468b904821a544db9729056a35a8cfa760c26a76f842e1",
+        "recordSha256": "1fdd867e3eae80074009d66e7d1042a88b0898eadf0e368cdee2b7a3e83e4649",
+        "localEvidence": "docs/audits/AUD-021-evidence/after-swap.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "after-terminal",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo test --locked --offline --bin mhfe terminal::tests -- --test-threads=2",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "mhfe",
+          "terminal::tests",
+          "--",
+          "--test-threads=2"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:24:27+00:00",
+        "endUtc": "2026-10-12T18:24:27+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [
+          {
+            "passed": 6,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filteredOut": 125
+          }
+        ],
+        "caseCounts": null,
+        "testNames": [
+          "terminal::tests::a_line_up_to_the_limit_keeps_its_buffer",
+          "terminal::tests::a_longer_line_is_refused",
+          "terminal::tests::durations_read_naturally",
+          "terminal::tests::only_the_line_break_is_removed",
+          "terminal::tests::the_advice_without_a_terminal_names_only_what_the_command_has",
+          "terminal::tests::lines_are_read_one_at_a_time_without_their_line_break"
+        ],
+        "diagnostics": [],
+        "logSha256": "3a74a62a5795c0cc4f7749faa596c9e403ae38a1545d470c11aa32197f482d31",
+        "recordSha256": "ba8f0e8466f3a879dd2657244fbfcb182fa98077ca04b845dfb5c884be501aa3",
+        "localEvidence": "docs/audits/AUD-021-evidence/after-terminal.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "before-display",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo test --locked --offline --bin mhfe a_generated_password_never_prints_without_a_private_screen -- --test-threads=1",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "mhfe",
+          "a_generated_password_never_prints_without_a_private_screen",
+          "--",
+          "--test-threads=1"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:23:16+00:00",
+        "endUtc": "2026-10-12T18:23:17+00:00",
+        "exitCode": 101,
+        "outcome": "failed",
+        "counts": [
+          {
+            "passed": 0,
+            "failed": 1,
+            "ignored": 0,
+            "measured": 0,
+            "filteredOut": 127
+          }
+        ],
+        "caseCounts": null,
+        "testNames": [],
+        "diagnostics": [
+          "thread 'made_password::tests::a_generated_password_never_prints_without_a_private_screen' (297) panicked at src/bin/mhfe/made_password.rs:245:9:",
+          "the generated password reached stderr without a private screen"
+        ],
+        "logSha256": "f1a4a3406f0511993c801319c9e7bacde2c3332305a95f0d8af0fb7bed5b6d6f",
+        "recordSha256": "e98168b4b7e2911dfc6e3198e6d04561ff14b90a143e814fa4f285fd5b54e5c5",
+        "localEvidence": "docs/audits/AUD-021-evidence/before-display.log",
+        "localOnly": true,
+        "note": "Expected regression failure after tests were added, before fixes."
+      },
+      {
+        "label": "before-swap",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo test --locked --offline --bin mhfe swap_inventory_is_not_confirmed_empty -- --test-threads=2",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "mhfe",
+          "swap_inventory_is_not_confirmed_empty",
+          "--",
+          "--test-threads=2"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:22:54+00:00",
+        "endUtc": "2026-10-12T18:22:57+00:00",
+        "exitCode": 101,
+        "outcome": "failed",
+        "counts": [
+          {
+            "passed": 0,
+            "failed": 2,
+            "ignored": 0,
+            "measured": 0,
+            "filteredOut": 126
+          }
+        ],
+        "caseCounts": null,
+        "testNames": [],
+        "diagnostics": [
+          "thread 'protect::tests::a_missing_swap_inventory_is_not_confirmed_empty' (297) panicked at src/bin/mhfe/protect.rs:1031:9:",
+          "assertion `left != right` failed: AUD-020-SEC001: unknown inventory must not suppress the warning",
+          "thread 'protect::tests::an_unreadable_swap_inventory_is_not_confirmed_empty' (298) panicked at src/bin/mhfe/protect.rs:1045:9:",
+          "assertion `left != right` failed: AUD-020-SEC001: failed inventory read must remain unknown"
+        ],
+        "logSha256": "f5ea0f60f289de7335f214dae3d992019e91bf367ef350dbfe6304a275903727",
+        "recordSha256": "20f979a68d0618ca25e9e5a5b014b88a02b06f2a7224049a159971916f61b641",
+        "localEvidence": "docs/audits/AUD-021-evidence/before-swap.log",
+        "localOnly": true,
+        "note": "Expected regression failure after tests were added, before fixes."
+      },
+      {
+        "label": "cli-build",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo build --locked --offline --bin mhfe",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "build",
+          "--locked",
+          "--offline",
+          "--bin",
+          "mhfe"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:25:41+00:00",
+        "endUtc": "2026-10-12T18:25:44+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [],
+        "caseCounts": null,
+        "testNames": [],
+        "diagnostics": [],
+        "logSha256": "a431a114250b54c4c8949de7995dc6432bff62c901e3bcf9883e6659a4019781",
+        "recordSha256": "fbe201464e4431a94d5c38acc77bf4f63c768622d568c7a9e8e95be93bca496b",
+        "localEvidence": "docs/audits/AUD-021-evidence/cli-build.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "clippy",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo clippy --locked --offline --all-targets --all-features -- -D warnings",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:25:10+00:00",
+        "endUtc": "2026-10-12T18:25:15+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [],
+        "caseCounts": null,
+        "testNames": [],
+        "diagnostics": [],
+        "logSha256": "63526cf6487c0ad6f4dd04f06e9f2778a45102211a806a680ae87ffa8af3f388",
+        "recordSha256": "f9c751dad0fb5e52c6bf5cf303a55b0bb21b91af6bf0f5153fc1db1c4c90b47a",
+        "localEvidence": "docs/audits/AUD-021-evidence/clippy.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "diff-check",
+        "command": "git diff --check",
+        "argv": ["git", "diff", "--check"],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+        },
+        "startUtc": "2026-10-12T18:28:37+00:00",
+        "endUtc": "2026-10-12T18:28:37+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [],
+        "caseCounts": null,
+        "testNames": [],
+        "diagnostics": [],
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "recordSha256": "352e295e1cc4b22319b88dfa3ed1ece34c5881468367a10186ce3f2957b3d6a3",
+        "localEvidence": "docs/audits/AUD-021-evidence/diff-check.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "release-note-format",
+        "command": "/home/user/.local/share/nodejs/node-v26.10.0-linux-x64/bin/node node_modules/prettier/bin/prettier.cjs --check docs/releases/unreleased.md",
+        "argv": [
+          "/home/user/.local/share/nodejs/node-v26.10.0-linux-x64/bin/node",
+          "node_modules/prettier/bin/prettier.cjs",
+          "--check",
+          "docs/releases/unreleased.md"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+        },
+        "startUtc": "2026-10-12T18:28:38+00:00",
+        "endUtc": "2026-10-12T18:28:38+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [],
+        "caseCounts": null,
+        "testNames": [],
+        "diagnostics": [],
+        "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+        "recordSha256": "9c41deb50c26e79274272cb49b19071cf3cbc38d5f6dbdfe80024cc21c0d07e6",
+        "localEvidence": "docs/audits/AUD-021-evidence/release-note-format.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "rust-format",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo fmt --check",
+        "argv": ["/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo", "fmt", "--check"],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+        },
+        "startUtc": "2026-10-12T18:25:11+00:00",
+        "endUtc": "2026-10-12T18:25:12+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [],
+        "caseCounts": null,
+        "testNames": [],
+        "diagnostics": [],
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "recordSha256": "869f604ab132b5e492ef92e26eb9e71a1db0512b44bfac5e99d06ea6035c2ca3",
+        "localEvidence": "docs/audits/AUD-021-evidence/rust-format.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "specification-control",
+        "command": "python3 -B -c 'from pathlib import Path; import json; checked=[]; spec=Path(\"../mhfe_spec/vectors\"); impl=Path(\"tests/fixtures\");\nfor suite in (\"suite3\",\"suite4\"):\n for p in sorted((spec/suite).glob(\"*.json\")):\n  q=impl/(suite+\"-vectors\")/p.name\n  if suite==\"suite3\" and p.name==\"validation-cases.json\":q=impl/p.name\n  assert p.read_bytes()==q.read_bytes(),str(p)\n  checked.append(str(q))\nprint(json.dumps({\"matchedFiles\":len(checked),\"scope\":\"Byte identity only; CLI host-control fix changes no algorithm or vectors\"}))'",
+        "argv": [
+          "python3",
+          "-B",
+          "-c",
+          "from pathlib import Path; import json; checked=[]; spec=Path(\"../mhfe_spec/vectors\"); impl=Path(\"tests/fixtures\");\nfor suite in (\"suite3\",\"suite4\"):\n for p in sorted((spec/suite).glob(\"*.json\")):\n  q=impl/(suite+\"-vectors\")/p.name\n  if suite==\"suite3\" and p.name==\"validation-cases.json\":q=impl/p.name\n  assert p.read_bytes()==q.read_bytes(),str(p)\n  checked.append(str(q))\nprint(json.dumps({\"matchedFiles\":len(checked),\"scope\":\"Byte identity only; CLI host-control fix changes no algorithm or vectors\"}))"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+        },
+        "startUtc": "2026-10-12T18:27:23+00:00",
+        "endUtc": "2026-10-12T18:27:24+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [],
+        "caseCounts": {
+          "matchedFiles": 31,
+          "scope": "Byte identity only; CLI host-control fix changes no algorithm or vectors"
+        },
+        "testNames": [],
+        "diagnostics": [],
+        "logSha256": "ac30e5cd17334a2e5c8d0913ec4ac77707d1a7bc9c105da21117f70308ca30a8",
+        "recordSha256": "c9dde1ab999121dc83afe55b3e1cb726afd90bd0f9bf93a209644d655912f165",
+        "localEvidence": "docs/audits/AUD-021-evidence/specification-control.log",
+        "localOnly": true,
+        "note": "31 fixture files byte-identical; no full-cost vector replay."
+      },
+      {
+        "label": "swap-classification-controls",
+        "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo test --locked --offline --bin mhfe -- a_plain_partition_is_unprotected dm_crypt_and_zram_are_protected lvm_without_encryption_is_unprotected a_file_whose_device_cannot_be_seen_is_unknown --test-threads=2",
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "mhfe",
+          "--",
+          "a_plain_partition_is_unprotected",
+          "dm_crypt_and_zram_are_protected",
+          "lvm_without_encryption_is_unprotected",
+          "a_file_whose_device_cannot_be_seen_is_unknown",
+          "--test-threads=2"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "2"
+        },
+        "startUtc": "2026-10-12T18:26:15+00:00",
+        "endUtc": "2026-10-12T18:26:16+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [
+          {
+            "passed": 4,
+            "failed": 0,
+            "ignored": 0,
+            "measured": 0,
+            "filteredOut": 127
+          }
+        ],
+        "caseCounts": null,
+        "testNames": [
+          "protect::tests::a_file_whose_device_cannot_be_seen_is_unknown",
+          "protect::tests::a_plain_partition_is_unprotected",
+          "protect::tests::dm_crypt_and_zram_are_protected",
+          "protect::tests::lvm_without_encryption_is_unprotected"
+        ],
+        "diagnostics": [],
+        "logSha256": "15e80ac808dfe6b8ce03512cbc9cb4158c99b4e3bd5a19196bca6d3d4babb951",
+        "recordSha256": "f0b5683040ecd0e24242ee79bd2b315c9d6b02b30d23ac7c9ed6598496950c32",
+        "localEvidence": "docs/audits/AUD-021-evidence/swap-classification-controls.log",
+        "localOnly": true,
+        "note": "Counts belong to this command; overlapping reruns are not added."
+      },
+      {
+        "label": "terminal-controls",
+        "command": "python3 -B docs/audits/AUD-021-harnesses/terminal.py target/debug/mhfe",
+        "argv": ["python3", "-B", "docs/audits/AUD-021-harnesses/terminal.py", "target/debug/mhfe"],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+        },
+        "startUtc": "2026-10-12T18:26:16+00:00",
+        "endUtc": "2026-10-12T18:26:25+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [],
+        "caseCounts": {
+          "focusedUnixFunctionsPassed": 3
+        },
+        "testNames": [],
+        "diagnostics": [],
+        "logSha256": "a86fc3503b55c7f3d5ad575c7fb4685daf0c99bcb5fc705baf3f093dcf79654d",
+        "recordSha256": "cb96da25406f0662f0f3047368fefb873cad56df5356a31c1bfe520c1a227323",
+        "localEvidence": "docs/audits/AUD-021-evidence/terminal-controls.log",
+        "localOnly": true,
+        "note": "Three existing Unix PTY functions, with their subcases; not the full terminal suite."
+      },
+      {
+        "label": "terminal-direct",
+        "command": "python3 -B docs/audits/AUD-021-harnesses/terminal.py target/debug/mhfe direct",
+        "argv": [
+          "python3",
+          "-B",
+          "docs/audits/AUD-021-harnesses/terminal.py",
+          "target/debug/mhfe",
+          "direct"
+        ],
+        "environment": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
+        },
+        "startUtc": "2026-10-12T18:27:22+00:00",
+        "endUtc": "2026-10-12T18:27:25+00:00",
+        "exitCode": 0,
+        "outcome": "passed",
+        "counts": [],
+        "caseCounts": {
+          "explicitPasswordKindsPassed": 3
+        },
+        "testNames": [],
+        "diagnostics": [],
+        "logSha256": "dbf22e96b46bb4ff38ca85d4c551669feab0a4a865a6ad2eef80d16684241585",
+        "recordSha256": "bd4878a022f4ff4d95528eb8b5aaca62e4a9d6064bcdf87704135c74f971e879",
+        "localEvidence": "docs/audits/AUD-021-evidence/terminal-direct.log",
+        "localOnly": true,
+        "note": "Words/check-word/chars exact explicit path; cancelled before Argon2; terminal restored."
+      }
+    ]
+  },
+  "targetedTests": {
+    "distinctPassed": 23,
+    "testNames": [
+      "made_password::tests::a_generated_password_never_prints_without_a_private_screen",
+      "made_password::tests::the_kinds_show_whole",
+      "made_password::tests::the_lines_fit_the_screen",
+      "protect::tests::a_denied_swap_inventory_remains_unavailable",
+      "protect::tests::a_file_whose_device_cannot_be_seen_is_unknown",
+      "protect::tests::a_missing_swap_inventory_is_not_confirmed_empty",
+      "protect::tests::a_plain_partition_is_unprotected",
+      "protect::tests::an_unreadable_swap_inventory_is_not_confirmed_empty",
+      "protect::tests::dm_crypt_and_zram_are_protected",
+      "protect::tests::lvm_without_encryption_is_unprotected",
+      "protect::tests::no_swap_needs_no_warning",
+      "settings::tests::only_a_free_memory_refusal_suggests_a_level",
+      "settings::tests::the_isolation_line_fits_the_summary",
+      "settings::tests::the_locked_memory_line_fits_the_summary",
+      "settings::tests::time_ranges_use_one_readable_unit",
+      "settings::tests::unavailable_swap_warns_while_confirmed_empty_does_not",
+      "settings::tests::visible_swap_warnings_keep_their_classification_and_escape_names",
+      "terminal::tests::a_line_up_to_the_limit_keeps_its_buffer",
+      "terminal::tests::a_longer_line_is_refused",
+      "terminal::tests::durations_read_naturally",
+      "terminal::tests::lines_are_read_one_at_a_time_without_their_line_break",
+      "terminal::tests::only_the_line_break_is_removed",
+      "terminal::tests::the_advice_without_a_terminal_names_only_what_the_command_has"
+    ],
+    "note": "Distinct passing Rust test names only; duplicated scoped runs and PTY cases are not added."
+  },
+  "findings": [],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-020-SEC001",
+      "category": "SEC",
+      "title": "Unreadable Linux swap inventory suppresses the secret-memory warning",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": false,
+      "fixCommit": null,
+      "verificationCommit": null,
+      "verifiedWorkingTree": true,
+      "correction": "SwapInventory::Unavailable preserves a failed read; the settings warning names unknown encryption. A readable empty inventory remains silent. Existing visible plaintext/unknown-device escaping and encrypted/zram classifications remain in the scoped tests.",
+      "verification": "Missing and directory-valued synthetic inventories and an injected PermissionDenied result are distinguished from a readable empty inventory. Warning strings and visible-area escaping/classification are checked. No actual swap paging, storage read or secret extraction.",
+      "evidence": [
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/before-swap.log",
+          "logSha256": "f5ea0f60f289de7335f214dae3d992019e91bf367ef350dbfe6304a275903727",
+          "outcome": "failed",
+          "localOnly": true
+        },
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/after-swap.log",
+          "logSha256": "a91d3ff7c633f51864468b904821a544db9729056a35a8cfa760c26a76f842e1",
+          "outcome": "passed",
+          "localOnly": true
+        },
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/after-settings.log",
+          "logSha256": "9765bac406c26f04ec75ce30f6ee2aec270fc24630d1cd3f581dfb5f80c9f6e1",
+          "outcome": "passed",
+          "localOnly": true
+        },
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/swap-classification-controls.log",
+          "logSha256": "15e80ac808dfe6b8ce03512cbc9cb4158c99b4e3bd5a19196bca6d3d4babb951",
+          "outcome": "passed",
+          "localOnly": true
+        },
+        {
+          "path": "src/bin/mhfe/protect.rs",
+          "beforeSha256": "c8ce24394c08c9afedb605b72c2a1c2208a37093cb0f7a42c5b0a2f0a0977bb8",
+          "afterSha256": "94c103f1057bd5901564d506a4895c3b767baae35d00b6a5e69d6d4de2794e0f"
+        },
+        {
+          "path": "src/bin/mhfe/settings.rs",
+          "beforeSha256": "bffdc12567667c675f76a830c407edf1a26470230eb426a444e37423eb157563",
+          "afterSha256": "e7600572c563eb2c7bec2641051b4f47a3306b4bf006d994c5e4ff14a2f5399f"
+        }
+      ],
+      "sourceFingerprint": "890bb277bf6575a387f2d5637df6e074a550788ba4810ec70f6fa972e4dd07e1",
+      "formalClosure": "Pending a signed fix/verification commit; fixed is a working-tree disposition, not formal verified closure. Original AUD-020 remains open at its reviewed snapshot."
+    },
+    {
+      "id": "AUD-020-SEC002",
+      "category": "SEC",
+      "title": "Generated password can reach the main Windows console when VT activation fails",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": false,
+      "fixCommit": null,
+      "verificationCommit": null,
+      "verifiedWorkingTree": true,
+      "correction": "Shared terminal eligibility now requires VT capability. After acquiring PrivateScreen, the common generated-password sink refuses unless shows_privately() confirms an actual or enclosing private screen, before any password text is written.",
+      "verification": "Before the patch, the isolated no-terminal regression detected generated-password output; afterward it confirms refusal and no output. Scoped PTY acceptance covers the shared words/check-word/chars display and enclosing flow according to the recorded harness output. Windows VT API failure, console retention and real Windows runtime remain unexecuted.",
+      "evidence": [
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/before-display.log",
+          "logSha256": "f1a4a3406f0511993c801319c9e7bacde2c3332305a95f0d8af0fb7bed5b6d6f",
+          "outcome": "failed",
+          "localOnly": true
+        },
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/after-display.log",
+          "logSha256": "e70e35af1d3931969ca95e0bac4d8aa4cd6250e970eab88437d5e530f5f00529",
+          "outcome": "passed",
+          "localOnly": true
+        },
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/after-terminal.log",
+          "logSha256": "3a74a62a5795c0cc4f7749faa596c9e403ae38a1545d470c11aa32197f482d31",
+          "outcome": "passed",
+          "localOnly": true
+        },
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/terminal-controls.log",
+          "logSha256": "a86fc3503b55c7f3d5ad575c7fb4685daf0c99bcb5fc705baf3f093dcf79654d",
+          "outcome": "passed",
+          "localOnly": true
+        },
+        {
+          "localEvidence": "docs/audits/AUD-021-evidence/terminal-direct.log",
+          "logSha256": "dbf22e96b46bb4ff38ca85d4c551669feab0a4a865a6ad2eef80d16684241585",
+          "outcome": "passed",
+          "localOnly": true
+        },
+        {
+          "path": "src/bin/mhfe/made_password.rs",
+          "beforeSha256": "9240335f441a3b723aa347e64732c90cfffe883fa9b894b73167146de36687ad",
+          "afterSha256": "9c1c2124334f3818a431e7c94c4eb7ee7d954ff5c5c8f472bf2a979a2338b6a4"
+        },
+        {
+          "path": "src/bin/mhfe/terminal.rs",
+          "beforeSha256": "c51d0261227015570c6dd99e7a58d86dda8f094f64e0ca0dc7264c44d326667f",
+          "afterSha256": "ea0fb4dda2abd72930e33618daded38d836b29b719428015cd8d9e68e0e01a4a"
+        }
+      ],
+      "sourceFingerprint": "890bb277bf6575a387f2d5637df6e074a550788ba4810ec70f6fa972e4dd07e1",
+      "formalClosure": "Pending a signed fix/verification commit; fixed is a working-tree disposition, not formal verified closure. Original AUD-020 remains open at its reviewed snapshot."
+    }
+  ],
+  "limitations": [
+    "Both fixes and scoped regressions pass in the dirty working tree; no signed fix or verification commit was requested or created. Formal status remains fixed, not verified.",
+    "Original three failing assertions remain in before-swap/before-display logs. They were regression runs after tests were added, not new findings or passing baseline checks.",
+    "No actual Windows VT activation failure, Windows/macOS runtime, console retention, forced paging, swap storage read or secret extraction was exercised.",
+    "Injected PermissionDenied and missing/directory synthetic procfs inventories test error handling, not host encryption itself.",
+    "No new full security scan, full-cost Argon2/vector replay, real browser suite, canonical Docker/WASM rebuild, release verification or publication. Algorithm, formats and public APIs did not change.",
+    "Terminal control support cannot guarantee privacy on a hostile terminal/host; the new guard proves the program refuses an inactive private-screen state in the tested path.",
+    "Local raw evidence is unchanged and ignored. Published home paths are anonymized; local-only artifacts are not public downloadable assets."
+  ],
+  "assessment": "Both original Low findings are fixed with passing scoped dirty-source verification. No new finding IDs or release-acceptance claim; signed-commit formal closure remains pending.",
+  "reportGenerator": {
+    "path": "docs/audits/AUD-021-harnesses/build_report.py",
+    "sha256": "bf26595739aaffab88720740cf80b8cef9c4dc752140df8911d5ef65e20d01b3"
+  },
+  "privacyRedaction": {
+    "timeZone": "UTC (+00:00)",
+    "timestampsUTC": true,
+    "newAudit": false,
+    "amendments": [
+      {
+        "dateUtc": "2026-10-13",
+        "authorizedBy": "repository owner",
+        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
+        "documentBindings": [],
+        "reportDocument": {
+          "document": "docs/audits/AUD-021-2026-10-12.md",
+          "previousSha256": "6131cb3e32d57719c53c78c28353b3282e3438b5bf9d1624fff70411bbbbf51c",
+          "redactedSha256": "acd48518fa4d6a592b4163e710f5a5694801362466caf39636bd527eda6d82a6"
+        },
+        "commitMap": {
+          "0155c951ab9deee0301b7e37b42ebc994cbd28b7": "e8dca53a5d17cb80f1f5ac1f5a40b351f939e7e7"
+        },
+        "commitRewrite": {
+          "kind": "owner-authorized-signed-privacy-amend",
+          "originalCommit": "0155c951ab9deee0301b7e37b42ebc994cbd28b7",
+          "originalTree": "21c1c8ca3742a236694935ba398266a5e99956d8",
+          "replacementCommit": "e8dca53a5d17cb80f1f5ac1f5a40b351f939e7e7",
+          "replacementTree": "ed5a650ac07c3d41907f4310277b90f08fd84b79",
+          "originalCommitRetention": "local audit-snapshot ref; no checkout or published tag",
+          "productFilesOutsideAuditsUnchanged": true,
+          "fullTreesIdentical": false,
+          "historicalReviewedCommitFieldsPreserved": true,
+          "historicalSourceHashesPreserved": true,
+          "checksRerun": false,
+          "note": "Full trees differ only within docs/audits/ (publication metadata and the historical report emitter). Original snapshots and evidence describe the original bytes. The replacement commit is not a new audit or an exact full-tree equivalence claim."
+        }
+      }
+    ],
+    "kind": "privacy-only-metadata-redaction"
+  }
+}
