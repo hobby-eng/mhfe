@@ -4,7 +4,7 @@
 # native program and for every WebAssembly build, the fast tests and Prettier, in a few minutes.
 # scripts/check.sh runs them first, then the slow checks of a release.
 #
-# Needs the pinned Rust toolchain and Node.js with the tools of `npm ci --ignore-scripts`.
+# Needs the pinned Rust toolchain and Node.js with the tools of `pnpm install --frozen-lockfile`.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,5 +29,5 @@ done
 # On x86-64 the tests run both the SSE2 and the SSSE3 copy of the Argon2 core.
 cargo test --locked
 # The workspace style for JavaScript, Markdown, JSON and YAML: double quotes, 100 columns.
-npm run --silent format:check
+pnpm run --silent format:check
 echo "The fast checks passed."

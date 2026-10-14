@@ -55,13 +55,15 @@ jobs:
           if foreign:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
-      # The Node.js of the workspace for Prettier, the browser package checks and Playwright.
+      # The Node.js of the workspace for Prettier, the browser package checks and Playwright, and
+      # pnpm, in the version package.json names in packageManager.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-      # The tools come from package-lock.json, each checked against its integrity hash.
+      # The tools come from pnpm-lock.yaml, each checked against its integrity hash.
       - name: Install the Node.js tools
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile
       # Formatting, the copy gate, clippy for native and WebAssembly, the fast tests (including the
       # C/Rust Argon2 cross-check) and Prettier.
       - name: Run the fast checks
@@ -94,7 +96,7 @@ jobs:
         if: ${{ env.RELEASE_CHECKS == 'true' }}
         timeout-minutes: 245
         run: |
-          npx playwright install --with-deps chromium firefox
+          pnpm exec playwright install --with-deps chromium firefox
           node scripts/verify-browsers.mjs
       # The results and console messages of each page, for a run that failed or stopped.
       - name: Keep the browser logs

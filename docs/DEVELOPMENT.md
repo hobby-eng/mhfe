@@ -36,17 +36,19 @@ scripts/check-fast.sh
 scripts/check.sh
 ```
 
-Markdown and JavaScript use the repository's pinned Prettier. Install the existing development
-dependencies from the lockfile and check formatting with:
+Markdown and JavaScript use the repository's pinned Prettier. The Node.js tools come through
+pnpm, in the version that `packageManager` in `package.json` names (with Corepack:
+`corepack enable`). Install the development dependencies from the lockfile and check formatting
+with:
 
 ```sh
-npm ci --ignore-scripts && npm run format:check
+pnpm install --frozen-lockfile && pnpm run format:check
 ```
 
 After `scripts/check.sh` has built the browser package, check it in Chromium and Firefox:
 
 ```sh
-npm run check:browsers
+pnpm run check:browsers
 ```
 
 The canonical Docker build is:

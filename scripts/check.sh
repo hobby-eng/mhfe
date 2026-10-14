@@ -5,7 +5,7 @@
 # vectors.yml does that, in about three hours.
 #
 # Needs the pinned Rust toolchain, wasm-bindgen 0.2.129, Emscripten 6.0.12, Node.js with the tools
-# of `npm ci --ignore-scripts`, Python 3, GNU tar and zip.
+# of `pnpm install --frozen-lockfile`, Python 3, GNU tar and zip.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
