@@ -2,6 +2,7 @@
   "name": "mhfe-tooling",
   "private": true,
   "description": "Development tools for the mhfe repository: the Prettier formatter and Playwright for the real-browser check. The program itself is Rust.",
+  "packageManager": "pnpm@12.8.1",
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",

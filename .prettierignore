@@ -17,3 +17,4 @@ docs/audits/*-evidence/
 /docs/audits/
 /node_modules/
 /package-lock.json
+/pnpm-lock.yaml
