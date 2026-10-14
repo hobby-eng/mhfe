@@ -50,6 +50,18 @@ if [[ -z "$source_state" ]]; then
   fi
 fi
 
+# The provenance lines of BUILD-INFO.txt, read from their sources: the vendored Argon2 commit as
+# vendor/phc-winner-argon2.md records it, and the Emscripten version that
+# scripts/build-argon2-wasm.sh, which made the browser package's Argon2 builds, accepts alone.
+argon2_commit="$(sed -nE 's/^\| Commit +\| `([0-9a-f]{40})`.*$/\1/p' vendor/phc-winner-argon2.md)"
+emscripten_version="$(
+  sed -nE 's/^expected_emscripten="([^"]+)"$/\1/p' scripts/build-argon2-wasm.sh
+)"
+if [[ -z "$argon2_commit" || -z "$emscripten_version" ]]; then
+  echo "Cannot read the Argon2 commit or the Emscripten version from their sources." >&2
+  exit 1
+fi
+
 add_common_files() {
   local folder="$1"
   if [[ -e "$folder/README.md" ]]; then
@@ -66,7 +78,7 @@ add_common_files() {
     echo "source: $source_commit ($source_state)"
     rustc --version --verbose
     wasm-bindgen --version 2>/dev/null || true
-    echo "Argon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb"
+    echo "Argon2: vendor/phc-winner-argon2 at $argon2_commit"
   } > "$folder/BUILD-INFO.txt"
 }
 
@@ -131,7 +143,7 @@ for package in "${packages[@]}"; do
       # and that the files in the archive match it.
       (cd "$folder" && sed -n '/^## SHA-256 of this build$/,$p' README.md | grep -E '^[0-9a-f]{64}  ' |
         sha256sum --check --quiet --strict -)
-      echo "Emscripten 6.0.12" >> "$folder/BUILD-INFO.txt"
+      echo "Emscripten $emscripten_version" >> "$folder/BUILD-INFO.txt"
       pack "$folder" "mhfe-$version-browser.tar.gz"
       ;;
     *)

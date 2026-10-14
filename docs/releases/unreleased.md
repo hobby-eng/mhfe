@@ -74,5 +74,7 @@ are cancelled.
 
 - The Windows zip's permission bits no longer depend on the umask of the checkout, and
   `THIRD_PARTY_NOTICES.md` covers the Rust standard library and the crates it is built from.
+- `BUILD-INFO.txt` reads the vendored Argon2 commit and the Emscripten version from their sources,
+  and a check keeps every copy of the pinned versions equal to its source.
 - The vendored Argon2 gate refuses an added file, and the no-network gates share one list of
   patterns.

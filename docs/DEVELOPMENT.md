@@ -1,8 +1,8 @@
 # Developing MHFE
 
-The command-line tool, Rust library and browser package implement the same algorithm. Use the
-toolchains and workspace rules in [AGENTS.md](../AGENTS.md). The library interfaces are in
-[API.md](API.md); browser integration is in [BROWSER-PACKAGE.md](BROWSER-PACKAGE.md).
+The command-line tool, Rust library and browser package implement the same algorithm. The
+toolchains are pinned as "Build from source" says. The library interfaces are in [API.md](API.md);
+browser integration is in [BROWSER-PACKAGE.md](BROWSER-PACKAGE.md).
 
 ## Build from source
 
@@ -14,7 +14,17 @@ cargo build --release --locked
 
 The program is then `target/release/mhfe` (`mhfe.exe` on Windows). The pinned Rust toolchain is
 recorded in `rust-toolchain.toml`; Node's version is in `.node-version`. Browser builds also need
-wasm-bindgen and Emscripten, as [AGENTS.md](../AGENTS.md) describes.
+the wasm-bindgen command-line tool 0.2.129 and Emscripten 6.0.12, installed as CI installs them:
+
+```sh
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
+git clone --depth 1 --branch 6.0.12 https://github.com/emscripten-core/emsdk.git
+emsdk/emsdk install 6.0.12 && emsdk/emsdk activate 6.0.12 && . emsdk/emsdk_env.sh
+```
+
+`scripts/bind-wasm.sh` and `scripts/build-argon2-wasm.sh` refuse any other version, and the
+canonical build uses the `emscripten/emsdk:6.0.12` image (`packaging/Dockerfile.reproducible`).
+`scripts/verify-pinned-versions.mjs` keeps these versions equal to the scripts' own.
 
 Release builds and the scripts below replace the builder's own paths in the native program and
 WebAssembly through `packaging/remap-builder-paths.sh`. They refuse `RUSTFLAGS` and
@@ -26,11 +36,11 @@ as `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS`.
 Run the smallest check appropriate to a change. The fast tests use a reduced Argon2 cost.
 `scripts/check-fast.sh` runs the fast checks that CI runs on every push and pull request:
 formatting, the copy and code-rules gates (`scripts/verify-no-copies.mjs`,
-`scripts/verify-code-rules.mjs`), clippy for every build, the fast tests, the browser package's
-types (`pnpm run check:types`), the lint (`pnpm run lint`) and Prettier. The complete local
-check, `scripts/check.sh`, adds the builds, the browser package, CLI/browser parity and the
-terminal cases at full size, but not the full-size vectors; CI runs it for a release tag and by
-hand:
+`scripts/verify-code-rules.mjs`), the pinned versions (`scripts/verify-pinned-versions.mjs`),
+clippy for every build, the fast tests, the browser package's types (`pnpm run check:types`), the
+lint (`pnpm run lint`) and Prettier. The complete local check, `scripts/check.sh`, adds the
+builds, the browser package, CLI/browser parity and the terminal cases at full size, but not the
+full-size vectors; CI runs it for a release tag and by hand:
 
 ```sh
 cargo test --locked
