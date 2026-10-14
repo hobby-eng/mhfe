@@ -23,12 +23,16 @@ as `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS`.
 
 ## Checks
 
-Run the smallest check appropriate to a change. The fast tests use a reduced Argon2 cost; the
-complete local check includes lints, tests, builds, the browser package and CLI/browser parity,
-but not the full-size vectors:
+Run the smallest check appropriate to a change. The fast tests use a reduced Argon2 cost.
+`scripts/check-fast.sh` runs the fast checks that CI runs on every push and pull request:
+formatting, the copy gate, clippy for every build, the fast tests and Prettier. The complete
+local check, `scripts/check.sh`, adds the builds, the browser package, CLI/browser parity and the
+terminal cases at full size, but not the full-size vectors; CI runs it for a release tag and by
+hand:
 
 ```sh
 cargo test --locked
+scripts/check-fast.sh
 scripts/check.sh
 ```
 
@@ -91,7 +95,7 @@ Do not give it every JSON file in the directory: verification records and suite 
 
 These commands are the independent checks used by `.github/workflows/vectors.yml`. Full-size
 replays run for a release tag or an explicit workflow request, rather than on a branch push;
-the ordinary CI uses fast checks. See [RELEASING.md](RELEASING.md) for the release sequence.
+the ordinary CI uses the fast checks. See [RELEASING.md](RELEASING.md) for the release sequence.
 
 ## Generated tables
 
