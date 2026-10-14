@@ -39,6 +39,7 @@ use mhfe::word_hints::WordList;
 use zeroize::Zeroizing;
 
 use crate::exit::Failure;
+use crate::standard_input::StandardInput;
 use crate::typed_line::{self, Hints, LineScreen};
 
 /// The terminal settings to restore while a hidden prompt has changed them. Whoever changes or
@@ -47,7 +48,7 @@ static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);
 
 /// What a line holds, which decides the keys that edit it and the hints below it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Content {
+pub(crate) enum Content {
     /// Free text, such as a BIP39 passphrase: no hints, and every other key is data.
     Text,
     /// A password: every other key is data, and where it is shown the words of the EFF list are
@@ -88,32 +89,62 @@ impl Content {
 /// switched before the prompt appears, so that a key typed or text pasted as soon as the prompt
 /// shows is already read as data. On Windows the standard library turns the console's UTF-16
 /// characters into UTF-8 bytes.
-pub fn read_line(
+pub(crate) fn read_line(
     prompt: &str,
     shown: bool,
     content: Content,
 ) -> Result<Option<LockedText>, Failure> {
-    let result = with_terminal_switched(platform::hide, || {
-        crate::style::prompt(prompt);
-        io::Write::flush(&mut io::stderr())?;
-        if !shown {
-            return edit_line(&mut io::stdin().lock(), None, content);
+    loop {
+        let mut announced = false;
+        let result = with_terminal_switched(platform::hide, || {
+            crate::style::prompt(prompt);
+            io::Write::flush(&mut io::stderr())?;
+            let mut announce = |failure: &Failure| {
+                announced = true;
+                eprintln!();
+                crate::style::retry(format!(
+                    "{} Press Enter to discard this line.",
+                    failure.message
+                ));
+                crate::style::prompt(&format!("{prompt}(discarding until Enter) "));
+            };
+            if !shown {
+                return edit_line_reporting(
+                    &mut StandardInput::new(),
+                    None,
+                    content,
+                    &mut announce,
+                );
+            }
+            let (mut controls, mut text) = (io::stderr(), anstream::stderr());
+            // The prompt's cells by the same rule as the characters typed after it.
+            let width = typed_line::text_cells(prompt);
+            let columns = columns_or_default();
+            let mut screen =
+                LineScreen::new(&mut controls, &mut text, width, columns, content.hints());
+            edit_line_reporting(
+                &mut StandardInput::new(),
+                Some(&mut screen),
+                content,
+                &mut announce,
+            )
+        });
+        // The terminal did not show the Enter key either.
+        eprintln!();
+        match result {
+            Err(failure) if failure.exit_code == crate::exit::INVALID_INPUT => {
+                if !announced {
+                    crate::style::retry(format!("{} Type the answer again.", failure.message));
+                }
+            }
+            other => return other,
         }
-        let (mut controls, mut text) = (io::stderr(), anstream::stderr());
-        // The prompt's cells by the same rule as the characters typed after it.
-        let width = typed_line::text_cells(prompt);
-        let columns = columns_or_default();
-        let mut screen = LineScreen::new(&mut controls, &mut text, width, columns, content.hints());
-        edit_line(&mut io::stdin().lock(), Some(&mut screen), content)
-    });
-    // The terminal did not show the Enter key either.
-    anstream::eprintln!();
-    result
+    }
 }
 
 /// A key that the menu acts on.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Key {
+pub(crate) enum Key {
     Up,
     Down,
     Enter,
@@ -129,7 +160,7 @@ pub enum Key {
 }
 
 /// How soon after a screen or a question first waits for a key a key counts as typed before it
-/// appeared: keys waiting in the terminal or in the standard library's buffer, such as an Enter
+/// appeared: keys waiting in the terminal or in the reader's buffer, such as an Enter
 /// typed during a long recovery, arrive within microseconds, while a person needs far longer than
 /// this to read what appeared and answer.
 const TYPED_AHEAD: std::time::Duration = std::time::Duration::from_millis(200);
@@ -141,11 +172,11 @@ const TYPED_AHEAD: std::time::Duration = std::time::Duration::from_millis(200);
 /// be left, such as one that shows a secret once, take only keys pressed after they appeared, so
 /// that a key typed during long work answers nothing (AUD-018, AUD-023-UI003). Only the end of the
 /// input ends the wait at once, as no key can follow it.
-pub fn with_keys<T>(
+pub(crate) fn with_keys<T>(
     choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
 ) -> Result<T, Failure> {
     with_terminal_switched(platform::single_keys, || {
-        let mut keys = TerminalKeys::new(io::stdin().lock());
+        let mut keys = TerminalKeys::new(StandardInput::new());
         let mut waits_since: Option<std::time::Instant> = None;
         choose(&mut || loop {
             let since = *waits_since.get_or_insert_with(std::time::Instant::now);
@@ -182,7 +213,7 @@ fn with_terminal_switched<T>(
 
 /// For the Ctrl+C handler: restores the terminal if a hidden prompt changed it, and keeps the lock
 /// until `exit` has ended the tool, so that no new prompt can change the terminal in between.
-pub fn restore_and_exit(exit: fn() -> !) -> ! {
+pub(crate) fn restore_and_exit(exit: fn() -> !) -> ! {
     let mut saved = lock_saved();
     if let Some(original) = saved.take() {
         platform::restore(&original);
@@ -212,12 +243,12 @@ fn echo_stays_on() -> Failure {
 }
 
 /// The identifier of [`HiddenInputCheck`] in a self-check report.
-pub const HIDDEN_INPUT_ID: &str = mhfe::self_check::process::HIDDEN_INPUT.id;
+pub(crate) const HIDDEN_INPUT_ID: &str = mhfe::self_check::process::HIDDEN_INPUT.id;
 
 /// The `hidden-input` check of the full self-test: the terminal on standard input is switched as
 /// for a hidden prompt, read back and restored. Every prompt for a secret reads the switch back as
 /// well and refuses to read when the echo stays on.
-pub struct HiddenInputCheck;
+pub(crate) struct HiddenInputCheck;
 
 impl ComponentCheck for HiddenInputCheck {
     fn id(&self) -> &'static str {
@@ -247,36 +278,36 @@ impl ComponentCheck for HiddenInputCheck {
 
 /// The keys that edit a hidden line; every other byte is kept.
 mod keys {
-    pub const BACKSPACE: u8 = 0x08;
-    pub const DELETE: u8 = 0x7f;
-    pub const CTRL_U: u8 = 0x15;
+    pub(super) const BACKSPACE: u8 = 0x08;
+    pub(super) const DELETE: u8 = 0x7f;
+    pub(super) const CTRL_U: u8 = 0x15;
     /// In a line of words only: elsewhere it is data.
-    pub const CTRL_W: u8 = 0x17;
+    pub(super) const CTRL_W: u8 = 0x17;
     /// In a line of words only: elsewhere it is data.
-    pub const TAB: u8 = b'\t';
-    pub const CTRL_D: u8 = 0x04;
+    pub(super) const TAB: u8 = b'\t';
+    pub(super) const CTRL_D: u8 = 0x04;
     /// Normally the terminal turns Ctrl+C into a signal; should the byte arrive, it quits too.
-    pub const CTRL_C: u8 = 0x03;
-    pub const ESCAPE: u8 = 0x1b;
+    pub(super) const CTRL_C: u8 = 0x03;
+    pub(super) const ESCAPE: u8 = 0x1b;
 }
 
 /// The width of the terminal on standard error, in columns, or `None` when it cannot be read.
-pub fn columns() -> Option<usize> {
+pub(crate) fn columns() -> Option<usize> {
     platform::columns()
 }
 
 /// The width assumed when it cannot be read: the usual 80 columns.
-pub const DEFAULT_COLUMNS: usize = 80;
+pub(crate) const DEFAULT_COLUMNS: usize = 80;
 
 /// [`columns`], or [`DEFAULT_COLUMNS`] when the width cannot be read; at least 1. The one
 /// fallback of every redraw (AUD-023-ARC014).
-pub fn columns_or_default() -> usize {
+pub(crate) fn columns_or_default() -> usize {
     columns().unwrap_or(DEFAULT_COLUMNS).max(1)
 }
 
 /// Whether the terminal on standard error carries out control sequences such as the switch to the
 /// alternate screen; on Windows the console is asked to do so first.
-pub fn control_sequences() -> bool {
+pub(crate) fn control_sequences() -> bool {
     platform::control_sequences()
 }
 
@@ -284,7 +315,7 @@ pub fn control_sequences() -> bool {
 /// terminals, TERM is not "dumb", and the terminal carries out control sequences. Lists, word
 /// hints and the private screen need it; elsewhere a line is read and written plainly
 /// (AUD-023-UI004). The one test of TERM=dumb.
-pub fn can_redraw() -> bool {
+pub(crate) fn can_redraw() -> bool {
     io::stdin().is_terminal()
         && io::stderr().is_terminal()
         && std::env::var_os("TERM").is_none_or(|term| term != "dumb")
@@ -294,7 +325,7 @@ pub fn can_redraw() -> bool {
 /// Whether standard output and standard error are one terminal, so that the private screen,
 /// switched and cleared through standard error, also holds and clears what goes to standard output.
 /// Output redirected to another terminal would stay there, on its main screen (AUD-008-SEC004).
-pub fn output_on_error_terminal() -> bool {
+pub(crate) fn output_on_error_terminal() -> bool {
     platform::output_on_error_terminal()
 }
 
@@ -312,12 +343,12 @@ trait KeySource {
     fn more_within(&mut self, delay: Duration) -> Result<bool, Failure>;
 }
 
-/// The keys typed at the terminal. Whatever the standard library has read from the terminal is
-/// taken over at once, so that its buffer stays empty and only the operating system needs to be
-/// asked whether more is coming. Bytes still here when a choice ends are dropped with this
-/// reader: a key pressed once too often must not end up in the next answer, such as a password.
-struct TerminalKeys<'a> {
-    input: io::StdinLock<'a>,
+/// The keys typed at the terminal. Whatever the reader of standard input has read is taken over at
+/// once, so that its buffer stays empty and only the operating system needs to be asked whether
+/// more is coming. Bytes still here when a choice ends are dropped with this reader: a key pressed
+/// once too often must not end up in the next answer, such as a password.
+struct TerminalKeys {
+    input: StandardInput,
     /// Bytes taken over and not yet read; wiped when dropped, as they could be typed-ahead text.
     pending: Zeroizing<Vec<u8>>,
     next: usize,
@@ -325,12 +356,13 @@ struct TerminalKeys<'a> {
     ended: bool,
 }
 
-impl<'a> TerminalKeys<'a> {
-    fn new(input: io::StdinLock<'a>) -> Self {
+impl TerminalKeys {
+    fn new(input: StandardInput) -> Self {
         Self {
             input,
-            // Reserved at the size of the standard library's buffer, whose contents it takes
-            // whole, so that it is never reallocated and leaves no unwiped copy.
+            // Reserved at the size of the longest answer, at least what the reader's buffer holds
+            // (one byte on Unix, the standard library's buffer on Windows), whose contents it
+            // takes whole, so that it is never reallocated and leaves no unwiped copy.
             pending: Zeroizing::new(Vec::with_capacity(crate::terminal::LINE_CAPACITY)),
             next: 0,
             ended: false,
@@ -338,7 +370,7 @@ impl<'a> TerminalKeys<'a> {
     }
 }
 
-impl KeySource for TerminalKeys<'_> {
+impl KeySource for TerminalKeys {
     fn next_byte(&mut self) -> Result<Option<u8>, Failure> {
         if self.next == self.pending.len() {
             self.pending.clear();
@@ -428,17 +460,18 @@ fn arrow(final_byte: Option<u8>) -> Key {
 /// what they remove, and the hint follows each change. The line keeps the lock of its buffer, and
 /// a line that ends in any other way, refused or closed, is wiped before its pages are unlocked
 /// (AUD-010).
-fn edit_line(
+fn edit_line_reporting(
     reader: &mut impl io::Read,
     screen: Option<&mut LineScreen>,
     content: Content,
+    announce: &mut impl FnMut(&Failure),
 ) -> Result<Option<LockedText>, Failure> {
     use crate::terminal::LINE_CAPACITY;
 
     let mut closed = false;
     // Locked before anything is typed into it: the line may be a password or a phrase.
     let line = LockedBytes::build(LINE_CAPACITY, |line| {
-        closed = LineEditor::new(screen, content, line).edit(reader)?;
+        closed = LineEditor::new(screen, content, line).edit(reader, announce)?;
         Ok::<(), Failure>(())
     })?;
     crate::terminal::note_unlocked(line.is_locked());
@@ -483,7 +516,11 @@ impl<'e, 's> LineEditor<'e, 's> {
     }
 
     /// Edits until the line ends; returns whether the person closed the input instead.
-    fn edit(&mut self, reader: &mut impl io::Read) -> Result<bool, Failure> {
+    fn edit(
+        &mut self,
+        reader: &mut impl io::Read,
+        announce: &mut impl FnMut(&Failure),
+    ) -> Result<bool, Failure> {
         use keys::{BACKSPACE, CTRL_D, CTRL_U, CTRL_W, DELETE, TAB};
 
         let mut byte = Zeroizing::new([0u8; 1]);
@@ -507,7 +544,18 @@ impl<'e, 's> LineEditor<'e, 's> {
                 (CTRL_W, Some(_)) => self.remove(self.last_word())?,
                 (TAB, Some(list)) => self.complete_word(list)?,
                 (CTRL_D, _) if self.line.is_empty() => return Ok(true),
-                (other, _) => self.push(other)?,
+                (other, _) => {
+                    if let Err(failure) = self.push(other) {
+                        if failure.exit_code == crate::exit::INVALID_INPUT {
+                            // Finish the refused line before a retry, so its remaining bytes can
+                            // never answer the next prompt. No discarded byte is retained.
+                            self.end()?;
+                            announce(&failure);
+                            discard_line(reader)?;
+                        }
+                        return Err(failure);
+                    }
+                }
             }
         }
     }
@@ -523,11 +571,8 @@ impl<'e, 's> LineEditor<'e, 's> {
     /// Adds a byte of a character. A complete character is shown unless it is a control
     /// character, and the hint follows.
     fn push(&mut self, byte: u8) -> Result<(), Failure> {
-        use crate::terminal::LINE_CAPACITY;
-        if self.line.len() == LINE_CAPACITY {
-            return Err(Failure::invalid_input(format!(
-                "An answer is longer than {LINE_CAPACITY} bytes; no valid answer is that long."
-            )));
+        if self.line.len() == crate::terminal::ANSWER_BYTES {
+            return Err(crate::terminal::too_long_answer());
         }
         self.line.push(byte);
         match std::str::from_utf8(&self.line[self.complete..]) {
@@ -632,6 +677,27 @@ impl<'e, 's> LineEditor<'e, 's> {
     }
 }
 
+/// Consumes the rest of a refused raw-terminal line without retaining its bytes.
+fn discard_line(reader: &mut impl io::Read) -> Result<(), Failure> {
+    // A paste can pause: only its line ending restores the frame. A continuously arriving stream
+    // that cannot be discarded within the budget stops the command rather than becoming input.
+    const BUDGET: Duration = Duration::from_secs(5);
+    let started = std::time::Instant::now();
+    let mut byte = Zeroizing::new([0u8; 1]);
+    loop {
+        match reader.read(&mut byte[..]) {
+            Ok(0) => return Ok(()),
+            Ok(_) if matches!(byte[0], b'\r' | b'\n' | keys::CTRL_D) => return Ok(()),
+            Ok(_) if started.elapsed() >= BUDGET => return Err(Failure::internal(
+                "Could not discard the refused input within 5 seconds; stop the paste and run the command again."
+            )),
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
 /// One character of a line as the editor took it.
 #[derive(Clone, Copy)]
 struct Entry {
@@ -687,6 +753,15 @@ fn not_shown(character: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The line reader with an output observer supplied by the test host.
+    fn edit_line(
+        reader: &mut impl io::Read,
+        screen: Option<&mut LineScreen>,
+        content: Content,
+    ) -> Result<Option<LockedText>, Failure> {
+        edit_line_reporting(reader, screen, content, &mut |_| {})
+    }
 
     /// Control and invisible formatting characters stay off the screen; letters of any script and
     /// a wide character are shown.
@@ -929,7 +1004,6 @@ mod tests {
         assert!(mhfe::Password::new(&text).is_ok());
     }
 
-    /// The keys in `bytes` up to the first Quit, which the end of the input gives too.
     /// Test input that arrives all at once: more follows exactly while bytes are left.
     impl KeySource for io::Cursor<Vec<u8>> {
         fn next_byte(&mut self) -> Result<Option<u8>, Failure> {
@@ -942,6 +1016,7 @@ mod tests {
         }
     }
 
+    /// The keys in `bytes` up to the first Quit, which the end of the input gives too.
     fn keys_in(bytes: &[u8]) -> Vec<Key> {
         let mut reader = io::Cursor::new(bytes.to_vec());
         let mut keys = Vec::new();
@@ -996,15 +1071,39 @@ mod tests {
 
     #[test]
     fn a_line_over_the_capacity_or_invalid_utf8_is_refused() {
-        use crate::terminal::LINE_CAPACITY;
-        let longest = "a".repeat(LINE_CAPACITY);
+        use crate::terminal::ANSWER_BYTES;
+        let longest = "a".repeat(ANSWER_BYTES);
         assert_eq!(edited(format!("{longest}\r").as_bytes()).unwrap(), longest);
         let too_long = format!("{longest}a\r");
+        let error = edit_line(
+            &mut io::Cursor::new(too_long.as_bytes().to_vec()),
+            None,
+            Content::Password,
+        )
+        .err()
+        .expect("one byte beyond the answer limit must be refused");
+        assert_eq!(error.message, crate::terminal::too_long_answer().message);
         let refused = |bytes: Vec<u8>| {
             edit_line(&mut io::Cursor::new(bytes), None, Content::Password).is_err()
         };
         assert!(refused(too_long.into_bytes()));
         assert!(refused(b"\xff\r".to_vec()));
+    }
+
+    #[test]
+    fn the_rest_of_a_refused_line_cannot_answer_the_next_prompt() {
+        let bytes = format!(
+            "{}discarded\rnext\r",
+            "a".repeat(crate::terminal::LINE_CAPACITY)
+        );
+        let mut reader = io::Cursor::new(bytes);
+        assert!(edit_line(&mut reader, None, Content::Text).is_err());
+        assert_eq!(
+            &*edit_line(&mut reader, None, Content::Text)
+                .unwrap()
+                .unwrap(),
+            "next"
+        );
     }
 
     /// The lock of the buffer goes with the line to the caller (AUD-007-SEC003).

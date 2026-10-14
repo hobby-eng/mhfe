@@ -31,7 +31,7 @@ const INDENT: &str = "  ";
 
 /// Where a line is written: its characters and the control sequences as they are, and the text of
 /// a hint through `text`, which leaves out the colours where the terminal shows none.
-pub struct LineScreen<'a> {
+pub(crate) struct LineScreen<'a> {
     controls: &'a mut dyn Write,
     text: &'a mut dyn Write,
     /// The columns of the prompt before the line.
@@ -52,17 +52,17 @@ pub struct LineScreen<'a> {
 
 /// The hints a line gets.
 #[derive(Clone, Copy)]
-pub struct Hints {
-    pub list: WordList,
+pub(crate) struct Hints {
+    pub(crate) list: WordList,
     /// Whether a word that the list does not have is said: in a line of words, not in a password,
     /// which may hold any text.
-    pub says_no_word: bool,
+    pub(crate) says_no_word: bool,
 }
 
 impl<'a> LineScreen<'a> {
     /// A line after a prompt `start` columns wide, on a terminal `columns` wide. Hints only where
     /// they fit.
-    pub fn new(
+    pub(crate) fn new(
         controls: &'a mut dyn Write,
         text: &'a mut dyn Write,
         start: usize,
@@ -92,7 +92,7 @@ impl<'a> LineScreen<'a> {
     }
 
     /// Shows one more character.
-    pub fn add(&mut self, character: &str) -> io::Result<()> {
+    pub(crate) fn add(&mut self, character: &str) -> io::Result<()> {
         self.settle()?;
         let width = cells(character);
         // A wide character does not fit in the last column: the terminal leaves it empty and
@@ -113,7 +113,7 @@ impl<'a> LineScreen<'a> {
     }
 
     /// Takes the last `characters` shown characters off the screen, with any hint below them.
-    pub fn remove(&mut self, characters: usize) -> io::Result<()> {
+    pub(crate) fn remove(&mut self, characters: usize) -> io::Result<()> {
         self.settle()?;
         let mut cells = 0;
         for _ in 0..characters {
@@ -130,7 +130,7 @@ impl<'a> LineScreen<'a> {
     }
 
     /// Shows the hint for `line`, the text typed so far, below it in place of the one before.
-    pub fn hint(&mut self, line: &str) -> io::Result<()> {
+    pub(crate) fn hint(&mut self, line: &str) -> io::Result<()> {
         let Some(hints) = self.hints else {
             return Ok(());
         };
@@ -151,7 +151,7 @@ impl<'a> LineScreen<'a> {
     }
 
     /// Clears the hint once the line is done.
-    pub fn finish(&mut self) -> io::Result<()> {
+    pub(crate) fn finish(&mut self) -> io::Result<()> {
         if self.hints.is_some() {
             self.controls.write_all(b"\x1b[J")?;
         }
@@ -494,57 +494,10 @@ mod tests {
         assert_eq!(screen_of(&["z"], 0, 20, BIP39, |_| {}), "z|");
     }
 
-    /// The test binary's allocator, which counts the blocks freed on a watching thread that still
-    /// hold [`WATCHED`]: a copy of a hint word that was not wiped (AUD-023-SEC001).
-    #[allow(
-        unsafe_code,
-        reason = "a global allocator is unsafe code by nature; it exists only in the test binary"
-    )]
-    mod freed {
-        use std::alloc::{GlobalAlloc, Layout, System};
-        use std::cell::Cell;
-        use std::sync::atomic::{AtomicUsize, Ordering};
-
-        /// An EFF word a hint row shows, which no other test of this binary frees.
-        pub const WATCHED: &[u8] = b"zookeeper";
-        pub static UNWIPED: AtomicUsize = AtomicUsize::new(0);
-
-        thread_local! {
-            pub static WATCHING: Cell<bool> = const { Cell::new(false) };
-        }
-
-        pub struct Inspecting;
-
-        // SAFETY: every call is passed on to the system allocator unchanged; dealloc only reads
-        // the block it is given before it is freed.
-        unsafe impl GlobalAlloc for Inspecting {
-            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-                // SAFETY: the caller's layout goes to the system allocator unchanged.
-                unsafe { System.alloc(layout) }
-            }
-
-            unsafe fn dealloc(&self, block: *mut u8, layout: Layout) {
-                if WATCHING.with(Cell::get) {
-                    // SAFETY: the block is `layout.size()` bytes, allocated and not yet freed.
-                    let bytes = unsafe { std::slice::from_raw_parts(block, layout.size()) };
-                    if bytes.windows(WATCHED.len()).any(|window| window == WATCHED) {
-                        UNWIPED.fetch_add(1, Ordering::SeqCst);
-                    }
-                }
-                // SAFETY: the block came from System.alloc with this layout and is freed once.
-                unsafe { System.dealloc(block, layout) }
-            }
-        }
-
-        #[global_allocator]
-        static ALLOCATOR: Inspecting = Inspecting;
-    }
-
     /// The rows of a hint leave no unwiped copy of its words when they are dropped: neither the
     /// word rows of a typed seed phrase nor those of a password typed from the EFF list.
     #[test]
     fn hint_rows_leave_no_copy_of_their_words() {
-        use std::sync::atomic::Ordering;
         let mut written = Vec::new();
         let mut text = Vec::new();
         let screen = LineScreen::new(&mut written, &mut text, 0, 80, BIP39);
@@ -553,15 +506,13 @@ mod tests {
             says_no_word: false,
         };
         let words = Hint::Words(&["zoning", "zookeeper", "zoologist"]);
-        freed::WATCHING.with(|watching| watching.set(true));
-        let before = freed::UNWIPED.load(Ordering::SeqCst);
-        for hints in [BIP39.unwrap(), eff] {
-            let rows = screen.rows_of(hints, words);
-            assert!(rows.iter().any(|row| row.contains("zookeeper")));
-            drop(rows);
-        }
-        let unwiped = freed::UNWIPED.load(Ordering::SeqCst) - before;
-        freed::WATCHING.with(|watching| watching.set(false));
+        let unwiped = crate::test_allocator::unwiped_blocks(|| {
+            for hints in [BIP39.unwrap(), eff] {
+                let rows = screen.rows_of(hints, words);
+                assert!(rows.iter().any(|row| row.contains("zookeeper")));
+                drop(rows);
+            }
+        });
         assert_eq!(unwiped, 0, "freed blocks that still hold a hint word");
     }
 }

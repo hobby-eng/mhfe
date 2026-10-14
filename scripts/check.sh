@@ -17,18 +17,8 @@ cd "$repo_root"
 . packaging/remap-builder-paths.sh
 remap_builder_paths "$repo_root"
 
-# Every commit that .git-blame-ignore-revs names must be in the history, or git blame skips
-# nothing. It needs the full history, which a shallow clone lacks.
-if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
-  echo "A shallow clone cannot check .git-blame-ignore-revs: git fetch --unshallow first." >&2
-  exit 1
-fi
-while read -r hash; do
-  if ! git cat-file -e "$hash^{commit}" 2>/dev/null; then
-    echo ".git-blame-ignore-revs names $hash, which is not a commit of this repository." >&2
-    exit 1
-  fi
-done < <(grep -Ev '^(#|$)' .git-blame-ignore-revs)
+# The ignored revisions must be full IDs, readable by Git blame with the complete history.
+node scripts/verify-blame-revs.mjs
 
 # The vendored Argon2 code must be byte for byte the recorded upstream files, with none added.
 node scripts/verify-vendored-argon2.mjs --self-test
@@ -42,7 +32,7 @@ cargo fetch --locked
 python3 scripts/third-party-licenses.py --self-test
 python3 scripts/third-party-licenses.py --check
 # The table of published rounds that the self-checks replay must be what the fixtures give.
-python3 scripts/generate-published-rounds.py --check
+node scripts/generate-published-rounds.mjs --check
 
 # Formatting, the copy gate, clippy for every build, the fast tests and Prettier.
 scripts/check-fast.sh
@@ -52,8 +42,7 @@ cargo build --locked --release
 # Ctrl+C), the self-test report, a start that prints nothing, and damaged copies of the program
 # that stop before any prompt, with the cases that run Argon2 at full size.
 # The program the release build above made, wherever CARGO_TARGET_DIR puts it.
-target_dir="$(cargo metadata --locked --no-deps --format-version 1 |
-  python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')"
+target_dir="$(node scripts/cargo-output.mjs target-directory)"
 python3 scripts/verify-hidden-input.py --full "$target_dir/release/mhfe"
 
 scripts/build-wasm.sh

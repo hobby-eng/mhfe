@@ -15,10 +15,15 @@ FROM emscripten/emsdk:6.0.12@sha256:77638e6c215a65f25a704c0c831d5c2463a8c0468a58
 WORKDIR /workspace
 COPY vendor/phc-winner-argon2 vendor/phc-winner-argon2
 COPY vendor/phc-winner-argon2.md vendor/
+# Every script the build runs and every module they import: scripts/verify-docker-stages.mjs, a
+# fast check, refuses a stage that leaves one out (AUD-024-BLD001).
 COPY scripts/build-argon2-wasm.sh scripts/remove-network-code.mjs scripts/network-code.mjs \
-     scripts/verify-vendored-argon2.mjs scripts/
-# The script checks the vendored files against their list before it compiles them.
-RUN scripts/build-argon2-wasm.sh
+     scripts/verify-vendored-argon2.mjs scripts/gate-command-line.mjs scripts/
+# Our wrapper of ref.c, which clears the stack each segment's fill leaves (AUD-024-SEC002).
+COPY src/engine/argon2_ref.c src/engine/argon2_stack.h src/engine/
+# The script checks the vendored files against their list before it compiles them; it needs no
+# network.
+RUN --network=none scripts/build-argon2-wasm.sh
 
 FROM buildpack-deps:noble@sha256:e93e9fafe026efb1c7788c98f48b04a170d81f7adfd8ca81ff76b44624e71328 AS toolchain
 
@@ -123,9 +128,8 @@ ARG RELEASE_VERSION
 # container has no .git of its own. They go into BUILD-INFO.txt of every archive.
 ARG SOURCE_COMMIT
 ARG SOURCE_STATE
-RUN test -n "${RELEASE_VERSION}" \
-    && package_version="$(cargo metadata --locked --offline --no-deps --format-version 1 | \
-         python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')" \
+RUN --network=none test -n "${RELEASE_VERSION}" \
+    && package_version="$(node scripts/cargo-output.mjs version)" \
     && test "${RELEASE_VERSION}" = "v${package_version}" \
     && scripts/package-release.sh "${RELEASE_VERSION}" /release
 

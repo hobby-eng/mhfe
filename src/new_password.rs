@@ -152,10 +152,19 @@ impl PasswordRecipe {
             ));
         }
         let groups: Vec<&str> = rolls.split_whitespace().collect();
+        // A count of groups that is not the recipe's is said as such, apart from the digits of a
+        // word (AUD-024-API015).
         if groups.len() != self.drawn_words() {
-            return Err(MhfeError::InvalidDiceRolls(
-                groups.len().min(self.drawn_words()) + 1,
-            ));
+            let computed = if self.has_check_word() {
+                "; the check word is computed, not rolled"
+            } else {
+                ""
+            };
+            return Err(MhfeError::InvalidRequest(format!(
+                "the dice give {} groups of digits, but this password draws {} words{computed}",
+                groups.len(),
+                self.drawn_words()
+            )));
         }
         self.make_from_indexes(&mut |number| word_index_of_rolls(number, groups[number - 1]))
     }
@@ -348,10 +357,27 @@ mod tests {
             recipe.make_from_rolls("11111 66667"),
             Err(MhfeError::InvalidDiceRolls(2))
         ));
-        assert!(matches!(
-            recipe.make_from_rolls("11111"),
-            Err(MhfeError::InvalidDiceRolls(2))
-        ));
+        // Too few or too many groups are said as such (AUD-024-API015).
+        for (rolls, given) in [("11111", 1), ("11111 22222 33333", 3)] {
+            let refused = recipe.make_from_rolls(rolls).err().unwrap();
+            assert_eq!(refused.code(), "INVALID_REQUEST");
+            assert!(
+                refused.to_string().contains(&format!(
+                    "{given} groups of digits, but this password draws 2 words"
+                )),
+                "{refused}"
+            );
+        }
+        let refused = PasswordRecipe::check_word()
+            .make_from_rolls("11111 11112 11113 11114 11115 11116")
+            .err()
+            .unwrap();
+        assert!(
+            refused
+                .to_string()
+                .ends_with("the check word is computed, not rolled"),
+            "{refused}"
+        );
         assert!(PasswordRecipe::characters(8)
             .unwrap()
             .make_from_rolls("11111")

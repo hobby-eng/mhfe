@@ -23,36 +23,22 @@ use crate::self_check::{
     DigestCase, Findings, Tier, DAMAGED,
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
+use crate::vectors::inputs::TEST_PASSWORD;
 use crate::{
     ContainerFacts, Mhfe, Password, PhraseLength, Recovery, Suite, WordCount, WorkFactor,
     SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
 
+const ANOTHER_SUITE: &str = "the built-in cases are of another suite";
+
 mod published;
 
 pub(crate) use published::{
-    published, published_table, PublishedReading, PublishedRound, PublishedRoundKeys,
+    published, published_in, published_table, PublishedReading, PublishedRound, PublishedRoundKeys,
     PublishedVector,
 };
 
-fn sha256(_: &[u8], message: &[u8]) -> Vec<u8> {
-    use sha2::Digest;
-    sha2::Sha256::digest(message).to_vec()
-}
-
-#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
-fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
-    use hmac::{KeyInit, Mac};
-    let mut mac = <hmac::Hmac<sha2::Sha256> as KeyInit>::new_from_slice(key)
-        .expect("HMAC takes a key of any length");
-    mac.update(message);
-    mac.finalize().into_bytes().to_vec()
-}
-
-fn blake2b_256(_: &[u8], message: &[u8]) -> Vec<u8> {
-    use blake2::Digest;
-    blake2::Blake2b::<blake2::digest::consts::U32>::digest(message).to_vec()
-}
+use crate::self_check::digests::{digest, hmac};
 
 /// RFC 4231 test case 6: a key longer than the block, which HMAC hashes first.
 const LONG_KEY: [u8; 131] = [0xaa; 131];
@@ -63,7 +49,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // FIPS 180-4, example "abc" (one block).
     DigestCase {
         algorithm: "SHA-256",
-        function: sha256,
+        function: digest::<sha2::Sha256>,
         key: b"",
         message: b"abc",
         expected: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
@@ -71,7 +57,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // FIPS 180-4, the 448-bit message, which needs a second block for its padding.
     DigestCase {
         algorithm: "SHA-256",
-        function: sha256,
+        function: digest::<sha2::Sha256>,
         key: b"",
         message: b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
         expected: "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
@@ -79,7 +65,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // RFC 4231, test case 2.
     DigestCase {
         algorithm: "HMAC-SHA-256",
-        function: hmac_sha256,
+        function: hmac::<sha2::Sha256>,
         key: b"Jefe",
         message: b"what do ya want for nothing?",
         expected: "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
@@ -87,7 +73,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // RFC 4231, test case 6.
     DigestCase {
         algorithm: "HMAC-SHA-256",
-        function: hmac_sha256,
+        function: hmac::<sha2::Sha256>,
         key: &LONG_KEY,
         message: b"Test Using Larger Than Block-Size Key - Hash Key First",
         expected: "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54",
@@ -97,7 +83,7 @@ const CIPHER_DIGESTS: [DigestCase; 5] = [
     // BLAKE2b-512("abc"). A BLAKE2b-512 cut to 32 bytes would give ba80a53f... instead.
     DigestCase {
         algorithm: "BLAKE2b-256",
-        function: blake2b_256,
+        function: digest::<blake2::Blake2b<blake2::digest::consts::U32>>,
         key: b"",
         message: b"abc",
         expected: "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319",
@@ -135,7 +121,11 @@ impl ComponentCheck for CipherHashesCheck {
 /// The repair words that the encryption of zero-12 makes with four words: MHFE-REPAIR-1's public
 /// vector (the specification's vectors/profiles/README.md), computed by an independent Python
 /// implementation.
-const ZERO_12_REPAIR_WORDS: (&str, usize, &str) = ("zero-12", 4, "shaft pupil patient jewel");
+const ZERO_12_REPAIR_WORDS: (&str, usize, &str) = (
+    "zero-12",
+    crate::repair::known_answers::ZERO_12_CARD.0,
+    crate::repair::known_answers::ZERO_12_CARD.1,
+);
 
 /// The `cipher-rounds` check: every vector of the tier through encryption, its check and
 /// recovery, then the refusals, and suite 4's round message, salt and mask for each entropy size.
@@ -255,7 +245,7 @@ impl CipherRoundsCheck {
             // zero-12's container with 15 words stated: the 12-word check passes and gives the
             // published reading, which says that 15 were stated.
             |table| {
-                let vector = find(table, "zero-12")?;
+                let vector = published_in(table, "zero-12")?;
                 let recovery = vector.recovery_at(table, 15)?.map_err(stopped)?;
                 let Recovery::Phrase(reading) = &recovery else {
                     return Err("gives several readings where its check found one".to_owned());
@@ -268,7 +258,7 @@ impl CipherRoundsCheck {
             // zero-12's container with 24 words stated: the 12-word reading first, which says
             // that 24 were stated, and the unverified 24-word reading after it.
             |table| {
-                let vector = find(table, "zero-12")?;
+                let vector = published_in(table, "zero-12")?;
                 let Recovery::Ambiguous(readings) =
                     vector.recovery_at(table, STATE_WORDS)?.map_err(stopped)?
                 else {
@@ -360,7 +350,7 @@ impl Refusal {
                 words,
                 code,
             } => {
-                let result = find(table, vector)?.recovery_at(table, words)?;
+                let result = published_in(table, vector)?.recovery_at(table, words)?;
                 expect_refusal(result.map(|_| ()), code)
             }
             Self::Swapped {
@@ -368,8 +358,8 @@ impl Refusal {
                 other,
                 code,
             } => {
-                let vector = find(table, vector)?;
-                let other = find(table, other)?;
+                let vector = published_in(table, vector)?;
+                let other = published_in(table, other)?;
                 let password = vector.password()?;
                 let mut mhfe = vector.mhfe(table)?;
                 let mut new = mhfe
@@ -382,7 +372,7 @@ impl Refusal {
                 )
             }
             Self::AtPim { vector, pim, code } => {
-                let vector = find(table, vector)?;
+                let vector = published_in(table, vector)?;
                 let work = WorkFactor::new(pim, vector.memory_level).map_err(stopped)?;
                 let mut mhfe = Mhfe::with_engine(work, PublishedRoundKeys::of(table));
                 let result = mhfe.decrypt(
@@ -395,14 +385,6 @@ impl Refusal {
             }
         }
     }
-}
-
-/// The vector named `name` in `table`.
-fn find(table: &'static [PublishedVector], name: &str) -> Result<&'static PublishedVector, String> {
-    table
-        .iter()
-        .find(|vector| vector.name == name)
-        .ok_or_else(|| "a built-in vector is missing".to_owned())
 }
 
 /// Whether a recovery gives exactly the published readings, in order.
@@ -489,7 +471,7 @@ impl ComponentCheck for CipherRoundsCheck {
                 findings.one(|| {
                     expect(
                         fixture.text("suite_id")? == SAME_LENGTH_SUITE_ID,
-                        "the built-in cases are of another suite",
+                        ANOTHER_SUITE,
                     )
                 });
                 entropy_separation(&fixture, &mut findings);
@@ -521,10 +503,7 @@ impl FormatsCheck {
     /// The suite 3 fixture; the phrase cases run with `engine`, which must not be reached.
     fn suite_3(&self, findings: &mut Findings, engine: impl Argon2Engine) -> Result<(), String> {
         let fixture = Fixture::read(self.suite_3)?;
-        expect(
-            fixture.text("suite_id")? == SUITE_ID,
-            "the built-in cases are of another suite",
-        )?;
+        expect(fixture.text("suite_id")? == SUITE_ID, ANOTHER_SUITE)?;
         findings.each("settings case", fixture.cases("settings")?, |case| {
             let result = WorkFactor::new(
                 fixtures::number_u32(case, "pim")?,
@@ -574,7 +553,7 @@ impl FormatsCheck {
                 "the verifier is written in another byte order",
             )
         });
-        let password = Password::new("public test password").map_err(stopped)?;
+        let password = Password::new(TEST_PASSWORD).map_err(stopped)?;
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
         findings.each("phrase case", fixture.cases("phrases")?, |case| {
             let expected = fixtures::text(case, "expected_error")?;
@@ -618,7 +597,7 @@ impl FormatsCheck {
     /// The refusals of the suite 4 fixture, with `engine`, which must not be reached.
     fn suite_4(&self, findings: &mut Findings, engine: impl Argon2Engine) -> Result<(), String> {
         let fixture = Fixture::read(self.suite_4)?;
-        let password = Password::new("public test password").map_err(stopped)?;
+        let password = Password::new(TEST_PASSWORD).map_err(stopped)?;
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
         findings.each("suite 4 refusal", fixture.cases("refusals")?, |case| {
             expect(fixtures::text(case, "expected")? == "rejected", DAMAGED)?;
@@ -856,9 +835,13 @@ mod tests {
         assert_eq!(key, zero_12.rounds[3].key);
         // The right salt with another password, and an unknown salt, are refused.
         assert_eq!(
-            keys.derive(b"public test passwore", &zero_12.rounds[3].salt, &mut key)
-                .unwrap_err()
-                .code(),
+            keys.derive(
+                crate::test_support::WRONG_PASSWORD.as_bytes(),
+                &zero_12.rounds[3].salt,
+                &mut key
+            )
+            .unwrap_err()
+            .code(),
             "INTERNAL_ERROR"
         );
         assert!(keys

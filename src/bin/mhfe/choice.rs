@@ -16,9 +16,8 @@
 //! or a terminal that cannot do this, is asked with numbered lines instead (`Input::choose` in
 //! terminal.rs).
 
-use std::io::{self, Write};
+use std::fmt::Write as _;
 
-use anstream::eprintln;
 use zeroize::Zeroizing;
 
 use crate::exit::Failure;
@@ -26,25 +25,26 @@ use crate::flow::{self, Kind};
 use crate::hidden_input::{self, Key};
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 use crate::terminal;
+use crate::terminal::write_control;
 
 /// The indent of an explanation.
 const TEXT_INDENT: &str = "  ";
 
 /// A question with what explains it.
-pub struct Question<'a> {
-    pub text: &'a str,
+pub(crate) struct Question<'a> {
+    pub(crate) text: &'a str,
     /// Short lines, each written to fit style::TEXT_WIDTH with its indent; "" separates two topics.
-    pub explanation: &'a [&'a str],
+    pub(crate) explanation: &'a [&'a str],
     /// The README section that explains the question, linked on one grey line.
-    pub more: Option<&'a str>,
+    pub(crate) more: Option<&'a str>,
     /// The grey label of the line that records the answer, at most 10 characters; `None` when
     /// what the program shows next states the answer anyway.
-    pub record: Option<&'a str>,
+    pub(crate) record: Option<&'a str>,
 }
 
 impl<'a> Question<'a> {
     /// A question without an explanation.
-    pub fn new(text: &'a str, record: &'a str) -> Self {
+    pub(crate) fn new(text: &'a str, record: &'a str) -> Self {
         Self {
             text,
             explanation: &[],
@@ -55,15 +55,15 @@ impl<'a> Question<'a> {
 }
 
 /// One answer of a question: a label and a grey note beside it, which may be empty.
-pub struct Answer {
+pub(crate) struct Answer {
     /// Wiped when dropped: a label may hold words of a password, as the check word's offer to
     /// replace one does (AUD-015-SEC006).
-    pub label: Zeroizing<String>,
-    pub note: String,
+    pub(crate) label: Zeroizing<String>,
+    pub(crate) note: String,
 }
 
 impl Answer {
-    pub fn new(label: impl Into<String>, note: impl Into<String>) -> Self {
+    pub(crate) fn new(label: impl Into<String>, note: impl Into<String>) -> Self {
         Self {
             label: Zeroizing::new(label.into()),
             note: note.into(),
@@ -73,13 +73,13 @@ impl Answer {
 
 /// An explanation shown when the person presses ?, and the words that offer it in the hint
 /// line, such as "? explains both".
-pub struct Help<'a> {
-    pub hint: &'a str,
-    pub show: &'a dyn Fn(),
+pub(crate) struct Help<'a> {
+    pub(crate) hint: &'a str,
+    pub(crate) show: &'a dyn Fn(),
 }
 
 /// The value of an option that answers a yes-or-no question of a menu: yes or no.
-pub fn parse_yes_no(text: &str) -> Result<bool, String> {
+pub(crate) fn parse_yes_no(text: &str) -> Result<bool, String> {
     match text {
         "yes" => Ok(true),
         "no" => Ok(false),
@@ -91,18 +91,18 @@ pub fn parse_yes_no(text: &str) -> Result<bool, String> {
 /// Escape or q; the block is then erased without a record. The first answer is highlighted at the
 /// start, so that Enter alone chooses it. In a command shown one step at a time the question is a
 /// step of its own.
-pub fn choose(
+pub(crate) fn choose(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
 ) -> Result<Option<usize>, Failure> {
-    flow::step();
+    flow::step()?;
     choose_here(question, answers, help)
 }
 
 /// [`choose`] below what the screen shows already, for a question about it, such as whether a
 /// phrase shown matches the owner's record.
-pub fn choose_here(
+pub(crate) fn choose_here(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
@@ -113,18 +113,18 @@ pub fn choose_here(
 /// [`choose`] with no answer highlighted at the start, for a question whose answer must be the
 /// person's own: Enter selects nothing until an arrow key has highlighted an answer, and a digit
 /// chooses at once. `help` is shown on ?, as in [`choose`].
-pub fn choose_without_default(
+pub(crate) fn choose_without_default(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
 ) -> Result<Option<usize>, Failure> {
-    flow::step();
+    flow::step()?;
     choose_here_without_default(question, answers, help)
 }
 
 /// [`choose_without_default`] below what the screen shows already, for a confirmation that must
 /// be explicit, such as the owner's that a phrase shown is theirs.
-pub fn choose_here_without_default(
+pub(crate) fn choose_here_without_default(
     question: &Question,
     answers: &[Answer],
     help: Option<Help>,
@@ -186,7 +186,7 @@ fn run_list(
 }
 
 /// The line that records an answer: a grey label and the answer in cyan, as a fact of a summary.
-pub fn record(label: &str, answer: &str) {
+pub(crate) fn record(label: &str, answer: &str) {
     style::fact_as(Kind::Record, label, paint(ACCENT, answer));
 }
 
@@ -266,7 +266,7 @@ fn draw(
 
 /// Draws a blank line, the question in bold and its explanation, and returns how many lines they
 /// took. A list or a prompt follows; after an explanation, a blank line separates it.
-pub fn draw_question(question: &Question) -> usize {
+pub(crate) fn draw_question(question: &Question) -> usize {
     draw_question_rows(question).rows()
 }
 
@@ -298,7 +298,7 @@ fn draw_question_rows(question: &Question) -> DrawnRows {
 
 /// Whether every line of an explanation fits the width of a list with its indent.
 #[cfg(test)]
-pub fn fits(explanation: &[&str]) -> bool {
+pub(crate) fn fits(explanation: &[&str]) -> bool {
     explanation
         .iter()
         .all(|line| TEXT_INDENT.len() + line.chars().count() <= style::TEXT_WIDTH)
@@ -338,7 +338,7 @@ pub(crate) const DIGIT_KEYS: usize = 9;
 /// wider than a narrow terminal taking more than one. The
 /// highlighted entry has a cyan marker and a bold label, so that it stands out also without
 /// colours. The notes line up after the longest label and are shortened to fit the width.
-pub fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
+pub(crate) fn draw_entries(entries: &[(&str, &str)], selected: usize) -> usize {
     draw_entry_rows(entries, Some(selected)).rows()
 }
 
@@ -354,7 +354,7 @@ fn label_width(entries: &[(&str, &str)]) -> usize {
 /// The widest line of a list as drawn: "› 1  ", the labels padded to the longest, two spaces and
 /// the note. A list wider than [`style::TEXT_WIDTH`] has a note cut with "…".
 #[cfg(test)]
-pub fn widest_line(entries: &[(&str, &str)]) -> usize {
+pub(crate) fn widest_line(entries: &[(&str, &str)]) -> usize {
     let label_width = label_width(entries);
     entries
         .iter()
@@ -371,7 +371,7 @@ pub fn widest_line(entries: &[(&str, &str)]) -> usize {
 
 /// Whether every answer of a list shows whole, no note cut: for the tests of each list.
 #[cfg(test)]
-pub fn answers_fit(answers: &[Answer]) -> bool {
+pub(crate) fn answers_fit(answers: &[Answer]) -> bool {
     let entries: Vec<(&str, &str)> = answers
         .iter()
         .map(|answer| (answer.label.as_str(), answer.note.as_str()))
@@ -379,43 +379,62 @@ pub fn answers_fit(answers: &[Answer]) -> bool {
     widest_line(&entries) <= style::TEXT_WIDTH
 }
 
+/// More than the bytes a list line takes beside its label, padding and note: the marker, the
+/// number, the gaps and the colour codes around each part.
+const LINE_STYLE_BYTES: usize = 128;
+
 /// The entries with `selected` highlighted, or none.
 fn draw_entry_rows(entries: &[(&str, &str)], selected: Option<usize>) -> DrawnRows {
-    let label_width = label_width(entries);
     let mut rows = DrawnRows::new();
+    for line in entry_lines(entries, selected) {
+        rows.line(&line);
+    }
+    rows
+}
+
+/// The lines of the entries with `selected` highlighted, or none, each wiped when dropped.
+fn entry_lines(entries: &[(&str, &str)], selected: Option<usize>) -> Vec<Zeroizing<String>> {
+    let label_width = label_width(entries);
+    let mut lines = Vec::with_capacity(entries.len());
     for (index, (label, note)) in entries.iter().enumerate() {
         let number = if index < DIGIT_KEYS {
             paint(MUTED, index + 1)
         } else {
             " ".to_owned()
         };
-        // The label and its line are wiped as the label is: they are drawn again and again.
-        let (marker, shown_label) = if Some(index) == selected {
-            (paint(ACCENT, "›"), Zeroizing::new(paint(STRONG, label)))
-        } else {
-            (" ".to_owned(), Zeroizing::new((*label).to_owned()))
-        };
         // Marker, number and the gaps: "› 1  " and two spaces before the note.
         let note_room = style::TEXT_WIDTH.saturating_sub(5 + label_width + 2);
         let note = shortened(note, note_room);
-        let line = Zeroizing::new(if note.is_empty() {
-            format!("{marker} {number}  {}", *shown_label)
+        // A label may hold words of a password, and the line is drawn again and again: it is
+        // written into one buffer, reserved beyond its final size so that it never grows and
+        // leaves an unwiped copy behind, and wiped when dropped; the label is never painted into
+        // a String of its own (AUD-024-SEC008).
+        let mut line = Zeroizing::new(String::with_capacity(
+            LINE_STYLE_BYTES + label.len() + label_width + note.len(),
+        ));
+        // Writing into a String cannot fail.
+        if Some(index) == selected {
+            let _ = write!(
+                line,
+                "{ACCENT}›{ACCENT:#} {number}  {STRONG}{label}{STRONG:#}"
+            );
         } else {
+            let _ = write!(line, "  {number}  {label}");
+        }
+        if !note.is_empty() {
             // Padded by hand: the width of a painted label would count its colour codes.
-            let padding = " ".repeat(label_width - label.chars().count());
-            format!(
-                "{marker} {number}  {}{padding}  {}",
-                *shown_label,
-                paint(MUTED, note)
-            )
-        });
-        rows.line(&line);
+            for _ in label.chars().count()..label_width {
+                line.push(' ');
+            }
+            let _ = write!(line, "  {MUTED}{note}{MUTED:#}");
+        }
+        lines.push(line);
     }
-    rows
+    lines
 }
 
 /// `text` cut to `room` characters with "…" at the end, so that a long note cannot wrap the line.
-pub fn shortened(text: &str, room: usize) -> String {
+pub(crate) fn shortened(text: &str, room: usize) -> String {
     if text.chars().count() <= room {
         return text.to_owned();
     }
@@ -425,21 +444,45 @@ pub fn shortened(text: &str, room: usize) -> String {
 
 /// Moves the cursor up `lines_above` lines to the start of the line, then clears to the end of
 /// the screen (VT100 "cursor up" and "erase in display").
-pub fn redraw_from(lines_above: usize) -> String {
+pub(crate) fn redraw_from(lines_above: usize) -> String {
     format!("\x1b[{lines_above}A\r\x1b[J")
-}
-
-/// Writes a cursor-control sequence as it is: anstream would remove it when NO_COLOR is set.
-pub fn write_control(sequence: &str) -> Result<(), Failure> {
-    let mut terminal = io::stderr();
-    terminal.write_all(sequence.as_bytes())?;
-    terminal.flush()?;
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The answers of the check word, restore with its note and replacements without, drawn
+    /// highlighted and not, free no block that still holds a word of the password
+    /// (AUD-024-SEC008).
+    #[test]
+    fn check_word_answers_leave_no_copy_of_their_words() {
+        use crate::check_word::word_label;
+        use crate::test_allocator::{unwiped_blocks, WATCHED};
+        let unwiped = unwiped_blocks(|| {
+            let answers = [
+                Answer::new(word_label(3, WATCHED, None), "restored by the check word"),
+                Answer::new(word_label(2, WATCHED, Some("zoologist")), ""),
+                Answer::new(word_label(4, "zoning", Some(WATCHED)), ""),
+                Answer::new("Type the password again", ""),
+            ];
+            let entries: Vec<(&str, &str)> = answers
+                .iter()
+                .map(|answer| (answer.label.as_str(), answer.note.as_str()))
+                .collect();
+            // The lines as they are drawn; printing them in a test copies them for the test's
+            // captured output, which the binary itself does not.
+            for selected in [None, Some(0), Some(1), Some(2), Some(3)] {
+                let lines = entry_lines(&entries, selected);
+                assert!(lines.iter().any(|line| line.contains(WATCHED)));
+                drop(lines);
+            }
+        });
+        assert_eq!(
+            unwiped, 0,
+            "freed blocks that still hold a word of the password"
+        );
+    }
 
     #[test]
     fn rendered_line_widths_recount_rows_after_a_resize() {

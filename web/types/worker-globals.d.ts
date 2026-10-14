@@ -32,8 +32,11 @@ type PartResultListener = (json: string) => void;
 
 /** The wasm-bindgen glue of runtime/mhfe.wasm. The functions that answer with JSON give text. */
 declare namespace mhfe {
-  /** Instantiates the compiled WebAssembly that the page passed. */
-  function initSync(options: { module: WebAssembly.Module }): unknown;
+  /**
+   * Instantiates the compiled WebAssembly that the page passed; its exports hold the memory, whose
+   * dead stack the worker zeroes between calls.
+   */
+  function initSync(options: { module: WebAssembly.Module }): { memory: WebAssembly.Memory };
   function packageVersion(): string;
 
   function suiteParameters(): string;
@@ -153,7 +156,7 @@ declare namespace mhfe {
   function describeAddress(address: string, coin: string, path: string, scanGap: number): string;
   function describeDraw(
     chosenWords: Uint8Array,
-    places: Uint32Array,
+    places: Float64Array,
     neverUse: string,
     walletCheck: boolean,
   ): string;
@@ -161,7 +164,7 @@ declare namespace mhfe {
     passphrase: Uint8Array,
     passphraseRepeat: Uint8Array,
     chosenWords: Uint8Array,
-    places: Uint32Array,
+    places: Float64Array,
     neverUse: string,
     walletCheck: boolean,
     random: RandomSource,
@@ -177,6 +180,7 @@ declare namespace mhfe {
 
   /** A rehearsal check in one worker: the recovery once, then comparisons with references. */
   class CheckSession {
+    asksLength(): boolean;
     constructor(
       container: string,
       password: Uint8Array,
@@ -274,6 +278,9 @@ interface Argon2Module {
   /** A pointer to `size` bytes of the C heap, 0 when there is no memory. */
   _malloc(size: number): number;
   _free(pointer: number): void;
+  /** The reference C implementation's static English error text. */
+  _argon2_error_message(code: number): number;
+  UTF8ToString(pointer: number): string;
   /** argon2id_hash_raw of vendor/phc-winner-argon2/include/argon2.h: 0, or an error code. */
   _argon2id_hash_raw(
     passes: number,

@@ -4,7 +4,7 @@ Time zone: UTC (+00:00)
 
 Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
 
-Audit-only scripts of [AUD-010](../audit-10-2026-10-07.md), the full-scope audit of the uncommitted
+Audit-only scripts of [AUD-010](../AUD-010-2026-10-07.md), the full-scope audit of the uncommitted
 modular refactor and the AUD-009 remediation. They were written for the MHFE working tree on HEAD
 `d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0` with source fingerprint
 `372da577dd586932d6b3fa47711d97bc25b8fa908a980cd2373b704724ec796b` (227 paths, computed by

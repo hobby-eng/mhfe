@@ -9,7 +9,6 @@
 use std::io::{self, BufRead, IsTerminal, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use anstream::eprintln;
 use mhfe::memory::LockedText;
 use mhfe::word_hints::WordList;
 use mhfe::{ContainerFacts, MhfeError, Password, Suite};
@@ -22,22 +21,35 @@ use crate::flow;
 use crate::hidden_input::{self, Content};
 use crate::protect;
 use crate::settings::Operation;
+use crate::standard_input::StandardInput;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
+mod control;
 mod private_screen;
 mod progress;
 
+pub(crate) use control::write_control;
 use private_screen::leave_private_screen;
-pub use private_screen::{
+pub(crate) use private_screen::{
     can_show_privately, clear_screen, enter_steps, leave_steps, on_alternate_screen,
     output_on_screen, private_input, wait_to_leave, PrivateScreen,
 };
-pub use progress::Progress;
+pub(crate) use progress::Progress;
 
-/// Longest line accepted, line break included: the library's typed-line buffer, which its
+/// Reserved line buffer, including room for CRLF: the library's typed-line buffer, which its
 /// memory-locking check probes. The buffer is reserved at this size and reading stops there, so
 /// it is never reallocated, which would leave an unwiped copy of a secret behind.
 pub(crate) const LINE_CAPACITY: usize = mhfe::memory::TYPED_LINE_BYTES;
+
+/// The same longest answer in scripted, visible and edited input, excluding its line ending.
+pub(crate) const ANSWER_BYTES: usize = LINE_CAPACITY - 2;
+
+/// The refusal of an answer beyond the common byte limit.
+pub(crate) fn too_long_answer() -> Failure {
+    Failure::invalid_input(format!(
+        "An answer is longer than {ANSWER_BYTES} bytes; no valid answer is that long."
+    ))
+}
 
 /// Says once, when a typed line's buffer could not be locked, that what is typed may reach swap:
 /// the startup summary told what its probe found, and memory locked by later buffers counts
@@ -54,24 +66,24 @@ pub(crate) fn note_unlocked(locked: bool) {
 }
 
 /// Where answers come from.
-pub enum Input {
+pub(crate) enum Input {
     /// A person at a terminal: secrets are hidden and a mistake can be corrected.
     /// `command_reads_stdin` tells whether the command has --stdin, so that a refusal for a
     /// missing terminal names it only where it exists (AUD-010).
     Terminal { command_reads_stdin: bool },
     /// A script: one answer per line on standard input, in the order the command documents.
-    Script(io::StdinLock<'static>),
+    Script(StandardInput),
 }
 
 /// What a refusal of an answer typed at a terminal asks for.
-pub const TYPE_AGAIN: &str = "Please type it again.";
+pub(crate) const TYPE_AGAIN: &str = "Please type it again.";
 
 impl Input {
     /// The input of a command that has --stdin: a script's lines on standard input when
     /// `from_standard_input`, a person at the terminal otherwise.
-    pub fn new(from_standard_input: bool) -> Self {
+    pub(crate) fn new(from_standard_input: bool) -> Self {
         if from_standard_input {
-            Self::Script(io::stdin().lock())
+            Self::Script(StandardInput::new())
         } else {
             Self::Terminal {
                 command_reads_stdin: true,
@@ -80,7 +92,7 @@ impl Input {
     }
 
     /// The input of a command without --stdin, which only a person at a terminal answers.
-    pub fn terminal_only() -> Self {
+    pub(crate) fn terminal_only() -> Self {
         Self::Terminal {
             command_reads_stdin: false,
         }
@@ -89,7 +101,7 @@ impl Input {
     /// The input of a command that reads a secret: without --stdin, standard input must be a
     /// terminal, or the command says at once how to run it, before any question would take the
     /// lines of a pipe as answers (AUD-023-UI006).
-    pub fn reading_secrets(self) -> Result<Self, Failure> {
+    pub(crate) fn reading_secrets(self) -> Result<Self, Failure> {
         match self {
             Self::Terminal {
                 command_reads_stdin,
@@ -100,14 +112,27 @@ impl Input {
         }
     }
 
+    /// Refuses an interactive result on a terminal that cannot clear its private screen.
+    ///
+    /// Explicit script output and output redirected by the caller keep their export format.
+    pub(crate) fn require_private_result(&self) -> Result<(), Failure> {
+        if !self.is_script() && output_on_screen() && !can_show_privately(self) {
+            return Err(Failure::invalid_input(
+                "This command can show its result only on a private screen. Use a capable \
+                 terminal, or redirect the output to a file.",
+            ));
+        }
+        Ok(())
+    }
+
     /// Whether a wrong answer can be asked again.
-    pub fn can_ask_again(&self) -> bool {
+    pub(crate) fn can_ask_again(&self) -> bool {
         matches!(self, Self::Terminal { .. })
     }
 
     /// An answer as `read` took it: `Some` when it was accepted. A refusal is shown at a terminal,
     /// which asks again (`None`), with `then` saying what to do, and ends a script, which cannot.
-    pub fn accepted<T>(
+    pub(crate) fn accepted<T>(
         &self,
         read: Result<T, MhfeError>,
         then: &str,
@@ -122,27 +147,31 @@ impl Input {
         }
     }
 
-    pub fn is_script(&self) -> bool {
+    pub(crate) fn is_script(&self) -> bool {
         matches!(self, Self::Script(_))
     }
 
     /// Reads a secret of free text, such as a BIP39 passphrase: at a terminal, shown as it is
     /// typed on the private screen and hidden anywhere else; from a script, the next line.
     /// `question` has no colon: "Password" is asked as "Password: ", or as "Password (hidden): ".
-    pub fn secret(&mut self, question: &str) -> Result<LockedText, Failure> {
+    pub(crate) fn secret(&mut self, question: &str) -> Result<LockedText, Failure> {
         self.secret_of(question, Content::Text)
     }
 
     /// Reads a password as [`Input::secret`] does; where it is shown, the words of the EFF list
     /// that begin with the word being typed are hinted below it.
-    pub fn password(&mut self, question: &str) -> Result<LockedText, Failure> {
+    pub(crate) fn password(&mut self, question: &str) -> Result<LockedText, Failure> {
         self.secret_of(question, Content::Password)
     }
 
     /// Reads secret words of `list`, such as a seed phrase, as [`Input::secret`] does; where they
     /// are shown, the words of the list are hinted below them, Tab completes one and Ctrl+W deletes
     /// one.
-    pub fn secret_words(&mut self, question: &str, list: WordList) -> Result<LockedText, Failure> {
+    pub(crate) fn secret_words(
+        &mut self,
+        question: &str,
+        list: WordList,
+    ) -> Result<LockedText, Failure> {
         self.secret_of(question, Content::Words(list))
     }
 
@@ -156,14 +185,14 @@ impl Input {
     }
 
     /// Reads a public answer, such as an address, shown while typed.
-    pub fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
+    pub(crate) fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
         match self {
             Self::Terminal { .. } => {
                 style::prompt(prompt);
                 io::stderr().flush()?;
-                match read_bounded_line(&mut io::stdin().lock())? {
+                match read_bounded_line(&mut StandardInput::new())? {
                     Some(line) => Ok(line),
-                    None => Err(Failure::invalid_input("No answer was typed.")),
+                    None => Err(MhfeError::Cancelled.into()),
                 }
             }
             Self::Script(lines) => read_script_line(lines, prompt),
@@ -173,14 +202,18 @@ impl Input {
     /// Reads public words of `list`, such as a container phrase, shown while typed. At a terminal
     /// that carries out control sequences the words of the list are hinted below them, Tab
     /// completes one and Ctrl+W deletes one; elsewhere as [`Input::visible`].
-    pub fn visible_words(&mut self, prompt: &str, list: WordList) -> Result<LockedText, Failure> {
+    pub(crate) fn visible_words(
+        &mut self,
+        prompt: &str,
+        list: WordList,
+    ) -> Result<LockedText, Failure> {
         let hinted = matches!(self, Self::Terminal { .. }) && hidden_input::can_redraw();
         if !hinted {
             return self.visible(prompt);
         }
         match hidden_input::read_line(prompt, true, Content::Words(list))? {
             Some(line) => Ok(line),
-            None => Err(Failure::invalid_input("No answer was typed.")),
+            None => Err(MhfeError::Cancelled.into()),
         }
     }
 
@@ -188,13 +221,17 @@ impl Input {
     /// is the default. A person at a terminal chooses from a list with the arrow keys. A script,
     /// or a terminal that cannot redraw lines, gets the answers numbered and types the number on a
     /// line of its own, or nothing for the first.
-    pub fn choose(&mut self, question: &Question, answers: &[Answer]) -> Result<usize, Failure> {
-        flow::step();
+    pub(crate) fn choose(
+        &mut self,
+        question: &Question,
+        answers: &[Answer],
+    ) -> Result<usize, Failure> {
+        flow::step()?;
         self.choose_here(question, answers)
     }
 
     /// [`Input::choose`] below what the screen shows already (choice::choose_here).
-    pub fn choose_here(
+    pub(crate) fn choose_here(
         &mut self,
         question: &Question,
         answers: &[Answer],
@@ -208,18 +245,18 @@ impl Input {
 
     /// [`Input::choose`] with no default, for an answer that must be the person's own: no answer
     /// is highlighted in the list, and the numbered form takes no empty line for the first.
-    pub fn choose_without_default(
+    pub(crate) fn choose_without_default(
         &mut self,
         question: &Question,
         answers: &[Answer],
     ) -> Result<usize, Failure> {
-        flow::step();
+        flow::step()?;
         self.choose_here_without_default(question, answers)
     }
 
     /// [`Input::choose_without_default`] below what the screen shows already
     /// (choice::choose_here_without_default).
-    pub fn choose_here_without_default(
+    pub(crate) fn choose_here_without_default(
         &mut self,
         question: &Question,
         answers: &[Answer],
@@ -280,41 +317,45 @@ impl Input {
 /// of the summary written next takes its place (as choice.rs does for a question with a list):
 /// the answers then read as a short summary, and the next question always appears at the bottom,
 /// after its blank line. A script gets neither the blank line nor the erasing.
-pub struct Step {
+pub(crate) struct Step {
     /// Lines drawn since the step began, its blank line included.
     lines: usize,
     erasable: bool,
 }
 
 impl Step {
-    pub fn start(input: &Input) -> Self {
+    pub(crate) fn start(input: &Input) -> Result<Self, Failure> {
         if input.is_script() {
-            return Self {
+            return Ok(Self {
                 lines: 0,
                 erasable: false,
-            };
+            });
         }
         if flow::is_active() {
             // On a screen of its own, the step needs no erasing.
-            flow::step();
-            return Self {
+            flow::step()?;
+            return Ok(Self {
                 lines: 0,
                 erasable: false,
-            };
+            });
         }
         eprintln!();
-        Self {
+        Ok(Self {
             lines: 1,
             erasable: hidden_input::can_redraw(),
-        }
+        })
     }
 
-    pub fn retry(&mut self, text: impl std::fmt::Display) {
+    pub(crate) fn retry(&mut self, text: impl std::fmt::Display) {
         self.lines += style::retry(text);
     }
 
     /// Reads a public answer, which the terminal shows after the prompt and may wrap.
-    pub fn visible(&mut self, input: &mut Input, prompt: &str) -> Result<LockedText, Failure> {
+    pub(crate) fn visible(
+        &mut self,
+        input: &mut Input,
+        prompt: &str,
+    ) -> Result<LockedText, Failure> {
         let answer = input.visible(prompt)?;
         if !input.is_script() {
             // The answer is measured in place: no copy of it is made.
@@ -327,9 +368,9 @@ impl Step {
     }
 
     /// Erases the step; the caller then writes its line of the summary.
-    pub fn finish(self) -> Result<(), Failure> {
+    pub(crate) fn finish(self) -> Result<(), Failure> {
         if self.erasable {
-            choice::write_control(&choice::redraw_from(self.lines))?;
+            write_control(&choice::redraw_from(self.lines))?;
         }
         Ok(())
     }
@@ -338,7 +379,7 @@ impl Step {
 /// Set while a container is on the screen whose check has not finished, so that Ctrl+C can say so.
 static UNVERIFIED_CONTAINER_SHOWN: AtomicBool = AtomicBool::new(false);
 
-pub fn set_unverified_container_shown(shown: bool) {
+pub(crate) fn set_unverified_container_shown(shown: bool) {
     UNVERIFIED_CONTAINER_SHOWN.store(shown, Ordering::SeqCst);
 }
 
@@ -347,7 +388,7 @@ pub fn set_unverified_container_shown(shown: bool) {
 /// Argon2 work area and every secret. If a hidden prompt has switched the echo off, the terminal
 /// is restored first, and a private screen is left. Ctrl+\, Ctrl+Z, a closed terminal (SIGHUP) and
 /// SIGTERM end it the same way, so that none leaves a secret on the screen (AUD-015-SEC004).
-pub fn stop_on_ctrl_c() {
+pub(crate) fn stop_on_ctrl_c() {
     let handler = || hidden_input::restore_and_exit(exit_cancelled);
     if ctrlc::set_handler(handler).is_err() {
         // Without the handler the default Ctrl+C behaviour still ends the tool at once.
@@ -359,7 +400,7 @@ pub fn stop_on_ctrl_c() {
     }
 }
 
-pub fn exit_cancelled() -> ! {
+pub(crate) fn exit_cancelled() -> ! {
     // The summary so far comes first, as when a command ends.
     flow::end_at_exit();
     leave_private_screen();
@@ -376,7 +417,7 @@ pub fn exit_cancelled() -> ! {
 }
 
 /// What a cancelled command says, after Ctrl+C or q in a list.
-pub fn show_cancelled() {
+pub(crate) fn show_cancelled() {
     style::warn("Cancelled. Nothing was saved.", "");
 }
 
@@ -419,10 +460,7 @@ fn no_terminal_advice(command_reads_stdin: bool) -> &'static str {
     }
 }
 
-fn read_script_line(
-    lines: &mut io::StdinLock<'static>,
-    prompt: &str,
-) -> Result<LockedText, Failure> {
+fn read_script_line(lines: &mut StandardInput, prompt: &str) -> Result<LockedText, Failure> {
     read_bounded_line(lines)?.ok_or_else(|| {
         Failure::invalid_input(format!(
             "Standard input ended before this answer: {}",
@@ -431,26 +469,31 @@ fn read_script_line(
     })
 }
 
-/// Reads one line of at most LINE_CAPACITY bytes into a buffer reserved at that size and locked,
+/// Reads an answer of at most ANSWER_BYTES bytes into the reserved, locked LINE_CAPACITY buffer,
 /// without its line break. `None` means that the input had ended. A longer line is refused, and
 /// what was read of it is wiped with the buffer, so the buffer never grows.
 ///
-/// The standard library keeps its own buffer of what it read from standard input and does not
-/// wipe it; only the copies in this program's buffers are under its control.
+/// The reader takes from standard input only what the line needs, and on Unix keeps no copy of it
+/// (standard_input.rs); on Windows the standard library keeps its own buffer, which it does not
+/// wipe.
 fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<LockedText>, Failure> {
     let mut read = 0;
     // Locked before anything is read into it: a script's line may be a password or a phrase.
     let line = LockedText::build(LINE_CAPACITY, |line| {
-        read = reader.take(LINE_CAPACITY as u64).read_line(line)?;
-        if !line.ends_with('\n') && read == LINE_CAPACITY {
-            // The line break counts towards LINE_CAPACITY, so the answer itself may have one byte
-            // less.
-            return Err(Failure::invalid_input(format!(
-                "An answer is longer than {} bytes; no valid answer is that long.",
-                LINE_CAPACITY - 1
-            )));
-        }
+        read = reader
+            .take(LINE_CAPACITY as u64)
+            .read_line(line)
+            .map_err(|error| {
+                if error.kind() == io::ErrorKind::InvalidData {
+                    Failure::invalid_input("The answer is not valid UTF-8 text.")
+                } else {
+                    error.into()
+                }
+            })?;
         strip_line_ending(line);
+        if line.len() > ANSWER_BYTES {
+            return Err(too_long_answer());
+        }
         Ok(())
     })?;
     note_unlocked(line.is_locked());
@@ -470,7 +513,7 @@ fn strip_line_ending(line: &mut String) {
 /// Prints a phrase to standard output. For a person: in a frame, numbered, for comparing with
 /// what was written down, and below it on one plain line, for copying. For a script: the plain
 /// line only.
-pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> Result<(), Failure> {
+pub(crate) fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> Result<(), Failure> {
     if input.is_script() {
         return style::out(phrase);
     }
@@ -483,8 +526,55 @@ pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> Result<(), F
     Ok(())
 }
 
+/// Shows accepted spellings before their input screen is cleared. A secret is shown only on
+/// the private screen; a script receives no extra output or question.
+pub(crate) fn read_back(
+    input: &Input,
+    typed: &str,
+    words: &str,
+    secret: bool,
+) -> Result<(), Failure> {
+    if input.is_script() || !spelling_needs_read_back(typed, words) {
+        return Ok(());
+    }
+    if secret && !on_alternate_screen() {
+        style::hint("The accepted words were not shown: a private screen is unavailable.");
+        return Ok(());
+    }
+    eprintln!();
+    style::hint("Accepted words, written out:");
+    for line in style::boxed_words(words) {
+        eprintln!("{}", *line);
+    }
+    if hidden_input::can_redraw() {
+        private_screen::wait_to_leave_saying(READ_BACK_PROMPT)
+    } else {
+        input_read_back_without_redraw()
+    }
+}
+
+/// The read-back wait is distinct from a secret input and never records its answer.
+fn input_read_back_without_redraw() -> Result<(), Failure> {
+    style::hint(READ_BACK_PROMPT);
+    let mut input = Input::terminal_only();
+    loop {
+        if input.visible("Enter: ")?.is_empty() {
+            return Ok(());
+        }
+    }
+}
+
+/// The person checks the spelling before the next question. Escape clears a capable screen too.
+pub(crate) const READ_BACK_PROMPT: &str = "Check the written-out words; Enter continues.";
+
+fn spelling_needs_read_back(typed: &str, words: &str) -> bool {
+    !typed.split_whitespace().eq(words.split_whitespace()) || words.split_whitespace().any(|word|
+        matches!(WordList::Bip39.hint(word), mhfe::word_hints::Hint::Words(matches) if matches.len() > 1)
+    )
+}
+
 /// The wallet a phrase shown opens, whose master key fingerprint is shown under it.
-pub enum Wallet<'a> {
+pub(crate) enum Wallet<'a> {
     /// A new seed phrase with the BIP39 passphrase chosen for it, empty for none.
     NewPassphrase(&'a str),
     /// A seed phrase whose BIP39 passphrase the command does not know: the wallet without one.
@@ -525,6 +615,7 @@ fn print_fingerprint(phrase: &str, wallet: Wallet) {
         paint(STRONG, fingerprint),
         paint(MUTED, format!("({which})"))
     );
+    style::hint(style::FINGERPRINT_NOTE);
 }
 
 /// The name `mhfe check --fingerprint` asks for, so that the same number is recognised there.
@@ -532,7 +623,7 @@ const FINGERPRINT_LABEL: &str = "Master key fingerprint";
 
 /// Reads a password on a private screen headed `title`, again until it is one that the
 /// specification allows, and records it in the summary.
-pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
+pub(crate) fn read_password(input: &mut Input, operation: Operation) -> Result<Password, Failure> {
     // A command may ask for a BIP39 passphrase or a new password too: say which secret this is.
     let (prompt, what) = match operation {
         Operation::Rekey => (
@@ -544,9 +635,9 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
             "The password the container was encrypted with; it is NOT a BIP39 passphrase.",
         ),
     };
-    let screen = PrivateScreen::enter(input, operation.title());
+    let screen = PrivateScreen::enter(input, operation.title())?;
     let (password, check) = loop {
-        if screen.is_active() {
+        if !input.is_script() {
             eprintln!();
             style::hint(what);
             style::hint(check_word::FORGOTTEN_WORD_HINT);
@@ -556,7 +647,7 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
         let (text, check) = match check_word::review(input, typed, &screen)? {
             Reviewed::Use(text, check) => (text, check),
             Reviewed::TypeAgain => {
-                screen.clear();
+                screen.clear()?;
                 continue;
             }
         };
@@ -570,7 +661,8 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
 }
 
 /// The question for a container: 24 words, or 12 to 21 for a same-length container.
-pub const CONTAINER_PROMPT: &str = "Container, 24 words or as long as the original seed phrase: ";
+pub(crate) const CONTAINER_PROMPT: &str =
+    "Container, 24 words or as long as the original seed phrase: ";
 
 /// Reads a container on a private screen headed `title`, as the phrase is read for an encryption:
 /// it is a valid seed phrase too, so it is shown as it is typed, taken at once when it is valid,
@@ -582,14 +674,24 @@ pub const CONTAINER_PROMPT: &str = "Container, 24 words or as long as the origin
 ///
 /// A search for missing words asks for the container password; it comes back with the container,
 /// so that the command does not ask for it again.
-pub fn read_container(
+pub(crate) fn read_container(
     input: &mut Input,
     title: &str,
     card: CardAsked,
 ) -> Result<ReadContainer, Failure> {
-    let screen = PrivateScreen::enter(input, title);
+    read_container_for(input, title, card, |_| Ok(()))
+}
+
+/// Reads a container usable by this command; a refused typed answer is asked again.
+pub(crate) fn read_container_for(
+    input: &mut Input,
+    title: &str,
+    card: CardAsked,
+    require: impl Fn(&ContainerFacts) -> Result<(), MhfeError>,
+) -> Result<ReadContainer, Failure> {
+    let screen = PrivateScreen::enter(input, title)?;
     let (container, reviewed) = loop {
-        if screen.is_active() {
+        if !input.is_script() {
             eprintln!();
             // Where a word typed as ? can be repaired, the person is told so before typing.
             if !matches!(card, CardAsked::Never) {
@@ -597,12 +699,18 @@ pub fn read_container(
             }
         }
         let typed = input.visible_words(CONTAINER_PROMPT, WordList::Bip39)?;
-        let Some(reviewed) = container_repair::review(input, typed, card)? else {
+        // The repair can replace the spelling with canonical words. Keep the original only in
+        // a wiping owner until its accepted spelling has been checked on this input screen.
+        let spelling = LockedText::copy_of(&typed);
+        let Some(reviewed) = container_repair::review(input, typed, card.clone())? else {
             continue;
         };
-        if let Some(container) =
-            input.accepted(ContainerFacts::read(&reviewed.words), TYPE_AGAIN)?
-        {
+        let read = ContainerFacts::read(&reviewed.words).and_then(|container| {
+            require(&container)?;
+            Ok(container)
+        });
+        if let Some(container) = input.accepted(read, TYPE_AGAIN)? {
+            read_back(input, &spelling, container.words(), false)?;
             break (container, reviewed);
         }
     };
@@ -630,12 +738,12 @@ pub fn read_container(
 
 /// A container read, with what a search for its missing words brought: the password it asked for,
 /// so that the command does not ask again, and what it matched.
-pub struct ReadContainer {
-    pub facts: ContainerFacts,
-    pub password: Option<Password>,
-    pub found_by: Option<String>,
+pub(crate) struct ReadContainer {
+    pub(crate) facts: ContainerFacts,
+    pub(crate) password: Option<Password>,
+    pub(crate) found_by: Option<String>,
     /// What was repaired, by the repair words or a search, as the summary records it.
-    pub repaired: Option<String>,
+    pub(crate) repaired: Option<String>,
 }
 
 #[cfg(test)]
@@ -675,28 +783,35 @@ mod tests {
 
     #[test]
     fn a_line_up_to_the_limit_keeps_its_buffer() {
-        let longest = format!("{}\n", "a".repeat(LINE_CAPACITY - 1));
-        let line = read_bounded_line(&mut io::Cursor::new(longest))
-            .unwrap()
-            .unwrap();
-        assert_eq!(line.len(), LINE_CAPACITY - 1);
-        assert_eq!(
-            line.capacity(),
-            LINE_CAPACITY,
-            "the buffer was never reallocated"
-        );
+        for ending in ["\n", "\r\n", ""] {
+            let longest = format!("{}{ending}", "a".repeat(ANSWER_BYTES));
+            let line = read_bounded_line(&mut io::Cursor::new(longest))
+                .unwrap()
+                .unwrap();
+            assert_eq!(line.len(), ANSWER_BYTES);
+            assert_eq!(
+                line.capacity(),
+                LINE_CAPACITY,
+                "the buffer was never reallocated"
+            );
+        }
     }
 
     #[test]
     fn a_longer_line_is_refused() {
-        let too_long = format!("{}\n", "a".repeat(LINE_CAPACITY));
+        let too_long = format!("{}\n", "a".repeat(ANSWER_BYTES + 1));
         let Err(failure) = read_bounded_line(&mut io::Cursor::new(too_long)) else {
             panic!("a longer line was accepted");
         };
-        assert!(
-            failure.message.contains("longer than"),
-            "{}",
-            failure.message
-        );
+        assert_eq!(failure.message, too_long_answer().message);
+    }
+
+    #[test]
+    fn invalid_utf8_on_standard_input_is_an_input_refusal() {
+        let Err(failure) = read_bounded_line(&mut io::Cursor::new(b"\xff\n")) else {
+            panic!("invalid UTF-8 was accepted");
+        };
+        assert_eq!(failure.exit_code, crate::exit::INVALID_INPUT);
+        assert_eq!(failure.message, "The answer is not valid UTF-8 text.");
     }
 }

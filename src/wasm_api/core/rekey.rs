@@ -11,7 +11,7 @@ use super::{
 };
 use crate::engine::browser::JsArgon2;
 use crate::rekey::{ConfirmedPhrase, Rekey, ReplacementRehearsal};
-use crate::wasm_api::{js_error, json, secret_json, whole_number, SecretText};
+use crate::wasm_api::{js_error, json, secret_json, SecretText};
 use crate::{
     refuse_unused_passphrase, Confirmation, MhfeError, PassphraseReferences, Password,
     PhraseLength, RecoveredForRekey, Settings, WordCount, WorkFactor,
@@ -55,6 +55,7 @@ pub struct RekeySession {
     wallet_has_passphrase: Option<bool>,
     /// The lengths at which the owner may confirm after the refusal (`ownerLengths`).
     owner_lengths: Vec<usize>,
+    refusal: Option<MhfeError>,
     confirmed: Option<ConfirmedPhrase>,
     /// What the new container's rehearsal compares, known before it is sealed.
     rehearsal: Option<ReplacementRehearsal>,
@@ -95,6 +96,15 @@ impl From<MhfeError> for NotConfirmed {
     fn from(error: MhfeError) -> Self {
         Self::Ends(js_error(error))
     }
+}
+
+/// The non-secret fields of a page's confirmation, including an optional owner length.
+struct PageConfirmation<'a> {
+    kind: &'a str,
+    reference: &'a str,
+    coin: &'a str,
+    path: &'a str,
+    words: Option<WordCount>,
 }
 
 /// Calls `then` with the library's confirmation of a rekey as the page names it, and the text of
@@ -140,7 +150,7 @@ impl RekeySession {
     /// passwords open on it are moved ([`keep_old_container`]).
     #[expect(
         clippy::too_many_arguments,
-        reason = "the WebAssembly boundary takes every input as an argument of its own"
+        reason = "the WebAssembly binding takes every input as an argument of its own"
     )]
     #[wasm_bindgen(constructor)]
     pub fn new(
@@ -167,6 +177,7 @@ impl RekeySession {
             recovered: None,
             wallet_has_passphrase: None,
             owner_lengths: Vec::new(),
+            refusal: None,
             confirmed: None,
             rehearsal: None,
             step: RekeyStep::Made,
@@ -177,7 +188,7 @@ impl RekeySession {
     /// words. Refused before any Argon2 work when they would give the old container again.
     #[expect(
         clippy::too_many_arguments,
-        reason = "the WebAssembly boundary takes every input as an argument of its own"
+        reason = "the WebAssembly binding takes every input as an argument of its own"
     )]
     #[wasm_bindgen(js_name = setNew)]
     pub fn set_new(
@@ -218,7 +229,7 @@ impl RekeySession {
     /// false is refused; everywhere else it is required (see [`Rekey::recover`]). The answer holds
     /// for every confirmation of the rekey. These refusals, and REFERENCE_REQUIRED for a
     /// confirmation that cannot confirm a phrase of the rekey's length, come before the first
-    /// round; only the Argon2 build's 1 MiB known answer runs before them. Returns JSON
+    /// round and before the Argon2 build's 1 MiB known answer. Returns JSON
     /// `{ ownerCheck, walletCheck }`: for "owner", the phrase to compare, and the rekey then waits
     /// for `ownerAnswer`; `walletCheck` the 16-bit source check of a 24-word reading with the
     /// reference's passphrase or the empty one, null for other lengths. A refusal after the
@@ -226,7 +237,7 @@ impl RekeySession {
     /// recovery for `confirmAgain`; `ownerLengths` then says whether the owner may give it.
     #[expect(
         clippy::too_many_arguments,
-        reason = "the WebAssembly boundary takes every input as an argument of its own"
+        reason = "the WebAssembly binding takes every input as an argument of its own"
     )]
     pub fn recover(
         &mut self,
@@ -269,7 +280,17 @@ impl RekeySession {
         let (recovered, has_passphrase) = self.or_end(outcome)?;
         self.recovered = Some(recovered);
         self.wallet_has_passphrase = Some(has_passphrase);
-        self.confirm_recovered(kind, reference, coin, path, &passphrase, on_round)
+        self.confirm_recovered(
+            PageConfirmation {
+                kind,
+                reference,
+                coin,
+                path,
+                words: None,
+            },
+            &passphrase,
+            on_round,
+        )
     }
 
     /// After a refused confirmation that allows another (the rekey waits for `confirmAgain`), the
@@ -290,7 +311,7 @@ impl RekeySession {
     /// recovery again, and any other failure ends the rekey.
     #[expect(
         clippy::too_many_arguments,
-        reason = "the WebAssembly boundary takes every input as an argument of its own"
+        reason = "the WebAssembly binding takes every input as an argument of its own"
     )]
     #[wasm_bindgen(js_name = confirmAgain)]
     pub fn confirm_again(
@@ -306,14 +327,22 @@ impl RekeySession {
         // Under a wiping owner first, so that a step out of its order drops it wiped too.
         let passphrase = SecretText::new(passphrase_utf8);
         self.expect(RekeyStep::Refused)?;
-        let outcome = self
-            .owner_length(kind, words)
-            .and_then(|length| match length {
-                Some(length) => self.rekey.set_length(length).map_err(js_error),
-                None => Ok(()),
-            });
-        self.or_end(outcome)?;
-        self.confirm_recovered(kind, reference, coin, path, &passphrase, on_round)
+        let words = word_count(words).map(|length| match length {
+            PhraseLength::Detect => None,
+            PhraseLength::Words(words) => Some(words),
+        });
+        let words = self.or_end(words)?;
+        self.confirm_recovered(
+            PageConfirmation {
+                kind,
+                reference,
+                coin,
+                path,
+                words,
+            },
+            &passphrase,
+            on_round,
+        )
     }
 
     /// The owner's answer after comparing the shown phrase with their backup: anything but yes
@@ -396,14 +425,11 @@ impl RekeySession {
     /// a refusal that allows another confirmation keeps it.
     fn confirm_recovered(
         &mut self,
-        kind: &str,
-        reference: &str,
-        coin: &str,
-        path: &str,
+        input: PageConfirmation<'_>,
         passphrase: &SecretText,
         on_round: &js_sys::Function,
     ) -> Result<js_sys::JsString, JsError> {
-        match self.try_confirm(kind, reference, coin, path, passphrase, on_round) {
+        match self.try_confirm(input, passphrase, on_round) {
             Ok((confirmed, result)) => {
                 self.recovered = None;
                 self.step = if confirmed.awaits_owner() {
@@ -423,6 +449,7 @@ impl RekeySession {
                 owner_lengths,
             }) => {
                 self.owner_lengths = owner_lengths;
+                self.refusal = Some(refusal.clone());
                 self.step = RekeyStep::Refused;
                 Err(js_error(refusal))
             }
@@ -434,11 +461,8 @@ impl RekeySession {
     }
 
     fn try_confirm(
-        &self,
-        kind: &str,
-        reference: &str,
-        coin: &str,
-        path: &str,
+        &mut self,
+        input: PageConfirmation<'_>,
         passphrase: &SecretText,
         on_round: &js_sys::Function,
     ) -> Result<(ConfirmedPhrase, js_sys::JsString), NotConfirmed> {
@@ -446,18 +470,30 @@ impl RekeySession {
             MhfeError::Internal("a rekey confirms without its recovery".to_owned())
         })?;
         with_rekey_confirmation(
-            kind,
-            reference,
-            coin,
-            path,
+            input.kind,
+            input.reference,
+            input.coin,
+            input.path,
             passphrase,
             |confirmation, text| {
-                let confirmed = self.rekey.confirm(
-                    recovered,
-                    confirmation,
-                    self.wallet_has_passphrase,
-                    &mut |stage, round, rounds| report(on_round, stage, round, rounds),
-                );
+                let mut progress = |stage, round, rounds| report(on_round, stage, round, rounds);
+                let confirmed = if let Some(refusal) = &self.refusal {
+                    self.rekey.confirm_again(
+                        recovered,
+                        refusal,
+                        confirmation,
+                        input.words,
+                        self.wallet_has_passphrase,
+                        &mut progress,
+                    )
+                } else {
+                    self.rekey.confirm(
+                        recovered,
+                        confirmation,
+                        self.wallet_has_passphrase,
+                        &mut progress,
+                    )
+                };
                 let confirmed = match confirmed {
                     Ok(confirmed) => confirmed,
                     Err(refusal) => {
@@ -487,35 +523,6 @@ impl RekeySession {
         )?
     }
 
-    /// The length the owner states with `words` for a confirmation of `kind` after a refusal: one
-    /// of the lengths the library left the owner, and 0 with every other kind.
-    fn owner_length(&self, kind: &str, words: f64) -> Result<Option<PhraseLength>, JsError> {
-        let words = whole_number(
-            words,
-            MhfeError::InvalidWordCount(0).code(),
-            "the word count",
-        )? as usize;
-        match (kind, words) {
-            ("owner", words) if self.owner_lengths.contains(&words) => Ok(Some(
-                PhraseLength::Words(WordCount::new(words).map_err(js_error)?),
-            )),
-            ("owner", _) if self.owner_lengths.is_empty() => {
-                Err(js_error(MhfeError::InvalidRequest(
-                    "the owner cannot confirm this phrase: an address or the fingerprint does"
-                        .to_owned(),
-                )))
-            }
-            ("owner", words) => Err(js_error(MhfeError::InvalidRequest(format!(
-                "the owner confirms a reading of {:?} words here, not {words}",
-                self.owner_lengths
-            )))),
-            (_, 0) => Ok(None),
-            _ => Err(js_error(MhfeError::InvalidRequest(
-                "only the owner's confirmation states a length".to_owned(),
-            ))),
-        }
-    }
-
     fn expect(&mut self, step: RekeyStep) -> Result<(), JsError> {
         if self.step == step {
             return Ok(());
@@ -538,6 +545,7 @@ impl RekeySession {
     fn end(&mut self) {
         self.step = RekeyStep::Ended;
         self.recovered = None;
+        self.refusal = None;
         self.confirmed = None;
     }
 }

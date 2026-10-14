@@ -2,6 +2,8 @@
 //! to ask when a typed password may have a check word. Reading the password and its repairs is the
 //! library's [`mhfe::check_word::PasswordReview`].
 
+use std::fmt::Write as _;
+
 use mhfe::check_word::{Correction, PasswordReview, Reading, Repair, ReviewChoice};
 use mhfe::memory::LockedText;
 
@@ -13,11 +15,11 @@ use crate::terminal::{Input, PrivateScreen};
 
 /// Said where a password is typed, so that a person who forgot a word knows how to get it back:
 /// a word left out would make it five words, an ordinary password.
-pub const FORGOTTEN_WORD_HINT: &str =
+pub(crate) const FORGOTTEN_WORD_HINT: &str =
     "If you forgot a word of a password with a check word, type ? in its place.";
 
 /// What to do with a typed password once its check word has been looked at.
-pub enum Reviewed {
+pub(crate) enum Reviewed {
     /// Use this password, as typed, corrected or with one word repaired; the outcome goes into the
     /// summary once the password is read.
     Use(LockedText, Outcome),
@@ -27,7 +29,7 @@ pub enum Reviewed {
 
 /// How the check word came out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Outcome {
+pub(crate) enum Outcome {
     /// The password cannot have a check word, or it was not looked at.
     NotChecked,
     /// The six words fit, as typed or with their spaces or capitals corrected as this says.
@@ -42,7 +44,7 @@ pub enum Outcome {
 impl Outcome {
     /// The answer of the summary line that records the password, `typed` ("typed" or "typed
     /// twice") followed by how the check word came out.
-    pub fn record(self, typed: &str) -> String {
+    pub(crate) fn record(self, typed: &str) -> String {
         match self {
             Self::NotChecked => typed.to_owned(),
             Self::Fits(None) => format!("{typed}, its check word fits"),
@@ -63,7 +65,7 @@ impl Outcome {
 /// whether its password has a check word. Only a person at a terminal is asked, on the private
 /// screen, since the answers show words of the password; a script, and a password that cannot have
 /// a check word, pass unchanged.
-pub fn review(
+pub(crate) fn review(
     input: &mut Input,
     typed: LockedText,
     screen: &PrivateScreen,
@@ -130,7 +132,8 @@ fn decide(
             ],
             false,
         ),
-        Reading::NotThisShape => unreachable!("only a password of the profile's shape is asked"),
+        // Never asked: review() returns before, for a password of another shape.
+        Reading::NotThisShape => (Vec::new(), false),
     };
     let repairs = review.repairs();
     if let (Some(change), false) = (change, repairs.is_empty()) {
@@ -185,20 +188,33 @@ enum Action<'r> {
     TypeAgain,
 }
 
+/// "Word 3: chokehold", with " instead of " and the word as typed when one is replaced, in a
+/// String reserved at more than its final size: it holds words of a password, and a String that
+/// grew would leave an unwiped copy behind (AUD-024-SEC008).
+pub(crate) fn word_label(position: usize, word: &str, typed: Option<&str>) -> String {
+    let mut label = String::with_capacity(32 + word.len() + typed.map_or(0, str::len));
+    // Writing into a String cannot fail.
+    let _ = write!(label, "Word {position}: {word}");
+    if let Some(typed) = typed {
+        label.push_str(" instead of ");
+        label.push_str(typed);
+    }
+    label
+}
+
 impl Action<'_> {
     fn answer(&self, review: &PasswordReview) -> Answer {
         match self {
             // A word outside the list is not repeated: it may be too long for the line.
             Self::Restore(repair) => Answer::new(
-                format!("Word {}: {}", repair.position(), repair.word()),
+                word_label(repair.position(), repair.word(), None),
                 "restored by the check word",
             ),
             Self::Replace(repair) => Answer::new(
-                format!(
-                    "Word {}: {} instead of {}",
+                word_label(
                     repair.position(),
                     repair.word(),
-                    review.typed_word(repair)
+                    Some(review.typed_word(repair)),
                 ),
                 "",
             ),

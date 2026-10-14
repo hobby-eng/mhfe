@@ -3,22 +3,30 @@
 // tries the worker's crypto.getRandomValues too.
 "use strict";
 
-/**
- * A request of the passwords module's operations as web/passwords.js sends it; each operation
- * reads its own fields. The secrets arrive as bytes, which the worker wipes after the operation.
- * @typedef {SelfCheckRequest & { password: Uint8Array, passwordRepeat: Uint8Array,
- *   repeated: boolean, choice: string, position: number, kind: string,
- *   count: number | undefined, rolls: Uint8Array, typed: Uint8Array }} PasswordsRequest
- */
+/** The field types of this module's DTO; Rust keeps numeric and mnemonic rules. */
+const PASSWORDS_FIELDS = /** @type {const} */ ({
+  tier: "text",
+  skip: "texts",
+  password: "bytes",
+  passwordRepeat: "bytes",
+  repeated: "boolean",
+  choice: "text",
+  position: "number",
+  kind: "text",
+  count: "optionalNumber",
+  rolls: "bytes",
+  typed: "bytes",
+});
+
+/** @typedef {CheckedFields<typeof PASSWORDS_FIELDS>} PasswordsRequest */
 
 /**
  * The passwords module's operations by name, which web/worker-start.js serves.
- * @type {Record<string, Operation<PasswordsRequest>>}
+ * @type {Record<string, Operation<unknown>>}
  */
 // oxlint-disable-next-line no-unused-vars -- web/worker-start.js serves it in runtime/worker.js
-const PASSWORD_OPERATIONS = {
+const PASSWORD_OPERATIONS = operationsWithFields(PASSWORDS_FIELDS, {
   parameters: () => JSON.parse(mhfe.passwordParameters()),
-  packageVersion: () => mhfe.packageVersion(),
   selfCheck: (request, host) =>
     host.selfCheck(request.tier, (onStart, onResult) =>
       mhfe.selfCheckPasswords(request.tier, request.skip, host.random, onStart, onResult),
@@ -30,4 +38,4 @@ const PASSWORD_OPERATIONS = {
   make: (request, host) =>
     JSON.parse(mhfe.makePassword(request.kind, request.count, request.rolls, host.random)),
   wordHints: (request) => JSON.parse(mhfe.wordHints("eff", request.typed)),
-};
+});

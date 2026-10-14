@@ -13,9 +13,6 @@
 // that a recovery takes, though none is reserved before these refusals.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-import vm from "node:vm";
 
 import {
   AMBIGUOUS_12_WORDS,
@@ -23,39 +20,19 @@ import {
   PHRASE,
   REDUCED_COST_SAME_LENGTH_CONTAINER,
   ZERO_24,
+  TEST_PASSWORD,
 } from "./public-test-data.mjs";
 
-const require = createRequire(import.meta.url);
-const root = new URL("../", import.meta.url);
-const read = (path) => readFileSync(new URL(path, root));
-const encode = (text) => new TextEncoder().encode(text);
-const noBytes = () => new Uint8Array();
+import { bindings as mhfe, root } from "./package-check/package.mjs";
+import { knownAnswersOnly, pageMessageOf } from "./package-check/module-bindings.mjs";
+import { encode, noBytes } from "./package-check/test-values.mjs";
 
 const PROGRAM = process.argv[2] ?? new URL("target/release/mhfe", root).pathname;
 /** The program's exit code for input it refuses (src/bin/mhfe/exit.rs). */
 const INVALID_INPUT = 2;
 /** The mark before an error of the program (src/bin/mhfe/style.rs). */
 const ERROR_MARK = "✗ Error:";
-/** The Argon2 costs of the known answers that a call of the core checks first (src/engine). */
-const KNOWN_ANSWER_COSTS = ["1024/1", "65536/3", "262144/2"];
-
-// The package's wasm-bindgen glue defines the global `mhfe`, the bindings of every module.
-vm.runInThisContext(read("target/wasm-bindgen/mhfe.js").toString(), { filename: "mhfe.js" });
-const mhfe = vm.runInThisContext("mhfe");
-mhfe.initSync({ module: read("dist/runtime/mhfe.wasm") });
-vm.runInThisContext(read("web/argon2-engine.js").toString(), { filename: "argon2-engine.js" });
-const argon2Engine = vm.runInThisContext("argon2Engine");
-const engine = argon2Engine(await require("../dist/core/argon2-st.js")());
-/** Argon2 for the core's refusals: its known answers pass, and a round would fail the check. */
-const knownAnswersOnly = {
-  derive: (password, salt, memoryKib, passes, key) => {
-    assert.ok(
-      KNOWN_ANSWER_COSTS.includes(`${memoryKib}/${passes}`),
-      "a refusal came after the first round started",
-    );
-    engine.derive(password, salt, memoryKib, passes, key);
-  },
-};
+const knownAnswersOnlyEngine = await knownAnswersOnly();
 const noRound = () => {};
 
 /** Runs the program in script mode with `lines` on standard input, without colour. */
@@ -83,25 +60,10 @@ function programError(result, what) {
     .trim();
 }
 
-/** The message a page shows for a refusal of the package: its text after the code, a sentence. */
-function packageError(code, action, what) {
-  let message = "";
-  assert.throws(
-    action,
-    (error) => {
-      message = error.message;
-      return message.startsWith(`${code}: `);
-    },
-    `${what}: the package refuses with ${code}`,
-  );
-  const text = message.slice(code.length + 2);
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
 /** Both refuse with the same words; the program may add what it did not do after them. */
 function sameRefusal(what, programResult, code, packageCall) {
   const fromProgram = programError(programResult, what);
-  const fromPackage = packageError(code, packageCall, what);
+  const fromPackage = pageMessageOf(code, packageCall, `${what}: the package refuses with ${code}`);
   assert.ok(
     fromProgram.startsWith(fromPackage),
     `${what}:\n  program: ${fromProgram}\n  package: ${fromPackage}`,
@@ -162,7 +124,7 @@ sameRefusal(
       "",
       "",
       noBytes(),
-      knownAnswersOnly,
+      knownAnswersOnlyEngine,
       noRound,
     ),
 );
@@ -183,7 +145,7 @@ sameRefusal(
       "",
       "",
       noBytes(),
-      knownAnswersOnly,
+      knownAnswersOnlyEngine,
       noRound,
     ),
 );
@@ -201,7 +163,7 @@ sameRefusal(
       0,
       15,
       new Uint8Array(),
-      knownAnswersOnly,
+      knownAnswersOnlyEngine,
       noRound,
     ),
 );
@@ -218,7 +180,7 @@ const encrypt = (phrase, password, repeat, sameLength) => () =>
     sameLength,
     0,
     false,
-    knownAnswersOnly,
+    knownAnswersOnlyEngine,
     noRound,
     () => {},
   );
@@ -226,7 +188,7 @@ sameRefusal(
   "encrypt --same-length of a 24-word phrase",
   program(["encrypt", "--stdin", "--same-length"], [ZERO_24]),
   "SAME_LENGTH_NEEDS_SHORT_PHRASE",
-  encrypt(ZERO_24, "public test password", "public test password", true),
+  encrypt(ZERO_24, TEST_PASSWORD, TEST_PASSWORD, true),
 );
 // The password's own rules come before its repetition is compared, in both.
 sameRefusal(
@@ -237,9 +199,9 @@ sameRefusal(
 );
 sameRefusal(
   "encrypt with another repetition",
-  program(["encrypt", "--stdin"], [PHRASE, "public test password", "other"]),
+  program(["encrypt", "--stdin"], [PHRASE, TEST_PASSWORD, "other"]),
   "PASSWORDS_DIFFER",
-  encrypt(PHRASE, "public test password", "other", false),
+  encrypt(PHRASE, TEST_PASSWORD, "other", false),
 );
 
 // The other lengths detection could read: warned of for a 24-word container, as the first

@@ -28,6 +28,8 @@ export class StandInWorker {
   constructor(url) {
     this.script = resolveObjectURL(url);
     this.terminated = false;
+    // Whether it has said it is ready, which started() waits for.
+    this.ready = false;
     this.messages = [];
     /**
      * The transfer list of each message as the page gave it: each buffer with its size before the
@@ -53,10 +55,15 @@ export class StandInWorker {
     } else if (this.messages.length === 1 && StandInWorker.loads) {
       setTimeout(() => {
         if (!this.terminated) this.reply({ type: "ready", buildId: BUILD_ID });
+        this.ready = true;
       }, 0);
     }
   }
   async #serveCheck() {
+    // The package's worker says its build before anything else (AUD-024-API006); a check that
+    // tests another build says so again with that one.
+    this.reply({ type: "ready", buildId: BUILD_ID });
+    this.ready = true;
     try {
       const result = await StandInWorker.serveCheck(this.messages[0], this);
       if (!this.terminated && result !== undefined) this.reply({ type: "result", result });
@@ -120,7 +127,9 @@ export async function started(matches = () => true) {
     const worker = StandInWorker.started.findLast(
       (each) => !each.selfCheck && each.messages.length > 0 && matches(each.messages[0]),
     );
-    if (worker !== undefined && !worker.terminated) return worker;
+    // A worker that loads says it is ready before any other message, as the package's does.
+    const loaded = worker?.ready === true || !StandInWorker.loads;
+    if (worker !== undefined && !worker.terminated && loaded) return worker;
     await nextTurn();
   }
   throw new Error("no worker received its request");

@@ -26,15 +26,17 @@ bech32 = { version = "=0.12.0", default-features = false, features = ["alloc"] }
 bip39 = { version = "=3.0.0", features = ["zeroize"] }
 # RIPEMD-160 for Bitcoin addresses; the same crate bip39 already depends on.
 bitcoin_hashes = { version = "=0.14.101", default-features = false }
-blake2 = "=0.11.0"
+# zeroize on blake2, hmac and sha2: their states are fed with secrets and are wiped on drop;
+# each crate gates its own wipe (AUD-024-SEC005).
+blake2 = { version = "=0.11.0", features = ["zeroize"] }
 bs58 = { version = "=0.5.1", default-features = false, features = ["alloc", "check"] }
 hex = "=0.4.3"
-hmac = "=0.13.0"
+hmac = { version = "=0.13.0", features = ["zeroize"] }
 # secp256k1 arithmetic for BIP32 in the rehearsal check; audited by NCC Group.
 k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
-sha2 = "=0.11.0"
+sha2 = { version = "=0.11.0", features = ["zeroize"] }
 # Keccak-256 for Ethereum, EVM, Tron and Injective addresses in the rehearsal check.
 sha3 = { version = "=0.12.0", default-features = false }
 # Its UNICODE_VERSION is (17, 0, 0), the version the specification pins for passwords.
@@ -97,12 +99,14 @@ browser-wallet = ["wasm-bindings"]
 [lints.rust]
 unsafe_code = "deny" # not "forbid": the operating-system modules allow it locally (RUST-07)
 missing_docs = "deny" # library crates
+unreachable_pub = "deny" # internal elements are pub(crate); generated WASM exports are excepted
 
 [lints.clippy]
 all = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+missing_panics_doc = "deny" # a panic that remains is documented (AUD-024-API016)
 too_many_lines = "deny" # at 150 lines, CORE-15
 mod_module_files = "deny" # RUST-03
 undocumented_unsafe_blocks = "deny" # RUST-07

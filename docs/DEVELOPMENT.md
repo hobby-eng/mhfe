@@ -33,6 +33,14 @@ as `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS`.
 
 ## Checks
 
+`scripts/cli-questions.json` lists every CLI choice call, its answer families and the scoped
+options that supply them. Recovery follow-ups state why an answer must wait for the actual result.
+`scripts/verify-cli-questions.mjs` checks call-site coverage in both directions, including new
+modules; a CLI unit test checks every mapped option against its actual clap command. This is a
+tripwire for unlisted calls and incomplete mappings, not a semantic proof about arbitrary Rust.
+Review dynamic answer producers when they change. Python's AST width gate checks the owner's
+agreed PEP 8 widths: 99 columns for code, 72 for comment-only lines and docstrings.
+
 Run the smallest check appropriate to a change. The fast tests use a reduced Argon2 cost.
 `scripts/check-fast.sh` runs the fast checks that CI runs on every push and pull request:
 formatting, the copy and code-rules gates (`scripts/verify-no-copies.mjs`,
@@ -56,6 +64,17 @@ with:
 ```sh
 pnpm install --frozen-lockfile && pnpm run format:check
 ```
+
+The browser checks need their Playwright browsers installed:
+
+```sh
+pnpm exec playwright install chromium firefox
+```
+
+On Linux use `pnpm exec playwright install --with-deps chromium firefox` to install their
+system dependencies too. Both `pnpm run check:browsers` and `node scripts/verify-browsers.mjs`
+need these browsers. The complete `scripts/check.sh` also needs Python 3.11 or later, GNU tar (`gtar` on
+macOS), gzip and zip.
 
 After `scripts/check.sh` has built the browser package, check it in Chromium and Firefox:
 
@@ -118,12 +137,12 @@ the ordinary CI uses the fast checks. See [RELEASING.md](RELEASING.md) for the r
 ## Generated tables
 
 Startup self-checks replay published vectors using the round keys recorded in the fixtures.
-`scripts/generate-published-rounds.py` writes `src/mhfe/published_rounds.rs` from those fixtures;
+`scripts/generate-published-rounds.mjs` writes `src/mhfe/published_rounds.rs` from those fixtures;
 regenerate it whenever the vectors change:
 
 ```sh
-python3 scripts/generate-published-rounds.py
-python3 scripts/generate-published-rounds.py --check
+node scripts/generate-published-rounds.mjs
+node scripts/generate-published-rounds.mjs --check
 ```
 
 `--check` compares without writing, as `scripts/check.sh` does. The self-check interfaces and
@@ -153,8 +172,8 @@ before compiling.
 On x86-64 the native Argon2 code is compiled twice, with SSE2 and SSSE3. The program selects
 SSSE3 only when the processor reports it, and otherwise uses SSE2, which every 64-bit x86
 processor supports. Both copies produce identical results and the tests exercise both. The
-[measurements](measurements/README.md) record the 7 to 10% speed difference; the C boundary and
-its invariants are in [SECURITY.md](../SECURITY.md#the-c-engine-and-its-boundary).
+[measurements](measurements/README.md) record the 7 to 10% speed difference; the C interface and
+its invariants are in [SECURITY.md](../SECURITY.md#the-c-engine-and-its-interface).
 
 ## Further reading
 

@@ -70,7 +70,15 @@ export async function loadClasses() {
       assert.ok(name in namespace, `${declarations} declares ${name}, which its module lacks`);
     }
   }
-  return { MhfeClient, MhfeCancelledError, MhfeError, MhfeRepair, MhfePasswords, MhfeWallet };
+  return {
+    MhfeClient,
+    MhfeCancelledError,
+    MhfeError,
+    MhfeRepair,
+    MhfePasswords,
+    MhfeWallet,
+    runtime: runtimeNamespace,
+  };
 }
 
 /** The client's own limits, checked before any secret is copied, equal the core's. */

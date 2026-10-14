@@ -20,8 +20,9 @@ pub(crate) use crate::vectors::{
 };
 /// One letter off [`TEST_PASSWORD`].
 pub(crate) const WRONG_PASSWORD: &str = "public test passwore";
-/// The master key fingerprint of [`ABANDON_12`] without a passphrase (BIP32 test vectors).
-pub(crate) const ABANDON_12_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
+/// The master key fingerprint of [`ABANDON_12`] without a passphrase, derived from the root key
+/// BIP-0084 publishes.
+pub(crate) use crate::vectors::ZERO_12_FINGERPRINT as ABANDON_12_FINGERPRINT;
 
 /// An engine that must never run: a refusal must come before any Argon2 work.
 pub(crate) struct NoArgon2Calls;
@@ -64,21 +65,9 @@ pub(crate) fn container_of(
 
 /// Entropies of 32 bytes with `counter` in the last eight, as a deterministic stand-in for a
 /// random generator: the wallet check's public vectors.
-pub(crate) fn counted(counter: u64) -> [u8; 32] {
-    let mut entropy = [0u8; 32];
-    entropy[24..].copy_from_slice(&counter.to_be_bytes());
-    entropy
-}
+pub(crate) use crate::wallet_check::known_answers::entropy as counted;
 
-/// The first counter whose phrase passes with the public test passphrase "TREZOR": entropy of
-/// 24 zero bytes and 76,562, "abandon" 21 times, "above proof fatigue". Found once with the
-/// release build, about 65,536 BIP39 seeds, and confirmed by an independent computation.
-pub(crate) const TREZOR_COUNTER: u64 = 76_562;
-
-/// The first counter whose phrase passes with an empty passphrase: 24 zero bytes and 98,918,
-/// "abandon" 21 times, "absorb another spoil". Found with an independent Python computation
-/// (digest 0000ede7…), which also confirmed that it fails with "TREZOR" (8d2b97fb…).
-pub(crate) const EMPTY_COUNTER: u64 = 98_918;
+pub(crate) use crate::wallet_check::known_answers::{EMPTY_COUNTER, TREZOR_COUNTER};
 
 /// The public container of the suite 3 vector zero-12: [`ABANDON_12`] under [`TEST_PASSWORD`] at
 /// full cost.
@@ -92,3 +81,7 @@ fn the_zero_12_container_is_the_vectors() {
     let value: serde_json::Value = serde_json::from_str(json).unwrap();
     assert_eq!(value["container"].as_str().unwrap(), zero_12_container());
 }
+
+/// Public BIP39 phrase whose packed state has no shorter reading.
+pub(crate) const LEGAL_24: &str = "legal winner thank year wave sausage worth useful legal winner thank year \
+                            wave sausage worth useful legal winner thank year wave sausage worth title";

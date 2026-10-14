@@ -224,7 +224,7 @@
       "kind": "observation",
       "title": "Prototype repository has no immutable revision history",
       "severity": "info",
-      "status": "accepted",
+      "status": "open",
       "releaseBlocking": false,
       "evidence": "Git reports no HEAD and all implementation paths as untracked.",
       "reproduction": "Run git status and git rev-parse HEAD.",
@@ -232,7 +232,8 @@
       "observed": "Only a manifest fingerprint identifies the reviewed tree.",
       "impact": "Later provenance and remediation comparisons are harder.",
       "recommendedFix": "Create an initial reviewed commit before publication.",
-      "requiredVerification": "Record the commit and rerun release gates."
+      "requiredVerification": "Record the commit and rerun release gates.",
+      "statusNote": "No owner acceptance evidence was retained at this snapshot; the later AUD-003 disposition remains a later record."
     }
   ],
   "remediation": [
@@ -328,7 +329,9 @@
       {
         "dateUtc": "2026-10-13",
         "authorizedBy": "repository owner",
-        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "changes": [
+          "Explicit report time zone label: UTC (+00:00)."
+        ],
         "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
         "documentBindings": [],
         "reportDocument": {
@@ -339,5 +342,21 @@
       }
     ],
     "timeZone": "UTC (+00:00)"
-  }
+  },
+  "documentationAmendments": [
+    {
+      "completedUtc": "2026-10-14T18:29:45.759752+00:00",
+      "authorizedBy": "repository owner",
+      "kind": "documentation-only",
+      "historicalChecksRerun": false,
+      "changes": [
+        "DOC006: the informational observation now carries its ID in Markdown and the supported open snapshot status in both companions."
+      ],
+      "reportDocument": {
+        "document": "docs/audits/AUD-001-2026-09-22.md",
+        "previousSha256": "97bf9273b4dfdbfb023f46dcee758f3e8d4f01c6d6f2c5edde9cd0fb56713bc0",
+        "sha256": "5541f6672597d0d8ef40f8071ad2e359f3e8eafbcb1d8920cc757b3484d3e76d"
+      }
+    }
+  ]
 }

@@ -11,15 +11,14 @@
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use anstream::eprintln;
-
+use crate::exit::Failure;
 use crate::style;
 use crate::terminal::{self, Input};
 
 /// What a line of the summary is. A blank line separates two groups of different kinds, as the
 /// summary looks when it is written as the steps go.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
+pub(crate) enum Kind {
     /// A line of a table, such as the settings or what to keep (style::fact).
     Fact,
     /// The record of an answer (choice::record).
@@ -62,15 +61,15 @@ fn state() -> MutexGuard<'static, Option<State>> {
 }
 
 /// Shows the steps of a command one at a time while this lives, and its summary when dropped.
-pub struct Flow {
+pub(crate) struct Flow {
     active: bool,
 }
 
 impl Flow {
     /// Starts the steps of the command headed `title`, where a terminal can switch screens and
     /// show them privately; anywhere else this does nothing.
-    pub fn start(input: &Input, title: &str) -> Self {
-        let active = terminal::enter_steps(input);
+    pub(crate) fn start(input: &Input, title: &str) -> Result<Self, Failure> {
+        let active = terminal::enter_steps(input)?;
         if active {
             *state() = Some(State {
                 title: title.to_owned(),
@@ -81,14 +80,14 @@ impl Flow {
                 recording: true,
             });
         }
-        Self { active }
+        Ok(Self { active })
     }
 }
 
 impl Flow {
     /// Ends the steps at once: the main screen gets the summary, and what the command writes next
     /// follows it there, as the result of a command does.
-    pub fn finish(mut self) {
+    pub(crate) fn finish(mut self) {
         self.end();
     }
 
@@ -113,11 +112,11 @@ impl Drop for Flow {
 /// While this lives, the steps keep nothing for the summary: what would be kept is shown on the
 /// screen of the step instead, and leaves with it. For the hidden wallets, whose number must leave
 /// no trace (AUD-007-SEC005).
-pub struct OffTheRecord {
+pub(crate) struct OffTheRecord {
     active: bool,
 }
 
-pub fn off_the_record() -> OffTheRecord {
+pub(crate) fn off_the_record() -> OffTheRecord {
     let mut guard = state();
     let active = match guard.as_mut() {
         Some(state) => {
@@ -139,21 +138,22 @@ impl Drop for OffTheRecord {
     }
 }
 
-pub fn is_active() -> bool {
+pub(crate) fn is_active() -> bool {
     state().is_some()
 }
 
 /// Begins a step: clears the screen and writes the title, then the warnings since the last step.
+///
 /// Does nothing outside a flow.
-pub fn step() {
+pub(crate) fn step() -> Result<(), Failure> {
     let (title, pending) = {
         let mut guard = state();
         let Some(state) = guard.as_mut() else {
-            return;
+            return Ok(());
         };
         (state.title.clone(), std::mem::take(&mut state.pending))
     };
-    terminal::clear_screen();
+    terminal::clear_screen()?;
     style::write_title(&title);
     if !pending.is_empty() {
         eprintln!();
@@ -161,34 +161,35 @@ pub fn step() {
             eprintln!("{line}");
         }
     }
+    Ok(())
 }
 
 /// Keeps `lines` for the summary instead of writing them. False outside a flow, or off the
 /// record, where the caller writes them on the screen as before.
-pub fn keep(kind: Kind, lines: &[String]) -> bool {
+pub(crate) fn keep(kind: Kind, lines: &[String]) -> bool {
     keep_lines(kind, lines, Shown::Later)
 }
 
 /// Keeps a warning for the summary and for the top of the next step.
-pub fn keep_notice(lines: &[String]) -> bool {
+pub(crate) fn keep_notice(lines: &[String]) -> bool {
     keep_next(Kind::Notice, lines)
 }
 
 /// Keeps `lines` for the summary and for the top of the next step, such as what a search will
 /// cover, shown before the work starts.
-pub fn keep_next(kind: Kind, lines: &[String]) -> bool {
+pub(crate) fn keep_next(kind: Kind, lines: &[String]) -> bool {
     keep_lines(kind, lines, Shown::NextStep)
 }
 
 /// Keeps lines for the summary that the caller has also shown on the screen of the step, such as
 /// a result next to what it is about. False where nothing is kept.
-pub fn keep_shown(kind: Kind, lines: &[String]) -> bool {
+pub(crate) fn keep_shown(kind: Kind, lines: &[String]) -> bool {
     keep_lines(kind, lines, Shown::Now)
 }
 
 /// Shows `lines` at the top of the next step without keeping them, such as the reason why a
 /// password typed there was refused.
-pub fn show_at_next_step(lines: &[String]) -> bool {
+pub(crate) fn show_at_next_step(lines: &[String]) -> bool {
     let mut guard = state();
     let Some(state) = guard.as_mut() else {
         return false;
@@ -199,7 +200,7 @@ pub fn show_at_next_step(lines: &[String]) -> bool {
 
 /// Keeps a "More:" line with the lines before it, and shows it where they were shown. Returns
 /// whether the caller must write it on the screen now, as it does outside a flow.
-pub fn keep_link(line: String) -> bool {
+pub(crate) fn keep_link(line: String) -> bool {
     let mut guard = state();
     let Some(state) = guard.as_mut() else {
         return true;
@@ -250,7 +251,7 @@ fn keep_lines(kind: Kind, lines: &[String], shown: Shown) -> bool {
 
 /// For Ctrl+C, which ends the tool from another thread: leaves the steps and writes the summary
 /// so far, unless the thread that was interrupted holds the lock.
-pub fn end_at_exit() {
+pub(crate) fn end_at_exit() {
     let finished = match STATE.try_lock() {
         Ok(mut guard) => guard.take(),
         Err(_) => None,

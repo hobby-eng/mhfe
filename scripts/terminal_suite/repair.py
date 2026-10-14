@@ -1,22 +1,42 @@
-"""The repair of a container phrase, by its repair words or by a search for missing words.
+# TOOL-01: public fixtures and cases of the Python PTY test runtime.
+"""
+The repair of a container phrase, by its repair words or by a search for
+missing words.
 
-Words typed as ? ask for the card, and the repaired container phrase is used only on "Use it", in
-every command and in `mhfe repair`; a script gives the card with --repair. Without the card a
-search uses an address or fingerprint of the container's own wallet: its reference records nothing
-until it is read, a wrong passphrase finds nothing, two missing words are found by an address, and
-a long search asks first.
+Words typed as ? ask for the card, and the repaired container phrase is
+used only on "Use it", in every command and in `mhfe repair`; a script
+gives the card with --repair. Without the card a search uses an address
+or fingerprint of the container's own wallet: its reference records
+nothing until it is read, a wrong passphrase finds nothing, two missing
+words are found by an address, and a long search asks first.
 """
 
 import sys
 
-from .constants import (CANCELLED, CANCELLED_SHOWN, COIN_ASKED, CONTAINER, CONTAINER_ASKED, CTRL_C,
-                        INVALID_INPUT, LEAVE_PRIVATE, LIST_SHOWN, MEMORY_REFUSED,
-                        NOT_ENOUGH_RESOURCES, PHRASE, PUBLIC_PASSPHRASE, SECRET)
+from .constants import (
+    CANCELLED,
+    CANCELLED_SHOWN,
+    COIN_ASKED,
+    CONTAINER,
+    CONTAINER_ASKED,
+    CTRL_C,
+    INVALID_INPUT,
+    LEAVE_PRIVATE,
+    LIST_SHOWN,
+    MEMORY_REFUSED,
+    NOT_ENOUGH_RESOURCES,
+    PHRASE,
+    PUBLIC_PASSPHRASE,
+    SECRET,
+)
 from .session import Session, run_plainly
 
-# The repair of a container phrase where it is read (container_repair::review in the tool): the
-# card asked for, the repaired container phrase shown, and the question before it is used. The
-# card is the published four-word card of zero-12's container phrase (vectors/profiles).
+# The repair of a container phrase where it is read
+# (container_repair::review in the tool): the
+# card asked for, the repaired container phrase shown, and the question
+# before it is used. The
+# card is the published four-word card of zero-12's container phrase
+# (vectors/profiles).
 CARD_HINT = b"Type the repair words as written on the card; ? for a word you cannot read."
 CARD_ASKED = b"Repair words: "
 ZERO_12_CARD = b"shaft pupil patient jewel"
@@ -28,7 +48,9 @@ REPAIRED_RECORDED = b"Repaired   words 3 and 17 of the container phrase, with it
 
 
 def container_with(changes):
-    """Zero-12's container phrase with the words at the positions given, from 1, replaced."""
+    """Zero-12's container phrase with the words at the positions given,
+    from 1, replaced.
+    """
     words = CONTAINER.split(" ")
     for position, word in changes.items():
         words[position - 1] = word
@@ -36,7 +58,9 @@ def container_with(changes):
 
 
 def check_repair_details(stderr, context):
-    """The public repair example must name both positions, erasures and restored words."""
+    """The public repair example must name both positions, erasures and
+    restored words.
+    """
     for position, restored in ((3, b"tower"), (17, b"cycle")):
         line = next(line for line in stderr.splitlines()
                     if f"word {position:>2}".encode() in line)
@@ -44,14 +68,19 @@ def check_repair_details(stderr, context):
             f"{context}: missing erasure and replacement for word {position}: {line!r}")
 
 
-def check_container_repair():
-    """A container phrase with words typed as ? asks for its repair words at once; the repaired
-    container phrase and every repaired word are shown on the private screen, and only "Use it"
-    goes on, to the password, with "Repaired" in the summary and none of the words. Words that
-    are not a container ask whether to type them again or repair them; Enter alone at the repair
-    words goes back to the container phrase. A script gives the card on the line after the
-    container phrase with --repair and is told on standard error what was repaired. All stop
-    before Argon2: at the password, or at a fingerprint that is not one."""
+def a_repair_card_restores_the_container_and_reports_changes():
+    """
+    A container phrase with words typed as ? asks for its repair words
+    at once; the repaired container phrase and every repaired word are
+    shown on the private screen, and only "Use it" goes on, to the
+    password, with "Repaired" in the summary and none of the words.
+    Words that are not a container ask whether to type them again or
+    repair them; Enter alone at the repair words goes back to the
+    container phrase. A script gives the card on the line after the
+    container phrase with --repair and is told on standard error what
+    was repaired. All stop before Argon2: at the password, or at a
+    fingerprint that is not one.
+    """
     session = Session(("check", "--fingerprint", "--pim", "0"))
     session.wait_for(CONTAINER_ASKED)
     session.answer(container_with({3: "?", 17: "?"}) + b"\r", CARD_HINT, CARD_ASKED)
@@ -101,17 +130,23 @@ def check_container_repair():
           "says what it repaired")
 
 
-# `mhfe repair` reads and repairs a container phrase as every command does (container_repair and
-# container_search in the tool), then shows the repaired container phrase on a private screen.
+# `mhfe repair` reads and repairs a container phrase as every command
+# does (container_repair and
+# container_search in the tool), then shows the repaired container
+# phrase on a private screen.
 REPAIR_RESULT = b"Repaired container, 24 words"
 WRITE_IT_DOWN = b"Write it down now: Enter or Escape clears this screen."
 
 
-def check_repair_command():
-    """`mhfe repair` repairs a container phrase with its card and shows it after "Use it"; Enter
-    alone at the card searches for a word typed as ?, here by the decoy fingerprint without a
-    password, and the found container phrase is shown the same way. A script gives the container
-    phrase and the card, one per line, and gets the repaired container phrase on standard output."""
+def the_repair_command_restores_and_confirms_a_container():
+    """
+    `mhfe repair` repairs a container phrase with its card and shows it
+    after "Use it"; Enter alone at the card searches for a word typed as
+    ?, here by the decoy fingerprint without a password, and the found
+    container phrase is shown the same way. A script gives the container
+    phrase and the card, one per line, and gets the repaired container
+    phrase on standard output.
+    """
     session = Session(("repair",))
     session.wait_for(CONTAINER_ASKED)
     session.answer(container_with({3: "?", 17: "?"}) + b"\r", CARD_HINT, CARD_ASKED)
@@ -152,9 +187,12 @@ def check_repair_command():
     print("repair command, script: the repaired container phrase on standard output")
 
 
-# The search for missing words without the repair words (container_search.rs in the tool). The
-# decoy fingerprint of zero-12's container phrase, computed by an independent Python
-# implementation (src/search/known_answers.rs), finds its last word in seconds.
+# The search for missing words without the repair words
+# (container_search.rs in the tool). The
+# decoy fingerprint of zero-12's container phrase, computed by an
+# independent Python
+# implementation (src/search/known_answers.rs), finds its last word in
+# seconds.
 SEARCH_ASKED = b"No repair words: what do you know?"
 REFERENCE_ASKED = b"Address or master key fingerprint: "
 CONTAINER_PASSPHRASE_ASKED = b"Is a BIP39 passphrase used with the container phrase?"
@@ -166,18 +204,21 @@ FOUND_USE_ASKED = b"Use the found container phrase?"
 FOUND_RECORDED = b"Repaired   word 24 of the container phrase, found by a search"
 LONG_SEARCH_WARNED = b"8 candidates, each a full recovery: about 8 to 16 minutes at these"
 TWO_EXPLAINED = b"Two words are missing: only a fingerprint or an address of the"
-# A nested SegWit address of zero-12's container phrase as a wallet, at m/49'/0'/0'/0/9, derived
+# A nested SegWit address of zero-12's container phrase as a wallet, at
+# m/49'/0'/0'/0/9, derived
 # by an independent Python implementation of BIP32 and P2SH-P2WPKH.
 ZERO_12_DECOY_ADDRESS = b"3FWJwUxDaXoGrxZQHT4EHBDZCZw7iHUaRn"
 GAP_ASKED = b"How far does the wallet go?"
 TWO_FOUND = b"Found word 5: iron, word 16: nerve, with the container's own wallet."
 
 
-def check_search_reference_is_recorded_once_read():
-    """The one field of a search's reference records nothing on the main screen before the text is
-    read as a fingerprint or an address of the coin asked: a seed phrase typed there is refused as
-    several words, and a word with control characters that is no address is never recorded
-    (AUD-015-SEC001)."""
+def a_search_records_the_reference_as_soon_as_it_is_read():
+    """The one field of a search's reference records nothing on the main
+    screen before the text is read as a fingerprint or an address of the
+    coin asked: a seed phrase typed there is refused as several words,
+    and a word with control characters that is no address is never
+    recorded (AUD-015-SEC001).
+    """
     session = Session(("check", "--fingerprint", "--pim", "0"))
     session.wait_for(CONTAINER_ASKED)
     session.answer(container_with({24: "?"}) + b"\r", CARD_ASKED)
@@ -198,21 +239,27 @@ def check_search_reference_is_recorded_once_read():
     print("search: the reference field records nothing until it is read; a phrase is refused")
 
 
-def check_container_search():
-    """Enter alone at the repair words of a container phrase with a word typed as ? asks what is
-    known: an address or fingerprint of the container's own wallet, read in one field, its BIP39
-    passphrase only after "Is a BIP39 passphrase used with the container phrase?". zero-12's decoy
-    fingerprint finds its last word without a password, shown with the found container phrase,
-    used only after "Use it"; the password follows, and the summary records the search, never the
-    word. A passphrase the container phrase does not have finds nothing, and the question comes
-    again. Two missing words offer only the container's own wallet: its address, at the gap
-    chosen, finds both; a gap of one's own is typed. "Not now" before a long search asks again;
-    on Linux the capped run then takes the password and stops at the memory reservation."""
+def missing_word_search_states_the_cost_and_requires_confirmation():
+    """Enter alone at the repair words of a container phrase with a word
+    typed as ? asks what is known: an address or fingerprint of the
+    container's own wallet, read in one field, its BIP39 passphrase only
+    after "Is a BIP39 passphrase used with the container phrase?".
+    zero-12's decoy fingerprint finds its last word without a password,
+    shown with the found container phrase, used only after "Use it"; the
+    password follows, and the summary records the search, never the
+    word. A passphrase the container phrase does not have finds nothing,
+    and the question comes again. Two missing words offer only the
+    container's own wallet: its address, at the gap chosen, finds both;
+    a gap of one's own is typed. "Not now" before a long search asks
+    again; on Linux the capped run then takes the password and stops at
+    the memory reservation.
+    """
     session = Session(("check", "--fingerprint", "--pim", "0"))
     session.wait_for(CONTAINER_ASKED)
     session.answer(container_with({24: "?"}) + b"\r", CARD_ASKED)
     session.answer(b"\r", SEARCH_ASKED, b"1 to 5 at once")
-    # A passphrase the container phrase is not used with: nothing matches, the question comes
+    # A passphrase the container phrase is not used with: nothing
+    # matches, the question comes
     # again.
     session.answer(b"1", REFERENCE_ASKED)
     session.answer(ZERO_12_DECOY_FINGERPRINT + b"\r", CONTAINER_PASSPHRASE_ASKED, LIST_SHOWN)
@@ -233,11 +280,13 @@ def check_container_search():
     assert b"peace" not in summary, "search: the found word reached the main screen"
     print("search: the decoy fingerprint finds the missing word; a wrong passphrase asks again")
 
-    # Two missing words: only the container's own wallet; its address among the first 20.
+    # Two missing words: only the container's own wallet; its address
+    # among the first 20.
     session = Session(("check", "--fingerprint", "--pim", "0"))
     session.wait_for(CONTAINER_ASKED)
     session.answer(container_with({5: "?", 16: "?"}) + b"\r", CARD_ASKED)
-    # Two missing words make about 4 million combinations to list first: seconds in a release
+    # Two missing words make about 4 million combinations to list first:
+    # seconds in a release
     # build, longer in a debug one.
     session.answer(b"\r", SEARCH_ASKED, TWO_EXPLAINED, b"1 or 2 at once", limit=120)
     session.answer(b"1", REFERENCE_ASKED)
@@ -248,7 +297,8 @@ def check_container_search():
     session.close()
     print("search: two words found by an address of the container's own wallet")
 
-    # A gap of the person's own: a number that is not one is asked again, and the scope stated
+    # A gap of the person's own: a number that is not one is asked
+    # again, and the scope stated
     # follows the number taken.
     session = Session(("check", "--fingerprint", "--pim", "0"))
     session.wait_for(CONTAINER_ASKED)
@@ -258,7 +308,8 @@ def check_container_search():
     session.answer(ZERO_12_DECOY_ADDRESS + b"\r", COIN_ASKED, LIST_SHOWN)
     session.answer(b"\r", GAP_ASKED, LIST_SHOWN)
     session.answer(b"4", b"Addresses of each chain: ")
-    session.answer(b"0\r", b"Type a whole number of addresses", b"Addresses of each chain: ")
+    session.answer(b"0\r", b"invalid derivation path: a search covers 1 to",
+                   b"not 1 and 0", b"Addresses of each chain: ")
     session.answer(b"30\r", b"0-1/0-29, 60 addresses", CONTAINER_PASSPHRASE_ASKED)
     session.close()
     print("search: a gap of one's own is typed, refused when it is not a number of addresses")

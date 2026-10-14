@@ -18,9 +18,9 @@ use windows_sys::Win32::System::Console::{
 use super::terminal_error;
 use crate::exit::Failure;
 
-pub type Settings = CONSOLE_MODE;
+pub(crate) type Settings = CONSOLE_MODE;
 
-pub fn current() -> Result<Settings, Failure> {
+pub(crate) fn current() -> Result<Settings, Failure> {
     let mut mode: CONSOLE_MODE = 0;
     // SAFETY: a plain console call on the standard input handle.
     if unsafe { GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mut mode) } == 0 {
@@ -29,7 +29,7 @@ pub fn current() -> Result<Settings, Failure> {
     Ok(mode)
 }
 
-pub fn hide(original: &Settings) -> Result<(), Failure> {
+pub(crate) fn hide(original: &Settings) -> Result<(), Failure> {
     // No echo and no line mode: this module edits the line. Processed input keeps Ctrl+C as
     // the cancel key; without line input the console acts on no other key.
     let hidden = (original & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT)) | ENABLE_PROCESSED_INPUT;
@@ -53,7 +53,7 @@ fn read_back_echo_off() -> Result<(), Failure> {
 /// Unix terminal does (Windows 10 and later). The menu redraws itself with VT cursor
 /// sequences on standard error, so the console is also asked to carry those out there; that
 /// output mode stays on, as for any program that writes colours.
-pub fn single_keys(original: &Settings) -> Result<(), Failure> {
+pub(crate) fn single_keys(original: &Settings) -> Result<(), Failure> {
     let keys = (original & !(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT))
         | ENABLE_PROCESSED_INPUT
         | ENABLE_VIRTUAL_TERMINAL_INPUT;
@@ -75,7 +75,7 @@ pub fn single_keys(original: &Settings) -> Result<(), Failure> {
 
 /// Asks the console to carry out the VT control sequences written to standard error, such as
 /// switching to the alternate screen; whether it agreed. The mode stays on, as in single_keys.
-pub fn control_sequences() -> bool {
+pub(crate) fn control_sequences() -> bool {
     // SAFETY: plain console calls on the standard error handle.
     unsafe {
         let output = GetStdHandle(STD_ERROR_HANDLE);
@@ -87,7 +87,7 @@ pub fn control_sequences() -> bool {
 
 /// A process has one console: standard output and standard error, when both are consoles,
 /// are that one.
-pub fn output_on_error_terminal() -> bool {
+pub(crate) fn output_on_error_terminal() -> bool {
     let mut mode: CONSOLE_MODE = 0;
     // SAFETY: plain console calls on the standard output and error handles.
     unsafe {
@@ -97,7 +97,7 @@ pub fn output_on_error_terminal() -> bool {
 }
 
 /// The width of the console window that standard error writes to.
-pub fn columns() -> Option<usize> {
+pub(crate) fn columns() -> Option<usize> {
     let mut info = CONSOLE_SCREEN_BUFFER_INFO::default();
     // SAFETY: a plain console call that fills `info`.
     let read = unsafe { GetConsoleScreenBufferInfo(GetStdHandle(STD_ERROR_HANDLE), &mut info) };
@@ -108,7 +108,7 @@ pub fn columns() -> Option<usize> {
 /// Whether a typed character arrives within `delay`. The console has no wait for that alone:
 /// its queue also holds events that give no character, such as the release of the Escape key
 /// itself, so the queue is looked at every few milliseconds until the time is up.
-pub fn input_within(delay: Duration) -> Result<bool, Failure> {
+pub(crate) fn input_within(delay: Duration) -> Result<bool, Failure> {
     const LOOK_EVERY: Duration = Duration::from_millis(5);
     let end = Instant::now() + delay;
     loop {
@@ -152,7 +152,7 @@ fn character_waiting() -> Result<bool, Failure> {
     Ok(typed)
 }
 
-pub fn restore(original: &Settings) {
+pub(crate) fn restore(original: &Settings) {
     // SAFETY: the mode read from this console before.
     unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), *original) };
 }

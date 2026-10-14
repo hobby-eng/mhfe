@@ -7,7 +7,7 @@
 //! detection would also accept another length. Each case seals a published vector, replayed with
 //! its recorded round keys.
 
-use super::{Encryption, KeepItem, WalletPassphrase};
+use super::{Encryption, Keep, KeepItem, WalletPassphrase};
 use crate::mhfe::known_answers::{published, published_table};
 use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
 
@@ -104,14 +104,40 @@ const CASES: [KeepCase; 6] = [
     },
 ];
 
+#[derive(Clone, Copy)]
+struct OldKeepCase {
+    vector: &'static str,
+    expected: &'static [KeepItem],
+}
+
+const OLD_CASES: [OldKeepCase; 2] = [
+    OldKeepCase {
+        vector: "zero-12",
+        expected: &[KeepItem::OldContainer, KeepItem::OldPasswords],
+    },
+    OldKeepCase {
+        vector: "zero-12-pim-1-memory-level-1",
+        expected: &[
+            KeepItem::OldContainer,
+            KeepItem::OldPasswords,
+            KeepItem::Pim(1),
+            KeepItem::MemoryLevel(1),
+        ],
+    },
+];
+
 /// The `keep-advice` check.
 pub(crate) struct KeepCheck {
     cases: &'static [KeepCase],
+    old_cases: &'static [OldKeepCase],
 }
 
 impl KeepCheck {
     pub(crate) fn new() -> Self {
-        Self { cases: &CASES }
+        Self {
+            cases: &CASES,
+            old_cases: &OLD_CASES,
+        }
     }
 
     fn case(case: &KeepCase) -> Result<(), String> {
@@ -153,6 +179,13 @@ impl ComponentCheck for KeepCheck {
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
         findings.each("case", self.cases, Self::case);
+        findings.each("old container", self.old_cases, |case| {
+            let work = published(case.vector)?.work()?;
+            expect(
+                Keep::old_container(work).items() == case.expected,
+                "differs",
+            )
+        });
         findings.outcome()
     }
 }
@@ -169,6 +202,17 @@ mod tests {
         );
     }
 
+    fn list_fails(cases: [KeepCase; 6], detail: &str) {
+        let mut check = KeepCheck {
+            cases: Box::leak(Box::new(cases)),
+            ..KeepCheck::new()
+        };
+        assert_eq!(
+            check.run(Tier::Startup),
+            ComponentOutcome::Failed(detail.to_owned())
+        );
+    }
+
     #[test]
     fn a_list_with_a_default_setting_fails() {
         let mut cases = CASES;
@@ -178,21 +222,26 @@ mod tests {
             KeepItem::RepairWords,
             KeepItem::Pim(0),
         ];
-        let mut check = KeepCheck {
-            cases: Box::leak(Box::new(cases)),
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("case 1 of 6 differs".to_owned())
-        );
+        list_fails(cases, "case 1 of 6 differs");
         let mut cases = CASES;
         cases[3].other_lengths = &[];
-        let mut check = KeepCheck {
-            cases: Box::leak(Box::new(cases)),
-        };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed("case 4 of 6 tells other checks".to_owned())
-        );
+        list_fails(cases, "case 4 of 6 tells other checks");
+    }
+    #[test]
+    fn old_container_lists_are_compared_with_their_known_answers() {
+        for original in OLD_CASES {
+            let wrong = OldKeepCase {
+                expected: &[KeepItem::OldContainer],
+                ..original
+            };
+            let mut check = KeepCheck {
+                old_cases: crate::self_check::leak([wrong]),
+                ..KeepCheck::new()
+            };
+            assert_eq!(
+                check.run(Tier::Startup),
+                ComponentOutcome::Failed("old container 1 of 1 differs".to_owned())
+            );
+        }
     }
 }

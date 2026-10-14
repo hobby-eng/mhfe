@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { PHRASE } from "../public-test-data.mjs";
 import { StandInWorker, started } from "./stand-in-worker.mjs";
 import {
+  NO_LENGTH_EVIDENCE,
   NOT_BOOLEAN_ANSWERS,
   REKEY_PASSPHRASE_ONLY_WITH_REFERENCE,
   SEARCH_PASSPHRASE_ONLY_WITH_REFERENCE,
@@ -77,6 +78,14 @@ function encryptRefusals(client, encrypt, libraryMessages) {
       walletPassphraseRequired,
     ]),
     [() => encrypt({ password: "p", sameLength: "yes" }), TypeError],
+    // A misspelled option is named, not dropped for its default (AUD-024-API003).
+    ...[{ PIM: 1 }, { samelength: true }, { repairWords: 4 }].map((misspelled) => [
+      () => encrypt({ password: "p", ...misspelled }),
+      {
+        name: "TypeError",
+        message: new RegExp(`^encrypt\\(\\) has no option "${Object.keys(misspelled)[0]}"`, "u"),
+      },
+    ]),
     [() => encrypt({ password: "p", repairWordCount: 3 }), { code: "INVALID_REPAIR_WORDS" }],
     [() => encrypt({ password: "p", passwordRepair: { repair: "3" } }), TypeError],
     [() => encrypt({ password: "a\uD800" }), { code: "INVALID_PASSWORD_TEXT" }],
@@ -128,6 +137,11 @@ function encryptRefusals(client, encrypt, libraryMessages) {
 /** The refusals of a rekey's settings and answers, and of calls without what they need. */
 function rekeyAndCallRefusals(client, encrypt, rekeyWith, libraryMessages) {
   return [
+    // A misspelled option is named, not dropped for its default (AUD-024-API003).
+    [
+      () => rekeyWith({ newPIM: 1 }),
+      { name: "TypeError", message: /^rekey\(\) has no option "newPIM"/u },
+    ],
     // A rekey names its new settings, and the old ones as the container's.
     [
       () =>
@@ -316,13 +330,12 @@ export async function checkMisplacedPassphrases(client) {
     onNoLength: () => ({ walletCheck: true, passphrase: "TREZOR" }),
   });
   worker = await started();
-  worker.reply({ type: "ask", question: "noLength", value: { builtInCheck: null } });
+  worker.reply({ type: "ask", question: "noLength", value: NO_LENGTH_EVIDENCE });
   await assert.rejects(
     noLengthWalletCheck,
     (error) =>
-      error.code === "CALLBACK_FAILED" &&
-      error.cause instanceof TypeError &&
-      error.cause.message ===
+      error instanceof TypeError &&
+      error.message ===
         "onNoLength gives a length, an address or a fingerprint, not the wallet check.",
   );
 }

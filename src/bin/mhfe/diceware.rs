@@ -4,7 +4,6 @@
 
 use std::io::IsTerminal;
 
-use anstream::eprintln;
 use clap::Args;
 use mhfe::check_word::DRAWN_WORDS;
 use mhfe::new_password::{
@@ -21,7 +20,7 @@ use crate::system_random::SystemRandom;
 use crate::terminal::{self, Input};
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     #[arg(
         long,
         value_name = "N",
@@ -138,19 +137,22 @@ fn dice_help() -> String {
 }
 
 /// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
-pub const SUMMARY: &str = "Make a strong password of words or characters";
+pub(crate) const SUMMARY: &str = "Make a strong password of words or characters";
 
 /// The top of `mhfe password --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         SUMMARY,
-        "Each word is drawn from the EFF large word list of 7,776 words, the same list that \
+        &format!(
+            "Each word is drawn from the EFF large word list of {} words, the same list that \
          five dice select from. Every word is equally likely.",
+            mhfe::eff::LIST_SIZE
+        ),
     ])
 }
 
 /// The end of `mhfe password -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     let five = format!(
         "{} random words, about {} bits",
         style::number_word(DEFAULT_WORDS, true),
@@ -191,7 +193,7 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     if let Some(count) = options.chars {
         return run_characters(count);
     }
@@ -202,10 +204,11 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         PasswordRecipe::words(options.words)?
     };
     let mut input = Input::terminal_only();
-    let flow = start(&input, &recipe);
+    input.require_private_result()?;
+    let flow = start(&input, &recipe)?;
     let password = if options.dice {
         // The rolls are typed on a step of their own.
-        flow::step();
+        flow::step()?;
         let indexes = read_dice(&mut input, recipe.drawn_words())?;
         recipe.make_from_indexes(&mut |number| Ok(indexes[number - 1]))?
     } else {
@@ -225,10 +228,10 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 }
 
 /// Starts `mhfe password` with its title and, over a weak `recipe`, a warning that names the
-/// recommended and the default size with their strength. At a terminal the password has a step of
-/// its own, cleared once it is written down; the summary says only how strong it is.
-fn start(input: &Input, recipe: &PasswordRecipe) -> Flow {
-    let flow = Flow::start(input, TITLE);
+/// recommended and the default size with their strength. An interactive terminal result has a
+/// private step, refused at entry where none is possible; the summary states only its strength.
+fn start(input: &Input, recipe: &PasswordRecipe) -> Result<Flow, Failure> {
+    let flow = Flow::start(input, TITLE)?;
     style::title(TITLE);
     eprintln!();
     if recipe.is_weak() {
@@ -253,17 +256,17 @@ fn start(input: &Input, recipe: &PasswordRecipe) -> Flow {
         );
         eprintln!();
     }
-    flow
+    Ok(flow)
 }
 
 /// The title of `mhfe password`.
 const TITLE: &str = "Make a password";
 
 /// Shows a new password with how strong it is and `notes` about it. At a terminal it is set apart
-/// and in bold for writing down, on a step of its own that is cleared when the person is done; a
-/// script gets the bare password.
+/// and in bold on its preflight-checked private step, cleared when the person is done. A redirected
+/// export gets the bare password.
 fn show(password: &str, strength: &str, notes: &[&str], flow: Flow) -> Result<i32, Failure> {
-    flow::step();
+    flow::step()?;
     if std::io::stdout().is_terminal() {
         style::out(format_args!("  {STRONG}{password}{STRONG:#}"))?;
         eprintln!();
@@ -286,7 +289,8 @@ fn show(password: &str, strength: &str, notes: &[&str], flow: Flow) -> Result<i3
 fn run_characters(count: usize) -> Result<i32, Failure> {
     let recipe = PasswordRecipe::characters(count)?;
     let input = Input::terminal_only();
-    let flow = start(&input, &recipe);
+    input.require_private_result()?;
+    let flow = start(&input, &recipe)?;
     let password = recipe.make(&mut SystemRandom)?;
     show(
         password.text(),

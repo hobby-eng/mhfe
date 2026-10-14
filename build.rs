@@ -9,8 +9,11 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 
 const ARGON2_DIR: &str = "vendor/phc-winner-argon2";
-/// Our own C file, not vendored: chooses the SSE2 or the SSSE3 copy of opt.c on x86-64.
+/// Our own C files, not vendored: one chooses the SSE2 or the SSSE3 copy of opt.c on x86-64, the
+/// other holds ref.c elsewhere; both clear the stack a segment's fill leaves (argon2_stack.h).
 const SIMD_CHOICE: &str = "src/engine/argon2_simd.c";
+const PORTABLE_FILL: &str = "src/engine/argon2_ref.c";
+const STACK_CLEAR: &str = "src/engine/argon2_stack.h";
 
 /// Library sources that every native build needs. The SIMD or the portable core is added below.
 const COMMON_SOURCES: [&str; 5] = [
@@ -52,6 +55,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     write_password_cases(&out_dir)?;
     println!("cargo:rerun-if-changed={ARGON2_DIR}");
     println!("cargo:rerun-if-changed={SIMD_CHOICE}");
+    println!("cargo:rerun-if-changed={PORTABLE_FILL}");
+    println!("cargo:rerun-if-changed={STACK_CLEAR}");
 
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH")?;
     let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap_or_default();
@@ -111,7 +116,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     } else {
         // ARM64, including Apple M-series, and every other architecture use the portable code.
-        build.file(argon2.join("src/ref.c"));
+        build.file(PORTABLE_FILL);
     }
 
     if target_family == "unix" {

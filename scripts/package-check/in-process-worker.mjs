@@ -4,13 +4,17 @@
 // that stops.
 import assert from "node:assert/strict";
 
-import { PHRASE } from "../public-test-data.mjs";
+import { PHRASE, REDUCED_COST_CONTAINER } from "../public-test-data.mjs";
 import { nextTurn } from "./expect.mjs";
-import { BUILD_ID, VERSION, builds, noop, packageWasm, parameters, read } from "./package.mjs";
+import { BUILD_ID, VERSION, builds, packageWasm, parameters, read } from "./package.mjs";
+import { checkWorkerProtocol } from "./protocol-values.mjs";
 import { CORE_PARTS, LABELS, PASSWORD_PARTS, REPAIR_PARTS, part, reports } from "./self-checks.mjs";
 import {
   CHECKED_PHRASE,
+  KNOWN_ANSWER_COSTS,
   PHRASE_TREZOR_FINGERPRINT,
+  REDUCED_MEMORY_KIB,
+  REDUCED_PASSES,
   encode,
   noBytes,
   typedForm,
@@ -116,6 +120,8 @@ const coreCheckWith = (globals, options) =>
  * worker's refusals of parts of other builds, for the classes' checks in part 4b.
  */
 export async function checkWorkerInProcess() {
+  await checkWorkerProtocol(inProcessWorker, workerScript, compiledPackage);
+  await checkWalletSearchProgress();
   await checkRepairAndCoreChecks();
   await checkArgon2BuildsNotStarted();
   await checkSizesAndMissingBuild();
@@ -126,10 +132,73 @@ export async function checkWorkerInProcess() {
   await checkHandshake(workerRefusals);
   await checkTrapInPart();
   await checkTrapInSession();
+  await checkStackCleared();
   console.log(
-    "The worker serves every self-check, names a part that stops, and refuses other builds.",
+    "The worker serves every self-check, names a part that stops, refuses other builds, and " +
+      "zeroes the WebAssembly's stack between calls.",
   );
   return workerRefusals;
+}
+
+/** Real searchWallet dispatch composes candidate and round progress at the public reduced cost. */
+async function checkWalletSearchProgress() {
+  // Deliberate copy of the test engine's cost selection: this executes in a classic worker's
+  // scope, which cannot import the package-check modules; known answers keep their real cost.
+  const reducedWorker =
+    workerScript +
+    `\n{
+    const fullCost = argon2For;
+    argon2For = async (request) => {
+      const engine = await fullCost(request);
+      return {
+        derive(password, salt, memory, passes, key) {
+          const known = ${JSON.stringify(KNOWN_ANSWER_COSTS)}.includes(memory + "/" + passes);
+          engine.derive(password, salt, known ? memory : ${REDUCED_MEMORY_KIB},
+            known ? passes : ${REDUCED_PASSES}, key);
+        },
+        reserve() {},
+      };
+    };
+  }`;
+  const posted = await inProcessWorker(
+    reducedWorker,
+    singleThreadedBuild,
+  )({
+    module: "core",
+    operation: "searchWallet",
+    compiled: compiledPackage,
+    container: REDUCED_COST_CONTAINER.split(" ").slice(0, -1).concat("?").join(" "),
+    password: encode("public test password"),
+    choice: "",
+    position: 0,
+    pim: 0,
+    memoryLevel: 0,
+    referenceKind: "fingerprint",
+    reference: "73c5da0a",
+    coin: "",
+    path: "",
+    passphrase: noBytes(),
+  });
+  const result = posted.at(-1);
+  assert.equal(result.type, "result");
+  assert.equal(
+    typeof result.result,
+    "object",
+    "the worker parses the result instead of returning JSON text",
+  );
+  assert.equal(result.result.found, true);
+  assert.equal(result.result.container, REDUCED_COST_CONTAINER);
+  assert.deepEqual(result.result.words, [{ position: 24, word: "sweet" }]);
+  const steps = posted.filter(({ type }) => type === "progress").map(({ value }) => value);
+  assert.ok(steps.length > 0);
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index];
+    assert.equal(step.stage, "search");
+    assert.equal(step.candidates, 8);
+    assert.equal(step.candidate, Math.floor(index / 12) + 1);
+    assert.equal(step.rounds, 12);
+    assert.equal(step.round, (index % 12) + 1);
+  }
 }
 
 /** The repair module's self-check, and the core's through the single-threaded Argon2 build. */
@@ -455,8 +524,21 @@ async function checkHandshake(workerRefusals) {
   }
 }
 
-// An unstamped module, as the unstamped worker runtime expects.
-const emptyModule = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+/** The custom section that says where a module's shadow stack ends (scripts/mark-wasm-stack.mjs). */
+const STACK_SECTION = "mhfe-stack";
+/** A module of no code that says its stack ends at `top`, unstamped. */
+const moduleWithStack = (top) =>
+  new WebAssembly.Module(
+    Buffer.concat([
+      Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]),
+      Buffer.from([0, 1 + STACK_SECTION.length + String(top).length, STACK_SECTION.length]),
+      Buffer.from(`${STACK_SECTION}${top}`),
+    ]),
+  );
+// An unstamped module, as the unstamped worker runtime expects, whose stack ends at 16.
+const emptyModule = moduleWithStack(16);
+/** initSync of stand-in bindings: an instance whose memory is one page. */
+const standInInit = () => ({ memory: new WebAssembly.Memory({ initial: 1 }) });
 
 /**
  * A WebAssembly that stops inside a part (a trap, such as a Rust panic, which a release build
@@ -470,7 +552,7 @@ async function checkTrapInPart() {
       "serveOperations(mhfe, { repair: REPAIR_OPERATIONS });",
     {
       mhfe: {
-        initSync: noop,
+        initSync: standInInit,
         packageVersion: () => VERSION,
         selfCheckRepair: (tier, skip, onStart, onResult) => {
           onStart("bip39-words", LABELS["bip39-words"]);
@@ -551,7 +633,7 @@ const coreOverStandIns = () => {
     workerSelf,
     {
       mhfe: {
-        initSync: noop,
+        initSync: standInInit,
         packageVersion: () => VERSION,
         suiteParameters: () => JSON.stringify({ hiddenWalletRefusals: [] }),
         CheckSession: TrappingSession,
@@ -575,15 +657,110 @@ async function checkTrapInSession() {
     TrappingSession.trapsIn = trapsIn;
     calledAfterTrap.length = 0;
     const { posted, send } = coreOverStandIns();
-    const done = send({ module: "core", operation, compiled: emptyModule, confirmsAgain: true });
+    const done = send({
+      module: "core",
+      operation,
+      compiled: emptyModule,
+      confirmsAgain: true,
+      container: "public synthetic container",
+      password: new Uint8Array([1]),
+      passwordRepeat: new Uint8Array([1]),
+      choice: "",
+      position: 0,
+      pim: 0,
+      memoryLevel: 0,
+      words: 12,
+      referenceKind: "words",
+      reference: "12",
+      coin: "",
+      path: "",
+      passphrase: new Uint8Array(),
+      argon2Script: null,
+      newPassword: new Uint8Array([2]),
+      newPasswordRepeat: new Uint8Array([2]),
+      newChoice: "",
+      newPosition: 0,
+      newPim: 0,
+      newMemoryLevel: 0,
+      repairWordCount: 0,
+      confirmKind: "builtInCheck",
+      mainPassphrase: new Uint8Array(),
+    });
     if (operation === "hiddenWallets") {
       // The session asks for the first password once it is ready.
       await nextTurn();
       assert.deepEqual(posted.at(-1), { type: "ask", question: "ready", value: null });
-      await send({ type: "answer", value: { password: new Uint8Array([1]) } });
+      await send({
+        type: "answer",
+        value: {
+          password: new Uint8Array([1]),
+          passwordRepeat: new Uint8Array([1]),
+          choice: "",
+          position: 0,
+        },
+      });
     }
     await done;
     assert.deepEqual(posted.at(-1), { type: "error", error: STOPPED }, `a trap in ${trapsIn}`);
     assert.deepEqual(calledAfterTrap, [], `nothing is called after a trap in ${trapsIn}`);
   }
+}
+
+/**
+ * The worker zeroes the WebAssembly's shadow stack after every operation and before every question
+ * to the page (AUD-024-SEC003): what a fingerprint leaves there, its seed, master key and chain
+ * code and the salt block of its passphrase, is gone once the result is posted, and the module
+ * still works. A WebAssembly that does not say where its stack ends is refused.
+ */
+async function checkStackCleared() {
+  const instances = [];
+  /** The glue's instances, recorded, so that the check reads the worker's memory. */
+  class Recorded extends WebAssembly.Instance {
+    constructor(module, imports) {
+      super(module, imports);
+      instances.push(this);
+    }
+  }
+  const recording = Object.create(WebAssembly, { Instance: { value: Recorded } });
+  const send = inProcessWorker(workerScript, { WebAssembly: recording });
+  const [section] = WebAssembly.Module.customSections(compiledPackage, STACK_SECTION);
+  const top = Number(new TextDecoder().decode(section));
+  for (const turn of [1, 2]) {
+    const request = { module: "wallet", operation: "fingerprint", passphrase: encode("TREZOR") };
+    const posted = await send({ ...request, phrase: encode(PHRASE), compiled: compiledPackage });
+    assert.deepEqual(posted.at(-1), { type: "result", result: PHRASE_TREZOR_FINGERPRINT });
+    const stack = new Uint8Array(instances[0].exports.memory.buffer, 0, top);
+    assert.ok(
+      stack.every((byte) => byte === 0),
+      `fingerprint ${turn}: the stack is zeroed`,
+    );
+  }
+  // Before a question, over stand-in bindings whose operation leaves its stack written.
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  const zeroedAtQuestion = [];
+  const workerSelf = {
+    postMessage: (message) => {
+      if (message.type === "ask") {
+        zeroedAtQuestion.push(new Uint8Array(memory.buffer, 0, 4096).every((byte) => byte === 0));
+      }
+    },
+  };
+  runWorkerScript(
+    `${read("web/worker-runtime.js")}\nserveOperations(mhfe, { probe: { asks: async (_, host) => ` +
+      "{ new Uint8Array(probeMemory.buffer, 0, 4096).fill(7); await host.ask('q', null); " +
+      "return true; } } });",
+    workerSelf,
+    { mhfe: { initSync: () => ({ memory }) }, probeMemory: memory },
+  );
+  const asked = workerSelf.onmessage({
+    data: { module: "probe", operation: "asks", compiled: moduleWithStack(4096) },
+  });
+  await nextTurn();
+  workerSelf.onmessage({ data: { type: "answer", value: null } });
+  await asked;
+  assert.deepEqual(zeroedAtQuestion, [true]);
+  // A WebAssembly that does not say where its stack ends was not built by scripts/bind-wasm.sh.
+  const unmarked = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+  const refused = await inProcessWorker(workerScript)({ ...repairRequest, compiled: unmarked });
+  assert.equal(refused.at(-1).error?.code, "PACKAGE_MISMATCH");
 }

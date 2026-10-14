@@ -120,7 +120,8 @@ fn group_directory(group_path: &str, mount_root: &str, mount_point: &Path) -> Op
 }
 
 /// cgroup v2: the smallest room left in the group and in every group above it up to the mount
-/// point. The root group has no memory.max, and "max" means no limit.
+/// point. The root group has no memory.max, and "max" means no limit. A group whose usage cannot
+/// be read gives no figure, rather than one made up from its limit (AUD-024-FUN004).
 fn available_v2(
     directory: &Path,
     mount_point: &Path,
@@ -137,7 +138,9 @@ fn available_v2(
         let Ok(limit) = limit.trim().parse::<u64>() else {
             continue; // "max"
         };
-        let usage = read_number(&read, &group.join("memory.current")).unwrap_or(limit);
+        let Some(usage) = read_number(&read, &group.join("memory.current")) else {
+            continue;
+        };
         let stat = read(&group.join("memory.stat")).unwrap_or_default();
         let reclaimable = stat_value(&stat, "inactive_file").unwrap_or(0);
         let room = room_left(limit, usage, reclaimable);
@@ -147,14 +150,15 @@ fn available_v2(
 }
 
 /// cgroup v1: memory.stat gives the limit that applies with every group above
-/// (`hierarchical_memory_limit`) and the reclaimable cache of the group and its children.
+/// (`hierarchical_memory_limit`) and the reclaimable cache of the group and its children. No
+/// figure where the usage cannot be read (AUD-024-FUN004).
 fn available_v1(directory: &Path, read: impl Fn(&Path) -> Option<String>) -> Option<u64> {
     let stat = read(&directory.join("memory.stat"))?;
     let limit = stat_value(&stat, "hierarchical_memory_limit")?;
     if limit >= V1_NO_LIMIT_FROM {
         return None;
     }
-    let usage = read_number(&read, &directory.join("memory.usage_in_bytes")).unwrap_or(limit);
+    let usage = read_number(&read, &directory.join("memory.usage_in_bytes"))?;
     let reclaimable = stat_value(&stat, "total_inactive_file").unwrap_or(0);
     Some(room_left(limit, usage, reclaimable))
 }
@@ -230,6 +234,30 @@ mod tests {
         assert_eq!(available_with("0::/app/job\n", V2_MOUNTS, read), Some(GIB));
     }
 
+    /// A group whose usage cannot be read gives no figure; a group above it still counts
+    /// (AUD-024-FUN004).
+    #[test]
+    fn a_group_whose_usage_cannot_be_read_gives_no_figure() {
+        let read = files(&[
+            ("/sys/fs/cgroup/app/memory.max", format!("{}\n", 2 * GIB)),
+            (
+                "/sys/fs/cgroup/app/memory.stat",
+                format!("inactive_file {}\n", GIB),
+            ),
+        ]);
+        assert_eq!(available_with("0::/app\n", V2_MOUNTS, &read), None);
+        let read = files(&[
+            ("/sys/fs/cgroup/app/memory.max", format!("{}\n", 2 * GIB)),
+            (
+                "/sys/fs/cgroup/app/memory.current",
+                "unreadable\n".to_owned(),
+            ),
+            ("/sys/fs/cgroup/memory.max", format!("{}\n", 3 * GIB)),
+            ("/sys/fs/cgroup/memory.current", format!("{}\n", GIB)),
+        ]);
+        assert_eq!(available_with("0::/app\n", V2_MOUNTS, read), Some(2 * GIB));
+    }
+
     #[test]
     fn no_limit_anywhere_gives_no_figure() {
         let read = files(&[("/sys/fs/cgroup/user.slice/memory.max", "max\n".to_owned())]);
@@ -259,6 +287,15 @@ mod tests {
             available_with(membership, mounts, read),
             Some(GIB + GIB / 2)
         );
+
+        // A usage that cannot be read gives no figure, not one made up from the limit
+        // (AUD-024-FUN004).
+        let stat = format!(
+            "hierarchical_memory_limit {}\ntotal_inactive_file 0\n",
+            2 * GIB
+        );
+        let read = files(&[("/sys/fs/cgroup/memory/docker/abc/memory.stat", stat)]);
+        assert_eq!(available_with(membership, mounts, read), None);
 
         let unlimited = "hierarchical_memory_limit 9223372036854771712\n".to_owned();
         let read = files(&[("/sys/fs/cgroup/memory/docker/abc/memory.stat", unlimited)]);

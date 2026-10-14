@@ -32,8 +32,8 @@ export function runPage() {
     });
 }
 
-/** Runs every check in turn, and resolves to the mode the client ran in. */
-export async function main() {
+/** Builds the same module classes for the complete suite and launcher smoke checks. */
+export async function pageClasses() {
   // The core takes the package's WebAssembly as bytes; the other classes share one compiled
   // module, as a page that uses several classes does.
   const client = new MhfeClient({
@@ -46,13 +46,19 @@ export async function main() {
   const repair = new MhfeRepair({ workerSource: WORKER_SOURCE, wasm: compiled });
   const passwords = new MhfePasswords({ workerSource: WORKER_SOURCE, wasm: compiled });
   const wallet = new MhfeWallet({ workerSource: WORKER_SOURCE, wasm: compiled });
+  return { client, compiled, repair, passwords, wallet };
+}
+
+/** Runs every check in turn, and resolves to the mode the client ran in. */
+export async function main() {
+  const { client, compiled, repair, passwords, wallet } = await pageClasses();
   // Containers the encryption checks make, for the checks of the other methods.
   const made = {};
 
   await checkStartupChecks(client, repair, passwords, wallet);
   await checkConstruction(client, compiled);
-  await checkReading(client);
   await checkEncrypt(client, repair, made);
+  await checkReading(client, made);
   await checkDecrypt(client, wallet, made);
   await checkRehearsal(client, made);
   await checkCancelAndCallbacks(client);
@@ -80,6 +86,12 @@ export function working(running = progress.running) {
 export function expect(condition, description) {
   results.push((condition ? "ok   " : "FAIL ") + description);
   if (!condition) failures.push(description);
+  working();
+}
+
+/** Records an observation separately from pass/fail checks. */
+export function note(description) {
+  results.push("info " + description);
   working();
 }
 

@@ -12,8 +12,8 @@
 //! match, zero-24 with its length detected and only the built-in check, and zero-12 with 15 words
 //! stated and only the built-in check, which finds 12 (AUD-015-FUN001).
 
-use super::{ConfirmedPhrase, Rekey};
-use crate::mhfe::known_answers::{published, published_table, PublishedVector};
+use super::{ConfirmedPhrase, Rekey, ReplacementRehearsal};
+use crate::mhfe::known_answers::{published_in, published_table, PublishedVector};
 use crate::rehearsal::{Confirmation, Reference};
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
@@ -22,11 +22,12 @@ use crate::{PhraseLength, WordCount};
 
 /// A rekey from one published vector to another of the same phrase, its length stated or
 /// detected (`detection`).
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct RekeyCase {
     from: &'static str,
     to: &'static str,
     detected: bool,
+    replacement: ReplacementRehearsal,
 }
 
 const CASES: [RekeyCase; 2] = [
@@ -34,21 +35,26 @@ const CASES: [RekeyCase; 2] = [
         from: "zero-12",
         to: "unicode-password",
         detected: false,
+        replacement: ReplacementRehearsal::BuiltInCheck,
     },
     RekeyCase {
         from: "zero-12",
         to: "zero-12-pim-1",
         detected: true,
+        replacement: ReplacementRehearsal::BuiltInCheck,
     },
 ];
 
 /// The master key fingerprint of "abandon" 11 times and "about" is 73c5da0a; this one differs in
 /// its last bit, so no recovery of a zero-24 container can match it.
-const WRONG_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0b];
+use crate::vectors::inputs::WRONG_FINGERPRINT;
 
 /// A rekey of one published vector that must be refused with `code`.
+#[derive(Clone, Copy)]
 struct Refusal {
     vector: &'static str,
+    /// A new vector for a same-password/settings refusal; otherwise recover and confirm.
+    new_vector: Option<&'static str>,
     /// The stated length, or none for a detected one.
     words: Option<usize>,
     /// A wrong fingerprint as the confirmation, or the built-in check alone.
@@ -57,10 +63,19 @@ struct Refusal {
     what: &'static str,
 }
 
-const REFUSALS: [Refusal; 3] = [
+const REFUSALS: [Refusal; 4] = [
+    Refusal {
+        vector: "zero-12",
+        new_vector: Some("zero-12"),
+        words: Some(12),
+        wrong_fingerprint: false,
+        code: "NEW_PASSWORD_SAME_AS_OLD",
+        what: "the same password and settings",
+    },
     // zero-24 has no built-in check: a reference confirms it, and a wrong one is refused.
     Refusal {
         vector: "zero-24",
+        new_vector: None,
         words: Some(24),
         wrong_fingerprint: true,
         code: "REFERENCE_MISMATCH",
@@ -69,6 +84,7 @@ const REFUSALS: [Refusal; 3] = [
     // A detected length is never confirmed by the built-in check alone, before any Argon2 work.
     Refusal {
         vector: "zero-24",
+        new_vector: None,
         words: None,
         wrong_fingerprint: false,
         code: "REFERENCE_REQUIRED",
@@ -78,6 +94,7 @@ const REFUSALS: [Refusal; 3] = [
     // the wallet then confirms the phrase.
     Refusal {
         vector: "zero-12",
+        new_vector: None,
         words: Some(15),
         wrong_fingerprint: false,
         code: "LENGTH_DIFFERS",
@@ -86,14 +103,19 @@ const REFUSALS: [Refusal; 3] = [
 ];
 
 impl Refusal {
-    fn run(&self) -> Result<(), String> {
-        let vector = published(self.vector)?;
+    fn run(&self, vectors: &'static [PublishedVector]) -> Result<(), String> {
+        let vector = published_in(vectors, self.vector)?;
         let length = match self.words {
             Some(words) => PhraseLength::Words(WordCount::new(words).map_err(stopped)?),
             None => PhraseLength::Detect,
         };
         let rekey = Rekey::new(vector.container, length, vector.password()?, vector.work()?)
             .map_err(stopped)?;
+        if let Some(name) = self.new_vector {
+            let new = published_in(vectors, name)?;
+            return expect_refusal(rekey.check_new(&new.password()?, new.work()?), self.code)
+                .map_err(|what| format!("{} {what}", self.what));
+        }
         let reference = Reference::Fingerprint {
             fingerprint: WRONG_FINGERPRINT,
             passphrase: "",
@@ -104,7 +126,7 @@ impl Refusal {
             Confirmation::BuiltInCheck
         };
         let result = rekey.recover(
-            &mut vector.mhfe(published_table())?,
+            &mut vector.mhfe(vectors)?,
             confirmation,
             Some(false),
             &mut |_, _, _| Ok(()),
@@ -114,19 +136,60 @@ impl Refusal {
     }
 }
 
+/// Replacement rehearsals of the unverified published 24-word phrase. Fingerprints were
+/// independently computed from the public BIP39 seed and BIP32 root (empty/TREZOR passphrase).
+#[derive(Clone)]
+struct ReplacementCase {
+    vector: &'static str,
+    owner: bool,
+    passphrase: &'static str,
+    expected: ReplacementRehearsal,
+}
+
+const REPLACEMENTS: [ReplacementCase; 3] = [
+    ReplacementCase {
+        vector: "zero-24",
+        owner: false,
+        passphrase: "",
+        expected: ReplacementRehearsal::ConfirmingReference,
+    },
+    ReplacementCase {
+        vector: "zero-24",
+        owner: true,
+        passphrase: "",
+        expected: ReplacementRehearsal::Fingerprint([0x54, 0x36, 0xd7, 0x24]),
+    },
+    ReplacementCase {
+        vector: "zero-24",
+        owner: true,
+        passphrase: "TREZOR",
+        expected: ReplacementRehearsal::Fingerprint([0x88, 0xbc, 0xa9, 0x2b]),
+    },
+];
+
 /// The `rekey` check.
 pub(crate) struct RekeyCheck {
     cases: &'static [RekeyCase],
+    refusals: &'static [Refusal],
+    vectors: &'static [PublishedVector],
+    replacements: &'static [ReplacementCase],
+    confirm_again: bool,
 }
 
 impl RekeyCheck {
     pub(crate) fn new() -> Self {
-        Self { cases: &CASES }
+        Self {
+            cases: &CASES,
+            refusals: &REFUSALS,
+            vectors: published_table(),
+            replacements: &REPLACEMENTS,
+            confirm_again: true,
+        }
     }
 
-    fn case(case: &RekeyCase) -> Result<(), String> {
-        let from = published(case.from)?;
-        let to = published(case.to)?;
+    fn case(&self, case: &RekeyCase) -> Result<(), String> {
+        let from = published_in(self.vectors, case.from)?;
+        let to = published_in(self.vectors, case.to)?;
         let length = if case.detected {
             PhraseLength::Detect
         } else {
@@ -146,21 +209,25 @@ impl RekeyCheck {
         };
         let confirmed = rekey
             .recover(
-                &mut from.mhfe(published_table())?,
+                &mut from.mhfe(self.vectors)?,
                 confirmation,
                 Some(false),
                 &mut |_, _, _| Ok(()),
             )
             .map_err(stopped)?;
-        Self::sealed_as(&rekey, &confirmed, to)
+        expect(
+            confirmed.replacement_rehearsal("").map_err(stopped)? == case.replacement,
+            "the replacement rehearsal differs",
+        )?;
+        self.sealed_as(&rekey, &confirmed, to)
     }
 
     /// One recovery, a refused confirmation, then another on the same recovery (AUD-017-UI002):
     /// zero-12 with 15 words stated, whose built-in check finds 12, leaves the owner the stated
     /// length; its fingerprint confirms it without the rounds again.
-    fn confirmed_again() -> Result<(), String> {
-        let from = published("zero-12")?;
-        let rekey = Rekey::new(
+    fn confirmed_again(&self) -> Result<(), String> {
+        let from = published_in(self.vectors, "zero-12")?;
+        let mut rekey = Rekey::new(
             from.container,
             PhraseLength::Words(WordCount::new(15).map_err(stopped)?),
             from.password()?,
@@ -169,7 +236,7 @@ impl RekeyCheck {
         .map_err(stopped)?;
         let recovered = rekey
             .recover_state(
-                &mut from.mhfe(published_table())?,
+                &mut from.mhfe(self.vectors)?,
                 Confirmation::BuiltInCheck,
                 &mut |_, _, _| Ok(()),
             )
@@ -194,19 +261,78 @@ impl RekeyCheck {
             fingerprint: crate::wallet::master_fingerprint(from.phrase, "").map_err(stopped)?,
             passphrase: "",
         };
-        let confirmed = confirm(Confirmation::Wallet(&fingerprint)).map_err(stopped)?;
-        Self::sealed_as(&rekey, &confirmed, published("unicode-password")?)
+        let confirmed = rekey
+            .confirm_again(
+                &recovered,
+                &refusal,
+                Confirmation::Wallet(&fingerprint),
+                None,
+                Some(false),
+                &mut |_, _, _| Ok(()),
+            )
+            .map_err(stopped)?;
+        self.sealed_as(
+            &rekey,
+            &confirmed,
+            published_in(self.vectors, "unicode-password")?,
+        )
+    }
+
+    fn replacement(&self, case: &ReplacementCase) -> Result<(), String> {
+        let vector = published_in(self.vectors, case.vector)?;
+        let rekey = Rekey::new(
+            vector.container,
+            PhraseLength::Detect,
+            vector.password()?,
+            vector.work()?,
+        )
+        .map_err(stopped)?;
+        let reference = Reference::Fingerprint {
+            fingerprint: crate::wallet::master_fingerprint(vector.phrase, case.passphrase)
+                .map_err(stopped)?,
+            passphrase: case.passphrase,
+        };
+        let confirmation = if case.owner {
+            Confirmation::Owner
+        } else {
+            Confirmation::Wallet(&reference)
+        };
+        let confirmed = rekey
+            .recover(
+                &mut vector.mhfe(self.vectors)?,
+                confirmation,
+                Some(!case.passphrase.is_empty()),
+                &mut |_, _, _| Ok(()),
+            )
+            .map_err(stopped)?;
+        expect(
+            confirmed.awaits_owner() == case.owner,
+            "the owner's confirmation step differs",
+        )?;
+        let confirmed = if case.owner {
+            confirmed.confirmed_by_owner()
+        } else {
+            confirmed
+        };
+        expect(
+            confirmed
+                .replacement_rehearsal(case.passphrase)
+                .map_err(stopped)?
+                == case.expected,
+            "the replacement rehearsal differs",
+        )
     }
 
     /// Seals `confirmed` with the password and settings of `to`, whose container it must give.
     fn sealed_as(
+        &self,
         rekey: &Rekey,
         confirmed: &ConfirmedPhrase,
         to: &PublishedVector,
     ) -> Result<(), String> {
         let sealed = rekey
             .seal(
-                &mut to.mhfe(published_table())?,
+                &mut to.mhfe(self.vectors)?,
                 confirmed,
                 &to.password()?,
                 None,
@@ -232,24 +358,14 @@ impl ComponentCheck for RekeyCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("rekey", self.cases, Self::case);
-        findings.one(|| {
-            let vector = published("zero-12")?;
-            let rekey = Rekey::new(
-                vector.container,
-                PhraseLength::Words(WordCount::new(12).map_err(stopped)?),
-                vector.password()?,
-                vector.work()?,
-            )
-            .map_err(stopped)?;
-            expect_refusal(
-                rekey.check_new(&vector.password()?, vector.work()?),
-                "NEW_PASSWORD_SAME_AS_OLD",
-            )
-            .map_err(|what| format!("the same password and settings {what}"))
+        findings.each("rekey", self.cases, |case| self.case(case));
+        if self.confirm_again {
+            findings.one(|| self.confirmed_again());
+        }
+        findings.each("refusal", self.refusals, |case| case.run(self.vectors));
+        findings.each("replacement", self.replacements, |case| {
+            self.replacement(case)
         });
-        findings.one(Self::confirmed_again);
-        findings.each("refusal", &REFUSALS, Refusal::run);
         findings.outcome()
     }
 }
@@ -269,19 +385,122 @@ mod tests {
     /// The rekey check of one case, from vector `from` to vector `to`.
     fn one_case(from: &'static str, to: &'static str, detected: bool) -> RekeyCheck {
         RekeyCheck {
-            cases: Box::leak(Box::new([RekeyCase { from, to, detected }])),
+            cases: Box::leak(Box::new([RekeyCase {
+                from,
+                to,
+                detected,
+                replacement: ReplacementRehearsal::BuiltInCheck,
+            }])),
+            ..RekeyCheck::new()
         }
     }
 
     #[test]
     fn a_rekey_is_compared_with_its_target_vector() {
         let mut check = one_case("zero-12", "spaces-password", false);
-        // spaces-password and zero-12-memory-level-1 hold the same phrase under another password
-        // or memory level: the rekey gives their containers. A vector of another phrase fails.
+        // The same phrase under another password or memory level must give each recorded
+        // target container; the damaged-container control below reaches that comparison.
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
         let mut check = one_case("zero-12", "zero-12-memory-level-1", true);
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
-        let mut check = one_case("zero-12", "nonzero-12", false);
-        assert!(check.run(Tier::Startup).is_failure());
+        // Keep the new password/settings and their recorded keys valid. Damage only the
+        // target container, so the failure must reach the final published-container comparison.
+        let mut vectors = published_table().to_vec();
+        vectors
+            .iter_mut()
+            .find(|vector| vector.name == "unicode-password")
+            .unwrap()
+            .container = published_in(published_table(), "zero-12")
+            .unwrap()
+            .container;
+        let mut check = one_case("zero-12", "unicode-password", false);
+        check.vectors = crate::self_check::leak(vectors);
+        assert_eq!(
+            check.run(Tier::Startup),
+            ComponentOutcome::Failed(
+                "rekey 1 of 1 the sealed container differs from the published one".to_owned()
+            )
+        );
+        let mut again = RekeyCheck {
+            cases: &[],
+            vectors: check.vectors,
+            refusals: &[],
+            replacements: &[],
+            ..RekeyCheck::new()
+        };
+        assert_eq!(
+            again.run(Tier::Startup),
+            ComponentOutcome::Failed(
+                "the sealed container differs from the published one".to_owned()
+            )
+        );
+    }
+    #[test]
+    fn every_refusal_has_a_control_that_is_accepted_and_names_that_branch() {
+        for original in REFUSALS {
+            let mut accepted = original;
+            if accepted.new_vector.is_some() {
+                accepted.new_vector = Some("unicode-password");
+            } else {
+                accepted.vector = "zero-12";
+                accepted.words = Some(12);
+                accepted.wrong_fingerprint = false;
+            }
+            let mut check = RekeyCheck {
+                cases: &[],
+                refusals: crate::self_check::leak([accepted]),
+                replacements: &[],
+                confirm_again: false,
+                ..RekeyCheck::new()
+            };
+            assert_eq!(
+                check.run(Tier::Startup),
+                ComponentOutcome::Failed(format!(
+                    "refusal 1 of 1 {} is accepted instead of refused with {}",
+                    original.what, original.code
+                ))
+            );
+        }
+    }
+
+    #[test]
+    fn each_replacement_rehearsal_is_compared_with_its_known_answer() {
+        for original in REPLACEMENTS {
+            let mut wrong = original.clone();
+            wrong.expected = match original.expected {
+                ReplacementRehearsal::Fingerprint(mut bytes) => {
+                    bytes[0] ^= 1;
+                    ReplacementRehearsal::Fingerprint(bytes)
+                }
+                _ => ReplacementRehearsal::BuiltInCheck,
+            };
+            let mut check = RekeyCheck {
+                cases: &[],
+                refusals: &[],
+                confirm_again: false,
+                replacements: crate::self_check::leak([wrong]),
+                ..RekeyCheck::new()
+            };
+            assert_eq!(
+                check.run(Tier::Startup),
+                ComponentOutcome::Failed(
+                    "replacement 1 of 1 the replacement rehearsal differs".to_owned()
+                )
+            );
+        }
+        for original in CASES {
+            let mut wrong = original.clone();
+            wrong.replacement = ReplacementRehearsal::ConfirmingReference;
+            let mut check = RekeyCheck {
+                cases: crate::self_check::leak([wrong]),
+                ..RekeyCheck::new()
+            };
+            assert_eq!(
+                check.run(Tier::Startup),
+                ComponentOutcome::Failed(
+                    "rekey 1 of 1 the replacement rehearsal differs".to_owned()
+                )
+            );
+        }
     }
 }

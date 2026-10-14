@@ -15,21 +15,22 @@ use std::fmt;
 use serde_json::Value;
 
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
-use crate::mhfe::known_answers::{published_table, PublishedRound, PublishedVector};
+use crate::mhfe::known_answers::{published_in, published_table, PublishedRound, PublishedVector};
 use crate::operation::{RoundCounter, Stage, StageCallback};
-use crate::{Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, ENCRYPTION_ROUNDS, ROUNDS};
+use crate::{Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WorkFactor, ROUNDS};
 
 /// The public vectors, as the repository and the specification publish them.
 const SUITE_3_VECTOR: &str = include_str!("../tests/fixtures/suite3-vectors/zero-12.json");
 const SUITE_4_VECTOR: &str =
     include_str!("../tests/fixtures/suite4-vectors/same-length-zero-12.json");
 
-/// What a vector gives: its name, phrase, password and container.
+/// What a vector gives: its name, phrase, password, container and settings.
 struct Vector {
     name: String,
     phrase: String,
     password: String,
     container: String,
+    work: WorkFactor,
 }
 
 impl Vector {
@@ -44,11 +45,19 @@ impl Vector {
                 .map(str::to_owned)
                 .ok_or_else(|| MhfeError::Internal(format!("a built-in vector lacks {pointer}")))
         };
+        let number = |pointer: &str| {
+            value
+                .pointer(pointer)
+                .and_then(Value::as_u64)
+                .and_then(|number| u32::try_from(number).ok())
+                .ok_or_else(|| MhfeError::Internal(format!("a built-in vector lacks {pointer}")))
+        };
         Ok(Self {
             name: text("/name")?,
             phrase: text("/inputs/phrase")?,
             password: text("/inputs/password")?,
             container: text("/container")?,
+            work: WorkFactor::new(number("/inputs/pim")?, number("/inputs/memory_level")?)?,
         })
     }
 }
@@ -60,13 +69,24 @@ pub struct SelfTest {
 }
 
 impl SelfTest {
-    /// The vectors built into the program. Both use the default settings, PIM 0 and memory level
-    /// 0, at 2 GiB: [`WorkFactor::default`](crate::WorkFactor::default).
+    /// The vectors built into the program, which must have the same settings.
     pub fn published() -> Result<Self, MhfeError> {
-        Ok(Self {
+        let test = Self {
             suite_3: Vector::read(SUITE_3_VECTOR)?,
             suite_4: Vector::read(SUITE_4_VECTOR)?,
-        })
+        };
+        if test.suite_3.work != test.suite_4.work {
+            return Err(MhfeError::Internal(
+                "the built-in vectors have different settings".to_owned(),
+            ));
+        }
+        Ok(test)
+    }
+
+    /// The settings of the vectors, which the `Mhfe` of [`SelfTest::run`] must have: PIM 0 and
+    /// memory level 0, at 2 GiB, as the vectors record them (AUD-024-API018).
+    pub fn work(&self) -> WorkFactor {
+        self.suite_3.work
     }
 
     /// The name of the built-in suite 3 vector.
@@ -81,12 +101,20 @@ impl SelfTest {
 
     /// Encrypts the suite 3 vector (rounds 1 to 12 of 24, [`Stage::Encrypt`]) and recovers the
     /// suite 4 vector (rounds 13 to 24, [`Stage::Recover`]) with `mhfe`, which must be at
-    /// the default settings, and compares both results with the published ones.
+    /// the vectors' settings, [`SelfTest::work`], and compares both results with the published
+    /// ones. An `mhfe` at other settings is refused before the first round
+    /// ([`MhfeError::InvalidRequest`]).
     pub fn run<E: Argon2Engine>(
         &self,
         mhfe: &mut Mhfe<E>,
         progress: StageCallback<'_>,
     ) -> Result<SelfTestResult, MhfeError> {
+        if mhfe.work_factor() != self.work() {
+            return Err(MhfeError::InvalidRequest(
+                "the self-test runs at the settings of its vectors, PIM 0 and memory level 0"
+                    .to_owned(),
+            ));
+        }
         let expected = self.expected_calls(published_table())?;
         let (work, engine) = mhfe.parts_mut();
         let mut watched = Mhfe::with_engine(work, RoundKeyWitness::new(engine, expected));
@@ -101,7 +129,7 @@ impl SelfTest {
         mhfe: &mut Mhfe<E>,
         progress: StageCallback<'_>,
     ) -> Result<(bool, bool), MhfeError> {
-        let rounds = RoundCounter::starting_after(0, ENCRYPTION_ROUNDS);
+        let rounds = RoundCounter::starting_after(0, SELF_TEST_ROUNDS);
         let password = Password::new(&self.suite_3.password)?;
         let encrypted = mhfe.encrypt_unchecked(
             &self.suite_3.phrase,
@@ -109,9 +137,9 @@ impl SelfTest {
             Suite::TwentyFourWords,
             &mut |round, _| rounds.report(Stage::Encrypt, round, &mut *progress),
         )?;
-        let suite_3 = *encrypted.words == self.suite_3.container;
+        let suite_3 = encrypted.words() == self.suite_3.container;
 
-        let rounds = RoundCounter::starting_after(ROUNDS, ENCRYPTION_ROUNDS);
+        let rounds = RoundCounter::starting_after(ROUNDS, SELF_TEST_ROUNDS);
         let password = Password::new(&self.suite_4.password)?;
         let recovered = mhfe.decrypt(
             &self.suite_4.container,
@@ -130,14 +158,8 @@ impl SelfTest {
         &self,
         table: &'static [PublishedVector],
     ) -> Result<Vec<ExpectedCall>, MhfeError> {
-        let vector = |name: &str| {
-            table
-                .iter()
-                .find(|vector| vector.name == name)
-                .ok_or_else(|| MhfeError::Internal("a built-in vector is missing".to_owned()))
-        };
-        let suite_3 = vector(&self.suite_3.name)?;
-        let suite_4 = vector(&self.suite_4.name)?;
+        let suite_3 = published_in(table, &self.suite_3.name).map_err(MhfeError::Internal)?;
+        let suite_4 = published_in(table, &self.suite_4.name).map_err(MhfeError::Internal)?;
         let call =
             |vector: &'static PublishedVector, round: &'static PublishedRound| ExpectedCall {
                 password_nfkd: vector.password_nfkd,
@@ -231,8 +253,8 @@ impl<E: Argon2Engine> Argon2Engine for RoundKeyWitness<'_, E> {
     }
 }
 
-/// The rounds of the self-test: 12 of the encryption and 12 of the recovery.
-const SELF_TEST_ROUNDS: u32 = 2 * ROUNDS;
+/// Total rounds of the published-vector self-test: one encryption and one recovery.
+pub const SELF_TEST_ROUNDS: u32 = 2 * ROUNDS;
 
 /// Where a self-test that did not pass first left the published path. The round is counted over
 /// the whole self-test: 1 to 12 the suite 3 encryption, 13 to 24 the suite 4 recovery.
@@ -431,6 +453,22 @@ mod tests {
         }
     }
 
+    /// The self-test runs at its vectors' settings, read from them, and refuses an `Mhfe` at
+    /// others before the first round, instead of a false fault (AUD-024-API018).
+    #[test]
+    fn the_self_test_refuses_other_settings() {
+        let test = SelfTest::published().unwrap();
+        assert_eq!(test.work(), WorkFactor::default());
+        let mut mhfe = Mhfe::with_engine(WorkFactor::new(1, 0).unwrap(), StandIn);
+        let mut rounds = 0;
+        let refused = test.run(&mut mhfe, &mut |_, _, _| {
+            rounds += 1;
+            Ok(())
+        });
+        assert!(matches!(refused, Err(MhfeError::InvalidRequest(_))));
+        assert_eq!(rounds, 0);
+    }
+
     /// The self-test with a fault behind the witness, in what the engine computes.
     fn with_fault_in_the_engine(change: Change, at: u32) -> SelfTestResult {
         let test = SelfTest::published().unwrap();
@@ -470,9 +508,12 @@ mod tests {
         assert!(result.suite_3_as_published() && result.suite_4_as_published());
         assert_eq!(result.fault(), None);
         assert_eq!(result.first_wrong_round(), None);
-        assert_eq!(rounds.len(), 24);
-        assert_eq!(rounds[0], (Stage::Encrypt, 1, 24));
-        assert_eq!(rounds[23], (Stage::Recover, 24, 24));
+        assert_eq!(rounds.len(), SELF_TEST_ROUNDS as usize);
+        assert_eq!(rounds[0], (Stage::Encrypt, 1, SELF_TEST_ROUNDS));
+        assert_eq!(
+            rounds[SELF_TEST_ROUNDS as usize - 1],
+            (Stage::Recover, SELF_TEST_ROUNDS, SELF_TEST_ROUNDS)
+        );
         // The stand-in gives the recorded keys too.
         assert!(with_fault_in_the_engine(Change::Key, 0).passed());
     }

@@ -1,0 +1,18 @@
+[package]
+name = "hash-state-drop-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# The versions mhfe pins at b6fca69 (Cargo.toml:29-39), with mhfe's features (none) by default.
+blake2 = "=0.11.0"
+hmac = "=0.13.0"
+sha2 = "=0.11.0"
+zeroize = "=1.9.1"
+
+[features]
+# The fix the candidate recommends.
+wipe = ["blake2/zeroize", "hmac/zeroize", "sha2/zeroize"]
+
+[workspace]

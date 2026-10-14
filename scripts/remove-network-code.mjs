@@ -1,5 +1,4 @@
-// Removes the network loaders from the generated browser scripts, so that the package contains no
-// code that could fetch anything, not even code that never runs.
+// Removes known generated network loaders, then applies the package's lexical tripwire.
 //
 //   node scripts/remove-network-code.mjs argon2 dist/argon2-mt.js dist/argon2-st.js
 //   node scripts/remove-network-code.mjs glue target/wasm-bindgen/mhfe.js
@@ -85,7 +84,10 @@ for (const file of files) {
   } else {
     text = removeFromGlue(text, file);
   }
-  const left = networkCodeIn(text);
+  const left = networkCodeIn(
+    text,
+    kind === "argon2" && file.endsWith("argon2-mt.js") ? "threaded" : undefined,
+  );
   if (left !== undefined) throw new Error(`${file}: network code is still present: ${left}`);
   writeFileSync(file, text);
 }

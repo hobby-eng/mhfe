@@ -90,7 +90,15 @@ impl PublishedVector {
 
 /// The published vector named `name`.
 pub(crate) fn published(name: &str) -> Result<&'static PublishedVector, String> {
-    PUBLISHED
+    published_in(&PUBLISHED, name)
+}
+
+/// A vector from the table a self-check is validating, including damaged-table controls.
+pub(crate) fn published_in<'a>(
+    table: &'a [PublishedVector],
+    name: &str,
+) -> Result<&'a PublishedVector, String> {
+    table
         .iter()
         .find(|vector| vector.name == name)
         .ok_or_else(|| "a built-in vector is missing".to_owned())

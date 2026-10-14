@@ -87,10 +87,16 @@ fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
 const NFKD_MAX_GROWTH: usize = 11;
 
 /// The BIP39 seed of a phrase and a passphrase: PBKDF2-HMAC-SHA512, 2,048 iterations, with the
-/// salt "mnemonic" and the passphrase in NFKD.
-pub(crate) fn bip39_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u8; 64]> {
+/// salt "mnemonic" and the passphrase in NFKD. A passphrase longer than
+/// [`super::MAX_PASSPHRASE_BYTES`] is refused first, so that no seed is derived from one
+/// (AUD-024-API019).
+pub(crate) fn bip39_seed(
+    mnemonic: &Mnemonic,
+    passphrase: &str,
+) -> Result<Zeroizing<[u8; 64]>, MhfeError> {
+    super::require_passphrase_size(passphrase)?;
     let normalized = normalized_passphrase(passphrase);
-    Zeroizing::new(mnemonic.to_seed_normalized(&normalized))
+    Ok(Zeroizing::new(mnemonic.to_seed_normalized(&normalized)))
 }
 
 /// The passphrase in NFKD, as BIP39 requires, in a buffer that is wiped when dropped. It is
@@ -114,11 +120,12 @@ pub(super) struct ExtendedKey {
 
 impl ExtendedKey {
     /// The master key of a BIP39 phrase and passphrase: `HMAC-SHA512("Bitcoin seed", seed)`.
+    ///
     /// The phrase is read by the library's one reader of phrases (AUD-010): any spacing and
     /// letter case, and four letters of a word, as every other phrase input takes it.
     pub(super) fn master(phrase: &str, passphrase: &str) -> Result<Self, MhfeError> {
         let mnemonic = phrase::parse(phrase).map_err(MhfeError::InvalidPhrase)?;
-        let seed = bip39_seed(&mnemonic, passphrase);
+        let seed = bip39_seed(&mnemonic, passphrase)?;
         let master = Self::from_hmac(b"Bitcoin seed", &[&seed[..]])?;
         // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
         if bool::from(master.scalar()?.is_zero()) {

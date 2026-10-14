@@ -6,7 +6,6 @@
 
 use std::time::Instant;
 
-use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::operation::WalletPassphrase;
@@ -25,13 +24,13 @@ use crate::flow::{self, Flow};
 use crate::made_password::NewPasswordOption;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
-use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
+use crate::style::{self, paint, HEADING, STRONG};
 use crate::system_random::SystemRandom;
 use crate::terminal::{self, Input, Wallet};
 use mhfe::strength::Strength;
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// The settings of the container
     #[command(flatten)]
     settings: Settings,
@@ -64,10 +63,10 @@ fn wallet_check_help() -> String {
 }
 
 /// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
-pub const SUMMARY: &str = "Generate a new wallet and its container";
+pub(crate) const SUMMARY: &str = "Generate a new wallet and its container";
 
 /// The top of `mhfe new --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         SUMMARY,
         "Draws a new 24-word seed phrase from the operating system's random generator, shows it \
@@ -81,7 +80,7 @@ pub fn about() -> String {
 }
 
 /// The end of `mhfe new -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::examples_with_note(
         &[
             (
@@ -103,7 +102,7 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     options.word_wishes.check()?;
     options.repair_words.check()?;
     // Every answer is a choice at the terminal; the new phrase is shown only on a private screen,
@@ -113,7 +112,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
          output redirected.",
     )?;
     // Every step on a screen of its own, the summary at the end.
-    let flow = Flow::start(&input, Operation::New.title());
+    let flow = Flow::start(&input, Operation::New.title())?;
     let work = settings::choose(options.settings, &mut input, Operation::New)?;
     // A wallet check exists only with a passphrase, so its question comes only after one.
     let passphrase = read_new_passphrase(&mut input, options.wallet_check == Some(true))?;
@@ -181,17 +180,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         repair_count,
     )?;
     flow.finish();
-    style::fact("Format", paint(MUTED, new.suite().id()));
-    // A passphrase belongs to the wallet, checked or not; the one typed here is known.
-    let keep = new.keep(work, WalletPassphrase::from(!passphrase.is_empty()));
-    style::fact_wrapped("Keep", &encrypt::what_to_keep(&keep));
-    style::fact_wrapped(
-        "Next",
-        &format!(
-            "rehearse with {} from the backup you wrote",
-            paint(ACCENT, "mhfe check")
-        ),
-    );
+    encrypt::print_container_summary(&new, work, WalletPassphrase::from(!passphrase.is_empty()));
+    encrypt::print_next_rehearsal();
     style::more(readme::NEW);
     Ok(SUCCESS)
 }
@@ -264,7 +254,7 @@ fn explain() {
 /// typed twice. With `checked`, the wallet check given as an option, none is refused and asked
 /// again, as the check needs one.
 fn read_new_passphrase(input: &mut Input, checked: bool) -> Result<LockedText, Failure> {
-    let screen = check::passphrase_screen(input, Operation::New, "the new wallet");
+    let screen = check::passphrase_screen(input, Operation::New, "the new wallet")?;
     let passphrase = loop {
         let passphrase = input.secret("BIP39 passphrase of the new wallet, or Enter for none")?;
         if passphrase.is_empty() {
@@ -302,7 +292,7 @@ fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
     let started = Instant::now();
     let expected = draw.odds().expected_draws.round() as u128;
     if expected > 1 {
-        flow::step();
+        flow::step()?;
         eprintln!();
         let what = if draw.is_checked() {
             "a phrase that passes the check"
@@ -324,7 +314,7 @@ fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
 
 /// Shows the new phrase on a private screen until Enter or Escape clears it.
 fn show_new_phrase(input: &Input, phrase: &str, passphrase: &str) -> Result<(), Failure> {
-    let screen = terminal::PrivateScreen::enter_to_show(input);
+    let screen = terminal::PrivateScreen::enter_to_show(input)?;
     if !screen.shows_privately() {
         return Err(Failure::internal(
             "No private screen to show the new phrase on.",

@@ -29,7 +29,7 @@ use mhfe::self_check::{process, ComponentCheck, ComponentOutcome, Tier};
 /// other processes of the same user from attaching to it (ptrace) or reading /proc/PID/mem. A
 /// crash then writes nothing to disk, wherever systemd-coredump or apport would put it. Called
 /// first in `main`; a refusal, which no usual system gives, changes nothing else.
-pub fn harden_process() {
+pub(crate) fn harden_process() {
     #[cfg(unix)]
     {
         let none = libc::rlimit {
@@ -52,7 +52,7 @@ pub fn harden_process() {
 /// (AUD-015-SEC004). A handler, unlike an ignored signal, is reset for a program the tool starts,
 /// such as the browser of `mhfe serve`. Returns whether both handlers read back as set, as every
 /// protection is read back before it is relied on.
-pub fn interrupt_on_quit_and_suspend() -> bool {
+pub(crate) fn interrupt_on_quit_and_suspend() -> bool {
     #[cfg(not(unix))]
     {
         true
@@ -87,7 +87,7 @@ pub fn interrupt_on_quit_and_suspend() -> bool {
 }
 
 /// The identifier of [`CoreDumpCheck`] in a self-check report.
-pub const CORE_DUMPS_ID: &str = process::CORE_DUMPS.id;
+pub(crate) const CORE_DUMPS_ID: &str = process::CORE_DUMPS.id;
 
 /// How one protection reads back from the kernel.
 // Windows reads nothing back: there, only the tests construct every variant.
@@ -192,7 +192,7 @@ fn dumpable() -> Option<ReadBack> {
 
 /// The `core-dumps` check: no core dumps and, on Linux, no reading of this process's memory by
 /// other programs, as [`harden_process`] set it.
-pub struct CoreDumpCheck;
+pub(crate) struct CoreDumpCheck;
 
 impl ComponentCheck for CoreDumpCheck {
     fn id(&self) -> &'static str {
@@ -210,14 +210,14 @@ impl ComponentCheck for CoreDumpCheck {
 
 /// What a command needs that isolation would forbid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Needs {
-    pub network: bool,
-    pub writes: bool,
+pub(crate) struct Needs {
+    pub(crate) network: bool,
+    pub(crate) writes: bool,
 }
 
 impl Needs {
     /// A command that handles secrets needs neither.
-    pub const NOTHING: Self = Self {
+    pub(crate) const NOTHING: Self = Self {
         network: false,
         writes: false,
     };
@@ -225,11 +225,11 @@ impl Needs {
 
 /// What the kernel enforces for the thread that runs a command.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Isolation {
-    pub no_network: bool,
-    pub no_writes: bool,
+pub(crate) struct Isolation {
+    pub(crate) no_network: bool,
+    pub(crate) no_writes: bool,
     /// The process runs in its own network namespace, with only an inactive loopback interface.
-    pub empty_network: bool,
+    pub(crate) empty_network: bool,
 }
 
 impl Isolation {
@@ -240,12 +240,12 @@ impl Isolation {
     };
 
     /// Whether nothing is enforced.
-    pub fn is_empty(self) -> bool {
+    pub(crate) fn is_empty(self) -> bool {
         self == Self::NONE
     }
 
-    /// The boundaries, as a summary names them.
-    pub fn names(self) -> Vec<&'static str> {
+    /// The restrictions, as a summary names them.
+    pub(crate) fn names(self) -> Vec<&'static str> {
         [
             (self.empty_network, "the isolated network"),
             (self.no_network, "no new sockets"),
@@ -262,23 +262,48 @@ thread_local! {
     static CLAIMED: Cell<Isolation> = const { Cell::new(Isolation::NONE) };
     /// What [`verify_isolation`] found of that report, once it has run in the thread.
     static PROBED: Cell<Option<IsolationProbe>> = const { Cell::new(None) };
+    /// What the command needed forbidden and the kernel did not enforce (AUD-024-SEC009).
+    static KERNEL_REFUSED: Cell<Isolation> = const { Cell::new(Isolation::NONE) };
 }
 
 /// Forbids the calling thread, and every thread it starts afterwards, what `needs` does not
 /// include, as far as the kernel allows: sockets through seccomp, writes to files through
-/// Landlock (Linux 5.13 and later). Descriptors already open, including sockets, files and
-/// terminals, stay usable. Returns what the kernel reports as now enforced; elsewhere than on
-/// Linux nothing is. [`verify_isolation`] then checks the report from the inside.
-pub fn isolate(needs: Needs) -> Isolation {
+/// Landlock (Linux 5.13 and later) together with a seccomp filter for the changes Landlock leaves
+/// (a file's mode, owner, extended attributes and times, truncation by path). Descriptors already
+/// open, including sockets, files and terminals, stay usable. Returns what the kernel reports as
+/// now enforced; elsewhere than on Linux nothing is. [`verify_isolation`] then checks the report
+/// from the inside, and [`isolation_refused`] tells what the kernel refused.
+pub(crate) fn isolate(needs: Needs) -> Isolation {
     let isolation = isolate_thread(needs);
     CLAIMED.with(|claimed| claimed.set(isolation));
     PROBED.with(|probed| probed.set(None));
+    KERNEL_REFUSED.with(|refused| refused.set(refused_of(needs, isolation)));
     isolation
+}
+
+/// What a command that `needs` this should have had forbidden but the kernel does not enforce:
+/// on Linux, the sockets and the writes it does not need. The network namespace is optional, as
+/// SECURITY.md says, and elsewhere than on Linux the system offers none of these to a program.
+fn refused_of(needs: Needs, enforced: Isolation) -> Isolation {
+    if !cfg!(target_os = "linux") {
+        return Isolation::NONE;
+    }
+    Isolation {
+        no_network: !needs.network && !enforced.no_network,
+        no_writes: !needs.writes && !enforced.no_writes,
+        empty_network: false,
+    }
+}
+
+/// What the calling thread's command should have had forbidden and the kernel refused, as on a
+/// kernel without Landlock.
+pub(crate) fn isolation_refused() -> Isolation {
+    KERNEL_REFUSED.with(Cell::get)
 }
 
 /// What is enforced for the calling thread, as the summary of a command states it: what the probes
 /// confirmed once [`verify_isolation`] has run, else what [`isolate`] reported.
-pub fn isolation() -> Isolation {
+pub(crate) fn isolation() -> Isolation {
     match PROBED.with(Cell::get) {
         Some(probe) => probe.confirmed,
         None => CLAIMED.with(Cell::get),
@@ -286,28 +311,28 @@ pub fn isolation() -> Isolation {
 }
 
 /// What [`isolate`] reported for the calling thread and a probe found does not hold.
-pub fn isolation_refuted() -> Isolation {
+pub(crate) fn isolation_refuted() -> Isolation {
     PROBED
         .with(Cell::get)
         .map_or(Isolation::NONE, |probe| probe.refuted)
 }
 
-/// What the probes found of each boundary [`isolate`] reported.
+/// What the probes found of each restriction [`isolate`] reported.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct IsolationProbe {
-    /// The boundaries that hold: what the summary of a command states from now on.
-    pub confirmed: Isolation,
-    /// The boundaries the kernel reported but a probe got through.
-    pub refuted: Isolation,
-    /// The boundaries no probe could confirm or refute, as without a /dev/null to open.
-    pub unverified: Isolation,
+pub(crate) struct IsolationProbe {
+    /// The restrictions that hold: what the summary of a command states from now on.
+    pub(crate) confirmed: Isolation,
+    /// The restrictions the kernel reported but a probe got through.
+    pub(crate) refuted: Isolation,
+    /// The restrictions no probe could confirm or refute, as without a /dev/null to open.
+    pub(crate) unverified: Isolation,
 }
 
-/// Probes, in the calling thread, every boundary [`isolate`] reported for it, and keeps only what
-/// holds for the summary of the command. Each probe tries what the boundary forbids and closes at
+/// Probes, in the calling thread, every restriction [`isolate`] reported for it, and keeps only what
+/// holds for the summary of the command. Each probe tries what the restriction forbids and closes at
 /// once whatever opens: no packet is sent and no file is written. Run in each thread a command
 /// runs in, after [`isolate`]; running it again probes the same report again.
-pub fn verify_isolation() -> IsolationProbe {
+pub(crate) fn verify_isolation() -> IsolationProbe {
     verify_isolation_with(&platform_probes::Kernel)
 }
 
@@ -327,11 +352,14 @@ trait Probes {
     fn io_uring(&self) -> Result<(), i32>;
     /// Opens /dev/null for writing and closes it at once, as [`Probes::socket`].
     fn open_for_writing(&self) -> Result<(), i32>;
+    /// Sets an extended attribute of the empty path, which names no file: the file filter refuses
+    /// it before the kernel looks the path up, which otherwise fails with ENOENT. Nothing changes.
+    fn change_attribute(&self) -> Result<(), i32>;
     /// The text of /proc/self/net/`name`, or `None` when it cannot be read.
     fn net_file(&self, name: &str) -> Option<String>;
 }
 
-/// What a probe of one boundary found.
+/// What a probe of one restriction found.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Found {
     Holds,
@@ -382,9 +410,12 @@ fn sockets_refused(probes: &dyn Probes) -> Found {
     }
 }
 
-/// Opening /dev/null for writing must be refused by Landlock. A system without /dev/null, or one
-/// that refuses for another reason, cannot tell.
+/// Opening /dev/null for writing must be refused by Landlock, and changing an attribute by the file
+/// filter. A system without /dev/null, or one that refuses for another reason, cannot tell.
 fn writes_refused(probes: &dyn Probes) -> Found {
+    if probes.change_attribute() != Err(REFUSED) {
+        return Found::Broken;
+    }
     match probes.open_for_writing() {
         Err(REFUSED) => Found::Holds,
         Ok(()) => Found::Broken,
@@ -459,6 +490,26 @@ mod platform_probes {
             opened(i64::from(file))
         }
 
+        fn change_attribute(&self) -> Result<(), i32> {
+            // SAFETY: the path and the name are NUL-terminated literals and the value is empty;
+            // setxattr reads nothing else.
+            let set = unsafe {
+                libc::syscall(
+                    libc::SYS_setxattr,
+                    c"".as_ptr(),
+                    c"user.mhfe".as_ptr(),
+                    std::ptr::null::<libc::c_void>(),
+                    0usize,
+                    0,
+                )
+            };
+            if set == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error().raw_os_error().unwrap_or(0))
+            }
+        }
+
         fn net_file(&self, name: &str) -> Option<String> {
             std::fs::read_to_string(format!("/proc/self/net/{name}")).ok()
         }
@@ -486,6 +537,10 @@ mod platform_probes {
             Err(NOT_TRIED)
         }
 
+        fn change_attribute(&self) -> Result<(), i32> {
+            Err(NOT_TRIED)
+        }
+
         fn net_file(&self, _: &str) -> Option<String> {
             None
         }
@@ -493,19 +548,26 @@ mod platform_probes {
 }
 
 /// The identifier of [`IsolationCheck`] in a self-check report.
-pub const ISOLATION_ID: &str = process::ISOLATION.id;
+pub(crate) const ISOLATION_ID: &str = process::ISOLATION.id;
 
 /// The `isolation` check: whether what [`isolate`] reported for the calling thread holds. It is not
 /// a failure when it does not: the summary of the command then states only what holds, with a
-/// warning, and the command goes on, as it would on a system without these boundaries.
-pub struct IsolationCheck;
+/// warning, and the command goes on, as it would on a system without these restrictions.
+pub(crate) struct IsolationCheck;
 
 impl IsolationCheck {
-    fn outcome(probe: IsolationProbe) -> ComponentOutcome {
+    /// The outcome of `probe`, with what the kernel `refused` of what the command needed.
+    fn outcome(probe: IsolationProbe, refused: Isolation) -> ComponentOutcome {
         if !probe.refuted.is_empty() {
             return ComponentOutcome::Warning(format!(
                 "weaker than the kernel reported: {}",
                 probe.refuted.names().join(", ")
+            ));
+        }
+        if !refused.is_empty() {
+            return ComponentOutcome::Warning(format!(
+                "weaker than needed, not enforced by this kernel: {}",
+                refused.names().join(", ")
             ));
         }
         if !probe.unverified.is_empty() {
@@ -536,13 +598,13 @@ impl ComponentCheck for IsolationCheck {
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
-        Self::outcome(verify_isolation())
+        Self::outcome(verify_isolation(), isolation_refused())
     }
 }
 
 /// The most memory this process may lock (RLIMIT_MEMLOCK), in bytes; `None` where it cannot be
 /// read, has no limit, or this is not Unix.
-pub fn lock_limit() -> Option<u64> {
+pub(crate) fn lock_limit() -> Option<u64> {
     #[cfg(unix)]
     {
         let mut limit = libc::rlimit {
@@ -582,8 +644,12 @@ fn isolate_thread(needs: Needs) -> Isolation {
     // Only a command that needs neither: in a user namespace of its own the process could not
     // create a file, as no owner of a new file maps to the system's users.
     let empty_network = needs == Needs::NOTHING && namespace::enter_empty_network();
+    // Both halves of "no writes" are installed whatever the other gives; only both together are
+    // reported (AUD-024-SEC001).
+    let no_file_changes = !needs.writes && seccomp::forbid_file_changes();
+    let no_new_writes = !needs.writes && landlock::forbid_writes(!needs.network);
     Isolation {
-        no_writes: !needs.writes && landlock::forbid_writes(!needs.network),
+        no_writes: no_new_writes && no_file_changes,
         no_network: !needs.network && seccomp::forbid_sockets(),
         empty_network,
     }
@@ -618,21 +684,21 @@ mod landlock;
 
 mod swap;
 
-pub use swap::unprotected_swap;
+pub(crate) use swap::unprotected_swap;
 
 /// A swap area through which memory could reach a disk unencrypted.
 #[derive(Debug, PartialEq, Eq)]
-pub struct SwapArea {
+pub(crate) struct SwapArea {
     /// The device or file, as /proc/swaps names it.
-    pub name: String,
+    pub(crate) name: String,
     /// False when it is surely unencrypted, true when MHFE cannot tell, as for a swap file on a
     /// file system whose device it cannot see.
-    pub unknown: bool,
+    pub(crate) unknown: bool,
 }
 
 /// An inspected swap inventory, or an unavailable Linux inventory that must still warn.
 #[derive(Debug, PartialEq, Eq)]
-pub enum SwapInventory {
+pub(crate) enum SwapInventory {
     Available(Vec<SwapArea>),
     Unavailable,
 }
@@ -673,6 +739,63 @@ mod tests {
         assert_eq!(super::isolation(), Isolation::default());
         assert!(std::net::TcpListener::bind("127.0.0.1:0").is_ok());
         fs::write(&target, "x").unwrap();
+        let _ = fs::remove_dir_all(&folder);
+    }
+
+    /// The file filter refuses, with EACCES, every change Landlock leaves to a file that already
+    /// exists: its mode, owner, extended attributes and times, and its truncation by path
+    /// (AUD-024-SEC001). The test's own thread is not isolated and may still change them.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_isolated_thread_cannot_change_an_existing_file() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::PermissionsExt;
+        let folder = std::env::temp_dir().join(format!("mhfe-file-changes-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        let file = folder.join("existing");
+        fs::write(&file, "x").unwrap();
+        let path = CString::new(file.as_os_str().as_bytes()).unwrap();
+        let refused = |result: libc::c_int| {
+            result == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EACCES)
+        };
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    isolate(Needs::NOTHING);
+                    let mode = fs::set_permissions(&file, fs::Permissions::from_mode(0o600));
+                    assert_eq!(mode.unwrap_err().raw_os_error(), Some(libc::EACCES), "mode");
+                    let opened = fs::File::open(&file).unwrap();
+                    let times = opened.set_modified(std::time::SystemTime::UNIX_EPOCH);
+                    assert_eq!(
+                        times.unwrap_err().raw_os_error(),
+                        Some(libc::EACCES),
+                        "times"
+                    );
+                    // SAFETY: the path and the name are NUL-terminated and live for the calls; the
+                    // value is one byte of a literal.
+                    unsafe {
+                        let name = c"user.mhfe";
+                        let attribute = libc::setxattr(
+                            path.as_ptr(),
+                            name.as_ptr(),
+                            c"x".as_ptr().cast(),
+                            1,
+                            0,
+                        );
+                        assert!(refused(attribute), "extended attribute");
+                        assert!(
+                            refused(libc::truncate(path.as_ptr(), 0)),
+                            "truncate by path"
+                        );
+                        let owner = libc::chown(path.as_ptr(), libc::getuid(), libc::getgid());
+                        assert!(refused(owner), "owner");
+                    }
+                })
+                .join()
+                .unwrap();
+        });
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
         let _ = fs::remove_dir_all(&folder);
     }
 
@@ -813,12 +936,16 @@ mod tests {
         );
     }
 
+    /// ENOENT on Linux (asm-generic/errno-base.h).
+    const NO_SUCH_FILE: i32 = 2;
+
     /// The probes' answers, as a test gives them.
     #[derive(Clone)]
     struct FakeKernel {
         socket: Result<(), i32>,
         io_uring: Result<(), i32>,
         write: Result<(), i32>,
+        attribute: Result<(), i32>,
         devices: Option<&'static str>,
         routes: Option<&'static str>,
     }
@@ -834,6 +961,7 @@ mod tests {
                 socket: Err(REFUSED),
                 io_uring: Err(REFUSED),
                 write: Err(REFUSED),
+                attribute: Err(REFUSED),
                 devices: Some(LOOPBACK_ONLY),
                 // An empty route table may lack its heading line.
                 routes: Some(""),
@@ -852,6 +980,10 @@ mod tests {
 
         fn open_for_writing(&self) -> Result<(), i32> {
             self.write
+        }
+
+        fn change_attribute(&self) -> Result<(), i32> {
+            self.attribute
         }
 
         fn net_file(&self, name: &str) -> Option<String> {
@@ -874,7 +1006,10 @@ mod tests {
         let probe = probe_claims(EVERYTHING, &FakeKernel::enforcing());
         assert_eq!(probe.confirmed, EVERYTHING);
         assert!(probe.refuted.is_empty() && probe.unverified.is_empty());
-        assert_eq!(IsolationCheck::outcome(probe), ComponentOutcome::Passed);
+        assert_eq!(
+            IsolationCheck::outcome(probe, Isolation::NONE),
+            ComponentOutcome::Passed
+        );
         // A heading line in the route table is no route.
         let with_heading = FakeKernel {
             routes: Some("Iface\tDestination\tGateway\n"),
@@ -887,12 +1022,15 @@ mod tests {
         // What was not reported is not probed, and nothing reported is not available.
         let nothing = probe_claims(Isolation::NONE, &FakeKernel::enforcing());
         assert_eq!(nothing, IsolationProbe::default());
-        assert_eq!(IsolationCheck::outcome(nothing).name(), "notAvailable");
+        assert_eq!(
+            IsolationCheck::outcome(nothing, Isolation::NONE).name(),
+            "notAvailable"
+        );
     }
 
     #[test]
     fn isolation_probe_downgrades_a_false_claim() {
-        let cases: [(&str, FakeKernel, Isolation); 6] = [
+        let cases: [(&str, FakeKernel, Isolation); 7] = [
             (
                 "a socket opens",
                 FakeKernel {
@@ -919,6 +1057,17 @@ mod tests {
                 "/dev/null opens for writing",
                 FakeKernel {
                     write: Ok(()),
+                    ..FakeKernel::enforcing()
+                },
+                Isolation {
+                    no_writes: true,
+                    ..Isolation::NONE
+                },
+            ),
+            (
+                "an attribute reaches the kernel's lookup: no file filter (AUD-024-SEC001)",
+                FakeKernel {
+                    attribute: Err(NO_SUCH_FILE),
                     ..FakeKernel::enforcing()
                 },
                 Isolation {
@@ -973,7 +1122,7 @@ mod tests {
                 "{case}"
             );
             assert_eq!(
-                IsolationCheck::outcome(probe),
+                IsolationCheck::outcome(probe, Isolation::NONE),
                 ComponentOutcome::Warning(format!(
                     "weaker than the kernel reported: {}",
                     refuted.names().join(", ")
@@ -983,11 +1132,53 @@ mod tests {
         }
     }
 
+    /// A restriction the command needed and the kernel refused, Landlock's or a seccomp filter's,
+    /// makes the check warn, while the network namespace stays optional (AUD-024-SEC009).
+    #[test]
+    fn a_restriction_the_kernel_refused_is_a_warning() {
+        let only_sockets = Isolation {
+            no_network: true,
+            empty_network: true,
+            ..Isolation::NONE
+        };
+        let only_writes = Isolation {
+            no_writes: true,
+            ..Isolation::NONE
+        };
+        for (enforced, refused) in [
+            (only_sockets, "no new file writes"),
+            (only_writes, "no new sockets"),
+        ] {
+            let kernel_refused = refused_of(Needs::NOTHING, enforced);
+            if !cfg!(target_os = "linux") {
+                assert!(kernel_refused.is_empty());
+                continue;
+            }
+            assert_eq!(kernel_refused.names(), [refused]);
+            let probe = probe_claims(enforced, &FakeKernel::enforcing());
+            assert_eq!(
+                IsolationCheck::outcome(probe, kernel_refused),
+                ComponentOutcome::Warning(format!(
+                    "weaker than needed, not enforced by this kernel: {refused}"
+                ))
+            );
+        }
+        let without_namespace = Isolation {
+            empty_network: false,
+            ..EVERYTHING
+        };
+        assert!(refused_of(Needs::NOTHING, without_namespace).is_empty());
+        // What a command needs is not refused: mhfe serve needs both.
+        let both = Needs {
+            network: true,
+            writes: true,
+        };
+        assert!(refused_of(both, Isolation::NONE).is_empty());
+    }
+
     /// Without /dev/null, or without /proc, a probe cannot tell: unverified, not refuted.
     #[test]
     fn a_probe_that_cannot_tell_leaves_the_claim_unverified() {
-        /// ENOENT on Linux (asm-generic/errno-base.h).
-        const NO_SUCH_FILE: i32 = 2;
         let no_dev_null = FakeKernel {
             write: Err(NO_SUCH_FILE),
             ..FakeKernel::enforcing()
@@ -1003,7 +1194,7 @@ mod tests {
         assert!(probe.refuted.is_empty());
         assert!(!probe.confirmed.no_writes && probe.confirmed.no_network);
         assert_eq!(
-            IsolationCheck::outcome(probe),
+            IsolationCheck::outcome(probe, Isolation::NONE),
             ComponentOutcome::NotAvailable("could not be verified: no new file writes".to_owned())
         );
         let no_proc = FakeKernel {
@@ -1067,20 +1258,20 @@ mod tests {
         );
     }
 
-    /// Exit codes of the process that [`g10_isolated_command`] forks, which its test process passes
+    /// Exit codes of the process that [`isolated_encrypt_child`] forks, which its test process passes
     /// on as its own. They are not 0 or 101, the codes of a test process that ran no such child.
     #[cfg(target_os = "linux")]
-    mod g10 {
-        pub const ISOLATED: i32 = 40;
-        pub const NO_NAMESPACE: i32 = 41;
-        pub const CHECKS_FAILED: i32 = 42;
-        pub const NOT_EMPTY: i32 = 43;
-        pub const NO_CHILD: i32 = 44;
-        /// Set for the test process that runs [`super::g10_isolated_command`].
-        pub const VARIABLE: &str = "MHFE_TEST_G10_CHILD";
+    mod isolated_child {
+        pub(super) const ISOLATED: i32 = 40;
+        pub(super) const NO_NAMESPACE: i32 = 41;
+        pub(super) const CHECKS_FAILED: i32 = 42;
+        pub(super) const NOT_EMPTY: i32 = 43;
+        pub(super) const NO_CHILD: i32 = 44;
+        /// Set for the test process that runs [`super::isolated_encrypt_child`].
+        pub(super) const VARIABLE: &str = "MHFE_TEST_ISOLATED_CHILD";
     }
 
-    /// G10: a command started directly enters its empty network before the checks at start, whose
+    /// A command started directly enters its empty network before the checks at start, whose
     /// Argon2 check runs four threads; a process with more than one thread could not enter it. The
     /// order of main is followed for `mhfe encrypt` in a process of a single thread, as a command
     /// has at that point: forked off a test process of its own that runs nothing else, so that no
@@ -1093,12 +1284,12 @@ mod tests {
         const LIMIT: std::time::Duration = std::time::Duration::from_secs(120);
         let mut process = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
-                "protect::tests::g10_isolated_command",
+                "protect::tests::isolated_encrypt_child",
                 "--exact",
                 "--ignored",
                 "--test-threads=1",
             ])
-            .env(g10::VARIABLE, "1")
+            .env(isolated_child::VARIABLE, "1")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -1115,12 +1306,16 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(20));
         };
         match status.code() {
-            Some(g10::ISOLATED) => {}
-            Some(g10::NO_NAMESPACE) => {
+            Some(isolated_child::ISOLATED) => {}
+            Some(isolated_child::NO_NAMESPACE) => {
                 eprintln!("This system allows no user namespace: checks only.")
             }
-            Some(g10::CHECKS_FAILED) => panic!("the checks at start failed after isolation"),
-            Some(g10::NOT_EMPTY) => panic!("the network of the isolated command is not empty"),
+            Some(isolated_child::CHECKS_FAILED) => {
+                panic!("the checks at start failed after isolation")
+            }
+            Some(isolated_child::NOT_EMPTY) => {
+                panic!("the network of the isolated command is not empty")
+            }
             other => panic!("the test process ran no isolated command: {other:?}"),
         }
     }
@@ -1131,9 +1326,9 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[ignore = "run by the_empty_network_is_entered_before_the_startup_checks_start_threads"]
-    fn g10_isolated_command() {
+    fn isolated_encrypt_child() {
         use clap::Parser;
-        if std::env::var_os(g10::VARIABLE).is_none() {
+        if std::env::var_os(isolated_child::VARIABLE).is_none() {
             return;
         }
         let command = crate::Cli::try_parse_from(["mhfe", "encrypt"])
@@ -1145,9 +1340,9 @@ mod tests {
         let child = unsafe { libc::fork() };
         if child == 0 {
             let code = if crate::prepare(&command).is_err() {
-                g10::CHECKS_FAILED
+                isolated_child::CHECKS_FAILED
             } else if !isolation().empty_network {
-                g10::NO_NAMESPACE
+                isolated_child::NO_NAMESPACE
             } else {
                 let devices = fs::read_to_string("/proc/self/net/dev").unwrap_or_default();
                 let interfaces: Vec<&str> = devices
@@ -1157,9 +1352,9 @@ mod tests {
                     .map(str::trim)
                     .collect();
                 if interfaces == ["lo"] {
-                    g10::ISOLATED
+                    isolated_child::ISOLATED
                 } else {
-                    g10::NOT_EMPTY
+                    isolated_child::NOT_EMPTY
                 }
             };
             // SAFETY: ends the child at once, without running anything of the test's process.
@@ -1171,7 +1366,7 @@ mod tests {
         let code = if waited && libc::WIFEXITED(status) {
             libc::WEXITSTATUS(status)
         } else {
-            g10::NO_CHILD
+            isolated_child::NO_CHILD
         };
         std::process::exit(code);
     }

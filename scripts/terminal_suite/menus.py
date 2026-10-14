@@ -1,11 +1,16 @@
-"""The menu of `mhfe`, and the lists and private screens of `mhfe encrypt` and `mhfe new`.
+# TOOL-01: public fixtures and cases of the Python PTY test runtime.
+"""
+The menu of `mhfe`, and the lists and private screens of `mhfe encrypt`
+and `mhfe new`.
 
-The menu's keys choose, do nothing or quit, and its password entry makes passwords on private
-screens. `mhfe encrypt` asks its lists on cleared screens and nothing about a BIP39 passphrase,
-also at a terminal that cannot redraw a list, where a password made by MHFE is refused. `mhfe new`
-and `mhfe wallets` show a phrase only on a private screen; `mhfe new` asks about a wallet check
-with no answer marked, takes a chosen word privately, and its quit keys leave the private screen. A
-dumb terminal gets no hints, and keys typed ahead clear no screen.
+The menu's keys choose, do nothing or quit, and its password entry makes
+passwords on private screens. `mhfe encrypt` asks its lists on cleared
+screens and nothing about a BIP39 passphrase, also at a terminal that
+cannot redraw a list, where a password made by MHFE is refused. `mhfe
+new` and `mhfe wallets` show a phrase only on a private screen; `mhfe
+new` asks about a wallet check with no answer marked, takes a chosen
+word privately, and its quit keys leave the private screen. A dumb
+terminal gets no hints, and keys typed ahead clear no screen.
 """
 
 import os
@@ -13,27 +18,71 @@ import re
 import signal
 import time
 
-from .constants import (AMPLE, BACKSPACE, BACK_TO_MENU, BAD_CHECKSUM, CANCELLED, CANCELLED_SHOWN,
-                        CHECK_ANSWERS, CHECK_ASKED, CHECK_EXPLAINED, CHECK_MARKED_HINT,
-                        CHECK_RECORDED, CHECK_UNMARKED_HINT, CHOSEN_ASKED, CHOSEN_RECORDED,
-                        CHOSEN_WORD_ASKED, CLEAR, CONTAINER, CONTAINER_ASKED, CTRL_C, CTRL_UP,
-                        DOWN, ENTER, ENTER_PRIVATE, ESCAPE, EXPLAINED, HELP_FROM_PASSWORD,
-                        HIGHLIGHT, IGNORED_KEY, INVALID_INPUT, LEAVE_PRIVATE, LENGTH_RECORDED,
-                        LIST_SHOWN, MENU_SHOWN, NEVER_USE_ASKED, NUMBERED_PROMPT, OWN_SETTINGS,
-                        PASSPHRASE_ASKED, PASSWORD_AGAIN, PASSWORD_ENTRY, PASSWORD_KIND,
-                        PASSWORD_MADE, PHRASE, PHRASE_RECORDED, PLACE_ASKED, PLACE_REFUSED,
-                        RECOGNISABLE, REPAIR_ASKED, REPAIR_RECORDED, SECRET, SETTINGS_ASKED, UP)
+from .constants import (
+    AMPLE,
+    BACKSPACE,
+    BACK_TO_MENU,
+    BAD_CHECKSUM,
+    CANCELLED,
+    CANCELLED_SHOWN,
+    CHECK_ANSWERS,
+    CHECK_ASKED,
+    CHECK_EXPLAINED,
+    CHECK_MARKED_HINT,
+    CHECK_RECORDED,
+    CHECK_UNMARKED_HINT,
+    CHOSEN_ASKED,
+    CHOSEN_RECORDED,
+    CHOSEN_WORD_ASKED,
+    CLEAR,
+    CONTAINER,
+    CONTAINER_ASKED,
+    CTRL_C,
+    CTRL_UP,
+    DOWN,
+    ENTER,
+    ENTER_PRIVATE,
+    ESCAPE,
+    EXPLAINED,
+    HELP_FROM_PASSWORD,
+    HIGHLIGHT,
+    IGNORED_KEY,
+    INVALID_INPUT,
+    LEAVE_PRIVATE,
+    LENGTH_RECORDED,
+    LIST_SHOWN,
+    MENU_SHOWN,
+    NEVER_USE_ASKED,
+    NUMBERED_PROMPT,
+    OWN_SETTINGS,
+    PASSPHRASE_ASKED,
+    PASSWORD_AGAIN,
+    PASSWORD_ENTRY,
+    PASSWORD_KIND,
+    PASSWORD_MADE,
+    PHRASE,
+    PHRASE_RECORDED,
+    PLACE_ASKED,
+    PLACE_REFUSED,
+    RECOGNISABLE,
+    REPAIR_ASKED,
+    REPAIR_RECORDED,
+    SECRET,
+    SETTINGS_ASKED,
+    UP,
+)
 from .passwords import PASSWORD_KIND_ASKED
 from .recovery import ANY_PASSPHRASE_RECORDED
 from .repair import CARD_ASKED, container_with
-from .session import Session, shown_privately
+from .session import Session, run_with_output, shown_privately
 
 
-def check_menu():
+def menu_passwords_regenerate_and_clear_their_private_screens():
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
     moves = DOWN * PASSWORD_ENTRY + UP
-    # The password and the prompt arrive together; the count of passwords is checked at the end.
+    # The password and the prompt arrive together; the count of
+    # passwords is checked at the end.
     session.answer(IGNORED_KEY + CTRL_UP + moves + ENTER, PASSWORD_KIND)
     session.answer(ENTER, PASSWORD_AGAIN)
     for _ in range(2):
@@ -47,25 +96,31 @@ def check_menu():
     session.answer(DOWN * HELP_FROM_PASSWORD + ENTER, BACK_TO_MENU)
     session.answer(ENTER, MENU_SHOWN)
     session.press(b"q")
-    # The tool needs a moment to end; close() would send Ctrl+C to a tool that is still running.
+    # The tool needs a moment to end; close() would send Ctrl+C to a
+    # tool that is still running.
     assert session.drain_until_exit(10), "menu: q did not end the tool"
     code, settings = session.close()
     assert code == 0, f"menu: q gave exit code {code}"
     assert settings == session.original, "menu: the terminal settings were not restored"
     assert session.output.count(PASSWORD_MADE) == 4, "menu: passwords were not regenerated"
-    # One private screen each time the entry is chosen; it is cleared on entering and on leaving,
+    # One private screen each time the entry is chosen; it is cleared on
+    # entering and on leaving,
     # and once more before each password made again.
     assert session.output.count(ENTER_PRIVATE) == 2, "menu: passwords did not use private screens"
     assert session.output.count(LEAVE_PRIVATE) == 2, "menu: password screens were not left"
     assert session.output.count(CLEAR) == 6, "menu: a password was not replaced by the next"
-    # A password of random characters may hold the key's letter; nothing else may.
+    # A password of random characters may hold the key's letter; nothing
+    # else may.
     shown = re.sub(rb"(?m)^  [2-9A-HJ-NP-Za-km-z]{16}\r?$", b"", session.output)
     assert IGNORED_KEY not in shown, "menu: a key was shown"
-    print("menu: password regeneration, Escape/q return, private screens cleared, "
-          "terminal restored")
+    print("menu: passwords regenerate, private screens clear and the terminal is restored")
     print("menu: the password entry asks for words or characters and makes both")
 
-    # Escape alone: the tool waits a moment for the rest of an arrow key's sequence, then quits.
+
+
+def a_lone_escape_quits_the_menu_and_restores_the_terminal():
+    # Escape alone: the tool waits a moment for the rest of an arrow
+    # key's sequence, then quits.
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
     session.press(ESCAPE)
@@ -75,6 +130,9 @@ def check_menu():
     assert settings == session.original, "menu: Escape did not restore the terminal settings"
     print("menu: a lone Escape quits, exit code 0, terminal restored")
 
+
+
+def ctrl_c_ends_the_menu_with_exit_code_130_and_restores_the_terminal():
     session = Session(arguments=())
     session.wait_for(MENU_SHOWN)
     session.type(CTRL_C)
@@ -82,25 +140,30 @@ def check_menu():
     code, settings = session.close()
     assert code == CANCELLED, f"menu: Ctrl+C gave exit code {code}"
     assert settings == session.original, "menu: Ctrl+C did not restore the terminal settings"
-    print("menu: Ctrl+C, exit code 130, terminal restored")
+    print("menu: Ctrl+C ends with code 130 and restores the terminal")
 
 
-def check_encrypt_lists():
+def encryption_lists_show_defaults_and_keep_the_phrase_private():
     session = Session(arguments=("encrypt",))
-    # Nothing typed yet: this waits for the whole first question, its link and its list.
+    # Nothing typed yet: this waits for the whole first question, its
+    # link and its list.
     session.answer(b"", SETTINGS_ASKED, LIST_SHOWN)
     session.answer(b"2", b"PIM: ")
     session.answer(b"x\r", b"whole number", b"PIM: ")
     session.answer(b"1\r", b"Memory level: ")
     session.answer(b"0\r", b"seed phrase: ")
-    # Twelve times the first word fails the checksum; the phrase is asked again.
+    # Twelve times the first word fails the checksum; the phrase is
+    # asked again.
     session.answer(BAD_CHECKSUM + b"\r", b"Please type it again", b"seed phrase: ")
-    # A valid phrase is taken at once, without a question; the next step clears the screen.
+    # A valid phrase is taken at once, without a question; the next step
+    # clears the screen.
     session.answer(PHRASE.encode() + b"\r", CLEAR, b"How long should", LIST_SHOWN)
     session.answer(b"?", EXPLAINED, LIST_SHOWN)
-    # Nothing is asked about a passphrase: the length is followed by the repair words.
+    # Nothing is asked about a passphrase: the length is followed by the
+    # repair words.
     session.answer(IGNORED_KEY + DOWN + UP + ENTER, CLEAR, REPAIR_ASKED, LIST_SHOWN)
-    # No repair words: they would appear only after the encryption, which this test never reaches.
+    # No repair words: they would appear only after the encryption,
+    # which this test never reaches.
     session.answer(b"5", PASSWORD_KIND_ASKED, LIST_SHOWN)
     # The person's own password, the first answer.
     session.answer(b"1", b"Container password: ")
@@ -112,7 +175,8 @@ def check_encrypt_lists():
     assert settings == session.original, "encrypt: the terminal settings were not restored"
     shown_privately("encrypt", session.output, SECRET)
     assert IGNORED_KEY not in session.output, "encrypt: a key was shown"
-    # The steps stayed on the alternate screen; the main screen got the summary when it ended.
+    # The steps stayed on the alternate screen; the main screen got the
+    # summary when it ended.
     summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
     records = (OWN_SETTINGS, PHRASE_RECORDED, LENGTH_RECORDED, REPAIR_RECORDED)
     for record in records:
@@ -138,17 +202,20 @@ def check_encrypt_lists():
     print("encrypt: Escape at a list cancels, exit code 130, terminal restored")
 
 
-def check_encrypt_numbered():
-    """A terminal that cannot redraw a list gets no question between the hidden phrase and the
-    hidden password: nothing is asked about the passphrase. The settings are given, so the hidden
-    phrase is the first answer; the container keeps 24 words and no repair words are asked, as
-    neither can be a list there."""
-    session = Session(("encrypt", "--pim", "0"), term="dumb")
+def a_dumb_terminal_numbers_encryption_choices_and_hides_the_phrase():
+    """
+    A terminal that cannot redraw asks container length and repair count
+    in numbered form. The phrase stays hidden and no BIP39 passphrase is
+    asked.
+    """
+    session, reader = run_with_output(("encrypt", "--pim", "0"), redirected=True, term="dumb")
     session.wait_for(b"Original seed phrase (hidden): ")
     start = len(session.output)
-    session.answer(PHRASE.encode() + b"\r", b"Container password (hidden): ")
+    session.answer(PHRASE.encode() + b"\r", b"Choice [1]: ")
+    session.answer(ENTER, REPAIR_ASKED, b"Choice [1]: ")
+    session.answer(ENTER, b"Container password (hidden): ")
     between = session.output[start:]
-    for asked in (PASSPHRASE_ASKED, NUMBERED_PROMPT):
+    for asked in (PASSPHRASE_ASKED,):
         assert asked not in between, f"encrypt, TERM=dumb: {asked!r} before the password"
     session.answer(CTRL_C, CANCELLED_SHOWN)
     assert session.drain_until_exit(10), "encrypt, TERM=dumb: Ctrl+C did not end the tool"
@@ -156,9 +223,13 @@ def check_encrypt_numbered():
     assert code == CANCELLED, f"encrypt, TERM=dumb: Ctrl+C gave exit code {code}"
     assert settings == session.original, "encrypt, TERM=dumb: the terminal settings changed"
     assert PHRASE.encode() not in session.output, "encrypt, TERM=dumb: the phrase was shown"
-    print("encrypt, TERM=dumb: the hidden password right after the hidden phrase, "
-          "the phrase hidden")
-    # A password made by MHFE needs a private screen, which TERM=dumb has none of: refused before
+    os.close(reader)
+    print(
+        "encrypt, TERM=dumb: container length and repair count are numbered; "
+        "the phrase stays hidden"
+    )
+    # A password made by MHFE needs a private screen, which TERM=dumb
+    # has none of: refused before
     # anything is asked (AUD-015-SEC003).
     for command in (("encrypt", "--pim", "0"), ("rekey", "--pim", "0")):
         session = Session((*command, "--new-password", "words"), term="dumb")
@@ -171,20 +242,11 @@ def check_encrypt_numbered():
     print("encrypt and rekey, TERM=dumb: a made password is refused before anything is asked")
 
 
-def run_with_output(arguments, redirected=False, term=None):
-    """Starts the tool with standard output in a pipe when `redirected`; returns the session and
-    the read end of the pipe, or None."""
-    if not redirected:
-        return Session(arguments, term=term), None
-    reader, writer = os.pipe()
-    session = Session(arguments, stdout=writer, term=term)
-    # The tool holds its own copy; the pipe ends once the tool has ended.
-    os.close(writer)
-    return session, reader
-
 
 def piped_output(reader):
-    """Everything the tool wrote to standard output, read once it has ended."""
+    """Everything the tool wrote to standard output, read once it has
+    ended.
+    """
     data = b""
     while chunk := os.read(reader, 65536):
         data += chunk
@@ -193,8 +255,10 @@ def piped_output(reader):
 
 
 def other_terminal_output(leader):
-    """Everything the tool wrote to a second terminal, read once it has ended. A pseudo-terminal
-    whose other end is closed reports an error instead of the end of the data."""
+    """Everything the tool wrote to a second terminal, read once it has
+    ended. A pseudo-terminal whose other end is closed reports an error
+    instead of the end of the data.
+    """
     os.set_blocking(leader, False)
     data = b""
     try:
@@ -206,15 +270,17 @@ def other_terminal_output(leader):
     return data
 
 
-def check_private_reveals():
+def private_results_refuse_redirected_or_unusable_terminals():
     refused = b"only on a private screen"
     for command in ("new", "wallets"):
         for label, redirected, term in (("standard output in a pipe", True, None),
                                         ("TERM=dumb", False, "dumb")):
             session, reader = run_with_output((command, "--pim", "0"), redirected, term)
             session.wait_for(refused)
-            # The refusal ends the tool by itself. The needle stands mid-line, so the tool may
-            # still be writing; a Ctrl+C typed now would race its exit code with the handler's
+            # The refusal ends the tool by itself. The needle stands
+            # mid-line, so the tool may
+            # still be writing; a Ctrl+C typed now would race its exit
+            # code with the handler's
             # 130 (AUD-023-BLD004).
             assert session.drain_until_exit(10), f"{command}, {label}: the refusal did not end"
             code, settings = session.close()
@@ -226,7 +292,8 @@ def check_private_reveals():
             if reader is not None:
                 assert piped_output(reader) == b"", f"{command}, {label}: wrote to the pipe"
             print(f"{command}: refused with {label}, before any question, exit code 2")
-        # Standard output on a second terminal: the private screen would be switched and cleared
+        # Standard output on a second terminal: the private screen would
+        # be switched and cleared
         # on the first one only (AUD-008-SEC004).
         leader, follower = os.openpty()
         session = Session((command, "--pim", "0"), stdout=follower)
@@ -265,17 +332,21 @@ def check_private_reveals():
         print(f"rekey: showing the phrase for comparison {state} {label}")
 
 
-def check_new_check_question():
-    """`mhfe new` asks about the wallet check with no answer marked (AUD-010): Enter, also typed
-    ahead with the repeated passphrase, does nothing, ? explains both answers, ↓ marks the first,
-    and Escape cancels before anything is drawn or recorded."""
+def a_new_wallet_requires_an_explicit_wallet_check_answer():
+    """`mhfe new` asks about the wallet check with no answer marked
+    (AUD-010): Enter, also typed ahead with the repeated passphrase,
+    does nothing, ? explains both answers, ↓ marks the first, and Escape
+    cancels before anything is drawn or recorded.
+    """
     session = Session(("new", "--pim", "0"))
     session.wait_for(b"passphrase of the new wallet")
     session.answer(SECRET + b"\r", b"Repeat the passphrase")
-    # The Enter after the repeated passphrase arrives before the list is drawn.
+    # The Enter after the repeated passphrase arrives before the list is
+    # drawn.
     session.answer(SECRET + b"\r" + ENTER, CHECK_ASKED, *CHECK_ANSWERS, LIST_SHOWN)
     question = session.output.rfind(CHECK_ASKED)
-    # The whole list, up to the line break after the last line of its hint.
+    # The whole list, up to the line break after the last line of its
+    # hint.
     session.wait_for(LIST_SHOWN + b"\r\n", since=question)
     shown = session.output[question:]
     assert HIGHLIGHT not in shown, "new: an answer to the check question was marked"
@@ -300,27 +371,27 @@ def check_new_check_question():
     print("new: ? explains both answers, ↓ marks the first; Escape cancels, exit code 130")
 
 
-def check_new_chosen_words():
-    """`mhfe new` asks for one chosen word on a private screen: a position the library refuses is
-    named without the word and asked again from the question; a word at the last position and a
-    word never to use keep about 244 random bits, said before the draw with the warning that the
-    word gives the wallet away. Escape at the next question cancels before anything is drawn. The
-    summary records how many words were chosen and the bits kept, never the word."""
+def a_new_wallet_asks_chosen_words_and_retries_conflicts():
+    """
+    `mhfe new` asks for one chosen word on a private screen: a position
+    the library refuses is named without the word and only its position
+    is asked again; a word at the last position and a word never to use
+    keep about 244 random bits, said before the draw with the warning
+    that the word gives the wallet away. Escape at the next question
+    cancels before anything is drawn. The summary records how many words
+    were chosen and the bits kept, never the word.
+    """
     session = Session(("new", "--pim", "0"))
     session.wait_for(b"passphrase of the new wallet")
-    # No passphrase: no wallet check, so the question about a word comes next.
+    # No passphrase: no wallet check, so the question about a word comes
+    # next.
     session.answer(b"\r", CHOSEN_ASKED, LIST_SHOWN)
     session.answer(b"2", CHOSEN_WORD_ASKED)
     session.answer(b"zoo\r", PLACE_ASKED)
     # One word only: the words never to use come next.
-    session.answer(b"25\r", NEVER_USE_ASKED)
     start = len(session.output)
-    session.answer(b"\r", PLACE_REFUSED, CHOSEN_ASKED, LIST_SHOWN)
+    session.answer(b"25\r", PLACE_REFUSED, PLACE_ASKED)
     assert b"zoo" not in session.output[start:], "new: the refusal named the word"
-    session.answer(b"2", CHOSEN_WORD_ASKED)
-    # The chosen word is hinted from the BIP39 list as it is typed.
-    session.answer(b"zo", b"zone  zoo")
-    session.answer(b"o\r", PLACE_ASKED)
     session.answer(b"24\r", NEVER_USE_ASKED)
     session.answer(b"abandon\r", RECOGNISABLE, AMPLE, REPAIR_ASKED, LIST_SHOWN)
     session.answer(ESCAPE, CANCELLED_SHOWN)
@@ -336,10 +407,12 @@ def check_new_chosen_words():
     print("new: the bits kept and the warning are said before the draw; no word in the summary")
 
 
-def check_quit_keys_leave_the_private_screen():
-    """Ctrl+\\ and Ctrl+Z at a visible prompt on a private screen, and SIGTERM, end `mhfe new` as
-    Ctrl+C does: the private screen with the chosen word on it is left, the terminal restored and
-    the exit code 130 (AUD-015-SEC004)."""
+def quit_keys_leave_the_private_screen():
+    """Ctrl+\\ and Ctrl+Z at a visible prompt on a private screen, and
+    SIGTERM, end `mhfe new` as Ctrl+C does: the private screen with the
+    chosen word on it is left, the terminal restored and the exit code
+    130 (AUD-015-SEC004).
+    """
     for name, stop in (("Ctrl+\\", b"\x1c"), ("Ctrl+Z", b"\x1a"), ("SIGTERM", None)):
         session = Session(("new", "--pim", "0"))
         session.wait_for(b"passphrase of the new wallet")
@@ -359,12 +432,17 @@ def check_quit_keys_leave_the_private_screen():
     print("new: Ctrl+\\, Ctrl+Z and SIGTERM leave the private screen and end as Ctrl+C does")
 
 
-def check_dumb_terminal_has_no_hints():
-    """At TERM=dumb the container prompt and the repair-word prompt write no control sequence and
-    no word hint while a word is typed and corrected, while at a terminal that redraws they hint
-    the words (AUD-023-UI004)."""
+def a_dumb_terminal_shows_no_control_sequences_or_hints():
+    """
+    At TERM=dumb the container prompt and the repair-word prompt write
+    no control sequence and no word hint while a word is typed and
+    corrected, while at a terminal that redraws they hint the words
+    (AUD-023-UI004).
+    """
     def typed_at(term, arguments, prompt, before=b""):
-        session = Session(arguments, term=term)
+        # Decrypt cannot reveal a secret on TERM=dumb; redirect the
+        # result while testing the public input editor on its terminal.
+        session, reader = run_with_output(arguments, redirected=True, term=term)
         session.wait_for(CONTAINER_ASKED)
         if before:
             session.answer(before, prompt)
@@ -372,6 +450,7 @@ def check_dumb_terminal_has_no_hints():
         session.type(CTRL_C)
         assert session.drain_until_exit(10), f"{term}: it did not end"
         session.close()
+        os.close(reader)
         return written
 
     prompts = (
@@ -387,10 +466,13 @@ def check_dumb_terminal_has_no_hints():
     print("TERM=dumb: the container and repair-word prompts write no control sequence or hint")
 
 
-def check_typed_ahead_keys_answer_nothing():
-    """A key typed before a screen that waits to be left appeared, during the start or with the
-    line before it, does not clear it, Enter, q and Escape alike: a made password and a repair
-    card stay until a key is pressed after they appeared (AUD-023-UI003)."""
+def typed_ahead_keys_answer_no_later_question():
+    """
+    A key typed before a screen that waits to be left appeared, during
+    the start or with the line before it, does not clear it, Enter, q
+    and Escape alike: a made password and a repair card stay until a key
+    is pressed after they appeared (AUD-023-UI003).
+    """
     cases = (
         ("password", ("password", "--words", "6"), None, b"\r"),
         ("password", ("password", "--words", "6"), None, b"q"),

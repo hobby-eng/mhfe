@@ -11,10 +11,23 @@ use std::ops::{Deref, DerefMut};
 
 use zeroize::Zeroizing;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod os;
+
 /// Text that is secret, or may be: a password, a phrase, a passphrase, or an answer read the same
 /// way as they are. Its buffer is locked before the text is written into it and stays locked
 /// until the text is wiped, also after it is handed to the code that asked for it
 /// (AUD-007-SEC003).
+///
+/// Page guards cannot be supplied separately by a public caller:
+///
+/// ```compile_fail,E0603
+/// use mhfe::memory::LockedPages;
+/// ```
+///
+/// ```compile_fail,E0624
+/// let _ = mhfe::memory::LockedText::from_locked;
+/// ```
 pub struct LockedText {
     text: Zeroizing<String>,
     // Declared after `text`, so that the pages are unlocked only once they are wiped.
@@ -24,7 +37,7 @@ pub struct LockedText {
 impl LockedText {
     /// Takes over `text` together with the guard that locked its buffer before it was filled.
     /// `locked` must cover the buffer of `text` itself, not of a copy, and `text` must not grow.
-    pub fn from_locked(text: Zeroizing<String>, locked: LockedPages) -> Self {
+    fn from_locked(text: Zeroizing<String>, locked: LockedPages) -> Self {
         Self { text, locked }
     }
 
@@ -32,20 +45,24 @@ impl LockedText {
     /// text is held here from the start, so that a `fill` that fails leaves it wiped while its
     /// pages are still locked. `fill` must not write more than `capacity` bytes: the buffer must
     /// never move.
+    ///
+    /// # Panics
+    ///
+    /// When `fill` changed the allocation or its capacity, even if it returns an error: this
+    /// may leave an unwiped, unlocked copy of the secret behind, which no error can take back,
+    /// so the program stops. The buffer owner enforces this invariant.
     pub fn build<E>(
         capacity: usize,
         fill: impl FnOnce(&mut String) -> Result<(), E>,
     ) -> Result<Self, E> {
         let text = Zeroizing::new(String::with_capacity(capacity));
         let locked = LockedPages::of_string(&text);
-        let reserved = text.capacity();
         let mut built = Self { text, locked };
-        fill(&mut built.text)?;
-        assert_eq!(
-            built.text.capacity(),
-            reserved,
-            "a locked text outgrew its buffer"
-        );
+        let filled = fill(&mut built.text);
+        built
+            .locked
+            .require_buffer(built.text.as_ptr(), built.text.capacity(), "a locked text");
+        filled?;
         Ok(built)
     }
 
@@ -88,25 +105,39 @@ pub struct LockedBytes {
     locked: LockedPages,
 }
 
+/// Stops the program when a locked buffer has moved, which left an unwiped, unlocked copy of a
+/// secret behind: a caller's error could not take it back, and going on would hide it. The one
+/// panic of the library outside its tests, as RUST-05 allows for a broken invariant
+/// (AUD-024-API016).
+#[expect(
+    clippy::panic,
+    reason = "a moved secret buffer cannot be undone; the program stops rather than go on"
+)]
+fn outgrown(what: &str) -> ! {
+    panic!("{what} outgrew its buffer or changed its allocation")
+}
+
 impl LockedBytes {
     /// Bytes that `fill` writes into a buffer reserved at `capacity` bytes and locked first. They
     /// are held here from the start, so that a `fill` that fails, such as on a password that is
     /// too long, leaves them wiped while their pages are still locked. `fill` must not write more
     /// than `capacity` bytes: the buffer must never move.
+    ///
+    /// # Panics
+    ///
+    /// When `fill` changed the allocation or its capacity, as [`LockedText::build`] does.
     pub fn build<E>(
         capacity: usize,
         fill: impl FnOnce(&mut Vec<u8>) -> Result<(), E>,
     ) -> Result<Self, E> {
         let bytes = Zeroizing::new(Vec::with_capacity(capacity));
         let locked = LockedPages::of_vec(&bytes);
-        let reserved = bytes.capacity();
         let mut built = Self { bytes, locked };
-        fill(&mut built.bytes)?;
-        assert_eq!(
-            built.bytes.capacity(),
-            reserved,
-            "locked bytes outgrew their buffer"
-        );
+        let filled = fill(&mut built.bytes);
+        built
+            .locked
+            .require_buffer(built.bytes.as_ptr(), built.bytes.capacity(), "locked bytes");
+        filled?;
         Ok(built)
     }
 
@@ -228,7 +259,7 @@ impl crate::self_check::ComponentCheck for LockProbe {
 /// The locked pages under a buffer, unlocked when this is dropped. The buffer must stay where it
 /// is while this lives: lock only a buffer reserved at its final size, which never grows.
 #[derive(Debug)]
-pub struct LockedPages {
+struct LockedPages {
     /// The address of the buffer, kept as a number: it is only handed back to the kernel.
     start: usize,
     bytes: usize,
@@ -236,19 +267,26 @@ pub struct LockedPages {
 }
 
 impl LockedPages {
+    /// Requires the exact allocation this guard covers, including when a fill returned an error.
+    fn require_buffer(&self, start: *const u8, bytes: usize, what: &str) {
+        if self.start != start as usize || self.bytes != bytes {
+            outgrown(what);
+        }
+    }
+
     /// Locks the whole capacity of `buffer`, so that what is written into it later is covered too.
-    pub fn of_vec(buffer: &Vec<u8>) -> Self {
+    fn of_vec(buffer: &Vec<u8>) -> Self {
         Self::lock(buffer.as_ptr(), buffer.capacity())
     }
 
     /// Locks the whole capacity of `text`.
-    pub fn of_string(text: &String) -> Self {
+    fn of_string(text: &String) -> Self {
         Self::lock(text.as_ptr(), text.capacity())
     }
 
     /// Whether the operating system keeps the pages in memory. They stay locked for as long as
     /// this lives, also when a guard of another buffer on the same page is dropped first.
-    pub fn is_locked(&self) -> bool {
+    fn is_locked(&self) -> bool {
         self.locked
     }
 
@@ -280,7 +318,7 @@ mod pages {
     use std::ops::RangeInclusive;
     use std::sync::{Mutex, PoisonError};
 
-    use crate::engine::{lock_pages, page_size, unlock_pages};
+    use super::os::{lock_pages, page_size, unlock_pages};
 
     /// How many live guards hold each page, by page number (its address divided by the page
     /// size). Every mlock and munlock happens under this lock too, so that another thread never
@@ -363,6 +401,48 @@ mod tests {
     use super::*;
 
     #[test]
+    #[should_panic(expected = "outgrew")]
+    fn locked_text_refuses_a_different_allocation_with_the_same_capacity() {
+        let mut replacement = String::with_capacity(32);
+        let _ = LockedText::build::<Infallible>(32, move |text| {
+            assert_eq!(text.capacity(), replacement.capacity());
+            std::mem::swap(text, &mut replacement);
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "outgrew")]
+    fn locked_bytes_refuse_a_different_allocation_with_the_same_capacity() {
+        let mut replacement = Vec::with_capacity(32);
+        let _ = LockedBytes::build::<Infallible>(32, move |bytes| {
+            assert_eq!(bytes.capacity(), replacement.capacity());
+            std::mem::swap(bytes, &mut replacement);
+            Ok(())
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "outgrew")]
+    fn a_failed_text_fill_cannot_bypass_the_buffer_invariant() {
+        let mut replacement = String::with_capacity(32);
+        let _ = LockedText::build(32, move |text| {
+            std::mem::swap(text, &mut replacement);
+            Err::<(), _>("public synthetic refusal")
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "outgrew")]
+    fn a_failed_byte_fill_cannot_bypass_the_buffer_invariant() {
+        let mut replacement = Vec::with_capacity(32);
+        let _ = LockedBytes::build(32, move |bytes| {
+            std::mem::swap(bytes, &mut replacement);
+            Err::<(), _>("public synthetic refusal")
+        });
+    }
+
+    #[test]
     fn the_lock_probe_tells_whether_memory_is_locked() {
         use crate::self_check::{ComponentCheck, Tier};
         let outcome = LockProbe::default().run(Tier::Startup);
@@ -391,7 +471,7 @@ mod tests {
     /// A copy is made at its final size and locked, like the text that is read in place.
     #[test]
     fn a_copy_is_locked_at_its_final_size() {
-        let text = "public test password";
+        let text = crate::test_support::TEST_PASSWORD;
         let copy = LockedText::copy_of(text);
         assert_eq!(&*copy, text);
         assert_eq!(copy.capacity(), text.len(), "the buffer never grew");
@@ -429,7 +509,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_failed_fill_releases_its_pages() {
-        let size = crate::engine::page_size().expect("a Unix system reports its page size");
+        let size = os::page_size().expect("a Unix system reports its page size");
         let mut page = 0;
         let mut was_locked = false;
         let refused = LockedBytes::build(3 * size, |bytes| {
@@ -450,7 +530,7 @@ mod tests {
     /// hold it: the buffer, which must outlive the page's use, the page's address and its size.
     #[cfg(unix)]
     fn page_of_this_test() -> (Vec<u8>, usize, usize) {
-        let size = crate::engine::page_size().expect("a Unix system reports its page size");
+        let size = os::page_size().expect("a Unix system reports its page size");
         let area: Vec<u8> = Vec::with_capacity(3 * size);
         let page = (area.as_ptr() as usize).next_multiple_of(size);
         (area, page, size)
@@ -498,12 +578,13 @@ mod tests {
     }
 
     /// A refused mlock, here of a page that is not mapped, holds nothing and leaves no count.
+    ///
     /// Linux only: it refuses that page, while macOS accepts it, as the first pages lie in the
     /// range it reserves as __PAGEZERO, so there the lock would succeed and hold the page.
     #[cfg(target_os = "linux")]
     #[test]
     fn a_refused_lock_holds_nothing() {
-        let size = crate::engine::page_size().expect("a Unix system reports its page size");
+        let size = os::page_size().expect("a Unix system reports its page size");
         // The first page above address zero, which no process maps.
         let unmapped = size;
         let refused = LockedPages::lock(unmapped as *const u8, 64);

@@ -53,7 +53,9 @@ Argon2 builds. A class compiles bytes once; a page with several classes compiles
 itself, with `WebAssembly.compile`, and passes the module to each. Every operation runs in a new
 worker made from a Blob of the worker script; a session of hidden wallets keeps its worker until it
 ends. A constructor throws a `TypeError` when a part is missing or of the wrong type; nothing else
-throws.
+throws. Every method rejects with a `TypeError` an option it does not take, naming it, so that a
+misspelled one such as `PIM` for `pim` is refused rather than left at its default; an option given
+as `undefined` counts as absent.
 
 The package has one version, the release version: every class's `parameters()` reports it as
 `version`, and the WebAssembly as `packageVersion()`. Each build of it also has an identifier,
@@ -112,16 +114,17 @@ const recovery = await client.decrypt({
 
 // The first receiving address of the public BIP84 test wallet, whose phrase is "abandon" eleven
 // times and then "about". `coin` is required, an id of MhfeWallet.parameters().coins: no coin is
-// the default, so that a page for one coin names no other. "ethereum" covers every EVM network.
+// the default, so that a page for one coin names no other. IDs use exact lower-case spelling,
+// without surrounding spaces. "ethereum" covers every EVM network.
 // `coin` and `path` belong only to an address: with another reference they are a TypeError.
-const { matches, path, evidence } = await client.check({
+const { outcome, path, evidence } = await client.check({
   container,
   password,
   reference: { address: "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", coin: "bitcoin" },
 });
-// For a container of that phrase: matches is true and path is "m/84'/0'/0'/0/0", where the
+// For a container of that phrase: outcome is "matches" and path is "m/84'/0'/0'/0/0", where the
 // address was found. Without a match, and for the other references, path is null.
-// evidence: { builtInCheck, walletCheck }, the original seed phrase's own checks.
+// evidence: { builtInCheck, matchingLengths, passed, walletCheck }, the phrase's own checks.
 ```
 
 `pim` and `memoryLevel`, 0 by default, are the container's settings: `encrypt()`, `decrypt()`,
@@ -164,15 +167,16 @@ values, such as the repair word counts and what each repairs.
 
 `check()` takes exactly one reference: `{ address, coin, path? }`, `{ fingerprint }`, `{ words }`,
 the built-in check of a 12- to 21-word original seed phrase, or `{ walletCheck: true }`, the phrase
-and passphrase check, with the wallet's `passphrase`. The wallet check compares the container's
-24-word reading only, never a shorter one, as the profile defines it. Some references cannot apply,
-and these are refused before the first round (the worker runs only the small known answer of its
-Argon2 build first). A same-length container has no built-in check (`NO_BUILT_IN_CHECK`) and no
-wallet check (`NO_WALLET_CHECK`). On a 24-word container the wallet check without a passphrase is
-refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says which apply
-(`builtInCheckLengths`, `offersWalletCheck`). The `passphrase` is given beside the reference, as for
-`searchDecoy()`, `searchWallet()` and a rekey's confirmation: one inside it, or any key a reference
-does not have, is a `TypeError` rather than dropped.
+and passphrase check, with the wallet's `passphrase`. The wallet check is compared with the
+container's 24-word reading only, as the profile defines it, and only where the length rules leave
+that reading alone: a shorter reading whose built-in check passes takes precedence and matches. Some
+references cannot apply, and these are refused before the first round (the worker runs only the
+small known answer of its Argon2 build first). A same-length container has no built-in check
+(`NO_BUILT_IN_CHECK`) and no wallet check (`NO_WALLET_CHECK`). On a 24-word container the wallet
+check without a passphrase is refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says
+which apply (`builtInCheckLengths`, `offersWalletCheck`). The `passphrase` is given beside the
+reference, as for `searchDecoy()`, `searchWallet()` and a rekey's confirmation: one inside it, or
+any key a reference does not have, is a `TypeError` rather than dropped.
 
 `outcome` follows the length rules of recovery, as the specification's rehearsal check does:
 
@@ -183,8 +187,8 @@ does not have, is a `TypeError` rather than dropped.
   it. Several lengths that pass with none stated, or beside a stated one that does not, are
   another: `evidence.matchingLengths` lists them, and the page says so;
 - `"doesNotMatch"`: no reading, as for a stated short length that nothing passes, or a reference
-  that does not match. `{ walletCheck: true }` that fails does not match, as the owner says the
-  phrase was drawn with it.
+  that does not match. `{ walletCheck: true }` that fails on a lone 24-word reading does not match,
+  as the owner says the phrase was drawn with it.
 
 `evidence` is what the same recovery shows of the original seed phrase's own checks:
 
@@ -249,8 +253,9 @@ recovery reports it, and it never confirms a rekey.
 - `words` is the phrase's word count, or 0, the default, to detect it. For a same-length container
   it is 0 or the container's own length. With the length detected on a 24-word container
   (`confirmationFor["0"]` is `"walletOrOwner"`), `{ builtInCheck: true }` alone is refused with
-  `REFERENCE_REQUIRED` before the first round (only the 1 MiB known answer of the Argon2 build runs
-  first, as for `check()`): a 24-word original may pass a short check by chance and would be sealed
+  `REFERENCE_REQUIRED` before the rekey worker runs its Argon2 known answer or rounds. The class's
+  independent startup self-check can already have run. A 24-word original may pass a short check
+  by chance and would be sealed
   again as another wallet. An address or the fingerprint is compared with every reading and
   confirms the one it matches, whatever its length; the owner confirms the one reading found.
 - Several lengths that pass by accident, about once in four billion containers, reject
@@ -370,6 +375,8 @@ const { missing, candidates, offersWalletSearch, offersOwnChecks } = await clien
 // The answers offered come from the library: the wallet search for one missing word, and the
 // original seed phrase's own checks where the container carries them, as the command-line tool.
 const fast = await client.searchDecoy({ container: typed, reference: { fingerprint }, passphrase });
+// Every candidate is compared: a fingerprint, a 32-bit check, that another candidate shares
+// rejects with SEVERAL_CANDIDATES_MATCH, and no container is taken; ask for an address then.
 // For two missing words and an address: scanGap, the first-account addresses of each chain
 // searched, parameters().decoyScanGap (20) by default; ask the user, as the command-line tool
 // does, when the wallet may go on.
@@ -535,7 +542,9 @@ operation stops, its worker ends and the promise rejects with `CALLBACK_FAILED`,
 as its `cause`. A failing `onProgress` of a hidden wallet ends the whole session, and one of a new
 phrase stops every worker of the draw. The client does not wait for a callback's promise, except
 for the owner's answer and `onConfirmAgain` in a rekey and the answer of `check()`'s `onNoLength`,
-which it awaits.
+which it awaits. The error message names the callback option. A refusal of the returned answer
+passes through as its own `TypeError` or `MhfeError`, without a `CALLBACK_FAILED` wrapper.
+The progress listener of a page's own full-check part is awaited too.
 
 ## Self-checks
 
@@ -633,9 +642,10 @@ leaving out what another class has passed: the parts listed in the repository's
 [`docs/API.md`](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md#self-checks)
 with their full-tier cases, and for `MhfePasswords` and `MhfeWallet` the browser's random
 generator, two probes and the spread of 1,024 of its bytes. `onProgress` receives
-`{ id, label, running: true }` as a part of the worker starts and
+`{ id, label, running: true }` as each part starts and
 `{ id, label, outcome, detail?, running: false }` as it ends. It resolves to a report like that of
-`startupCheck()`, with `tier` "full".
+`startupCheck()`, with `tier` "full". This includes the page's own parts, even when one fails,
+and every part not run here, with its reason, in report order.
 
 `MhfeClient.fullCheck()` then checks Argon2 at 64 and 256 MiB with the single-threaded build,
 `argon2-sizes-single-threaded`, "Argon2id at 64 and 256 MiB, single-threaded build", and on a
@@ -729,17 +739,18 @@ loop. Every round also refuses a key that the build left unwritten or set to zer
   256 MiB instead.
 - That Argon2 wiped its memory after a call: where the allocator put the freed work area in the
   Emscripten heap is not reliably known, so the page does not scan for it. The package's Node
-  checks (`scripts/verify-browser-package.mjs`) confirm it for the single-threaded build: about
-  2 KiB of allocator records and of the stack of the last block computation stay non-zero after a
-  1 MiB call.
+  checks (`scripts/verify-browser-package.mjs`) confirm it for the single-threaded build: a few
+  hundred bytes of allocator records stay non-zero after a 1 MiB call, as the C code also clears
+  the stack of each segment's block computation.
 - The threaded Argon2 build on a page that is not cross-origin isolated, such as one opened as a
   file: without `SharedArrayBuffer` it cannot run, and its part is not run.
 - Free memory, which a page cannot measure (see [Memory](#memory)).
 - A random generator that is deterministic but looks random: no test can tell. The checks find one
   that is stuck or narrow.
 - Deliberate tampering: the build identifier catches files of different builds mixed by accident.
-  Tampering is for `SHA256SUMS` and its OpenPGP signature, the build attestations and, in fast
-  mode, the page's `mhfe-fast-mode.sha256`.
+  Check `SHA256SUMS` and its OpenPGP signature and the build attestations after download. The
+  page's `mhfe-fast-mode.sha256` catches accidental damage or a swapped page; someone who can
+  change the page can change that checksum file too.
 
 ## Fast and standard mode
 
@@ -757,7 +768,9 @@ Both launchers serve a page only when the checksum file `mhfe-fast-mode.sha256` 
 line in the format `sha256sum` writes, the page's SHA-256, two spaces and its file name, or one
 space and `*` before the name as `sha256sum --binary` writes it. Ship that file beside the tool's
 HTML file, always under this name. Without it, with another file name in it or with a different
-SHA-256, the launcher refuses with a message and serves nothing. Started without arguments, as by a
+SHA-256, the launcher refuses with a message and serves nothing. The page's file name must end
+in lower-case `.html`; `.htm` and `.HTML` are refused separately from checksum-format errors.
+Started without arguments, as by a
 double-click, `mhfe` shows its menu, whose first entry serves the page named in the
 `mhfe-fast-mode.sha256` next to the program; when that file is wrong, the menu says that the fast
 mode is not offered, and why. `mhfe-fast-mode.py` started without arguments serves that page at
@@ -813,6 +826,10 @@ do for them:
 
 - show the warning of the command-line tool: "Experimental: not independently reviewed; do not use
   it to protect real funds.";
+- create, recover and check on a trusted offline computer; a page served from the internet is
+  for demonstration. Send no password, passphrase, phrase or value derived from them over any
+  network. Keep `connect-src 'none'` and no telemetry, analytics, remote error reports or sync
+  ([specification: Application requirements](https://github.com/hobby-eng/mhfe-spec#application-requirements));
 - link each topic to its README section, as the command-line tool's "More:" lines do (see the table
   below); the page shows the link and loads nothing from it;
 - ask for a new password twice (the classes refuse two different entries) and advise a different
@@ -883,7 +900,9 @@ do for them:
   page did not know (`passphraseIfAny`, which the command-line tool words "any BIP39 passphrase of
   the wallet"), the repair words, a PIM or memory level that is not the default and, rarely, the
   word count are added there when needed;
-- if it shows the container from `onUnverified`, mark it clearly as not yet verified, and then say
+- if it shows the container from `onUnverified`, mark it clearly as not yet verified and ask the
+  user not to rely on it until the check ends
+  ([specification: Creating a container](https://github.com/hobby-eng/mhfe-spec#creating-a-container)), then say
   how the check ended: verified when the promise resolves, wrong and not to be used on
   `VERIFICATION_FAILED`, not verified on a cancel or any other error. Never make repair words from
   that container: the result carries them once the check has passed. A page that does not show the
@@ -927,7 +946,9 @@ do for them:
   would be a record of one. Show the phrase of an owner confirmation concealed, ask the owner to
   compare it with a written record, not with memory, and remove it after the answer. Say afterwards
   that the old container phrase and password still open the wallet, and that the new container
-  phrase is rehearsed with what the result's `rehearsal` names;
+  phrase is rehearsed with what the result's `rehearsal` names. Call the replacement checked, or
+  suggest discarding its old backup, only after that rehearsal matches
+  ([specification: Application requirements](https://github.com/hobby-eng/mhfe-spec#application-requirements));
 - before hidden wallets, say every time that nothing is created or stored and that the container and
   each password give the same wallet every time; ask for the main wallet's BIP39 passphrase every
   time; show no list or count of the wallets opened, as the command-line tool shows them only on its
@@ -1016,25 +1037,38 @@ The README sections that the command-line tool links to:
 
 ## What the browser cannot wipe
 
-A password, a BIP39 passphrase, a phrase and dice rolls given to a class are copied into UTF-8
-bytes once its check at start has passed, transferred to the worker, so that no copy stays with the
-class, and wiped there; a `Uint8Array` the page passes is always copied into an array of its own,
-never transferred or emptied, whatever its kind. Text with an unpaired surrogate, a phrase included,
-is refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser. The Rust code and the
+A password, a BIP39 passphrase, a phrase and dice rolls given to a class are copied into UTF-8 bytes
+once its check at start has passed, transferred to the worker, so that no copy stays with the class,
+and wiped there; a `Uint8Array` the page passes is always copied into an array of its own, never
+transferred or emptied, whatever its kind. Text with an unpaired surrogate, a phrase included, is
+refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser. The Rust code and the
 Argon2 bridge overwrite their own buffers of these bytes, the keys and the states they hold, and
 every worker is terminated when its operation or session ends. Copies that the compiler and the
-dependencies leave on the WebAssembly's stack are not overwritten: they stay in the worker until
-later calls overwrite them or the worker ends, also while a session waits for the page. Such are
-the BIP39 seed and the BIP32 master key and chain code computed for a fingerprint, a wallet check,
-a hidden wallet or a rekey's owner confirmation, and the BIP39 passphrase inside the salt block of
-BIP39's PBKDF2. A browser locks no memory, so any of it may be written to swap. A cancelled
-operation, or a session of hidden wallets closed while it opens a wallet, terminates its worker
-instead, as soon as the worker has loaded the WebAssembly if it is still loading it: the browser
-frees that memory without overwriting it. So does an operation in which the WebAssembly stopped (a
-trap: a Rust panic or a fault of the computer), which rejects with `INTERNAL_ERROR`, "The
-WebAssembly stopped": its session cannot be called again, not even to wipe it, and its worker is
-terminated. What reaches the page
-is a JavaScript string, which the browser cannot erase: a password typed into a page, a recovered or
+dependencies leave on the WebAssembly's stack, such as the BIP39 seed and the BIP32 master key and
+chain code computed for a fingerprint, a wallet check, a hidden wallet or a rekey's owner
+confirmation, and the BIP39 passphrase inside the salt block of BIP39's PBKDF2, are zeroed by the
+worker after every operation and before every question to the page, while no WebAssembly code runs:
+the whole stack is dead then. The C code of Argon2 clears the stack each lane's work leaves, which
+would hold the last blocks its output is computed from, after every segment, in both builds. A
+browser locks no memory, so any of it may be written to swap. A cancelled operation, or a session of
+hidden wallets closed while it opens a wallet, terminates its worker instead, as soon as the worker
+has loaded the WebAssembly if it is still loading it: the browser frees that memory without
+overwriting it. So does an operation in which the WebAssembly stopped (a trap: a Rust panic or a
+fault of the computer), which rejects with `INTERNAL_ERROR`, "The WebAssembly stopped": its session
+cannot be called again, not even to wipe it, and its worker is terminated. A failing page callback
+or refused callback answer also terminates the worker without guaranteeing the session's own wipe
+(`CALLBACK_FAILED`, or the unchanged `TypeError` or `MhfeError` from validation). So do
+`PACKAGE_MISMATCH`, an unexpected worker message and `WORKER_FAILED`, including a failed send.
+Normal worker completions attempt their explicit cleanup; termination alone promises no overwrite.
+
+A rekey waiting for the owner or `onConfirmAgain` holds its old and new passwords and recovered
+state; a check waiting for `onNoLength` holds its recovered state. These waits last as long as the
+page takes to answer: cancel them when the user leaves or after a while without use. Hidden-wallet
+sessions and multi-worker phrase draws have the lifetimes described above.
+
+What reaches the page is
+a JavaScript string, which the browser cannot erase: a password typed into a page, a recovered or
 new phrase, a generated password, the words of a check word review, the phrase of an owner
-confirmation and the phrases of hidden wallets. Pass passwords and passphrases as `Uint8Array` where
+confirmation and the phrases of hidden wallets, `readPhrase()`'s written-out phrase and the
+secret-derived strings returned by `wordHints()`. Pass passwords and passphrases as `Uint8Array` where
 possible, keep phrases and passwords on screen only as long as needed, and close the tab afterwards.

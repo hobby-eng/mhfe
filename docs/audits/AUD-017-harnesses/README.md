@@ -4,7 +4,7 @@ Time zone: UTC (+00:00)
 
 Privacy-only documentation update: this is not a new audit. No checks were rerun; recorded results and evidence are unchanged.
 
-These are the scripts of audit AUD-017 ([report](../audit-17-2026-10-09.md)), a compact audit of mhfe.
+These are the scripts of audit AUD-017 ([report](../AUD-017-2026-10-09.md)), a compact audit of mhfe.
 
 - The reviewed source is commit `3c60594479302827fe40975b04fd07f9f6fd4b3b` plus the uncommitted 0.5.1 working tree, with source fingerprint `b2addb366a3bda36ed23bb84f68a2c92550b0c0f7c533d366894a8664963cbc7`.
 - No script builds anything or runs full-size Argon2.

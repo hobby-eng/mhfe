@@ -37,6 +37,7 @@ const core = bindings;
 
 /** Argon2 builds that fail their known answer are refused, and the Argon2 memory is wiped. */
 export async function checkArgon2Faults() {
+  await checkReferenceErrorMessage();
   checkFaultyBuilds();
   checkLateFault();
   const residue = await checkArgon2Wipe();
@@ -44,6 +45,23 @@ export async function checkArgon2Faults() {
     `Argon2 builds that fail their known answer are refused before round 1 and after the last; ` +
       `${residue} non-zero bytes remain after a known answer.`,
   );
+}
+
+/** A reference C error keeps its own explanation, without a second protocol code in the text. */
+async function checkReferenceErrorMessage() {
+  const module = await builds["single-threaded"]();
+  const original = module._argon2id_hash_raw;
+  try {
+    module._argon2id_hash_raw = () => -33;
+    const faulty = argon2Engine(module);
+    expectMessage("ARGON2_FAILED: Threading failure", () =>
+      faulty.derive(PASSWORD, new Uint8Array(32), 1024, 1, new Uint8Array(32)),
+    );
+    const report = JSON.parse(core.selfCheckCore("startup", [], faulty, noop, noop));
+    assert.equal(report.components[1].detail, "Argon2id could not run: Threading failure");
+  } finally {
+    module._argon2id_hash_raw = original;
+  }
 }
 
 /**
@@ -130,14 +148,16 @@ function checkLateFault() {
 }
 
 /**
- * The reference code wipes its work area before it frees it, and the bridge its copies of the
- * password, salt and key: after the 1 MiB known answer, a fresh single-threaded build's memory
- * holds about 2 KiB more non-zero bytes than before (allocator records and the stack of the last
- * block computation), where a work area left as it was would add 1 MiB. Fragile by nature: it
- * depends on where the allocator puts things, so its bound is generous. Gives what remains.
+ * The reference code wipes its work area before it frees it, the bridge its copies of the
+ * password, salt and key, and our fill_segment the stack of each segment's block computation
+ * (src/engine/argon2_stack.h, AUD-024-SEC002): after the 1 MiB known answer, a fresh
+ * single-threaded build's memory holds a few hundred non-zero bytes more than before, the
+ * allocator's records, where the uncleared stack added about 2 KiB and a work area left as it was
+ * would add 1 MiB. Fragile by nature: it depends on where the allocator puts things, so its bound
+ * is four times what was measured. Gives what remains.
  */
 async function checkArgon2Wipe() {
-  const WIPED_RESIDUE_BYTES = 16 * 1024;
+  const WIPED_RESIDUE_BYTES = 1024;
   const freshArgon2 = await builds["single-threaded"]();
   const nonZeroBytes = (heap) => heap.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
   const nonZeroBefore = nonZeroBytes(freshArgon2.HEAPU8);

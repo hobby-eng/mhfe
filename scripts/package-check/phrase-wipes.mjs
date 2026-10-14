@@ -188,21 +188,21 @@ const PHRASE_CASES = [
   // to be sought; the word is read without the spaces around it.
   {
     name: "describeDraw, its chosen word",
-    text: "Happy".padStart(40),
+    text: `\n${"Happy".padStart(40)}`,
     call: (instance, bytes) =>
-      JSON.parse(instance.describeDraw(bytes, Uint32Array.from([1]), "", false)).randomness,
+      JSON.parse(instance.describeDraw(bytes, Float64Array.from([1]), "", false)).randomness,
     expected: (outcome) => outcome === "ample",
   },
   {
     name: "drawPhrase, its chosen word",
-    text: "Happy".padStart(40),
+    text: `\n${"Happy".padStart(40)}`,
     call: (instance, bytes) =>
       JSON.parse(
         instance.drawPhrase(
           noBytes(),
           noBytes(),
           bytes,
-          Uint32Array.from([1]),
+          Float64Array.from([1]),
           "",
           false,
           testRandom,
@@ -213,13 +213,13 @@ const PHRASE_CASES = [
   },
   {
     name: "drawPhrase, its chosen word refused",
-    text: "Notaword".padStart(40),
+    text: `\n${"Notaword".padStart(40)}`,
     call: (instance, bytes) =>
       instance.drawPhrase(
         noBytes(),
         noBytes(),
         bytes,
-        Uint32Array.from([1]),
+        Float64Array.from([1]),
         "",
         false,
         testRandom,
@@ -229,13 +229,13 @@ const PHRASE_CASES = [
   },
   {
     name: "drawPhrase, its chosen word after a refused passphrase",
-    text: "Happy".padStart(40),
+    text: `\n${"Happy".padStart(40)}`,
     call: (instance, bytes) =>
       instance.drawPhrase(
         new Uint8Array([0xff]),
         noBytes(),
         bytes,
-        Uint32Array.from([1]),
+        Float64Array.from([1]),
         "",
         false,
         testRandom,

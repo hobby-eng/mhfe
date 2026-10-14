@@ -71,17 +71,17 @@ fn search_json(search: &ContainerSearch, found: Option<Found>) -> Result<String,
             candidates: search.count(),
         });
     };
-    let fingerprint = container_fingerprint_text(&found.container)?;
+    let fingerprint = container_fingerprint_text(found.container())?;
     json(&SearchJson {
         found: true,
-        container: Some(found.container.to_string()),
+        container: Some(found.container().to_owned()),
         container_fingerprint: Some(fingerprint),
         words: found
-            .words
+            .words()
             .iter()
             .map(|&(position, word)| FoundWordJson { position, word })
             .collect(),
-        path: found.path.as_ref().map(ToString::to_string),
+        path: found.path().map(ToString::to_string),
         candidates: search.count(),
     })
 }
@@ -102,7 +102,7 @@ const DECOY_REPORT_EVERY: usize = 64;
 #[wasm_bindgen(js_name = searchDecoy)]
 #[expect(
     clippy::too_many_arguments,
-    reason = "the WebAssembly boundary takes every input as an argument of its own"
+    reason = "the WebAssembly binding takes every input as an argument of its own"
 )]
 pub fn search_decoy(
     written: &str,
@@ -119,7 +119,7 @@ pub fn search_decoy(
     let scan_gap = whole_number(
         scan_gap,
         MhfeError::InvalidRequest(String::new()).code(),
-        "scanGap",
+        "the scan gap",
     )?;
     let wallet = reference_target(reference_kind, reference, coin, path)?;
     let search = ContainerSearch::new(written).map_err(js_error)?;
@@ -145,10 +145,10 @@ pub fn search_decoy(
 #[wasm_bindgen(js_name = searchWallet)]
 #[expect(
     clippy::too_many_arguments,
-    reason = "the WebAssembly boundary takes every input as an argument of its own"
+    reason = "the WebAssembly binding takes every input as an argument of its own"
 )]
 pub fn search_wallet(
-    // A deliberate copy of the arguments of CheckSession::new: the WebAssembly boundary takes
+    // A deliberate copy of the arguments of CheckSession::new: the WebAssembly binding takes
     // every input as an argument of its own, the secrets as bytes that the binding wipes.
     written: &str,
     password_utf8: Vec<u8>,

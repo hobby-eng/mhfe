@@ -8,9 +8,12 @@
  * ffi.rs sets MHFE_FLAG_SSSE3 in argon2_context.flags when the processor has SSSE3. The vendored
  * code reads only the two lowest bits of the flags (ARGON2_FLAG_CLEAR_PASSWORD and
  * ARGON2_FLAG_CLEAR_SECRET in include/argon2.h) and passes the context through unchanged.
+ *
+ * After either copy returns, the stack it leaves is cleared (argon2_stack.h, AUD-024-SEC002).
  */
 
 #include "core.h"
+#include "argon2_stack.h"
 
 /* Must equal MHFE_FLAG_SSSE3 in src/engine/ffi.rs. */
 #define MHFE_FLAG_SSSE3 (UINT32_C(1) << 31)
@@ -24,4 +27,5 @@ void fill_segment(const argon2_instance_t *instance, argon2_position_t position)
     } else {
         mhfe_fill_segment_sse2(instance, position);
     }
+    mhfe_clear_stack();
 }

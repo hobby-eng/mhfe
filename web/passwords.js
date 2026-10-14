@@ -20,12 +20,13 @@
 import {
   MhfeModuleClass,
   ModuleWorker,
+  refuseUnknownOptions,
   describeChoice,
   encodeSecret,
   requireSecret,
   requireText,
   secretOrEmpty,
-  wipeSecrets,
+  SecretRequest,
   wordHintsOf,
 } from "../runtime/runtime.js";
 
@@ -36,6 +37,12 @@ export { MhfeError } from "../runtime/runtime.js";
  *   from "./passwords.d.ts"
  * @import { WorkerRequest } from "../runtime/runtime.js"
  */
+
+/** @import { NoKeys } from "./types/api-presence.d.ts" */
+/** @typedef {NoKeys<Exclude<keyof DeclaredPasswords, keyof MhfePasswords>>} DeclaredButMissing */
+/** @typedef {NoKeys<Exclude<keyof MhfePasswords, keyof DeclaredPasswords>>} PresentButUndeclared */
+/** @typedef {NoKeys<Exclude<keyof typeof DeclaredPasswords, keyof typeof MhfePasswords>>} MissingStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof MhfePasswords, keyof typeof DeclaredPasswords>>} ExtraStatics */
 
 /** The name of this module's operations in the package's worker. */
 const PASSWORDS_MODULE = "passwords";
@@ -97,14 +104,15 @@ export class MhfePasswords extends MhfeModuleClass {
       // An empty repetition is a repetition that differs, not a missing one.
       repeated: passwordRepeat !== undefined,
     };
+    let handed = false;
     try {
       message.passwordRepeat = encodeSecret(repeat, "repeated password");
-    } catch (error) {
-      // A refused repetition must not leave the password's copy behind.
-      wipeSecrets(message);
-      throw error;
+      const running = this.#module.run(message);
+      handed = true;
+      return running;
+    } finally {
+      if (!handed) new SecretRequest(message).wipe();
     }
-    return this.#module.run(message);
   }
 
   /**
@@ -164,3 +172,12 @@ export class MhfePasswords extends MhfeModuleClass {
     return this.#module.run(message);
   }
 }
+
+// The options each method takes, which it refuses others beside (AUD-024-API003); kept in step
+// with passwords.d.ts.
+refuseUnknownOptions(MhfePasswords.prototype, {
+  review: ["password", "passwordRepeat"],
+  wordHints: ["typed"],
+  strength: ["password", "passwordRepair"],
+  make: ["kind", "count", "dice"],
+});

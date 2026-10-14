@@ -173,7 +173,7 @@
     "/home/user/Documents/bip_tools/multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
     "/home/user/Documents/bip_tools/multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
   },
-  "procedureNote": "The schema bytes used (989bf3de…) are an uncommitted, formatting-only change in multi-chain-wallet-tools of the committed schema d47df01252ad6fb11d8cad00b7d9e6dde62b3ee3331c3bfbef9a7b99adda30f7 (commit c76141fb2890dfeb515c2abe0aac0ed941f48238); their JSON content is identical (local-only docs-build-release-audit-records log).",
+  "procedureNote": "The schema bytes used (989bf3de\u2026) are an uncommitted, formatting-only change in multi-chain-wallet-tools of the committed schema d47df01252ad6fb11d8cad00b7d9e6dde62b3ee3331c3bfbef9a7b99adda30f7 (commit c76141fb2890dfeb515c2abe0aac0ed941f48238); their JSON content is identical (local-only docs-build-release-audit-records log).",
   "scope": {
     "summary": "Ordinary full-scope audit (compact team, workspace AGENTS.md 'Audit depth') of the uncommitted modular refactor on d7af4b1: Rust library, command-line tool, single-WASM bindings, the browser package (web/ and the local dist/ build), build and release scripts and workflows, documentation and audit records; verification of the six AUD-009 findings. Not release acceptance.",
     "excluded": [
@@ -633,7 +633,7 @@
       "endedUtc": "2026-10-07T18:31:34Z",
       "exitCode": 0,
       "logSha256": "0492e9a49124b99545c62649420a1b0250ae1e30448b3903d4fc436f8a184af5",
-      "result": "Fingerprint 372da577…, 227 paths."
+      "result": "Fingerprint 372da577\u2026, 227 paths."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/browser-package-inputs.command.json",
@@ -807,7 +807,7 @@
       "endedUtc": "2026-10-07T18:43:45Z",
       "exitCode": 0,
       "logSha256": "0492e9a49124b99545c62649420a1b0250ae1e30448b3903d4fc436f8a184af5",
-      "result": "Fingerprint 372da577…, unchanged."
+      "result": "Fingerprint 372da577\u2026, unchanged."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/cli-terminal-fingerprint.command.json",
@@ -821,7 +821,7 @@
       "endedUtc": "2026-10-07T18:26:15Z",
       "exitCode": 0,
       "logSha256": "0492e9a49124b99545c62649420a1b0250ae1e30448b3903d4fc436f8a184af5",
-      "result": "Fingerprint 372da577…, unchanged."
+      "result": "Fingerprint 372da577\u2026, unchanged."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/cli-terminal-help-and-colour.command.json",
@@ -975,7 +975,7 @@
       "endedUtc": "2026-10-07T19:14:23Z",
       "exitCode": 0,
       "logSha256": "73ca58f5cd0a3f376f5596b41019c892f8d2d32f8e253e2c503ae6d6c1864657",
-      "result": "HEAD d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0; 55 modified, 1 deleted, 3 renamed and 49 untracked paths outside docs/audits; fingerprint 372da577…, unchanged."
+      "result": "HEAD d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0; 55 modified, 1 deleted, 3 renamed and 49 untracked paths outside docs/audits; fingerprint 372da577\u2026, unchanged."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/coordinator-not-applicable-grep.command.json",
@@ -1045,7 +1045,7 @@
       "endedUtc": "2026-10-07T18:52:40Z",
       "exitCode": 0,
       "logSha256": "0492e9a49124b99545c62649420a1b0250ae1e30448b3903d4fc436f8a184af5",
-      "result": "Fingerprint 372da577…, unchanged."
+      "result": "Fingerprint 372da577\u2026, unchanged."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/crypto-core-grep-markers.command.json",
@@ -1303,7 +1303,7 @@
       "endedUtc": "2026-10-07T18:42:43Z",
       "exitCode": 0,
       "logSha256": "6edbb2ca2b6e8e590ab3f606e27bae4c041c6a4d3e4baf81696e7c93a562f1a1",
-      "result": "Vendored Argon2 files match their recorded SHA-256; EFF list addd3553…, 7,776 lines."
+      "result": "Vendored Argon2 files match their recorded SHA-256; EFF list addd3553\u2026, 7,776 lines."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/docs-build-release-argon2-vs-canonical.command.json",
@@ -1462,7 +1462,7 @@
       "endedUtc": "2026-10-07T18:44:43Z",
       "exitCode": 0,
       "logSha256": "0492e9a49124b99545c62649420a1b0250ae1e30448b3903d4fc436f8a184af5",
-      "result": "Fingerprint 372da577…, unchanged."
+      "result": "Fingerprint 372da577\u2026, unchanged."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/docs-build-release-fingerprint.command.json",
@@ -1476,7 +1476,7 @@
       "endedUtc": "2026-10-07T18:26:10Z",
       "exitCode": 0,
       "logSha256": "0492e9a49124b99545c62649420a1b0250ae1e30448b3903d4fc436f8a184af5",
-      "result": "Fingerprint 372da577…, 227 paths."
+      "result": "Fingerprint 372da577\u2026, 227 paths."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/docs-build-release-licenses.command.json",
@@ -1671,7 +1671,7 @@
       "endedUtc": "2026-10-07T18:47:19Z",
       "exitCode": 0,
       "logSha256": "0492e9a49124b99545c62649420a1b0250ae1e30448b3903d4fc436f8a184af5",
-      "result": "Fingerprint 372da577…, unchanged."
+      "result": "Fingerprint 372da577\u2026, unchanged."
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/secrets-security-harness-hashes.command.json",
@@ -2097,7 +2097,7 @@
       "exitCode": 1,
       "logSha256": "c93c4b85f07683e0e900a0d3b4ff21557adac772f35d97a7b39a69920439221f",
       "result": "Exit 1 by design: REPRODUCED-fingerprint-reading fails (API001 fixed: 73c5da0a and the address from typed forms); every other section matches the oracle; REPRODUCED-wallet-check-rule still passes because it asks the bare criterion.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-cli-help-and-colour.command.json",
@@ -2115,7 +2115,7 @@
       "exitCode": 0,
       "logSha256": "1fc2c1510d4514fb9052d76b290b4df9ec3d21d2fd0acfd2fea5723a5e691c1a",
       "result": "8 passed (UI002, UI003).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-cli-module-graph.command.json",
@@ -2132,7 +2132,7 @@
       "exitCode": 0,
       "logSha256": "3e6b229d586fb0d44fc64f75e950796cf112d42ff757d12dcbfc2c79aed27592",
       "result": "module-graph: passed; only {engine, suite} remains (ARC002).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-cli-new-check-default.command.json",
@@ -2150,7 +2150,7 @@
       "exitCode": 0,
       "logSha256": "f2e03eb0231aab2f18df35063e8a4a796d703881c68a5be210b50ee7e7a61688",
       "result": "N1 and N2 pass (UI001).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-cli-scripts-mode.command.json",
@@ -2168,7 +2168,7 @@
       "exitCode": 1,
       "logSha256": "59c8593373d8a0a1b070e3d4225255d22ddc5b17193f9642e35d99bc02bbe79a",
       "result": "7 passed, 1 failed: S2, because round 1 required --coin; superseded by the owner's script-coin decision (8 passed in verification-cli-scripts-mode).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-verify-hidden-input.command.json",
@@ -2186,7 +2186,7 @@
       "exitCode": 0,
       "logSha256": "b6a17f221e705ab4206a13f38634728452e830034876742c9f1cacc14afcf010",
       "result": "Exit 0 with the four new PTY cases.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-verify-browser-package.command.json",
@@ -2202,7 +2202,7 @@
       "exitCode": 0,
       "logSha256": "ef0aeb471ec46609fd4b97b3c068817b6995780d6c5cce4d48556f30406da038",
       "result": "Exit 0 (fast mode) with the new cases.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-browser-package-transport.command.json",
@@ -2218,7 +2218,7 @@
       "exitCode": 1,
       "logSha256": "959c9d9fc8ba24bca7aa61260ff001983dc037e980380a75f1f22a509b394a88",
       "result": "79 passed, 1 failed: the inherited names are refused (API002); the failure is the probe's baseline PACKAGE_MISMATCH wording (API006 fixed).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-browser-package-inputs.command.json",
@@ -2234,7 +2234,7 @@
       "exitCode": 1,
       "logSha256": "b3db5ffcd29c03c1ed8cc622fe92ada42ad65032c4639b693917482a7c3cd2c6",
       "result": "Crashes by design at the checkWord count, which is now refused before a worker (API005); its phrase strings no longer fit the byte bindings (SEC001).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-browser-package-static-scan.command.json",
@@ -2250,7 +2250,7 @@
       "exitCode": 0,
       "logSha256": "e0fee548791204a9148cdeb066d52f1380487e75990c956cdb2ed07ba505d722",
       "result": "14 passed.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-browser-package-surface.command.json",
@@ -2266,7 +2266,7 @@
       "exitCode": 1,
       "logSha256": "33e1fd7d683afeecdf09f87c6d08d8ebcab14041ba61159f5a4be6c16f337c24",
       "result": "Throws at describePhrase with a phrase string, which the byte binding no longer takes (SEC001).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-adapted-browser-package-surface.command.json",
@@ -2282,7 +2282,7 @@
       "exitCode": 0,
       "logSha256": "3931278b16e0c2635b037901087bd8556314315783aa99a57fe407ec267704d8",
       "result": "Adapted copy (phrases as bytes): 84 passed.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-adapted-browser-package-inputs.command.json",
@@ -2298,7 +2298,7 @@
       "exitCode": 0,
       "logSha256": "10f7b53e387359f50b70132822fb90f858d134fbe576ff7bcdb74c51bd12b062",
       "result": "Adapted copy: 181 passed, 0 failed (API003, API004, API005; walletFingerprint 73c5da0a).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-adapted-secrets-security-wasm-residue.command.json",
@@ -2314,7 +2314,7 @@
       "exitCode": 0,
       "logSha256": "5542a3666e477263b4a9edf4e93d49cae4111c9d477ea117ea1c80d327c40452",
       "result": "Adapted copy: 26 measurements, 0 with a copy left (SEC001).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-doc-checks.command.json",
@@ -2330,7 +2330,7 @@
       "exitCode": 0,
       "logSha256": "e21a5264f9d68e19f4c27fb328c46f9aabd5b9493b5ba32bedc4f947d3be75b7",
       "result": "PASS.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-package-readme-links.command.json",
@@ -2347,7 +2347,7 @@
       "exitCode": 0,
       "logSha256": "ff7c962b4aaac23d4dc2bee98feaf338eedae171bf0e0bc74008ce64adb403bd",
       "result": "0 relative links: PASS (DOC002).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-wasm-builder-paths.command.json",
@@ -2364,7 +2364,7 @@
       "exitCode": 0,
       "logSha256": "df3461c5389f571d053caec48911a991cc55fa5334ad8fcadb8a920a815c6470",
       "result": "dist/runtime/mhfe.wasm: PASS, no builder path (23 paths remapped).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-error-codes.command.json",
@@ -2380,7 +2380,7 @@
       "exitCode": 0,
       "logSha256": "163ddf197defbcf095b9599ebce076c7959838ad1479ab429375d697ec71e025",
       "result": "PASS.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-cli-options-in-docs.command.json",
@@ -2396,7 +2396,7 @@
       "exitCode": 0,
       "logSha256": "74b5404372f955e968a7d21b6f423e704a5198ba003d5bf59d3e7eaba2de73e7",
       "result": "PASS.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-dist-freshness.command.json",
@@ -2412,7 +2412,7 @@
       "exitCode": 1,
       "logSha256": "9ddfd6061046eb0b614b4213a60e4c8dd1cd6e44f2ee1af363a5283f4a274d64",
       "result": "Exit 1: the probe reads target/, while round 1 built with CARGO_TARGET_DIR=target/remediation (a probe limit).",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/remediation-secrets-builder-paths.command.json",
@@ -2428,7 +2428,7 @@
       "exitCode": 0,
       "logSha256": "0152fa1f149480ef57ceb79eff6eb687ae028510c6003bba589724ca03d7ab23",
       "result": "PASSED: no absolute builder path in dist/.",
-      "testedBytes": "the round-1 tree, fingerprint 28e1ec87…db05 (228 paths) in the verifier's report"
+      "testedBytes": "the round-1 tree, fingerprint 28e1ec87\u2026db05 (228 paths) in the verifier's report"
     },
     {
       "localLedger": "local-only: docs/audits/AUD-010-evidence/verification-check-sh.command.json",
@@ -2950,7 +2950,7 @@
         "src/bin/mhfe/check.rs:240-246 and :589-603 (the CLI reads the passphrase 'or Enter if it has none')",
         "Builds: native library (Mhfe::check and check_in_stages with Reference::WalletCheck), CLI `mhfe check` choice 'The phrase + passphrase check' (offered for every 24-word container), browser core MhfeClient.check({ walletCheck: true })"
       ],
-      "reproduction": "1) `python3 docs/audits/AUD-010-harnesses/crypto-core/short_reading_wallet_check.py` finds the public passphrase P = 'aud010 public probe 11656': SHA-256('MHFE-WALLET-CHECK-SEED-1' || BE32(128) || BIP39-seed('abandon' x11 'about', P)) begins 000002c1..., while with BE32(256) it begins b45361b2.... 2) `docs/audits/AUD-010-harnesses/run-logged.sh crypto-core-probe-reproductions python3 docs/audits/AUD-010-harnesses/crypto-core/probe.py --only REPRODUCED-wallet-check-rule`: the library answers wallet_check::phrase_passes('abandon' x11 'about', P) = true and wallet_check::verify(same, P) = INVALID_WORD_COUNT; phrase_passes(24-word trezor phrase, '') = false (evaluated) while verify(same, '') = WALLET_CHECK_NEEDS_PASSPHRASE. 3) Source trace of the production entry point: Mhfe::check(container of the published vector zero-12, 'public test password', Reference::WalletCheck { passphrase: P }) -> recover_to_check accepts the 24-word container -> compare_state: X passes the 12-word verifier, so packing::matching_short_lengths gives [12] and the first reading compared is the 12-word original -> compare -> phrase_passes(..., P) = true -> CheckOutcome::Matches. The CLI then prints '✓ matches: the recovered phrase, with this BIP39 passphrase, passes its check (16 bits).'; the browser core check() takes the same library path. 4) Empty passphrase: CLI `mhfe check`, choice 'The phrase + passphrase check', Enter at the passphrase prompt evaluates Reference::WalletCheck { passphrase: '' }; the browser's MhfeClient.check(..., { walletCheck: true }) with passphrase '' and MhfeWallet.walletCheck refuse with WALLET_CHECK_NEEDS_PASSPHRASE. A full-cost (2 GiB Argon2) CLI or browser run was not executed.",
+      "reproduction": "1) `python3 docs/audits/AUD-010-harnesses/crypto-core/short_reading_wallet_check.py` finds the public passphrase P = 'aud010 public probe 11656': SHA-256('MHFE-WALLET-CHECK-SEED-1' || BE32(128) || BIP39-seed('abandon' x11 'about', P)) begins 000002c1..., while with BE32(256) it begins b45361b2.... 2) `docs/audits/AUD-010-harnesses/run-logged.sh crypto-core-probe-reproductions python3 docs/audits/AUD-010-harnesses/crypto-core/probe.py --only REPRODUCED-wallet-check-rule`: the library answers wallet_check::phrase_passes('abandon' x11 'about', P) = true and wallet_check::verify(same, P) = INVALID_WORD_COUNT; phrase_passes(24-word trezor phrase, '') = false (evaluated) while verify(same, '') = WALLET_CHECK_NEEDS_PASSPHRASE. 3) Source trace of the production entry point: Mhfe::check(container of the published vector zero-12, 'public test password', Reference::WalletCheck { passphrase: P }) -> recover_to_check accepts the 24-word container -> compare_state: X passes the 12-word verifier, so packing::matching_short_lengths gives [12] and the first reading compared is the 12-word original -> compare -> phrase_passes(..., P) = true -> CheckOutcome::Matches. The CLI then prints '\u2713 matches: the recovered phrase, with this BIP39 passphrase, passes its check (16 bits).'; the browser core check() takes the same library path. 4) Empty passphrase: CLI `mhfe check`, choice 'The phrase + passphrase check', Enter at the passphrase prompt evaluates Reference::WalletCheck { passphrase: '' }; the browser's MhfeClient.check(..., { walletCheck: true }) with passphrase '' and MhfeWallet.walletCheck refuse with WALLET_CHECK_NEEDS_PASSPHRASE. A full-cost (2 GiB Argon2) CLI or browser run was not executed.",
       "expected": "mhfe_spec README 'Optional source profile' defines the check for 256-bit source entropy E with BE32(256) and says recovery 'evaluates this source check with the recovered 24-word mnemonic'; the profile may be offered with or without the empty-passphrase form, but with one rule. Workspace rules: all logic in library modules, the bindings only translate (src/wasm_api/mod.rs:12 says so too), and the command line and the browser offer the same operations.",
       "observed": "The rehearsal compares the wallet check against every reading of X, short readings first, computing T with BE32(128..224) for 12- to 21-word readings, a construction the profile does not define; for a 12-word original a passphrase passes about once in 65,536 (P demonstrated). The empty-passphrase rule is decided in three different places: refused by wallet_check::verify, PhraseDraw::with_check and the browser binding, accepted by Reference::WalletCheck and the CLI, and described as the owner's choice in the wallet_check module documentation.",
       "impact": "Bounded: a 16-bit statistical check whose match the tools already label as not proving the wallet, and which never confirms a rekey (recover_confirmed excludes WalletCheck). A user who applies the wallet check to a 24-word container holding a 12- to 21-word original can get a false 'matches' (about 2^-16 per short reading, on top of the 24-word reading's own 2^-16); the CLI and the browser answer differently for the same inputs (empty passphrase). No secret is exposed.",
@@ -3172,7 +3172,7 @@
         "docs/BROWSER-PACKAGE.md:478 example"
       ],
       "reproduction": "transport.mjs part 7: the real dist worker refuses an unstamped WebAssembly, and its error is replayed to a WorkerJob as the page receives it. The real-browser run shows the same in Chromium and Firefox.",
-      "expected": "docs/BROWSER-PACKAGE.md: PACKAGE_MISMATCH gives 'a message that names the two files and their builds, such as \"core/argon2-st.js is of build … and runtime/worker.js of build …\"', with the paths spelled as in the package (lowercase folders).",
+      "expected": "docs/BROWSER-PACKAGE.md: PACKAGE_MISMATCH gives 'a message that names the two files and their builds, such as \"core/argon2-st.js is of build \u2026 and runtime/worker.js of build \u2026\"', with the paths spelled as in the package (lowercase folders).",
       "observed": "The page shows 'Runtime/mhfe.wasm is of build development and runtime/worker.js of build 4c948de3a4ee3f03: take every file of the package from one build', and the browsers show 'Core/argon2-st.js is of build 0123456789abcdef and runtime/worker.js of build 4c948de3a4ee3f03: ...'. The page's own PACKAGE_MISMATCH messages (runtime.js:220 and :655, client.js:777) start in lowercase and end with a full stop, while the worker's are capitalized and have none.",
       "impact": "A user-visible error names a folder that does not exist on a case-sensitive file system, and the messages of one code are inconsistent. Cosmetic, bounded.",
       "evidence": [
@@ -3181,8 +3181,8 @@
         "local-only: docs/audits/AUD-010-evidence/browser-package-skeptic-challenge.log (exit 1, SHA-256 1f92938c716ab8de0493039268ba2dd4d1184844af7e68e4fc90f83200c67460): challenger's part 5 with the real sentence()",
         "harness: docs/audits/AUD-010-harnesses/browser-package/transport.mjs (SHA-256 d12e9f0eb5956e2ca72c2ba34971b65bafb0bf1f7d3b7cf532bbaf9176bc29eb)"
       ],
-      "recommendedFix": "Begin these messages with a word, for example 'The file runtime/mhfe.wasm is of build …', or do not apply sentence() to a message that starts with a package path; make every PACKAGE_MISMATCH message use one form, and align the documentation example.",
-      "requiredVerification": "Rerun transport.mjs: the PACKAGE_MISMATCH spelling check passes. In the next verify-browsers run the messages read 'runtime/…' and 'core/…' (or the new wording), and the documentation example matches.",
+      "recommendedFix": "Begin these messages with a word, for example 'The file runtime/mhfe.wasm is of build \u2026', or do not apply sentence() to a message that starts with a package path; make every PACKAGE_MISMATCH message use one form, and align the documentation example.",
+      "requiredVerification": "Rerun transport.mjs: the PACKAGE_MISMATCH spelling check passes. In the next verify-browsers run the messages read 'runtime/\u2026' and 'core/\u2026' (or the new wording), and the documentation example matches.",
       "challenge": {
         "verdict": "confirmed",
         "severity": "low",
@@ -3443,7 +3443,7 @@
       ],
       "reproduction": "`python3 docs/audits/AUD-010-harnesses/cli-terminal/new-check-default.py target/release/mhfe` runs `mhfe new --pim 0` in an 80x24 pseudo-terminal, types the synthetic passphrase 'synthetic probe passphrase' twice and, at 'Do you want a check that confirms the password at recovery?', reads the list, presses Enter alone, then presses Escape. The phrase is never drawn and Argon2 never runs.",
       "expected": "README.md:419-421: 'Only with a passphrase does it then ask whether you want a check that confirms the password at recovery, with nothing preselected'. new_wallet.rs:115 says 'Nothing is preselected'. docs/BROWSER-PACKAGE.md:665-666 tells hosts to offer this check 'with neither answer preselected'. The tool's own no-default form (choice::choose_without_default, used for the passphrase question) marks no answer, shows the hint 'Enter selects once one is marked', and ignores Enter alone.",
-      "observed": "Answer 1 is marked ('› 1  No check   every password opens a valid wallet'). The hint reads '↑ ↓ choose · Enter selects · 1 or 2 at once · ? explains both · Esc cancels'. Enter alone went on to the next question, 'Repair words for the plate?'. The summary on the main screen recorded 'Check      No check'. Escape ended the command with exit code 130, and the passphrase never reached the main screen. Because keys are read before the list is drawn, a typed-ahead Enter after the repeated passphrase picks the answer unseen.",
+      "observed": "Answer 1 is marked ('\u203a 1  No check   every password opens a valid wallet'). The hint reads '\u2191 \u2193 choose \u00b7 Enter selects \u00b7 1 or 2 at once \u00b7 ? explains both \u00b7 Esc cancels'. Enter alone went on to the next question, 'Repair words for the plate?'. The summary on the main screen recorded 'Check      No check'. Escape ended the command with exit code 130, and the passphrase never reached the main screen. Because keys are read before the list is drawn, a typed-ahead Enter after the repeated passphrase picks the answer unseen.",
       "impact": "A hurried Enter decides a property of the new wallet that can never change afterwards: the phrase is drawn with or without the check. The CLI behaves differently from its README and from the browser-host guidance. No secret is exposed; the preselected answer is the documented usual case, and the summary records the choice.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/cli-terminal-new-check-default.log (exit 1, SHA-256 227d20bcb94e508c353cca290a0446a0d1bee600caa53fce0f6fb4ef2ead4939): N1 and N2 fail; N3 exit 130",
@@ -3453,7 +3453,7 @@
         "harness: docs/audits/AUD-010-harnesses/cli-terminal/ptyrun.py (SHA-256 23ea4190326e0f56036b497d6fe0ae3ea135b90cefce1a3a6a14d97afcadcd5b)"
       ],
       "recommendedFix": "Give choice::choose_without_default an optional Help so that '? explains both' stays available, and call it from ask_for_check; keep the hint 'Enter selects once one is marked'.",
-      "requiredVerification": "new-check-default.py passes: nothing marked, Enter alone does nothing, a digit or ↑/↓ then Enter chooses, Escape gives 130. Add the same case to scripts/verify-hidden-input.py. Rerun the encrypt and rekey passphrase-question checks of check.sh.",
+      "requiredVerification": "new-check-default.py passes: nothing marked, Enter alone does nothing, a digit or \u2191/\u2193 then Enter chooses, Escape gives 130. Add the same case to scripts/verify-hidden-input.py. Rerun the encrypt and rekey passphrase-question checks of check.sh.",
       "challenge": {
         "verdict": "confirmed",
         "severity": "medium",
@@ -3499,7 +3499,7 @@
       "id": "AUD-010-UI003",
       "category": "UI",
       "kind": "finding",
-      "title": "Usage errors are printed in clap's 'error:' format, not as the red '✗ Error:' line",
+      "title": "Usage errors are printed in clap's 'error:' format, not as the red '\u2717 Error:' line",
       "severity": "low",
       "status": "verified",
       "originalStatus": "open",
@@ -3512,8 +3512,8 @@
         "src/bin/mhfe/main.rs:197 (Cli::parse() lets clap print and exit); every command-line usage error, such as an unknown option, a missing required option or a conflict"
       ],
       "reproduction": "`CLICOLOR_FORCE=1 target/release/mhfe encrypt --no-such-option`, or help-and-colour.py check C6.",
-      "expected": "Workspace AGENTS.md 'Terminal output': 'a red \"✗ Error:\" for errors, on one line'. The tool's own errors follow this rule (style.rs:210-215).",
-      "observed": "Exit code 2 and nothing on standard output. Standard error shows \"error: unexpected argument '--no-such-option' found\" in bold red with no ✗ (od shows ESC[1mESC[31merror:), then 'Usage: mhfe encrypt [OPTIONS]' and \"For more information, try '--help'.\"",
+      "expected": "Workspace AGENTS.md 'Terminal output': 'a red \"\u2717 Error:\" for errors, on one line'. The tool's own errors follow this rule (style.rs:210-215).",
+      "observed": "Exit code 2 and nothing on standard output. Standard error shows \"error: unexpected argument '--no-such-option' found\" in bold red with no \u2717 (od shows ESC[1mESC[31merror:), then 'Usage: mhfe encrypt [OPTIONS]' and \"For more information, try '--help'.\"",
       "impact": "Usage errors look different from every other error of the tool and of the workspace. Presentation only.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/cli-terminal-help-and-colour.log (exit 1, SHA-256 adff7c2b527e70edb7b1a65c1b543c59069c320b8a8d2029c2a59a0d49513bb2): check C6",
@@ -3547,7 +3547,7 @@
       ],
       "reproduction": "`python3 docs/audits/AUD-010-harnesses/cli-terminal/scripts-mode.py target/release/mhfe` (checks S6 and S8). Examples: `printf '%s\\npw\\npw\\n' \"abandon x12\" | target/release/mhfe encrypt --stdin` (twelve times 'abandon', a public phrase with an invalid checksum); `target/release/mhfe password --dice </dev/null`.",
       "expected": "Workspace AGENTS.md: 'Running text wraps at 78 columns.' style.rs:217-218 says error_wrapped is the form 'for a message longer than a line'. settings.rs:366-367: 'Each text keeps the summary line within 78 columns, its label included.'",
-      "observed": "8 of 23 error lines are wider than 78 columns: 107, 135, 113, 128, 143, 146, 146 and 82 columns; for example '✗ Error: The seed phrase is not a valid English BIP39 phrase: its checksum does not match, so a word is wrong or words are out of order' (135). The repair Next line is 81 columns. With the 13-column label, the Keep values from the encrypt.rs unit tests give 103 columns (24 words, password, passphrase, repair words) and 93 (the script form). Only the error at start (startup.rs) wraps.",
+      "observed": "8 of 23 error lines are wider than 78 columns: 107, 135, 113, 128, 143, 146, 146 and 82 columns; for example '\u2717 Error: The seed phrase is not a valid English BIP39 phrase: its checksum does not match, so a word is wrong or words are out of order' (135). The repair Next line is 81 columns. With the 13-column label, the Keep values from the encrypt.rs unit tests give 103 columns (24 words, password, passphrase, repair words) and 93 (the script form). Only the error at start (startup.rs) wraps.",
       "impact": "In an 80-column terminal long errors and the keep list wrap in the middle of words, so the final summary is harder to read. Presentation only. No secret is echoed: an invalid word is named by its position, not its text.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/cli-terminal-scripts-mode.log (exit 1, SHA-256 c8c2986a9964ee896f6156d2fa873efb0584718f05d190128ab9ef2c9e09c3c5): S6 and S8 fail and list every line",
@@ -3580,7 +3580,7 @@
       ],
       "reproduction": "`target/release/mhfe password --dice </dev/null`; also `printf '1\\n<public 24-word zero container>\\n1\\n' | target/release/mhfe rekey --pim 0`; then `target/release/mhfe password --stdin` and `target/release/mhfe rekey --stdin`. scripts-mode.py check S5 does all of this.",
       "expected": "A refusal names only options that the command accepts. rekey.rs:83 says no script answers rekey.",
-      "observed": "Both runs exit with code 2 and the message '✗ Error: There is no terminal to type secrets into. Run the command in a terminal, or pass --stdin and give one answer per line on standard input.' Both `mhfe password --stdin` and `mhfe rekey --stdin` are then rejected by clap with \"error: unexpected argument '--stdin' found\".",
+      "observed": "Both runs exit with code 2 and the message '\u2717 Error: There is no terminal to type secrets into. Run the command in a terminal, or pass --stdin and give one answer per line on standard input.' Both `mhfe password --stdin` and `mhfe rekey --stdin` are then rejected by clap with \"error: unexpected argument '--stdin' found\".",
       "impact": "Misleading advice for script authors. Nothing is read or exposed.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/cli-terminal-scripts-mode.log (exit 1, SHA-256 c8c2986a9964ee896f6156d2fa873efb0584718f05d190128ab9ef2c9e09c3c5): check S5",
@@ -3615,7 +3615,7 @@
       ],
       "reproduction": "`printf '<public 24-word zero container>\\npw\\n0x9858EfFD232B4033E47d90003D41EC34EcaEda94\\n\\n' | target/release/mhfe check --stdin --address`; with --coin ethereum the same input is accepted. scripts-mode.py checks S7 and S2.",
       "expected": "Script mode names the coin it assumes in its refusal, or requires one; README's 'For scripts' lists every answer and option a script needs for check.",
-      "observed": "Exit code 2 and '✗ Error: The address cannot be used for the check: its checksum or format is wrong' for a valid EVM address; the message does not mention Bitcoin or --coin. With --coin ethereum the same input reached the memory reservation (exit 4 under the 1 GiB cap). The --coin short help says '(default bitcoin)' and its long help 'a script means bitcoin' (challenger's correction: the default is not wholly unstated). The interactive list highlights Bitcoin by default.",
+      "observed": "Exit code 2 and '\u2717 Error: The address cannot be used for the check: its checksum or format is wrong' for a valid EVM address; the message does not mention Bitcoin or --coin. With --coin ethereum the same input reached the memory reservation (exit 4 under the 1 GiB cap). The --coin short help says '(default bitcoin)' and its long help 'a script means bitcoin' (challenger's correction: the default is not wholly unstated). The interactive list highlights Bitcoin by default.",
       "impact": "A script author who checks a non-Bitcoin wallet is told the address is malformed. A wrong match is not possible. CLI and browser differ on whether a coin is required.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/cli-terminal-scripts-mode.log (exit 1, SHA-256 c8c2986a9964ee896f6156d2fa873efb0584718f05d190128ab9ef2c9e09c3c5): checks S2 and S7",
@@ -3711,11 +3711,11 @@
     },
     {
       "scope": "crypto-core",
-      "text": "Bitcoin and Litecoin '3…' addresses are read as P2SH-P2WPKH (documented in src/wallet.rs); a multisig P2SH address cannot be told apart and ends as 'does not match' rather than a refusal. Inherent to the encoding."
+      "text": "Bitcoin and Litecoin '3\u2026' addresses are read as P2SH-P2WPKH (documented in src/wallet.rs); a multisig P2SH address cannot be told apart and ends as 'does not match' rather than a refusal. Inherent to the encoding."
     },
     {
       "scope": "crypto-core",
-      "text": "Provenance: tests/fixtures/suite3-vectors/independent-verification.json names verifier SHA-256 25d578ee… while scripts/independent-suite3.py is now bcc12b46…; every recorded fixture hash equals the current file. The suite 4 record matches its script."
+      "text": "Provenance: tests/fixtures/suite3-vectors/independent-verification.json names verifier SHA-256 25d578ee\u2026 while scripts/independent-suite3.py is now bcc12b46\u2026; every recorded fixture hash equals the current file. The suite 4 record matches its script."
     },
     {
       "scope": "crypto-core",
@@ -3871,7 +3871,7 @@
     },
     {
       "scope": "docs-build-release",
-      "text": "The procedure schema used is the working copy 989bf3de… of multi-chain-wallet-tools, an uncommitted formatting-only change of the committed d47df012… (3eb0494); the two are semantically identical."
+      "text": "The procedure schema used is the working copy 989bf3de\u2026 of multi-chain-wallet-tools, an uncommitted formatting-only change of the committed d47df012\u2026 (3eb0494); the two are semantically identical."
     },
     {
       "scope": "docs-build-release",
@@ -4187,8 +4187,8 @@
       "verificationCommit": null,
       "commitNote": "Not bound in this record: the fix was checked on uncommitted source bytes; the commit is to be added with a check that its tree has these bytes.",
       "sourceFingerprint": "83ea7dad588e3dbfe329d3ee0e07816bdfb420bdcb9376a13d9c5ed0a720d502",
-      "fix": "Every PACKAGE_MISMATCH message of the worker and the page starts with 'The file …', so sentence() never capitalizes a package path; the docs/BROWSER-PACKAGE.md example matches.",
-      "result": "verify-browser-package.mjs checks the exact text of all eight worker refusals (check.sh); the browsers show 'PACKAGE_MISMATCH: The file runtime/mhfe.wasm is of build 49bb65dedeb230b3 …' and 'The file core/argon2-st.js …'; the round-2 verifier checked the documentation example.",
+      "fix": "Every PACKAGE_MISMATCH message of the worker and the page starts with 'The file \u2026', so sentence() never capitalizes a package path; the docs/BROWSER-PACKAGE.md example matches.",
+      "result": "verify-browser-package.mjs checks the exact text of all eight worker refusals (check.sh); the browsers show 'PACKAGE_MISMATCH: The file runtime/mhfe.wasm is of build 49bb65dedeb230b3 \u2026' and 'The file core/argon2-st.js \u2026'; the round-2 verifier checked the documentation example.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/verification-check-sh.log (exit 0, SHA-256 89b74876b9a5a6dd795cfbdf86d59d7a9db00460b0377a1333d613555e071c53)",
         "local-only: docs/audits/AUD-010-evidence/verification-browsers.log (exit 0, SHA-256 2eddb65eccfdbc1bf024b3da29b4ce215595019109cd2a6f5e3662c9220f704c)"
@@ -4210,7 +4210,7 @@
       "verificationCommit": null,
       "commitNote": "Not bound in this record: the fix was checked on uncommitted source bytes; the commit is to be added with a check that its tree has these bytes.",
       "sourceFingerprint": "83ea7dad588e3dbfe329d3ee0e07816bdfb420bdcb9376a13d9c5ed0a720d502",
-      "fix": "Owner decision: this work is released as v0.5.1, and v0.5.0 stays published as it is; no tag moves. Cargo.toml, the Cargo.lock entry and CITATION.cff say 0.5.1 and the browser package reports 0.5.1; the notes are docs/releases/v0.5.1.md, which says that 0.5.0 stays published; docs/releases/v0.5.0.md is byte for byte the tag's; docs/API.md's history reads 'apiVersion … 7 in v0.5.0; version replaced it in v0.5.1'.",
+      "fix": "Owner decision: this work is released as v0.5.1, and v0.5.0 stays published as it is; no tag moves. Cargo.toml, the Cargo.lock entry and CITATION.cff say 0.5.1 and the browser package reports 0.5.1; the notes are docs/releases/v0.5.1.md, which says that 0.5.0 stays published; docs/releases/v0.5.0.md is byte for byte the tag's; docs/API.md's history reads 'apiVersion \u2026 7 in v0.5.0; version replaced it in v0.5.1'.",
       "result": "The static part of the required verification passed (round-2 verifier): one version in Cargo.toml, Cargo.lock, CITATION.cff, mhfe --version, dist/modules.json and docs/API.md's history; v0.5.0.md equal to git show v0.5.0:; tag v0.5.0 still dcb56e1 -> dd43975; no v0.5.1 tag. On the remediated bytes check.sh builds mhfe-experimental v0.5.1. Audit records naming dd43975 and tag v0.5.0 stay true, as no tag moved.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/verification-check-sh.log (exit 0, SHA-256 89b74876b9a5a6dd795cfbdf86d59d7a9db00460b0377a1333d613555e071c53)"
@@ -4351,7 +4351,7 @@
       "commitNote": "Not bound in this record: the fix was checked on uncommitted source bytes; the commit is to be added with a check that its tree has these bytes.",
       "sourceFingerprint": "83ea7dad588e3dbfe329d3ee0e07816bdfb420bdcb9376a13d9c5ed0a720d502",
       "fix": "new_wallet::ask_for_check uses choice::choose_without_default, which keeps '? explains both'; a hint that does not fit 78 columns goes on two lines.",
-      "result": "new-check-default.py N1 and N2 pass and Escape exits 130; the PTY cases 'the check question has no default; Enter, also typed ahead, does nothing' and '? explains both answers, ↓ marks the first; Escape cancels' and choice::tests::the_hint_names_the_numbers_and_the_help pass in check.sh, with the encrypt and rekey passphrase-question cases.",
+      "result": "new-check-default.py N1 and N2 pass and Escape exits 130; the PTY cases 'the check question has no default; Enter, also typed ahead, does nothing' and '? explains both answers, \u2193 marks the first; Escape cancels' and choice::tests::the_hint_names_the_numbers_and_the_help pass in check.sh, with the encrypt and rekey passphrase-question cases.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/verification-cli-new-check-default.log (exit 0, SHA-256 f2e03eb0231aab2f18df35063e8a4a796d703881c68a5be210b50ee7e7a61688)",
         "local-only: docs/audits/AUD-010-evidence/verification-check-sh.log (exit 0, SHA-256 89b74876b9a5a6dd795cfbdf86d59d7a9db00460b0377a1333d613555e071c53)"
@@ -4396,8 +4396,8 @@
       "verificationCommit": null,
       "commitNote": "Not bound in this record: the fix was checked on uncommitted source bytes; the commit is to be added with a check that its tree has these bytes.",
       "sourceFingerprint": "83ea7dad588e3dbfe329d3ee0e07816bdfb420bdcb9376a13d9c5ed0a720d502",
-      "fix": "main.rs parses with Cli::try_parse; help and version go through clap as before; any other clap error is one red '✗ Error:' line wrapped at 78 columns, then clap's tip and usage in grey, exit 2.",
-      "result": "help-and-colour.py C6: exit 2, empty standard output, a red '✗ Error: Unexpected argument …' line; style::tests::a_usage_error_reads_as_an_error_of_the_tool and the PTY usage-error case pass in check.sh.",
+      "fix": "main.rs parses with Cli::try_parse; help and version go through clap as before; any other clap error is one red '\u2717 Error:' line wrapped at 78 columns, then clap's tip and usage in grey, exit 2.",
+      "result": "help-and-colour.py C6: exit 2, empty standard output, a red '\u2717 Error: Unexpected argument \u2026' line; style::tests::a_usage_error_reads_as_an_error_of_the_tool and the PTY usage-error case pass in check.sh.",
       "evidence": [
         "local-only: docs/audits/AUD-010-evidence/verification-cli-help-and-colour.log (exit 0, SHA-256 1fc2c1510d4514fb9052d76b290b4df9ec3d21d2fd0acfd2fea5723a5e691c1a)",
         "local-only: docs/audits/AUD-010-evidence/verification-check-sh.log (exit 0, SHA-256 89b74876b9a5a6dd795cfbdf86d59d7a9db00460b0377a1333d613555e071c53)"
@@ -4670,7 +4670,7 @@
       "commitNote": "No commit is bound in this record. The commit or commits are to be added with a check that their tree has these bytes (for example with docs/audits/AUD-010-harnesses/remediation/source-bytes.py)."
     },
     "verifierFingerprints": {
-      "round1": "28e1ec87…db05 (228 paths)",
+      "round1": "28e1ec87\u2026db05 (228 paths)",
       "round2": "68a48fb7f9ccf1e5ad3d95b153052ef646d8cfee82e3f1e8c87cf50acddb1d0b (229 paths)",
       "note": "The round verifiers checked intermediate trees; their own runs other than the records listed under remediation round 1 have no local record. Only the runs of the phases 'verification of the remediated bytes' and 'record-time recheck' tested the remediated bytes."
     },
@@ -4813,7 +4813,7 @@
       "No verifier reviewed the coordinator's edits made after the round-2 verification (README.md, docs/API.md, docs/BROWSER-PACKAGE.md, scripts/check.sh)."
     ],
     "limitations": [
-      "The fixes are uncommitted source bytes bound by the fingerprint 83ea7dad…; no fix or verification commit is bound in this record (null).",
+      "The fixes are uncommitted source bytes bound by the fingerprint 83ea7dad\u2026; no fix or verification commit is bound in this record (null).",
       "SEC002 and SEC003 rest on is_locked() assertions, Rust's drop order and source review; no swap-out or freed page was observed.",
       "ARC001's path through Rekey::seal rests on the source; the full-cost run shows the CLI rekey's result.",
       "The browser runs used the test-only reduced-cost Argon2 except the full-size encryption in Node; no full-cost operation ran in a browser.",
@@ -4842,7 +4842,7 @@
   "harnesses": {
     "readme": "docs/audits/AUD-010-harnesses/README.md",
     "files": {
-      "docs/audits/AUD-010-harnesses/README.md": "94a5d3b1ba5939e861fa4468bdf3cdd019d6693c9336c0260d3976851de635a2",
+      "docs/audits/AUD-010-harnesses/README.md": "d0fd106c89d91b5f7c770c991a4e05ece4ae4ca8147115c72550ebf50f3012d9",
       "docs/audits/AUD-010-harnesses/browser-package/inputs.mjs": "078ecabaf1a81fbb9c9a708990be617cd0fd2ade545ce8fc6bb2447090d3f7f6",
       "docs/audits/AUD-010-harnesses/browser-package/lib.mjs": "2c0d843509fc1364a496f3c61d2955675d9516a637cbf44c25bd4fa56507d604",
       "docs/audits/AUD-010-harnesses/browser-package/static-scan.mjs": "80083cbcbbcfdb5638fe482f57044e22843d0f4dc1562ed71b0be8e3dc9f0bf5",
@@ -4897,7 +4897,7 @@
     "reason": "Two medium and 22 low findings are open, two of them release blocking (AUD-010-FUN001 and AUD-010-BLD001). No critical or high finding was established, and no change to the suite 3 or suite 4 outputs: the cipher sources are unchanged since d7af4b1035355a69779f8ad70a9dc50ba5b9ffd0, and the published vectors reproduce from their recorded round keys and through independent oracles. All six AUD-009 findings are verified on the uncommitted source. The full-size vector replays and ignored tests are pending, and no canonical rebuild or cross-target run was made."
   },
   "limitations": [
-    "Baseline of uncommitted source bound by the source fingerprint 372da577…; no commit identity exists for the reviewed bytes or the AUD-009 fixes.",
+    "Baseline of uncommitted source bound by the source fingerprint 372da577\u2026; no commit identity exists for the reviewed bytes or the AUD-009 fixes.",
     "Full-size runs (2 GiB Argon2id) were not executed by the reviewers (256 MiB limit) and none of the coordinator's capped chain had finished when this record was written. vectors-suite3 runs a test binary compiled from the reviewed bytes; the later runs compile after the remediation began editing the tree (about 19:17Z) and so cannot be credited to this baseline.",
     "FUN001 was not reproduced end to end through Mhfe::check at full cost; every step of the path was reproduced and the code is deterministic.",
     "SEC002 and SEC003 rest on source traces; no swap-out was demonstrated.",
@@ -4920,28 +4920,44 @@
     "newAudit": false,
     "documentBindings": [
       {
-        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/README.md"],
+        "keyPath": [
+          "harnesses",
+          "files",
+          "docs/audits/AUD-010-harnesses/README.md"
+        ],
         "document": "docs/audits/AUD-010-harnesses/README.md",
         "originalSha256": "3f57738ea3c24cf7bba2384a5075184c6d753339757c0922b54796415552225d",
         "redactedSha256": "94a5d3b1ba5939e861fa4468bdf3cdd019d6693c9336c0260d3976851de635a2",
         "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/crypto-core/README.md"],
+        "keyPath": [
+          "harnesses",
+          "files",
+          "docs/audits/AUD-010-harnesses/crypto-core/README.md"
+        ],
         "document": "docs/audits/AUD-010-harnesses/crypto-core/README.md",
         "originalSha256": "bc6dc7ebc780ec82f436492c865f16fb3317ee9f585dc552fd1e9dedc04512c5",
         "redactedSha256": "32a6f0abd023c35fdfd0aa8a126526284b38e230bc079f78fa7aa793c60958c6",
         "change": "privacy-only harness documentation; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/crypto-core/oracle.py"],
+        "keyPath": [
+          "harnesses",
+          "files",
+          "docs/audits/AUD-010-harnesses/crypto-core/oracle.py"
+        ],
         "document": "docs/audits/AUD-010-harnesses/crypto-core/oracle.py",
         "originalSha256": "00636ef35d4c2295e2c0ce94acc19963f699792e120bd76a4b13d3d58fa010f6",
         "redactedSha256": "d2c56ba0403891e9387d09789e73fa698c0e4964c980cbb10a614ba900e057f9",
         "change": "privacy-only runtime path portability; the original execution digest is retained; no audit checks were rerun"
       },
       {
-        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/crypto-core/probe.py"],
+        "keyPath": [
+          "harnesses",
+          "files",
+          "docs/audits/AUD-010-harnesses/crypto-core/probe.py"
+        ],
         "document": "docs/audits/AUD-010-harnesses/crypto-core/probe.py",
         "originalSha256": "8609ac1bdbe05892bfdfe2deaaea6de15a078cf3752514427dc4533a41785d34",
         "redactedSha256": "92bd6a99d6153a17fc74a9e1634b2ab5a704415e18b3906a5c1bbd7c796dd8cd",
@@ -4981,7 +4997,11 @@
         "change": "privacy-only harness documentation from the history rewrite of 2026-10-09; no executable or audit rerun; amended again on 2026-10-09"
       },
       {
-        "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/secrets-security/README.md"],
+        "keyPath": [
+          "harnesses",
+          "files",
+          "docs/audits/AUD-010-harnesses/secrets-security/README.md"
+        ],
         "document": "docs/audits/AUD-010-harnesses/secrets-security/README.md",
         "originalSha256": "29cdeceed810d57c1b57458f0a35accca3c820f364582125cc36c848307dfaf4",
         "redactedSha256": "7ce7e0215a26441c49e6da73aa66a6f27a81644c67b55396f45d6e21579d4208",
@@ -4997,7 +5017,10 @@
           "A session scratchpad path replaced by <scratchpad>."
         ],
         "note": "Documentation-only edit; no check was rerun.",
-        "commitMap": { "52b6b36": "dd43975", "a38a044": "d7af4b1" }
+        "commitMap": {
+          "52b6b36": "dd43975",
+          "a38a044": "d7af4b1"
+        }
       },
       {
         "dateUtc": "2026-10-09",
@@ -5028,11 +5051,17 @@
       {
         "dateUtc": "2026-10-13",
         "authorizedBy": "repository owner",
-        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "changes": [
+          "Explicit report time zone label: UTC (+00:00)."
+        ],
         "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
         "documentBindings": [
           {
-            "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/README.md"],
+            "keyPath": [
+              "harnesses",
+              "files",
+              "docs/audits/AUD-010-harnesses/README.md"
+            ],
             "document": "docs/audits/AUD-010-harnesses/README.md",
             "previousSha256": "3f57738ea3c24cf7bba2384a5075184c6d753339757c0922b54796415552225d",
             "previousDocumentSha256": "9219b319116c911c26cc6049247afc11162183878d0883bb2c7f955279a0c2b3",
@@ -5052,7 +5081,11 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["harnesses", "files", "docs/audits/AUD-010-harnesses/crypto-core/README.md"],
+            "keyPath": [
+              "harnesses",
+              "files",
+              "docs/audits/AUD-010-harnesses/crypto-core/README.md"
+            ],
             "document": "docs/audits/AUD-010-harnesses/crypto-core/README.md",
             "previousSha256": "bc6dc7ebc780ec82f436492c865f16fb3317ee9f585dc552fd1e9dedc04512c5",
             "previousDocumentSha256": "fa80bb113d929eda5047c0d9e2b238fdefe63644cfc1fdeca07d363851dea1dc",
@@ -5084,7 +5117,12 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["privacyRedaction", "documentBindings", "0", "redactedSha256"],
+            "keyPath": [
+              "privacyRedaction",
+              "documentBindings",
+              "0",
+              "redactedSha256"
+            ],
             "document": "docs/audits/AUD-010-harnesses/README.md",
             "previousSha256": "9219b319116c911c26cc6049247afc11162183878d0883bb2c7f955279a0c2b3",
             "previousDocumentSha256": "9219b319116c911c26cc6049247afc11162183878d0883bb2c7f955279a0c2b3",
@@ -5092,7 +5130,12 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["privacyRedaction", "documentBindings", "1", "redactedSha256"],
+            "keyPath": [
+              "privacyRedaction",
+              "documentBindings",
+              "1",
+              "redactedSha256"
+            ],
             "document": "docs/audits/AUD-010-harnesses/crypto-core/README.md",
             "previousSha256": "fa80bb113d929eda5047c0d9e2b238fdefe63644cfc1fdeca07d363851dea1dc",
             "previousDocumentSha256": "fa80bb113d929eda5047c0d9e2b238fdefe63644cfc1fdeca07d363851dea1dc",
@@ -5100,7 +5143,12 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["privacyRedaction", "documentBindings", "5", "redactedSha256"],
+            "keyPath": [
+              "privacyRedaction",
+              "documentBindings",
+              "5",
+              "redactedSha256"
+            ],
             "document": "docs/audits/AUD-010-harnesses/crypto-core-skeptic/README.md",
             "previousSha256": "55df15e38676bb1703bc27fa8639b9012b94c9a288b22673384f435a8b51cba5",
             "previousDocumentSha256": "55df15e38676bb1703bc27fa8639b9012b94c9a288b22673384f435a8b51cba5",
@@ -5108,7 +5156,12 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["privacyRedaction", "documentBindings", "6", "redactedSha256"],
+            "keyPath": [
+              "privacyRedaction",
+              "documentBindings",
+              "6",
+              "redactedSha256"
+            ],
             "document": "docs/audits/AUD-010-harnesses/docs-build-release/README.md",
             "previousSha256": "30376be5b81eb4fb94433857304f7c403890b4d4148cc02550e5fa4221a5d2b9",
             "previousDocumentSha256": "30376be5b81eb4fb94433857304f7c403890b4d4148cc02550e5fa4221a5d2b9",
@@ -5116,7 +5169,12 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["privacyRedaction", "documentBindings", "7", "redactedSha256"],
+            "keyPath": [
+              "privacyRedaction",
+              "documentBindings",
+              "7",
+              "redactedSha256"
+            ],
             "document": "docs/audits/AUD-010-harnesses/secrets-security/README.md",
             "previousSha256": "75fa60489de5bc28e7fd6fcbe08b91cfe8494f31a0c116d56a43cb774e1455ad",
             "previousDocumentSha256": "75fa60489de5bc28e7fd6fcbe08b91cfe8494f31a0c116d56a43cb774e1455ad",
@@ -5132,5 +5190,30 @@
       }
     ],
     "timeZone": "UTC (+00:00)"
-  }
+  },
+  "harnessDocumentationAmendments": [
+    {
+      "document": "docs/audits/AUD-010-harnesses/README.md",
+      "previousSha256": "94a5d3b1ba5939e861fa4468bdf3cdd019d6693c9336c0260d3976851de635a2",
+      "sha256": "d0fd106c89d91b5f7c770c991a4e05ece4ae4ca8147115c72550ebf50f3012d9",
+      "completedUtc": "2026-10-14T18:29:45.759752+00:00",
+      "checksRerun": false
+    }
+  ],
+  "documentationAmendments": [
+    {
+      "completedUtc": "2026-10-14T18:29:45.759752+00:00",
+      "authorizedBy": "repository owner",
+      "kind": "documentation-only",
+      "historicalChecksRerun": false,
+      "changes": [
+        "DOC005: the harness introduction points to the canonical report name; its current README hash is rebound. Commands remain frozen."
+      ],
+      "reportDocument": {
+        "document": "docs/audits/AUD-010-2026-10-07.md",
+        "previousSha256": "03fb90f593cf735a9c10f63f9820e7a4143d0309c7b4891a34cb0e72e52a9159",
+        "sha256": "0be9ed04a4bfdda0f492f2f57b1e6f974084492a111fed5f69009c63ce34358a"
+      }
+    }
+  ]
 }

@@ -1,0 +1,12 @@
+[package]
+name = "aud024-guide-lib-core"
+version = "0.0.0"
+edition = "2021"
+publish = false
+build = "build.rs"
+
+[dependencies]
+mhfe-experimental = { path = "@REPO@" }
+zeroize = "=1.9.1"
+
+[workspace]

@@ -290,7 +290,7 @@ function checkDamagedVectors() {
       "address-search": part(
         "address-search",
         "failed",
-        "search 1 of 5 stops with INVALID_ADDRESS",
+        "search 1 of 20 stops with INVALID_ADDRESS",
       ),
     },
   );
@@ -303,7 +303,7 @@ function checkDamagedVectors() {
     "startup",
     WALLET_PARTS,
     WALLET_PARTS,
-    { "address-search": part("address-search", "failed", "search 1 of 5 is stated otherwise") },
+    { "address-search": part("address-search", "failed", "search 1 of 20 is stated otherwise") },
   );
   // The master key of BIP32 with its key "Bitcoin seed" changed: the fingerprint repairContainer
   // gives is made with it, so the repair module's own check fails (AUD-023-BLD010).

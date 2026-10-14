@@ -5,9 +5,8 @@
 //! `mhfe self-test --vectors` on the computer before a hidden wallet is funded; it is not repeated
 //! here, as it takes minutes.
 
-use anstream::eprintln;
 use clap::Args;
-use mhfe::{HiddenWallets, MhfeError, Password};
+use mhfe::{ContainerFacts, HiddenWallets, MhfeError, Password};
 
 use crate::check;
 use crate::choice::{Answer, Question};
@@ -21,7 +20,7 @@ use crate::style::{self, paint, ACCENT, HEADING};
 use crate::terminal::{self, Input, Progress, Wallet};
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// The settings of the container
     #[command(flatten)]
     settings: Settings,
@@ -31,10 +30,10 @@ pub struct Options {
 }
 
 /// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
-pub const SUMMARY: &str = "Open hidden wallets with other passwords";
+pub(crate) const SUMMARY: &str = "Open hidden wallets with other passwords";
 
 /// The top of `mhfe wallets --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         SUMMARY,
         "Every password other than the container's own opens another valid 24-word wallet on a \
@@ -44,7 +43,7 @@ pub fn about() -> String {
 }
 
 /// The end of `mhfe wallets -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::examples_with_note(
         &[
             ("mhfe wallets", "Open hidden wallets on a container"),
@@ -55,12 +54,12 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; a wallet is only ever shown on a private screen.
     let mut input = terminal::private_input(NO_PRIVATE_SCREEN)?;
     // Every step on a screen of its own, the summary at the end. The steps lie on the alternate
     // screen, which is what keeps the wallets private: without it the command does not go on.
-    let flow = Flow::start(&input, Operation::Wallets.title());
+    let flow = Flow::start(&input, Operation::Wallets.title())?;
     if !flow::is_active() {
         return Err(Failure::invalid_input(NO_PRIVATE_SCREEN));
     }
@@ -74,13 +73,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     // The wallets are opened one password at a time below, so a password that a search for
     // missing words asked for is not kept.
-    let read = terminal::read_container(
+    let read = terminal::read_container_for(
         &mut input,
         Operation::Wallets.title(),
         options.repair.card(Operation::Wallets, work),
+        ContainerFacts::require_hidden_wallets,
     )?;
     let container = read.facts;
-    container.require_hidden_wallets()?;
     // A hidden wallet that passes the main wallet's check with its passphrase is refused too; the
     // question comes every time, so that it tells nothing about the main wallet.
     let passphrase = check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;
@@ -92,9 +91,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let mut number = 0;
     loop {
         let password = read_unused_password(&mut input, &wallets)?;
-        let mut progress = Progress::start_as("Opening");
+        let mut progress = Progress::start_as("Opening")?;
         let derived = wallets.open(&mut mhfe, password, &mut |round, rounds| {
-            progress.round_starts(round, rounds);
+            progress.round_starts(mhfe::operation::Stage::Recover, round, rounds);
             Ok(())
         });
         progress.finish();
@@ -117,9 +116,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     }
     drop(off_the_record);
     flow.finish();
-    style::fact_wrapped(
+    style::fact(
         "Next",
-        &format!(
+        format!(
             "fund them only from sources not linked to you; {} changes them",
             paint(ACCENT, "mhfe rekey")
         ),

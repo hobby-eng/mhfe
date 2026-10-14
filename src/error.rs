@@ -73,6 +73,12 @@ pub enum MhfeError {
         /// The most missing words the search looks for.
         limit: usize,
     },
+    /// More than one candidate container of a search for missing words matches its reference,
+    /// which therefore cannot tell them apart: none is taken (AUD-024-FUN001).
+    SeveralCandidatesMatch {
+        /// The number of candidates that match.
+        matches: usize,
+    },
     /// A PIM above [`crate::MAX_PIM`], of the settings that the message names.
     InvalidPim {
         /// The PIM given.
@@ -136,6 +142,9 @@ pub enum MhfeError {
     InvalidFingerprint(String),
     /// The BIP39 passphrase given as bytes is not UTF-8 text.
     InvalidPassphrase,
+    /// The BIP39 passphrase is longer than [`crate::wallet::MAX_PASSPHRASE_BYTES`]; the value is
+    /// its length in bytes (AUD-024-API019).
+    PassphraseTooLong(usize),
     /// The computer reports less free memory than the memory level needs.
     NotEnoughMemory {
         /// The memory the level needs, in bytes.
@@ -184,7 +193,7 @@ pub enum MhfeError {
     /// The recovered phrase was shown to its owner, who said it is not theirs.
     NotConfirmedByOwner,
     /// The coin of an address is not one the check knows.
-    InvalidCoin(String),
+    InvalidCoin,
     /// A part of the program gave another answer than its known answer in a self-check
     /// ([`crate::self_check`]): nothing that part computes can be trusted on this computer. The
     /// component is its label, such as "Repair words (MHFE-REPAIR-1)", and the detail says which
@@ -307,6 +316,12 @@ impl fmt::Display for MhfeError {
                  the repair words repair more",
                 crate::phrase::grouped(crate::phrase::LIST_SIZE)
             ),
+            Self::SeveralCandidatesMatch { matches } => write!(
+                f,
+                "{matches} candidate container phrases match the reference, which cannot tell \
+                 them apart, so none is taken: search again with a receiving address of the same \
+                 wallet, which tells them apart"
+            ),
             Self::InvalidPim { pim, settings } => write!(
                 f,
                 "{settings} PIM must be a whole number from 0 to {}, not {pim}",
@@ -384,6 +399,11 @@ impl fmt::Display for MhfeError {
                 write!(f, "invalid master key fingerprint: {reason}")
             }
             Self::InvalidPassphrase => write!(f, "the BIP39 passphrase is not valid UTF-8 text"),
+            Self::PassphraseTooLong(bytes) => write!(
+                f,
+                "the BIP39 passphrase is too long: {bytes} bytes, but at most {} are allowed",
+                crate::wallet::MAX_PASSPHRASE_BYTES
+            ),
             Self::NotEnoughMemory {
                 needed_bytes,
                 available_bytes,
@@ -440,7 +460,13 @@ impl fmt::Display for MhfeError {
                 "the recovered phrase is not yours: the password, PIM, memory level, word count or \
                  container is wrong. Nothing was encrypted again"
             ),
-            Self::InvalidCoin(reason) => write!(f, "unknown coin {reason}"),
+            Self::InvalidCoin => {
+                let known: Vec<_> = crate::wallet::Coin::ALL
+                    .iter()
+                    .map(|coin| coin.id())
+                    .collect();
+                write!(f, "unknown coin; the coins are {}", known.join(", "))
+            }
             Self::SelfCheckFailed { component, detail } => f.write_str(
                 &crate::self_check::failure_message("the self-test failed", component, detail),
             ),
@@ -472,6 +498,7 @@ impl MhfeError {
             Self::InvalidWordWish(_) => "INVALID_WORD_WISH",
             Self::RepairNotPossible { .. } => "REPAIR_NOT_POSSIBLE",
             Self::TooManyMissingWords { .. } => "TOO_MANY_MISSING_WORDS",
+            Self::SeveralCandidatesMatch { .. } => "SEVERAL_CANDIDATES_MATCH",
             Self::InvalidPim { .. } => "INVALID_PIM",
             Self::InvalidMemoryLevel { .. } => "INVALID_MEMORY_LEVEL",
             Self::EmptyPassword => "EMPTY_PASSWORD",
@@ -489,6 +516,7 @@ impl MhfeError {
             Self::InvalidDerivationPath(_) => "INVALID_DERIVATION_PATH",
             Self::InvalidFingerprint(_) => "INVALID_FINGERPRINT",
             Self::InvalidPassphrase => "INVALID_PASSPHRASE",
+            Self::PassphraseTooLong(_) => "PASSPHRASE_TOO_LONG",
             Self::NotEnoughMemory { .. } => "NOT_ENOUGH_MEMORY",
             Self::MemoryAllocation { .. } => "MEMORY_ALLOCATION_FAILED",
             Self::MemoryLevelNotSupportedHere { .. } => "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
@@ -504,7 +532,7 @@ impl MhfeError {
             Self::PasswordAlreadyUsed => "PASSWORD_ALREADY_USED",
             Self::NewPasswordSameAsOld => "NEW_PASSWORD_SAME_AS_OLD",
             Self::NotConfirmedByOwner => "NOT_CONFIRMED_BY_OWNER",
-            Self::InvalidCoin(_) => "INVALID_COIN",
+            Self::InvalidCoin => "INVALID_COIN",
             Self::SelfCheckFailed { .. } => "SELF_CHECK_FAILED",
             Self::Internal(_) => "INTERNAL_ERROR",
         }
@@ -556,6 +584,16 @@ mod tests {
             error.to_string(),
             "this memory level needs 2 GiB of memory, but only 1.5 GiB is available; \
              close other programs or choose a lower memory level"
+        );
+    }
+
+    #[test]
+    fn an_unknown_coin_is_one_sentence_without_the_typed_value() {
+        assert_eq!(MhfeError::InvalidCoin.code(), "INVALID_COIN");
+        assert_eq!(
+            MhfeError::InvalidCoin.to_string(),
+            "unknown coin; the coins are bitcoin, bitcoin-cash, cosmos, dash, dogecoin, ethereum, \
+             ethereum-classic, injective, litecoin, tron, xrp, zcash"
         );
     }
 

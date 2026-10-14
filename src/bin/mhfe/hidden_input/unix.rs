@@ -14,14 +14,14 @@ use std::time::Duration;
 use super::terminal_error;
 use crate::exit::Failure;
 
-pub type Settings = libc::termios;
+pub(super) type Settings = libc::termios;
 
-pub fn current() -> Result<Settings, Failure> {
+pub(super) fn current() -> Result<Settings, Failure> {
     current_on(libc::STDIN_FILENO)
 }
 
 /// The settings of the terminal on `descriptor`.
-pub fn current_on(descriptor: libc::c_int) -> Result<Settings, Failure> {
+pub(super) fn current_on(descriptor: libc::c_int) -> Result<Settings, Failure> {
     let mut settings = MaybeUninit::<libc::termios>::uninit();
     // SAFETY: tcgetattr fills the whole structure when it returns 0.
     if unsafe { libc::tcgetattr(descriptor, settings.as_mut_ptr()) } != 0 {
@@ -31,7 +31,7 @@ pub fn current_on(descriptor: libc::c_int) -> Result<Settings, Failure> {
     Ok(unsafe { settings.assume_init() })
 }
 
-pub fn hide(original: &Settings) -> Result<(), Failure> {
+pub(super) fn hide(original: &Settings) -> Result<(), Failure> {
     hide_on(libc::STDIN_FILENO, original)
 }
 
@@ -39,7 +39,7 @@ pub fn hide(original: &Settings) -> Result<(), Failure> {
 const ECHO_AND_EDITING: libc::tcflag_t = libc::ECHO | libc::ICANON | libc::IEXTEN;
 
 /// [`hide`] for the terminal on `descriptor`.
-pub fn hide_on(descriptor: libc::c_int, original: &Settings) -> Result<(), Failure> {
+pub(super) fn hide_on(descriptor: libc::c_int, original: &Settings) -> Result<(), Failure> {
     let mut hidden = *original;
     // No echo and no line mode: this module edits the line. ISIG keeps Ctrl+C as the
     // interrupt key; quit and suspend become ordinary characters.
@@ -65,27 +65,27 @@ pub fn hide_on(descriptor: libc::c_int, original: &Settings) -> Result<(), Failu
 }
 
 /// Whether `settings` have neither the terminal's echo nor its own line editing.
-pub fn echo_off(settings: &Settings) -> bool {
+pub(super) fn echo_off(settings: &Settings) -> bool {
     settings.c_lflag & ECHO_AND_EDITING == 0
 }
 
 /// The menu's keys need the same settings as a hidden line: every byte at once, no echo.
-pub fn single_keys(original: &Settings) -> Result<(), Failure> {
+pub(super) fn single_keys(original: &Settings) -> Result<(), Failure> {
     hide(original)
 }
 
 /// A Unix terminal carries out control sequences as they come.
-pub fn control_sequences() -> bool {
+pub(super) fn control_sequences() -> bool {
     true
 }
 
-pub fn output_on_error_terminal() -> bool {
+pub(super) fn output_on_error_terminal() -> bool {
     same_terminal(libc::STDOUT_FILENO, libc::STDERR_FILENO)
 }
 
 /// Whether two descriptors are the same terminal: character devices with the same device
 /// number. Two terminals of one system, such as two pseudo-terminals, have different numbers.
-pub fn same_terminal(first: libc::c_int, second: libc::c_int) -> bool {
+pub(super) fn same_terminal(first: libc::c_int, second: libc::c_int) -> bool {
     let device = |descriptor| {
         let mut status = MaybeUninit::<libc::stat>::zeroed();
         // SAFETY: fstat fills the stat when it returns 0; it was zeroed before.
@@ -97,7 +97,7 @@ pub fn same_terminal(first: libc::c_int, second: libc::c_int) -> bool {
     matches!((device(first), device(second)), (Some(first), Some(second)) if first == second)
 }
 
-pub fn columns() -> Option<usize> {
+pub(super) fn columns() -> Option<usize> {
     let mut size = MaybeUninit::<libc::winsize>::zeroed();
     // SAFETY: TIOCGWINSZ fills the winsize when it returns 0; it was zeroed before.
     let read = unsafe { libc::ioctl(libc::STDERR_FILENO, libc::TIOCGWINSZ, size.as_mut_ptr()) };
@@ -108,7 +108,7 @@ pub fn columns() -> Option<usize> {
 
 /// Whether a byte arrives on standard input within `delay`. select, not poll: macOS's poll
 /// does not support terminals.
-pub fn input_within(delay: Duration) -> Result<bool, Failure> {
+pub(super) fn input_within(delay: Duration) -> Result<bool, Failure> {
     loop {
         // SAFETY: an fd_set and a timeval on the stack that select may change, for standard
         // input only; all zero bytes are a valid fd_set.
@@ -136,7 +136,7 @@ pub fn input_within(delay: Duration) -> Result<bool, Failure> {
     }
 }
 
-pub fn restore(original: &Settings) {
+pub(super) fn restore(original: &Settings) {
     // SAFETY: the settings read from this terminal before. A failure cannot be reported
     // usefully here; the shell restores the terminal when the tool ends in any case.
     unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, original) };

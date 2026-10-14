@@ -45,6 +45,27 @@ pub(crate) mod known_answers;
 
 /// Indexes from 2^31 up are hardened (BIP32).
 pub const HARDENED: u32 = 1 << 31;
+
+/// The longest address text read, after its white space is trimmed: longer than every address of
+/// the coins, so that a long text is refused before it is decoded (AUD-024-API019).
+pub const MAX_ADDRESS_BYTES: usize = 128;
+
+/// The longest BIP39 passphrase taken, in bytes as typed: as long as a password may be, and far
+/// beyond any passphrase a wallet asks for (AUD-024-API019).
+pub const MAX_PASSPHRASE_BYTES: usize = crate::MAX_PASSWORD_BYTES;
+
+/// Refuses a BIP39 passphrase longer than [`MAX_PASSPHRASE_BYTES`] (`PASSPHRASE_TOO_LONG`): every
+/// seed of the library is derived after it, and a front end may ask it before any work.
+pub fn require_passphrase_size(passphrase: &str) -> Result<(), MhfeError> {
+    if passphrase.len() > MAX_PASSPHRASE_BYTES {
+        return Err(MhfeError::PassphraseTooLong(passphrase.len()));
+    }
+    Ok(())
+}
+
+/// The most steps a derivation path may have: a BIP32 node keeps its depth in one byte
+/// (AUD-024-API020).
+pub const MAX_PATH_DEPTH: usize = 255;
 /// Receiving and change chains of a BIP44-style account. DIP17 calls them key classes and
 /// hardens them.
 const CHAINS: [u32; 2] = [0, 1];
@@ -151,7 +172,7 @@ impl Coin {
             Self::Litecoin => "L…, M…, 3… or ltc1q…",
             Self::Cosmos => "cosmos1…",
             Self::Injective => "inj1…",
-            Self::Dash => "X… or dash1k…",
+            Self::Dash => "X…, dash1k… or tdash1k…",
         }
     }
 
@@ -178,16 +199,13 @@ impl Coin {
 impl FromStr for Coin {
     type Err = MhfeError;
 
-    /// Reads an identifier such as "bitcoin" or "bitcoin-cash".
+    /// Reads an exact lower-case identifier such as "bitcoin" or "bitcoin-cash". Other case or
+    /// surrounding white space is refused with [`MhfeError::InvalidCoin`].
     fn from_str(text: &str) -> Result<Self, MhfeError> {
-        let wanted = text.trim().to_ascii_lowercase();
         Self::ALL
             .into_iter()
-            .find(|coin| coin.id() == wanted)
-            .ok_or_else(|| {
-                let known: Vec<&str> = Self::ALL.iter().map(|coin| coin.id()).collect();
-                MhfeError::InvalidCoin(format!("the coins are {}", known.join(", ")))
-            })
+            .find(|coin| coin.id() == text)
+            .ok_or(MhfeError::InvalidCoin)
     }
 }
 
@@ -252,10 +270,21 @@ pub struct Address {
 }
 
 impl Address {
-    /// Reads `text` as a single-key receiving address of `coin`. Multisignature and script
-    /// addresses, Zcash shielded addresses and those of other coins are refused.
+    /// Reads `text` as a supported receiving address of `coin`. Bitcoin and Litecoin P2SH
+    /// addresses ("3…", "M…" or Bitcoin testnet "2…") are interpreted as nested SegWit
+    /// (P2SH-P2WPKH, BIP49): a script hash does not reveal its script. Multisignature or other
+    /// P2SH script addresses are read too, but the search derives only single-key nested SegWit
+    /// and normally finds no match. P2WSH and other unsupported witness programs, CashAddr P2SH,
+    /// shielded or TEX Zcash and unsupported coin/network forms give [`MhfeError::InvalidAddress`].
     pub fn parse(coin: Coin, text: &str) -> Result<Self, MhfeError> {
-        encodings::parse(coin, text.trim())
+        let text = text.trim();
+        if text.len() > MAX_ADDRESS_BYTES {
+            return Err(MhfeError::InvalidAddress(format!(
+                "it has {} bytes, more than any address ({MAX_ADDRESS_BYTES})",
+                text.len()
+            )));
+        }
+        encodings::parse(coin, text)
     }
 
     /// The coin the address belongs to.
@@ -323,10 +352,16 @@ impl FromStr for DerivationPath {
     type Err = MhfeError;
 
     /// Strict: starts with `m`, steps separated by `/`, each a decimal number below 2^31 with an
-    /// optional hardened mark; no spaces, signs or empty steps.
+    /// optional hardened mark; no spaces, signs or empty steps; at most [`MAX_PATH_DEPTH`] steps,
+    /// counted before any is read.
     fn from_str(text: &str) -> Result<Self, MhfeError> {
         let invalid =
             || MhfeError::InvalidDerivationPath("it is not a path like m/84'/0'/0'/0/5".to_owned());
+        if text.split('/').count() > MAX_PATH_DEPTH + 1 {
+            return Err(MhfeError::InvalidDerivationPath(format!(
+                "it has more than {MAX_PATH_DEPTH} steps, the deepest a BIP32 key can be"
+            )));
+        }
         let mut steps = text.split('/');
         if steps.next() != Some("m") {
             return Err(invalid());
@@ -365,6 +400,7 @@ impl fmt::Display for DerivationPath {
 }
 
 /// How far the address search goes: accounts `0..accounts`, both chains, indexes `0..indexes`.
+///
 /// Each count is at least 1 and at most 2^31: BIP32 has 2^31 hardened account numbers and 2^31
 /// ordinary address indexes, and a higher number would silently name a different path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -688,8 +724,7 @@ mod tests {
     }
 
     /// The public BIP39 test phrase of BIP84, BIP86 and many wallets.
-    const ABANDON: &str =
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const ABANDON: &str = crate::test_support::ABANDON_12;
 
     fn path(text: &str) -> DerivationPath {
         text.parse().unwrap()
@@ -697,8 +732,8 @@ mod tests {
 
     #[test]
     fn master_fingerprints_match_known_values() {
-        // 73c5da0a is the published value; b4e3f5ed was computed independently with Python's
-        // hashlib from the BIP32 and BIP39 specifications.
+        // 73c5da0a is derived from the root key BIP-0084 publishes; b4e3f5ed was computed
+        // independently with Python's hashlib from the BIP32 and BIP39 specifications.
         assert_eq!(
             hex::encode(master_fingerprint(ABANDON, "").unwrap()),
             "73c5da0a"
@@ -975,8 +1010,54 @@ mod tests {
         for coin in Coin::ALL {
             assert_eq!(coin.id().parse::<Coin>().unwrap(), coin);
         }
-        assert_eq!("Bitcoin-Cash".parse::<Coin>().unwrap(), Coin::BitcoinCash);
+        for refused in ["Bitcoin-Cash", "BITCOIN", " bitcoin", "bitcoin "] {
+            assert_eq!(refused.parse::<Coin>(), Err(MhfeError::InvalidCoin));
+        }
         assert!("solana".parse::<Coin>().is_err());
+    }
+
+    #[test]
+    fn a_p2sh_script_is_read_as_nested_segwit_but_the_single_key_wallet_does_not_match() {
+        // The public AUD-024 1-of-1 CHECKMULTISIG address, not a BIP49 script.
+        let target = Address::parse(Coin::Bitcoin, "39kh1g5VzX7eEEzAnbNZsG2w1WCYNQVu3G").unwrap();
+        assert_eq!(target.address_type(), AddressType::P2shP2wpkh);
+        assert_eq!(
+            find_address(ABANDON, "", &target, None, SearchLimits::new(1, 1).unwrap()).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn unsupported_single_key_forms_name_the_form_and_the_supported_alternative() {
+        // Public forms computed independently from the same HASH160 for AUD-024.
+        for (coin, text, reason) in [
+            (Coin::BitcoinCash, "bitcoincash:zqyx49mu0kkn9ftfj6hje6g2wfer34yfnqnpwfwhlf",
+                "the token-aware address form is not supported; give the bitcoincash:q… address of the same key"),
+            (Coin::Zcash, "tex1j4jdnlkjg7vxk9dz747skwcr9m4js3mvsg2wra",
+                "the TEX address form is not supported; give its transparent t1… form on mainnet"),
+            (Coin::Dash, "yRd4FhXfVGHXpsuZXPNkMrfD9GVj46pnjt",
+                "Dash Core testnet addresses (y…) are not supported; give a mainnet X… address"),
+        ] {
+            assert_eq!(Address::parse(coin, text), Err(MhfeError::InvalidAddress(reason.into())));
+        }
+        // A valid Bech32m testnet TEX address of a synthetic zero hash.
+        let textest =
+            bech32::encode::<bech32::Bech32m>(bech32::Hrp::parse("textest").unwrap(), &[0; 20])
+                .unwrap();
+        assert_eq!(
+            Address::parse(Coin::Zcash, &textest),
+            Err(MhfeError::InvalidAddress(
+                "the TEX address form is not supported; give its transparent t1… form on mainnet"
+                    .into()
+            ))
+        );
+        let p2sh = bs58::encode([0x13; 21]).with_check().into_string();
+        assert_eq!(Address::parse(Coin::Dash, &p2sh), Err(MhfeError::InvalidAddress(
+            "Dash Core testnet P2SH addresses are not supported; give a single-key mainnet X… address".into()
+        )));
+        assert!(
+            Address::parse(Coin::Dash, "tdash1kr0xt5wj85ht5u464rfysjrq75rewz9mysjwf59p").is_ok()
+        );
     }
 
     #[test]
@@ -1165,6 +1246,44 @@ mod tests {
         }
     }
 
+    /// An address text longer than any address, and a BIP39 passphrase over its limit, are
+    /// refused before anything is decoded or derived, at every entry point (AUD-024-API019).
+    #[test]
+    fn long_addresses_and_passphrases_are_refused_first() {
+        let long = "1".repeat(MAX_ADDRESS_BYTES + 1);
+        for coin in [Coin::Bitcoin, Coin::Ethereum, Coin::Cosmos] {
+            let refused = Address::parse(coin, &long).unwrap_err().to_string();
+            assert!(
+                refused.contains("more than any address"),
+                "{coin:?}: {refused}"
+            );
+            let at_limit = Address::parse(coin, &long[1..]).unwrap_err().to_string();
+            assert!(
+                !at_limit.contains("more than any address"),
+                "{coin:?}: {at_limit}"
+            );
+        }
+        let phrase = crate::test_support::ABANDON_12;
+        let at_limit = "a".repeat(MAX_PASSPHRASE_BYTES);
+        let over = "a".repeat(MAX_PASSPHRASE_BYTES + 1);
+        assert!(master_fingerprint(phrase, &at_limit).is_ok());
+        let too_long = |result: Result<(), MhfeError>| {
+            assert_eq!(result.unwrap_err().code(), "PASSPHRASE_TOO_LONG");
+        };
+        too_long(master_fingerprint(phrase, &over).map(|_| ()));
+        too_long(crate::wallet_check::phrase_passes(phrase, &over).map(|_| ()));
+        too_long(crate::wallet_check::PhraseDraw::with_check(&over).map(|_| ()));
+        let container = crate::test_support::zero_12_container();
+        too_long(crate::HiddenWallets::new(&container, &over).map(|_| ()));
+        let reference = crate::Reference::Fingerprint {
+            fingerprint: [0; 4],
+            passphrase: &over,
+        };
+        too_long(crate::rehearsal::refuse_impossible(24, &reference));
+        let confirmation = crate::rehearsal::Confirmation::Wallet(&reference);
+        too_long(confirmation.refuse_for(crate::container::ConfirmationNeeded::WalletOrOwner));
+    }
+
     #[test]
     fn paths_are_parsed_strictly() {
         assert_eq!(path("m/84'/0'/0'/0/5").to_string(), "m/84'/0'/0'/0/5");
@@ -1185,13 +1304,23 @@ mod tests {
         ] {
             assert!(invalid.parse::<DerivationPath>().is_err(), "{invalid:?}");
         }
+        // A BIP32 depth fits one byte: 255 steps at most (AUD-024-API020).
+        let deepest = format!("m{}", "/0".repeat(MAX_PATH_DEPTH));
+        assert_eq!(path(&deepest).to_string(), deepest);
+        let refused = format!("{deepest}/0")
+            .parse::<DerivationPath>()
+            .unwrap_err();
+        assert!(
+            refused.to_string().contains("more than 255 steps"),
+            "{refused}"
+        );
     }
 
     #[test]
     fn fingerprints_are_eight_hex_digits() {
         assert_eq!(
             parse_fingerprint(" 73C5DA0A ").unwrap(),
-            [0x73, 0xc5, 0xda, 0x0a]
+            crate::test_support::ABANDON_12_FINGERPRINT
         );
         for invalid in ["73c5da0", "73c5da0a0", "zzzzzzzz", ""] {
             assert!(parse_fingerprint(invalid).is_err(), "{invalid:?}");

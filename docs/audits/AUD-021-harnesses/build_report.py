@@ -374,7 +374,7 @@ class RemediationReport:
             "", "Shared procedure bindings:", "", "| Procedure | SHA-256 |", "| --- | --- |",
         ]
         for name, relative in helpers.PROCEDURES.items():
-            lines.append(f"| [{name}](../../../multi-chain-wallet-tools/docs/{relative}) | `{report['procedureHashes'][name]}` |")
+            lines.append(f"| local-only: `multi-chain-wallet-tools/docs/{relative}` | `{report['procedureHashes'][name]}` |")
         lines += ["", "Source and original-audit bindings:", "", "| Record / source | Before SHA-256 | After SHA-256 |", "| --- | --- | --- |"]
         for item in binding["changedFiles"]:
             lines.append(f"| [{item['path']}](../../{item['path']}) | `{item['beforeSha256']}` | `{item['afterSha256']}` |")

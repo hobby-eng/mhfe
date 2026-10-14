@@ -9,25 +9,25 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 
-import { bundleClasses, inline, pagePolicy, read, root } from "./bundle-browser-classes.mjs";
+import { bundlePackageClasses, inline, pagePolicy, read, root } from "./bundle-browser-classes.mjs";
 
-const clientModule = bundleClasses(root, [
-  "core/client.js",
-  "repair/repair.js",
-  "passwords/passwords.js",
-  "wallet/wallet.js",
-]);
+import { PHRASE, TEST_PASSWORD, FULL_SIZE_CONTAINER } from "./public-test-data.mjs";
+
+import { scriptArguments } from "./gate-command-line.mjs";
+
+scriptArguments("usage: node scripts/build-browser-check.mjs");
+
+const clientModule = bundlePackageClasses(root);
 const checks = `
 const WORKER_SOURCE = ${inline(read("dist/runtime/worker.js").toString())};
 const WASM_BASE64 = ${inline(read("dist/runtime/mhfe.wasm").toString("base64"))};
 const ARGON2_THREADED = ${inline(read("dist/core/argon2-mt.js").toString())};
 const ARGON2_SINGLE_THREADED = ${inline(read("dist/core/argon2-st.js").toString())};
 
-const PHRASE = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-const PASSWORD = 'public test password';
-// The native tool and an independent OpenSSL script give this container for the phrase above.
-const EXPECTED_CONTAINER =
-  'donate stove tower picnic iron rescue trick shrimp roof rib home cigar bag pledge also nerve cycle famous provide heart ahead chunk caution peace';
+const PHRASE = ${inline(PHRASE)};
+const PASSWORD = ${inline(TEST_PASSWORD)};
+// The published full-cost container, shared by native and browser checks.
+const EXPECTED_CONTAINER = ${inline(FULL_SIZE_CONTAINER)};
 
 const output = document.getElementById('log');
 const log = (line) => {

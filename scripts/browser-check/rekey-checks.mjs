@@ -7,6 +7,7 @@
 /** MhfeClient.rekey: its rounds and results, its confirmations, and its refusals. */
 export async function checkRekey(client, repair, wallet, made) {
   group("MhfeClient.rekey");
+  await checkKeepingOldContainer(client);
   const helpers = await rekeyHelpers(client, made);
   await checkRekeyResult(helpers, wallet);
   await checkRekeyDetectedLength(helpers);
@@ -25,6 +26,24 @@ export async function checkRekey(client, repair, wallet, made) {
   await checkRekeyPassphraseRefusals(helpers);
   await checkRekeyConfirmationTypes(helpers);
   await checkRekeyNewSettings(helpers);
+}
+
+/** keepOldContainer lists the exact old-backup settings, even above the browser's memory limit. */
+export async function checkKeepingOldContainer(client) {
+  for (const { options, expected } of KEEP_OLD_CASES) {
+    expectEqual(
+      await client.keepOldContainer(options),
+      expected,
+      `keepOldContainer preserves the old backup with settings ${JSON.stringify(options ?? {})}`,
+    );
+  }
+  await expectRejection(
+    client.keepOldContainer({ pim: 1024 }),
+    "INVALID_PIM",
+    "keepOldContainer refuses an invalid PIM",
+    undefined,
+    "The PIM must be a whole number from 0 to 1023, not 1024",
+  );
 }
 
 /** What checkRekey's steps share: the requests they vary, encrypt's result, early refusals. */

@@ -41,7 +41,10 @@ const PINS = [
     name: "the vendored Argon2 commit",
     value: COMMIT,
     source: ["vendor/phc-winner-argon2.md", "| Commit | `{}`"],
-    copies: [["src/vectors.rs", "phc-winner-argon2 commit \\ {}"]],
+    copies: [
+      ["src/vectors.rs", "phc-winner-argon2 commit \\ {}"],
+      ["THIRD_PARTY_NOTICES.md", "commit `{}`"],
+    ],
   },
   {
     name: "Emscripten",
@@ -80,6 +83,11 @@ const PINS = [
       ["packaging/Dockerfile.reproducible", "wasm-bindgen-cli --version {}", '"wasm-bindgen {}"'],
       [".github/workflows/ci.yml", "wasm-bindgen-cli --version {}"],
       ["docs/DEVELOPMENT.md", "wasm-bindgen command-line tool {}", "wasm-bindgen-cli --version {}"],
+      [
+        "THIRD_PARTY_NOTICES.md",
+        "wasm-bindgen command-line tool {}",
+        "`wasm-bindgen-cli-support` {}",
+      ],
       ["scripts/bind-wasm.sh", "Needs wasm-bindgen {}"],
       ["scripts/build-wasm.sh", "wasm-bindgen {}"],
       ["scripts/check.sh", "wasm-bindgen {}"],

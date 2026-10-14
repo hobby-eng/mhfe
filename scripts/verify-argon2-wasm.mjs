@@ -3,6 +3,10 @@
 // places them in dist/core/.
 import { createRequire } from "node:module";
 
+import { scriptArguments } from "./gate-command-line.mjs";
+
+scriptArguments("usage: node scripts/verify-argon2-wasm.mjs");
+
 const require = createRequire(import.meta.url);
 const builds = {
   threaded: require("../dist/core/argon2-mt.js"),

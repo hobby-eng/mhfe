@@ -220,16 +220,25 @@ function checkWordWishes() {
   // A chosen word: what it costs before the draw, as the library rates it (src/word_wishes.rs), and
   // a draw that meets it. One chosen word and one word never to use at most; a word at a fixed
   // position, a word never to use and the wallet check keep 228.98 bits, the least they can keep.
+  // Each word after a line break of its own, as the class sends them (AUD-024-API009).
+  const entries = (list) => list.map((word) => `\n${word}`).join("");
   const describeDraw = (words, places, neverUse, walletCheck) =>
-    JSON.parse(wallet.describeDraw(encode(words), Uint32Array.from(places), neverUse, walletCheck));
-  assert.deepEqual(describeDraw("", [], "", false), {
+    JSON.parse(
+      wallet.describeDraw(
+        encode(entries(words)),
+        Float64Array.from(places),
+        entries(neverUse),
+        walletCheck,
+      ),
+    );
+  assert.deepEqual(describeDraw([], [], [], false), {
     randomBits: 256,
     randomness: "full",
     expectedDraws: 1,
     recognisable: false,
     fixedPosition: false,
   });
-  assert.deepEqual(describeDraw("", [], "", true), {
+  assert.deepEqual(describeDraw([], [], [], true), {
     randomBits: 240,
     randomness: "ample",
     expectedDraws: 65536,
@@ -237,54 +246,70 @@ function checkWordWishes() {
     fixedPosition: false,
   });
   // A word never to use with the check is rated as the check alone (AUD-015-UI003).
-  const neverUseChecked = describeDraw("", [], "abandon", true);
+  const neverUseChecked = describeDraw([], [], ["abandon"], true);
   assert.equal(neverUseChecked.randomness, "ample");
   assert.ok(neverUseChecked.randomBits > 239.98 && neverUseChecked.randomBits < 239.99);
-  assert.equal(describeDraw("happy", [0], "", true).fixedPosition, false);
+  assert.equal(describeDraw(["happy"], [0], [], true).fixedPosition, false);
   // A chosen word makes the phrase recognisable to someone who learns or guesses it; a word never
   // to use alone does not.
-  const worst = describeDraw("happy", [1], "abandon", true);
+  const worst = describeDraw(["happy"], [1], ["abandon"], true);
   assert.equal(worst.randomness, "notRecommended");
   assert.equal(worst.recognisable, true);
   assert.equal(worst.fixedPosition, true);
   assert.ok(worst.randomBits > 228.98 && worst.randomBits < 228.99, `${worst.randomBits}`);
-  assert.equal(describeDraw("", [], "abandon", false).recognisable, false);
-  assert.equal(describeDraw("zoo", [24], "", false).expectedDraws, 256);
+  assert.equal(describeDraw([], [], ["abandon"], false).recognisable, false);
+  assert.equal(describeDraw(["zoo"], [24], [], false).expectedDraws, 256);
   expectMessage(
     "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: the chosen word is not an " +
       "English BIP39 word",
-    () => describeDraw("notaword", [1], "", false),
+    () => describeDraw(["notaword"], [1], [], false),
   );
   expectMessage(
     "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: choose at most 1 word",
-    () => describeDraw("happy zoo", [1, 2], "", false),
+    () => describeDraw(["happy", "zoo"], [1, 2], [], false),
   );
   expectMessage(
     "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: name at most 1 word never " +
       "to use",
-    () => describeDraw("", [], "abandon zoo", false),
+    () => describeDraw([], [], ["abandon", "zoo"], false),
   );
-  expectCode("INVALID_WORD_WISH", () => describeDraw("happy", [25], "", false));
-  expectCode("INVALID_REQUEST", () => describeDraw("happy zoo", [1], "", false));
+  expectCode("INVALID_WORD_WISH", () => describeDraw(["happy"], [25], [], false));
+  expectCode("INVALID_REQUEST", () => describeDraw(["happy", "zoo"], [1], [], false));
+  // An empty or blank entry stays an entry, which the library refuses (AUD-024-API009); a place
+  // that is not a whole number from 0, and a walletCheck that is not a boolean, are refused, not
+  // converted (AUD-024-API022).
+  for (const [words, places, neverUse] of [
+    [[""], [1], []],
+    [[" "], [0], []],
+    [[], [], ["", "abandon"]],
+    [["happy"], [Number.NaN], []],
+    [["happy"], [1.5], []],
+    [["happy"], [2 ** 32], []],
+  ]) {
+    expectCode("INVALID_WORD_WISH", () => describeDraw(words, places, neverUse, false));
+  }
+  for (const walletCheck of ["true", 1, undefined]) {
+    expectCode("INVALID_REQUEST", () => describeDraw([], [], [], walletCheck));
+  }
   /** A phrase drawn without a passphrase that meets `words` at `places` and avoids `neverUse`. */
   const drawnWith = (words, places, neverUse) =>
     JSON.parse(
       wallet.drawPhrase(
         noBytes(),
         noBytes(),
-        encode(words),
-        Uint32Array.from(places),
-        neverUse,
+        encode(entries(words)),
+        Float64Array.from(places),
+        entries(neverUse),
         false,
         testRandom,
         noop,
       ),
     ).phrase.split(" ");
-  const atTheEnd = drawnWith("ZOO", [24], "abandon");
+  const atTheEnd = drawnWith(["ZOO"], [24], ["abandon"]);
   assert.equal(atTheEnd.length, 24);
   assert.equal(atTheEnd[23], "zoo", "a chosen word at its position");
   assert.ok(!atTheEnd.includes("abandon"), "no word never to use");
-  assert.ok(drawnWith("happ", [0], "").includes("happy"), "a chosen word anywhere");
+  assert.ok(drawnWith(["happ"], [0], []).includes("happy"), "a chosen word anywhere");
 }
 
 /** The hints below a line of words being typed. */
@@ -320,7 +345,7 @@ function checkWordHints() {
  * The message a page reads for a refusal of the WebAssembly: its text after the code, begun with a
  * capital letter as sentence() in web/runtime.js writes it.
  */
-function pageMessageOf(code, action) {
+export function pageMessageOf(code, action, description = code) {
   let message = "";
   assert.throws(
     action,
@@ -328,10 +353,24 @@ function pageMessageOf(code, action) {
       message = error.message;
       return message.startsWith(`${code}: `);
     },
-    code,
+    description,
   );
   const text = message.slice(code.length + 2);
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** A refusal-test engine: known answers execute, while any cipher round is a failure. */
+export async function knownAnswersOnly() {
+  /** An Argon2 engine for refusals: the known answer that a call checks first, and no round. */
+  const knownAnswerEngine = argon2Engine(await builds["single-threaded"]());
+  return {
+    derive: (password, salt, memoryKib, passes, key) => {
+      if (!KNOWN_ANSWER_COSTS.includes(`${memoryKib}/${passes}`)) {
+        assert.fail("a refusal came after the first round started");
+      }
+      knownAnswerEngine.derive(password, salt, memoryKib, passes, key);
+    },
+  };
 }
 
 /**
@@ -340,16 +379,8 @@ function pageMessageOf(code, action) {
  * classes' with these.
  */
 export async function checkLibraryMessages() {
-  /** An Argon2 engine for refusals: the known answer that a call checks first, and no round. */
-  const knownAnswerEngine = argon2Engine(await builds["single-threaded"]());
-  const noArgon2 = {
-    derive: (password, salt, memoryKib, passes, key) => {
-      if (!KNOWN_ANSWER_COSTS.includes(`${memoryKib}/${passes}`)) {
-        assert.fail("a refusal came after the first round started");
-      }
-      knownAnswerEngine.derive(password, salt, memoryKib, passes, key);
-    },
-  };
+  checkRekeyRefusalOrder();
+  const noArgon2 = await knownAnswersOnly();
   /**
    * The library's refusal, with `code`, of the new settings `newPim` and `newMemoryLevel` of a
    * rekey.
@@ -412,6 +443,27 @@ export async function checkLibraryMessages() {
     "The new PIM must be a whole number from 0 to 1023, not 1024",
   );
   return LIBRARY_MESSAGES;
+}
+
+/** Binding confirmation refusals precede even an Argon2 engine whose known answer would fail. */
+function checkRekeyRefusalOrder() {
+  let derives = 0;
+  const faulty = {
+    derive: () => {
+      derives += 1;
+      throw new Error("the Argon2 known answer failed");
+    },
+  };
+  const session = new core.RekeySession(FULL_SIZE_CONTAINER, 0, encode("p"), "", 0, 0, 0, faulty);
+  try {
+    session.setNew(encode("n"), encode("n"), "", 0, 0, 0, 0);
+    expectCode("REFERENCE_REQUIRED", () =>
+      session.recover("builtInCheck", "", "", "", noBytes(), false, noop),
+    );
+    assert.equal(derives, 0, "confirmation was refused before the engine's known answer");
+  } finally {
+    session.free();
+  }
 }
 
 /**

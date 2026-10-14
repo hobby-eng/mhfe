@@ -6,7 +6,8 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use super::{
-    js_error, json, review_choice, run_self_check, secret_json, whole_number, JsRandom, SecretText,
+    js_error, json, review_choice, run_self_check, secret_json, whole_number, yes_or_no, JsRandom,
+    SecretText,
 };
 use crate::check_word::{self, Correction, PasswordReview, Reading, PROFILE};
 use crate::new_password::{
@@ -79,12 +80,13 @@ struct ReviewJson<'a> {
 pub fn review_password(
     password_utf8: Vec<u8>,
     repeat_utf8: Vec<u8>,
-    repeated: bool,
+    repeated: JsValue,
 ) -> Result<js_sys::JsString, JsError> {
     let password = SecretText::new(password_utf8);
     let repeat = SecretText::new(repeat_utf8);
     let typed = password.text(MhfeError::InvalidPasswordUtf8)?;
     let repeat = repeat.text(MhfeError::InvalidPasswordUtf8)?;
+    let repeated = yes_or_no(&repeated, "repeated")?;
     check_word::check_typed_twice(typed, repeated.then_some(repeat)).map_err(js_error)?;
     let review = PasswordReview::of(typed);
     let restorable = review.reading() == Reading::Restorable;

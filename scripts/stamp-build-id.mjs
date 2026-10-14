@@ -18,6 +18,8 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { scriptArguments } from "./gate-command-line.mjs";
+
 /** The custom section that names the build; web/worker-runtime.js reads it. */
 const BUILD_SECTION = "mhfe-build";
 /** Hex digits of the SHA-256 kept: 64 bits tell builds apart well beyond any need. */
@@ -42,11 +44,9 @@ const BUILD_FILES = [
 /** A build constant before stamping, such as `const CLIENT_BUILD_ID = "development";`. */
 const UNSTAMPED = /^((?:export )?const [A-Z0-9_]*BUILD_ID = )"development";$/gmu;
 
-const [packageDir] = process.argv.slice(2);
-if (packageDir === undefined) {
-  console.error("Usage: node scripts/stamp-build-id.mjs <package folder>");
-  process.exit(1);
-}
+const {
+  positionals: [packageDir],
+} = scriptArguments("usage: node scripts/stamp-build-id.mjs <package folder>", { operands: 1 });
 
 const files = new Map(BUILD_FILES.map((path) => [path, readFileSync(join(packageDir, path))]));
 const wasm = files.get(WASM_FILE);

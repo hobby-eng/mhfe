@@ -233,6 +233,19 @@ function checkEndsAfterRefusal(run) {
     );
     session.free();
   }
+  const defaultOwner = rekeyStating(run, 15);
+  expectCode("LENGTH_DIFFERS", () =>
+    defaultOwner.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
+  );
+  const defaultShown = JSON.parse(
+    defaultOwner.confirmAgain("owner", "", "", "", noBytes(), 0, () => {}),
+  );
+  assert.equal(
+    defaultShown.ownerCheck.statedWords,
+    15,
+    "the library defaults to the only owner length",
+  );
+  defaultOwner.free();
   const notRefused = rekeyStating(run, 12);
   assert.equal(notRefused.ownerLengths(), "null");
   expectMessage("INVALID_REQUEST: invalid request: a rekey step out of its order", () =>

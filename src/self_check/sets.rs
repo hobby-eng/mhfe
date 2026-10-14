@@ -220,7 +220,7 @@ pub fn native<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
 mod tests {
     use super::*;
 
-    /// Every check of the plan, in the order the tool runs them, each once.
+    /// Every check of the native set, in the order the tool runs them, each once.
     const NATIVE_IDS: [&str; 27] = [
         "cipher-hashes",
         "argon2",
@@ -356,9 +356,9 @@ mod tests {
         (report, total)
     }
 
-    /// The startup set of the command-line tool stays within its budget: a quarter of a second in
-    /// a release build, where it takes a few tens of milliseconds, so that a fixed wait such as the
-    /// one AUD-023-DOC002 found fails it. A debug build runs the hashes
+    /// A smoke check of the whole startup set's budget: a quarter of a second in a release build,
+    /// where it takes a few tens of milliseconds. The search module separately checks that an
+    /// instant comparison does not wait out a progress interval. A debug build runs the hashes
     /// and the curve arithmetic unoptimized, many times slower, so its bound is generous. Run
     /// `cargo test --release --lib the_startup_set_stays_within_its_budget -- --nocapture` to see
     /// the time of each check.

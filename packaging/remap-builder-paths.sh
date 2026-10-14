@@ -1,6 +1,6 @@
 # Sourced, not run, by every build of a program or WebAssembly that a release ships or that
 # scripts/check-release-artifacts.sh checks: packaging/Dockerfile.reproducible,
-# scripts/package-release.sh, scripts/check.sh and scripts/build-wasm.sh; and by
+# scripts/package-release.sh, scripts/check.sh and scripts/bind-wasm.sh; and by
 # scripts/check-release-artifacts.sh itself for the list of directories it refuses. Shell code that
 # both dash, the /bin/sh of the Dockerfile, and bash run.
 #

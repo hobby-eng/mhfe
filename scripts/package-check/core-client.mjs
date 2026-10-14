@@ -4,10 +4,11 @@
 // session of hidden wallets, and its copies of secrets, which it wipes.
 import assert from "node:assert/strict";
 
-import { PHRASE } from "../public-test-data.mjs";
+import { KEEP_OLD_CASES, PHRASE } from "../public-test-data.mjs";
 import { checkClientRefusals, checkMisplacedPassphrases, clientCalls } from "./client-refusals.mjs";
 import { checkRekeyCallbacks } from "./client-rekey.mjs";
 import { expectPhraseTransferred, nextTurn } from "./expect.mjs";
+import { compiledPackage, inProcessWorker, workerScript } from "./in-process-worker.mjs";
 import { sources } from "./page-classes.mjs";
 import {
   RealTextEncoder,
@@ -30,9 +31,11 @@ export async function checkCoreClient(classes, libraryMessages) {
   await checkEncryptRequest(client);
   await checkUnansweredEncrypt(client);
   await checkFastMode(client);
+  await checkKeepingOldContainer(client);
   await checkReadingAndSearch(client, MhfeCancelledError);
   await checkClientRefusals(client, libraryMessages);
   await checkMisplacedPassphrases(client);
+  await checkUnknownWorkerCode(client);
   await checkFailingOperations(client);
   await checkRekeyCallbacks(client, MhfeError);
   await checkHiddenWalletSession(client, MhfeCancelledError);
@@ -40,6 +43,41 @@ export async function checkCoreClient(classes, libraryMessages) {
   await checkCallerArrays(client);
   console.log("The core client passes its checks with a stand-in worker.");
   return client;
+}
+
+/** The class dispatches every old-backup description through the real worker and Rust binding. */
+async function checkKeepingOldContainer(client) {
+  for (const { options, expected } of KEEP_OLD_CASES) {
+    const keeping = client.keepOldContainer(options);
+    const worker = await started((message) => message.operation === "keepOldContainer");
+    const replies = await inProcessWorker(workerScript)({
+      ...worker.messages[0],
+      compiled: compiledPackage,
+    });
+    worker.reply(replies.at(-1));
+    assert.deepEqual(await keeping, expected);
+  }
+  await assert.rejects(client.keepOldContainer({ pim: 1024 }), {
+    code: "INVALID_PIM",
+    message: "The PIM must be a whole number from 0 to 1023, not 1024",
+  });
+}
+
+/** An error with an undeclared code cannot enter the public error enum or keep a job alive. */
+async function checkUnknownWorkerCode(client) {
+  const checking = client.check({
+    container: "public synthetic container",
+    password: "public test password",
+    reference: { fingerprint: "00000000" },
+  });
+  const refused = assert.rejects(checking, { code: "PACKAGE_MISMATCH" });
+  const worker = await started((message) => message.operation === "check");
+  worker.reply({
+    type: "error",
+    error: { code: "UNDECLARED_CODE", message: "public synthetic error" },
+  });
+  await refused;
+  assert.ok(worker.terminated, "an unknown code ends the job");
 }
 
 /** What an encryption sends its worker, and how the worker's replies reach the page. */
@@ -265,8 +303,9 @@ async function checkHiddenWalletSession(client, MhfeCancelledError) {
   const first = session.open({ password: "one", passwordRepeat: "one" });
   await nextTurn();
   assert.equal(new TextDecoder().decode(worker.messages[1].value.password), "one");
-  worker.reply({ type: "ask", question: "opened", value: { phrase: "w", words: 24 } });
-  assert.deepEqual(await first, { phrase: "w", words: 24 });
+  const opened = { phrase: "w", words: 24, fingerprintWithoutPassphrase: "00000000" };
+  worker.reply({ type: "ask", question: "opened", value: opened });
+  assert.deepEqual(await first, opened);
   const again = session.open({ password: "one", passwordRepeat: "one" });
   await nextTurn();
   worker.reply({

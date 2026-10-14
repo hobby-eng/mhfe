@@ -49,28 +49,7 @@ for umask in 022 002 027 077; do
 done
 
 # The bits each archive lists: 0644 for a file, 0755 for a program, a launcher and a folder.
-python3 - "$scratch/022.tar.gz" "$scratch/022.zip" <<'PY' || failed=1
-import sys
-import tarfile
-import zipfile
-
-EXECUTABLE = {"mhfe", "mhfe-launch.sh"}
-found = {}
-with tarfile.open(sys.argv[1]) as packed:
-    for member in packed.getmembers():
-        found[("tar", member.name.removeprefix("./"))] = member.mode
-with zipfile.ZipFile(sys.argv[2]) as packed:
-    for member in packed.infolist():
-        found[("zip", member.filename.removeprefix("./"))] = (member.external_attr >> 16) & 0o7777
-wrong = [
-    f"{kind} {name or '.'}: {mode:o}"
-    for (kind, name), mode in sorted(found.items())
-    if mode != (0o755 if name in EXECUTABLE or name in ("", ".", "licenses") else 0o644)
-]
-if wrong or len(found) < 10:
-    print(f"The archives list other permission bits: {wrong or found}", file=sys.stderr)
-    sys.exit(1)
-PY
+python3 scripts/verify-archive-permissions.py "$scratch/022.tar.gz" "$scratch/022.zip" || failed=1
 
 if ((failed)); then
   exit 1

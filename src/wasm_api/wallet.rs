@@ -6,7 +6,8 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use super::{
-    call_page, js_error, json, run_self_check, secret_json, whole_number, JsRandom, SecretText,
+    call_page, js_error, json, run_self_check, secret_json, whole_number, yes_or_no, JsRandom,
+    SecretText,
 };
 use crate::self_check::sets;
 use crate::wallet::{master_fingerprint_text, AddressSearch, Coin, SearchLimits};
@@ -57,26 +58,35 @@ pub fn wallet_parameters() -> Result<String, JsError> {
     })
 }
 
-/// The wishes of a new phrase as a page passes them: `chosen_words`, the chosen words one space
-/// apart, a secret; `places`, the place of each, 0 for anywhere and otherwise its position from
-/// 1; and `never_use`, the words never to use, one space apart.
-fn wishes_from(chosen_words: &str, places: &[u32], never_use: &str) -> Result<WordWishes, JsError> {
-    let words: Vec<&str> = chosen_words.split_whitespace().collect();
+/// The wishes of a new phrase as a page passes them: `chosen_words`, the chosen words, a secret;
+/// `places`, the place of each, 0 for anywhere and otherwise its position from 1; and `never_use`,
+/// the words never to use. Each word comes after a line break of its own, so that an empty, blank
+/// or two-word entry stays one entry, which the library refuses, rather than vanishing or
+/// splitting (AUD-024-API009). A place is refused unless it is a whole number from 0
+/// (AUD-024-API022).
+fn wishes_from(chosen_words: &str, places: &[f64], never_use: &str) -> Result<WordWishes, JsError> {
+    let words = entries(chosen_words);
     if words.len() != places.len() {
         return Err(js_error(MhfeError::InvalidRequest(
             "give one place for every chosen word".to_owned(),
         )));
     }
-    let chosen: Vec<(Place, &str)> = places
-        .iter()
-        .zip(words)
-        .map(|(&place, word)| match place {
-            0 => (Place::Anywhere, word),
-            position => (Place::At(position as usize), word),
-        })
-        .collect();
-    let never: Vec<&str> = never_use.split_whitespace().collect();
-    WordWishes::new(&chosen, &never).map_err(js_error)
+    let code = MhfeError::InvalidWordWish(String::new()).code();
+    let mut chosen: Vec<(Place, &str)> = Vec::with_capacity(words.len());
+    for (&place, word) in places.iter().zip(words) {
+        chosen.push(
+            match whole_number(place, code, "a chosen word's position")? {
+                0 => (Place::Anywhere, word),
+                position => (Place::At(position as usize), word),
+            },
+        );
+    }
+    WordWishes::new(&chosen, &entries(never_use)).map_err(js_error)
+}
+
+/// The entries of `text`, each after a line break: none for an empty text.
+fn entries(text: &str) -> Vec<&str> {
+    text.split('\n').skip(1).collect()
 }
 
 /// The refusal of chosen words that are not UTF-8 text.
@@ -107,13 +117,17 @@ struct DrawJson {
 #[wasm_bindgen(js_name = describeDraw)]
 pub fn describe_draw(
     chosen_words_utf8: Vec<u8>,
-    places: Vec<u32>,
+    places: Vec<f64>,
     never_use: &str,
-    wallet_check: bool,
+    wallet_check: JsValue,
 ) -> Result<String, JsError> {
     let chosen_words = SecretText::new(chosen_words_utf8);
     let wishes = wishes_from(chosen_words.text(not_utf8())?, &places, never_use)?;
-    let check_bits = if wallet_check { WALLET_CHECK_BITS } else { 0 };
+    let check_bits = if yes_or_no(&wallet_check, "walletCheck")? {
+        WALLET_CHECK_BITS
+    } else {
+        0
+    };
     let odds = wishes.odds(check_bits);
     json(&DrawJson {
         random_bits: odds.random_bits,
@@ -182,7 +196,7 @@ pub fn describe_address(
     let limits = match whole_number(
         scan_gap,
         MhfeError::InvalidRequest(String::new()).code(),
-        "scanGap",
+        "the scan gap",
     )? {
         0 => SearchLimits::default(),
         gap => SearchLimits::first_account(gap).map_err(js_error)?,
@@ -215,16 +229,16 @@ struct NewPhraseJson<'a> {
 /// words, walletCheck, fingerprintWithPassphrase }`.
 #[expect(
     clippy::too_many_arguments,
-    reason = "the WebAssembly boundary takes every input as an argument of its own"
+    reason = "the WebAssembly binding takes every input as an argument of its own"
 )]
 #[wasm_bindgen(js_name = drawPhrase)]
 pub fn draw_phrase(
     passphrase_utf8: Vec<u8>,
     passphrase_repeat_utf8: Vec<u8>,
     chosen_words_utf8: Vec<u8>,
-    places: Vec<u32>,
+    places: Vec<f64>,
     never_use: &str,
-    wallet_check: bool,
+    wallet_check: JsValue,
     mut random: JsRandom,
     on_draws: &js_sys::Function,
 ) -> Result<js_sys::JsString, JsError> {
@@ -237,6 +251,7 @@ pub fn draw_phrase(
     let repeat = repeat.text(MhfeError::InvalidPassphrase)?;
     wallet_check::require_same_passphrase(passphrase, repeat).map_err(js_error)?;
     let wishes = wishes_from(chosen_words.text(not_utf8())?, &places, never_use)?;
+    let wallet_check = yes_or_no(&wallet_check, "walletCheck")?;
     let draw = if wallet_check {
         PhraseDraw::with_check(passphrase)
     } else {

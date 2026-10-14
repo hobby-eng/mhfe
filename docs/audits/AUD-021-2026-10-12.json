@@ -30,7 +30,10 @@
   "scope": {
     "repository": "https://github.com/hobby-eng/mhfe",
     "mode": "Scoped authorized remediation follow-up, not a new full security scan",
-    "findings": ["AUD-020-SEC001", "AUD-020-SEC002"],
+    "findings": [
+      "AUD-020-SEC001",
+      "AUD-020-SEC002"
+    ],
     "included": [
       "src/bin/mhfe/protect.rs",
       "src/bin/mhfe/settings.rs",
@@ -816,7 +819,11 @@
       {
         "label": "diff-check",
         "command": "git diff --check",
-        "argv": ["git", "diff", "--check"],
+        "argv": [
+          "git",
+          "diff",
+          "--check"
+        ],
         "environment": {
           "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
           "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
@@ -865,7 +872,11 @@
       {
         "label": "rust-format",
         "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo fmt --check",
-        "argv": ["/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo", "fmt", "--check"],
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "fmt",
+          "--check"
+        ],
         "environment": {
           "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
           "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
@@ -966,7 +977,12 @@
       {
         "label": "terminal-controls",
         "command": "python3 -B docs/audits/AUD-021-harnesses/terminal.py target/debug/mhfe",
-        "argv": ["python3", "-B", "docs/audits/AUD-021-harnesses/terminal.py", "target/debug/mhfe"],
+        "argv": [
+          "python3",
+          "-B",
+          "docs/audits/AUD-021-harnesses/terminal.py",
+          "target/debug/mhfe"
+        ],
         "environment": {
           "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
           "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
@@ -1172,7 +1188,7 @@
   "assessment": "Both original Low findings are fixed with passing scoped dirty-source verification. No new finding IDs or release-acceptance claim; signed-commit formal closure remains pending.",
   "reportGenerator": {
     "path": "docs/audits/AUD-021-harnesses/build_report.py",
-    "sha256": "bf26595739aaffab88720740cf80b8cef9c4dc752140df8911d5ef65e20d01b3"
+    "sha256": "184809bd0fdc0b71ebcc014abddd47db7da2023a9989267f8e4fc6cd5cde350d"
   },
   "privacyRedaction": {
     "timeZone": "UTC (+00:00)",
@@ -1182,7 +1198,9 @@
       {
         "dateUtc": "2026-10-13",
         "authorizedBy": "repository owner",
-        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "changes": [
+          "Explicit report time zone label: UTC (+00:00)."
+        ],
         "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
         "documentBindings": [],
         "reportDocument": {
@@ -1210,5 +1228,29 @@
       }
     ],
     "kind": "privacy-only-metadata-redaction"
-  }
+  },
+  "documentationAmendments": [
+    {
+      "completedUtc": "2026-10-14T18:29:45.759752+00:00",
+      "authorizedBy": "repository owner",
+      "kind": "documentation-only",
+      "historicalChecksRerun": false,
+      "changes": [
+        "DOC004: sibling-workspace procedure paths are labelled local-only code spans; their pinned SHA-256 values are unchanged."
+      ],
+      "reportDocument": {
+        "document": "docs/audits/AUD-021-2026-10-12.md",
+        "previousSha256": "acd48518fa4d6a592b4163e710f5a5694801362466caf39636bd527eda6d82a6",
+        "sha256": "5bf7bdf06aada13c37d989824c2529d6e5cc39ffc08aff2a0eaeadcd8795171e"
+      },
+      "documentBindings": [
+        {
+          "document": "docs/audits/AUD-021-harnesses/build_report.py",
+          "previousRecordedSha256": "bf26595739aaffab88720740cf80b8cef9c4dc752140df8911d5ef65e20d01b3",
+          "sha256": "184809bd0fdc0b71ebcc014abddd47db7da2023a9989267f8e4fc6cd5cde350d",
+          "change": "Owner-authorized record-generation correction; historical executions were not repeated."
+        }
+      ]
+    }
+  ]
 }

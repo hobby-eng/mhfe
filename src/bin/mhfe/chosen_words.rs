@@ -3,13 +3,13 @@
 //! (mhfe::word_wishes); this module asks and tells.
 
 use clap::Args;
+use mhfe::memory::LockedText;
 use mhfe::wallet_check::PhraseDraw;
 use mhfe::word_hints::WordList;
 use mhfe::word_wishes::{
     Place, Randomness, WishOdds, WordWishes, MAX_CHOSEN_WORDS, MAX_NEVER_USE_WORDS, PHRASE_WORDS,
     RECOMMENDED_RANDOM_BITS,
 };
-use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::{self, Failure};
@@ -26,7 +26,7 @@ const _: () = assert!(MAX_CHOSEN_WORDS == 1 && MAX_NEVER_USE_WORDS == 1);
 /// `--choose-word` and `--never-use` of `mhfe new`: whether a word of the new phrase is chosen,
 /// and a word it must not hold.
 #[derive(Args)]
-pub struct WordWishOptions {
+pub(crate) struct WordWishOptions {
     /// A word the new phrase must not hold
     #[arg(long = "never-use", value_name = "WORD", long_help = never_use_help())]
     never_use: Option<String>,
@@ -61,7 +61,7 @@ impl WordWishOptions {
     /// Refuses, before any question, a word the library would refuse whatever word is chosen: a
     /// word not on the list, or more than it takes. Asking for a chosen word again could never
     /// mend it (AUD-015-UI002).
-    pub fn check(&self) -> Result<(), Failure> {
+    pub(crate) fn check(&self) -> Result<(), Failure> {
         if let Some(words) = self.words() {
             let never: Vec<&str> = words.iter().map(String::as_str).collect();
             WordWishes::new(&[], &never)?;
@@ -85,7 +85,7 @@ fn split_words(text: &str) -> Vec<String> {
 
 /// Asks for the wishes of the new phrase until the library takes them for `draw`, and says what
 /// they cost: none when the person wants every word at random.
-pub fn ask(
+pub(crate) fn ask(
     input: &mut Input,
     draw: PhraseDraw,
     option: &WordWishOptions,
@@ -109,13 +109,15 @@ pub fn ask(
         };
         let never_use = match &given {
             Some(words) => words.clone(),
-            None if wants_words => read_never_use(input)?,
+            None if wants_words => read_never_use(input, &chosen)?,
             None => Vec::new(),
         };
         let pairs: Vec<(Place, &str)> = chosen
             .iter()
-            .map(|(place, word)| (*place, word.as_str()))
+            .map(|(place, word)| (*place, &**word))
             .collect();
+        // A supplied never-use word cannot be changed: a conflict asks for the chosen word.
+        // Asked never-use words have already been checked against the retained chosen word.
         let never: Vec<&str> = never_use.iter().map(String::as_str).collect();
         match WordWishes::new(&pairs, &never) {
             Ok(wishes) => {
@@ -154,20 +156,34 @@ fn ask_whether(input: &mut Input) -> Result<bool, Failure> {
 }
 
 /// The chosen word with its place, typed hidden on a private screen as part of the secret phrase:
-/// none for Enter alone.
-fn read_chosen(input: &mut Input) -> Result<Vec<(Place, Zeroizing<String>)>, Failure> {
-    let _screen = PrivateScreen::enter(input, Operation::New.title());
-    let word = input.secret_words("Chosen word, or Enter for none", WordList::Bip39)?;
+/// none for Enter alone. The word stays in its locked buffer while the word never to use is asked
+/// (AUD-024-SEC013).
+fn read_chosen(input: &mut Input) -> Result<Vec<(Place, LockedText)>, Failure> {
+    let _screen = PrivateScreen::enter(input, Operation::New.title())?;
+    let word = loop {
+        let word = input.secret_words("Chosen word, or Enter for none", WordList::Bip39)?;
+        let checked = if word.is_empty() {
+            Ok(())
+        } else {
+            WordWishes::new(&[(Place::Anywhere, &word)], &[]).map(|_| ())
+        };
+        if input
+            .accepted(checked, "Type the chosen word again.")?
+            .is_some()
+        {
+            break word;
+        }
+    };
     if word.is_empty() {
         return Ok(Vec::new());
     }
-    let place = read_place(input)?;
-    Ok(vec![(place, Zeroizing::new(word.to_string()))])
+    let place = read_place(input, &word)?;
+    Ok(vec![(place, word)])
 }
 
 /// The place of the chosen word: a position in the phrase, or Enter for anywhere. The library
 /// refuses a position outside it.
-fn read_place(input: &mut Input) -> Result<Place, Failure> {
+fn read_place(input: &mut Input, word: &str) -> Result<Place, Failure> {
     loop {
         let typed = input.visible(&format!(
             "Its position, 1 to {PHRASE_WORDS}, or Enter for anywhere: "
@@ -177,7 +193,18 @@ fn read_place(input: &mut Input) -> Result<Place, Failure> {
             return Ok(Place::Anywhere);
         }
         match typed.parse::<usize>() {
-            Ok(position) => return Ok(Place::At(position)),
+            Ok(position) => {
+                let place = Place::At(position);
+                if input
+                    .accepted(
+                        WordWishes::new(&[(place, word)], &[]),
+                        "Type its position again.",
+                    )?
+                    .is_some()
+                {
+                    return Ok(place);
+                }
+            }
             Err(_) => {
                 style::retry(format!(
                     "Type a number from 1 to {PHRASE_WORDS}, or Enter alone for anywhere."
@@ -188,15 +215,35 @@ fn read_place(input: &mut Input) -> Result<Place, Failure> {
 }
 
 /// The word never to use, typed visibly on a step of its own: it is not part of the phrase.
-fn read_never_use(input: &mut Input) -> Result<Vec<String>, Failure> {
-    flow::step();
-    let typed = input.visible_words("Word never to use, or Enter for none: ", WordList::Bip39)?;
-    Ok(split_words(&typed))
+fn read_never_use(
+    input: &mut Input,
+    chosen: &[(Place, LockedText)],
+) -> Result<Vec<String>, Failure> {
+    flow::step()?;
+    let pairs: Vec<_> = chosen
+        .iter()
+        .map(|(place, word)| (*place, &**word))
+        .collect();
+    loop {
+        let typed =
+            input.visible_words("Word never to use, or Enter for none: ", WordList::Bip39)?;
+        let words = split_words(&typed);
+        let never: Vec<_> = words.iter().map(String::as_str).collect();
+        if input
+            .accepted(
+                WordWishes::new(&pairs, &never),
+                "Type the word never to use again.",
+            )?
+            .is_some()
+        {
+            return Ok(words);
+        }
+    }
 }
 
 /// Says what the wishes leave of the phrase's randomness, as the library rates it, and what chosen
 /// words give away.
-pub fn tell(odds: WishOdds) {
+pub(crate) fn tell(odds: WishOdds) {
     if odds.recognisable {
         style::warn(
             "If someone learns or guesses your chosen word, it lets them rule out almost every \

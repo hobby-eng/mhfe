@@ -536,7 +536,8 @@ export class MhfeClient {
    * with a TypeError. Resolves
    * only after the container has been decrypted again and checked; a failed check rejects with
    * VERIFICATION_FAILED. `onUnverified` receives the container before the check, for showing it
-   * marked as not yet verified; the page must then report how the check ended. If `onUnverified`
+   * marked as not yet verified; ask the user not to rely on it until the check ends, then report
+   * how it ended. If `onUnverified`
    * fails like `onProgress` can, the operation stops and rejects with CALLBACK_FAILED.
    */
   encrypt(
@@ -615,7 +616,11 @@ export class MhfeClient {
     /** Whether searchWallet() with the phrase's own checks is offered too. */
     offersOwnChecks: boolean;
   }>;
-  /** Searches for up to two missing words with the decoy wallet, without a password. */
+  /**
+   * Searches for up to two missing words with the decoy wallet, without a password. Every
+   * candidate is compared; a reference that more than one matches rejects with
+   * SEVERAL_CANDIDATES_MATCH, and an address tells them apart.
+   */
   searchDecoy(options: {
     container: string;
     reference: Extract<MhfeReference, { address: string } | { fingerprint: string }>;

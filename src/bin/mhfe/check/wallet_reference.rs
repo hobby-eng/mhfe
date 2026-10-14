@@ -1,6 +1,7 @@
 //! The wallet references a person types: a receiving address of a coin, or the master key
 //! fingerprint, with the wallet's BIP39 passphrase.
 
+use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::wallet::{
     fingerprint_text, parse_fingerprint, Address, AddressSearch, Coin, DerivationPath, SearchLimits,
@@ -21,10 +22,73 @@ use crate::terminal::{self, Input, Step};
 /// a page of the browser package must name the coin.
 const SCRIPT_DEFAULT_COIN: Coin = Coin::Bitcoin;
 
+/// Address metadata shared by checks, rekey confirmations and missing-word searches.
+#[derive(Args, Clone, Default)]
+pub(crate) struct AddressOptions {
+    /// Coin of the address reference
+    #[arg(long, value_name = "COIN", long_help = coin_help())]
+    coin: Option<Coin>,
+
+    /// Look only at this derivation path of the address reference
+    #[arg(long, value_name = "PATH", long_help = path_help())]
+    path: Option<DerivationPath>,
+}
+
+impl AddressOptions {
+    /// The coin supplied for every address reference of this command.
+    pub(crate) fn coin(&self) -> Option<Coin> {
+        self.coin
+    }
+
+    /// The supplied path, owned by the reference that will use it.
+    pub(crate) fn path(&self) -> Option<DerivationPath> {
+        self.path.clone()
+    }
+
+    /// The options supplied, named without their values for an early refusal.
+    pub(crate) fn given_names(&self) -> Vec<&'static str> {
+        [
+            (self.coin.is_some(), "--coin"),
+            (self.path.is_some(), "--path"),
+        ]
+        .into_iter()
+        .filter_map(|(given, name)| given.then_some(name))
+        .collect()
+    }
+
+    /// Refuses metadata alongside a fingerprint or another non-address reference.
+    pub(crate) fn require_address(&self, address: bool) -> Result<(), MhfeError> {
+        if !address && !self.given_names().is_empty() {
+            return Err(MhfeError::InvalidRequest(
+                "--coin and --path belong to an address reference".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn coin_help() -> String {
+    let coins: Vec<_> = Coin::ALL.iter().map(|coin| coin.id()).collect();
+    style::option_help(&[
+        &format!("Coin of the address reference: {}.", coins.join(", ")),
+        "Use an exact lower-case identifier. Without it a terminal asks; a check script uses \
+         bitcoin and states that choice. The same coin applies to an address used to find \
+         missing container words.",
+    ])
+}
+
+fn path_help() -> String {
+    style::option_help(&[
+        "Look only at this derivation path of an address reference, such as m/84'/0'/0'/0/5.",
+        "Without it the standard paths are searched. Applies both to a wallet comparison \
+         and to an address used to find missing container words; not to a fingerprint.",
+    ])
+}
+
 /// A reference of the wallet that the owner typed, a receiving address or the master key
 /// fingerprint, with the wallet's BIP39 passphrase: what a check compares a recovery with, and what
 /// confirms a recovery without a built-in check before it is encrypted again.
-pub struct WalletReference {
+pub(crate) struct WalletReference {
     /// An address or a fingerprint.
     target: ReferenceTarget,
     passphrase: LockedText,
@@ -44,17 +108,19 @@ impl WalletReference {
     /// fingerprint, of a wallet whose BIP39 passphrase the person has said it has or has not:
     /// only a wallet with one is then asked for it, on the private screen of `operation`, and it
     /// may not be empty.
-    pub fn read_of_wallet(
+    pub(crate) fn read_of_wallet(
         input: &mut Input,
         fingerprint: bool,
         operation: Operation,
         wallet_has_passphrase: bool,
+        options: &AddressOptions,
     ) -> Result<Self, Failure> {
+        options.require_address(!fingerprint)?;
         Self::read_given(
             input,
             fingerprint,
-            None,
-            None,
+            options.coin(),
+            options.path(),
             operation,
             Some(wallet_has_passphrase),
         )
@@ -63,7 +129,10 @@ impl WalletReference {
     /// Reads a reference for a search for missing words: one answer, "Address or master key
     /// fingerprint", eight hex digits being a fingerprint and anything else an address, whose coin
     /// is then asked. No passphrase is read: the search asks whose it would be.
-    pub fn read_address_or_fingerprint(input: &mut Input) -> Result<Self, Failure> {
+    pub(crate) fn read_address_or_fingerprint(
+        input: &mut Input,
+        options: &AddressOptions,
+    ) -> Result<Self, Failure> {
         // Nothing typed here is recorded before it is read as a fingerprint, or as an address of
         // the coin asked next, so that a seed phrase typed into the wrong field never reaches the
         // summary on the main screen (AUD-015-SEC001).
@@ -80,7 +149,10 @@ impl WalletReference {
             }
             // No address of any coin has eight hex digits alone.
             Ok(match parse_fingerprint(text) {
-                Ok(fingerprint) => Typed::Fingerprint(fingerprint),
+                Ok(fingerprint) => {
+                    options.require_address(false)?;
+                    Typed::Fingerprint(fingerprint)
+                }
                 Err(_) => Typed::Address(Zeroizing::new(text.to_owned())),
             })
         })?;
@@ -90,7 +162,13 @@ impl WalletReference {
                 format!("master key fingerprint {}", fingerprint_text(fingerprint)),
             ),
             Typed::Address(text) => {
-                let coin = ask_for_coin(input)?;
+                let coin = match options.coin() {
+                    Some(coin) => {
+                        choice::record("Coin", coin.name());
+                        coin
+                    }
+                    None => ask_for_coin(input)?,
+                };
                 let (address, text) = match Address::parse(coin, &text) {
                     Ok(address) => (address, text.trim().to_owned()),
                     // Asked again with the coin known, which states the forms it takes.
@@ -103,13 +181,16 @@ impl WalletReference {
                 };
                 let target = ReferenceTarget::Address {
                     address,
-                    path: None,
+                    path: options.path(),
                 };
                 (target, format!("address {text}"))
             }
         };
         // Only now, read as what the field asks for.
         choice::record("Reference", &shown);
+        if matches!(target, ReferenceTarget::Fingerprint(_)) {
+            style::fingerprint_fact();
+        }
         Ok(Self {
             target,
             passphrase: LockedText::copy_of(""),
@@ -119,24 +200,24 @@ impl WalletReference {
 
     /// What this reference was typed as, such as "address 3FWJ…" or "master key fingerprint
     /// e0f73b78"; empty for one read for a check.
-    pub fn shown(&self) -> &str {
+    pub(crate) fn shown(&self) -> &str {
         &self.shown
     }
 
     /// Whether this is an address, which a search looks for within a scope it states.
-    pub fn is_address(&self) -> bool {
+    pub(crate) fn is_address(&self) -> bool {
         matches!(self.target, ReferenceTarget::Address { .. })
     }
 
     /// States what a search for this address covers within `limits`; nothing for a fingerprint.
-    pub fn show_search(&self, limits: SearchLimits) {
+    pub(crate) fn show_search(&self, limits: SearchLimits) {
         if let ReferenceTarget::Address { address, path } = &self.target {
             show_search(address, path.as_ref(), limits);
         }
     }
 
     /// The library's reference with `passphrase` in place of the one read.
-    pub fn reference_with<'a>(&'a self, passphrase: &'a str) -> Reference<'a> {
+    pub(crate) fn reference_with<'a>(&'a self, passphrase: &'a str) -> Reference<'a> {
         self.target.with(passphrase)
     }
 
@@ -152,6 +233,9 @@ impl WalletReference {
         operation: Operation,
         wallet_has_passphrase: Option<bool>,
     ) -> Result<Self, Failure> {
+        let options = AddressOptions { coin, path };
+        options.require_address(!fingerprint)?;
+        let AddressOptions { coin, path } = options;
         let target = if fingerprint {
             ReferenceTarget::Fingerprint(read_public(
                 input,
@@ -196,6 +280,9 @@ impl WalletReference {
             show_search(&address, path.as_ref(), SearchLimits::default());
             ReferenceTarget::Address { address, path }
         };
+        if matches!(target, ReferenceTarget::Fingerprint(_)) {
+            style::fingerprint_fact();
+        }
         let passphrase = match wallet_has_passphrase {
             // A separate secret from the MHFE password; most wallets have none.
             None => read_passphrase_of(input, operation, "the wallet")?,
@@ -209,13 +296,13 @@ impl WalletReference {
         })
     }
 
-    pub fn reference(&self) -> Reference<'_> {
+    pub(crate) fn reference(&self) -> Reference<'_> {
         self.reference_with(&self.passphrase)
     }
 }
 
 /// The answers that compare with the wallet itself.
-pub fn wallet_answers() -> [Answer; 2] {
+pub(crate) fn wallet_answers() -> [Answer; 2] {
     [
         Answer::new(
             "A receiving address (recommended)",
@@ -275,7 +362,7 @@ fn read_public<T>(
     record: Option<(&str, &str)>,
     parse: impl Fn(&str) -> Result<T, MhfeError>,
 ) -> Result<T, Failure> {
-    let mut step = Step::start(input);
+    let mut step = Step::start(input)?;
     loop {
         let text = step.visible(input, prompt)?;
         match parse(&text) {

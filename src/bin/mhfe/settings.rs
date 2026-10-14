@@ -1,7 +1,6 @@
 //! The PIM and memory-level options shared by every command that runs MHFE. A person at a
 //! terminal who gives neither is asked: the defaults are chosen unless they pick their own.
 
-use anstream::eprintln;
 use clap::Args;
 use mhfe::engine::{check_can_run, highest_available_level, NativeEngine};
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
@@ -17,10 +16,10 @@ use crate::terminal::Input;
 use crate::time_text;
 
 #[derive(Args, Clone, Copy)]
-pub struct Settings {
+pub(crate) struct Settings {
     // Options rather than defaults, so that a command can tell whether the person gave them.
     #[arg(long, value_name = "N", help = pim_short_help(), long_help = pim_help())]
-    pub pim: Option<u32>,
+    pub(crate) pim: Option<u32>,
 
     #[arg(
         long = "mem",
@@ -28,7 +27,7 @@ pub struct Settings {
         help = memory_level_short_help(),
         long_help = memory_level_help()
     )]
-    pub memory_level: Option<u32>,
+    pub(crate) memory_level: Option<u32>,
 }
 
 /// The short helps, built from the limits and the default (AUD-023-ARC007).
@@ -72,7 +71,7 @@ fn memory_level_help() -> String {
 impl Settings {
     /// The settings given for `operation`: those of a rekey's new container are refused as the
     /// new PIM or memory level ([`WorkFactor::new_settings`]).
-    pub fn work_factor_for(self, operation: Operation) -> Result<WorkFactor, Failure> {
+    pub(crate) fn work_factor_for(self, operation: Operation) -> Result<WorkFactor, Failure> {
         let (pim, level) = (self.pim.unwrap_or(0), self.memory_level.unwrap_or(0));
         Ok(match operation {
             Operation::RekeyNew => WorkFactor::new_settings(pim, level)?,
@@ -84,7 +83,7 @@ impl Settings {
     /// cannot run, before anything is typed: a rekey checks its new ones at its start, not after
     /// the old container's recovery (AUD-023-UI002). Settings that are asked are checked when
     /// they are answered.
-    pub fn check_given(self, operation: Operation) -> Result<(), Failure> {
+    pub(crate) fn check_given(self, operation: Operation) -> Result<(), Failure> {
         if self.given() {
             check_resources(self.work_factor_for(operation)?)?;
         }
@@ -99,7 +98,7 @@ impl Settings {
 
 /// What a command computes, which sets its title and how many rounds it runs.
 #[derive(Clone, Copy)]
-pub enum Operation {
+pub(crate) enum Operation {
     /// Twelve rounds forward, then twelve backwards to check that they give the phrase back.
     Encrypt,
     /// Twelve rounds backwards.
@@ -121,7 +120,7 @@ pub enum Operation {
 
 impl Operation {
     /// The title of the command, at the top of its screen and of its private screen.
-    pub const fn title(self) -> &'static str {
+    pub(crate) const fn title(self) -> &'static str {
         match self {
             Operation::Encrypt => "Encrypt a seed phrase",
             Operation::Decrypt => "Recover a seed phrase",
@@ -139,7 +138,7 @@ impl Operation {
 /// gave neither setting is asked first: the defaults, or their own. Nothing secret has been asked
 /// yet. The format of the container is shown once it is known: after the choice of an encryption,
 /// or from the container's word count.
-pub fn choose(
+pub(crate) fn choose(
     settings: Settings,
     input: &mut Input,
     operation: Operation,
@@ -151,7 +150,7 @@ pub fn choose(
     let defaults = settings.work_factor_for(operation)?;
     let asked = !settings.given() && input.can_ask_again();
     let work = if asked && ask_for_own(input, operation, defaults)? {
-        ask_own(input)?
+        ask_own(input, operation)?
     } else {
         defaults
     };
@@ -246,55 +245,60 @@ fn ask_for_own(
 
 /// Asks for a PIM and a memory level until this computer can run them. At a terminal that redraws
 /// lines, the questions are erased afterwards: the settings shown next record the answers.
-fn ask_own(input: &mut Input) -> Result<WorkFactor, Failure> {
+fn ask_own(input: &mut Input, operation: Operation) -> Result<WorkFactor, Failure> {
     // Both numbers are asked on one step of their own in a command shown one step at a time.
-    flow::step();
+    flow::step()?;
     let mut drawn_lines = 0;
-    let work = loop {
-        let pim = ask_number(
-            input,
-            &Question {
-                text: &format!("PIM, {}", pim_range()),
-                explanation: &["Each step adds the default work again: 1 doubles the time."],
-                more: None,
-                record: None,
-            },
-            "PIM: ",
-            &mut drawn_lines,
-        )?;
-        let sizes = format!("{}.", memory_levels());
-        let available = highest_available_level().map(|highest| {
-            format!("This computer has the memory for level {highest} at most now.")
-        });
-        let mut explanation = vec![sizes.as_str()];
-        explanation.extend(available.as_deref());
-        let level = ask_number(
-            input,
-            &Question {
-                text: &format!("Memory level, {}", level_range()),
-                explanation: &explanation,
-                more: None,
-                record: None,
-            },
-            "Memory level: ",
-            &mut drawn_lines,
-        )?;
-        let checked = WorkFactor::new(pim, level)
-            .map_err(Failure::from)
-            .and_then(|work| check_resources(work).map(|()| work));
-        match checked {
-            Ok(work) => break work,
-            Err(failure) => {
-                eprintln!();
-                drawn_lines += 1 + style::retry(format!(
-                    "{}. Please choose again.",
-                    failure.message.trim_end_matches('.')
-                ));
+    let pim = ask_number(
+        input,
+        &Question {
+            text: &format!("PIM, {}", pim_range()),
+            explanation: &["Each step adds the default work again: 1 doubles the time."],
+            more: None,
+            record: None,
+        },
+        "PIM: ",
+        &mut drawn_lines,
+        |pim| {
+            Settings {
+                pim: Some(pim),
+                memory_level: Some(0),
             }
-        }
-    };
+            .work_factor_for(operation)
+            .map(|_| ())
+        },
+    )?;
+    let sizes = format!("{}.", memory_levels());
+    let available = highest_available_level()
+        .map(|highest| format!("This computer has the memory for level {highest} at most now."));
+    let mut explanation = vec![sizes.as_str()];
+    explanation.extend(available.as_deref());
+    let level = ask_number(
+        input,
+        &Question {
+            text: &format!("Memory level, {}", level_range()),
+            explanation: &explanation,
+            more: None,
+            record: None,
+        },
+        "Memory level: ",
+        &mut drawn_lines,
+        |level| {
+            let work = Settings {
+                pim: Some(pim),
+                memory_level: Some(level),
+            }
+            .work_factor_for(operation)?;
+            check_resources(work)
+        },
+    )?;
+    let work = Settings {
+        pim: Some(pim),
+        memory_level: Some(level),
+    }
+    .work_factor_for(operation)?;
     if hidden_input::can_redraw() && !flow::is_active() {
-        choice::write_control(&choice::redraw_from(drawn_lines))?;
+        crate::terminal::write_control(&choice::redraw_from(drawn_lines))?;
     }
     Ok(work)
 }
@@ -306,13 +310,22 @@ fn ask_number(
     question: &Question,
     prompt: &str,
     drawn_lines: &mut usize,
+    require: impl Fn(u32) -> Result<(), Failure>,
 ) -> Result<u32, Failure> {
     *drawn_lines += choice::draw_question(question);
     loop {
         let typed = input.visible(prompt)?;
         *drawn_lines += 1;
         match typed.trim().parse() {
-            Ok(number) => return Ok(number),
+            Ok(number) => match require(number) {
+                Ok(()) => return Ok(number),
+                Err(failure) => {
+                    *drawn_lines += style::retry(format!(
+                        "{}. Please choose again.",
+                        failure.message.trim_end_matches('.')
+                    ))
+                }
+            },
             Err(_) => *drawn_lines += style::retry("Type a whole number."),
         }
     }
@@ -337,11 +350,11 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     let rounds = rounds_of(operation);
     let how = match operation {
         Operation::Encrypt | Operation::RekeyNew | Operation::New => {
-            "24 rounds (12 to encrypt, 12 to check)"
+            format!("{rounds} rounds ({ROUNDS} to encrypt, {ROUNDS} to check)")
         }
-        Operation::Decrypt | Operation::Check | Operation::Rekey => "12 rounds",
-        Operation::Wallets => "12 rounds a wallet",
-        Operation::Repair => "12 rounds a candidate",
+        Operation::Decrypt | Operation::Check | Operation::Rekey => format!("{rounds} rounds"),
+        Operation::Wallets => format!("{rounds} rounds a wallet"),
+        Operation::Repair => format!("{rounds} rounds a candidate"),
     };
     let gray = |text: String| paint(MUTED, text);
 
@@ -386,16 +399,11 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         locked_memory_text(locking, crate::protect::lock_limit()),
     );
     eprintln!();
-    let refuted = crate::protect::isolation_refuted();
-    if !refuted.is_empty() {
-        // The summary above states only what the probes confirmed (protect::verify_isolation).
-        style::warn(
-            &format!(
-                "Isolation is weaker than the kernel reported: {}.",
-                refuted.names().join(", ")
-            ),
-            "",
-        );
+    for warning in isolation_warnings(
+        crate::protect::isolation_refuted(),
+        crate::protect::isolation_refused(),
+    ) {
+        style::warn(&warning, "");
         eprintln!();
     }
     if matches!(
@@ -414,10 +422,40 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     }
 }
 
+/// The warnings under the summary: what the kernel reported but a probe got through, `refuted`
+/// (the summary states only what the probes confirmed, protect::verify_isolation), and what the
+/// command needed forbidden and the kernel `refused` (AUD-024-SEC009).
+fn isolation_warnings(
+    refuted: crate::protect::Isolation,
+    refused: crate::protect::Isolation,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if !refuted.is_empty() {
+        warnings.push(format!(
+            "Isolation is weaker than the kernel reported: {}.",
+            refuted.names().join(", ")
+        ));
+    }
+    let allowed: Vec<&str> = [
+        (refused.no_network, "new sockets"),
+        (refused.no_writes, "new file writes"),
+    ]
+    .into_iter()
+    .filter_map(|(set, name)| set.then_some(name))
+    .collect();
+    if !allowed.is_empty() {
+        warnings.push(format!(
+            "Isolation is weaker than this command needs: this kernel does not forbid {}.",
+            allowed.join(" or ")
+        ));
+    }
+    warnings
+}
+
 /// What the kernel forbids this command, for the summary; `None` where it forbids nothing, as
 /// outside Linux.
 fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
-    // "New": neither boundary revokes descriptors opened before, such as a redirected standard
+    // "New": neither restriction revokes descriptors opened before, such as a redirected standard
     // output. Each text keeps the summary line within 78 columns, its label included.
     let forbidden = match (
         isolation.empty_network,
@@ -474,11 +512,12 @@ fn check_resources(work: WorkFactor) -> Result<(), Failure> {
 }
 
 /// Reserves the Argon2 memory, after the inputs have been read and checked.
-pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeEngine>, Failure> {
+pub(crate) fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeEngine>, Failure> {
     Mhfe::new(work).map_err(with_level_hint)
 }
 
 /// Adds the highest memory level this computer can use now to a refusal for lack of free memory.
+///
 /// Only that refusal rests on the reported free memory. After a failed reservation that figure has
 /// just proved too high, and a level above the highest this build runs is refused whatever memory
 /// is free, so neither gets a level to try (AUD-005-UI001).
@@ -504,17 +543,17 @@ fn memory_levels() -> String {
 }
 
 /// The memory of `level`: "2 GiB", and in whole tebibytes from 1 TiB on, as the highest levels are.
-pub fn memory_text(level: u32) -> String {
+pub(crate) fn memory_text(level: u32) -> String {
     WorkFactor::new(0, level).map_or_else(|_| String::new(), WorkFactor::memory_text)
 }
 
 /// The PIMs a container takes: "0 to 1023".
-pub fn pim_range() -> String {
+pub(crate) fn pim_range() -> String {
     format!("0 to {}", mhfe::MAX_PIM)
 }
 
 /// The memory levels a container takes: "0 to 21".
-pub fn level_range() -> String {
+pub(crate) fn level_range() -> String {
     format!("0 to {MAX_MEMORY_LEVEL}")
 }
 
@@ -576,9 +615,50 @@ mod tests {
                 no_writes: bits & 4 != 0,
             };
             if let Some(text) = isolation_text(isolation) {
-                assert!(LABEL + style::visible_width(&text) <= 78, "{text}");
+                assert!(
+                    LABEL + style::visible_width(&text) <= style::TEXT_WIDTH,
+                    "{text}"
+                );
             }
         }
+    }
+
+    /// A restriction the kernel refused is warned about under the summary, as one it reported but a
+    /// probe got through (AUD-024-SEC009).
+    #[test]
+    fn a_refused_isolation_is_warned_about() {
+        use crate::protect::Isolation;
+        let none = Isolation::default();
+        assert!(isolation_warnings(none, none).is_empty());
+        let writes = Isolation {
+            no_writes: true,
+            ..none
+        };
+        let sockets = Isolation {
+            no_network: true,
+            ..none
+        };
+        assert_eq!(
+            isolation_warnings(none, writes),
+            [
+                "Isolation is weaker than this command needs: this kernel does not forbid new file \
+              writes."
+            ]
+        );
+        assert_eq!(
+            isolation_warnings(sockets, writes),
+            [
+                "Isolation is weaker than the kernel reported: no new sockets.",
+                "Isolation is weaker than this command needs: this kernel does not forbid new file \
+                 writes."
+            ]
+        );
+        let both = Isolation {
+            no_network: true,
+            no_writes: true,
+            ..none
+        };
+        assert!(isolation_warnings(none, both)[0].ends_with("new sockets or new file writes."));
     }
 
     /// Every text of the locked-memory fact fits one summary line of 78 columns with its label.
@@ -592,7 +672,10 @@ mod tests {
         ] {
             // A limit as long as one can be written.
             let text = locked_memory_text(outcome, Some(1023 << 20));
-            assert!(LABEL + style::visible_width(&text) <= 78, "{text}");
+            assert!(
+                LABEL + style::visible_width(&text) <= style::TEXT_WIDTH,
+                "{text}"
+            );
         }
         assert_eq!(
             locked_memory_text(ComponentOutcome::Passed, None),

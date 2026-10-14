@@ -1,0 +1,10 @@
+[package]
+name = "aud024-verify-kelvin-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mhfe = { package = "mhfe-experimental", path = "../../../.." }
+
+[workspace]

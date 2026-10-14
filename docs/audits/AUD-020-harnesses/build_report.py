@@ -431,7 +431,7 @@ class AuditReport:
         ]
         for name, digest in report["procedureHashes"].items():
             relative = PROCEDURES[name]
-            lines.append(f"| [{name}](../../../multi-chain-wallet-tools/docs/{relative}) | `{digest}` |")
+            lines.append(f"| local-only: `multi-chain-wallet-tools/docs/{relative}` | `{digest}` |")
         lines += ["", "### Coverage ledger", "",
             "A `passed` static row means the described source review/targeted evidence completed within its stated scope; it does not imply the procedure's full runtime matrix ran. Failed rows reference the two tracked findings across more than one discipline; they are not counted again.",
             "", "| Check ID | Category / logical group | Tool / build scope | Method | Outcome | Evidence / gap reason |",

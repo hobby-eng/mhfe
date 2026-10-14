@@ -674,14 +674,21 @@
         ],
         "logSha256": "ddad5cc8d51eb4f0fe9225532215bd6d1408214680986142d39f259e0c52e038",
         "recordSha256": "e2ec5f9e6b17d9ca449a427c608f77bfd993acf23e4d42eda1a7bc09c4876085",
-        "diagnostics": ["assertion failed: std::net::TcpListener::bind(\"127.0.0.1:0\").is_ok()"],
+        "diagnostics": [
+          "assertion failed: std::net::TcpListener::bind(\"127.0.0.1:0\").is_ok()"
+        ],
         "localEvidence": "docs/audits/AUD-020-evidence/protect.log",
         "note": "Initial protected execution failed at localhost bind; retained as an environment restriction. See the separate host-permission rerun."
       },
       {
         "label": "published-rounds",
         "command": "python3 -B scripts/generate-published-rounds.py --check",
-        "argv": ["python3", "-B", "scripts/generate-published-rounds.py", "--check"],
+        "argv": [
+          "python3",
+          "-B",
+          "scripts/generate-published-rounds.py",
+          "--check"
+        ],
         "environment": {
           "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
           "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
@@ -798,7 +805,11 @@
       {
         "label": "rust-format",
         "command": "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo fmt --check",
-        "argv": ["/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo", "fmt", "--check"],
+        "argv": [
+          "/home/user/Documents/bip_tools/workingspace/cargo/bin/cargo",
+          "fmt",
+          "--check"
+        ],
         "environment": {
           "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
           "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup"
@@ -1174,7 +1185,7 @@
           "The probe stubs device resolution only for a positive synthetic control; read-error branches execute the unchanged production helper."
         ]
       },
-      "expected": "An unreadable swap inventory must be reported as unknown before secrets are read, as SECURITY.md:79–81 promises.",
+      "expected": "An unreadable swap inventory must be reported as unknown before secrets are read, as SECURITY.md:79\u201381 promises.",
       "observed": "`unprotected_swap_under()` loses the read-error state by returning `Vec::new()`. `settings::warn_about_swap()` interprets an empty vector as no reportable swap and returns. Existing `unknown` flags cover visible areas with unresolved devices, not failure to read the inventory itself. The Argon2 workspace is intentionally not mlocked, so the documented unknown-encryption warning is the relevant residual-risk control.",
       "impact": "When Linux denies or omits `/proc/swaps`, secret-handling commands silently skip the swap-encryption warning because an inventory read failure is returned as an empty list. On a host with plaintext swap, this removes the warning before the unlocked Argon2 work area is used; paging and later access to the backing storage are additional prerequisites, not demonstrated secret extraction. The code demonstrably omits a promised diagnostic, but exploitation requires an unusual procfs restriction, active plaintext host swap, actual paging and an adversary with access to its storage. No mnemonic/password input can force that environment, and trusted offline-host guidance remains.",
       "prerequisites": [
@@ -1407,7 +1418,7 @@
   "assessment": "2 confirmed Low conditional host secret-handling findings remain open. Targeted checks support the traced paths; release acceptance and exhaustive security assurance are not assessed.",
   "reportGenerator": {
     "path": "docs/audits/AUD-020-harnesses/build_report.py",
-    "sha256": "ada5dc20433d733752ec85a00fc9aa57e4a93dc97819bffeab886d07bd35f0cb"
+    "sha256": "ba77fdee60e836826467b0ff472367424dd5d534ea05c20f334c553363d1ebf5"
   },
   "peerReviewLimitations": {
     "architecture-review.json": [],
@@ -5539,7 +5550,7 @@
   "reviewerReconciliation": [
     "The original CLI supplement classified Windows generated-password screen activation as optional hardening. The coordinator independently traced a supported direct command with --repair-words 0 that bypasses menu-based cancellation, and accepted the conditional private-screen guard omission as AUD-020-SEC002, Low with medium confidence. No Windows runtime failure or real secret exposure was demonstrated; the original reviewer artifact is unchanged.",
     "Original baseline wording names ../mhfe_spec/DESIGN-NOTES.md; the actual current companion reference is ../mhfe_spec/docs/DESIGN-NOTES.md. This is a coordinator correction of an artifact statement, not a product finding or new review execution.",
-    "Original baseline BASELINE-Q007 says the Python launcher delegates to an executable. Current packaging/mhfe-fast-mode.py:307–355 owns its listener/server directly; browser opening uses Python webbrowser. The original review artifact is retained unchanged, while the architecture/packaging mapping supplies the corrected fact."
+    "Original baseline BASELINE-Q007 says the Python launcher delegates to an executable. Current packaging/mhfe-fast-mode.py:307\u2013355 owns its listener/server directly; browser opening uses Python webbrowser. The original review artifact is retained unchanged, while the architecture/packaging mapping supplies the corrected fact."
   ],
   "privacyRedaction": {
     "timeZone": "UTC (+00:00)",
@@ -5549,7 +5560,9 @@
       {
         "dateUtc": "2026-10-13",
         "authorizedBy": "repository owner",
-        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "changes": [
+          "Explicit report time zone label: UTC (+00:00)."
+        ],
         "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
         "documentBindings": [],
         "reportDocument": {
@@ -5577,5 +5590,29 @@
       }
     ],
     "kind": "privacy-only-metadata-redaction"
-  }
+  },
+  "documentationAmendments": [
+    {
+      "completedUtc": "2026-10-14T18:29:45.759752+00:00",
+      "authorizedBy": "repository owner",
+      "kind": "documentation-only",
+      "historicalChecksRerun": false,
+      "changes": [
+        "DOC004: sibling-workspace procedure paths are labelled local-only code spans; their pinned SHA-256 values are unchanged."
+      ],
+      "reportDocument": {
+        "document": "docs/audits/AUD-020-2026-10-12.md",
+        "previousSha256": "f046ebdf822acc6c88488e37264b0d9d1834a21e845b87d408743d9991b10f93",
+        "sha256": "baf9c628d4fc004f12e5001371b47408b2ef5844b21618de81dd8892666af3b2"
+      },
+      "documentBindings": [
+        {
+          "document": "docs/audits/AUD-020-harnesses/build_report.py",
+          "previousRecordedSha256": "ada5dc20433d733752ec85a00fc9aa57e4a93dc97819bffeab886d07bd35f0cb",
+          "sha256": "ba77fdee60e836826467b0ff472367424dd5d534ea05c20f334c553363d1ebf5",
+          "change": "Owner-authorized record-generation correction; historical executions were not repeated."
+        }
+      ]
+    }
+  ]
 }

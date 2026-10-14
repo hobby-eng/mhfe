@@ -14,14 +14,14 @@ use blake2::digest::consts::U32;
 use blake2::Blake2b;
 use hmac::{Hmac, KeyInit, Mac};
 use mhfe::engine::NativeEngine;
-use mhfe::vectors::{NegativeInput, PublicInput};
+use mhfe::vectors::{self, NegativeInput, PublicInput, CHECKSUM_FILE, NEGATIVE_CASES_STEM};
 use mhfe::{Mhfe, MhfeError};
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 /// One suite of vectors: where its files are and what writes them.
-pub struct Suite {
+pub(crate) struct Suite {
     /// The folder of the vector files, their SHA256SUMS and the independent check's record.
     pub folder: &'static str,
     /// The command that writes the vectors, named when a file is missing.
@@ -43,7 +43,7 @@ pub struct Suite {
 }
 
 /// A written vector or case as the JSON it is compared in.
-pub fn value<T: Serialize>(written: Result<T, MhfeError>) -> Value {
+pub(crate) fn value<T: Serialize>(written: Result<T, MhfeError>) -> Value {
     serde_json::to_value(written.unwrap()).unwrap()
 }
 
@@ -89,9 +89,9 @@ impl Suite {
 
     /// Every vector file is present, unchanged since it was written, and made from the public
     /// inputs in the source; the independent check covers exactly the files of SHA256SUMS.
-    pub fn check_files(&self) {
-        let sums = fs::read_to_string(format!("{}/SHA256SUMS", self.folder))
-            .expect("SHA256SUMS is missing");
+    pub(crate) fn check_files(&self) {
+        let sums = fs::read_to_string(format!("{}/{CHECKSUM_FILE}", self.folder))
+            .unwrap_or_else(|error| panic!("{CHECKSUM_FILE} is missing: {error}"));
         let mut listed = HashSet::new();
         for line in sums.lines() {
             let (digest, name) = line.split_once("  ").expect("sha256sum line format");
@@ -99,7 +99,7 @@ impl Suite {
             listed.insert(name.to_owned());
         }
         for input in self.inputs {
-            let name = format!("{}.json", input.name());
+            let name = vectors::file_name(input.name());
             assert!(listed.contains(&name), "{name} is missing");
             let vector = self.recorded(&name);
             let work = input.work().unwrap();
@@ -112,7 +112,7 @@ impl Suite {
                 "{name}"
             );
         }
-        let negative = self.recorded("negative-cases.json");
+        let negative = self.recorded(&vectors::file_name(NEGATIVE_CASES_STEM));
         let negative = negative.as_array().unwrap();
         assert_eq!(negative.len(), self.negative_inputs.len());
         for case in negative {
@@ -144,11 +144,11 @@ impl Suite {
 
     /// In every round of every vector, the recorded salt input and mask message give the recorded
     /// salt and mask, with the recorded Argon2id output as the HMAC key.
-    pub fn check_rounds(&self) {
+    pub(crate) fn check_rounds(&self) {
         let salt_label = format!("{}/ROUND-SALT", self.suite_id);
         let mask_label = format!("{}/ROUND-MASK", self.suite_id);
         for input in self.inputs {
-            let name = format!("{}.json", input.name());
+            let name = vectors::file_name(input.name());
             let vector = self.recorded(&name);
             assert_eq!(vector["schema"], self.schema, "{name}");
             for direction in ["encryption", "decryption"] {
@@ -178,8 +178,8 @@ impl Suite {
 
     /// A vector written by a later release matches the recorded one, while any change of what the
     /// vector fixes, such as its container or the program's name, still does not.
-    pub fn check_writer_version(&self) {
-        let recorded = self.recorded(&format!("{}.json", self.inputs[0].name()));
+    pub(crate) fn check_writer_version(&self) {
+        let recorded = self.recorded(&vectors::file_name(self.inputs[0].name()));
         let mut later = recorded.clone();
         later["generator"]["version"] = Value::from("9.9.9");
         assert_eq!(with_recorded_writer(later.clone(), &recorded), recorded);
@@ -194,19 +194,19 @@ impl Suite {
     /// Every vector, then every negative case, written again at full size equals its recorded
     /// file. A negative case reads the container of its vector from the recorded file, which the
     /// replay of that vector compares with what it gives.
-    pub fn reproduce(&self) {
+    pub(crate) fn reproduce(&self) {
         for (index, input) in self.inputs.iter().enumerate() {
             if !mine(index) {
                 continue;
             }
             let mut mhfe = Mhfe::new(input.work().unwrap()).unwrap();
-            let expected = self.recorded(&format!("{}.json", input.name()));
+            let expected = self.recorded(&vectors::file_name(input.name()));
             let written = with_recorded_writer((self.generate)(&mut mhfe, input), &expected);
             assert_eq!(written, expected, "{}", input.name());
             println!("{}: reproduced", input.name());
         }
 
-        let expected = self.recorded("negative-cases.json");
+        let expected = self.recorded(&vectors::file_name(NEGATIVE_CASES_STEM));
         let expected = expected.as_array().unwrap();
         assert_eq!(
             expected.len(),
@@ -217,7 +217,7 @@ impl Suite {
             if !mine(self.inputs.len() + offset) {
                 continue;
             }
-            let container = self.recorded(&format!("{}.json", input.container_of()))["container"]
+            let container = self.recorded(&vectors::file_name(input.container_of()))["container"]
                 .as_str()
                 .unwrap()
                 .to_owned();

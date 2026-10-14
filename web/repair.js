@@ -15,7 +15,12 @@
 // called. Each call runs in a worker of its own, so calls never wait for each other. The first call
 // waits for the class's startup check (startupCheck()).
 
-import { MhfeModuleClass, ModuleWorker, requireText } from "../runtime/runtime.js";
+import {
+  MhfeModuleClass,
+  ModuleWorker,
+  refuseUnknownOptions,
+  requireText,
+} from "../runtime/runtime.js";
 
 export { MhfeError } from "../runtime/runtime.js";
 
@@ -23,6 +28,12 @@ export { MhfeError } from "../runtime/runtime.js";
  * @import { MhfeRepair as DeclaredRepair, MhfeRepairParameters, MhfeRepairSources }
  *   from "./repair.d.ts"
  */
+
+/** @import { NoKeys } from "./types/api-presence.d.ts" */
+/** @typedef {NoKeys<Exclude<keyof DeclaredRepair, keyof MhfeRepair>>} DeclaredButMissing */
+/** @typedef {NoKeys<Exclude<keyof MhfeRepair, keyof DeclaredRepair>>} PresentButUndeclared */
+/** @typedef {NoKeys<Exclude<keyof typeof DeclaredRepair, keyof typeof MhfeRepair>>} MissingStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof MhfeRepair, keyof typeof DeclaredRepair>>} ExtraStatics */
 
 /** The name of this module's operations in the package's worker. */
 const REPAIR_MODULE = "repair";
@@ -99,3 +110,11 @@ export class MhfeRepair extends MhfeModuleClass {
     return this.#module.run({ operation: "inspectContainer", container });
   }
 }
+
+// The options each method takes, which it refuses others beside (AUD-024-API003); kept in step
+// with repair.d.ts.
+refuseUnknownOptions(MhfeRepair.prototype, {
+  repairWords: ["container", "count"],
+  repairContainer: ["container", "card"],
+  inspectContainer: ["container"],
+});

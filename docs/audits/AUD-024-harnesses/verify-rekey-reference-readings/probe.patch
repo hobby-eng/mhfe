@@ -1,0 +1,77 @@
+--- a/src/rehearsal/reencryption.rs
++++ b/src/rehearsal/reencryption.rs
+@@ -438,4 +438,74 @@
+             .unwrap();
+         assert_eq!(phrase.phrase(), ABANDON);
+     }
++
++    /// AUD-024 verification probe (scratch copy only, reduced-cost engine). For each case the
++    /// rehearsal check with a wallet fingerprint, and RecoveredForRekey::confirm with the same
++    /// fingerprint at several lengths, on the same container.
++    #[test]
++    fn aud024_verify_rekey_reference_readings() {
++        use crate::rehearsal::CheckOutcome;
++        use crate::test_support::AMBIGUOUS_12_21;
++        use sha2::{Digest, Sha256};
++        let password = test_password();
++        let none = &mut |_, _| Ok(());
++        let fp = |phrase: &str| wallet::master_fingerprint(phrase, "").unwrap();
++        let show = |r: Result<RecoveredPhrase, MhfeError>| match r {
++            Ok(p) => format!("Ok(words {}, verified {})", p.words(), p.verified()),
++            Err(e) => format!("Err({})", e.code()),
++        };
++        let len = |w: usize| PhraseLength::Words(WordCount::new(w).unwrap());
++
++        // Case A: a 24-word original whose state reads as a 12-word phrase (entropy
++        // 0^16 || SHA-256(0^16)[..16]: the 12-word reading is "abandon ... about").
++        let mut state = [0u8; 32];
++        state[16..].copy_from_slice(&Sha256::digest([0u8; 16])[..16]);
++        let p24 = crate::phrase::phrase_from_entropy(&state).unwrap();
++        println!("AUD024 A: original words {}", p24.split(' ').count());
++        println!(
++            "AUD024 A: other_detected_lengths (encryption warning) = {:?}",
++            crate::other_detected_lengths(&p24).unwrap()
++        );
++        let fp24 = fp(&p24);
++        println!("AUD024 A: original fingerprint {:02x?}; 12-word reading's fingerprint {:02x?}", fp24, fp(ABANDON));
++        let r24 = Reference::Fingerprint { fingerprint: fp24, passphrase: "" };
++        let mut mhfe = reduced();
++        let container = mhfe.encrypt(&p24, &password, Suite::TwentyFourWords, none).unwrap();
++        let check = mhfe.check(&container, &password, &r24, none).unwrap();
++        println!("AUD024 A: rehearsal check (Mhfe::check) with the original's fingerprint: {check:?}");
++        assert!(matches!(check, CheckOutcome::Matches { .. }));
++        let recovered = mhfe
++            .recover_for_rekey(&container, &password, PhraseLength::Detect, Confirmation::Wallet(&r24), none)
++            .unwrap();
++        let mut nothing = || Ok(());
++        for (name, length) in [("Detect", PhraseLength::Detect), ("24 stated", len(24)), ("15 stated", len(15)), ("12 stated", len(12))] {
++            let r = recovered.confirm(length, Confirmation::Wallet(&r24), &mut nothing);
++            println!("AUD024 A: rekey confirm, length {name}, original's fingerprint: {}", show(r));
++        }
++        let owner = recovered.confirm(PhraseLength::Detect, Confirmation::Owner, &mut nothing);
++        println!("AUD024 A: rekey confirm, length Detect, owner: {}", show(owner));
++        // Public API path (crate::Rekey), as the CLI and the WebAssembly binding use it.
++        let rekey = crate::rekey::Rekey::new(&container, PhraseLength::Detect, test_password(), crate::WorkFactor::default()).unwrap();
++        let r = rekey.recover(&mut reduced(), Confirmation::Wallet(&r24), Some(false), &mut |_, _, _| Ok(()));
++        println!(
++            "AUD024 A: Rekey::new(Detect).recover with the original's fingerprint: {:?}",
++            r.map(|c| c.phrase().words()).map_err(|e| e.code())
++        );
++
++        // Case B: AMBIGUOUS_12_21, a 12-word original whose state passes the 21-word check too.
++        let fp12 = fp(AMBIGUOUS_12_21);
++        let r12 = Reference::Fingerprint { fingerprint: fp12, passphrase: "" };
++        let container = mhfe.encrypt(AMBIGUOUS_12_21, &password, Suite::TwentyFourWords, none).unwrap();
++        let check = mhfe.check(&container, &password, &r12, none).unwrap();
++        println!("AUD024 B: rehearsal check with the original's fingerprint: {check:?}");
++        let recovered = mhfe
++            .recover_for_rekey(&container, &password, len(21), Confirmation::BuiltInCheck, none)
++            .unwrap();
++        let first = recovered.confirm(len(21), Confirmation::BuiltInCheck, &mut nothing);
++        println!("AUD024 B: rekey confirm, 21 stated, built-in check: {}", show(first));
++        for (name, length) in [("21 stated", len(21)), ("12 stated", len(12)), ("Detect", PhraseLength::Detect), ("24 stated", len(24))] {
++            let r = recovered.confirm(length, Confirmation::Wallet(&r12), &mut nothing);
++            println!("AUD024 B: rekey confirm, length {name}, original's fingerprint: {}", show(r));
++        }
++    }
+ }

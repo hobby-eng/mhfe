@@ -18,11 +18,13 @@ use crate::{
     SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
 
-mod inputs;
+pub(crate) mod inputs;
 
-// The phrases and the password that the tests of other modules share (test_support.rs).
+// The public inputs reused by native unit tests under their existing names.
 #[cfg(test)]
-pub(crate) use inputs::{AMBIGUOUS_12_21, NONZERO_12, TEST_PASSWORD, ZERO_12, ZERO_24};
+pub(crate) use inputs::{
+    AMBIGUOUS_12_21, NONZERO_12, TEST_PASSWORD, ZERO_12, ZERO_12_FINGERPRINT, ZERO_24,
+};
 pub use inputs::{NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS, SAME_LENGTH_NEGATIVE_INPUTS};
 
 /// Identifies this file layout; a changed layout gets a new name.
@@ -33,6 +35,16 @@ pub const NEGATIVE_SCHEMA: &str = "mhfe-suite-3-negative-case-v2";
 pub const SAME_LENGTH_SCHEMA: &str = "mhfe-suite-4-vector-v1";
 /// The layout of a suite 4 negative case.
 pub const SAME_LENGTH_NEGATIVE_SCHEMA: &str = "mhfe-suite-4-negative-case-v1";
+/// The checksum list shared by the vector writer and replays.
+pub const CHECKSUM_FILE: &str = "SHA256SUMS";
+/// The negative cases' file stem, also accepted by the writer's selection option.
+pub const NEGATIVE_CASES_STEM: &str = "negative-cases";
+const FILE_EXTENSION: &str = "json";
+
+/// The JSON filename of a vector or of the negative cases, from its published stem.
+pub fn file_name(stem: &str) -> String {
+    format!("{stem}.{FILE_EXTENSION}")
+}
 const WARNING: &str = "Public test data only. This file contains the password and every round \
                        key by design; never use its phrase or password for real funds.";
 /// Argon2 version 1.3, written as the number the specification and RFC 9106 use (0x13).

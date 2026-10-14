@@ -1,32 +1,63 @@
-"""Options, scripts and refusals: what the tool says without a terminal or before a question.
+# TOOL-01: public fixtures and cases of the Python PTY test runtime.
+"""
+Options, scripts and refusals: what the tool says without a terminal or
+before a question.
 
-`mhfe encrypt --stdin` asks nothing about a passphrase; a --never-use word, new settings out of
-range and a --confirm that does not fit are refused at start; every answer that is not a secret is
-also an option; a result that cannot be written fails with exit code 1; password sizes out of range
-are refused in the library's words; usage errors and help follow the tool's style; and the messages
-of a script wrap at 78 columns and name only what a command has.
+`mhfe encrypt --stdin` asks nothing about a passphrase; a --never-use
+word, new settings out of range and a --confirm that does not fit are
+refused at start; given options bypass their mapped questions; a
+result that cannot be written fails with exit code 1; password sizes out
+of range are refused in the library's words; usage errors and help
+follow the tool's style; and the messages of a script wrap at 78 columns
+and name only what a command has.
 """
 
 import os
 import subprocess
 import sys
 
-from .constants import (BAD_CHECKSUM, CHECK_ASKED, CHOSEN_ASKED, COIN_ASSUMED, COMMANDS, CONTAINER,
-                        CONTAINER_ASKED, CTRL_C, ERROR_MARK, ERROR_RED, HELP_WIDTH, INVALID_INPUT,
-                        MEMORY_REFUSED, NAMES_COIN, NOT_ENOUGH_RESOURCES, NO_TERMINAL,
-                        NUMBERED_PROMPT, PASSPHRASE_ASKED, PHRASE, PROGRAM, PUBLIC_ADDRESS,
-                        PUBLIC_ETHEREUM_ADDRESS, REPAIR_ASKED, SECRET, TEXT_WIDTH)
+from .constants import (
+    BAD_CHECKSUM,
+    CANCELLED,
+    CHECK_ASKED,
+    CHOSEN_ASKED,
+    COIN_ASSUMED,
+    COMMANDS,
+    CONTAINER,
+    CONTAINER_ASKED,
+    CTRL_C,
+    ERROR_MARK,
+    ERROR_RED,
+    HELP_WIDTH,
+    INVALID_INPUT,
+    MEMORY_REFUSED,
+    NAMES_COIN,
+    NOT_ENOUGH_RESOURCES,
+    NO_TERMINAL,
+    NUMBERED_PROMPT,
+    PASSPHRASE_ASKED,
+    PHRASE,
+    PROGRAM,
+    PUBLIC_ADDRESS,
+    PUBLIC_ETHEREUM_ADDRESS,
+    REPAIR_ASKED,
+    SECRET,
+    TEXT_WIDTH,
+)
 from .recovery import ORIGINAL_PASSPHRASE_ASKED
 from .repair import ZERO_12_CARD, container_with
 from .session import Session, run_plainly, tool_environment, wrapped
 
 
-def check_encrypt_script():
-    """A script gives the phrase and the password twice, one per line, and is not asked about the
-    wallet's passphrase, as no one is: the two lines after the phrase are taken as the passwords.
-    They differ, which ends the tool before Argon2. A question would show its text and take the
-    first password line as its answer instead. The help lists no passphrase among what encrypt asks
-    for."""
+def script_encryption_asks_no_passphrase_and_refuses_different_passwords():
+    """
+    A script gives the phrase and the password twice, one per line, and
+    is not asked about the wallet's passphrase, as no one is: the two
+    lines after the phrase are taken as the passwords. They differ,
+    which ends the tool before Argon2. A question would show its text
+    and take the first password line as its answer instead. The help
+    lists no passphrase among what encrypt asks for.
+    """
     lines = b"\n".join((PHRASE.encode(), SECRET, SECRET + b"x")) + b"\n"
     result = subprocess.run([PROGRAM, "encrypt", "--stdin"], input=lines, capture_output=True,
                             env=dict(os.environ, NO_COLOR="1"), timeout=30)
@@ -37,7 +68,10 @@ def check_encrypt_script():
     assert PASSPHRASE_ASKED not in result.stderr, "encrypt --stdin: asked about the passphrase"
     assert NUMBERED_PROMPT not in result.stderr, "encrypt --stdin: asked to choose"
     assert result.stdout == b"", "encrypt --stdin: wrote to standard output"
-    print("encrypt --stdin: not asked about the passphrase; two different passwords end it, code 2")
+    print(
+        "encrypt --stdin: not asked about the passphrase; "
+        "two different passwords end it, code 2"
+    )
     text = run_plainly(("encrypt", "--help")).stdout
     asks = text[text.index(b"What it asks for:"):text.index(b"Examples:")]
     assert b"Original seed phrase" in asks and b"Password" in asks, f"encrypt --help: {asks!r}"
@@ -45,10 +79,11 @@ def check_encrypt_script():
     print("encrypt --help: no passphrase among what it asks for")
 
 
-def check_never_use_is_refused_at_start():
-    """A --never-use word the library refuses whatever word is chosen is refused before the first
-    question, with exit code 2, instead of the chosen-word question coming back again and again
-    (AUD-015-UI002)."""
+def an_invalid_never_use_word_is_refused_before_any_question():
+    """A --never-use word the library refuses whatever word is chosen is
+    refused before the first question, with exit code 2, instead of the
+    chosen-word question coming back again and again (AUD-015-UI002).
+    """
     for word in ("notaword", "abandon,zoo"):
         result = run_plainly(("new", "--never-use", word))
         assert result.returncode == INVALID_INPUT, f"new --never-use {word}: {result.returncode}"
@@ -59,15 +94,19 @@ def check_never_use_is_refused_at_start():
     print("new: a --never-use word the library refuses ends the tool before any question")
 
 
-def check_rekey_refuses_given_settings_at_start():
-    """New settings out of range, or more memory than the computer gives, and a --confirm the
-    length given cannot use, end `mhfe rekey` with exit code 2 or 4 before the container is asked,
-    not after the old container's recovery (AUD-023-UI002)."""
+def rekey_refuses_invalid_new_settings_before_any_question():
+    """
+    New settings out of range, or more memory than the computer gives,
+    and a --confirm the length given cannot use, end `mhfe rekey` with
+    exit code 2 or 4 before the container is asked, not after the old
+    container's recovery (AUD-023-UI002).
+    """
     for arguments, code, refusal in (
         (("--new-pim", "5000"), INVALID_INPUT, b"The new PIM must be a whole number"),
         (("--new-mem", "99"), INVALID_INPUT, b"The new memory level must be a whole number"),
         (("--words", "24", "--confirm", "check"), INVALID_INPUT, b"The built-in check alone"),
-        # 3 TiB: more free memory than any computer that runs this suite reports.
+        # 3 TiB: more free memory than any computer that runs this suite
+        # reports.
         (("--new-mem", "21"), NOT_ENOUGH_RESOURCES, b"memory"),
     ):
         session = Session(("rekey", "--pim", "0", *arguments))
@@ -80,11 +119,15 @@ def check_rekey_refuses_given_settings_at_start():
     print("rekey: given new settings and a --confirm the length cannot use are refused at start")
 
 
-def check_answers_given_as_options():
-    """Each question that is not about a secret has an option that answers it, and a command
-    given it asks no such question (AUD-023-UI005): `new --wallet-check no --choose-word no
-    --repair-words 0`, `encrypt --same-length no` and `check --words auto --passphrase-used no`. A
-    value that is not yes or no is refused at start."""
+def given_options_skip_their_corresponding_questions():
+    """
+    new, encrypt and check skip the questions answered by their flags.
+
+    This case covers --wallet-check, --choose-word, --repair-words,
+    --same-length and --passphrase-used. option_paths covers the other
+    explicit option families; cli-questions.json inventories questions
+    and interactive follow-ups without claiming they all need flags.
+    """
     session = Session(("new", "--pim", "0", "--wallet-check", "no", "--choose-word", "no",
                        "--repair-words", "0"))
     session.wait_for(b"passphrase of the new wallet")
@@ -104,20 +147,28 @@ def check_answers_given_as_options():
     session.close()
     assert b"How long should" not in session.output, "encrypt --same-length no: asked the length"
 
-    # The capped address space stops the check at its memory reservation, after the questions.
+    # The capped address space stops the check at its memory
+    # reservation, after the questions.
     session = Session(("check", "--pim", "0", "--words", "auto", "--passphrase-used", "no"),
                       capped=sys.platform == "linux")
     session.wait_for(CONTAINER_ASKED)
     session.answer(CONTAINER.encode() + b"\r", b"ontainer password: ")
-    session.type(SECRET + b"\r")
-    if not session.drain_until_exit(15):
-        session.type(CTRL_C)
-        session.drain_until_exit(10)
-    session.close()
+    capped = sys.platform == "linux"
+    # Without Linux's effective cap, cancel before any reservation.
+    session.type(SECRET + b"\r" if capped else CTRL_C)
+    assert session.drain_until_exit(10), "check with its answers: it did not end"
+    code, _ = session.close()
+    assert code == (NOT_ENOUGH_RESOURCES if capped else CANCELLED), (
+        f"check with its answers: code {code}")
+    if capped:
+        assert MEMORY_REFUSED in session.output, "check with its answers: no memory refusal"
+    else:
+        assert b"Recovering" not in session.output, "check with its answers: recovery started"
     assert ORIGINAL_PASSPHRASE_ASKED not in session.output, (
         "check --passphrase-used no: asked about the passphrase")
 
-    # --wallet-check yes asks again for a passphrase given empty: the check needs one.
+    # --wallet-check yes asks again for a passphrase given empty: the
+    # check needs one.
     session = Session(("new", "--pim", "0", "--wallet-check", "yes", "--choose-word", "no",
                        "--repair-words", "0"))
     session.wait_for(b"passphrase of the new wallet")
@@ -129,7 +180,8 @@ def check_answers_given_as_options():
     session.close()
     assert CHECK_ASKED not in session.output[start:], "new --wallet-check yes: asked the check"
 
-    # --passphrase-used answers only the question of --words auto at a terminal.
+    # --passphrase-used answers only the question of --words auto at a
+    # terminal.
     for arguments, refusal in (
             (("check", "--fingerprint", "--passphrase-used", "no"),
              b"--passphrase-used belongs only to --words auto"),
@@ -144,7 +196,8 @@ def check_answers_given_as_options():
                       ("check", "--words", "auto", "--passphrase-used", "maybe")):
         result = run_plainly(arguments)
         assert result.returncode == INVALID_INPUT, f"{arguments}: exit code {result.returncode}"
-        # The refusal is wrapped to the width of the error column, at any word.
+        # The refusal is wrapped to the width of the error column, at
+        # any word.
         refusal = b" ".join(result.stderr.split())
         assert b"give yes or no" in refusal, f"{arguments}: {result.stderr!r}"
     print("new, encrypt and check: answers given as options are not asked; maybe is refused")
@@ -152,17 +205,21 @@ def check_answers_given_as_options():
     print("check: --passphrase-used is refused without --words auto and with --stdin")
 
 
-# What a result that cannot be written gives (style::out in src/bin/mhfe/style.rs): one error
+# What a result that cannot be written gives (style::out in
+# src/bin/mhfe/style.rs): one error
 # line and exit code 1, never a panic or a success (AUD-023-FUN001).
 OUTPUT_FAILED = b"Error: Input or output failed: "
-# The device on which every write fails with "no space left". Linux has it; macOS, where CI runs
+# The device on which every write fails with "no space left". Linux has
+# it; macOS, where CI runs
 # this script too, does not.
 FULL_DEVICE = "/dev/full"
 
 
 def unwritable_output(target):
-    """A descriptor every write to which fails: the writing end of a pipe whose reader is closed,
-    or the full device."""
+    """
+    A descriptor every write to which fails: the writing end of a pipe
+    whose reader is closed, or the full device.
+    """
     if target == FULL_DEVICE:
         return os.open(FULL_DEVICE, os.O_WRONLY)
     reader, writer = os.pipe()
@@ -170,11 +227,13 @@ def unwritable_output(target):
     return writer
 
 
-def check_unwritable_results():
-    """A result written to a pipe whose reader has gone, or to a full device where the system has
-    one, fails with one error line and exit code 1, for each command whose result needs no Argon2
-    work: password, repair-words and repair. encrypt, decrypt and check write theirs through the
-    same function."""
+def unwritable_standard_output_refuses_a_successful_result():
+    """A result written to a pipe whose reader has gone, or to a full
+    device where the system has one, fails with one error line and exit
+    code 1, for each command whose result needs no Argon2 work:
+    password, repair-words and repair. encrypt, decrypt and check write
+    theirs through the same function.
+    """
     container = container_with({3: "?", 17: "?"})
     commands = (
         (("password", "--words", "6"), b""),
@@ -199,9 +258,36 @@ def check_unwritable_results():
               "fails with exit code 1")
 
 
-def check_password_sizes():
-    """A password size out of range is refused before anything is made, in the library's words
-    (AUD-011-ARC001), with exit code 2; the sizes at the limits are made."""
+def unwritable_standard_error_refuses_a_successful_result():
+    """Messages that cannot be written to standard error, a full device,
+    fail a command that otherwise succeeded with exit code 1, and leave
+    the documented code of one that failed, with no panic and no abort
+    (AUD-024-FUN009). Linux only, which has the device.
+    """
+    if not os.path.exists(FULL_DEVICE):
+        print("standard error on a full device: not checked, as this system has none")
+        return
+    for arguments, expected in ((("password", "--words", "6"), 1),
+                                (("password", "--words", "33"), INVALID_INPUT)):
+        errors = os.open(FULL_DEVICE, os.O_WRONLY)
+        try:
+            result = subprocess.run([PROGRAM, *arguments], stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE, stderr=errors,
+                                    env=tool_environment(), timeout=30)
+        finally:
+            os.close(errors)
+        label = " ".join(arguments)
+        assert result.returncode == expected, f"{label}: exit code {result.returncode}"
+    print("standard error on a full device: exit code 1 after a success, the documented code "
+          "after a failure, and no abort")
+
+
+def password_sizes_outside_the_library_limits_are_refused():
+    """
+    A password size out of range is refused before anything is made, in
+    the library's words (AUD-011-ARC001), with exit code 2; the sizes at
+    the limits are made.
+    """
     for arguments, message in (
         (("password", "--words", "33"), "Choose between 1 and 32 words"),
         (("password", "--words", "0"), "Choose between 1 and 32 words"),
@@ -219,8 +305,10 @@ def check_password_sizes():
     print("password sizes: out of range refused in the library's words, the limits made")
 
 
-def check_usage_errors_and_help():
-    """Usage errors read as errors of the tool, and every help fits its width with examples."""
+def usage_errors_hide_secrets_and_help_keeps_terminal_colours():
+    """Usage errors read as errors of the tool, and every help fits its
+    width with examples.
+    """
     for arguments, message in (
         (("encrypt", "--no-such-option"), "Unexpected argument '--no-such-option' found"),
         (("serve",), "The following required arguments were not provided: <FILE>"),
@@ -257,10 +345,12 @@ def check_usage_errors_and_help():
           "with examples")
 
 
-def check_script_messages():
-    """Errors wrap at the text width, the advice without a terminal names only what a command has,
-    and a script that compares with an address without --coin is told that Bitcoin is assumed
-    (AUD-010)."""
+def script_messages_wrap_with_their_commands_input_names():
+    """
+    Errors wrap at the text width, the advice without a terminal names
+    only what a command has, and a script that compares with an address
+    without --coin is told that Bitcoin is assumed (AUD-010).
+    """
     lines = b"\n".join((BAD_CHECKSUM, SECRET, SECRET)) + b"\n"
     result = run_plainly(("encrypt", "--stdin", "--pim", "0"), lines)
     assert result.returncode == INVALID_INPUT, f"encrypt --stdin: exit code {result.returncode}"
@@ -274,8 +364,10 @@ def check_script_messages():
     print("errors: a long one wraps to 78 columns under its mark")
 
     container = CONTAINER.encode()
-    # A command that reads a secret refuses a standard input that is no terminal at once, without
-    # --stdin, before any question could take its lines as answers (AUD-023-UI006).
+    # A command that reads a secret refuses a standard input that is no
+    # terminal at once, without
+    # --stdin, before any question could take its lines as answers
+    # (AUD-023-UI006).
     lines = b"1\n" + container + b"\n" + SECRET + b"\n"
     for arguments, data, names_stdin in (
         (("password", "--dice"), b"", False),

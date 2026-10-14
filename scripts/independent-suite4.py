@@ -1,24 +1,33 @@
-"""Independent implementation of MHFE suite 4, the same-length containers, for checking the Rust
-implementation.
+"""
+Independent implementation of MHFE suite 4, the same-length containers,
+for checking the Rust implementation.
 
-Written from the specification alone, like scripts/independent-suite3.py, whose word list, BIP39
-coding, password rule and OpenSSL Argon2id it uses unchanged. Install the packages with
-`python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`.
-Only public test inputs belong here.
+Written from the specification alone, like
+scripts/independent-suite3.py, whose word list, BIP39 coding, password
+rule and OpenSSL Argon2id it uses unchanged. Install the packages with
+`python3 -m pip install --require-hashes -r
+scripts/independent-suite3-requirements.txt`. Only public test inputs
+belong here.
 
 Usage:
-    python3 scripts/independent-suite4.py encrypt "<phrase>" "<password>" [PIM] [MEM]
-    python3 scripts/independent-suite4.py vector [--trust-argon2-keys] [--record <file>] <file.json> ...
-    python3 scripts/independent-suite4.py validation tests/fixtures/suite4-vectors/validation-cases.json
+python3 scripts/independent-suite4.py encrypt "<phrase>" "<password>"
+[PIM] [MEM]
+python3 scripts/independent-suite4.py vector [--trust-argon2-keys]
+[--record <file>] <file.json> ...
+python3 scripts/independent-suite4.py validation
+tests/fixtures/suite4-vectors/validation-cases.json
 
-`vector` checks suite 4 vector files and their negative-cases.json: it recomputes every value in
-both directions, including every Argon2id call. With --trust-argon2-keys it takes the recorded
-Argon2id outputs as given, looked up by their salt, and checks everything else. --record adds the
-checked files to a JSON record, normally tests/fixtures/suite4-vectors/independent-verification.json,
-in the layout of the suite 3 record.
+`vector` checks suite 4 vector files and their negative-cases.json: it
+recomputes every value in both directions, including every Argon2id
+call. With --trust-argon2-keys it takes the recorded Argon2id outputs as
+given, looked up by their salt, and checks everything else. --record
+adds the checked files to a JSON record, normally
+tests/fixtures/suite4-vectors/independent-verification.json, in the
+layout of the suite 3 record.
 
-`validation` checks the fast cases, which need no Argon2id: that `ENT` is part of every round
-message, and the inputs that must be refused before any Argon2id work.
+`validation` checks the fast cases, which need no Argon2id: that `ENT`
+is part of every round message, and the inputs that must be refused
+before any Argon2id work.
 """
 
 import hashlib
@@ -26,10 +35,29 @@ import hmac
 import importlib.util
 import json
 import os
+import runpy
 import sys
+from pathlib import Path
+
+# Deliberate copy in the four checker entry points: refuse before any
+# optional dependency or test module loads. verify-python-checks.mjs
+# checks
+# their identical refusal under -O, -OO and PYTHONOPTIMIZE.
+if sys.flags.optimize:
+    sys.exit(
+        "Python optimization disables assertions; run this checker "
+        "without -O or PYTHONOPTIMIZE."
+    )
+
+parse_arguments = runpy.run_path(
+    Path(__file__).with_name("independent-arguments.py")
+)["parse_arguments"]
+if __name__ == "__main__":
+    parse_arguments(sys.argv[1:], "validation")
 
 _here = os.path.dirname(os.path.abspath(__file__))
-_spec = importlib.util.spec_from_file_location("suite3", os.path.join(_here, "independent-suite3.py"))
+_spec = importlib.util.spec_from_file_location("suite3", os.path.join(_here,
+    "independent-suite3.py"))
 suite3 = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(suite3)
 
@@ -40,7 +68,8 @@ SCHEMA = "mhfe-suite-4-vector-v1"
 NEGATIVE_SCHEMA = "mhfe-suite-4-negative-case-v1"
 VALIDATION_SCHEMA = "mhfe-suite-4-validation-cases-v1"
 ROUNDS = suite3.ROUNDS
-# Entropy bytes of the lengths suite 4 takes; a 24-word source has no suite 4 form.
+# Entropy bytes of the lengths suite 4 takes; a 24-word source has no
+# suite 4 form.
 SHORT_LENGTHS = suite3.SHORT_LENGTHS
 
 
@@ -51,7 +80,9 @@ def round_message(pim, level, entropy_bits, round_index, half):
 
 
 def round_values(argon2, password, pim, level, entropy_bits, round_index, right):
-    """The salt input, salt, Argon2id output, mask input and mask of one round."""
+    """The salt input, salt, Argon2id output, mask input and mask of one
+    round.
+    """
     message = round_message(pim, level, entropy_bits, round_index, right)
     salt_input, mask_input = DS_SALT + message, DS_MASK + message
     salt = hashlib.blake2b(salt_input, digest_size=32).digest()[:16]
@@ -102,7 +133,8 @@ def check_vector(vector, trust_keys):
     pim, level = inputs["pim"], inputs["memory_level"]
     assert inputs["password"].encode().hex() == inputs["password_utf8_hex"]
     password = suite3.check_password(
-        {"password": inputs["password"], "password_nfkd_utf8_hex": inputs["password_nfkd_utf8_hex"]}
+        {"password": inputs["password"],
+            "password_nfkd_utf8_hex": inputs["password_nfkd_utf8_hex"]}
     )
     assert vector["argon2"] == {
         "variant": "Argon2id",
@@ -146,8 +178,10 @@ def check_vector(vector, trust_keys):
 
 
 def check_negative_case(case):
-    """Recovery with a wrong password or setting gives another phrase of the same length and no
-    error; another chosen length is refused before any Argon2id work."""
+    """Recovery with a wrong password or setting gives another phrase of
+    the same length and no error; another chosen length is refused
+    before any Argon2id work.
+    """
     suite3.check_header(case, NEGATIVE_SCHEMA, SUITE_ID)
     pim, level, words = case["pim"], case["memory_level"], case["words"]
     password = suite3.check_password(case)
@@ -163,22 +197,28 @@ def check_negative_case(case):
 
 
 def check_validation_cases(path):
-    """The fast cases: ENT in every round message, and the inputs refused before Argon2id."""
+    """
+    The fast cases: ENT in every round message, and the inputs refused
+    before Argon2id.
+    """
     fixture = json.load(open(path, encoding="utf-8"))
     assert fixture["schema"] == VALIDATION_SCHEMA and fixture["suite_id"] == SUITE_ID.decode()
     for case in fixture["ent_separation"]:
         half = bytes.fromhex(case["half_hex"])
         assert len(half) * 16 == case["entropy_bits"], case["id"]
-        message = round_message(case["pim"], case["memory_level"], case["entropy_bits"], case["round"], half)
+        message = round_message(case["pim"], case["memory_level"], case["entropy_bits"],
+            case["round"], half)
         assert (DS_SALT + message).hex() == case["salt_input_hex"], case["id"]
-        assert hashlib.blake2b(DS_SALT + message, digest_size=32).digest()[:16].hex() == case["salt_hex"], case["id"]
+        assert hashlib.blake2b(DS_SALT + message,
+            digest_size=32).digest()[:16].hex() == case["salt_hex"], case["id"]
         key = bytes.fromhex(case["key_hex"])
         assert (DS_MASK + message).hex() == case["mask_input_hex"], case["id"]
         mask = hmac.new(key, DS_MASK + message, hashlib.sha256).digest()[: len(half)]
         assert mask.hex() == case["mask_hex"], case["id"]
     salts = [case["salt_hex"] for case in fixture["ent_separation"]]
     assert len(set(salts)) == len(salts), "ENT must separate the salts"
-    # The recovery table: a chosen original length, a selected suite or both admit only these
+    # The recovery table: a chosen original length, a selected suite or
+    # both admit only these
     # container word counts; every refusal case must fall outside them.
     def admitted(length, suite, words):
         by_length = length is None or words == 24 or (length < 24 and words == length)
@@ -199,7 +239,8 @@ def check_validation_cases(path):
     )
 
 
-# Taken before main() puts verifier_description below in its place, which would otherwise call
+# Taken before main() puts verifier_description below in its place,
+# which would otherwise call
 # itself.
 suite3_verifier_description = suite3.verifier_description
 
@@ -213,18 +254,15 @@ def verifier_description():
 
 
 def main(arguments):
-    command, arguments = arguments[0], arguments[1:]
-    if command == "encrypt":
-        extra = [int(value) for value in arguments[2:4]]
-        print(encrypt(arguments[0], arguments[1], *extra))
+    options = parse_arguments(arguments, "validation")
+    if options.command == "encrypt":
+        print(encrypt(options.phrase, options.password, options.pim, options.memory_level))
         return
-    if command == "validation":
-        for path in arguments:
+    if options.command == "validation":
+        for path in options.files:
             check_validation_cases(path)
         return
-    if command != "vector":
-        sys.exit(__doc__)
-    trust, record_path, paths = suite3.vector_arguments(arguments)
+    trust, record_path, paths = options.trust_argon2_keys, options.record, options.files
     checked = suite3.check_files(paths, trust, check_vector, check_negative_case)
     if record_path is not None:
         # The suite 3 record format, with this script as the verifier.

@@ -1,0 +1,10 @@
+[package]
+name = "aud024-verifier-decoy-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mhfe-experimental = { path = "../../../../.." }
+
+[workspace]

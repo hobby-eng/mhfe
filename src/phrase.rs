@@ -37,7 +37,7 @@ const PREFIX_LETTERS: usize = 4;
 /// Parses an English BIP39 phrase. Any spacing and letter case is accepted, and so are the
 /// first four or more letters of a word, because many metal backups keep only four letters.
 /// The checksum must be valid. Error messages give word positions, never the words.
-pub fn parse(input: &str) -> Result<Mnemonic, String> {
+pub(crate) fn parse(input: &str) -> Result<Mnemonic, String> {
     let word_count = input.split_whitespace().count();
     if !WORD_COUNTS.contains(&word_count) {
         return Err(format!(
@@ -49,8 +49,7 @@ pub fn parse(input: &str) -> Result<Mnemonic, String> {
     // Reserved at full size up front, so the phrase is never copied by a reallocation.
     let mut normalized = Zeroizing::new(String::with_capacity(word_count * (LONGEST_WORD + 1)));
     for (position, typed) in input.split_whitespace().enumerate() {
-        let lowercase = Zeroizing::new(typed.to_ascii_lowercase());
-        let word = complete_word(&lowercase).ok_or_else(|| {
+        let word = typed_word(typed).ok_or_else(|| {
             format!(
                 "word {} is not in the English BIP39 word list",
                 position + 1
@@ -72,7 +71,7 @@ pub fn parse(input: &str) -> Result<Mnemonic, String> {
 
 /// Parses a container: a valid phrase of 24 words (suite 3) or of 12, 15, 18 or 21 words
 /// (suite 4, the same-length containers), which [`crate::Suite::of_container`] tells apart.
-pub fn parse_container(input: &str) -> Result<Mnemonic, String> {
+pub(crate) fn parse_container(input: &str) -> Result<Mnemonic, String> {
     parse(input)
 }
 
@@ -143,12 +142,6 @@ fn mnemonic_of(entropy: &[u8]) -> Result<Mnemonic, MhfeError> {
         .map_err(|error| MhfeError::Internal(error.to_string()))
 }
 
-/// Checks a container before anything is computed and returns it as read: every word written
-/// out in full and in lower case, one space apart, so a person can compare it with the backup.
-pub fn check_container(input: &str) -> Result<String, MhfeError> {
-    crate::ContainerFacts::read(input).map(|facts| facts.words().to_owned())
-}
-
 /// A word of the English list, or the only word that starts with the typed letters when at
 /// least four were typed.
 pub(crate) fn complete_word(typed: &str) -> Option<&'static str> {
@@ -195,6 +188,14 @@ pub(crate) fn counts_text(counts: &[usize]) -> String {
     }
 }
 
+/// The list word that one word as typed stands for: in any case of ASCII letters, four letters of
+/// it enough. The lower-case copy, part of a secret phrase, is wiped. Unicode case is not folded:
+/// a sign such as U+212A KELVIN SIGN is no letter of the list, in a phrase or in a wish
+/// (AUD-024-FUN012).
+pub(crate) fn typed_word(typed: &str) -> Option<&'static str> {
+    complete_word(&Zeroizing::new(typed.to_ascii_lowercase()))
+}
+
 /// The word numbers of `text` as typed, each word completed from four letters in any case, and the
 /// positions, from 0, that are unreadable: `?` or not a word of the list. An unreadable word stands
 /// as 0 until it is repaired or found.
@@ -202,7 +203,7 @@ pub(crate) fn word_numbers(text: &str) -> (Vec<u16>, Vec<usize>) {
     let mut numbers = Vec::new();
     let mut unreadable = Vec::new();
     for (position, typed) in text.split_whitespace().enumerate() {
-        match complete_word(&typed.to_ascii_lowercase()).and_then(word_number) {
+        match typed_word(typed).and_then(word_number) {
             Some(number) => numbers.push(number),
             None => {
                 numbers.push(0);
@@ -259,8 +260,7 @@ pub(crate) fn words_of(numbers: &[u16]) -> String {
 mod tests {
     use super::*;
 
-    const ZERO_12: &str =
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const ZERO_12: &str = crate::test_support::ABANDON_12;
 
     #[test]
     fn counts_are_grouped_by_thousands() {

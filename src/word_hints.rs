@@ -208,17 +208,14 @@ mod tests {
 
     #[test]
     fn one_letter_gives_a_count_and_two_the_words() {
-        assert_eq!(WordList::Bip39.hint("z"), Hint::Count(4));
-        assert_eq!(
-            WordList::Bip39.hint("Z"),
-            Hint::Count(4),
-            "in any letter case"
-        );
+        for case in [&known_answers::CASES[0], &known_answers::CASES[4]] {
+            assert_eq!(case.list.hint(case.line), case.hint);
+            assert_eq!(case.list.hint(&case.line.to_ascii_uppercase()), case.hint);
+        }
         assert_eq!(
             WordList::Bip39.hint("abandon zo"),
             Hint::Words(&["zone", "zoo"])
         );
-        assert_eq!(WordList::Eff.hint("y"), Hint::Count(27));
         assert_eq!(WordList::Eff.hint("yo-"), Hint::Words(&["yo-yo"]));
         let Hint::Words(un) = WordList::Eff.hint("un") else {
             panic!("no words");
@@ -229,10 +226,8 @@ mod tests {
     #[test]
     fn a_whole_word_alone_needs_no_hint_but_a_shared_start_does() {
         assert_eq!(WordList::Bip39.hint("zoo"), Hint::Nothing);
-        assert_eq!(
-            WordList::Bip39.hint("art"),
-            Hint::Words(&["art", "artefact", "artist", "artwork"])
-        );
+        let case = &known_answers::CASES[3];
+        assert_eq!(case.list.hint(case.line), case.hint);
     }
 
     #[test]
@@ -241,9 +236,10 @@ mod tests {
         assert_eq!(WordList::Bip39.hint("abandon xq"), Hint::NoWord);
         // Longer than any word of either list: still no word begins like this (AUD-015-UI004).
         assert_eq!(WordList::Bip39.hint("toolongforanyword"), Hint::NoWord);
-        assert_eq!(WordList::Eff.hint("zookeepers"), Hint::NoWord);
+        let missing = &known_answers::CASES[7];
+        assert_eq!(missing.list.hint(missing.line), missing.hint);
         assert_eq!(WordList::Eff.hint("zookeeper"), Hint::Nothing);
-        assert_eq!(WordList::Eff.completion("zookeepers").letters, "");
+        assert_eq!(missing.list.completion(missing.line).letters, "");
         // A space after a word, a "?" for an unreadable word, a digit or a control character: no
         // word is being typed.
         for line in ["", "abandon ", "abandon ?", "ab1", "a\tb\u{1}"] {

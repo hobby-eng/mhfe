@@ -32,6 +32,7 @@ pub type ProgressCallback<'a> = &'a mut dyn FnMut(u32, u32) -> Result<(), MhfeEr
 pub const ENCRYPTION_ROUNDS: u32 = 2 * ROUNDS;
 
 /// The length of an original phrase: 12, 15, 18, 21 or 24 words, the BIP39 lengths MHFE takes.
+///
 /// It is made only by [`WordCount::new`], so it never holds any other number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WordCount(usize);
@@ -122,8 +123,8 @@ pub enum RecoveryStatus {
     Verified,
     /// From a same-length container, which has no built-in check.
     NoBuiltInCheck,
-    /// Read as 24 words by automatic detection: for a shorter original the password or a setting
-    /// is wrong.
+    /// Read as 24 words by automatic detection, or beside verified short readings after the
+    /// stated short length failed. This reading has no built-in check; another reading may pass.
     ReadAs24Detected,
     /// Read as 24 words, as the person stated.
     ReadAs24Chosen,
@@ -246,14 +247,38 @@ pub enum Recovery {
 /// A container that has been computed but not yet checked (creation steps 1 to 5). It may be
 /// shown to a person while [`Mhfe::check_new_container`] runs, clearly marked as not verified;
 /// a program that receives it for further use should wait for the check.
+///
+/// Its words and suite are read-only:
+///
+/// ```compile_fail
+/// fn corrupt(container: &mut mhfe::NewContainer) { container.words.clear(); }
+/// ```
+///
+/// ```compile_fail
+/// fn corrupt(container: &mut mhfe::NewContainer) {
+///     container.suite = mhfe::Suite::TwentyFourWords;
+/// }
+/// ```
 pub struct NewContainer {
     /// The words of the container: 24, or as many as the original for a same-length container.
-    pub words: Zeroizing<String>,
+    words: Zeroizing<String>,
     /// The suite it was made with, which an application shows after creating it.
-    pub suite: Suite,
+    suite: Suite,
     /// The state `X` the check must get back: the packed original, or the entropy itself. It is
     /// kept out of swap from before the first round until the check is done.
     source: LockedBytes,
+}
+
+impl NewContainer {
+    /// The unchecked container's words, held by this object until its creation check completes.
+    pub fn words(&self) -> &str {
+        &self.words
+    }
+
+    /// The suite the unchecked container was made with.
+    pub fn suite(&self) -> Suite {
+        self.suite
+    }
 }
 
 /// MHFE at one work factor, together with the Argon2 engine that computes it.
@@ -452,12 +477,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         password: &'a Password,
         geometry: Geometry,
     ) -> Permutation<'a> {
-        Permutation {
-            engine: &mut self.engine,
-            password,
-            work: self.work,
-            geometry,
-        }
+        Permutation::new(&mut self.engine, password, self.work, geometry)
     }
 }
 
@@ -492,6 +512,22 @@ pub(crate) fn recover(x: &State, length: PhraseLength) -> Result<Recovery, MhfeE
                 .collect::<Result<Vec<_>, MhfeError>>()?,
         )),
     }
+}
+
+/// Every reading of the state `x` of a 24-word container worth comparing with a wallet
+/// ([`LengthDetection::readings`], as the rehearsal check compares them), each compared with the
+/// stated `length`: an address or the fingerprint is compared with all of them, whatever length
+/// is stated (AUD-024-FUN008).
+pub(crate) fn every_reading(
+    x: &State,
+    length: PhraseLength,
+) -> Result<Vec<RecoveredPhrase>, MhfeError> {
+    let detection = LengthDetection::of(x);
+    let stated = length.stated();
+    detection
+        .readings()
+        .map(|words| Ok(read_as(x, words)?.compared_with(stated, detection.short_lengths())))
+        .collect()
 }
 
 /// Refuses a container equal to the original. A working implementation meets `Y = X` with
@@ -571,10 +607,8 @@ mod tests {
     use crate::feistel::tests::HashEngine;
     use crate::test_support::{counted, reduced, test_password, wrong_password, TREZOR_COUNTER};
 
-    const ZERO_12: &str =
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    const LEGAL_24: &str = "legal winner thank year wave sausage worth useful legal winner thank year \
-                            wave sausage worth useful legal winner thank year wave sausage worth title";
+    const ZERO_12: &str = crate::test_support::ABANDON_12;
+    use crate::test_support::LEGAL_24;
 
     #[test]
     fn creation_warns_when_detection_would_accept_another_length() {

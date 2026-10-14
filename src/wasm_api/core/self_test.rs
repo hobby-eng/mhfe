@@ -10,7 +10,6 @@ use crate::engine::{BrowserArgon2Check, BrowserArgon2SizesCheck};
 use crate::self_check::{sets, ComponentCheck, SelfCheck};
 use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wasm_api::{js_error, json, run_self_check};
-use crate::WorkFactor;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,7 +61,7 @@ struct SelfTestJson<'a> {
 #[wasm_bindgen(js_name = selfTest)]
 pub fn self_test(argon2: JsArgon2, on_round: &js_sys::Function) -> Result<String, JsError> {
     let test = SelfTest::published().map_err(js_error)?;
-    let (mut mhfe, _) = mhfe_with(WorkFactor::default(), argon2)?;
+    let (mut mhfe, _) = mhfe_with(test.work(), argon2)?;
     let result = test.run(&mut mhfe, &mut |stage, round, rounds| {
         report(on_round, stage, round, rounds)
     });
@@ -85,7 +84,8 @@ pub fn self_test(argon2: JsArgon2, on_round: &js_sys::Function) -> Result<String
 /// The self-check of the core module's parts at `tier`, "startup" or "full": the cipher's hashes
 /// and rounds, the formats, the container facts and what to keep, passwords, the word list, the
 /// repair words, the check word, the wallet's hashes, seeds, keys and addresses, the wallet check,
-/// hidden wallets, rekey and the rehearsal check, each with a case it must refuse. With `argon2`,
+/// hidden wallets, rekey, missing-word search and the rehearsal check, each with a case it must
+/// refuse. With `argon2`,
 /// the worker's Argon2 build, it also runs Argon2's known answer through it; without, Argon2 is
 /// listed as not run. `skip_ids` leaves out parts that another module of the page has passed
 /// already. Returns JSON as described at [`run_self_check`].

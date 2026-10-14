@@ -73,6 +73,12 @@ const DRAWS: [DrawCase; 4] = [
     },
 ];
 
+/// Independent rejection-sampling examples: bytes, bound and accepted value.
+pub(crate) const REJECTION_CASES: [(&[u8], usize, usize); 2] = [
+    (&[228, 5], 57, 5),
+    (&[0xf3, 0x00, 0x00, 0x07], crate::eff::LIST_SIZE, 7),
+];
+
 /// The `password-generator` check.
 pub(crate) struct GeneratorCheck {
     draws: &'static [DrawCase],
@@ -107,19 +113,15 @@ impl ComponentCheck for GeneratorCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        // 228 = 4 x 57 is the first byte refused for 57 values; 62,208 = 8 x 7,776 the first pair
-        // refused for 7,776, and the pair is read as a big-endian number.
-        findings.one(|| {
-            let mut source = ScriptedSource::new(vec![228, 5]);
-            expect(uniform_below(&mut source, 57) == Ok(5), "a draw is biased")
-        });
-        findings.one(|| {
-            let mut source = ScriptedSource::new(vec![0xf3, 0x00, 0x00, 0x07]);
-            expect(
-                uniform_below(&mut source, 7776) == Ok(7),
-                "a draw is biased",
-            )
-        });
+        for &(bytes, bound, expected) in &REJECTION_CASES {
+            findings.one(|| {
+                let mut source = ScriptedSource::new(bytes.to_vec());
+                expect(
+                    uniform_below(&mut source, bound) == Ok(expected),
+                    "a draw is biased",
+                )
+            });
+        }
         findings.each("draw", self.draws, Self::draw);
         // A stuck source is refused before anything is drawn from it.
         findings.one(|| {

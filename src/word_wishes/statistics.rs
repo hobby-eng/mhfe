@@ -205,6 +205,7 @@ fn chi_square(counts: &[usize], bins: usize) -> f64 {
 }
 
 /// Laurent-Massart's chi-square tail bound: df + 2 sqrt(df t) + 2t, t = ln(1/alpha).
+///
 /// This bounds the chi-square model; Pearson's finite multinomial statistic is approximate.
 fn chi_square_bound(bins: usize) -> f64 {
     let freedom = (bins - 1) as f64;
@@ -235,6 +236,7 @@ fn word_counts_are_uniform(counts: &[usize], left_out: &[u16], label: &str) {
 }
 
 /// Test each full free word separately before pooling: opposite position biases can cancel.
+///
 /// With 20,000 draws each allowed bin has an expected count above nine.
 fn free_words_are_uniform(drawn: &Drawn, positions: &[usize], left_out: Option<u16>) {
     let mut pooled = vec![0usize; WORDS];
@@ -273,6 +275,7 @@ fn bit_pairs_match(drawn: &Drawn, first: usize, second: usize, probabilities: [f
 }
 
 /// Adjacent bits within each free full word, and equal-offset bits across neighboring free words.
+///
 /// These joint checks catch copied or correlated bits whose separate marginals remain balanced.
 fn free_bits_are_uncorrelated(drawn: &Drawn, positions: &[usize], left_out: Option<u16>) {
     let allowed = WORDS - usize::from(left_out.is_some());

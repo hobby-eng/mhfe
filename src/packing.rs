@@ -13,30 +13,30 @@ use zeroize::Zeroizing;
 use crate::memory::LockedBytes;
 use crate::MhfeError;
 
-pub const STATE_BYTES: usize = 32;
-pub type State = [u8; STATE_BYTES];
+pub(crate) const STATE_BYTES: usize = 32;
+pub(crate) type State = [u8; STATE_BYTES];
 /// The words of a phrase that fills the whole state, three for every four bytes (BIP39): a suite 3
 /// container, and the longest original seed phrase, which has no room left for a built-in check.
-pub const STATE_WORDS: usize = words_of_entropy(STATE_BYTES);
+pub(crate) const STATE_WORDS: usize = words_of_entropy(STATE_BYTES);
 
 /// The words of a BIP39 phrase of `bytes` bytes of entropy: three for every four bytes, as BIP39
 /// adds one checksum bit for every 32 bits of entropy and each word carries 11 bits.
-pub const fn words_of_entropy(bytes: usize) -> usize {
+pub(crate) const fn words_of_entropy(bytes: usize) -> usize {
     bytes / 4 * 3
 }
 
 /// Short phrase lengths, in the order automatic detection tests them.
-pub const SHORT_WORD_COUNTS: [usize; 4] = [12, 15, 18, 21];
+pub(crate) const SHORT_WORD_COUNTS: [usize; 4] = [12, 15, 18, 21];
 
 /// The entropy bytes of a BIP39 phrase of `words` words, four for every three: the inverse of
 /// [`words_of_entropy`].
-pub const fn entropy_of_words(words: usize) -> usize {
+pub(crate) const fn entropy_of_words(words: usize) -> usize {
     words / 3 * 4
 }
 
 /// The checksum bits of a BIP39 phrase of `words` words: one for every three words, 4 for 12 words
 /// and 8 for 24 (BIP39: CS = ENT / 32 and words = (ENT + CS) / 11).
-pub const fn checksum_bits(words: usize) -> usize {
+pub(crate) const fn checksum_bits(words: usize) -> usize {
     words / 3
 }
 
@@ -50,7 +50,7 @@ pub(crate) fn with_checksum(entropy: &State) -> [u8; STATE_BYTES + 1] {
 }
 
 /// Entropy size `ENT / 8` of a phrase with `words` words.
-pub fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
+pub(crate) fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
     if !crate::phrase::WORD_COUNTS.contains(&words) {
         return Err(MhfeError::InvalidWordCount(words));
     }
@@ -59,7 +59,7 @@ pub fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
 
 /// Packs the entropy `E` of a phrase into `X`, which is the phrase in all but form: it is written
 /// into a buffer locked first, which the caller holds through the rounds.
-pub fn pack(entropy: &[u8]) -> Result<LockedBytes, MhfeError> {
+pub(crate) fn pack(entropy: &[u8]) -> Result<LockedBytes, MhfeError> {
     let length = entropy.len();
     if entropy_bytes(words_of_entropy(length)) != Ok(length) {
         return Err(MhfeError::Internal(format!(
@@ -85,7 +85,7 @@ fn sha256(data: &[u8]) -> Zeroizing<[u8; 32]> {
 /// Reads `X` as the entropy of a phrase with `words` words: its first `ENT / 8` bytes, read in
 /// place, since a copy would lie outside the locked buffer that holds `X`. For a short phrase all
 /// `r` verifier bits must match, otherwise the result is [`MhfeError::VerifierMismatch`].
-pub fn unpack(state: &State, words: usize) -> Result<&[u8], MhfeError> {
+pub(crate) fn unpack(state: &State, words: usize) -> Result<&[u8], MhfeError> {
     let length = entropy_bytes(words)?;
     let (entropy, verifier) = state.split_at(length);
     if length < STATE_BYTES {

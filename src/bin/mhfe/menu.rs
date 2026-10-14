@@ -12,10 +12,9 @@
 use std::ffi::OsString;
 use std::io::{self, Write};
 
-use anstream::eprintln;
 use clap::{CommandFactory, Parser};
 
-use crate::choice::{self, draw_entries, redraw_from, write_control, Answer, Question};
+use crate::choice::{self, draw_entries, redraw_from, Answer, Question};
 use crate::container_repair;
 use crate::exit::{Failure, SUCCESS};
 use crate::hidden_input::{self, Key};
@@ -23,6 +22,7 @@ use crate::made_password::PasswordKind;
 use crate::readme;
 use crate::settings::Operation;
 use crate::style;
+use crate::terminal::write_control;
 use crate::{protect, self_test, serve, show_failure, startup, terminal, Cli};
 
 /// What an entry does when it is chosen.
@@ -69,7 +69,7 @@ impl Entry {
 /// one, and a command of the menu, which runs in a thread of it, is isolated without one
 /// (protect.rs). When a check fails, the window that a double-click opened stays until Enter, so
 /// that the failure can be read.
-pub fn start() -> Result<i32, Failure> {
+pub(crate) fn start() -> Result<i32, Failure> {
     if let Err(failure) = startup::check(startup::Checks::EveryPart) {
         // Ctrl+C at the wait restores the terminal, which the wait switches to single keys.
         terminal::stop_on_ctrl_c();
@@ -101,7 +101,7 @@ fn run() -> Result<i32, Failure> {
         menu_lines = 0;
         match &entries[chosen].action {
             Action::Quit => return Ok(SUCCESS),
-            Action::Help => Cli::command().print_long_help()?,
+            Action::Help => style::out(Cli::command().render_long_help())?,
             Action::Password => match make_passwords() {
                 Ok(()) => continue,
                 Err(failure) => show_failure(&failure),
@@ -274,13 +274,21 @@ fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
     let cli = Cli::try_parse_from(typed)
         .map_err(|error| Failure::internal(format!("The menu built a wrong command: {error}")))?;
     std::thread::scope(|scope| {
-        let worker = scope.spawn(|| {
-            protect::isolate(crate::needs_of(&cli.command));
-            // The checks at start ran once before the menu, in its own thread, which is not
-            // isolated; what isolate() reports for this thread is probed here.
-            protect::verify_isolation();
-            crate::run(cli.command)
-        });
+        // A thread the system refuses, as under a limit on processes, is the menu's message, not
+        // a panic (AUD-024-FUN002).
+        let worker = std::thread::Builder::new()
+            .spawn_scoped(scope, || {
+                protect::isolate(crate::needs_of(&cli.command));
+                // The checks at start ran once before the menu, in its own thread, which is not
+                // isolated; what isolate() reports for this thread is probed here.
+                protect::verify_isolation();
+                crate::run(cli.command)
+            })
+            .map_err(|error| {
+                Failure::internal(format!(
+                    "The system refused a thread for the command: {error}"
+                ))
+            })?;
         worker
             .join()
             .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
@@ -310,14 +318,14 @@ fn make_passwords() -> Result<(), Failure> {
             .map(OsString::from),
     );
     let input = terminal::Input::terminal_only();
-    let screen = terminal::PrivateScreen::enter_to_show(&input);
+    let screen = terminal::PrivateScreen::enter_to_show(&input)?;
     loop {
         run_command(&arguments)?;
         eprintln!();
         if !wait_for_enter("Press Enter for another password (Esc returns to the menu).")? {
             return Ok(());
         }
-        screen.clear();
+        screen.clear()?;
     }
 }
 

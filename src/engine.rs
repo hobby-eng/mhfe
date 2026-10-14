@@ -82,8 +82,6 @@ pub(crate) mod known_answers;
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
 
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) use ffi::{lock_pages, page_size, unlock_pages};
 #[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
 pub use known_answers::{BrowserArgon2Check, BrowserArgon2SizesCheck};
 #[cfg(not(target_arch = "wasm32"))]

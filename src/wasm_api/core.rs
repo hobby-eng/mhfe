@@ -14,7 +14,7 @@ use wasm_bindgen::prelude::*;
 
 use super::{
     call_page, container_fingerprint_text, js_error, json, repair_capacities, review_choice,
-    secret_json, whole_number, CapacityJson, SecretText,
+    secret_json, whole_number, yes_or_no, CapacityJson, SecretText,
 };
 use crate::check_word;
 use crate::engine::browser::{BrowserEngine, JsArgon2, HIGHEST_BROWSER_MEMORY_LEVEL};
@@ -341,7 +341,7 @@ fn sealed_json(
 /// The repair words come only with the result, after the check has passed.
 #[expect(
     clippy::too_many_arguments,
-    reason = "the WebAssembly boundary takes every input as an argument of its own"
+    reason = "the WebAssembly binding takes every input as an argument of its own"
 )]
 #[wasm_bindgen]
 pub fn encrypt(
@@ -352,7 +352,7 @@ pub fn encrypt(
     position: f64,
     pim: f64,
     memory_level: f64,
-    same_length: bool,
+    same_length: JsValue,
     repair_word_count: f64,
     wallet_has_passphrase: JsValue,
     argon2: JsArgon2,
@@ -367,7 +367,7 @@ pub fn encrypt(
     let password = new_password_from(&typed, &repeat, choice, position)?;
     let wallet_passphrase = WalletPassphrase::from(passphrase_answer(&wallet_has_passphrase)?);
     let phrase = phrase.phrase()?;
-    let suite = if same_length {
+    let suite = if yes_or_no(&same_length, "sameLength")? {
         Suite::SameLength
     } else {
         Suite::TwentyFourWords
@@ -423,7 +423,7 @@ struct RecoveryJson<'a> {
 /// give "ambiguous", the checked reading first.
 #[expect(
     clippy::too_many_arguments,
-    reason = "the WebAssembly boundary takes every input as an argument of its own"
+    reason = "the WebAssembly binding takes every input as an argument of its own"
 )]
 #[wasm_bindgen]
 pub fn decrypt(

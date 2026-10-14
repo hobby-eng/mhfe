@@ -6,37 +6,116 @@
 // web/argon2-engine.js bridges it to the WebAssembly.
 "use strict";
 
+const REFERENCE_COMMON_FIELDS = /** @type {const} */ ({
+  reference: "text",
+  coin: "text",
+  path: "text",
+  passphrase: "bytes",
+});
+const REFERENCE_FIELDS = /** @type {const} */ ({
+  ...REFERENCE_COMMON_FIELDS,
+  referenceKind: "text",
+});
+const CONFIRMATION_FIELDS = /** @type {const} */ ({
+  ...REFERENCE_COMMON_FIELDS,
+  confirmKind: "text",
+  words: "number",
+});
+const OWNER_ANSWER_FIELDS = /** @type {const} */ ({ confirmed: "boolean", passphrase: "bytes" });
+const HIDDEN_OPEN_FIELDS = /** @type {const} */ ({
+  password: "bytes",
+  passwordRepeat: "bytes",
+  choice: "text",
+  position: "number",
+});
+
 /**
- * A request of the core's operations as web/client.js sends it; each operation reads its own
- * fields. The secrets arrive as bytes, which the worker wipes after the operation.
- * @typedef {SelfCheckRequest & ReferenceFields & { phrase: Uint8Array, password: Uint8Array,
- *   passwordRepeat: Uint8Array, choice: string, position: number, pim: number,
- *   memoryLevel: number, sameLength: boolean, repairWordCount: number,
- *   walletHasPassphrase: boolean | null | undefined, container: string, words: number,
- *   asksLength: boolean, scanGap: number, argon2: boolean, argon2Script: Blob | null,
- *   newPassword: Uint8Array, newPasswordRepeat: Uint8Array, newChoice: string,
- *   newPosition: number, newPim: number, newMemoryLevel: number, confirmKind: string,
- *   confirmsAgain: boolean, mainPassphrase: Uint8Array }} CoreRequest
+ * A session ends with null or close=true; otherwise every opening field is required.
+ * @param {unknown} value
+ * @returns {HiddenWalletRequest | null}
  */
+function readHiddenWalletRequest(value) {
+  if (value === null) return null;
+  try {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw packageMismatch("The page sent a malformed hidden-wallet answer");
+    }
+    const answer = /** @type {Record<string, unknown>} */ (value);
+    if (answer.close === true) {
+      new SecretRequest(answer).wipe();
+      return { close: true };
+    }
+    if (answer.close !== undefined && answer.close !== false) {
+      throw packageMismatch("The page sent a malformed close field");
+    }
+    const opened = checkedFields(value, HIDDEN_OPEN_FIELDS);
+    return {
+      close: false,
+      password: opened.password,
+      passwordRepeat: opened.passwordRepeat,
+      choice: opened.choice,
+      position: opened.position,
+    };
+  } catch (error) {
+    new SecretRequest(value).wipe();
+    throw error;
+  }
+}
+
+/** The field types of this module's DTO; Rust keeps numeric and mnemonic rules. */
+const CORE_FIELDS = /** @type {const} */ ({
+  tier: "text",
+  skip: "texts",
+  referenceKind: "text",
+  reference: "text",
+  coin: "text",
+  path: "text",
+  passphrase: "bytes",
+  phrase: "bytes",
+  password: "bytes",
+  passwordRepeat: "bytes",
+  choice: "text",
+  position: "number",
+  pim: "number",
+  memoryLevel: "number",
+  sameLength: "boolean",
+  repairWordCount: "number",
+  walletHasPassphrase: "triBoolean",
+  container: "text",
+  words: "number",
+  asksLength: "boolean",
+  scanGap: "number",
+  argon2: "boolean",
+  argon2Script: "script",
+  newPassword: "bytes",
+  newPasswordRepeat: "bytes",
+  newChoice: "text",
+  newPosition: "number",
+  newPim: "number",
+  newMemoryLevel: "number",
+  confirmKind: "text",
+  confirmsAgain: "boolean",
+  mainPassphrase: "bytes",
+});
+
+/** @typedef {CheckedFields<typeof CORE_FIELDS>} CoreRequest */
 
 /**
  * A reference that a recovery is compared with, as a check's request and the page's answer to
  * "noLength" (answerNoLength in web/client.js) carry it.
- * @typedef {{ referenceKind: string, reference: string, coin: string, path: string,
- *   passphrase: Uint8Array }} ReferenceFields
+ * @typedef {CheckedFields<typeof REFERENCE_FIELDS>} ReferenceFields
  */
 
 /**
  * The page's answer to "confirmAgain" (answerConfirmAgain in web/client.js): another confirmation.
- * @typedef {{ confirmKind: string, reference: string, coin: string, path: string,
- *   passphrase: Uint8Array, words: number }} ConfirmationFields
+ * @typedef {CheckedFields<typeof CONFIRMATION_FIELDS>} ConfirmationFields
  */
 
 /**
  * The page's next request in a session of hidden wallets (openHiddenWallets in web/client.js): a
  * password typed twice with its review choice, or the end of the session.
- * @typedef {{ close?: boolean, password: Uint8Array, passwordRepeat: Uint8Array, choice: string,
- *   position: number }} HiddenWalletRequest
+ * @typedef {{ close: true } | (CheckedFields<typeof HIDDEN_OPEN_FIELDS> & { close: false })}
+ *   HiddenWalletRequest
  */
 
 /**
@@ -69,12 +148,11 @@ const FALLBACK_NOTE = "the check ran the single-threaded build of the standard m
 
 /**
  * The core's operations by name, which web/worker-start.js serves.
- * @type {Record<string, Operation<CoreRequest>>}
+ * @type {Record<string, Operation<unknown>>}
  */
 // oxlint-disable-next-line no-unused-vars -- web/worker-start.js serves it in runtime/worker.js
-const CORE_OPERATIONS = {
+const CORE_OPERATIONS = operationsWithFields(CORE_FIELDS, {
   parameters: () => JSON.parse(mhfe.suiteParameters()),
-  packageVersion: () => mhfe.packageVersion(),
   describePhrase: (request) => JSON.parse(mhfe.describePhrase(request.phrase)),
   describeContainer: (request) => JSON.parse(mhfe.describeContainer(request.container)),
 
@@ -153,16 +231,17 @@ const CORE_OPERATIONS = {
         );
       const result = compare(request);
       // Detection that found no verified length, none or several, asks the page for the length.
-      if (result.outcome !== "notVerified" || !request.asksLength) return result;
+      if (!session.asksLength() || !request.asksLength) return result;
       // The page answers with a reference or null (answerNoLength in web/client.js).
-      const next = /** @type {ReferenceFields | null} */ (
-        await host.ask("noLength", result.evidence)
+      const next = checkedNullableFields(
+        await host.ask("noLength", result.evidence),
+        REFERENCE_FIELDS,
       );
       if (next === null) return result;
       try {
         return compare(next);
       } finally {
-        wipeSecrets(next);
+        new SecretRequest(next).wipe();
       }
     });
   },
@@ -288,16 +367,17 @@ const CORE_OPERATIONS = {
       const recovered = await recoverConfirmed(session, request, host);
       if (recovered.ownerCheck !== null) {
         // The page answers with the owner's yes or no (answerOwner in web/client.js).
-        const answer = /** @type {{ confirmed: boolean, passphrase: Uint8Array } | null} */ (
+        const answer = checkedNullableFields(
           await host.ask("ownerCheck", {
             ...recovered.ownerCheck,
             rehearsalNeedsPassphrase: recovered.rehearsalNeedsPassphrase,
-          })
+          }),
+          OWNER_ANSWER_FIELDS,
         );
         try {
           session.ownerAnswer(answer?.confirmed === true, answer?.passphrase ?? new Uint8Array());
         } finally {
-          wipeSecrets(answer);
+          new SecretRequest(answer).wipe();
         }
       }
       const sealed = JSON.parse(
@@ -327,7 +407,7 @@ const CORE_OPERATIONS = {
       const keepsSessionOpen = new Set(JSON.parse(mhfe.suiteParameters()).hiddenWalletRefusals);
       // The page answers each question with its next request (openHiddenWallets in
       // web/client.js).
-      let next = /** @type {HiddenWalletRequest | null} */ (await host.ask("ready", null));
+      let next = readHiddenWalletRequest(await host.ask("ready", null));
       while (next !== null && next?.close !== true) {
         /** @type {[question: string, value: unknown]} */
         let reply;
@@ -348,14 +428,14 @@ const CORE_OPERATIONS = {
           if (!keepsSessionOpen.has(refusal.code)) throw error;
           reply = ["refused", refusal];
         } finally {
-          wipeSecrets(next);
+          new SecretRequest(next).wipe();
         }
-        next = /** @type {HiddenWalletRequest | null} */ (await host.ask(...reply));
+        next = readHiddenWalletRequest(await host.ask(...reply));
       }
       return { closed: true };
     });
   },
-};
+});
 
 /**
  * A rekey's recovery and confirmation. When a confirmation is refused after the rounds and the
@@ -391,8 +471,9 @@ async function recoverConfirmed(session, request, host) {
     const ownerLengths = JSON.parse(session.ownerLengths());
     if (ownerLengths === null || !request.confirmsAgain) throw refusal;
     // The page answers with another confirmation or null (answerConfirmAgain in web/client.js).
-    const next = /** @type {ConfirmationFields | null} */ (
-      await host.ask("confirmAgain", { ...describeError(refusal), ownerLengths })
+    const next = checkedNullableFields(
+      await host.ask("confirmAgain", { ...describeError(refusal), ownerLengths }),
+      CONFIRMATION_FIELDS,
     );
     if (next === null) throw refusal;
     confirm = () => {
@@ -407,7 +488,7 @@ async function recoverConfirmed(session, request, host) {
           host.progress,
         );
       } finally {
-        wipeSecrets(next);
+        new SecretRequest(next).wipe();
       }
     };
   }
@@ -420,7 +501,7 @@ async function recoverConfirmed(session, request, host) {
 async function argon2For(request) {
   const builds = argon2Builds();
   const build = builds.threaded.create === undefined ? builds.singleThreaded : builds.threaded;
-  return argon2Engine(await startArgon2(build, request.argon2Script));
+  return argon2Engine(await startArgon2(build, request.argon2Script ?? null));
 }
 
 /**
@@ -443,7 +524,7 @@ async function argon2ForCheck(request) {
   const failures = [];
   for (const build of tried) {
     try {
-      const argon2 = argon2Engine(await startArgon2(build, request.argon2Script));
+      const argon2 = argon2Engine(await startArgon2(build, request.argon2Script ?? null));
       return { argon2, outcomeOf: (result) => afterFallback(result, failures) };
     } catch (error) {
       const { code, message } = describeError(error);

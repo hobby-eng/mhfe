@@ -13,7 +13,11 @@
 //!
 //! The words typed are read as for a repair: `?` or a word outside the BIP39 list marks a missing
 //! word, and the first four letters of a word are enough. A candidate that matches proves only
-//! what the reference proves: an address strongly, a fingerprint with 32 bits.
+//! what the reference proves among all the candidates: an address strongly; a fingerprint, a
+//! 32-bit check, is shared by another of the 262,144 candidates of two missing words of 12 about
+//! once in 16,384 searches. The search with the decoy wallet therefore compares every candidate
+//! and refuses a reference that more than one matches (`SEVERAL_CANDIDATES_MATCH`); an address
+//! tells them apart.
 
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
@@ -62,14 +66,37 @@ pub struct ContainerSearch {
 }
 
 /// A candidate that matched the reference.
+///
+/// The result's words are read-only outside its producer:
+///
+/// ```compile_fail
+/// fn corrupt(found: &mut mhfe::search::Found) { found.words.clear(); }
+/// ```
 #[derive(Debug)]
 pub struct Found {
     /// The container phrase, every word in full, one space apart.
-    pub container: Zeroizing<String>,
+    container: Zeroizing<String>,
     /// Each missing word as found, with its position from 1.
-    pub words: Vec<(usize, &'static str)>,
+    words: Vec<(usize, &'static str)>,
     /// For an address, the path where it was found.
-    pub path: Option<DerivationPath>,
+    path: Option<DerivationPath>,
+}
+
+impl Found {
+    /// The candidate container that matched the reference.
+    pub fn container(&self) -> &str {
+        &self.container
+    }
+
+    /// Each missing word found, with its position from one.
+    pub fn words(&self) -> &[(usize, &'static str)] {
+        &self.words
+    }
+
+    /// The matched address's derivation path, or none for another kind of reference.
+    pub fn path(&self) -> Option<&DerivationPath> {
+        self.path.as_ref()
+    }
 }
 
 impl ContainerSearch {
@@ -77,10 +104,31 @@ impl ContainerSearch {
     /// missing (`INVALID_REQUEST` otherwise), at most [`MAX_MISSING_FOR_DECOY`] of them
     /// (`TOO_MANY_MISSING_WORDS`).
     pub fn new(written: &str) -> Result<Self, MhfeError> {
-        let ContainerReading::Marked { unreadable } = ContainerReading::read(written) else {
-            return Err(MhfeError::InvalidRequest(
-                "no word of the container phrase is marked missing: type ? in its place".to_owned(),
-            ));
+        // `?` or a word outside the BIP39 list marks a missing word, as for a repair
+        // (AUD-024-API013).
+        let unreadable = match ContainerReading::read(written) {
+            ContainerReading::Marked { unreadable } => unreadable,
+            ContainerReading::WrongLength(count) => {
+                return Err(crate::repair::wrong_container_length(count))
+            }
+            ContainerReading::NotAContainer => {
+                let (_, outside) = phrase::word_numbers(written);
+                if outside.is_empty() {
+                    return Err(MhfeError::InvalidRequest(
+                        "every word is in the BIP39 list, but the container phrase's checksum \
+                         fails: a word is wrong, not missing; type ? in the place of a word that \
+                         cannot be read"
+                            .to_owned(),
+                    ));
+                }
+                outside.iter().map(|position| position + 1).collect()
+            }
+            ContainerReading::Container => {
+                return Err(MhfeError::InvalidRequest(
+                    "no word of the container phrase is marked missing: type ? in its place"
+                        .to_owned(),
+                ))
+            }
         };
         if unreadable.len() > MAX_MISSING_FOR_DECOY {
             return Err(MhfeError::TooManyMissingWords {
@@ -117,7 +165,7 @@ impl ContainerSearch {
     /// addresses a wallet leaves, more for an address further on, at a cost that grows with it.
     /// One missing word keeps the usual search. A front end states the scope before the work.
     pub fn decoy_address_limits(&self, scan_gap: u32) -> Result<SearchLimits, MhfeError> {
-        if self.missing.len() > MAX_MISSING_FOR_WALLET {
+        if !self.offers_wallet_search() {
             SearchLimits::first_account(scan_gap)
         } else {
             Ok(SearchLimits::default())
@@ -128,8 +176,9 @@ impl ContainerSearch {
     /// within [`ContainerSearch::decoy_address_limits`] of `scan_gap` unless its path is given,
     /// or a fingerprint, with the passphrase it names: none for the container typed into a
     /// wallet as it is, the usual case, or the one the person says is used with the container
-    /// phrase. Natively the candidates are shared among the processor's cores, and the first
-    /// match stops them all; a WebAssembly build compares them in turn. `on_progress(done,
+    /// phrase. Every candidate is compared, natively on the processor's cores, in a WebAssembly
+    /// build in turn: a reference that more than one candidate matches cannot tell them apart and
+    /// is refused (`SEVERAL_CANDIDATES_MATCH`) rather than one of them taken. `on_progress(done,
     /// count)` hears how far the comparison has come and stops the search with its error, such
     /// as a cancel.
     pub fn search_decoy(
@@ -144,7 +193,7 @@ impl ContainerSearch {
         let compare = |index: usize, stopped: &dyn Fn() -> bool| {
             rehearsal::compare_until(&self.container(&self.candidates[index]), &compared, stopped)
         };
-        let matched = compare_candidates(self.count(), &compare, on_progress)?;
+        let matched = only_match(compare_candidates(self.count(), &compare, on_progress)?)?;
         Ok(matched.map(|(index, outcome)| {
             let missing = &self.candidates[index];
             self.found(self.container(missing), missing, outcome.path().cloned())
@@ -185,7 +234,7 @@ impl ContainerSearch {
                     recovered.passes_own_checks(*passphrase)?.then_some(None)
                 }
                 _ => {
-                    let outcome = recovered.compare(reference)?.outcome;
+                    let outcome = recovered.compare(reference)?.outcome().clone();
                     outcome.matches().then(|| outcome.path().cloned())
                 }
             };
@@ -272,16 +321,18 @@ impl ContainerSearch {
     }
 }
 
-/// Compares candidates `0..count` with `compare` and gives the first that matches with its
-/// outcome. Natively the candidates are shared among the processor's cores, each taking the next
-/// one left, while this thread reports how far they have come; a WebAssembly build, which has no
-/// threads here, compares them in turn.
+/// Compares every candidate `0..count` with `compare` and gives each that matches, with its
+/// outcome, by index: a search does not stop at a first match, which another candidate could
+/// share (AUD-024-FUN001). Natively the candidates are shared among the processor's cores, each
+/// worker taking the next one left, while this thread reports how far they have come; where the
+/// system starts no worker, and in a WebAssembly build, which has no threads here, they are
+/// compared in turn.
 #[cfg(not(target_arch = "wasm32"))]
 fn compare_candidates(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
-) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
+) -> Result<Vec<(usize, CheckOutcome)>, MhfeError> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Condvar, Mutex};
     use std::time::Duration;
@@ -294,56 +345,53 @@ fn compare_candidates(
     // The workers that have ended, which wake this thread at once when the last one does.
     let finished = Mutex::new(0);
     let all_finished = Condvar::new();
-    // `stop` ends the taking of candidates after a match, while the comparisons under way finish,
-    // so that the lowest match wins; `abort`, after an error or a cancel, ends those too.
-    let stop = AtomicBool::new(false);
+    // After an error or a cancel, ends the taking of candidates and the comparisons under way.
     let abort = AtomicBool::new(false);
-    // The match with the lowest index, so that the result does not depend on the threads' order.
-    let matched: Mutex<Option<(usize, CheckOutcome)>> = Mutex::new(None);
+    let matched: Mutex<Vec<(usize, CheckOutcome)>> = Mutex::new(Vec::new());
     let failure: Mutex<Option<MhfeError>> = Mutex::new(None);
     // Keeps the error and ends every comparison, those under way too.
     let abort_with = |error| {
         *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
         abort.store(true, Ordering::Relaxed);
-        stop.store(true, Ordering::Relaxed);
     };
-    std::thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| {
-                while !stop.load(Ordering::Relaxed) {
-                    let index = next.fetch_add(1, Ordering::Relaxed);
-                    if index >= count {
-                        break;
-                    }
-                    match compare(index, &|| abort.load(Ordering::Relaxed)) {
-                        Ok(outcome) if outcome.matches() => {
-                            let mut best = matched.lock().unwrap_or_else(|e| e.into_inner());
-                            if best.as_ref().is_none_or(|(found, _)| index < *found) {
-                                *best = Some((index, outcome));
-                            }
-                            stop.store(true, Ordering::Relaxed);
-                        }
-                        Ok(_) => {}
-                        // A comparison abandoned after an abort: the abort's error stands.
-                        Err(_) if abort.load(Ordering::Relaxed) => {}
-                        Err(error) => abort_with(error),
-                    }
-                    done.fetch_add(1, Ordering::Relaxed);
-                }
-                *finished.lock().unwrap_or_else(|e| e.into_inner()) += 1;
-                all_finished.notify_one();
-            });
+    let work = || {
+        while !abort.load(Ordering::Relaxed) {
+            let index = next.fetch_add(1, Ordering::Relaxed);
+            if index >= count {
+                break;
+            }
+            match compare(index, &|| abort.load(Ordering::Relaxed)) {
+                Ok(outcome) if outcome.matches() => matched
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push((index, outcome)),
+                Ok(_) => {}
+                // A comparison abandoned after an abort: the abort's error stands.
+                Err(_) if abort.load(Ordering::Relaxed) => {}
+                Err(error) => abort_with(error),
+            }
+            done.fetch_add(1, Ordering::Relaxed);
         }
+        *finished.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        all_finished.notify_one();
+    };
+    let started = std::thread::scope(|scope| {
+        let started = crate::workers::start_scoped(scope, workers, &work);
         // This thread tells how far the comparison has come at every interval, and ends as soon as
-        // the last worker does, without waiting out an interval (AUD-023-DOC002); an error from
-        // it stops the workers. After an abort it is not asked again while the workers end.
+        // the last worker started does, without waiting out an interval (AUD-023-DOC002); an error
+        // from it stops the workers. After an abort it is not asked again while the workers end.
         let interval = Duration::from_millis(PROGRESS_INTERVAL_MS);
+        // With no worker started there is nothing to wait for: the candidates are compared in
+        // turn below.
         loop {
+            if started == 0 {
+                break;
+            }
             let ended = finished.lock().unwrap_or_else(|e| e.into_inner());
             let (ended, _) = all_finished
-                .wait_timeout_while(ended, interval, |ended| *ended < workers)
+                .wait_timeout_while(ended, interval, |ended| *ended < started)
                 .unwrap_or_else(|e| e.into_inner());
-            if *ended >= workers {
+            if *ended >= started {
                 break;
             }
             // The workers that end meanwhile need the lock.
@@ -355,14 +403,17 @@ fn compare_candidates(
                 abort_with(error);
             }
         }
+        started
     });
+    if started == 0 {
+        return compare_in_turn(count, compare, on_progress);
+    }
     if let Some(error) = failure.into_inner().unwrap_or_else(|e| e.into_inner()) {
         return Err(error);
     }
-    let matched = matched.into_inner().unwrap_or_else(|e| e.into_inner());
-    if matched.is_none() {
-        on_progress(count, count)?;
-    }
+    on_progress(count, count)?;
+    let mut matched = matched.into_inner().unwrap_or_else(|e| e.into_inner());
+    matched.sort_by_key(|(index, _)| *index);
     Ok(matched)
 }
 
@@ -375,15 +426,39 @@ fn compare_candidates(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
-) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
+) -> Result<Vec<(usize, CheckOutcome)>, MhfeError> {
+    compare_in_turn(count, compare, on_progress)
+}
+
+/// Compares every candidate in turn on the calling thread, reporting after each one, and gives
+/// each that matches, by index.
+fn compare_in_turn(
+    count: usize,
+    compare: CandidateCompare<'_>,
+    on_progress: CandidateProgress<'_>,
+) -> Result<Vec<(usize, CheckOutcome)>, MhfeError> {
+    let mut matched = Vec::new();
     for index in 0..count {
         let outcome = compare(index, &|| false)?;
         on_progress(index + 1, count)?;
         if outcome.matches() {
-            return Ok(Some((index, outcome)));
+            matched.push((index, outcome));
         }
     }
-    Ok(None)
+    Ok(matched)
+}
+
+/// The one candidate that matched, or none; a reference that more than one candidate matches
+/// cannot tell them apart, so that none is taken (AUD-024-FUN001).
+fn only_match(
+    matched: Vec<(usize, CheckOutcome)>,
+) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
+    if matched.len() > 1 {
+        return Err(MhfeError::SeveralCandidatesMatch {
+            matches: matched.len(),
+        });
+    }
+    Ok(matched.into_iter().next())
 }
 
 /// `reference` as the decoy search compares it: an address without a path within `limits`.
@@ -503,6 +578,41 @@ mod tests {
     use crate::wallet;
     use crate::Suite;
 
+    /// One instant comparison ends before a progress interval; a fixed sleep in the waiting
+    /// loop must fail in debug builds too. A median tolerates occasional scheduler delays.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn instant_comparisons_end_before_one_progress_interval() {
+        use std::time::{Duration, Instant};
+        let mut times = Vec::new();
+        for _ in 0..10 {
+            let mut progress = Vec::new();
+            let started = Instant::now();
+            let found = compare_candidates(
+                1,
+                &|_, _| Ok(CheckOutcome::DoesNotMatch),
+                &mut |done, total| {
+                    progress.push((done, total));
+                    Ok(())
+                },
+            )
+            .unwrap();
+            times.push(started.elapsed());
+            assert!(found.is_empty());
+            assert_eq!(
+                progress,
+                [(1, 1)],
+                "instant work reports only its completion"
+            );
+        }
+        times.sort_unstable();
+        assert!(
+            times[times.len() / 2] < Duration::from_millis(PROGRESS_INTERVAL_MS),
+            "instant comparison median {:?} includes a whole progress interval",
+            times[times.len() / 2],
+        );
+    }
+
     fn with(container: &str, changes: &[(usize, &'static str)]) -> String {
         let mut words: Vec<&str> = container.split(' ').collect();
         for &(position, word) in changes {
@@ -551,39 +661,30 @@ mod tests {
         }
     }
 
-    /// The decoy wallet's fingerprint finds the container among the candidates, also with two
-    /// missing words, without the password; a fingerprint of another wallet finds nothing.
+    /// The decoy wallet's fingerprint finds the container among the candidates of a missing word,
+    /// without the password; with a passphrase the decoy has not, or the fingerprint of another
+    /// wallet, it finds nothing.
     #[test]
-    fn the_decoy_fingerprint_finds_the_missing_words() {
+    fn the_decoy_fingerprint_finds_the_missing_word() {
         let container = zero_12_container();
         let fingerprint = wallet::master_fingerprint(&container, "").unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
             passphrase: "",
         };
-        // Words 15 and 21, "also" and "ahead", come early in the list, where a debug build of the
-        // tests reaches them in seconds.
-        let search = ContainerSearch::new(&with(&container, &[(15, "?"), (21, "?")])).unwrap();
-        assert!(search.count() > 8 * 2048 / 2, "about 16,384 candidates");
+        let one = ContainerSearch::new(&with(&container, &[(24, "?")])).unwrap();
         let mut compared = 0;
-        let found = search
-            .search_decoy(&reference, DECOY_SCAN_GAP, &mut |done, _| {
-                compared = done;
-                Ok(())
-            })
-            .unwrap()
-            .unwrap();
-        assert_eq!(*found.container, container);
-        let words: Vec<&str> = container.split(' ').collect();
-        assert_eq!(found.words, [(15, words[14]), (21, words[20])]);
-        assert!(compared <= search.count());
-        // The decoy is compared with the passphrase given only: with one it has not, the decoy
-        // wallet of the container typed as it is does not match.
+        let found = decoy_found(&one, &reference, &mut |done, _| {
+            compared = done;
+            Ok(())
+        });
+        assert_eq!(found_words(&found, &container), [24]);
+        // Every candidate is compared, not only those before the match (AUD-024-FUN001).
+        assert_eq!(compared, one.count());
         let with_passphrase = Reference::Fingerprint {
             fingerprint,
             passphrase: "TREZOR",
         };
-        let one = ContainerSearch::new(&with(&container, &[(24, "?")])).unwrap();
         assert!(one
             .search_decoy(&with_passphrase, DECOY_SCAN_GAP, &mut |_, _| Ok(()))
             .unwrap()
@@ -596,6 +697,132 @@ mod tests {
             .search_decoy(&other, DECOY_SCAN_GAP, &mut |_, _| Ok(()))
             .unwrap()
             .is_none());
+    }
+
+    /// Two missing words: the decoy wallet's fingerprint finds both among about 16,384
+    /// candidates, every one of them compared.
+    #[test]
+    #[ignore = "compares all 16,384 candidates: about a minute and a half in a debug build"]
+    fn full_size_decoy_search_finds_two_missing_words() {
+        let container = zero_12_container();
+        let reference = Reference::Fingerprint {
+            fingerprint: wallet::master_fingerprint(&container, "").unwrap(),
+            passphrase: "",
+        };
+        let search = ContainerSearch::new(&with(&container, &[(15, "?"), (21, "?")])).unwrap();
+        assert!(search.count() > 8 * 2048 / 2, "about 16,384 candidates");
+        let found = decoy_found(&search, &reference, &mut |_, _| Ok(()));
+        assert_eq!(found_words(&found, &container), [15, 21]);
+    }
+
+    /// What the decoy search finds with `reference`, which must match one candidate.
+    fn decoy_found(
+        search: &ContainerSearch,
+        reference: &Reference<'_>,
+        on_progress: CandidateProgress<'_>,
+    ) -> Found {
+        search
+            .search_decoy(reference, DECOY_SCAN_GAP, on_progress)
+            .unwrap()
+            .unwrap()
+    }
+
+    /// The positions of the words found, each checked against `container`, which must be the one
+    /// found.
+    fn found_words(found: &Found, container: &str) -> Vec<usize> {
+        assert_eq!(*found.container, container);
+        let words: Vec<&str> = container.split(' ').collect();
+        for &(position, word) in &found.words {
+            assert_eq!(word, words[position - 1]);
+        }
+        found.words.iter().map(|&(position, _)| position).collect()
+    }
+
+    /// Two candidates of "abandon" ten times and two missing words share the fingerprint
+    /// a30a4e0f: "able ghost" comes first, "best student" later. The search finds both and takes
+    /// neither, where it used to take the first (AUD-024-FUN001).
+    #[test]
+    #[ignore = "compares all 262,144 candidates: minutes in a debug build"]
+    fn full_size_decoy_search_refuses_a_fingerprint_two_candidates_share() {
+        let abandon = "abandon ".repeat(10);
+        let first = format!("{abandon}able ghost");
+        let later = format!("{abandon}best student");
+        let fingerprint = wallet::master_fingerprint(&first, "").unwrap();
+        assert_eq!(fingerprint, [0xa3, 0x0a, 0x4e, 0x0f]);
+        assert_eq!(wallet::master_fingerprint(&later, "").unwrap(), fingerprint);
+        let search = ContainerSearch::new(&format!("{abandon}? ?")).unwrap();
+        let reference = Reference::Fingerprint {
+            fingerprint,
+            passphrase: "",
+        };
+        let refused = search.search_decoy(&reference, DECOY_SCAN_GAP, &mut |_, _| Ok(()));
+        match refused {
+            Err(MhfeError::SeveralCandidatesMatch { matches }) => assert!(matches >= 2),
+            other => panic!("not refused: {other:?}"),
+        }
+    }
+
+    /// A comparison that matches the candidates of `matching`, with a path in each outcome to tell
+    /// them apart.
+    fn matching_at(
+        matching: &'static [usize],
+    ) -> impl Fn(usize, &dyn Fn() -> bool) -> Result<CheckOutcome, MhfeError> + Sync {
+        move |index, _| {
+            Ok(if matching.contains(&index) {
+                CheckOutcome::Matches { path: None }
+            } else {
+                CheckOutcome::DoesNotMatch
+            })
+        }
+    }
+
+    /// Every candidate that matches is found, in the order of the candidates, on the workers and
+    /// in turn alike; the comparison goes on after a first match (AUD-024-FUN001).
+    #[test]
+    fn every_matching_candidate_is_found_in_order() {
+        let compare = matching_at(&[1, 3, 4]);
+        let mut last = 0;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let found = compare_candidates(6, &compare, &mut |done, _| {
+                last = done;
+                Ok(())
+            })
+            .unwrap();
+            let indexes: Vec<usize> = found.iter().map(|(index, _)| *index).collect();
+            assert_eq!(indexes, [1, 3, 4]);
+            assert_eq!(last, 6);
+        }
+        let in_turn = compare_in_turn(6, &compare, &mut |_, _| Ok(())).unwrap();
+        let indexes: Vec<usize> = in_turn.iter().map(|(index, _)| *index).collect();
+        assert_eq!(indexes, [1, 3, 4]);
+        // A progress error ends the comparison in turn too.
+        let stopped = compare_in_turn(6, &compare, &mut |_, _| Err(MhfeError::Cancelled));
+        assert_eq!(stopped.err(), Some(MhfeError::Cancelled));
+    }
+
+    /// One match is taken, none is none, and several are refused with their number.
+    #[test]
+    fn only_one_match_is_taken() {
+        let matched = |indexes: &[usize]| {
+            indexes
+                .iter()
+                .map(|&index| (index, CheckOutcome::Matches { path: None }))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(only_match(matched(&[])).unwrap(), None);
+        assert_eq!(
+            only_match(matched(&[2])).unwrap().map(|(index, _)| index),
+            Some(2)
+        );
+        assert_eq!(
+            only_match(matched(&[2, 5])).err(),
+            Some(MhfeError::SeveralCandidatesMatch { matches: 2 })
+        );
+        assert_eq!(
+            only_match(matched(&[2, 5])).err().unwrap().code(),
+            "SEVERAL_CANDIDATES_MATCH"
+        );
     }
 
     /// Without any reference, the built-in check of a 12-word original seed phrase finds the
@@ -626,6 +853,8 @@ mod tests {
         let container = zero_12_container();
         let one = ContainerSearch::new(&with(&container, &[(24, "?")])).unwrap();
         let two = ContainerSearch::new(&with(&container, &[(15, "?"), (21, "?")])).unwrap();
+        assert!(one.offers_wallet_search());
+        assert!(!two.offers_wallet_search());
         assert_eq!(
             one.decoy_address_limits(50).unwrap(),
             SearchLimits::default()
@@ -655,6 +884,31 @@ mod tests {
         };
         let refused = search.search_decoy(&built_in, DECOY_SCAN_GAP, &mut |_, _| Ok(()));
         assert_eq!(refused.err().unwrap().code(), "INVALID_REQUEST");
+        // Read as a repair reads it (AUD-024-API013): a word outside the list is missing, a
+        // wrong length is said as such, and a checksum that fails names a wrong word.
+        let outside = ContainerSearch::new(&with(&container, &[(5, "zzzz")])).unwrap();
+        assert_eq!(outside.missing(), [5]);
+        let short = format!(
+            "{} ?",
+            container.split(' ').take(10).collect::<Vec<_>>().join(" ")
+        );
+        let wrong_length = ContainerSearch::new(&short).err().unwrap();
+        assert_eq!(wrong_length.code(), "INVALID_CONTAINER");
+        assert!(
+            wrong_length.to_string().contains("it has 11 words"),
+            "{wrong_length}"
+        );
+        let first = container.split(' ').next().unwrap();
+        let other = if first == "zoo" { "abandon" } else { "zoo" };
+        let wrong_word = ContainerSearch::new(&with(&container, &[(1, other)]))
+            .err()
+            .unwrap();
+        assert!(
+            wrong_word
+                .to_string()
+                .contains("a word is wrong, not missing"),
+            "{wrong_word}"
+        );
     }
 
     /// With the owner's wallet, each candidate is recovered first: the fingerprint of the

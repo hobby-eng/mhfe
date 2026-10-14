@@ -11,15 +11,13 @@
 use std::io::{self, IsTerminal};
 use std::time::{Duration, Instant};
 
-use anstream::{eprint, eprintln};
 use anstyle::Style;
 use clap::Args;
-use mhfe::operation::Stage;
 use mhfe::self_check::{ComponentOutcome, ComponentResult, SelfCheckReport, Tier};
-use mhfe::self_test::SelfTest;
 #[cfg(test)]
 use mhfe::self_test::SelfTestFault;
-use mhfe::{WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe::self_test::{SelfTest, SELF_TEST_ROUNDS};
+use mhfe::WorkFactor;
 
 use crate::exit::{Failure, INTERNAL_ERROR, SUCCESS};
 use crate::flow::{self, Flow, Kind};
@@ -32,17 +30,17 @@ use crate::terminal::{Input, Progress};
 use crate::time_text;
 
 #[derive(Args)]
-pub struct Options {
-    /// Also run the published vectors at full cost: minutes, 2 GiB
-    #[arg(long, long_help = vectors_help())]
+pub(crate) struct Options {
+    #[arg(long, long_help = vectors_help(),
+        help = format!("Published vectors at full cost: {}", vectors_cost()))]
     vectors: bool,
 }
 
 /// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
-pub const SUMMARY: &str = "Run the self-test";
+pub(crate) const SUMMARY: &str = "Run the self-test";
 
 /// The top of `mhfe self-test --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         SUMMARY,
         "Compares every part of this program with its known answers on this computer: the \
@@ -57,25 +55,33 @@ pub fn about() -> String {
 }
 
 fn vectors_help() -> String {
+    // Help remains printable when a built-in vector is damaged; the startup checks then
+    // refuse an operation. These labels must not introduce a panic before those checks.
+    let test = SelfTest::published().ok();
     style::option_help(&[
         "Also run the published vectors at their full cost.",
         &format!(
-            "Encrypts the public suite 3 vector zero-12 and recovers the public suite 4 vector \
-             same-length-zero-12 at the default settings, 12 rounds each, and compares the \
+            "Encrypts the public suite 3 vector {} and recovers the public suite 4 vector \
+             {} at the default settings, {} rounds each, and compares the \
              results with the published ones. It finds faults that show only at the full size of \
              Argon2's memory. Cost: {}.",
+            test.as_ref()
+                .map_or("unavailable", SelfTest::suite_3_vector),
+            test.as_ref()
+                .map_or("unavailable", SelfTest::suite_4_vector),
+            mhfe::ROUNDS,
             vectors_cost()
         ),
     ])
 }
 
 /// The answer of the menu and the example of the help for the full self-test.
-pub const EVERY_PART: &str = "Every part";
+pub(crate) const EVERY_PART: &str = "Every part";
 /// The same for the self-test with the published vectors.
-pub const WITH_VECTORS: &str = "Every part and the published vectors";
+pub(crate) const WITH_VECTORS: &str = "Every part and the published vectors";
 
 /// The end of `mhfe self-test --help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::help_section(
         "Examples:",
         &[
@@ -87,13 +93,12 @@ pub fn help() -> String {
 
 /// What the published vectors cost: "about 2 to 4 minutes, 2 GiB", for the help, the report and
 /// the menu.
-pub fn vectors_cost() -> String {
-    // Both vectors use the default settings, PIM 0 and memory level 0: an encryption of 12
-    // rounds and a recovery of 12.
-    let work = WorkFactor::default();
+pub(crate) fn vectors_cost() -> String {
+    // An encryption of 12 rounds and a recovery of 12, at the vectors' settings.
+    let work = SelfTest::published().map_or_else(|_| WorkFactor::default(), |test| test.work());
     format!(
         "about {}, {}",
-        time_text::of_rounds(work, ENCRYPTION_ROUNDS),
+        time_text::of_rounds(work, SELF_TEST_ROUNDS),
         work.memory_text()
     )
 }
@@ -103,14 +108,15 @@ const TITLE: &str = "Test this program";
 /// How the message of a part that stops the program begins.
 const FAILED: &str = "Self-test failed";
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // With the published vectors the work takes minutes: at a terminal it is then a step of its
     // own, as in the commands that run Argon2, and the summary and verdict follow it.
     let flow = options
         .vectors
-        .then(|| Flow::start(&Input::terminal_only(), TITLE));
+        .then(|| Flow::start(&Input::terminal_only(), TITLE))
+        .transpose()?;
     style::title(TITLE);
-    flow::step();
+    flow::step()?;
     let started = Instant::now();
     let report = test_every_part();
     let took = started.elapsed();
@@ -284,8 +290,7 @@ fn alarm(headline: &str) -> i32 {
 /// came out as published.
 fn run_vectors(flow: Flow) -> Result<bool, Failure> {
     let test = SelfTest::published()?;
-    // Both vectors use the default settings, PIM 0 and memory level 0.
-    let work = WorkFactor::default();
+    let work = test.work();
     style::fact(
         "Vectors",
         format!(
@@ -296,20 +301,10 @@ fn run_vectors(flow: Flow) -> Result<bool, Failure> {
         ),
     );
     style::fact("Cost", vectors_cost());
-    let mut progress = Progress::start();
+    let mut progress = Progress::start()?;
     let mut mhfe = settings::reserve_memory(work)?;
-    let mut recovering = false;
-    // The terminal shows the encryption's rounds of 24, then the recovery's of 12, as two parts.
     let result = test.run(&mut mhfe, &mut |stage, round, rounds| {
-        if stage == Stage::Recover {
-            if !recovering {
-                recovering = true;
-                progress.next_operation();
-            }
-            progress.round_starts(round - ROUNDS, ROUNDS);
-        } else {
-            progress.round_starts(round, rounds);
-        }
+        progress.round_starts(stage, round, rounds);
         Ok(())
     })?;
     progress.finish();
@@ -334,7 +329,7 @@ fn run_vectors(flow: Flow) -> Result<bool, Failure> {
     // Where it left the published path: before Argon2id, in Argon2id, or after its last call. The
     // library words it, so that the browser package says the same.
     if let Some(fault) = result.fault() {
-        style::fact_wrapped("Fault", &fault.to_string());
+        style::fact("Fault", fault.to_string());
     }
     eprintln!();
     Ok(result.passed())

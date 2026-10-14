@@ -9,13 +9,13 @@ use super::{Hint, WordList};
 use crate::self_check::{expect, ComponentCheck, ComponentOutcome, Findings, Tier};
 
 /// What a line typed from a list must give.
-struct HintCase {
-    list: WordList,
-    line: &'static str,
-    hint: Hint,
+pub(super) struct HintCase {
+    pub(super) list: WordList,
+    pub(super) line: &'static str,
+    pub(super) hint: Hint,
 }
 
-const CASES: [HintCase; 8] = [
+pub(super) const CASES: [HintCase; 8] = [
     HintCase {
         list: WordList::Bip39,
         line: "z",

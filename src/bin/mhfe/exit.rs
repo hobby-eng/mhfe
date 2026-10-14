@@ -4,41 +4,44 @@ use std::fmt;
 
 use mhfe::MhfeError;
 
-pub const SUCCESS: i32 = 0;
+// Deliberate copy in the standalone Python launcher, compared by its parity tests.
+pub(crate) const SUCCESS: i32 = 0;
 /// An error inside the tool or its environment, such as an Argon2 failure or unreadable input.
-pub const INTERNAL_ERROR: i32 = 1;
+// Deliberate copy in the standalone Python launcher, compared by its parity tests.
+pub(crate) const INTERNAL_ERROR: i32 = 1;
 /// A mistake in what was typed: an invalid phrase, container, password, setting or option.
-pub const INVALID_INPUT: i32 = 2;
+// Deliberate copy in the standalone Python launcher, compared by its parity tests.
+pub(crate) const INVALID_INPUT: i32 = 2;
 /// The recovered phrase failed its check or does not match the reference: usually a wrong
 /// password, PIM, memory level or container.
-pub const NO_MATCH: i32 = 3;
+pub(crate) const NO_MATCH: i32 = 3;
 /// The computer cannot run the request: not enough memory for the memory level, memory that could
 /// not be reserved, or a level beyond what this environment can use.
-pub const NOT_ENOUGH_RESOURCES: i32 = 4;
+pub(crate) const NOT_ENOUGH_RESOURCES: i32 = 4;
 /// `check` recovered only readings that nothing verifies: a 24-word reading without a wallet
 /// reference, which a wrong password gives too, or several lengths whose built-in checks pass with
 /// none of them stated.
-pub const NOT_VERIFIED: i32 = 5;
+pub(crate) const NOT_VERIFIED: i32 = 5;
 /// Stopped by the person: Ctrl+C (128 + SIGINT, as shells report it), and as it Ctrl+\, Ctrl+Z,
 /// SIGTERM or a closed terminal, Escape or q at a question, or Ctrl+D at an empty prompt.
-pub const CANCELLED: i32 = 130;
+pub(crate) const CANCELLED: i32 = 130;
 
 /// A reason to stop, with the text to show and the exit code to return.
 #[derive(Debug)]
-pub struct Failure {
-    pub message: String,
-    pub exit_code: i32,
+pub(crate) struct Failure {
+    pub(crate) message: String,
+    pub(crate) exit_code: i32,
 }
 
 impl Failure {
-    pub fn invalid_input(message: impl Into<String>) -> Self {
+    pub(crate) fn invalid_input(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             exit_code: INVALID_INPUT,
         }
     }
 
-    pub fn internal(message: impl Into<String>) -> Self {
+    pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             exit_code: INTERNAL_ERROR,
@@ -46,7 +49,7 @@ impl Failure {
     }
 
     /// A stop whose reason the command has shown already: `main` adds nothing.
-    pub fn shown(exit_code: i32) -> Self {
+    pub(crate) fn shown(exit_code: i32) -> Self {
         Self {
             message: String::new(),
             exit_code,
@@ -87,6 +90,7 @@ impl From<MhfeError> for Failure {
             | MhfeError::InvalidDerivationPath(_)
             | MhfeError::InvalidFingerprint(_)
             | MhfeError::InvalidPassphrase
+            | MhfeError::PassphraseTooLong(_)
             | MhfeError::InvalidRequest(_)
             | MhfeError::InvalidPasswordSize(_)
             | MhfeError::InvalidDiceRolls(_)
@@ -99,9 +103,10 @@ impl From<MhfeError> for Failure {
             | MhfeError::InvalidWordWish(_)
             | MhfeError::PasswordAlreadyUsed
             | MhfeError::NewPasswordSameAsOld
-            | MhfeError::InvalidCoin(_) => INVALID_INPUT,
+            | MhfeError::InvalidCoin => INVALID_INPUT,
             MhfeError::VerifierMismatch
             | MhfeError::AmbiguousLength { .. }
+            | MhfeError::SeveralCandidatesMatch { .. }
             | MhfeError::LengthDiffers { .. }
             | MhfeError::ReferenceMismatch
             | MhfeError::NotConfirmedByOwner => NO_MATCH,
@@ -131,7 +136,7 @@ impl From<std::io::Error> for Failure {
 
 /// A refused answer as the person reads it: the error as a sentence, then `then`, such as "Please
 /// type it again.", or nothing more when `then` is empty.
-pub fn refused(error: &impl fmt::Display, then: &str) -> String {
+pub(crate) fn refused(error: &impl fmt::Display, then: &str) -> String {
     let sentence = format!("{}.", capitalize(&error.to_string()));
     if then.is_empty() {
         return sentence;
@@ -140,7 +145,7 @@ pub fn refused(error: &impl fmt::Display, then: &str) -> String {
 }
 
 /// Library messages start in lower case so that they read well inside other sentences.
-pub fn capitalize(text: &str) -> String {
+pub(crate) fn capitalize(text: &str) -> String {
     let mut characters = text.chars();
     match characters.next() {
         Some(first) => first.to_uppercase().chain(characters).collect(),

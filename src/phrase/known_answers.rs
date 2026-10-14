@@ -29,7 +29,7 @@ pub(crate) struct TrezorVector {
 pub(crate) const TREZOR_ENGLISH: [TrezorVector; 24] = [
     TrezorVector {
         entropy: "00000000000000000000000000000000",
-        phrase: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        phrase: crate::vectors::inputs::ZERO_12,
     },
     TrezorVector {
         entropy: "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
@@ -173,7 +173,8 @@ impl ComponentCheck for WordListCheck {
     fn run(&mut self, tier: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
         findings.one(|| {
-            let mut text = String::with_capacity(2048 * 9);
+            let mut text =
+                String::with_capacity(usize::from(super::LIST_SIZE) * (super::LONGEST_WORD + 1));
             for word in Language::English.word_list() {
                 text.push_str(word);
                 text.push('\n');

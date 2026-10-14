@@ -21,7 +21,8 @@
 //! Each module also exports its self-check (`selfCheckCore`, `selfCheckArgon2`,
 //! `selfCheckRepair`, `selfCheckPasswords`, `selfCheckWallet`): the library's set of known
 //! answers for the parts that module computes ([`crate::self_check::sets`]), which its class runs
-//! once before the first operation and again in the page's full self-test.
+//! once before the first operation and again in the page's full self-test. `selfCheckProcess`
+//! reports the process checks available to a page; only the page's full self-test runs it.
 
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -263,16 +264,39 @@ impl SecretText {
 
 /// A setting or count as JavaScript passed it. wasm-bindgen would turn a `u32` parameter into the
 /// number modulo 2^32, so that 2^32 became 0 and -1 became 4294967295; taking the number as it is
-/// lets anything but a whole number in the `u32` range be refused with the error code `code`.
+/// lets anything but a whole number from 0 be refused with the error code `code`, and a larger
+/// whole number reach the rule that owns the parameter.
 pub(crate) fn whole_number(value: f64, code: &str, name: &str) -> Result<u32, JsError> {
-    // NaN and the infinities have a NaN fractional part, so they fail the first test.
-    if value.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&value) {
-        Ok(value as u32)
+    // NaN and the infinities have a NaN fractional part, so they fail the first test. A whole
+    // number too large for 32 bits goes on as the largest, which the rule that owns the parameter
+    // refuses in its own words (AUD-024-API021).
+    if value.fract() == 0.0 && value >= 0.0 {
+        Ok(if value > f64::from(u32::MAX) {
+            u32::MAX
+        } else {
+            value as u32
+        })
     } else {
         Err(JsError::new(&format!(
             "{code}: {name} must be a whole number, not {value}"
         )))
     }
+}
+
+/// A yes or no the page passed: true or false only. A bool of the WebAssembly binding would take
+/// any value, "true" as false and 2^32 as false (AUD-024-API022); `name` names it in the refusal
+/// (INVALID_REQUEST).
+#[cfg(any(
+    feature = "browser-core",
+    feature = "browser-passwords",
+    feature = "browser-wallet"
+))]
+pub(crate) fn yes_or_no(value: &JsValue, name: &str) -> Result<bool, JsError> {
+    value.as_bool().ok_or_else(|| {
+        js_error(MhfeError::InvalidRequest(format!(
+            "{name} must be true or false"
+        )))
+    })
 }
 
 /// The page's random source, `{ fill(bytes) }`, which calls `crypto.getRandomValues`. The bytes
@@ -292,27 +316,11 @@ impl crate::random::RandomSource for JsRandom {
         self.fill_bytes(bytes).map_err(|error| {
             MhfeError::RandomFailed(format!(
                 "the page's random source failed: {}",
-                js_message(&error)
+                crate::js_error::message(&error)
                     .unwrap_or_else(|| "it threw something other than an Error".to_owned())
             ))
         })
     }
-}
-
-/// The message of a JavaScript error, such as the browser's own words when getRandomValues
-/// refuses, so that the cause reaches the page: the thrown text, or an Error's message; `None`
-/// for anything else, which the caller names.
-#[cfg(any(
-    feature = "browser-core",
-    feature = "browser-passwords",
-    feature = "browser-wallet"
-))]
-pub(crate) fn js_message(error: &JsValue) -> Option<String> {
-    error.as_string().or_else(|| {
-        js_sys::Reflect::get(error, &JsValue::from_str("message"))
-            .ok()?
-            .as_string()
-    })
 }
 
 /// A review choice of the password check word as a page passes it: `kind` is "" or "asTyped" for

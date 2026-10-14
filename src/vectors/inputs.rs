@@ -26,7 +26,29 @@ const NONZERO_21: &str = "letter advice cage absurd amount doctor acoustic avoid
                           cage absurd amount doctor acoustic avoid letter advice cage absurd apart";
 /// NFKD changes all but the spaces and the emoji: e + U+0301, "fi", "P", "A" + U+030A, "1",
 /// and U+0438 U+0306.
-const UNICODE_PASSWORD: &str = "Caf\u{E9} \u{FB01} \u{FF30}\u{212B}\u{2460} \u{1F510} \u{439}";
+pub(crate) const UNICODE_PASSWORD: &str =
+    "Caf\u{E9} \u{FB01} \u{FF30}\u{212B}\u{2460} \u{1F510} \u{439}";
+/// NFKD bytes of UNICODE_PASSWORD, independently reproduced with Python Unicode 17.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-passwords"
+))]
+pub(crate) const UNICODE_PASSWORD_NFKD: &str = "43616665cc81206669205041cc8a3120f09f949020d0b8cc86";
+/// The BIP84 master fingerprint of ZERO_12 without a passphrase.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-wallet"
+))]
+pub(crate) const ZERO_12_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
+/// One bit changed in the public fingerprint, for refusal cases.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+pub(crate) const WRONG_FINGERPRINT: [u8; 4] = {
+    let mut fingerprint = ZERO_12_FINGERPRINT;
+    fingerprint[3] ^= 1;
+    fingerprint
+};
 /// The password of the public test vectors.
 pub(crate) const TEST_PASSWORD: &str = "public test password";
 /// A 12-word phrase whose packed state passes the 21-word built-in check too, by chance.

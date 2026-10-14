@@ -30,6 +30,19 @@ export function bundleClasses(root, paths) {
   ].join("\n");
 }
 
+/** The complete package's four class files, shared by the browser pages. */
+export const PACKAGE_CLASSES = [
+  "core/client.js",
+  "repair/repair.js",
+  "passwords/passwords.js",
+  "wallet/wallet.js",
+];
+
+/** The complete package's runtime and classes as one inline module. */
+export function bundlePackageClasses(root) {
+  return bundleClasses(root, PACKAGE_CLASSES);
+}
+
 /**
  * The Content-Security-Policy of a page whose one inline module is `script`, as the offline wallet
  * tools send it: nothing but that script, WebAssembly, Blob workers and inline styles. The one

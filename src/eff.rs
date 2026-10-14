@@ -10,9 +10,21 @@ use zeroize::Zeroizing;
 use crate::MhfeError;
 
 /// The EFF large wordlist, unchanged: "11111<TAB>abacus" to "66666<TAB>zoom", one per line.
+///
 /// Provenance and licence: vendor/eff-large-wordlist.md.
 pub(crate) const EFF_LIST: &str =
     include_str!("../vendor/eff-large-wordlist/eff_large_wordlist.txt");
+/// SHA-256 of the vendored eff_large_wordlist.txt, as vendor/eff-large-wordlist.md records it for
+/// the file the EFF publishes. It confirms that the embedded bytes are that file; it is not an
+/// independent answer of the code.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-passwords"
+))]
+pub(crate) const EFF_LIST_SHA256: &str =
+    "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e";
+
 /// Words in the list: 6^5, one for every roll of five dice.
 pub const LIST_SIZE: usize = 7776;
 /// log2(7776) = 12.925 bits per word, in thousandths, to state strengths without floats.
@@ -33,6 +45,10 @@ impl EffList {
     /// The list, read on first use. The self-check of the password check word reads it with
     /// [`EffList::try_get`] at every start, so that a damaged list stops the program there with a
     /// clear error instead of here.
+    ///
+    /// # Panics
+    ///
+    /// Only when the compiled-in list is damaged, which that check reports first.
     #[expect(
         clippy::expect_used,
         reason = "the list is compiled in, and the startup self-check reads it before any caller"
@@ -133,10 +149,7 @@ mod tests {
     #[test]
     fn the_vendored_list_is_the_published_file() {
         let digest = Sha256::digest(EFF_LIST.as_bytes());
-        assert_eq!(
-            hex::encode(digest),
-            "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e"
-        );
+        assert_eq!(hex::encode(digest), EFF_LIST_SHA256);
         let list = EffList::get();
         assert_eq!(list.word(0), "abacus");
         assert_eq!(list.word(LIST_SIZE - 1), "zoom");

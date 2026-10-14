@@ -17,6 +17,11 @@ pub(super) fn parse(coin: Coin, text: &str) -> Result<Address, MhfeError> {
         Coin::Cosmos => parse_bech32_account(coin, text, "cosmos", AddressType::P2pkh)?,
         Coin::Injective => parse_bech32_account(coin, text, "inj", AddressType::Keccak)?,
         Coin::Dash if is_bech32(text, &["dash1", "tdash1"]) => parse_dash_platform(text)?,
+        Coin::Zcash if is_bech32(text, &["tex1", "textest1"]) => {
+            return Err(invalid_address(
+                "the TEX address form is not supported; give its transparent t1… form on mainnet",
+            ));
+        }
         Coin::Zcash if is_shielded_zcash(text) => {
             return Err(invalid_address(
                 "it is shielded; use a transparent t1… address of the same wallet",
@@ -187,6 +192,20 @@ fn parse_base58(coin: Coin, text: &str) -> Result<Address, MhfeError> {
         .with_check(None)
         .into_vec()
         .map_err(|_| malformed_address())?;
+    // Dash Core testnet versions, distinct from the supported Platform testnet form.
+    const DASH_TESTNET_P2PKH: u8 = 0x8c;
+    const DASH_TESTNET_P2SH: u8 = 0x13;
+    if coin == Coin::Dash && decoded.len() == 21 {
+        match decoded[0] {
+            DASH_TESTNET_P2PKH => return Err(invalid_address(
+                "Dash Core testnet addresses (y…) are not supported; give a mainnet X… address",
+            )),
+            DASH_TESTNET_P2SH => return Err(invalid_address(
+                "Dash Core testnet P2SH addresses are not supported; give a single-key mainnet X… address",
+            )),
+            _ => {}
+        }
+    }
     let &(prefix, address_type, testnet) = base58_versions(coin)
         .iter()
         .find(|(prefix, _, _)| decoded.starts_with(prefix))
@@ -290,9 +309,12 @@ fn eip55(address: &[u8]) -> String {
 /// The CashAddr alphabet and the prefix of Bitcoin Cash addresses.
 const CASHADDR_CHARSET: &[u8; 32] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const CASHADDR_PREFIX: &str = "bitcoincash";
+// CashTokens' token-aware single-key version, with a 160-bit hash.
+const CASHADDR_TOKEN_P2PKH: u8 = 0x10;
 
 /// A Bitcoin Cash CashAddr address, with or without its "bitcoincash:" prefix, in either case. Only
-/// a P2PKH address with a 160-bit hash (version byte 0, "q...") is single-key.
+/// the legacy P2PKH form with a 160-bit hash (version byte 0, "q...") is accepted. The token-aware
+/// single-key form is recognised and refused with its supported alternative.
 fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
     let lowercase = text.to_ascii_lowercase();
     if lowercase != text && text.to_ascii_uppercase() != text {
@@ -332,6 +354,10 @@ fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
             address_type: AddressType::P2pkh,
             program: hash.to_vec(),
         }),
+        // CashTokens' token-aware P2PKH flag, with the same 160-bit public-key hash.
+        Some((&CASHADDR_TOKEN_P2PKH, hash)) if hash.len() == 20 => Err(invalid_address(
+            "the token-aware address form is not supported; give the bitcoincash:q… address of the same key",
+        )),
         _ => Err(invalid_address(
             "only single-key addresses (bitcoincash:q…) can be checked",
         )),

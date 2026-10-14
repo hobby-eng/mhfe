@@ -94,7 +94,11 @@ export async function checkStartupChecks(client, repair, passwords, wallet) {
         ? "argon2 notRun: this check leaves Argon2 out"
         : line,
     );
-    expectEqual(partLines(report), expected, `${name}: every part as expected`);
+    expectEqual(
+      partLines(report),
+      expected,
+      `${name}: every part reports its expected startup outcome`,
+    );
     expect(
       report.passed &&
         report.tier === "startup" &&
@@ -136,7 +140,7 @@ export async function checkFullChecks(client, repair, passwords, wallet) {
     const time = Math.round(performance.now() - started);
     expectEqual(partLines(report), passedLines(ids), `${name}: every part passes at the full tier`);
     expect(report.passed && report.tier === "full" && labelled(report), `${name}: passed`);
-    expect(true, `${name}: the full self-check took ${time} ms`);
+    note(`${name}: the full self-check took ${time} ms`);
   }
   // The core's, with Argon2 at 64 and 256 MiB: the single-threaded build, then on an isolated
   // page the threaded one, never both at once.
@@ -162,19 +166,16 @@ export async function checkFullChecks(client, repair, passwords, wallet) {
       "isolation notAvailable: a web page cannot sandbox itself or prove that it is offline",
       "hidden-input notAvailable: a web page has no terminal whose echo it could read back",
     ],
-    `MhfeClient: every part at the full tier, Argon2's sizes of ${fast ? "both builds" : "the single-threaded build"}`,
+    `MhfeClient: every part reports its full-tier outcome and Argon2's sizes pass for ${fast ? "both builds" : "the single-threaded build"}`,
   );
-  expect(report.passed && labelled(report), `MhfeClient: the full self-check took ${time} ms`);
-  const ran = [...SELF_CHECK.core, "argon2-sizes-single-threaded"];
-  if (fast) ran.push("argon2-sizes-threaded");
-  // The process parts come from the WebAssembly too, each not available.
-  const processParts = ["memory-locking", "core-dumps", "isolation", "hidden-input"];
+  expect(
+    report.passed && labelled(report),
+    "MhfeClient: the full self-check passes with the library's labels",
+  );
+  note(`MhfeClient: the full self-check took ${time} ms`);
   expectEqual(
     events.map(({ id, running, outcome }) => (running ? `start ${id}` : `end ${id} ${outcome}`)),
-    [
-      ...ran.flatMap((id) => [`start ${id}`, `end ${id} passed`]),
-      ...processParts.flatMap((id) => [`start ${id}`, `end ${id} notAvailable`]),
-    ],
+    report.components.flatMap(({ id, outcome }) => [`start ${id}`, `end ${id} ${outcome}`]),
     "MhfeClient: each part is reported as it starts and ends, one after the other",
   );
   if (fast) {

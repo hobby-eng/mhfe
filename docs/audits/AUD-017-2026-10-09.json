@@ -1115,84 +1115,84 @@
   "remediation": [
     {
       "id": "AUD-017-FUN001",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "The owner's choice of the stricter rule: with the length detected the built-in check alone is refused before any Argon2 work in the library (Confirmation::refuse_for; ConfirmationNeeded::Detected removed, confirmationFor[\"0\"] is \"walletOrOwner\"), so the CLI and the browser agree. Tests: rekey::tests::a_detected_length_needs_the_wallet_or_the_owner, the rekey self-check's REFERENCE_REQUIRED row, both browser suites; the probe rekey-parity exits 0."
     },
     {
       "id": "AUD-017-BLD001",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "The three test copies are one helper each (rekey_of, Refusal table, evidence_for); node scripts/verify-no-copies.mjs exits 0."
     },
     {
       "id": "AUD-017-SEC001",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "The found words are written into one Zeroizing buffer reserved at its final size (container_search.rs)."
     },
     {
       "id": "AUD-017-API001",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "The owner callback's PhraseJson carries statedWords where the check found another length; d.ts, documents and both browser suites updated; rekey-parity part B exits 0."
     },
     {
       "id": "AUD-017-UI001",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "--repair-words N (encrypt, new, rekey), --passphrase-used yes|no (decrypt, rekey) and --confirm check|address|fingerprint|show (rekey); a script gives decrypt the passphrase on a third line with --passphrase-used yes. static_cli_rules S3/S4 pass."
     },
     {
       "id": "AUD-017-UI002",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "Rekey::recover_state recovers once into a RecoveredForRekey, and Rekey::confirm confirms it as often as a confirmation is refused; owner_can_confirm and lengths_the_owner_can_confirm tell the CLI which answers to offer. Test: a_refused_confirmation_is_followed_by_another_on_the_same_recovery."
     },
     {
       "id": "AUD-017-ARC001",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "phrase_length::check_finds and MORE_RELIABLE are the one wording; static_cli_rules S1 passes."
     },
     {
       "id": "AUD-017-ARC002",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "The CLI asks Rekey::owner_can_confirm; static_cli_rules S2 passes."
     },
     {
       "id": "AUD-017-ARC003",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "One ScanGapOption, its help built from DECOY_SCAN_GAP; typed_defaults exits 0."
     },
     {
       "id": "AUD-017-BLD002",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "The Dockerfile says \"some of the checks\"; docker_vs_check exits 0."
     },
     {
       "id": "AUD-017-DOC001",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "decrypt --help lists the passphrase step and --stdin's third line; the README sentence and the failure hint name the 16-bit check."
     },
     {
       "id": "AUD-017-DOC002",
-      "status": "fixed",
+      "status": "open",
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "API.md and BROWSER-PACKAGE.md describe decrypt's passphrase, the candidate fields, the rekey walletCheck and statedWords; api_md_decrypt exits 0."
@@ -1228,7 +1228,9 @@
       {
         "dateUtc": "2026-10-13",
         "authorizedBy": "repository owner",
-        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "changes": [
+          "Explicit report time zone label: UTC (+00:00)."
+        ],
         "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
         "documentBindings": [],
         "reportDocument": {
@@ -1239,5 +1241,21 @@
       }
     ],
     "kind": "privacy-only-metadata-redaction"
-  }
+  },
+  "documentationAmendments": [
+    {
+      "completedUtc": "2026-10-14T18:29:45.759752+00:00",
+      "authorizedBy": "repository owner",
+      "kind": "documentation-only",
+      "historicalChecksRerun": false,
+      "changes": [
+        "DOC006: remediation rows stay open until a commit records them, as the original follow-up states; AUD-019 records the later closure."
+      ],
+      "reportDocument": {
+        "document": "docs/audits/AUD-017-2026-10-09.md",
+        "previousSha256": "72a490f8b407b795a48ce103f04261fe5c57374b05bf8eb4f24651fbd28fa99c",
+        "sha256": "02ba37f1c44fb2390d544443e1682ad30d1d4644b20c6b9f438602f944312cf3"
+      }
+    }
+  ]
 }

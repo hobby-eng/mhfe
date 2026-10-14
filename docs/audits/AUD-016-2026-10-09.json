@@ -3491,7 +3491,7 @@
   "harnessBindings": {
     "docs/audits/AUD-016-harnesses/README.md": "a15cd408cacc02881e7e08b42a15ba5a1c12db5d2caf7dec54b2bb76d5184424",
     "docs/audits/AUD-016-harnesses/artifact-bindings.py": "77a34a5ac9f30aaa2989f5780f0aa0da986c0d636a45de7823bae5d24f73f42e",
-    "docs/audits/AUD-016-harnesses/assemble.py": "14332fe861b6594aee638bd788667872a3bb199585105213b95f9b85697fffa6",
+    "docs/audits/AUD-016-harnesses/assemble.py": "87b36182644b5915e98d1cd3516acd2403e6b076e172a0fa071799dd29a7c2d9",
     "docs/audits/AUD-016-harnesses/baseline.py": "1b41ad8f58d8125474f1d3e0fe0043ae3a41624368caf450a6911b0b0a94f084",
     "docs/audits/AUD-016-harnesses/browser/README.md": "8b9e89962ec6c73eab7de02bf0bccd0e4118eb7703272ac8cce1231bdbc80aab",
     "docs/audits/AUD-016-harnesses/browser/page-protocol.mjs": "b393e9f7bdbb14efae0bfd0317df91f7412e0019d1992da708a8216a4e850b32",
@@ -3901,11 +3901,16 @@
       {
         "dateUtc": "2026-10-13",
         "authorizedBy": "repository owner",
-        "changes": ["Explicit report time zone label: UTC (+00:00)."],
+        "changes": [
+          "Explicit report time zone label: UTC (+00:00)."
+        ],
         "note": "Privacy-only documentation metadata edit. Existing timestamps and their instants, findings, counts, reviewed-source and artifact hashes remain unchanged. No audit execution was repeated; ignored raw evidence remains original.",
         "documentBindings": [
           {
-            "keyPath": ["harnessBindings", "docs/audits/AUD-016-harnesses/README.md"],
+            "keyPath": [
+              "harnessBindings",
+              "docs/audits/AUD-016-harnesses/README.md"
+            ],
             "document": "docs/audits/AUD-016-harnesses/README.md",
             "previousSha256": "b8dce37951f31a4089117d4107959653fd44c3e64214a49bfb1cba47cb800a4c",
             "previousDocumentSha256": "b8dce37951f31a4089117d4107959653fd44c3e64214a49bfb1cba47cb800a4c",
@@ -3913,7 +3918,10 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["harnessBindings", "docs/audits/AUD-016-harnesses/browser/README.md"],
+            "keyPath": [
+              "harnessBindings",
+              "docs/audits/AUD-016-harnesses/browser/README.md"
+            ],
             "document": "docs/audits/AUD-016-harnesses/browser/README.md",
             "previousSha256": "902dafb69d81acb33b7a5fa04ed51e317f38e5ffd839fc9476871156b6627518",
             "previousDocumentSha256": "902dafb69d81acb33b7a5fa04ed51e317f38e5ffd839fc9476871156b6627518",
@@ -3921,7 +3929,10 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["harnessBindings", "docs/audits/AUD-016-harnesses/core/README.md"],
+            "keyPath": [
+              "harnessBindings",
+              "docs/audits/AUD-016-harnesses/core/README.md"
+            ],
             "document": "docs/audits/AUD-016-harnesses/core/README.md",
             "previousSha256": "bb6e81b57de054610f46e25dd257695c445af917d6a5f73575998d88bbc2fb03",
             "previousDocumentSha256": "bb6e81b57de054610f46e25dd257695c445af917d6a5f73575998d88bbc2fb03",
@@ -3929,7 +3940,10 @@
             "change": "Explicit UTC (+00:00) label and privacy-only documentation note; historical audit execution was not repeated."
           },
           {
-            "keyPath": ["harnessBindings", "docs/audits/AUD-016-harnesses/native/README.md"],
+            "keyPath": [
+              "harnessBindings",
+              "docs/audits/AUD-016-harnesses/native/README.md"
+            ],
             "document": "docs/audits/AUD-016-harnesses/native/README.md",
             "previousSha256": "90c77e170bece9b1622e98ff5c3a6fe49d424017b7f18ed80b5741dacfe3eb58",
             "previousDocumentSha256": "90c77e170bece9b1622e98ff5c3a6fe49d424017b7f18ed80b5741dacfe3eb58",
@@ -3946,5 +3960,29 @@
     ],
     "timeZone": "UTC (+00:00)",
     "timestampsUTC": true
-  }
+  },
+  "documentationAmendments": [
+    {
+      "completedUtc": "2026-10-14T18:29:45.759752+00:00",
+      "authorizedBy": "repository owner",
+      "kind": "documentation-only",
+      "historicalChecksRerun": false,
+      "changes": [
+        "DOC004: sibling-workspace procedure paths are labelled local-only code spans; their pinned SHA-256 values are unchanged."
+      ],
+      "reportDocument": {
+        "document": "docs/audits/AUD-016-2026-10-09.md",
+        "previousSha256": "83e0735eb51b11199f8f81ac98192eba352777ba0714095ea59824197cea37d1",
+        "sha256": "c052f89249f12661b7386c0446c20247718e983351fda9dcfeba9427749ab322"
+      },
+      "documentBindings": [
+        {
+          "document": "docs/audits/AUD-016-harnesses/assemble.py",
+          "previousRecordedSha256": "14332fe861b6594aee638bd788667872a3bb199585105213b95f9b85697fffa6",
+          "sha256": "87b36182644b5915e98d1cd3516acd2403e6b076e172a0fa071799dd29a7c2d9",
+          "change": "Owner-authorized record-generation correction; historical executions were not repeated."
+        }
+      ]
+    }
+  ]
 }

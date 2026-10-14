@@ -17,19 +17,7 @@ use crate::self_check::{
     DigestCase, Findings, Tier, DAMAGED,
 };
 
-fn sha512(_: &[u8], message: &[u8]) -> Vec<u8> {
-    use sha2::Digest;
-    sha2::Sha512::digest(message).to_vec()
-}
-
-#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
-fn hmac_sha512(key: &[u8], message: &[u8]) -> Vec<u8> {
-    use hmac::{KeyInit, Mac};
-    let mut mac = <hmac::Hmac<sha2::Sha512> as KeyInit>::new_from_slice(key)
-        .expect("HMAC takes a key of any length");
-    mac.update(message);
-    mac.finalize().into_bytes().to_vec()
-}
+use crate::self_check::digests::{digest, hmac};
 
 fn ripemd160(_: &[u8], message: &[u8]) -> Vec<u8> {
     bitcoin_hashes::ripemd160::Hash::hash(message)
@@ -55,7 +43,7 @@ const WALLET_DIGESTS: [DigestCase; 7] = [
     // FIPS 180-4, example "abc".
     DigestCase {
         algorithm: "SHA-512",
-        function: sha512,
+        function: digest::<sha2::Sha512>,
         key: b"",
         message: b"abc",
         expected: "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a\
@@ -64,7 +52,7 @@ const WALLET_DIGESTS: [DigestCase; 7] = [
     // FIPS 180-4, the 896-bit message, which needs a second block.
     DigestCase {
         algorithm: "SHA-512",
-        function: sha512,
+        function: digest::<sha2::Sha512>,
         key: b"",
         message: b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno\
                    ijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
@@ -74,7 +62,7 @@ const WALLET_DIGESTS: [DigestCase; 7] = [
     // RFC 4231, test case 2.
     DigestCase {
         algorithm: "HMAC-SHA-512",
-        function: hmac_sha512,
+        function: hmac::<sha2::Sha512>,
         key: b"Jefe",
         message: b"what do ya want for nothing?",
         expected: "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea250554\
@@ -83,7 +71,7 @@ const WALLET_DIGESTS: [DigestCase; 7] = [
     // RFC 4231, test case 6.
     DigestCase {
         algorithm: "HMAC-SHA-512",
-        function: hmac_sha512,
+        function: hmac::<sha2::Sha512>,
         key: &LONG_KEY,
         message: b"Test Using Larger Than Block-Size Key - Hash Key First",
         expected: "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f352\
@@ -144,12 +132,11 @@ impl ComponentCheck for WalletHashesCheck {
     }
 }
 
-/// The public test phrase of BIP-0039, BIP-0084 and many wallets: "abandon" 11 times, "about".
-const ABANDON: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                       abandon abandon about";
 /// The passphrase of the published vector unicode-password, which NFKD changes: Python's
 /// unicodedata gives the bytes 43616665cc81206669205041cc8a3120f09f949020d0b8cc86.
-const UNICODE_PASSPHRASE: &str = "Caf\u{e9} \u{fb01} \u{ff30}\u{212b}\u{2460} \u{1f510} \u{439}";
+use crate::vectors::inputs::UNICODE_PASSWORD as UNICODE_PASSPHRASE;
+/// The public test phrase of BIP-0039, BIP-0084 and many wallets: "abandon" 11 times, "about".
+use crate::vectors::inputs::ZERO_12 as ABANDON;
 
 /// A BIP39 seed: phrase, passphrase and the 64-byte seed.
 #[derive(Clone, Copy)]
@@ -227,7 +214,7 @@ impl SeedCheck {
 
     fn seed(phrase: &str, passphrase: &str, expected: &str) -> Result<(), String> {
         let mnemonic = Mnemonic::parse_in(Language::English, phrase).map_err(|_| damaged())?;
-        let seed = bip39_seed(&mnemonic, passphrase);
+        let seed = bip39_seed(&mnemonic, passphrase).map_err(|_| damaged())?;
         expect(hex::encode(&seed[..]) == expected, "differs")
     }
 }
@@ -418,7 +405,7 @@ mod address_search {
     /// The paths come from the standards the addresses follow, each step written out: BIP44, BIP84
     /// and DIP17 give the purpose and coin type of the root, under which the accounts 0' to 9', the
     /// two chains and the indexes 0 to 99 lie. The addresses are those of [`super::addresses::ADDRESSES`].
-    const SEARCHES_STATED: [SearchCase; 5] = [
+    const SEARCHES_STATED: [SearchCase; 20] = [
         // BIP-0084's published first receiving address: purpose 84', coin type 0', 2 chains × 10
         // accounts × 100 indexes.
         SearchCase {
@@ -471,7 +458,117 @@ mod address_search {
             addresses: 2_000,
             only_path: false,
         },
+        // All remaining coin types and Bitcoin/Litecoin purposes, from the independent address table.
+        stated(
+            &super::addresses::ADDRESSES[0],
+            Some("legacy (BIP44)"),
+            "m/44'/0'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[1],
+            Some("nested SegWit (BIP49)"),
+            "m/49'/0'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[5],
+            Some("Taproot (BIP86)"),
+            "m/86'/0'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[30],
+            Some("legacy (BIP44)"),
+            "m/44'/2'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[31],
+            Some("nested SegWit (BIP49)"),
+            "m/49'/2'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[32],
+            Some("native SegWit (BIP84)"),
+            "m/84'/2'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[16],
+            None,
+            "m/44'/60'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[18],
+            None,
+            "m/44'/144'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[20],
+            None,
+            "m/44'/195'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[22],
+            Some("transparent"),
+            "m/44'/133'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[24],
+            None,
+            "m/44'/3'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[33],
+            None,
+            "m/44'/{61,60}'/0'-9'/0-1/0-99",
+            4000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[35],
+            None,
+            "m/44'/118'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[37],
+            None,
+            "m/44'/60'/0'-9'/0-1/0-99",
+            2000,
+        ),
+        stated(
+            &super::addresses::ADDRESSES[38],
+            Some("Core (BIP44)"),
+            "m/44'/5'/0'-9'/0-1/0-99",
+            2000,
+        ),
     ];
+
+    /// The address and coin come from an existing vector; its search pattern is an independent
+    /// expected value from BIP44/BIP49/BIP84/BIP86, SLIP44 and DIP17, not the search implementation.
+    const fn stated(
+        vector: &super::addresses::AddressCase,
+        type_description: Option<&'static str>,
+        pattern: &'static str,
+        addresses: u128,
+    ) -> SearchCase {
+        SearchCase {
+            coin: vector.coin,
+            address: vector.address,
+            path: "",
+            type_description,
+            pattern,
+            addresses,
+            only_path: false,
+        }
+    }
 
     /// A search an address check must refuse, as its texts are given, and the error code.
     #[derive(Clone, Copy)]
@@ -482,13 +579,25 @@ mod address_search {
         code: &'static str,
     }
 
-    /// An index of 2^31 without the hardened mark, which would name another path, an address of
-    /// another coin, and a coin the check does not know.
-    const SEARCHES_REFUSED: [RefusedSearch; 3] = [
+    /// An index of 2^31 without the hardened mark, which would name another path, a path of 256
+    /// steps, one more than a BIP32 depth holds (AUD-024-API020), an address of another coin, and
+    /// a coin the check does not know.
+    const SEARCHES_REFUSED: [RefusedSearch; 4] = [
         RefusedSearch {
             coin: "bitcoin",
             address: "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
             path: "m/84'/0'/0'/0/2147483648",
+            code: "INVALID_DERIVATION_PATH",
+        },
+        RefusedSearch {
+            coin: "bitcoin",
+            address: "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
+            path: "m/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0\
+                   /0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0\
+                   /0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0\
+                   /0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0\
+                   /0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0\
+                   /0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0",
             code: "INVALID_DERIVATION_PATH",
         },
         RefusedSearch {
@@ -579,6 +688,40 @@ mod address_search {
         }
 
         #[test]
+        fn a_search_description_covers_every_coin_and_bitcoin_litecoin_purpose() {
+            assert_eq!(
+                AddressSearchCheck::new().run(Tier::Startup),
+                ComponentOutcome::Passed
+            );
+            for coin in Coin::ALL {
+                assert!(
+                    SEARCHES_STATED.iter().any(|case| case.coin == coin),
+                    "{coin:?}"
+                );
+            }
+            for coin in [Coin::Bitcoin, Coin::Litecoin] {
+                let mut purposes = SEARCHES_STATED
+                    .iter()
+                    .filter(|case| case.coin == coin && !case.only_path)
+                    .map(|case| {
+                        crate::wallet::Address::parse(case.coin, case.address)
+                            .unwrap()
+                            .address_type()
+                            .purpose()
+                    })
+                    .collect::<Vec<_>>();
+                purposes.sort_unstable();
+                purposes.dedup();
+                let expected = if coin == Coin::Bitcoin {
+                    vec![44, 49, 84, 86]
+                } else {
+                    vec![44, 49, 84]
+                };
+                assert_eq!(purposes, expected, "{coin:?}");
+            }
+        }
+
+        #[test]
         fn a_search_stated_otherwise_or_accepted_fails() {
             let mut stated = SEARCHES_STATED;
             // Nine accounts instead of ten.
@@ -588,7 +731,7 @@ mod address_search {
                     stated: leak(stated),
                     ..AddressSearchCheck::new()
                 },
-                "search 1 of 5 is stated otherwise",
+                "search 1 of 20 is stated otherwise",
             );
             let mut stated = SEARCHES_STATED;
             stated[1].only_path = false;
@@ -597,7 +740,7 @@ mod address_search {
                     stated: leak(stated),
                     ..AddressSearchCheck::new()
                 },
-                "search 2 of 5 is stated otherwise",
+                "search 2 of 20 is stated otherwise",
             );
             // The highest ordinary index is a valid path: a search there is accepted.
             let mut refused = SEARCHES_REFUSED;
@@ -609,7 +752,7 @@ mod address_search {
             assert_eq!(
                 check.run(Tier::Startup),
                 ComponentOutcome::Failed(
-                    "wrong search 1 of 3 is accepted instead of refused with \
+                    "wrong search 1 of 4 is accepted instead of refused with \
                      INVALID_DERIVATION_PATH"
                         .to_owned()
                 )

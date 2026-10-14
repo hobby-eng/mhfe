@@ -27,9 +27,19 @@ struct WalletCheckVector {
     startup: bool,
 }
 
+/// The first counter whose phrase passes with the public test passphrase "TREZOR": entropy of
+/// 24 zero bytes and 76,562, "abandon" 21 times, "above proof fatigue". Found once with the
+/// release build, about 65,536 BIP39 seeds, and confirmed by an independent computation.
+pub(crate) const TREZOR_COUNTER: u64 = 76_562;
+
+/// The first counter whose phrase passes with an empty passphrase: 24 zero bytes and 98,918,
+/// "abandon" 21 times, "absorb another spoil". Found with an independent Python computation
+/// (digest 0000ede7…), which also confirmed that it fails with "TREZOR" (8d2b97fb…).
+pub(crate) const EMPTY_COUNTER: u64 = 98_918;
+
 const VECTORS: [WalletCheckVector; 4] = [
     WalletCheckVector {
-        counter: 76_562,
+        counter: TREZOR_COUNTER,
         passphrase: "TREZOR",
         digest: "0000e86481bdfe6dbf45e6e41fba4f309fcf09d3f0af2fe3f46736c663840853",
         passes: true,
@@ -37,7 +47,7 @@ const VECTORS: [WalletCheckVector; 4] = [
         startup: true,
     },
     WalletCheckVector {
-        counter: 76_562,
+        counter: TREZOR_COUNTER,
         passphrase: "",
         // The specification gives "ebd07f71"; the rest from hashlib, as the module says.
         digest: "ebd07f7120cfeb611077221ca20da98c6bef15e72f0cbfd2ef2c6c6514ad7ddb",
@@ -46,7 +56,7 @@ const VECTORS: [WalletCheckVector; 4] = [
         startup: true,
     },
     WalletCheckVector {
-        counter: 98_918,
+        counter: EMPTY_COUNTER,
         passphrase: "",
         digest: "0000ede77b44fbd62025e1d36a45ebe3846cf48f7b3e76ca6a91495fdadc1fb2",
         passes: true,
@@ -54,7 +64,7 @@ const VECTORS: [WalletCheckVector; 4] = [
         startup: false,
     },
     WalletCheckVector {
-        counter: 98_918,
+        counter: EMPTY_COUNTER,
         passphrase: "TREZOR",
         // The specification gives "8d2b97fb"; the rest from hashlib, as the module says.
         digest: "8d2b97fb997a034302b996efea1a302ce3721b645ed056c5304c3c327fb77df4",
@@ -65,7 +75,7 @@ const VECTORS: [WalletCheckVector; 4] = [
 ];
 
 /// The entropy of a vector: 24 zero bytes, then the counter as a big-endian 64-bit number.
-fn entropy(counter: u64) -> [u8; NEW_ENTROPY_BYTES] {
+pub(crate) fn entropy(counter: u64) -> [u8; NEW_ENTROPY_BYTES] {
     let mut entropy = [0u8; NEW_ENTROPY_BYTES];
     entropy[NEW_ENTROPY_BYTES - 8..].copy_from_slice(&counter.to_be_bytes());
     entropy
@@ -146,7 +156,8 @@ impl ComponentCheck for WalletCheckProfile {
         });
         // Without a passphrase, anyone who sees the phrase could test it.
         findings.one(|| {
-            let phrase = crate::phrase::phrase_from_entropy(&entropy(76_562)).map_err(stopped)?;
+            let phrase = crate::phrase::phrase_from_entropy(&entropy(VECTORS[0].counter))
+                .map_err(stopped)?;
             expect_refusal(verify(&phrase, ""), "WALLET_CHECK_NEEDS_PASSPHRASE")
                 .map_err(|what| format!("a check without a passphrase {what}"))
         });

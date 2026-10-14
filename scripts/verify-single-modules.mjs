@@ -7,7 +7,7 @@
 //   node scripts/verify-single-modules.mjs
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 import { PHRASE, SELF_CHECK_PARTS } from "./public-test-data.mjs";
 import { damagedCopies, isVectorText, rustStrings } from "./rust-strings.mjs";
@@ -22,6 +22,12 @@ const read = (path) => readFileSync(new URL(path, root));
 const OWNERS = {
   "src/mhfe/known_answers.rs": ["core"],
   "src/mhfe/known_answers/published.rs": ["core"],
+  "src/mhfe/published_rounds.rs": ["core"],
+  "src/engine/known_answers.rs": ["core"],
+  "src/self_check.rs": ["core", "repair"],
+  "tests/fixtures/suite4-vectors/validation-cases.json": ["core"],
+  "tests/fixtures/suite3-vectors/zero-12.json": ["core"],
+  "tests/fixtures/suite4-vectors/same-length-zero-12.json": ["core"],
   "src/container/known_answers.rs": ["core"],
   "src/operation/known_answers.rs": ["core"],
   "src/search/known_answers.rs": ["core"],
@@ -41,26 +47,76 @@ const OWNERS = {
   "src/wallet/known_answers/addresses.rs": ["core", "wallet"],
 };
 
+/** Literals shared by several checks, now held once outside their known-answer modules. */
+const SHARED_INPUTS = {
+  "src/vectors/inputs.rs": {
+    ZERO_12: ["core", "repair", "wallet"],
+    ZERO_24: ["core", "repair", "wallet"],
+    UNICODE_PASSWORD: ["core", "repair", "passwords", "wallet"],
+    UNICODE_PASSWORD_NFKD: ["core", "passwords"],
+  },
+  "src/eff.rs": { EFF_LIST_SHA256: ["core", "passwords"] },
+};
+
+/** Read exact Rust literals by symbol; a missing or changed declaration needs review. */
+function sharedVectors() {
+  return Object.entries(SHARED_INPUTS).flatMap(([path, symbols]) => {
+    const literals = new Map(
+      [
+        ...read(path)
+          .toString()
+          .matchAll(/\bconst\s+(\w+)\s*:\s*&str\s*=\s*("(?:\\.|[^"\\])*")/gsu),
+      ].map((match) => [match[1], rustStrings(match[2])[0]]),
+    );
+    return Object.entries(symbols).map(([name, owners]) => {
+      assert.ok(literals.has(name), `${path}: no shared literal ${name}`);
+      return { text: literals.get(name), owners };
+    });
+  });
+}
+
 /** Texts that a module holds for its own reason, which a foreign part's vector happens to be. */
 const COINCIDENCES = new Map([
+  ["0123456789abcdef", "the common hexadecimal alphabet"],
+  ["0102030405060708", "the common ascending-byte table"],
   [
     "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz",
     "the generator's 57 characters, part of the Base58 alphabet of addresses",
   ],
 ]);
 
+/** Text values of a fixture, leaving ownership decisions to its caller. */
+function fixtureStrings(value) {
+  if (typeof value === "string") return [value];
+  return typeof value === "object" && value !== null
+    ? Object.values(value).flatMap(fixtureStrings)
+    : [];
+}
+
+/** Strings and compile-time hex constants, including tags stored as bytes rather than text. */
+function vectorsOf(path) {
+  const source = read(path).toString();
+  const texts = path.endsWith(".json") ? fixtureStrings(JSON.parse(source)) : rustStrings(source);
+  const hexes = compiledHexes(source);
+  return [...new Set([...texts.filter(isVectorText), ...hexes])];
+}
+
+/** Only hex() constants become bytes at compile time; JSON hex fields stay text in the binary. */
+function compiledHexes(source) {
+  return [...source.matchAll(/\bhex\(\s*"([\da-fA-F]{16,})"\s*\)/gu)].map((match) => match[1]);
+}
+const COMPILED_HEX = new Set(
+  Object.keys(OWNERS)
+    .filter((path) => path.endsWith(".rs"))
+    .flatMap((path) => compiledHexes(read(path).toString())),
+);
+
 /** The vectors of the suite 3 validation fixture outside its passwords, which only core reads. */
 function formatsVectors() {
   const fixture = JSON.parse(read("tests/fixtures/validation-cases.json").toString());
-  const strings = (value) =>
-    typeof value === "string"
-      ? [value]
-      : typeof value === "object" && value !== null
-        ? Object.values(value).flatMap(strings)
-        : [];
   const { passwords, ...others } = fixture;
-  const ofPasswords = new Set(strings(passwords));
-  return strings(others).filter((text) => isVectorText(text) && !ofPasswords.has(text));
+  const ofPasswords = new Set(fixtureStrings(passwords));
+  return fixtureStrings(others).filter((text) => isVectorText(text) && !ofPasswords.has(text));
 }
 
 /**
@@ -68,11 +124,17 @@ function formatsVectors() {
  * are part of one of its own, such as the twelve words "abandon" that begin its phrases.
  */
 function foreignVectors(module) {
-  const vectorsOf = (path) => rustStrings(read(path).toString()).filter(isVectorText);
   const own = new Set();
   const foreign = new Set();
   for (const [path, owners] of Object.entries(OWNERS)) {
     for (const text of vectorsOf(path)) (owners.includes(module) ? own : foreign).add(text);
+  }
+  for (const { text, owners } of sharedVectors()) {
+    if (isVectorText(text)) (owners.includes(module) ? own : foreign).add(text);
+  }
+  if (module === "passwords") {
+    const { passwords } = JSON.parse(read("tests/fixtures/validation-cases.json").toString());
+    for (const text of fixtureStrings(passwords)) own.add(text);
   }
   if (module !== "core") for (const text of formatsVectors()) foreign.add(text);
   const ownTexts = [...own];
@@ -83,6 +145,87 @@ function foreignVectors(module) {
       !COINCIDENCES.has(text) &&
       !ownTexts.some((mine) => mine.includes(text)),
   );
+}
+
+/** The same foreign values in their textual and compiled hexadecimal byte forms. */
+function carriedVectors(module, bytes) {
+  return foreignVectors(module).filter(
+    (text) =>
+      bytes.includes(Buffer.from(text)) ||
+      (COMPILED_HEX.has(text) && bytes.includes(Buffer.from(text, "hex"))),
+  );
+}
+
+/** Every known-answer source, generated table and runtime fixture has an explicit owner. */
+function checkOwnershipInventory() {
+  const walk = (folder) =>
+    readdirSync(new URL(folder, root), { withFileTypes: true }).flatMap((entry) => {
+      const path = `${folder}${entry.name}`;
+      return entry.isDirectory() ? walk(`${path}/`) : path.endsWith(".rs") ? [path] : [];
+    });
+  for (const path of walk("src/").filter((name) => !name.startsWith("src/bin/"))) {
+    const source = read(path).toString();
+    if (
+      path.includes("/known_answers") ||
+      /Generated by/u.test(source.split("\n").slice(0, 8).join("\n"))
+    ) {
+      assert.ok(Object.hasOwn(OWNERS, path), `${path}: no vector owner`);
+    }
+    // These two modules are native/test-only; other unit-test sections are not browser inputs.
+    if (["src/test_support.rs", "src/vectors.rs"].includes(path)) continue;
+    const runtime = source.split("#[cfg(test)]")[0];
+    for (const [, fixture] of runtime.matchAll(
+      /include_str!\(\s*"([^"]*tests\/fixtures\/[^"]+)"/gu,
+    )) {
+      const resolved = new URL(fixture, new URL(path, root)).pathname;
+      const name = resolved.slice(root.pathname.length);
+      assert.ok(
+        name === "tests/fixtures/validation-cases.json" || Object.hasOwn(OWNERS, name),
+        `${name}: no fixture owner`,
+      );
+    }
+  }
+}
+
+/** Each new vector source is detectable as text, and each compiled tag is detectable as bytes. */
+function selfTest() {
+  checkOwnershipInventory();
+  const shared = sharedVectors();
+  assert.ok(shared.length > 0, "shared-input ownership is not empty");
+  for (const { text, owners } of shared) {
+    if (!isVectorText(text)) continue;
+    for (const module of ["core", "repair", "passwords", "wallet"]) {
+      if (owners.includes(module)) continue;
+      assert.ok(
+        carriedVectors(module, Buffer.from(text)).includes(text),
+        `${module}: a shared foreign literal is still detectable`,
+      );
+    }
+  }
+  for (const path of [
+    "src/mhfe/published_rounds.rs",
+    "src/engine/known_answers.rs",
+    "src/self_check.rs",
+    "tests/fixtures/suite4-vectors/validation-cases.json",
+    "tests/fixtures/suite3-vectors/zero-12.json",
+    "tests/fixtures/suite4-vectors/same-length-zero-12.json",
+  ]) {
+    const foreign = new Set(foreignVectors("passwords"));
+    const vector = vectorsOf(path).find((text) => foreign.has(text));
+    assert.ok(vector, `${path}: has a foreign control`);
+    assert.ok(
+      carriedVectors("passwords", Buffer.from(vector)).includes(vector),
+      `${path}: found as text`,
+    );
+    const hex = vectorsOf(path).find((text) => foreign.has(text) && COMPILED_HEX.has(text));
+    if (hex !== undefined)
+      assert.ok(
+        carriedVectors("passwords", Buffer.from(hex, "hex")).includes(hex),
+        `${path}: found as bytes`,
+      );
+  }
+  assert.deepEqual(carriedVectors("passwords", Buffer.from("0123456789abcdef")), []);
+  console.log("The vector ownership and foreign text/byte controls pass.");
 }
 
 /**
@@ -130,6 +273,16 @@ const MODULES = {
   },
 };
 
+const args = process.argv.slice(2);
+if (args.length === 1 && args[0] === "--self-test") {
+  selfTest();
+  process.exit(0);
+}
+if (args.length !== 0) {
+  console.error("Usage: node scripts/verify-single-modules.mjs [--self-test]");
+  process.exit(2);
+}
+checkOwnershipInventory();
 for (const [module, { check, vector, holds = [], lacks = [] }] of Object.entries(MODULES)) {
   const { glue, wasm } = build(module);
   const run = (bytes) => {
@@ -150,7 +303,7 @@ for (const [module, { check, vector, holds = [], lacks = [] }] of Object.entries
   // Each message says what failed: a marker it should hold that is missing, or one it holds.
   for (const marker of holds) assert.ok(text.includes(marker), `${module}: it lacks ${marker}`);
   for (const marker of lacks) assert.ok(!text.includes(marker), `${module}: it holds ${marker}`);
-  const carried = foreignVectors(module).filter((foreign) => text.includes(foreign));
+  const carried = carriedVectors(module, wasm);
   assert.deepEqual(carried, [], `${module}: it carries vectors of parts outside its set`);
   console.log(
     `The ${module} module alone passes its startup self-check and carries no other part.`,

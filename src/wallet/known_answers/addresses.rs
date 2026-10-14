@@ -1,6 +1,6 @@
 //! The `addresses` self-check: one receiving address of each encoding at its path, derived from the
 //! test phrase, with a damaged copy of each checksum that must be refused, and in the full
-//! self-test two address searches.
+//! self-test the standard search of every published address.
 
 use super::{damaged, expect, expect_refusal, stopped, ABANDON};
 use crate::self_check::{ComponentCheck, ComponentOutcome, Findings, Tier};
@@ -31,6 +31,7 @@ const fn at(coin: Coin, path: &'static str, address: &'static str, startup: bool
 }
 
 /// Where the wallets of [`ABANDON`] put each address, also the table of the wallet's unit tests.
+///
 /// Published vectors: BIP-0084's m/84'/0'/0'/0/0, 0/1 and 1/0, BIP-0086's m/86'/0'/0'/0/0 and 1/0,
 /// BIP-0049's testnet m/49'/1'/0'/0/0, and the official DIP17/DIP18 vectors of Dash Platform.
 /// BIP-0044 publishes no address, and BIP-0049 no mainnet one: those rows and the other Bitcoin
@@ -335,18 +336,19 @@ const DAMAGED_ADDRESSES: [(Coin, &str); 9] = [
 
 /// The master key fingerprint of [`ABANDON`] without a passphrase, 73c5da0a, derived from the root
 /// key that BIP-0084's test vector publishes.
-const ABANDON_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
+use crate::vectors::inputs::ZERO_12_FINGERPRINT as ABANDON_FINGERPRINT;
 
-/// Searches the full self-test runs: an address found under the second root of its coin, and one
-/// at account 3, the change chain and index 7, within 4 accounts and 8 indexes.
-const SEARCHES: [(usize, &str); 2] = [(29, "m/44'/0'/0'/0/0"), (9, "m/84'/0'/3'/1/7")];
+/// Small search bounds covering the vectors' largest account and address index (3 and 7).
+const SEARCH_ACCOUNTS: u32 = 4;
+const SEARCH_INDEXES: u32 = 8;
 
 /// The `addresses` check: the master fingerprint of BIP-0084's root key, each address at its path
 /// derived from one master key per passphrase, and the damaged addresses refused. The full
-/// self-test adds every address of the table and two searches.
+/// self-test adds every address of the table and each address's standard-path search.
 pub(crate) struct AddressesCheck {
     addresses: &'static [AddressCase],
     damaged: &'static [(Coin, &'static str)],
+    searches: &'static [AddressCase],
 }
 
 impl AddressesCheck {
@@ -354,6 +356,7 @@ impl AddressesCheck {
         Self {
             addresses: &ADDRESSES,
             damaged: &DAMAGED_ADDRESSES,
+            searches: &ADDRESSES,
         }
     }
 
@@ -414,14 +417,13 @@ impl ComponentCheck for AddressesCheck {
             expect_refusal(Address::parse(coin, text), "INVALID_ADDRESS")
         });
         if full {
-            findings.each("search", &SEARCHES, |&(index, expected)| {
-                let case = self.addresses.get(index).ok_or_else(damaged)?;
+            findings.each("search", self.searches, |case| {
                 let address = Address::parse(case.coin, case.address).map_err(stopped)?;
-                let limits = SearchLimits::new(4, 8).map_err(stopped)?;
+                let limits = SearchLimits::new(SEARCH_ACCOUNTS, SEARCH_INDEXES).map_err(stopped)?;
                 let found = find_address(ABANDON, case.passphrase, &address, None, limits)
                     .map_err(stopped)?;
                 expect(
-                    found.map(|path| path.to_string()).as_deref() == Some(expected),
+                    found.map(|path| path.to_string()).as_deref() == Some(case.path),
                     "finds the address elsewhere",
                 )
             });
@@ -445,8 +447,12 @@ mod tests {
             );
         }
         assert_eq!(ADDRESSES.iter().filter(|case| case.startup).count(), 18);
-        assert_eq!(SEARCHES[0].1, ADDRESSES[SEARCHES[0].0].path);
-        assert_eq!(SEARCHES[1].1, ADDRESSES[SEARCHES[1].0].path);
+        for coin in Coin::ALL {
+            assert!(AddressesCheck::new()
+                .searches
+                .iter()
+                .any(|case| case.coin == coin));
+        }
     }
 
     #[test]
@@ -470,6 +476,27 @@ mod tests {
             },
             "damaged address 5 of 9 is accepted instead of refused with INVALID_ADDRESS",
         );
+    }
+
+    #[test]
+    fn a_standard_search_that_finds_another_path_fails() {
+        for vector in ADDRESSES {
+            let wrong = AddressCase {
+                path: "m/0",
+                ..vector
+            };
+            let mut check = AddressesCheck {
+                searches: leak([wrong]),
+                ..AddressesCheck::new()
+            };
+            let outcome = check.run(Tier::Full);
+            assert_eq!(
+                outcome,
+                ComponentOutcome::Failed("search 1 of 1 finds the address elsewhere".to_owned()),
+                "{}",
+                vector.path
+            );
+        }
     }
 
     /// A self-check's detail never carries a coin's name or an address.

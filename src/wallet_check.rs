@@ -79,7 +79,7 @@ fn digest(entropy: &[u8], passphrase: &str) -> Result<Zeroizing<[u8; 32]>, MhfeE
     let bits = u32::try_from(entropy.len() * 8).unwrap_or(u32::MAX);
     let mnemonic = Mnemonic::from_entropy_in(Language::English, entropy)
         .map_err(|error| MhfeError::Internal(error.to_string()))?;
-    let seed = wallet::bip39_seed(&mnemonic, passphrase);
+    let seed = wallet::bip39_seed(&mnemonic, passphrase)?;
     Ok(tagged_digest(bits, &seed[..]))
 }
 
@@ -138,6 +138,7 @@ pub fn require_same_passphrase(passphrase: &str, repeat: &str) -> Result<(), Mhf
 }
 
 /// Whether a recovered 24-word phrase passes the wallet check with the passphrase the owner gives.
+///
 /// An empty passphrase is refused ([`require_passphrase`]), and so is a phrase of another length.
 pub fn verify(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
     require_passphrase(passphrase)?;
@@ -184,6 +185,7 @@ impl PhraseDraw {
     /// the phrase could test it.
     pub fn with_check(passphrase: &str) -> Result<Self, MhfeError> {
         require_passphrase(passphrase)?;
+        wallet::require_passphrase_size(passphrase)?;
         Ok(Self {
             passphrase: Some(LockedText::copy_of(passphrase)),
             wishes: WordWishes::none(),
@@ -218,21 +220,34 @@ impl PhraseDraw {
 
     /// Up to `count` draws from `source`: the first entropy that passes, or `None`. Several
     /// threads or workers may call it at once; taking the first entropy found by any of them
-    /// leaves every passing entropy equally likely. An entropy of zeros, which a random source
-    /// never gives in practice, means the source filled nothing and is refused.
+    /// leaves every passing entropy equally likely. An entropy that a random source never gives
+    /// in practice is refused: one of a single byte value, zeros among them, as from a source that
+    /// fills nothing or is stuck, or one equal to the entropy drawn before it (AUD-024-SEC014).
     pub fn try_draws(
         &self,
         source: &mut dyn RandomSource,
         count: u64,
     ) -> Result<Option<Zeroizing<[u8; NEW_ENTROPY_BYTES]>>, MhfeError> {
+        self.draws_after(source, count, &mut Zeroizing::new([0u8; NEW_ENTROPY_BYTES]))
+    }
+
+    /// [`PhraseDraw::try_draws`] after the entropy `previous`, which it compares the first draw
+    /// with, and where it leaves the last entropy it drew, as the source gave it.
+    pub(crate) fn draws_after(
+        &self,
+        source: &mut dyn RandomSource,
+        count: u64,
+        previous: &mut [u8; NEW_ENTROPY_BYTES],
+    ) -> Result<Option<Zeroizing<[u8; NEW_ENTROPY_BYTES]>>, MhfeError> {
         let mut entropy = Zeroizing::new([0u8; NEW_ENTROPY_BYTES]);
         for _ in 0..count {
             source.fill(&mut entropy[..])?;
-            if entropy.iter().all(|&byte| byte == 0) {
+            if entropy.iter().all(|&byte| byte == entropy[0]) || *entropy == *previous {
                 return Err(MhfeError::RandomFailed(
-                    "it gave an entropy of zeros".to_owned(),
+                    "it gave an entropy that cannot be random".to_owned(),
                 ));
             }
+            previous.copy_from_slice(&entropy[..]);
             // The chosen words' bits are set after the source's bytes are judged, and a phrase
             // that misses a wish is drawn again, before the check's costly seed.
             self.wishes.apply(&mut entropy);
@@ -448,8 +463,7 @@ mod tests {
             PhraseDraw::with_check(""),
             Err(MhfeError::WalletCheckNeedsPassphrase)
         ));
-        let twelve = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                      abandon abandon about";
+        let twelve = crate::test_support::ABANDON_12;
         assert!(matches!(
             verify(twelve, "TREZOR"),
             Err(MhfeError::NoWalletCheckAtLength(12))
@@ -504,8 +518,7 @@ mod tests {
     /// test phrase passes the criterion is refused by `verify`.
     #[test]
     fn only_the_criterion_takes_a_short_phrase() {
-        let twelve = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                      abandon abandon about";
+        let twelve = crate::test_support::ABANDON_12;
         let passphrase = "aud010 public probe 11656";
         assert_eq!(phrase_passes(twelve, passphrase), Ok(true));
         assert_eq!(
@@ -543,6 +556,52 @@ mod tests {
             PhraseDraw::unchecked().draw(&mut stuck, &mut |_| Ok(())),
             Err(MhfeError::RandomFailed(_))
         ));
+    }
+
+    /// A source that gets stuck after its probes, on one byte or on one block, gives no phrase
+    /// but RANDOM_FAILED, on one thread and on several (AUD-024-SEC014).
+    #[test]
+    fn a_source_stuck_after_its_probes_gives_no_phrase() {
+        let stuck_after_probes = |block: [u8; NEW_ENTROPY_BYTES]| {
+            let mut fills = 0u64;
+            move |bytes: &mut [u8]| {
+                fills += 1;
+                if fills <= 2 {
+                    bytes.copy_from_slice(&counted(fills));
+                } else {
+                    bytes.copy_from_slice(&block);
+                }
+                Ok(())
+            }
+        };
+        let mut block = counted(TREZOR_COUNTER - 1);
+        block[0] = 0x5a;
+        for stuck in [[0xff; NEW_ENTROPY_BYTES], [0x5a; NEW_ENTROPY_BYTES], block] {
+            for draw in [
+                PhraseDraw::unchecked(),
+                PhraseDraw::with_check("TREZOR").unwrap(),
+            ] {
+                let drawn = draw.draw(&mut stuck_after_probes(stuck), &mut |_| Ok(()));
+                // An unchecked draw takes the first block; only a repeated one is refused.
+                if stuck == block && !draw.is_checked() {
+                    assert!(drawn.is_ok());
+                    continue;
+                }
+                assert!(
+                    matches!(drawn, Err(MhfeError::RandomFailed(_))),
+                    "{stuck:?}"
+                );
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let threaded =
+                        draw.draw_on_threads(4, &|| stuck_after_probes(stuck), &mut |_| Ok(()));
+                    assert!(
+                        matches!(threaded, Err(MhfeError::RandomFailed(_))),
+                        "{stuck:?}"
+                    );
+                }
+            }
+        }
     }
 
     /// A stand-in for the system's generator on one thread: the [`counted`] entropies after

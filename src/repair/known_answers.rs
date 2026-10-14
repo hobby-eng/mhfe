@@ -17,20 +17,17 @@ const NONZERO_12: &str = "hotel supply dune casual fork treat century web wide v
 const NONZERO_21: &str = "seat govern run smooth flag fragile horse night simple luggage vacuum \
                           warfare tissue permit gym upset average blade pen blue view";
 /// "abandon" 23 times, then "art": the phrase of 32 zero bytes.
-const ABANDON_ART: &str =
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                           abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                           abandon abandon abandon abandon abandon art";
+use crate::vectors::inputs::ZERO_24 as ABANDON_ART;
 
 /// A container phrase and its cards of 2, 4, 6 and 8 repair words.
 #[derive(Clone, Copy)]
-struct CardRow {
-    container: &'static str,
-    cards: [&'static str; 4],
+pub(super) struct CardRow {
+    pub(super) container: &'static str,
+    pub(super) cards: [&'static str; 4],
 }
 
 /// The table of MHFE-REPAIR-1's public vectors.
-const CARDS: [CardRow; 4] = [
+pub(super) const CARDS: [CardRow; 4] = [
     CardRow {
         container: ZERO_12,
         cards: [
@@ -69,6 +66,20 @@ const CARDS: [CardRow; 4] = [
     },
 ];
 
+/// The four-word card column of the public zero-12 container row.
+pub(crate) const ZERO_12_CARD: (usize, &str) = (super::REPAIR_WORD_COUNTS[1], CARDS[0].cards[1]);
+
+fn damaged_words<'a>(source: &'a str, changes: &[(usize, &'a str)]) -> Result<String, String> {
+    let mut words: Vec<&str> = source.split_whitespace().collect();
+    for &(position, word) in changes {
+        let slot = words
+            .get_mut(position.wrapping_sub(1))
+            .ok_or_else(damaged)?;
+        *slot = word;
+    }
+    Ok(words.join(" "))
+}
+
 /// What a repair must give.
 #[derive(Clone, Copy)]
 enum Expected {
@@ -93,12 +104,12 @@ struct RepairCase {
     startup: bool,
 }
 
-const REPAIRS: [RepairCase; 7] = [
+const REPAIRS: [RepairCase; 11] = [
     // The specification: words 3 and 17 unreadable, restored as "tower" and "cycle".
     RepairCase {
         container: ZERO_12,
         damage: &[(3, "?"), (17, "?")],
-        card: "shaft pupil patient jewel",
+        card: ZERO_12_CARD.1,
         expected: Expected::Repaired {
             container_words: &[3, 17],
             card_words: &[],
@@ -127,7 +138,7 @@ const REPAIRS: [RepairCase; 7] = [
     RepairCase {
         container: ZERO_12,
         damage: &[(10, "zoo"), (5, "?")],
-        card: "shaft pupil patient jewel",
+        card: ZERO_12_CARD.1,
         expected: Expected::Repaired {
             container_words: &[5, 10],
             card_words: &[],
@@ -138,7 +149,7 @@ const REPAIRS: [RepairCase; 7] = [
     RepairCase {
         container: ZERO_12,
         damage: &[(3, "zoo"), (17, "abandon")],
-        card: "shaft pupil patient jewel",
+        card: ZERO_12_CARD.1,
         expected: Expected::Repaired {
             container_words: &[3, 17],
             card_words: &[],
@@ -164,6 +175,46 @@ const REPAIRS: [RepairCase; 7] = [
         expected: Expected::Repaired {
             container_words: &[2, 11, 23],
             card_words: &[6],
+        },
+        startup: false,
+    },
+    RepairCase {
+        container: ZERO_12,
+        damage: &[(5, "zoo"), (20, "abandon")],
+        card: ZERO_12_CARD.1,
+        expected: Expected::Repaired {
+            container_words: &[5, 20],
+            card_words: &[],
+        },
+        startup: false,
+    },
+    RepairCase {
+        container: ZERO_12,
+        damage: &[(1, "?"), (9, "legal"), (24, "?")],
+        card: ZERO_12_CARD.1,
+        expected: Expected::Repaired {
+            container_words: &[1, 9, 24],
+            card_words: &[],
+        },
+        startup: false,
+    },
+    RepairCase {
+        container: ZERO_12,
+        damage: &[(1, "?")],
+        card: "shaft ? patient jewel",
+        expected: Expected::Repaired {
+            container_words: &[1],
+            card_words: &[2],
+        },
+        startup: false,
+    },
+    RepairCase {
+        container: ZERO_12,
+        damage: &[],
+        card: "zoo extra",
+        expected: Expected::Repaired {
+            container_words: &[],
+            card_words: &[1],
         },
         startup: false,
     },
@@ -237,14 +288,8 @@ impl RepairWordsCheck {
     }
 
     fn repair(case: &RepairCase) -> Result<(), String> {
-        let mut words: Vec<&str> = case.container.split_whitespace().collect();
-        for &(position, word) in case.damage {
-            let slot = words
-                .get_mut(position.wrapping_sub(1))
-                .ok_or_else(damaged)?;
-            *slot = word;
-        }
-        let result = super::repair(&words.join(" "), case.card);
+        let words = damaged_words(case.container, case.damage)?;
+        let result = super::repair(&words, case.card);
         match case.expected {
             Expected::Refused(code) => expect_refusal(result, code),
             Expected::Repaired {
@@ -267,14 +312,8 @@ impl RepairWordsCheck {
     }
 
     fn reading(case: &ReadingCase) -> Result<(), String> {
-        let mut words: Vec<&str> = ZERO_12.split_whitespace().collect();
-        for &(position, word) in case.changes {
-            let slot = words
-                .get_mut(position.wrapping_sub(1))
-                .ok_or_else(damaged)?;
-            *slot = word;
-        }
-        let read = super::ContainerReading::read(&words.join(" "));
+        let words = damaged_words(ZERO_12, case.changes)?;
+        let read = super::ContainerReading::read(&words);
         let expected = match case.expected {
             ExpectedReading::Container => super::ContainerReading::Container,
             ExpectedReading::Marked(unreadable) => super::ContainerReading::Marked {
@@ -354,7 +393,7 @@ mod tests {
     #[test]
     fn an_accepted_wrong_card_fails() {
         let mut repairs = REPAIRS;
-        repairs[2].card = "shaft pupil patient jewel";
+        repairs[2].card = ZERO_12_CARD.1;
         fails_with(
             RepairWordsCheck {
                 repairs: leak(repairs),

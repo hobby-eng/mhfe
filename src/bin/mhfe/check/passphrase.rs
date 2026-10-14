@@ -1,7 +1,6 @@
 //! The BIP39 passphrases a command asks for, on a private screen, and the questions whether a
 //! wallet has one.
 
-use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::wallet_check::{self, WALLET_CHECK_BITS};
@@ -15,7 +14,7 @@ use crate::terminal::{Input, PrivateScreen};
 /// The BIP39 passphrase for the phrase + passphrase check, which the library offers only with one
 /// (`wallet_check::require_passphrase`, the rule the browser package follows too): an empty one
 /// is refused and asked again.
-pub fn read_check_passphrase(
+pub(super) fn read_check_passphrase(
     input: &mut Input,
     operation: Operation,
 ) -> Result<LockedText, Failure> {
@@ -29,15 +28,19 @@ pub fn read_check_passphrase(
 
 /// The private screen of `operation` on which the BIP39 passphrase of `whose` is typed, with the
 /// reminder that it is not the container password.
-pub fn passphrase_screen(input: &Input, operation: Operation, whose: &str) -> PrivateScreen {
-    let screen = PrivateScreen::enter(input, operation.title());
-    if screen.is_active() {
+pub(crate) fn passphrase_screen(
+    input: &Input,
+    operation: Operation,
+    whose: &str,
+) -> Result<PrivateScreen, Failure> {
+    let screen = PrivateScreen::enter(input, operation.title())?;
+    if !input.is_script() {
         eprintln!();
         style::hint(&format!(
             "Part of {whose}, as a 25th word; it is NOT the container password."
         ));
     }
-    screen
+    Ok(screen)
 }
 
 /// Reads a BIP39 passphrase on the private screen of `operation`, again until `accept` takes it;
@@ -48,7 +51,7 @@ fn read_passphrase_until(
     whose: &str,
     accept: impl Fn(&str) -> Result<(), String>,
 ) -> Result<LockedText, Failure> {
-    let _screen = passphrase_screen(input, operation, whose);
+    let _screen = passphrase_screen(input, operation, whose)?;
     loop {
         let passphrase = input.secret(&format!("BIP39 passphrase of {whose}"))?;
         let message = match accept(&passphrase) {
@@ -64,7 +67,7 @@ fn read_passphrase_until(
 
 /// The BIP39 passphrase used with `whose`, such as "the container phrase", which the person has
 /// said there is: it may not be empty.
-pub fn read_passphrase_named(
+pub(crate) fn read_passphrase_named(
     input: &mut Input,
     operation: Operation,
     whose: &str,
@@ -80,7 +83,7 @@ pub fn read_passphrase_named(
 /// the commands that ask it (the owner's rule that every answer that is not a secret is an option
 /// too). The passphrase itself is never an option: it is typed, or a script's line.
 #[derive(Args)]
-pub struct PassphraseUsedOption {
+pub(crate) struct PassphraseUsedOption {
     /// Whether a BIP39 passphrase is used: yes or no
     #[arg(long = "passphrase-used", value_name = "yes|no", value_parser = choice::parse_yes_no)]
     used: Option<bool>,
@@ -88,17 +91,17 @@ pub struct PassphraseUsedOption {
 
 impl PassphraseUsedOption {
     /// The answer given, or `None` to ask at a terminal.
-    pub fn given(&self) -> Option<bool> {
+    pub(crate) fn given(&self) -> Option<bool> {
         self.used
     }
 }
 
 /// Whose BIP39 passphrase a question is about, named in it and in its field.
-pub const CONTAINER_PHRASE: &str = "the container phrase";
-pub const ORIGINAL_SEED_PHRASE: &str = "the original seed phrase";
+pub(crate) const CONTAINER_PHRASE: &str = "the container phrase";
+pub(crate) const ORIGINAL_SEED_PHRASE: &str = "the original seed phrase";
 
 /// Asks whether a BIP39 passphrase is used with `whose` and, if so, reads it; empty for none.
-pub fn ask_passphrase(
+pub(crate) fn ask_passphrase(
     input: &mut Input,
     operation: Operation,
     whose: &str,
@@ -110,7 +113,7 @@ pub fn ask_passphrase(
 /// every recovery evaluates (the specification's recovery rules). Longer than the usual link, as
 /// the owner asked (2026-10-09): nothing else on the screen says why a tool that only decrypts
 /// wants a passphrase.
-pub fn source_check_why() -> [String; 8] {
+pub(crate) fn source_check_why() -> [String; 8] {
     [
         format!("A new 24-word phrase can carry a {WALLET_CHECK_BITS}-bit check tied to its BIP39"),
         "passphrase, as mhfe new offers. The container does not show whether".to_owned(),
@@ -124,7 +127,7 @@ pub fn source_check_why() -> [String; 8] {
 }
 
 /// [`ask_passphrase`] with an explanation under the question and a link to `more`.
-pub fn ask_passphrase_explained(
+pub(crate) fn ask_passphrase_explained(
     input: &mut Input,
     operation: Operation,
     whose: &str,
@@ -174,12 +177,12 @@ pub(super) fn read_own_checks_passphrase(
 }
 
 /// The BIP39 passphrase of a wallet named `wallet`, such as "the main wallet", or none.
-pub fn read_passphrase_of(
+pub(crate) fn read_passphrase_of(
     input: &mut Input,
     operation: Operation,
     wallet: &str,
 ) -> Result<LockedText, Failure> {
-    let screen = passphrase_screen(input, operation, wallet);
+    let screen = passphrase_screen(input, operation, wallet)?;
     let passphrase = input.secret(&format!(
         "BIP39 passphrase of {wallet}, or Enter if it has none"
     ))?;

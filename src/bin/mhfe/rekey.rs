@@ -5,7 +5,6 @@
 //! owner comparing the phrase, shown on a private screen, with their backup. Encrypting under the
 //! old password and comparing would prove nothing.
 
-use anstream::eprintln;
 use clap::{Args, ValueEnum};
 use mhfe::memory::LockedText;
 use mhfe::operation::{Keep, Sealed, Stage};
@@ -14,9 +13,8 @@ use mhfe::wallet::fingerprint_text;
 use mhfe::wallet_check::WALLET_CHECK_BITS;
 use mhfe::{
     Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, Password,
-    PhraseLength, RecoveredForRekey, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
+    PhraseLength, RecoveredForRekey, WordCount, WorkFactor,
 };
-use zeroize::Zeroizing;
 
 use crate::check::{self, WalletReference};
 use crate::choice::{self, Answer, Question};
@@ -28,11 +26,11 @@ use crate::made_password::{NewPasswordOption, PasswordKind};
 use crate::phrase_length;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
-use crate::style::{self, paint, ACCENT, HEADING, MUTED};
+use crate::style::{self, paint, ACCENT, HEADING};
 use crate::terminal::{self, Input, Progress, Wallet};
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// The settings of the old container
     #[command(flatten)]
     old: Settings,
@@ -43,16 +41,16 @@ pub struct Options {
     #[command(flatten)]
     repair_words: RepairWordsOption,
 
-    /// PIM of the new container, 0 to 1023 (default 0)
-    #[arg(long = "new-pim", value_name = "N")]
+    #[arg(long = "new-pim", value_name = "N",
+          help = format!("PIM of the new container, {} (default 0)", settings::pim_range()))]
     new_pim: Option<u32>,
 
-    /// New memory level, 0 to 21 (default 0: 2 GiB)
-    #[arg(long = "new-mem", value_name = "LEVEL", long_help = new_memory_help())]
+    #[arg(long = "new-mem", value_name = "LEVEL", long_help = new_memory_help(),
+          help = format!("New memory level, {} (default 0: {})", settings::level_range(), settings::memory_text(0)))]
     new_memory_level: Option<u32>,
 
-    /// Words of the seed phrase: 12 to 24, or auto
-    #[arg(long, value_name = "N", value_parser = phrase_length::parse, long_help = words_help())]
+    #[arg(long, value_name = "N", value_parser = phrase_length::parse, long_help = words_help(),
+          help = format!("Words of the seed phrase: {}, or {}", phrase_length::length_range(), phrase_length::AUTO))]
     words: Option<PhraseLength>,
 
     /// Confirm by: check, address, fingerprint or show
@@ -95,11 +93,11 @@ fn words_help() -> String {
 
 fn confirm_help() -> String {
     style::option_help(&[
-        "How the recovered phrase is confirmed before it is encrypted again: check, its built-in \
-         check, for a 12- to 21-word length stated with --words; address or fingerprint, of the \
+        &format!("How the recovered phrase is confirmed before it is encrypted again: check, its built-in \
+         check, for a {} length stated with --words; address or fingerprint, of the \
          wallet, typed next; show, only if you know neither: the phrase on a private screen, to \
          compare with your written backup or enter into your wallet, and then a fingerprint to \
-         rehearse the new container with.",
+         rehearse the new container with.", phrase_length::short_range_words()),
         "Asked at a terminal when not given. A way the length does not allow is refused before \
          anything is computed, and after a refusal on the recovered phrase the question is asked \
          again.",
@@ -107,10 +105,10 @@ fn confirm_help() -> String {
 }
 
 /// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
-pub const SUMMARY: &str = "Change the password or settings of a container";
+pub(crate) const SUMMARY: &str = "Change the password or settings of a container";
 
 /// The top of `mhfe rekey --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         SUMMARY,
         "Recovers the seed phrase from the old container, confirms it, by its built-in check, by \
@@ -122,7 +120,7 @@ pub fn about() -> String {
 }
 
 /// The end of `mhfe rekey -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::examples_with_note(
         &[
             ("mhfe rekey", "A new password, with the questions as lists"),
@@ -140,13 +138,19 @@ pub fn help() -> String {
     )
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; no script reads a phrase back and forth.
     let mut input = Input::terminal_only().reading_secrets()?;
     options.new_password.check(&input)?;
+    options
+        .repair
+        .address()
+        .require_address(options.confirm == Some(Kind::Address))?;
+    require_confirmation_screen(&input, options.confirm)?;
     options.repair_words.check()?;
+    input.require_private_result()?;
     // At a terminal every step on a screen of its own, the summary at the end.
-    let flow = Flow::start(&input, Operation::Rekey.title());
+    let flow = Flow::start(&input, Operation::Rekey.title())?;
     let old_work = settings::choose(options.old, &mut input, Operation::Rekey)?;
     let new_settings = Settings {
         pim: options.new_pim,
@@ -167,7 +171,14 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // The rounds run once; a confirmation that is refused is followed by another on the same
     // recovery (AUD-017-UI002).
     let state = recover(&rekey, old_work, &how)?;
-    let recovered = confirm(&mut input, &mut rekey, &state, &mut how, wallet_passphrase)?;
+    let recovered = confirm(
+        &mut input,
+        &mut rekey,
+        &state,
+        &mut how,
+        wallet_passphrase,
+        options.repair.address(),
+    )?;
     drop(state);
     let recovered = record_recovery(&mut input, recovered, &how)?;
     let rehearsal = replacement_rehearsal(&mut input, &recovered)?;
@@ -215,10 +226,15 @@ fn read_old_container(
     options: &Options,
     old_work: WorkFactor,
 ) -> Result<(ContainerFacts, Rekey), Failure> {
-    let read = terminal::read_container(
+    let read = terminal::read_container_for(
         input,
         Operation::Rekey.title(),
         options.repair.card(Operation::Rekey, old_work),
+        |container| {
+            options
+                .words
+                .map_or(Ok(()), |length| container.require_length(length))
+        },
     )?;
     let container = read.facts;
     let length = phrase_length(input, options.words, &container)?;
@@ -241,12 +257,8 @@ fn choose_confirmation(
     options: &Options,
     rekey: &Rekey,
 ) -> Result<(How, bool), Failure> {
+    require_confirmation_screen(input, options.confirm)?;
     let kind = match (options.confirm, rekey.confirmation_needed()) {
-        (Some(Kind::Owner), _) if !terminal::can_show_privately(input) => {
-            return Err(Failure::invalid_input(
-                "--confirm show needs a terminal that can show the phrase on a private screen.",
-            ))
-        }
         (Some(kind), _) => kind,
         (None, ConfirmationNeeded::BuiltInCheck) => Kind::BuiltInCheck,
         (None, ConfirmationNeeded::WalletOrOwner) => ask_how_to_confirm(input, true)?,
@@ -259,7 +271,20 @@ fn choose_confirmation(
         Some(used) => used,
         None => ask_wallet_passphrase(input)?,
     };
-    Ok((how_of(input, kind, wallet_passphrase)?, wallet_passphrase))
+    Ok((
+        how_of(input, kind, wallet_passphrase, options.repair.address())?,
+        wallet_passphrase,
+    ))
+}
+
+/// A show confirmation is refused before any question when its private screen cannot open.
+fn require_confirmation_screen(input: &Input, kind: Option<Kind>) -> Result<(), Failure> {
+    if matches!(kind, Some(Kind::Owner)) && !terminal::can_show_privately(input) {
+        return Err(Failure::invalid_input(
+            "--confirm show needs a terminal that can show the phrase on a private screen.",
+        ));
+    }
+    Ok(())
 }
 
 /// Runs the recovery's twelve rounds at the old settings. The old memory is released when it
@@ -267,15 +292,15 @@ fn choose_confirmation(
 fn recover(rekey: &Rekey, old_work: WorkFactor, how: &How) -> Result<RecoveredForRekey, Failure> {
     let mut mhfe = settings::reserve_memory(old_work)?;
     let reference = how.reference();
-    let mut progress = Progress::start();
+    let mut progress = Progress::start()?;
     // The terminal shows the twelve rounds of the recovery as before; a comparison with the
     // wallet follows them without a round of its own.
     let state = rekey.recover_state(
         &mut mhfe,
         how.confirmation(reference.as_ref()),
-        &mut |stage, round, _| {
+        &mut |stage, round, rounds| {
             if stage == Stage::Recover {
-                progress.round_starts(round, ROUNDS);
+                progress.round_starts(stage, round, rounds);
             }
             Ok(())
         },
@@ -292,15 +317,27 @@ fn confirm(
     state: &RecoveredForRekey,
     how: &mut How,
     wallet_passphrase: bool,
+    address_options: &check::AddressOptions,
 ) -> Result<ConfirmedPhrase, Failure> {
+    let mut previous_refusal = None;
+    let mut owner_words = None;
     loop {
         let reference = how.reference();
-        let refusal = match rekey.confirm(
-            state,
-            how.confirmation(reference.as_ref()),
-            Some(wallet_passphrase),
-            &mut |_, _, _| Ok(()),
-        ) {
+        let confirmation = how.confirmation(reference.as_ref());
+        let mut progress = |_, _, _| Ok(());
+        let confirmed = if let Some(refusal) = &previous_refusal {
+            rekey.confirm_again(
+                state,
+                refusal,
+                confirmation,
+                owner_words,
+                Some(wallet_passphrase),
+                &mut progress,
+            )
+        } else {
+            rekey.confirm(state, confirmation, Some(wallet_passphrase), &mut progress)
+        };
+        let refusal = match confirmed {
             Ok(confirmed) => return Ok(confirmed),
             Err(refusal) => refusal,
         };
@@ -322,16 +359,24 @@ fn confirm(
             // rules). An address or the fingerprint compares every reading.
             _ => SEVERAL_LENGTHS.to_owned(),
         });
-        let kind = ask_how_to_confirm(input, !owner_lengths.is_empty())?;
+        let kind = if address_options.given_names().is_empty() {
+            ask_how_to_confirm(input, !owner_lengths.is_empty())?
+        } else {
+            Kind::Address
+        };
         // The owner compares the reading of one of these lengths, stated where there is a choice.
-        if kind == Kind::Owner {
-            let stated = match owner_lengths[..] {
-                [only] => WordCount::new(only)?,
-                _ => phrase_length::ask_stated(input, &owner_lengths, &[], "Phrase")?,
-            };
-            rekey.set_length(PhraseLength::Words(stated))?;
-        }
-        *how = how_of(input, kind, wallet_passphrase)?;
+        owner_words = match (kind, &owner_lengths[..]) {
+            (Kind::Owner, [_]) => None, // The library selects the only permitted length.
+            (Kind::Owner, _) => Some(phrase_length::ask_stated(
+                input,
+                &owner_lengths,
+                &[],
+                "Phrase",
+            )?),
+            _ => None,
+        };
+        previous_refusal = Some(refusal);
+        *how = how_of(input, kind, wallet_passphrase, address_options)?;
     }
 }
 
@@ -346,12 +391,13 @@ fn record_recovery(
     // The 16-bit source check of a 24-word reading, which every recovery evaluates, with the
     // passphrase typed for the reference or the empty one; only a pass is said. It never
     // confirms a phrase to seal again: 16 bits are too few.
-    // A copy of a secret, wiped when dropped.
-    let source_passphrase = Zeroizing::new(match how {
-        How::Wallet(wallet) => wallet.reference().passphrase().unwrap_or("").to_owned(),
-        How::BuiltInCheck | How::Owner => String::new(),
-    });
-    let source_check = match phrase.passes_wallet_check(&source_passphrase)? {
+    // Borrowed from its locked buffer, not copied (AUD-024-SEC013).
+    let reference = how.reference();
+    let source_passphrase = reference
+        .as_ref()
+        .and_then(mhfe::Reference::passphrase)
+        .unwrap_or("");
+    let source_check = match phrase.passes_wallet_check(source_passphrase)? {
         Some(true) => format!(", passes the {WALLET_CHECK_BITS}-bit check"),
         _ => String::new(),
     };
@@ -417,9 +463,7 @@ fn seal(
             recovered,
             new_password,
             repair_count,
-            // The rekey numbers these rounds 13 to 36 of its 36; the bar shows the encryption's
-            // own 1 to 24, as for any encryption.
-            &mut |stage, round, _| progress(stage, round - ROUNDS, ENCRYPTION_ROUNDS),
+            progress,
             on_unverified,
         )
     })
@@ -433,18 +477,17 @@ fn print_summary(
     recovered: &ConfirmedPhrase,
     rehearsal: &ReplacementRehearsal,
 ) {
-    style::fact("Format", paint(MUTED, new.suite().id()));
-    style::fact_wrapped(
-        "Keep",
-        &encrypt::what_to_keep(&new.keep(new_work, recovered.wallet_has_passphrase().into())),
-    );
+    encrypt::print_container_summary(new, new_work, recovered.wallet_has_passphrase().into());
     // Rekeying revokes nothing: the old container phrase and password open the wallet until
     // destroyed.
     style::fact(
         "Old backup",
         "the old container phrase still opens the wallet with the old password",
     );
-    style::fact_wrapped("Next", &next_rehearsal(rehearsal));
+    style::fact("Next", next_rehearsal(rehearsal));
+    if matches!(rehearsal, ReplacementRehearsal::Fingerprint(_)) {
+        style::fingerprint_fact();
+    }
     style::more(readme::REKEY);
 }
 
@@ -492,7 +535,12 @@ impl How {
 
 /// The confirmation of `kind`, its reference read for an address or the fingerprint, of a wallet
 /// whose BIP39 passphrase the person has said it has or has not.
-fn how_of(input: &mut Input, kind: Kind, wallet_passphrase: bool) -> Result<How, Failure> {
+fn how_of(
+    input: &mut Input,
+    kind: Kind,
+    wallet_passphrase: bool,
+    address_options: &check::AddressOptions,
+) -> Result<How, Failure> {
     Ok(match kind {
         Kind::BuiltInCheck => How::BuiltInCheck,
         Kind::Owner => How::Owner,
@@ -501,6 +549,7 @@ fn how_of(input: &mut Input, kind: Kind, wallet_passphrase: bool) -> Result<How,
             kind == Kind::Fingerprint,
             Operation::Rekey,
             wallet_passphrase,
+            address_options,
         )?),
     })
 }
@@ -590,7 +639,7 @@ const OWNER_CHECKS: &[&str] = &[
 /// Shows the recovered phrase on a private screen and asks the owner whether it is theirs. Only a
 /// yes goes on; the screen is cleared either way.
 fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
-    let screen = terminal::PrivateScreen::enter_to_show(input);
+    let screen = terminal::PrivateScreen::enter_to_show(input)?;
     if !screen.shows_privately() {
         return Err(Failure::internal(
             "No private screen to show the phrase on.",
@@ -650,7 +699,7 @@ fn phrase_length(
 /// What detection asks for in a rekey, beside its answer: the built-in check alone confirms no
 /// detected length, so an address, the fingerprint or the phrase shown confirms it, as for 24
 /// words.
-pub const DETECTION_MISSES: &str = "then an address or the phrase confirms";
+pub(crate) const DETECTION_MISSES: &str = "then an address or the phrase confirms";
 
 /// Said when several lengths pass, before the question how to confirm the phrase.
 const SEVERAL_LENGTHS: &str =
@@ -683,6 +732,20 @@ fn read_different_password(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn given_repair_words_skip_the_question_without_recovering_the_old_container() {
+        use clap::Parser;
+        for (typed, expected) in [("0", None), ("4", Some(4))] {
+            let cli =
+                crate::Cli::try_parse_from(["mhfe", "rekey", "--repair-words", typed]).unwrap();
+            let crate::Command::Rekey(options) = cli.command else {
+                unreachable!()
+            };
+            let mut input = Input::terminal_only();
+            assert_eq!(options.repair_words.choose(&mut input).unwrap(), expected);
+        }
+    }
     use mhfe::WORD_COUNTS;
 
     #[test]

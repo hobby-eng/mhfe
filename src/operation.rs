@@ -252,9 +252,9 @@ impl Encryption {
             })?;
         let repair_words = self
             .repair_word_count
-            .map(|count| repair_words(&container.words, count))
+            .map(|count| repair_words(container.words(), count))
             .transpose()?;
-        on_unverified(&container.words)?;
+        on_unverified(container.words())?;
         mhfe.check_new_container(&container, password, &mut |round, rounds| {
             progress(Stage::Check, round, rounds)
         })?;
@@ -278,17 +278,17 @@ pub struct Sealed {
 impl Sealed {
     /// The container's words.
     pub fn container(&self) -> &str {
-        &self.container.words
+        self.container.words()
     }
 
     /// The suite the container was made with.
     pub fn suite(&self) -> Suite {
-        self.container.suite
+        self.container.suite()
     }
 
     /// The number of the container's words.
     pub fn container_words(&self) -> usize {
-        self.container.words.split(' ').count()
+        self.container.words().split(' ').count()
     }
 
     /// The repair words, made only once the check has passed.
@@ -301,7 +301,7 @@ impl Sealed {
     /// container do not.
     pub fn built_in_check(&self) -> bool {
         self.container
-            .suite
+            .suite()
             .built_in_check_lengths()
             .contains(&self.original_words)
     }

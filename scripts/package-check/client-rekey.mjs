@@ -14,6 +14,7 @@ const shownToOwner = {
   words: 12,
   statedWords: 15,
   fingerprintWithoutPassphrase: "00000000",
+  rehearsalNeedsPassphrase: true,
 };
 // The owner's yes goes back with the passphrase for the new container's rehearsal, empty here.
 const OWNER_YES = { type: "answer", value: { confirmed: true, passphrase: new Uint8Array(0) } };
@@ -23,9 +24,27 @@ const lengthDiffers = { code: "LENGTH_DIFFERS", message: "the check finds 12", o
 /** The rekey's questions to the page, its answers, and what ends it. */
 export async function checkRekeyCallbacks(client, MhfeError) {
   await checkOwnerAsked(client);
+  await checkUnexpectedOwnerQuestion(client);
   await checkConfirmAgain(client, MhfeError);
   await checkConfirmAgainRefused(client);
   await checkTrapAndPassphrases(client);
+}
+
+/** A worker cannot ask the owner when the active confirmation has no owner callback. */
+async function checkUnexpectedOwnerQuestion(client) {
+  const rekeying = client.rekey({
+    container: "public synthetic container",
+    words: 12,
+    password: "old",
+    newPassword: "new",
+    newPasswordRepeat: "new",
+    confirmation: { builtInCheck: true },
+  });
+  const refused = assert.rejects(rekeying, { code: "PACKAGE_MISMATCH" });
+  const worker = await started((message) => message.operation === "rekey");
+  worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
+  await refused;
+  assert.ok(worker.terminated, "a malformed owner question ends the job");
 }
 
 /**
@@ -64,12 +83,10 @@ async function checkOwnerAsked(client) {
   assert.deepEqual(await rekeying, { container: "n" });
   // The owner's yes with the wallet's passphrase, for the new container's rehearsal, reaches the
   // worker as a yes with the passphrase as bytes; any other answer is a no.
-  for (const [answer, confirmed, passphrase] of [
-    [{ passphrase: "TREZOR" }, true, "TREZOR"],
-    [1, false, ""],
-    [{}, false, ""],
-  ]) {
-    const answered = client.rekey({
+  // A rekey whose owner callback answers `answer`, the worker asking it; kept in an object, so
+  // that awaiting the helper does not wait for the rekey itself.
+  const rekeyAnswered = async (answer) => {
+    const rekeying = client.rekey({
       container: "c",
       words: 15,
       password: "old",
@@ -80,6 +97,16 @@ async function checkOwnerAsked(client) {
     });
     worker = await started();
     worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
+    return { rekeying };
+  };
+  for (const [answer, confirmed, passphrase] of [
+    [{ passphrase: "TREZOR" }, true, "TREZOR"],
+    [{ passphrase: "TREZOR", other: undefined }, true, "TREZOR"],
+    [false, false, ""],
+    [1, false, ""],
+    [{}, false, ""],
+  ]) {
+    const { rekeying: answered } = await rekeyAnswered(answer);
     await nextTurn();
     const { value } = worker.messages[1];
     assert.deepEqual(
@@ -90,25 +117,55 @@ async function checkOwnerAsked(client) {
     worker.reply({ type: "result", result: { container: "n" } });
     await answered;
   }
+  // An answer with any other key than passphrase is refused, not read as a yes: the owner's no
+  // with the passphrase must not seal the phrase (AUD-024-API001).
+  for (const answer of [{ confirmed: false, passphrase: "TREZOR" }, { yes: true }]) {
+    const { rekeying: refused } = await rekeyAnswered(answer);
+    await assert.rejects(
+      refused,
+      // The class's refusal of the answer comes as it is, not as a failure of the callback
+      // (AUD-024-API007).
+      (error) =>
+        error instanceof TypeError &&
+        error.message.startsWith("The owner callback gives true, false or { passphrase }"),
+      `the owner's answer ${JSON.stringify(answer)}`,
+    );
+  }
   // A passphrase answered as null is refused as any passphrase that is not text or bytes, never
-  // taken for an empty one (AUD-016-API003): the callback's answer fails, with that as the cause.
-  const answeredNull = client.rekey({
+  // taken for an empty one (AUD-016-API003): the rekey ends with that TypeError.
+  const { rekeying: answeredNull } = await rekeyAnswered({ passphrase: null });
+  await assert.rejects(
+    answeredNull,
+    (error) =>
+      error instanceof TypeError &&
+      error.message === "passphrase must be a string or a Uint8Array.",
+  );
+  const unused = client.rekey({
     container: "c",
     words: 15,
     password: "old",
     newPassword: "new",
     newPasswordRepeat: "new",
-    confirmation: { owner: () => ({ passphrase: null }) },
-    walletHasPassphrase: true,
+    confirmation: { owner: () => ({ passphrase: "TREZOR" }) },
+    walletHasPassphrase: false,
   });
   worker = await started();
-  worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
-  await assert.rejects(
-    answeredNull,
-    (error) =>
-      error.code === "CALLBACK_FAILED" &&
-      error.cause instanceof TypeError &&
-      error.cause.message === "passphrase must be a string or a Uint8Array.",
+  worker.reply({
+    type: "ask",
+    question: "ownerCheck",
+    value: {
+      ...shownToOwner,
+      rehearsalNeedsPassphrase: false,
+    },
+  });
+  await assert.rejects(unused, {
+    name: "TypeError",
+    message: REKEY_PASSPHRASE_ONLY_WITH_REFERENCE,
+  });
+  assert.equal(
+    worker.terminated,
+    true,
+    "an unused owner passphrase ends the rekey before sending it",
   );
 }
 
@@ -177,7 +234,7 @@ async function checkConfirmAgain(client, MhfeError) {
 
 /**
  * A null answer ends the rekey with the refusal, as the worker throws it; an answer the client
- * refuses stops the rekey with CALLBACK_FAILED, its TypeError as the cause.
+ * refuses stops the rekey with its TypeError (AUD-024-API007).
  */
 async function checkConfirmAgainRefused(client) {
   const { rekeyWith } = clientCalls(client);
@@ -238,10 +295,7 @@ async function checkConfirmAgainRefused(client) {
     });
     await assert.rejects(
       refused,
-      (error) =>
-        error.code === "CALLBACK_FAILED" &&
-        error.cause instanceof TypeError &&
-        error.cause.message === message,
+      (error) => error instanceof TypeError && error.message === message,
       message,
     );
     assert.equal(worker.terminated, true, `${message}: the worker stops`);

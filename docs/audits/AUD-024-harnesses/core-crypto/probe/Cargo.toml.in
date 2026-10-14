@@ -1,0 +1,14 @@
+# The AUD-024 core-crypto probe: a program on the public API of mhfe. run.sh writes this file as
+# Cargo.toml in a temporary folder, with the repository root in place of the marker below.
+[package]
+name = "aud024-core-crypto-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mhfe = { package = "mhfe-experimental", path = "@REPO_ROOT@" }
+sha2 = "=0.11.0"
+hex = "=0.4.3"
+
+[workspace]

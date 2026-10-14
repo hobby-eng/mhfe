@@ -19,10 +19,25 @@
 // and from the typedefs below for what the declaration leaves out (TS-13).
 
 /**
- * @import { CompiledModule as DeclaredCompiledModule, MhfeComponentResult, MhfeErrorCode,
+ * @import { CompiledModule as DeclaredCompiledModule, MhfeError as DeclaredError,
+ *   MhfeModuleClass as DeclaredModuleClass, MhfeComponentResult, MhfeErrorCode,
  *   MhfePasswordRepair, MhfeSecret, MhfeSelfCheckProgress, MhfeSelfCheckReport, MhfeSelfCheckTier,
  *   PackageCheck as DeclaredPackageCheck } from "./runtime.d.ts"
  */
+
+/** @import { NoKeys } from "./types/api-presence.d.ts" */
+/** @typedef {NoKeys<Exclude<keyof DeclaredCompiledModule, keyof CompiledModule>>} MissingCompiledKeys */
+/** @typedef {NoKeys<Exclude<keyof CompiledModule, keyof DeclaredCompiledModule>>} ExtraCompiledKeys */
+/** @typedef {NoKeys<Exclude<keyof DeclaredError, keyof MhfeError>>} MissingErrorKeys */
+/** @typedef {NoKeys<Exclude<keyof MhfeError, keyof DeclaredError>>} ExtraErrorKeys */
+/** @typedef {NoKeys<Exclude<keyof DeclaredModuleClass<unknown>, keyof MhfeModuleClass>>} MissingModuleKeys */
+/** @typedef {NoKeys<Exclude<keyof MhfeModuleClass, keyof DeclaredModuleClass<unknown>>>} ExtraModuleKeys */
+/** @typedef {NoKeys<Exclude<keyof typeof DeclaredCompiledModule, keyof typeof CompiledModule>>} MissingCompiledStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof CompiledModule, keyof typeof DeclaredCompiledModule>>} ExtraCompiledStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof DeclaredError, keyof typeof MhfeError>>} MissingErrorStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof MhfeError, keyof typeof DeclaredError>>} ExtraErrorStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof DeclaredModuleClass, keyof typeof MhfeModuleClass>>} MissingModuleStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof MhfeModuleClass, keyof typeof DeclaredModuleClass>>} ExtraModuleStatics */
 
 /**
  * The build of the package these files come from, which scripts/stamp-build-id.mjs derives from
@@ -49,6 +64,206 @@ export class MhfeError extends Error {
     this.code = code;
     if (options?.report !== undefined) this.report = options.report;
   }
+}
+
+/**
+ * Deliberate copy of MhfeErrorCode: the declaration is type-only, while worker messages need
+ * membership checks at runtime. package-check/manifest.mjs compares every value with that type.
+ * @type {readonly MhfeErrorCode[]}
+ */
+const KNOWN_ERROR_CODES = [
+  "INVALID_PHRASE",
+  "INVALID_CONTAINER",
+  "INVALID_WORD_COUNT",
+  "SAME_LENGTH_NEEDS_SHORT_PHRASE",
+  "LENGTH_CHOICE_NOT_APPLICABLE",
+  "NO_BUILT_IN_CHECK",
+  "NO_WALLET_CHECK",
+  "NO_HIDDEN_WALLETS",
+  "REFERENCE_REQUIRED",
+  "REFERENCE_MISMATCH",
+  "HIDDEN_WALLET_PASSES_CHECK",
+  "INVALID_REPAIR_WORDS",
+  "REPAIR_NOT_POSSIBLE",
+  "TOO_MANY_MISSING_WORDS",
+  "SEVERAL_CANDIDATES_MATCH",
+  "AMBIGUOUS_LENGTH",
+  "LENGTH_DIFFERS",
+  "INVALID_PIM",
+  "INVALID_MEMORY_LEVEL",
+  "EMPTY_PASSWORD",
+  "PASSWORD_TOO_LONG",
+  "INVALID_PASSWORD_UTF8",
+  "CONTROL_CHARACTER_IN_PASSWORD",
+  "UNASSIGNED_CHARACTER",
+  "VERIFIER_MISMATCH",
+  "FIXED_POINT",
+  "VERIFICATION_FAILED",
+  "SELF_CHECK_FAILED",
+  "PACKAGE_MISMATCH",
+  "CANCELLED",
+  "INVALID_ADDRESS",
+  "INVALID_DERIVATION_PATH",
+  "INVALID_FINGERPRINT",
+  "NOT_ENOUGH_MEMORY",
+  "MEMORY_ALLOCATION_FAILED",
+  "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
+  "ARGON2_FAILED",
+  "INVALID_PASSPHRASE",
+  "PASSPHRASE_TOO_LONG",
+  "INVALID_REQUEST",
+  "INVALID_COIN",
+  "INVALID_PASSWORD_SIZE",
+  "INVALID_DICE_ROLLS",
+  "PASSWORD_REPAIR_NOT_OFFERED",
+  "PASSWORDS_DIFFER",
+  "WALLET_CHECK_NEEDS_PASSPHRASE",
+  "RANDOM_FAILED",
+  "PASSWORD_ALREADY_USED",
+  "NEW_PASSWORD_SAME_AS_OLD",
+  "NOT_CONFIRMED_BY_OWNER",
+  "INTERNAL_ERROR",
+  "INVALID_PASSWORD_TEXT",
+  "PASSPHRASES_DIFFER",
+  "INVALID_WORD_WISH",
+  "BUSY",
+  "SESSION_CLOSED",
+  "WORKER_FAILED",
+  "CALLBACK_FAILED",
+];
+
+/**
+ * Membership of the protocol's declared error-code enum.
+ * @param {unknown} value
+ * @returns {value is MhfeErrorCode}
+ */
+function isErrorCode(value) {
+  return typeof value === "string" && KNOWN_ERROR_CODES.some((code) => code === value);
+}
+
+/**
+ * A worker error validated before its code enters MhfeError.
+ * @param {unknown} value
+ * @returns {{ code: MhfeErrorCode, message: string }}
+ */
+function readWorkerError(value) {
+  if (!isRecord(value) || !isErrorCode(value.code) || typeof value.message !== "string") {
+    throw packageMismatch("The worker returned a malformed error");
+  }
+  return { code: value.code, message: value.message };
+}
+
+/**
+ * Validates a channel's payload before a heterogeneous typed handler receives it. A handler's
+ * declared parameter belongs to its registered channel; the cast stays inside this adapter,
+ * after the channel reader has checked the received fields.
+ * @param {WorkerHandler} handler
+ * @param {string} channel
+ * @param {unknown} value
+ * @returns {() => HandlerResult}
+ */
+function checkedPageHandler(handler, channel, value) {
+  const checked = readWorkerValue(channel, value);
+  return () => /** @type {ArrivedHandler} */ (handler)(checked);
+}
+
+/**
+ * A worker channel's DTO. Values are returned only after the properties used by page handlers
+ * are checked; malformed protocol data is PACKAGE_MISMATCH, independent of callback failures.
+ * @param {string} channel
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+function readWorkerValue(channel, value) {
+  const numeric = (/** @type {unknown} */ item) =>
+    typeof item === "number" && Number.isFinite(item);
+  const numbers = (/** @type {unknown} */ items) => Array.isArray(items) && items.every(numeric);
+  const mismatch = () => {
+    throw packageMismatch(`The worker sent a malformed ${channel} value`);
+  };
+  if (channel === "ready") {
+    if (value !== null) mismatch();
+    return value;
+  }
+  if (channel === "draws") {
+    if (!numeric(value)) mismatch();
+    return value;
+  }
+  if (channel === "component") return readComponent(value);
+  if (channel === "refused") return readWorkerError(value);
+  if (!isRecord(value) || Array.isArray(value)) return mismatch();
+  switch (channel) {
+    case "componentStart":
+      if (typeof value.id !== "string" || typeof value.label !== "string") mismatch();
+      break;
+    case "progress":
+      if (typeof value.stage !== "string") return mismatch();
+      if (value.stage === "search") {
+        if (
+          !numeric(value.candidate) ||
+          !numeric(value.candidates) ||
+          (value.round !== undefined && !numeric(value.round)) ||
+          (value.rounds !== undefined && !numeric(value.rounds))
+        )
+          mismatch();
+      } else if (
+        !["encrypt", "check", "recover", "compare"].includes(value.stage) ||
+        !numeric(value.round) ||
+        typeof value.rounds !== "number" ||
+        ![12, 24, 36].includes(value.rounds)
+      )
+        mismatch();
+      break;
+    case "unverified":
+      if (typeof value.container !== "string" || typeof value.containerFingerprint !== "string")
+        mismatch();
+      break;
+    case "ownerCheck":
+      if (
+        typeof value.phrase !== "string" ||
+        !numeric(value.words) ||
+        (value.statedWords !== undefined && !numeric(value.statedWords)) ||
+        typeof value.fingerprintWithoutPassphrase !== "string" ||
+        typeof value.rehearsalNeedsPassphrase !== "boolean"
+      )
+        mismatch();
+      break;
+    case "confirmAgain":
+      readWorkerError(value);
+      if (!numbers(value.ownerLengths)) mismatch();
+      break;
+    case "opened":
+      if (
+        typeof value.phrase !== "string" ||
+        value.words !== 24 ||
+        typeof value.fingerprintWithoutPassphrase !== "string"
+      )
+        mismatch();
+      break;
+    case "noLength":
+      if (
+        !(value.builtInCheck === null || numeric(value.builtInCheck)) ||
+        !numbers(value.matchingLengths) ||
+        !(value.walletCheck === null || typeof value.walletCheck === "boolean") ||
+        !Array.isArray(value.passed)
+      )
+        return mismatch();
+      for (const passed of value.passed) {
+        if (
+          !isRecord(passed) ||
+          !(
+            passed.check === "walletCheck" ||
+            (passed.check === "builtInCheck" && numeric(passed.words)) ||
+            (passed.check === "builtInChecks" && numbers(passed.lengths))
+          )
+        )
+          mismatch();
+      }
+      break;
+    default:
+      return mismatch();
+  }
+  return value;
 }
 
 /** The error of an operation that cancel() stopped. */
@@ -95,9 +310,7 @@ export class CompiledModule {
   get() {
     this.#compiled ??= isCompiledModule(this.#wasm)
       ? Promise.resolve(this.#wasm)
-      : // Bytes over a SharedArrayBuffer are no BufferSource: WebAssembly.compile checks that
-        // itself and rejects them, which the startup check reports (PackageCheck).
-        WebAssembly.compile(/** @type {BufferSource} */ (this.#wasm));
+      : WebAssembly.compile(this.#wasm);
     return this.#compiled;
   }
 }
@@ -116,8 +329,70 @@ function isCompiledModule(value) {
  * @param {unknown} value
  * @returns {value is Record<string, unknown>}
  */
-function isRecord(value) {
-  return typeof value === "object" && value !== null;
+export function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A library component's outcome tag. Deliberate copy of MhfeComponentResult's declaration:
+ * runtime messages need the type-only enum's values before they can be used.
+ * @param {unknown} value
+ * @returns {value is MhfeComponentResult["outcome"]}
+ */
+function isComponentOutcome(value) {
+  return (
+    value === "passed" ||
+    value === "warning" ||
+    value === "notAvailable" ||
+    value === "notRun" ||
+    value === "failed"
+  );
+}
+
+/**
+ * A self-check component at the page-worker trust boundary, without trusting a producer's cast.
+ * @param {unknown} value
+ * @returns {MhfeComponentResult}
+ */
+function readComponent(value) {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.label !== "string" ||
+    !isComponentOutcome(value.outcome) ||
+    (value.detail !== undefined && typeof value.detail !== "string")
+  ) {
+    throw packageMismatch("The worker returned a malformed self-check component");
+  }
+  const component = { id: value.id, label: value.label, outcome: value.outcome };
+  return value.detail === undefined ? component : { ...component, detail: value.detail };
+}
+
+/**
+ * Text-array shape at a protocol trust boundary, including every element.
+ * @param {unknown} value
+ * @returns {value is string[]}
+ */
+function isTextArray(value) {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+/**
+ * A self-check set received from a worker; partial or null results are package mismatches.
+ * @param {unknown} value
+ * @returns {SetReport}
+ */
+export function readSetReport(value) {
+  if (
+    !isRecord(value) ||
+    !(typeof value.version === "string" || value.version === null) ||
+    !Array.isArray(value.components) ||
+    (value.ids !== undefined && !isTextArray(value.ids))
+  ) {
+    throw packageMismatch("The worker returned a malformed self-check report");
+  }
+  const report = { version: value.version, components: value.components.map(readComponent) };
+  return value.ids === undefined ? report : { ...report, ids: value.ids };
 }
 
 /**
@@ -131,15 +406,15 @@ function messageOf(error) {
 
 /**
  * A request to the worker: its module, its operation and that operation's fields, the secrets
- * among them as bytes (SECRET_FIELDS); or a later message of the same operation.
+ * among them as SecretBytes owners; or a later message of the same operation.
  * @typedef {Record<string, unknown>} WorkerRequest
  */
 
 /**
- * The answer to a worker's question: `message` goes back to the worker with `transfer`, the
- * buffers of its secrets; null or undefined answers nothing. It is no promise (`then`), so that
- * callPage tells it from one.
- * @typedef {{ message: unknown, transfer: Transferable[], then?: undefined } | null | undefined}
+ * The answer to a worker's question: the job takes ownership of `message` and transfers its
+ * secret buffers; null or undefined answers nothing. It is no promise (`then`), so that callPage
+ * tells it from one.
+ * @typedef {{ message: unknown, then?: undefined } | null | undefined}
  *   WorkerAnswer
  */
 
@@ -158,10 +433,9 @@ function messageOf(error) {
 
 /**
  * A WorkerHandler as a worker's message calls it, with the value as it arrived. WorkerJob calls a
- * handler only once isReadableReply has read the message's type and the worker has said that it
- * is of this build (WorkerJob's #started); the worker of this build gives each type the value its
- * handler takes, and scripts/verify-browser-package.mjs compares the news it posts with
- * WORKER_NEWS.
+ * handler only after isReadableReply has read the envelope, the build handshake has succeeded,
+ * and readWorkerValue has validated this channel's payload. The checkedPageHandler adapter
+ * keeps the heterogeneous handler assertion inside that validated protocol reader.
  * @typedef {(value: unknown) => HandlerResult} ArrivedHandler
  */
 
@@ -195,14 +469,23 @@ export class WorkerJob {
   /** @type {string | null} */
   #url = null;
   #ended = false;
-  /** @type {{ resolve: (result: unknown) => void, reject: (error: MhfeError) => void } | null} */
+  /** The request's buffers while compilation or worker startup is pending.
+   * @type {SecretRequest | null} */
+  #request = null;
+  /** @type {{ resolve: (result: unknown) => void, reject: (error: Error) => void } | null} */
   #settle = null;
   /** @type {(job: WorkerJob) => void} */
   #onEnd;
   /** @type {number | undefined} */
   #startTimer = undefined;
-  /** Whether the worker has loaded the WebAssembly (its "ready"). */
+  /** Whether the worker has loaded the WebAssembly: it has sent its first message. */
   #loaded = false;
+  /**
+   * Whether the worker has said, in its "ready", that it is of this build. Before that only
+   * "ready" and "error" are read: no handler of the page runs, and no result is taken, from a
+   * worker of another build (AUD-024-API006).
+   */
+  #buildChecked = false;
 
   /**
    * @param {string[]} scripts
@@ -221,11 +504,12 @@ export class WorkerJob {
    * the secrets of `message` belong to this job: every failure on the way wipes them. Resolves to
    * the worker's result as it arrived.
    * @param {WorkerRequest} message
-   * @param {Transferable[]} transfer
    * @param {DeclaredCompiledModule} wasm
    * @returns {Promise<unknown>}
    */
-  run(message, transfer, wasm) {
+  run(message, wasm) {
+    const owned = new SecretRequest(message);
+    this.#request = owned;
     return new Promise((resolve, reject) => {
       this.#settle = { resolve, reject };
       const start = async () => {
@@ -270,7 +554,7 @@ export class WorkerJob {
           // A minute without loading: it is not waited for any longer.
           this.#terminate();
         }, WORKER_START_TIMEOUT_MS);
-        this.send({ ...message, compiled }, transfer);
+        this.send({ ...message, compiled });
       };
       start()
         .catch((error) => {
@@ -279,7 +563,7 @@ export class WorkerJob {
           );
         })
         .finally(() => {
-          if (this.#ended) wipeSecrets(message);
+          owned.wipe();
         });
     });
   }
@@ -287,20 +571,22 @@ export class WorkerJob {
   /**
    * Sends a later step to the worker, such as a session's next request.
    * @param {WorkerRequest} message
-   * @param {Transferable[]} [transfer]
    */
-  send(message, transfer = []) {
+  send(message) {
+    const owned = new SecretRequest(message);
     if (this.#ended || this.#worker === null) {
-      wipeSecrets(message);
+      owned.wipe();
       return;
     }
     try {
-      this.#worker.postMessage(message, transfer);
+      this.#worker.postMessage(owned.message, owned.transfer);
     } catch (error) {
-      wipeSecrets(message);
+      owned.wipe();
       this.stop(
         new MhfeError("WORKER_FAILED", `The request could not be sent: ${messageOf(error)}`),
       );
+    } finally {
+      owned.wipe();
     }
   }
 
@@ -309,12 +595,15 @@ export class WorkerJob {
    * A worker that is still loading the WebAssembly stops once it has loaded it, or when it fails,
    * or at the start's time limit: Firefox crashes the whole page when a worker is terminated while
    * it loads the WebAssembly, as when every worker of a draw fails within milliseconds. Its
-   * request is answered by nobody: its messages are ignored from now on.
-   * @param {MhfeError | null} error
+   * request is answered by nobody: its messages are ignored from now on. `error` is an
+   * MhfeError, or the TypeError of a class that refused an answer of the page.
+   * @param {Error | null} error
    */
   stop(error) {
     if (this.#ended) return;
     this.#ended = true;
+    this.#request?.wipe();
+    this.#request = null;
     clearTimeout(this.#startTimer);
     if (this.#loaded || this.#worker === null) {
       this.#terminate();
@@ -358,13 +647,15 @@ export class WorkerJob {
     if (reply.type === "ready") {
       // isReadableReply checked that a ready's build is text.
       this.#started(/** @type {string} */ (reply.buildId));
+    } else if (!this.#buildChecked && reply.type !== "error") {
+      this.stop(
+        packageMismatch(`The worker sent ${JSON.stringify(reply.type)} before it said its build`),
+      );
     } else if (reply.type === "result") {
       this.stop(null);
       this.#settle?.resolve(reply.result);
     } else if (reply.type === "error") {
-      // isReadableReply checked that an error's code and message are text; the codes are the
-      // library's, which scripts/verify-browser-package.mjs keeps equal to MhfeErrorCode.
-      const error = /** @type {{ code: MhfeErrorCode, message: string }} */ (reply.error);
+      const error = readWorkerError(reply.error);
       this.stop(new MhfeError(error.code, sentence(error.message)));
     } else if (reply.type === "ask") {
       void this.#answer(reply.question, reply.value);
@@ -402,7 +693,9 @@ export class WorkerJob {
             BUILD_ID,
         ),
       );
+      return;
     }
+    this.#buildChecked = true;
   }
 
   /**
@@ -412,20 +705,39 @@ export class WorkerJob {
    * @param {string} name
    */
   callPage(callback, value, name) {
+    if (callback === undefined) return;
+    let invoke;
     try {
-      // The value is of the type its handler takes (ArrivedHandler).
-      const returned = /** @type {ArrivedHandler | undefined} */ (callback)?.(value);
+      invoke = checkedPageHandler(callback, name, value);
+    } catch (mismatch) {
+      this.stop(
+        mismatch instanceof Error
+          ? mismatch
+          : packageMismatch("The worker value could not be read"),
+      );
+      return;
+    }
+    try {
+      const returned = invoke();
       if (typeof returned?.then === "function") {
-        returned.then(undefined, (cause) => {
-          // Once the job has ended there is nothing left to stop: the page's rejection stays
-          // unhandled, as it would be without this client, instead of being swallowed.
-          if (this.#ended) throw cause;
-          this.stop(callbackFailed(name, cause));
-        });
+        returned.then(undefined, (cause) => this.#pageFailed(name, cause));
       }
     } catch (cause) {
-      this.stop(callbackFailed(name, cause));
+      this.#pageFailed(name, cause);
     }
+  }
+
+  /**
+   * Ends the job when the page's callback for the message `name` failed with `cause`. Once the
+   * job has ended there is nothing left to stop: the page's error is thrown again, a rejection
+   * left unhandled, as it would be without this client, instead of being swallowed
+   * (AUD-024-API008).
+   * @param {string} name
+   * @param {unknown} cause
+   */
+  #pageFailed(name, cause) {
+    if (this.#ended) throw cause;
+    this.stop(callbackFailed(name, cause));
   }
 
   /**
@@ -441,14 +753,15 @@ export class WorkerJob {
       return;
     }
     try {
-      // The value is of the type its handler takes (ArrivedHandler).
-      const answer = await /** @type {ArrivedHandler} */ (handler)(value);
-      this.send({ type: "answer", value: answer?.message ?? answer }, answer?.transfer ?? []);
+      const answer = await checkedPageHandler(handler, question, value)();
+      this.send({ type: "answer", value: answer?.message ?? answer });
     } catch (cause) {
-      // A handler that wraps the page's callback may name the failure itself; anything else,
-      // an MhfeError of another call included, becomes CALLBACK_FAILED with it as the cause.
-      const named = cause instanceof MhfeError && cause.code === "CALLBACK_FAILED";
-      this.stop(named ? cause : callbackFailed(question, cause));
+      // The class's handler calls the page through askPage, which names what the page's own
+      // function throws CALLBACK_FAILED; anything else is the class's refusal of the answer, a
+      // TypeError or an MhfeError, which ends the job as it is (AUD-024-API007). After the end,
+      // nothing is swallowed (#pageFailed).
+      if (this.#ended) throw cause;
+      this.stop(cause instanceof Error ? cause : callbackFailed(question, cause));
     }
   }
 }
@@ -552,8 +865,8 @@ export const HIGHEST_WORD_POSITION = 0xffff_ffff;
 
 /**
  * Parts of the package that come from different builds (PACKAGE_MISMATCH): `what` says which, and
- * the advice follows. The worker says it in the same words (web/worker-runtime.js), as a worker
- * script imports nothing; the package checks compare both.
+ * the advice follows. Deliberate copy: the worker says it in the same words
+ * (web/worker-runtime.js), as a worker script imports nothing; the package checks compare both.
  * @param {string} what
  */
 export function packageMismatch(what) {
@@ -595,54 +908,111 @@ function isReadableReply(reply) {
   if (reply.type === "ready") return typeof reply.buildId === "string";
   if (reply.type !== "error") return true;
   const { error } = reply;
-  return isRecord(error) && typeof error.code === "string" && typeof error.message === "string";
+  return isRecord(error) && isErrorCode(error.code) && typeof error.message === "string";
 }
 
-/**
- * The fields of a request that hold secrets; this client's own byte copies of them. The worker
- * lists the same fields (web/worker-runtime.js), as a worker script imports nothing.
- */
-const SECRET_FIELDS = [
-  "phrase",
-  "password",
-  "passwordRepeat",
-  "passphrase",
-  "passphraseRepeat",
-  "chosenWords",
-  "newPassword",
-  "newPasswordRepeat",
-  "mainPassphrase",
-  "rolls",
-  "typed",
-];
+// SECRET_OWNERS_BEGIN
+/** A byte buffer owned by this operation; wiping is best effort in JavaScript. */
+export class SecretBytes {
+  /** @type {Uint8Array} */
+  #bytes;
+  // Deliberate copy: page and classic worker share this owner; the package compares both.
 
-/**
- * Overwrites this client's byte copies of the secrets in a request or in a session's answer
- * (`value`); they are its own arrays. A copy already transferred to the worker is empty, and
- * filling a transferred array would throw, so it is left alone. The copies are Uint8Arrays of
- * encodeSecret().
- * @param {WorkerRequest | null} message
- */
-export function wipeSecrets(message) {
-  for (const holder of [message, message?.value]) {
-    for (const field of SECRET_FIELDS) {
-      const bytes = isRecord(holder) ? holder[field] : undefined;
-      if (bytes instanceof Uint8Array && bytes.byteLength > 0) bytes.fill(0);
-    }
+  /** Takes ownership of an already copied or transferred buffer, without another copy.
+   * @param {Uint8Array} bytes */
+  constructor(bytes) {
+    this.#bytes = bytes;
+  }
+
+  /** The owned bytes, for protocol serialization or a library call. */
+  get bytes() {
+    return this.#bytes;
+  }
+
+  /** Erases the live buffer; a detached buffer is already owned by the receiver. */
+  wipe() {
+    if (this.#bytes.byteLength > 0) this.#bytes.fill(0);
   }
 }
 
-/**
- * The transfer list of a request's secrets, so that no copy stays in the page.
- * @param {WorkerRequest} message
- * @returns {Transferable[]}
- */
-export function secretBuffers(message) {
-  return SECRET_FIELDS.flatMap((field) => {
-    const bytes = message[field];
-    return bytes instanceof Uint8Array ? [bytes.buffer] : [];
-  });
+/** A request owns every secret at any depth and supplies its plain wire value and transfer list. */
+export class SecretRequest {
+  /** @type {Set<SecretBytes>} */
+  #secrets = new Set();
+  // Deliberate copy: page and classic worker share this owner; the package compares both.
+  /** @type {unknown} */
+  #message;
+
+  /** Collects byte owners by type, never by a field name. Cycles and repeated references are safe.
+   * @param {unknown} message */
+  constructor(message) {
+    /** @type {WeakMap<object, object>} */
+    const seen = new WeakMap();
+    /** @param {unknown} value
+     * @returns {unknown} */
+    const wire = (value) => {
+      if (value instanceof SecretBytes) {
+        this.#secrets.add(value);
+        return value.bytes;
+      }
+      if (value instanceof Uint8Array) {
+        this.#secrets.add(new SecretBytes(value));
+        return value;
+      }
+      if (typeof value !== "object" || value === null) return value;
+      const known = seen.get(value);
+      if (known !== undefined) return known;
+      if (Array.isArray(value)) {
+        /** @type {unknown[]} */
+        const items = [];
+        seen.set(value, items);
+        for (const item of value) items.push(wire(item));
+        return items;
+      }
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) return value;
+      /** @type {Record<string, unknown>} */
+      const record = {};
+      seen.set(value, record);
+      for (const [key, item] of Object.entries(value)) {
+        Object.defineProperty(record, key, { value: wire(item), enumerable: true });
+      }
+      return record;
+    };
+    this.#message = wire(message);
+  }
+
+  /** The serializable value, with owners replaced by their byte buffers. */
+  get message() {
+    return this.#message;
+  }
+
+  /** Each transferable secret buffer once, independent of its name and nesting. */
+  get transfer() {
+    return [...new Set([...this.#secrets].map((secret) => secret.bytes.buffer))].filter(
+      (buffer) => buffer instanceof ArrayBuffer,
+    );
+  }
+
+  /** Erases all buffers this request owns, including partially constructed answers. */
+  wipe() {
+    for (const secret of this.#secrets) secret.wipe();
+  }
 }
+
+// Older browsers may lack Symbol.dispose; the owners still have explicit wipe().
+const disposeSymbol = Reflect.get(Symbol, "dispose");
+if (typeof disposeSymbol === "symbol") {
+  for (const Owner of [SecretBytes, SecretRequest]) {
+    Object.defineProperty(Owner.prototype, disposeSymbol, {
+      /** @this {SecretBytes | SecretRequest} */
+      value() {
+        this.wipe();
+      },
+    });
+  }
+}
+// SECRET_OWNERS_END
 
 /**
  * A secret is given as text or as its UTF-8 bytes; anything else is a TypeError.
@@ -672,7 +1042,7 @@ export function secretOrEmpty(value, name) {
 }
 
 /**
- * UTF-8 bytes of a phrase, password, passphrase or dice digits, in a plain Uint8Array of their
+ * Owned UTF-8 bytes of a phrase, password, passphrase or dice digits, in a Uint8Array of their
  * own, which the transfer to the worker empties and a refusal wipes. A JavaScript string may hold
  * a lone surrogate, which TextEncoder would silently turn into U+FFFD, so such a string is refused
  * instead. Bytes are copied into a new array rather than with their own slice(): a subclass such
@@ -681,7 +1051,7 @@ export function secretOrEmpty(value, name) {
  * library's to refuse (EMPTY_PASSWORD), in the order of its rules, as the command-line tool does.
  * @param {unknown} value
  * @param {string} name
- * @returns {Uint8Array<ArrayBuffer>}
+ * @returns {SecretBytes}
  */
 export function encodeSecret(value, name) {
   requireSecret(value, name);
@@ -697,7 +1067,7 @@ export function encodeSecret(value, name) {
   } else {
     bytes = new Uint8Array(value);
   }
-  return bytes;
+  return new SecretBytes(bytes);
 }
 
 /**
@@ -721,13 +1091,15 @@ function isWellFormed(text) {
 export function describeChoice(choice, name) {
   if (choice === undefined || choice === "asTyped") return ["", 0];
   if (choice === "corrected") return ["corrected", 0];
-  if (
-    choice !== null &&
-    typeof choice === "object" &&
-    Number.isSafeInteger(choice.repair) &&
-    choice.repair >= 1 &&
-    choice.repair <= HIGHEST_WORD_POSITION
-  ) {
+  if (choice !== null && typeof choice === "object" && Number.isSafeInteger(choice.repair)) {
+    // Deliberate copy of MhfeError::PasswordRepairNotOffered: 0 is the worker's no-repair
+    // sentinel. The package tests compare this refusal with the library (AUD-024-API002).
+    if (choice.repair < 1 || choice.repair > HIGHEST_WORD_POSITION) {
+      throw new MhfeError(
+        "PASSWORD_REPAIR_NOT_OFFERED",
+        "The review of this password did not offer that choice",
+      );
+    }
     return ["repair", choice.repair];
   }
   throw new TypeError(
@@ -755,6 +1127,50 @@ export async function wordHintsOf(module, typed) {
  */
 export function requireText(value, name) {
   if (typeof value !== "string") throw new TypeError(`${name} must be a string.`);
+}
+
+/**
+ * Refuses an own key of `options` that `method` does not take, with a TypeError that names it, as
+ * a misspelled option such as PIM for pim would otherwise fall back to its default unseen
+ * (AUD-024-API003). A key whose value is undefined counts as absent; a value that is not an object
+ * is left to the method's own checks.
+ * @param {unknown} options
+ * @param {readonly string[]} keys
+ * @param {string} method
+ */
+export function requireKnownKeys(options, keys, method) {
+  if (typeof options !== "object" || options === null) return;
+  for (const [key, value] of Object.entries(options)) {
+    if (value !== undefined && !keys.includes(key)) {
+      throw new TypeError(
+        `${method}() has no option ${JSON.stringify(key)}; its options are ${keys.join(", ")}.`,
+      );
+    }
+  }
+}
+
+/**
+ * Makes each method of `prototype` that `optionKeys` names refuse an options object with a key it
+ * does not take ([`requireKnownKeys`]), before the method itself runs; the methods are async, so
+ * the refusal rejects their promise. The lists stand beside each class, one place for its options.
+ * @param {object} prototype
+ * @param {Record<string, readonly string[]>} optionKeys
+ */
+export function refuseUnknownOptions(prototype, optionKeys) {
+  for (const [name, keys] of Object.entries(optionKeys)) {
+    const method = /** @type {(...args: unknown[]) => Promise<unknown>} */ (
+      Reflect.get(prototype, name)
+    );
+    Object.defineProperty(prototype, name, {
+      configurable: true,
+      writable: true,
+      /** @param {unknown[]} args */
+      async value(...args) {
+        requireKnownKeys(args[0], keys, name);
+        return Reflect.apply(method, this, args);
+      },
+    });
+  }
 }
 
 /**
@@ -803,7 +1219,42 @@ export function sentence(text) {
  * @param {unknown} cause
  */
 function callbackFailed(name, cause) {
-  return new MhfeError("CALLBACK_FAILED", `The page's ${name} callback failed.`, { cause });
+  const option = Object.hasOwn(PAGE_CALLBACKS, name) ? PAGE_CALLBACKS[name] : name;
+  return new MhfeError("CALLBACK_FAILED", `The page's ${option} callback failed.`, { cause });
+}
+
+/**
+ * The page's option that each worker message reaches, which a failure names rather than the
+ * message (AUD-024-API007).
+ * @type {Record<string, string>}
+ */
+const PAGE_CALLBACKS = {
+  progress: "onProgress",
+  componentStart: "onProgress",
+  component: "onProgress",
+  draws: "onProgress",
+  unverified: "onUnverified",
+  noLength: "onNoLength",
+  ownerCheck: "owner",
+  confirmAgain: "onConfirmAgain",
+};
+
+/**
+ * The page's answer of `callback` to `value`; what the page's own function throws or rejects with
+ * becomes CALLBACK_FAILED naming `name`, its option, with the page's error as the cause. A class
+ * then checks the answer, and its refusal ends the operation as it is.
+ * @template V, T
+ * @param {(value: V) => T | PromiseLike<T>} callback
+ * @param {V} value
+ * @param {string} name
+ * @returns {Promise<T>}
+ */
+export async function askPage(callback, value, name) {
+  try {
+    return await callback(value);
+  } catch (cause) {
+    throw callbackFailed(name, cause);
+  }
 }
 
 // The self-check of a class: known answers of every part the class computes, compared before its
@@ -957,7 +1408,7 @@ export class ModuleWorker {
   start(message, handlers = {}) {
     const job = new WorkerJob([this.#workerSource], handlers);
     const request = { module: this.#module, ...message };
-    return { job, done: job.run(request, secretBuffers(request), this.#wasm) };
+    return { job, done: job.run(request, this.#wasm) };
   }
 
   /**
@@ -969,7 +1420,6 @@ export class ModuleWorker {
   #selfCheck(tier, skip, handlers) {
     return new WorkerJob([this.#workerSource], handlers).run(
       { module: this.#module, operation: "selfCheck", tier, skip },
-      [],
       this.#wasm,
     );
   }
@@ -1018,6 +1468,8 @@ export class MhfeModuleClass {
     return this.#module.run({ operation: "parameters" });
   }
 }
+
+refuseUnknownOptions(MhfeModuleClass.prototype, { fullCheck: ["onProgress"] });
 
 /**
  * The self-check of one class on its page. `startup()` runs once, before the first operation:
@@ -1130,30 +1582,51 @@ export class PackageCheck {
    * @returns {Promise<MhfeSelfCheckReport>}
    */
   async #check(tier, steps, onProgress) {
-    const features = this.#features();
-    const components = [features, this.#packageParts()];
-    if (this.#secrets) components.push(encodingPart());
+    const start = async (/** @type {{ id: string, label: string }} */ part) => {
+      if (onProgress)
+        await askPage(onProgress, { id: part.id, label: part.label, running: true }, "onProgress");
+    };
+    const end = async (/** @type {MhfeComponentResult} */ part) => {
+      if (onProgress) await askPage(onProgress, { ...part, running: false }, "onProgress");
+    };
+    await start(PAGE_PARTS.features);
+    let features = this.#features();
     /** @type {string | null} */
     let version = null;
     if (features.outcome === "passed") {
       const compiled = await this.#compiles();
-      if (compiled !== null) components[0] = compiled;
+      if (compiled !== null) features = compiled;
+    }
+    const components = [features];
+    await end(features);
+    await start(PAGE_PARTS.package);
+    const packageParts = this.#packageParts();
+    components.push(packageParts);
+    await end(packageParts);
+    if (this.#secrets) {
+      await start(PAGE_PARTS.encoding);
+      const encoded = encodingPart();
+      components.push(encoded);
+      await end(encoded);
     }
     if (components.every((component) => component.outcome !== "failed")) {
       for (const step of steps) {
         if (step.components !== undefined) {
-          components.push(...step.components);
+          for (const part of step.components) {
+            await start(part);
+            components.push(part);
+            await end(part);
+          }
           continue;
         }
         const rename = step.rename ?? ((component) => component);
-        // The worker of this build gives a set's report (selfCheck in web/worker-runtime.js).
-        const ran = /** @type {SetReport} */ (
+        const ran = readSetReport(
           await step.run(step.skipPassed ? this.#passedIds() : [], {
             componentStart: (/** @type {{ id: string, label: string }} */ part) =>
               onProgress?.({ ...rename(part), running: true }),
             component: (/** @type {MhfeComponentResult} */ part) =>
               onProgress?.({ ...rename(part), running: false }),
-          })
+          }),
         );
         version ??= ran.version;
         components.push(...this.#placed(ran, step.skipPassed).map(rename));
@@ -1304,8 +1777,13 @@ export class PackageCheck {
 function encodingPart() {
   let failure = null;
   try {
-    const bytes = encodeSecret(ENCODING_PROBE, "probe");
-    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const owned = encodeSecret(ENCODING_PROBE, "probe");
+    let hex;
+    try {
+      hex = Array.from(owned.bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    } finally {
+      owned.wipe();
+    }
     if (hex !== ENCODING_PROBE_UTF8) failure = "the page encodes text into other UTF-8 bytes";
   } catch {
     failure = "the page cannot encode text";
@@ -1327,7 +1805,7 @@ function encodingPart() {
 
 /**
  * The error of every operation of a class whose self-check found a part that failed. Its text is
- * the library's `self_check::failure_message`, which a report of page parts cannot call; the
+ * a deliberate copy of `self_check::failure_message`, which a report of page parts cannot call; the
  * package checks compare both word for word.
  * @param {MhfeSelfCheckReport} report
  */

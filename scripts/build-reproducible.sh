@@ -4,13 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-version="$(
-  python3 - <<'PY'
-import tomllib
-with open("Cargo.toml", "rb") as source:
-    print("v" + tomllib.load(source)["package"]["version"])
-PY
-)"
+version="v$(node scripts/cargo-output.mjs version)"
 
 # The output folder is a plain name inside the repository that .gitignore already covers, so
 # a mistyped argument can never point the replacement below at another folder.
@@ -52,6 +46,7 @@ if [[ ! -s "$staging/release/SHA256SUMS" ]]; then
   echo "The build finished without release/SHA256SUMS; the previous output is kept." >&2
   exit 1
 fi
+node scripts/verify-release-checksums.mjs "$staging/release"
 rm -rf "$output_dir"
 mv "$staging" "$output_dir"
 trap - EXIT

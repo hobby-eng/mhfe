@@ -14,10 +14,9 @@
 use std::fmt::Write as _;
 use std::io::IsTerminal;
 
-use anstream::{eprint, eprintln};
 use mhfe::engine::NativeEngine;
 use mhfe::memory::LockedText;
-use mhfe::search::{ContainerSearch, Found, DECOY_SCAN_GAP, MAX_MISSING_FOR_WALLET};
+use mhfe::search::{ContainerSearch, Found, DECOY_SCAN_GAP};
 use mhfe::wallet::SearchLimits;
 use mhfe::{MhfeError, Password, Reference, WorkFactor};
 use zeroize::Zeroizing;
@@ -59,7 +58,7 @@ enum Next {
 /// Searches for the words of `written` typed as `?`, without its repair words, asking what the
 /// person knows again until a container phrase is found and used. `None` asks for the container
 /// phrase again.
-pub fn search_missing(
+pub(crate) fn search_missing(
     input: &mut Input,
     written: &str,
     context: SearchContext,
@@ -74,10 +73,10 @@ pub fn search_missing(
     loop {
         let next = match ask_what_is_known(input, &search)? {
             Known::TypeAgain => Next::TypeAgain,
-            Known::ContainerWallet => with_container_wallet(input, &search, context)?,
-            Known::OriginalWallet => with_original_wallet(input, &search, context)?,
-            Known::OriginalPassphrase => with_own_checks(input, &search, context, true)?,
-            Known::Nothing => with_own_checks(input, &search, context, false)?,
+            Known::ContainerWallet => with_container_wallet(input, &search, &context)?,
+            Known::OriginalWallet => with_original_wallet(input, &search, &context)?,
+            Known::OriginalPassphrase => with_own_checks(input, &search, &context, true)?,
+            Known::Nothing => with_own_checks(input, &search, &context, false)?,
         };
         match next {
             Next::Use(reviewed) => return Ok(Some(reviewed)),
@@ -170,12 +169,13 @@ const A_WALLET_EXPLAINED: &str =
     "A wallet is known by one of its addresses or its master key fingerprint.";
 
 /// Compares every candidate with the container's own wallet, telling how far it has come on a
-/// line of its own, rewritten in place at a terminal.
+/// line of its own, rewritten in place at a terminal. The library's refusal is given back as it
+/// is, so that the caller can ask again after one the person can answer.
 fn compare_with_decoy(
     search: &ContainerSearch,
     reference: &Reference<'_>,
     scan_gap: u32,
-) -> Result<Option<Found>, Failure> {
+) -> Result<Option<Found>, MhfeError> {
     style::hint(&format!(
         "Comparing {} candidates with the container's own wallet.",
         search.count()
@@ -187,11 +187,11 @@ fn compare_with_decoy(
             eprint!("\r  Compared {done} of {count}\x1b[K");
         }
         Ok(())
-    })?;
+    });
     if on_terminal {
         eprintln!();
     }
-    Ok(found)
+    found
 }
 
 /// Asks how far to search an address of the container's own wallet for two missing words.
@@ -249,7 +249,12 @@ fn read_own_gap(input: &mut Input) -> Result<u32, Failure> {
     loop {
         let typed = input.visible("Addresses of each chain: ")?;
         match typed.trim().parse::<u32>() {
-            Ok(gap) if (1..=MOST_SCAN_GAP).contains(&gap) => return Ok(gap),
+            Ok(gap) => match SearchLimits::first_account(gap) {
+                Ok(_) => return Ok(gap),
+                Err(error) => {
+                    style::retry(error.to_string());
+                }
+            },
             _ => {
                 style::retry(format!(
                     "Type a whole number of addresses from 1 to {MOST_SCAN_GAP}."
@@ -280,12 +285,12 @@ const NO_OWN_CHECK_EXPLAINED: &str =
 fn with_container_wallet(
     input: &mut Input,
     search: &ContainerSearch,
-    context: SearchContext,
+    context: &SearchContext,
 ) -> Result<Next, Failure> {
-    let reference = WalletReference::read_address_or_fingerprint(input)?;
+    let reference = WalletReference::read_address_or_fingerprint(input, &context.address)?;
     // How far an address is searched for two missing words: as given, or as asked; a fingerprint
     // or one missing word needs no gap.
-    let two_missing = search.missing().len() > MAX_MISSING_FOR_WALLET;
+    let two_missing = !search.offers_wallet_search();
     let scan_gap = match context.scan_gap {
         Some(gap) => gap,
         None if two_missing && reference.is_address() => ask_scan_gap(input)?,
@@ -299,15 +304,30 @@ fn with_container_wallet(
         }
     };
     reference.show_search(limits);
+    if !reference.is_address() {
+        style::hint(&format!(
+            "A fingerprint is a 32-bit check: if another of the {} candidates shares it, the \
+             search says so and takes none, and an address tells them apart.",
+            search.count()
+        ));
+    }
     let passphrase = check::ask_passphrase(input, context.operation, CONTAINER_PHRASE)?;
     eprintln!();
-    let found = compare_with_decoy(search, &reference.reference_with(&passphrase), scan_gap)?;
+    let found = match compare_with_decoy(search, &reference.reference_with(&passphrase), scan_gap) {
+        Ok(found) => found,
+        // Two candidates share the reference: the person may give an address instead
+        // (AUD-024-FUN001).
+        Err(error @ MhfeError::SeveralCandidatesMatch { .. }) => {
+            style::retry(refused(&error, ""));
+            return Ok(Next::AskAgain);
+        }
+        Err(error) => return Err(error.into()),
+    };
     match found {
         Some(found) => {
             // Listed among the matches of a check: what the container phrase was found by.
             let at = found
-                .path
-                .as_ref()
+                .path()
                 .map(|path| format!(" at {path}"))
                 .unwrap_or_default();
             let found_by = format!("the container's own wallet: {}{at}", reference.shown());
@@ -331,9 +351,9 @@ fn with_container_wallet(
 fn with_original_wallet(
     input: &mut Input,
     search: &ContainerSearch,
-    context: SearchContext,
+    context: &SearchContext,
 ) -> Result<Next, Failure> {
-    let reference = WalletReference::read_address_or_fingerprint(input)?;
+    let reference = WalletReference::read_address_or_fingerprint(input, &context.address)?;
     reference.show_search(SearchLimits::default());
     let passphrase = check::ask_passphrase(input, context.operation, ORIGINAL_SEED_PHRASE)?;
     let reference = reference.reference_with(&passphrase);
@@ -345,7 +365,7 @@ fn with_original_wallet(
 fn with_own_checks(
     input: &mut Input,
     search: &ContainerSearch,
-    context: SearchContext,
+    context: &SearchContext,
     with_passphrase: bool,
 ) -> Result<Next, Failure> {
     let passphrase = if with_passphrase {
@@ -380,7 +400,7 @@ impl SearchWords {
 fn search_by_recoveries(
     input: &mut Input,
     search: &ContainerSearch,
-    context: SearchContext,
+    context: &SearchContext,
     reference: &Reference<'_>,
     said: SearchWords,
 ) -> Result<Next, Failure> {
@@ -453,7 +473,7 @@ fn run_long(
     ) -> Result<Option<Found>, MhfeError>,
 ) -> Result<Option<Found>, Failure> {
     let mut mhfe = settings::reserve_memory(work)?;
-    let mut progress = Progress::start_as("Searching");
+    let mut progress = Progress::start_as("Searching")?;
     style::hint(&format!("{} candidates, one line each.", search.count()));
     let mut current = 0;
     let found = run(&mut mhfe, &mut |candidate, _, round, rounds| {
@@ -463,7 +483,7 @@ fn run_long(
             }
             current = candidate;
         }
-        progress.round_starts(round, rounds);
+        progress.round_starts(mhfe::operation::Stage::Recover, round, rounds);
         Ok(())
     })?;
     progress.finish();
@@ -475,7 +495,7 @@ const TYPE_AGAIN: &str = "Type the container phrase again";
 
 /// Whether to use a container phrase that a search or a repair found: `used` says what using it
 /// asks of the owner, `not_used` what typing it again leaves.
-pub fn use_or_type_again(used: &'static str, not_used: &'static str) -> [Answer; 2] {
+pub(crate) fn use_or_type_again(used: &'static str, not_used: &'static str) -> [Answer; 2] {
     [
         Answer::new("Use it", used),
         Answer::new(TYPE_AGAIN, not_used),
@@ -504,17 +524,19 @@ fn use_found(
             HEADING,
             format!(
                 "Found container phrase, {} words",
-                found.container.split(' ').count()
+                found.container().split(' ').count()
             )
         )
     );
-    for line in style::boxed_words(&found.container) {
+    for line in style::boxed_words(found.container()) {
         eprintln!("{}", *line);
     }
     // Written into one buffer reserved at its final size and wiped when dropped: the words are
     // container words (AUD-017-SEC001).
-    let mut places = Zeroizing::new(String::with_capacity(found.words.len() * FOUND_WORD_BYTES));
-    for (index, (position, word)) in found.words.iter().enumerate() {
+    let mut places = Zeroizing::new(String::with_capacity(
+        found.words().len() * FOUND_WORD_BYTES,
+    ));
+    for (index, (position, word)) in found.words().iter().enumerate() {
         if index > 0 {
             places.push_str(", ");
         }
@@ -535,7 +557,7 @@ fn use_found(
         return Ok(Next::TypeAgain);
     }
     let positions: Vec<String> = found
-        .words
+        .words()
         .iter()
         .map(|(position, _)| position.to_string())
         .collect();
@@ -548,7 +570,7 @@ fn use_found(
         how.trim_start_matches("with ").trim_start_matches("by "),
     );
     Ok(Next::Use(Reviewed {
-        words: LockedText::copy_of(&found.container),
+        words: LockedText::copy_of(found.container()),
         repaired: Some(format!(
             "{which} of the container phrase, found by a search"
         )),

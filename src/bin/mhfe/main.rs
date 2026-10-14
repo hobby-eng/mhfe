@@ -5,9 +5,30 @@
 //! words. Secrets are only ever typed at a terminal or read from standard input, never taken from
 //! command-line arguments.
 // No unsafe code, except the few operating-system calls in hidden_input.rs, which switch the
-// terminal's echo off, and in protect.rs, which forbid core dumps, and the test binary's
-// allocator in typed_line.rs, which looks for unwiped copies.
+// terminal's echo off, in standard_input.rs, which reads standard input, and in protect.rs, which
+// forbid core dumps, and the test binary's allocator in test_allocator.rs, which looks for
+// unwiped copies.
 #![deny(unsafe_code)]
+
+/// `eprint!` and `eprintln!` of the tool, through which every message goes: anstream's colours,
+/// but a failed write of standard error does not panic, which would abort the tool without its
+/// cleanup. The failure is remembered, and a command that otherwise succeeded ends with exit code
+/// 1 (style::write_message, AUD-024-FUN009).
+macro_rules! eprint {
+    ($($arg:tt)*) => {
+        $crate::style::write_message(format_args!($($arg)*))
+    };
+}
+
+/// [`eprint!`] with a line break after the message.
+macro_rules! eprintln {
+    () => {
+        $crate::style::write_message(format_args!("\n"))
+    };
+    ($($arg:tt)*) => {
+        $crate::style::write_message(format_args!("{}\n", format_args!($($arg)*)))
+    };
+}
 
 mod cell_widths;
 mod check;
@@ -33,10 +54,13 @@ mod rekey;
 mod self_test;
 mod serve;
 mod settings;
+mod standard_input;
 mod startup;
 mod style;
 mod system_random;
 mod terminal;
+#[cfg(test)]
+mod test_allocator;
 mod test_tools;
 mod time_text;
 mod typed_line;
@@ -52,14 +76,7 @@ use crate::exit::Failure;
     version,
     styles = style::help_styles(),
     term_width = style::HELP_WIDTH,
-    // Broken by hand at 80 columns: without its optional wrapping feature, clap prints text as
-    // given, and that feature would add a dependency.
-    about = "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics\n\n\
-             Encrypts an English BIP39 seed phrase of 12 to 24 words into a password-\n\
-             protected container that is itself a valid BIP39 phrase: 24 words, or as many\n\
-             as a 12- to 21-word original seed phrase if you choose so. Recovers the\n\
-             original seed phrase from it.\n\
-             Suites MHFE-BIP39-256-EXPERIMENTAL-3 and MHFE-BIP39-LP-EXPERIMENTAL-4.",
+    about = about(),
     after_help = main_help(),
     // Without a terminal for the menu, `mhfe` alone prints this help.
     arg_required_else_help = true,
@@ -74,74 +91,89 @@ enum Command {
     #[command(
         about = new_wallet::SUMMARY,
         long_about = new_wallet::about(),
-        after_help = new_wallet::help()
+        after_help = style::help_ending(new_wallet::help())
     )]
     New(new_wallet::Options),
     #[command(
         about = encrypt::SUMMARY,
         long_about = encrypt::about(),
-        after_help = encrypt::help(),
-        after_long_help = encrypt::long_help()
+        after_help = style::help_ending(encrypt::examples()),
+        after_long_help = style::help_ending(encrypt::long_help())
     )]
     Encrypt(encrypt::Options),
     #[command(
         about = decrypt::SUMMARY,
         long_about = decrypt::about(),
-        after_help = decrypt::help(),
-        after_long_help = decrypt::long_help()
+        after_help = style::help_ending(decrypt::examples()),
+        after_long_help = style::help_ending(decrypt::long_help())
     )]
     Decrypt(decrypt::Options),
     #[command(
         about = check::SUMMARY,
         long_about = check::about(),
-        after_help = check::help(),
-        after_long_help = check::long_help()
+        after_help = style::help_ending(check::examples()),
+        after_long_help = style::help_ending(check::long_help())
     )]
     Check(check::Options),
-    #[command(about = rekey::SUMMARY, long_about = rekey::about(), after_help = rekey::help())]
+    #[command(about = rekey::SUMMARY, long_about = rekey::about(), after_help = style::help_ending(rekey::help()))]
     Rekey(rekey::Options),
     #[command(
         about = wallets::SUMMARY,
         long_about = wallets::about(),
-        after_help = wallets::help()
+        after_help = style::help_ending(wallets::help())
     )]
     Wallets(wallets::Options),
     #[command(
         about = container_repair::REPAIR_SUMMARY,
         long_about = container_repair::repair_about(),
-        after_help = container_repair::repair_help()
+        after_help = style::help_ending(container_repair::repair_help())
     )]
     Repair(container_repair::RepairOptions),
     #[command(
         about = container_repair::WORDS_SUMMARY,
         long_about = container_repair::words_about(),
-        after_help = container_repair::words_help()
+        after_help = style::help_ending(container_repair::words_help())
     )]
     RepairWords(container_repair::WordsOptions),
     #[command(
         about = diceware::SUMMARY,
         long_about = diceware::about(),
-        after_help = diceware::help()
+        after_help = style::help_ending(diceware::help())
     )]
     Password(diceware::Options),
     #[command(
         about = self_test::SUMMARY,
         long_about = self_test::about(),
-        after_help = self_test::help()
+        after_help = style::help_ending(self_test::help())
     )]
     SelfTest(self_test::Options),
-    #[command(about = serve::SUMMARY, long_about = serve::about(), after_help = serve::help())]
+    #[command(about = serve::SUMMARY, long_about = serve::about(), after_help = style::help_ending(serve::help()))]
     Serve(serve::Options),
     /// [test only] Write the public suite 3 or suite 4 test vectors
-    #[command(after_help = test_tools::vectors_help())]
+    #[command(after_help = style::help_ending(test_tools::vectors_help()))]
     TestVectors(test_tools::VectorOptions),
     /// [test only] Time one encryption and one recovery
-    #[command(after_help = test_tools::benchmark_help())]
+    #[command(after_help = style::help_ending(test_tools::benchmark_help()))]
     TestBenchmark(test_tools::BenchmarkOptions),
+}
+
+/// The top-level description, from the suites' current length ranges and identifiers.
+fn about() -> String {
+    style::command_about(&[
+        "MHFE: Memory-Hard Feistel Encryption for BIP39 Mnemonics",
+        &format!("Encrypts an English BIP39 seed phrase of {} words into a password-protected \
+                  container that is itself a valid BIP39 phrase: 24 words, or as many as a {} \
+                  original seed phrase if you choose so. Recovers the original seed phrase from it.",
+                  phrase_length::length_range(), phrase_length::short_range_words()),
+        &format!("Suites {} and {}.", mhfe::SUITE_ID, mhfe::SAME_LENGTH_SUITE_ID),
+    ])
 }
 
 /// The end of `mhfe --help`: examples and the ground rules.
 fn main_help() -> String {
+    use mhfe::new_password::DEFAULT_WORDS;
+    use mhfe::repair::RECOMMENDED_REPAIR_WORDS;
+    let more_words = DEFAULT_WORDS + 1;
     let examples = style::help_section(
         "Examples:",
         &[
@@ -150,7 +182,10 @@ fn main_help() -> String {
             ("mhfe encrypt", "Encrypt a phrase with the default settings"),
             (
                 "mhfe encrypt --pim 1 --mem 1",
-                "Encrypt with twice the passes and 3 GiB",
+                &format!(
+                    "Encrypt with twice the passes and {}",
+                    settings::memory_text(1)
+                ),
             ),
             ("mhfe decrypt", "Recover the phrase from a container"),
             (
@@ -165,23 +200,29 @@ fn main_help() -> String {
                 "mhfe check --address",
                 "Rehearse it against a wallet address",
             ),
+            ("mhfe rekey", rekey::SUMMARY),
+            ("mhfe wallets", wallets::SUMMARY),
+            ("mhfe repair", container_repair::REPAIR_SUMMARY),
             (
-                "mhfe rekey",
-                "Change the password or settings of a container",
+                &format!("mhfe repair-words --count {RECOMMENDED_REPAIR_WORDS}"),
+                &format!(
+                    "Make {} repair words for a container phrase",
+                    style::number_word(RECOMMENDED_REPAIR_WORDS, false)
+                ),
             ),
-            ("mhfe wallets", "Open hidden wallets with other passwords"),
             (
-                "mhfe repair",
-                "Repair a container phrase with its repair words",
+                "mhfe password",
+                &format!(
+                    "Make a strong password of {} dice words",
+                    style::number_word(DEFAULT_WORDS, false)
+                ),
             ),
             (
-                "mhfe repair-words --count 4",
-                "Make four repair words for a container phrase",
-            ),
-            ("mhfe password", "Make a strong password of five dice words"),
-            (
-                "mhfe password --dice --words 6",
-                "Make a password of six words from real dice",
+                &format!("mhfe password --dice --words {more_words}"),
+                &format!(
+                    "Make a password of {} words from real dice",
+                    style::number_word(more_words, false)
+                ),
             ),
             (
                 "mhfe self-test",
@@ -189,7 +230,10 @@ fn main_help() -> String {
             ),
             (
                 "mhfe self-test --vectors",
-                "Also run the published vectors: minutes, 2 GiB",
+                &format!(
+                    "Also run the published vectors: {}",
+                    self_test::vectors_cost()
+                ),
             ),
             ("mhfe serve tool.html", "Open a browser tool in fast mode"),
             (
@@ -204,8 +248,13 @@ fn main_help() -> String {
         &[
             (
                 "mhfe encrypt --pim 3 --mem 2 --same-length --new-password check-word",
-                "PIM 3 and 4 GiB, a container as long as a 12- to 21-word phrase, and a password \
-                 that MHFE makes: five words and a check word",
+                &format!(
+                    "PIM 3 and {}, a container as long as a {} phrase, and a password \
+                 that MHFE makes: {} words and a check word",
+                    settings::memory_text(2),
+                    phrase_length::short_range_words(),
+                    style::number_word(mhfe::check_word::DRAWN_WORDS, false)
+                ),
             ),
             (
                 "mhfe decrypt --pim 3 --mem 2 --words auto --repair --scan-gap 100",
@@ -215,27 +264,27 @@ fn main_help() -> String {
             ),
             (
                 "mhfe rekey --pim 3 --mem 2 --new-pim 1 --new-mem 0 --new-password words",
-                "From PIM 3 and 4 GiB to PIM 1 and 2 GiB, under five dice words that MHFE \
+                &format!(
+                    "From PIM 3 and {} to PIM 1 and {}, under {} dice words that MHFE \
                  makes; --words, --repair and --scan-gap as for decrypt",
+                    settings::memory_text(2),
+                    settings::memory_text(0),
+                    style::number_word(DEFAULT_WORDS, false)
+                ),
             ),
         ],
     );
-    let note = "Secrets are typed on a private screen, never passed as arguments. Use MHFE on a \
-                trusted computer without a network connection. -h gives a short summary of a \
+    let note = "Secrets are typed on a private screen, never passed as arguments. -h gives a short summary of a \
                 command, --help the full explanation.";
-    format!(
-        "{examples}\n{full}\n{}\n{}",
-        style::help_note(note),
-        style::paint(
-            style::WARNING,
-            "Experimental: not independently reviewed; do not use it to protect real funds."
-        )
-    )
+    style::help_ending(format!("{examples}\n{full}\n{}", style::help_note(note)))
 }
 
 fn main() {
     // Before anything else, so that no secret can ever be in a core dump.
     protect::harden_process();
+    // A panic anywhere leaves the private screen and restores the terminal (AUD-024-FUN009).
+    startup::install_panic_hook();
+    style::configure_colours();
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
     // menu, which runs the same commands, each in an isolated thread of its own. The checks at
     // start run once, before the menu and before any isolation: the menu enters no network
@@ -259,17 +308,28 @@ fn main() {
             failure.exit_code
         }
     };
-    std::process::exit(exit_code);
+    std::process::exit(final_exit_code(exit_code, style::message_failed()));
+}
+
+/// The exit code of a command that ended with `code`: a message that could not be written to
+/// standard error, as on a full disk, fails a command that otherwise succeeded, with exit code 1
+/// (AUD-024-FUN009); any other code stands.
+fn final_exit_code(code: i32, message_failed: bool) -> i32 {
+    if code == exit::SUCCESS && message_failed {
+        exit::INTERNAL_ERROR
+    } else {
+        code
+    }
 }
 
 /// Shows why a command stopped. An empty message means that the command has already shown it.
 fn show_failure(failure: &Failure) {
     if failure.exit_code == exit::CANCELLED {
         // q in a list: the person stopped on purpose, as with Ctrl+C, which is not an error.
-        anstream::eprintln!();
+        eprintln!();
         terminal::show_cancelled();
     } else if !failure.message.is_empty() {
-        anstream::eprintln!();
+        eprintln!();
         style::error_wrapped(&failure.to_string());
     }
 }
@@ -288,14 +348,72 @@ fn exit_unparsed(error: clap::Error) -> ! {
     ) {
         error.exit();
     }
-    anstream::eprintln!();
-    // Rendered as plain text; mhfe adds its own colours.
-    style::usage_error(&error.render().to_string());
+    eprintln!();
+    style::usage_error(&usage_error_text(&error));
     std::process::exit(exit::INVALID_INPUT);
 }
 
+/// clap's text for a usage error, rendered as plain text, as mhfe adds its own colours. A value or
+/// argument the person gave is left out, with every tip that repeats it: it may be a password or
+/// a seed phrase typed on the command line by mistake (AUD-024-SEC004). A mistyped option name,
+/// such as --stdn, is kept with clap's tip.
+fn usage_error_text(error: &clap::Error) -> String {
+    let rendered = error.render().to_string();
+    let Some(given) = withheld_value(error) else {
+        return rendered;
+    };
+    let quoted = format!("'{given}'");
+    let mut lines: Vec<String> = Vec::new();
+    for (index, line) in rendered.lines().enumerate() {
+        if index == 0 {
+            lines.push(line.replacen(&format!(" {quoted}"), "", 1));
+            lines.push(String::new());
+            lines.push(format!("  tip: {WITHHELD_TIP}"));
+        } else if !line.contains(&quoted) {
+            lines.push(line.to_owned());
+        }
+    }
+    lines.join("\n")
+}
+
+/// Why a usage error leaves out what was given.
+const WITHHELD_TIP: &str = "what was given is not repeated, as it may be a secret: passwords and \
+                            phrases are typed when asked, or given with --stdin";
+
+/// What a usage error would repeat from the command line, unless it names an option.
+fn withheld_value(error: &clap::Error) -> Option<&str> {
+    use clap::error::{ContextKind, ContextValue, ErrorKind};
+    let (kind, may_name_an_option) = match error.kind() {
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation | ErrorKind::TooManyValues => {
+            (ContextKind::InvalidValue, false)
+        }
+        ErrorKind::UnknownArgument => (ContextKind::InvalidArg, true),
+        ErrorKind::InvalidSubcommand => (ContextKind::InvalidSubcommand, false),
+        _ => return None,
+    };
+    match error.get(kind) {
+        Some(ContextValue::String(given))
+            if !given.is_empty() && !(may_name_an_option && names_an_option(given)) =>
+        {
+            Some(given)
+        }
+        _ => None,
+    }
+}
+
+/// Whether an argument reads as a mistyped option name: a dash, then letters, digits and dashes,
+/// 32 characters at most.
+fn names_an_option(argument: &str) -> bool {
+    argument.starts_with('-')
+        && argument.len() <= 32
+        && argument
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+}
+
 /// Isolates a command started directly and runs its checks at start, before it reads anything.
-/// The order matters (G10 of the self-check plan): a process enters its own network namespace
+///
+/// The order matters: a process enters its own network namespace
 /// only while it has a single thread, and the Argon2 check at start runs on four threads. The
 /// start menu runs the same checks before it opens, with no network namespace (menu.rs).
 fn prepare(command: &Command) -> Result<(), Failure> {
@@ -375,6 +493,54 @@ mod tests {
         Cli::try_parse_from(typed).unwrap().command
     }
 
+    /// The usage error text of a command line that clap refuses.
+    fn usage_error_of(arguments: &[&str]) -> String {
+        let typed = std::iter::once("mhfe").chain(arguments.iter().copied());
+        match Cli::try_parse_from(typed) {
+            Ok(_) => panic!("{arguments:?} is a command"),
+            Err(error) => usage_error_text(&error),
+        }
+    }
+
+    /// A usage error names the option, never a phrase or password given by mistake; a mistyped
+    /// option name keeps its tip (AUD-024-SEC004).
+    #[test]
+    fn a_usage_error_does_not_repeat_what_was_given() {
+        let phrase = "abandon ability able about above absent absorb abstract absurd abuse access \
+                      accident";
+        let password = "public-test-password";
+        let address = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
+        let cases: [&[&str]; 9] = [
+            &["encrypt", phrase],
+            &[phrase],
+            &["abandon", "ability"],
+            &["check", "--address", "--coin", phrase],
+            &["check", "--address", "--path", phrase],
+            &["check", "--words", phrase],
+            &["encrypt", "--pim", password],
+            &["rekey", "--new-pim", password],
+            &["check", address, "--address", "--path", password],
+        ];
+        for arguments in cases {
+            let text = usage_error_of(arguments);
+            for secret in ["abandon", "ability", password] {
+                assert!(!text.contains(secret), "{arguments:?}: {text}");
+            }
+            assert!(text.contains(WITHHELD_TIP), "{arguments:?}: {text}");
+        }
+        let text = usage_error_of(&["check", "--words", phrase]);
+        assert!(
+            text.starts_with("error: invalid value for '--words <N>'"),
+            "{text}"
+        );
+        let typo = usage_error_of(&["encrypt", "--stdn"]);
+        assert!(
+            typo.contains("'--stdn'") && typo.contains("'--stdin'"),
+            "{typo}"
+        );
+        assert!(!typo.contains(WITHHELD_TIP));
+    }
+
     /// The help of the tool and of every command, short (-h) and long (--help, and `mhfe help`),
     /// fits the help width and ends with examples (AUD-010).
     #[test]
@@ -383,16 +549,22 @@ mod tests {
         let mut cli = Cli::command();
         cli.build();
         let mut helps = vec![
-            ("mhfe -h".to_owned(), cli.render_help().to_string()),
-            ("mhfe --help".to_owned(), cli.render_long_help().to_string()),
+            ("mhfe -h".to_owned(), cli.render_help().ansi().to_string()),
+            (
+                "mhfe --help".to_owned(),
+                cli.render_long_help().ansi().to_string(),
+            ),
         ];
         // clap's own `help` command lists the commands and has nothing else to show.
         for command in cli.get_subcommands_mut().filter(|c| c.get_name() != "help") {
             let name = command.get_name().to_owned();
-            helps.push((format!("{name} -h"), command.render_help().to_string()));
+            helps.push((
+                format!("{name} -h"),
+                command.render_help().ansi().to_string(),
+            ));
             helps.push((
                 format!("{name} --help"),
-                command.render_long_help().to_string(),
+                command.render_long_help().ansi().to_string(),
             ));
         }
         for (help, text) in helps {
@@ -402,16 +574,162 @@ mod tests {
                     "{help}: {line}"
                 );
             }
-            assert!(text.contains("\nExamples:\n"), "{help} has no examples");
+            assert!(
+                style::plain(&text).contains("\nExamples:\n"),
+                "{help} has no examples"
+            );
+            assert!(
+                text.trim_end()
+                    .ends_with(&style::paint(style::WARNING, style::SAFETY_LINE)),
+                "{help} does not end with the yellow safety line"
+            );
+            assert!(
+                text.contains(&style::help_note(
+                    "Use MHFE on a trusted computer without a network connection."
+                )),
+                "{help} lacks its grey note before the safety line"
+            );
         }
     }
 
     /// Every result reaches standard output through `style::out`, which reports a write that
     /// failed, a closed pipe included, instead of panicking or exiting with success
-    /// (AUD-023-FUN001): no other code of the tool prints to standard output.
+    /// (AUD-023-FUN001). Clap's top-level help/version exit is the one explicit exception;
+    /// it handles no operation result. Menu help also uses style::out.
     #[test]
     fn every_result_is_written_through_one_function() {
-        // Every module of the tool, its submodules in their folders included.
+        let files = tool_files();
+        assert!(files.len() > 30, "the tool's modules are read");
+        for path in files {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let mut code = production_code(&text).to_owned();
+            if path.file_name().unwrap() == "style.rs" {
+                let start = code.find("fn out(").unwrap();
+                let end = start + code[start..].find("\n}").unwrap() + 2;
+                code.replace_range(start..end, "");
+            }
+            if path.file_name().unwrap() == "main.rs" {
+                // This exact call is guarded by DisplayHelp/DisplayVersion above; no result.
+                assert_eq!(code.matches("error.exit();").count(), 1);
+                code = code.replace("error.exit();", "");
+            }
+            assert!(
+                !writes_stdout(&code),
+                "{} writes to standard output outside style::out",
+                path.display()
+            );
+        }
+    }
+
+    fn production_code(text: &str) -> &str {
+        text.split("#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap_or_default()
+    }
+
+    fn writes_stdout(text: &str) -> bool {
+        let code: String = text
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect();
+        let code = code.replace("eprintln!(", "").replace("eprint!(", "");
+        if [
+            "println!(",
+            "print!(",
+            ".print_help(",
+            ".print_long_help(",
+            ".exit()",
+        ]
+        .iter()
+        .any(|call| code.contains(call))
+        {
+            return true;
+        }
+        let mut receivers = vec!["stdout()".to_owned()];
+        // Follow local stdout/lock aliases. Terminal detection and flush-only uses are readers,
+        // not writers; this deliberately lexical guard is backed by mutation controls below.
+        for statement in code.split(';') {
+            let Some((left, right)) = statement.split_once('=') else {
+                continue;
+            };
+            let alias = left
+                .rsplit("let")
+                .next()
+                .unwrap_or_default()
+                .trim_start_matches("mut");
+            if !alias.is_empty()
+                && alias
+                    .chars()
+                    .all(|character| character.is_alphanumeric() || character == '_')
+                && receivers.iter().any(|receiver| right.contains(receiver))
+                && !right.contains(".is_terminal()")
+                && !right.contains(".flush()")
+            {
+                receivers.push(alias.to_owned());
+            }
+        }
+        receivers.iter().any(|receiver| {
+            [
+                format!("write!({receiver},"),
+                format!("writeln!({receiver},"),
+                format!("write!(&mut{receiver},"),
+                format!("writeln!(&mut{receiver},"),
+                format!("{receiver}.write("),
+                format!("{receiver}.write_all("),
+                format!("{receiver}.write_fmt("),
+            ]
+            .iter()
+            .any(|call| code.contains(call))
+        }) || [
+            "write!(io::stdout(),",
+            "writeln!(io::stdout(),",
+            "write!(std::io::stdout(),",
+            "writeln!(std::io::stdout(),",
+            "write!(anstream::stdout(),",
+            "writeln!(anstream::stdout(),",
+        ]
+        .iter()
+        .any(|call| code.contains(call))
+    }
+
+    #[test]
+    fn the_stdout_guard_catches_writers_after_test_items_and_through_aliases() {
+        for source in [
+            "#[cfg(test)] fn probe() {} fn result() { println!(\"lost\"); }",
+            "writeln!(io::stdout(), \"lost\");",
+            "let mut output = io::stdout(); output.write_all(b\"lost\");",
+            "let output = anstream::stdout(); let mut locked = output.lock(); writeln!(locked, \"lost\");",
+            "command.print_long_help();",
+            "failure.exit();",
+        ] { assert!(writes_stdout(production_code(source)), "missed {source}"); }
+        assert!(!writes_stdout(
+            "io::stdout().is_terminal(); io::stdout().flush(); eprintln!(\"message\");"
+        ));
+    }
+
+    /// A failed message fails only a command that otherwise succeeded, and no code of the tool
+    /// writes to standard error but through its own non-panicking macros (AUD-024-FUN009).
+    #[test]
+    fn a_failed_message_fails_only_a_command_that_succeeded() {
+        assert_eq!(final_exit_code(exit::SUCCESS, true), exit::INTERNAL_ERROR);
+        assert_eq!(final_exit_code(exit::SUCCESS, false), exit::SUCCESS);
+        assert_eq!(final_exit_code(exit::NO_MATCH, true), exit::NO_MATCH);
+        for path in tool_files() {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let code = production_code(&text);
+            for panicking in ["anstream::eprint", "use anstream::{eprint", "std::eprint"] {
+                let allowed = path.ends_with("style.rs") && panicking == "std::eprint";
+                assert!(
+                    allowed || !code.contains(panicking),
+                    "{} writes with {panicking}",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    /// Every module of the tool, its submodules in their folders included.
+    fn tool_files() -> Vec<std::path::PathBuf> {
         let mut folders =
             vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bin/mhfe")];
         let mut files = Vec::new();
@@ -425,20 +743,7 @@ mod tests {
                 }
             }
         }
-        assert!(files.len() > 30, "the tool's modules are read");
-        for path in files {
-            let text = std::fs::read_to_string(&path).unwrap();
-            // The code, not its tests, which may name the macros.
-            let code = text.split("#[cfg(test)]").next().unwrap_or_default();
-            let without_errors = code.replace("eprintln!(", "").replace("eprint!(", "");
-            for macro_call in ["println!(", "print!("] {
-                assert!(
-                    !without_errors.contains(macro_call),
-                    "{} writes to standard output with {macro_call}",
-                    path.display()
-                );
-            }
-        }
+        files
     }
 
     /// The --stdin helps name every line of a script's input and output: the card line of
@@ -468,9 +773,109 @@ mod tests {
         assert!(!password.contains("at a hidden prompt"));
     }
 
-    /// The settings' limits, the password sizes, the repair word counts and the length ranges
-    /// that the helps state are their constants': a help that typed one of them again would fail
-    /// here when the constant changes (AUD-023-ARC007).
+    /// Each settings argument's own short and long help names its limits; a sibling option
+    /// cannot satisfy the check (AUD-024-ARC025).
+    #[test]
+    fn every_settings_argument_states_its_own_limits() {
+        use clap::CommandFactory;
+        let mut cli = Cli::command();
+        cli.build();
+        for command in [
+            "new", "encrypt", "decrypt", "check", "rekey", "wallets", "repair",
+        ] {
+            for (option, expected) in [
+                ("pim", format!("0 to {}", mhfe::MAX_PIM)),
+                ("mem", format!("0 to {}", mhfe::MAX_MEMORY_LEVEL)),
+            ] {
+                assert_argument_help(&cli, command, option, &expected, true);
+                assert_argument_help(&cli, command, option, &expected, false);
+            }
+            assert_argument_help(&cli, command, "mem", &settings::memory_text(0), true);
+        }
+        for long in [false, true] {
+            assert_argument_help(
+                &cli,
+                "rekey",
+                "new-pim",
+                &format!("0 to {}", mhfe::MAX_PIM),
+                long,
+            );
+            assert_argument_help(
+                &cli,
+                "rekey",
+                "new-mem",
+                &format!("0 to {}", mhfe::MAX_MEMORY_LEVEL),
+                long,
+            );
+            assert_argument_help(&cli, "rekey", "new-mem", &settings::memory_text(0), long);
+        }
+    }
+
+    #[test]
+    fn every_question_mapping_names_options_of_its_actual_command() {
+        use clap::CommandFactory;
+        let inventory: serde_json::Value =
+            serde_json::from_str(include_str!("../../../scripts/cli-questions.json")).unwrap();
+        let mut cli = Cli::command();
+        cli.build();
+        let bindings = inventory["bindings"].as_object().unwrap();
+        assert!(!bindings.is_empty(), "the question inventory is not empty");
+        for (name, mappings) in bindings {
+            for mapping in mappings.as_array().unwrap() {
+                for command in mapping["commands"].as_array().unwrap() {
+                    let command = command.as_str().unwrap();
+                    let parsed = cli.find_subcommand(command).unwrap();
+                    for option in mapping["options"].as_array().unwrap() {
+                        let option = option.as_str().unwrap();
+                        assert!(
+                            parsed
+                                .get_arguments()
+                                .any(|arg| arg.get_long() == Some(option)),
+                            "{name}: {command} --{option} does not exist"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn normalized(text: impl ToString) -> String {
+        text.to_string()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn argument_help(cli: &clap::Command, command: &str, option: &str, long: bool) -> String {
+        let command = cli.find_subcommand(command).unwrap();
+        let arg = command
+            .get_arguments()
+            .find(|arg| arg.get_long() == Some(option))
+            .unwrap();
+        let help = if long {
+            arg.get_long_help().or_else(|| arg.get_help())
+        } else {
+            arg.get_help()
+        };
+        normalized(help.unwrap())
+    }
+
+    fn assert_argument_help(
+        cli: &clap::Command,
+        command: &str,
+        option: &str,
+        expected: &str,
+        long: bool,
+    ) {
+        let text = argument_help(cli, command, option, long);
+        assert!(
+            text.contains(expected),
+            "{command} --{option} (long={long}): missing {expected:?} in {text:?}"
+        );
+    }
+
+    /// Public sizes and lengths appear in the specific argument, about text or example that
+    /// describes them, alongside the existing full-page help layout checks.
     #[test]
     fn every_help_states_the_limits_of_the_constants() {
         use clap::CommandFactory;
@@ -502,14 +907,6 @@ mod tests {
             .collect();
         let cards = style::or_list(&cards);
         for long in [false, true] {
-            for name in ["encrypt", "decrypt", "check", "rekey", "new"] {
-                let text = help(name, long);
-                assert!(text.contains(&format!("0 to {}", mhfe::MAX_PIM)), "{name}");
-                assert!(
-                    text.contains(&format!("0 to {}", mhfe::MAX_MEMORY_LEVEL)),
-                    "{name}"
-                );
-            }
             let password = help("password", long);
             assert!(password.contains(&format!(
                 "1 to {MOST_WORDS} (default {DEFAULT_WORDS}; fewer than {RECOMMENDED_WORDS} are weak)"
@@ -526,6 +923,80 @@ mod tests {
         assert!(help("check", true).contains(&format!("{first}- to {last}-word")));
         assert!(help("password", true).contains(&format!("1 to {MOST_CHARACTERS}")));
         assert!(help("encrypt", true).contains(&format!("none, or {cards} for a card")));
+    }
+
+    #[test]
+    fn the_password_round_memory_and_example_facts_follow_their_sources() {
+        use clap::CommandFactory;
+        use mhfe::new_password::{DEFAULT_CHARACTERS, DEFAULT_WORDS};
+        let mut cli = Cli::command();
+        cli.build();
+        for command in ["new", "encrypt", "rekey"] {
+            for expected in [
+                format!(
+                    "words: {} dice words",
+                    style::number_word(DEFAULT_WORDS, false)
+                ),
+                format!(
+                    "check-word: {} words",
+                    style::number_word(mhfe::check_word::DRAWN_WORDS, false)
+                ),
+                format!(
+                    "chars: {} random characters",
+                    style::number_word(DEFAULT_CHARACTERS, false)
+                ),
+            ] {
+                assert_argument_help(&cli, command, "new-password", &expected, true);
+            }
+        }
+        assert_argument_help(
+            &cli,
+            "rekey",
+            "words",
+            &phrase_length::length_range(),
+            false,
+        );
+        assert_argument_help(
+            &cli,
+            "rekey",
+            "confirm",
+            &phrase_length::short_range_words(),
+            true,
+        );
+        assert_argument_help(
+            &cli,
+            "self-test",
+            "vectors",
+            &self_test::vectors_cost(),
+            false,
+        );
+        let test = mhfe::self_test::SelfTest::published().unwrap();
+        for name in [test.suite_3_vector(), test.suite_4_vector()] {
+            assert_argument_help(&cli, "self-test", "vectors", name, true);
+        }
+        let about = |name| normalized(cli.find_subcommand(name).unwrap().get_long_about().unwrap());
+        assert!(about("encrypt").contains(&format!("{} rounds", mhfe::ENCRYPTION_ROUNDS)));
+        for name in ["check", "decrypt"] {
+            assert!(
+                about(name).contains(&format!("{} rounds", mhfe::ROUNDS)),
+                "{name}"
+            );
+        }
+        assert!(about("password").contains(&format!("{} words", mhfe::eff::LIST_SIZE)));
+        let examples = normalized(main_help());
+        for expected in [
+            format!(
+                "Make a strong password of {} dice words",
+                style::number_word(DEFAULT_WORDS, false)
+            ),
+            format!("twice the passes and {}", settings::memory_text(1)),
+            format!("PIM 3 and {}", settings::memory_text(2)),
+        ] {
+            assert!(examples.contains(&expected), "{expected}");
+        }
+        assert!(
+            normalized(encrypt::long_help()).contains(&format!("first {} rounds", mhfe::ROUNDS))
+        );
     }
 
     /// Each command's summary, which `-h` and the menu show, is the first line of its `--help`
@@ -545,6 +1016,42 @@ mod tests {
                 "{}",
                 command.get_name()
             );
+        }
+    }
+
+    #[test]
+    fn the_plain_main_examples_follow_their_commands_summaries() {
+        use clap::CommandFactory;
+        let cli = Cli::command();
+        let help = style::plain(&main_help());
+        let lines = help.lines().collect::<Vec<_>>();
+        for name in ["rekey", "wallets", "repair"] {
+            let command = format!("mhfe {name}");
+            let start = lines
+                .iter()
+                .position(|line| {
+                    line.trim_start()
+                        .strip_prefix(&command)
+                        .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
+                })
+                .expect("every plain example is present");
+            let row = std::iter::once(lines[start])
+                .chain(
+                    lines[start + 1..]
+                        .iter()
+                        .copied()
+                        .take_while(|line| !line.trim_start().starts_with("mhfe ")),
+                )
+                .collect::<Vec<_>>()
+                .join(" ");
+            let row = row.split_whitespace().collect::<Vec<_>>().join(" ");
+            let summary = cli
+                .find_subcommand(name)
+                .unwrap()
+                .get_about()
+                .unwrap()
+                .to_string();
+            assert!(row.contains(&summary), "{name}: {row:?} lacks {summary:?}");
         }
     }
 

@@ -2,17 +2,17 @@
 //! as the phrase (specification: "Choosing the suite" in suite 4). The same length is used only
 //! when the person chooses it, and its consequences are shown before and after the choice.
 
-use anstream::eprintln;
 use mhfe::{ContainerChoice, OriginalFacts, Suite};
 
 use crate::choice::{self, Answer, Help, Question};
 use crate::exit::Failure;
 use crate::readme;
 use crate::style::{self, paint, MUTED, STRONG};
+use crate::terminal::Input;
 
 /// Asks a person at a terminal which container to make for a 12- to 21-word phrase. Enter alone
 /// keeps 24 words.
-pub fn choose(original: &OriginalFacts) -> Result<Suite, Failure> {
+pub(crate) fn choose(input: &mut Input, original: &OriginalFacts) -> Result<Suite, Failure> {
     let words = original.word_count();
     // The recommended 24 words first, then the phrase's own length.
     let choices = original.container_choices();
@@ -28,18 +28,21 @@ pub fn choose(original: &OriginalFacts) -> Result<Suite, Failure> {
         more: Some(readme::CONTAINER_LENGTH),
         record: Some("Container"),
     };
-    let chosen = choice::choose(
-        &question,
-        &answers,
-        Some(Help {
-            hint: "? explains both",
-            show: &|| explain(&choices),
-        }),
-    )?;
-    let Some(index) = chosen else {
-        return Err(mhfe::MhfeError::Cancelled.into());
+    let chosen = if crate::hidden_input::can_redraw() {
+        choice::choose(
+            &question,
+            &answers,
+            Some(Help {
+                hint: "? explains both",
+                show: &|| explain(&choices),
+            }),
+        )?
+        .ok_or(mhfe::MhfeError::Cancelled)?
+    } else {
+        explain(&choices);
+        input.choose(&question, &answers)?
     };
-    let suite = choices[index].suite();
+    let suite = choices[chosen].suite();
     if suite == Suite::SameLength {
         show_consequences(words);
     }
@@ -56,7 +59,7 @@ fn label(choice: ContainerChoice) -> String {
 }
 
 /// What each choice gives and costs, shown when the person presses ?.
-pub fn explain(choices: &[ContainerChoice]) {
+pub(crate) fn explain(choices: &[ContainerChoice]) {
     for &choice in choices {
         eprintln!("{}", paint(STRONG, label(choice)));
         match choice.suite() {
@@ -113,13 +116,16 @@ fn explain_same_length(choice: ContainerChoice) {
 }
 
 /// The consequences of a same-length container, which the person must see once it is chosen.
-pub fn show_consequences(words: usize) {
+pub(crate) fn show_consequences(words: usize) {
     // Set apart from the summary above and below it.
     eprintln!();
     style::warn(
-        &format!("A wrong password will not be detected: it opens another {words}-word wallet."),
+        &format!("A wrong password, PIM or memory level will not be detected: it opens another {words}-word wallet."),
         "",
     );
+    style::costs(&format!(
+        "The container reveals that the original phrase has {words} words."
+    ));
     style::more(readme::CONTAINER_LENGTH);
     eprintln!();
 }

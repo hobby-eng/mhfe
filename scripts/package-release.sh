@@ -27,18 +27,12 @@ fi
 remap_builder_paths "$repo_root"
 . packaging/pack-archives.sh
 # CARGO_TARGET_DIR may move the programs out of target/.
-target_dir="$(
-  cargo metadata --locked --no-deps --format-version 1 |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])'
-)"
+target_dir="$(node scripts/cargo-output.mjs target-directory)"
 tar_command="$(command -v gtar || command -v tar)"
 archives=()
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
 
-# Documents and licence texts that every archive carries. An archive that brings its own
-# README.md, as the browser package does with its integration guide and the SHA-256 of its
-# files, keeps it and gets the project overview as README-mhfe.md.
 # The commit and the state of the working copy: given by scripts/build-reproducible.sh inside the
 # container, which has no .git, or read from git here (the macOS release jobs).
 source_commit="${SOURCE_COMMIT:-$(git rev-parse HEAD)}"
@@ -62,6 +56,9 @@ if [[ -z "$argon2_commit" || -z "$emscripten_version" ]]; then
   exit 1
 fi
 
+# Documents and licence texts that every archive carries. An archive that brings its own
+# README.md, as the browser package does with its integration guide and the SHA-256 of its
+# files, keeps it and gets the project overview as README-mhfe.md.
 add_common_files() {
   local folder="$1"
   if [[ -e "$folder/README.md" ]]; then
@@ -70,6 +67,8 @@ add_common_files() {
     cp README.md "$folder/"
   fi
   cp LICENSE-MIT LICENSE-APACHE THIRD_PARTY_NOTICES.md "$folder/"
+  mkdir -p "$folder/assets"
+  cp assets/mhfe-mascot.png "$folder/assets/"
   mkdir -p "$folder/licenses"
   cp vendor/phc-winner-argon2/LICENSE "$folder/licenses/argon2-LICENSE"
   cp vendor/eff-large-wordlist.md "$folder/licenses/eff-large-wordlist.md"
@@ -80,6 +79,7 @@ add_common_files() {
     wasm-bindgen --version 2>/dev/null || true
     echo "Argon2: vendor/phc-winner-argon2 at $argon2_commit"
   } > "$folder/BUILD-INFO.txt"
+  node scripts/verify-packaged-readme.mjs "$folder"
 }
 
 # Packs `folder` into the archive named `archive` in the output folder, by its kind, with the
@@ -157,6 +157,6 @@ done
 # with its crate list.
 scripts/check-release-artifacts.sh --archives "${archives[@]}"
 
-(cd "$output" && sha256sum -- *.tar.gz *.zip 2>/dev/null > SHA256SUMS || true)
+(cd "$output" && sha256sum -- "${archives[@]##*/}" > SHA256SUMS)
 echo "Release archives in $output:"
 cat "$output/SHA256SUMS"

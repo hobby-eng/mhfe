@@ -14,7 +14,8 @@
 // offline wallet tools, the transfer of secrets to them, the threaded Argon2 build in a
 // cross-origin isolated page, cancellation and the page's failing callbacks. Each browser opens
 // the page twice: as a file (standard mode) and from a loopback server with the isolation
-// headers (fast mode), as `mhfe serve` gives them. The page calls every method of the four classes
+// headers (fast mode), through the real `mhfe serve` launcher. The Python launcher also runs
+// each browser's startup smoke check with the threaded build and the full response policy. The page calls every method of the four classes
 // with each of its options and compares the results, or the refusals, with known values: public
 // vectors, values computed independently, or the results of another method or class.
 //
@@ -40,7 +41,7 @@
 // The page's code is in scripts/browser-check/: its constants in page-values.mjs, and its checks,
 // which run from their source text in the page, in the other modules (harness.mjs says how).
 import { mkdirSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { execFileSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -62,7 +63,13 @@ import * as rekeySameLengthChecks from "./browser-check/rekey-same-length-checks
 import * as repairChecks from "./browser-check/repair-checks.mjs";
 import * as selfChecks from "./browser-check/self-checks.mjs";
 import * as walletChecks from "./browser-check/wallet-checks.mjs";
-import { bundleClasses, inline, pagePolicy, read, root } from "./bundle-browser-classes.mjs";
+import { bundlePackageClasses, inline, pagePolicy, read, root } from "./bundle-browser-classes.mjs";
+import { nativeBinary } from "./cargo-paths.mjs";
+import {
+  FastModeLauncher,
+  checkLauncherResponse,
+  writeLauncherChecksum,
+} from "./browser-check/fast-mode-launcher.mjs";
 import { FULL_SIZE_CONTAINER } from "./public-test-data.mjs";
 
 // How long a page may take (AUD-023-BLD005). Its checks take a minute or two, but each of its two
@@ -209,12 +216,7 @@ const checks = [
   "}",
   "",
 ].join("\n");
-const classes = bundleClasses(root, [
-  "core/client.js",
-  "repair/repair.js",
-  "passwords/passwords.js",
-  "wallet/wallet.js",
-]);
+const classes = bundlePackageClasses(root);
 const script = classes + sources + checks;
 
 // The policy of the offline wallet tools, which scripts/build-browser-check.mjs shares
@@ -236,35 +238,42 @@ const pagePath = fileURLToPath(new URL("target/browser-check/reduced-cost.html",
 mkdirSync(new URL("target/browser-check/", root), { recursive: true });
 writeFileSync(pagePath, page);
 
-// The headers that make the page cross-origin isolated, so that the threaded Argon2 build runs.
-const server = createServer((request, response) => {
-  response.writeHead(200, {
-    "Content-Type": "text/html; charset=utf-8",
-    "Cross-Origin-Opener-Policy": "same-origin",
-    "Cross-Origin-Embedder-Policy": "require-corp",
-  });
-  response.end(page);
-});
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-
-const addresses = {
-  standard: pathToFileURL(pagePath).href,
-  fast: `http://127.0.0.1:${server.address().port}/`,
-};
+// Both real launchers require this digest before opening the page. The complete fast-mode
+// suite uses the native launcher; Python gets the same startup smoke check in each browser.
+writeLauncherChecksum(pagePath);
+let native;
+if (selected.modes.includes("fast")) {
+  execFileSync("cargo", ["build", "--locked", "--bin", "mhfe"], { stdio: "inherit" });
+  native = nativeBinary("mhfe");
+}
 let failed = false;
-try {
-  for (const name of selected.browsers) {
-    const browser = await BROWSERS[name].launch();
-    try {
-      for (const mode of selected.modes) {
-        failed = !(await checkPage(browser, name, mode, addresses[mode])) || failed;
+for (const name of selected.browsers) {
+  const browser = await BROWSERS[name].launch();
+  try {
+    for (const mode of selected.modes) {
+      if (mode === "standard") {
+        failed = !(await checkPage(browser, name, mode, pathToFileURL(pagePath).href)) || failed;
+      } else {
+        const launcher = await FastModeLauncher.start("native", pagePath, native);
+        try {
+          failed = !(await checkPage(browser, name, mode, launcher.address, "native")) || failed;
+        } finally {
+          await launcher.stop();
+        }
+        const smokePath = writeSmokePage(classes, sources, checks);
+        const python = await FastModeLauncher.start("python", smokePath);
+        try {
+          failed = !(await checkPage(browser, name, mode, python.address, "python")) || failed;
+        } finally {
+          await python.stop();
+          // The next native launch serves the complete suite, whose digest differs.
+          writeLauncherChecksum(pagePath);
+        }
       }
-    } finally {
-      await browser.close();
     }
+  } finally {
+    await browser.close();
   }
-} finally {
-  await new Promise((resolve) => server.close(resolve));
 }
 if (failed) {
   console.error("The browser check failed.");
@@ -275,8 +284,31 @@ console.log(
     `${selected.modes.join(" and ")} mode.`,
 );
 
+/** A startup-only page for the standalone Python route, without repeating random phrase draws. */
+function writeSmokePage(classes, sources, checks) {
+  const smokeMain = `async function main() {
+    const { client, repair, passwords, wallet } = await pageClasses();
+    try {
+      expect(crossOriginIsolated, "the real launcher makes the page isolated");
+      expect(client.mode() === "fast", "the client selects its threaded fast mode");
+      await checkStartupChecks(client, repair, passwords, wallet);
+      return client.mode();
+    } finally {
+      client.close(); repair.close(); passwords.close(); wallet.close();
+    }
+  }`;
+  const smokeScript = classes + sources + checks.replace(String(harness.main), smokeMain);
+  const smoke = `<!doctype html><html lang="en"><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${pagePolicy(smokeScript)}">
+<title>MHFE launcher startup check</title><script type="module">${smokeScript}</script></html>`;
+  const path = fileURLToPath(new URL("target/browser-check/launcher-smoke.html", root));
+  writeFileSync(path, smoke);
+  writeLauncherChecksum(path);
+  return path;
+}
+
 /** Opens the page in a new tab and reports its results; true when everything passed. */
-async function checkPage(browser, browserName, mode, address) {
+async function checkPage(browser, browserName, mode, address, launcher = "file") {
   const page = await browser.newPage();
   const strayRequests = [];
   const pageErrors = [];
@@ -289,7 +321,12 @@ async function checkPage(browser, browserName, mode, address) {
   page.on("pageerror", (error) => pageErrors.push(String(error)));
   page.on("console", (message) => consoleLines.push(`${message.type()}: ${message.text()}`));
   try {
-    await page.goto(address);
+    const response = await page.goto(address);
+    if (mode === "fast") {
+      await checkLauncherResponse(response);
+      if (!(await page.evaluate(() => crossOriginIsolated)))
+        throw new Error("The real launcher did not isolate the page.");
+    }
     const { mode: clientMode, results, failures } = await pageOutcome(page, pageErrors);
     // A page that stopped has no mode to compare: its stop is the failure.
     if (clientMode !== null && clientMode !== mode) {
@@ -298,7 +335,7 @@ async function checkPage(browser, browserName, mode, address) {
     for (const url of strayRequests) failures.push(`a request left the page: ${url}`);
     for (const error of pageErrors) failures.push(`uncaught page error: ${error}`);
     const lines = [
-      `${browserName} ${browser.version()}, ${mode} mode:`,
+      `${browserName} ${browser.version()}, ${mode} mode (${launcher}):`,
       ...results.map((line) => `  ${line}`),
       ...failures.map((failure) => `  FAIL ${failure}`),
     ];
@@ -310,7 +347,7 @@ async function checkPage(browser, browserName, mode, address) {
       ...consoleLines.map((line) => `  ${line}`),
     ];
     writeFileSync(
-      new URL(`target/browser-check/${browserName}-${mode}.log`, root),
+      new URL(`target/browser-check/${browserName}-${mode}-${launcher}.log`, root),
       log.join("\n") + "\n",
     );
     return failures.length === 0;
@@ -329,13 +366,16 @@ async function pageOutcome(page, pageErrors) {
   for (;;) {
     const state = await ask(page, () => ({
       finished: window.mhfeCheck !== undefined,
-      quietMs: window.mhfeProgress === undefined ? 0 : Date.now() - window.mhfeProgress.updated,
+      started: window.mhfeProgress !== undefined,
+      quietMs: window.mhfeProgress === undefined ? null : Date.now() - window.mhfeProgress.updated,
     }));
     if (state?.finished) return page.evaluate(() => window.mhfeCheck);
     let stopped = null;
     if (pageErrors.length > 0) stopped = "an uncaught error stopped the page's script";
     else if (state === null) stopped = `the page did not answer for ${STALL_MS / 1000} s`;
-    else if (state.quietMs > STALL_MS) {
+    else if (!state.started && Date.now() - start > STALL_MS) {
+      stopped = `the page's script did not start within ${STALL_MS / 1000} s`;
+    } else if (state.quietMs > STALL_MS) {
       stopped = `no result or drawing report for ${Math.round(state.quietMs / 1000)} s`;
     } else if (Date.now() - start > PAGE_LIMIT_MS) {
       stopped = `the page did not end within ${PAGE_LIMIT_MS / 60_000} minutes`;

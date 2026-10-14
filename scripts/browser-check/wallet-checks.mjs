@@ -269,14 +269,14 @@ export async function checkDrawRefusals(wallet) {
     "WALLET_CHECK_NEEDS_PASSPHRASE",
     "the wallet check without a passphrase is refused",
   );
-  await expectTypeError(
+  await expectRejection(
     wallet.drawPhrase({
       passphrase: "TREZOR",
       passphraseRepeat: "TREZOR",
       walletCheck: true,
       workers: 0,
     }),
-    "workers must be a whole number from 1 to 256.",
+    "INVALID_REQUEST",
     "no workers are refused",
   );
   const { result: unchecked, workersStarted: uncheckedWorkers } = await countingWorkers(() =>

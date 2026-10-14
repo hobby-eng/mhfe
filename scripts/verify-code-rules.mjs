@@ -6,9 +6,14 @@
 //            the first line (after a #! line) exempts a file. TypeScript and JavaScript are left
 //            to the lint gate (oxlint's max-lines).
 //   CORE-25  every dependency pinned exactly: "1.2.3" in package.json, "=1.2.3" in Cargo.toml.
+//   RUST-05  no assert!, assert_eq!, assert_ne!, unreachable!, todo! or unimplemented! in Rust code
+//            outside its tests and const blocks, which clippy's panic lints do not see: a
+//            refusal, or the documented exception of an expect (AUD-024-API016).
 //   TOOL-02  a shell script sets -euo pipefail before its first command, or says why not in a
 //            header comment "no set -euo pipefail: <reason>" (a file that is only sourced).
 //   TOOL-03  every Python package of a requirements file comes with its --hash.
+//   TOOL-04  Python code at most 99 columns, comment-only lines and docstrings at most 72,
+//            the owner's agreed PEP 8 widths (AUD-024-ARC037).
 //   TOOL-05  pnpm through package.json's packageManager, and pnpm-lock.yaml the only lockfile.
 //   TS-05    no `private` keyword in TypeScript: #private fields.
 //   TS-06    an error class's name ends in Error.
@@ -32,6 +37,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { reported, runGate } from "./gate-command-line.mjs";
+import { rustRunTimeLines } from "./rust-code.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 /** CORE-15's limit for a file. */
@@ -200,6 +206,46 @@ function docCommentFindings(path, lines) {
   });
 }
 
+/**
+ * CORE-19/20: adjacent JSDoc blocks, except type declarations, and a Rust doc's one-line
+ * summary joined to a new sentence. This catches the recurring misplaced-comment pattern; it
+ * cannot decide whether a comment's meaning fits its item. Genuine new Rust paragraphs use a
+ * blank /// line, so that they are distinct from a sentence accidentally moved onto an item.
+ */
+function joinedDocFindings(path, lines) {
+  const found = [];
+  if (path.endsWith(".rs")) {
+    for (let i = 0; i < lines.length - 1; i += 1) {
+      const first = /^\s*\/\/\/\s*(.*)$/u.exec(lines[i]);
+      if (first === null || (i > 0 && /^\s*\/\/\//u.test(lines[i - 1]))) continue;
+      const next = /^\s*\/\/\/\s*([A-Z].*)$/u.exec(lines[i + 1]);
+      if (first[1].endsWith(".") && !first[1].startsWith("-") && next !== null) {
+        found.push(finding("CORE-19", path, i + 1, "joined doc paragraphs: review the item's doc"));
+      }
+    }
+  } else if (/\.[cm]?[jt]s$/u.test(path)) {
+    let previous;
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!/^\s*\/\*\*/u.test(lines[i])) continue;
+      const start = i;
+      while (i < lines.length - 1 && !lines[i].includes("*/")) i += 1;
+      const block = lines.slice(start, i + 1).join("\n");
+      const typedef = /@(?:typedef|import|callback)\b/u.test(block);
+      if (
+        previous !== undefined &&
+        lines.slice(previous.end + 1, start).every((line) => line.trim() === "") &&
+        !previous.typedef &&
+        !typedef
+      ) {
+        found.push(finding("CORE-19", path, start + 1, "adjacent doc blocks: review their items"));
+      }
+      previous =
+        lines[i].slice(lines[i].indexOf("*/") + 2).trim() === "" ? { end: i, typedef } : undefined;
+    }
+  }
+  return found;
+}
+
 /** WEB-01: no inline handler such as onclick= in markup, in a page or in a script's template. */
 function markupFindings(path, lines) {
   if (!/\.(?:html|js|mjs)$/u.test(path)) return [];
@@ -208,8 +254,36 @@ function markupFindings(path, lines) {
   );
 }
 
+/** A macro that panics at run time, which clippy's lints do not report. */
+const PANICKING_MACRO = /(?<![\w:])(?:assert|assert_eq|assert_ne|unreachable|todo|unimplemented)!/u;
+
+/** RUST-05: a panicking macro in the run-time code of a Rust file that is not a test module. */
+function panicFindings(path, lines, testModules) {
+  if (!/^src\/.*\.rs$/u.test(path) || testModules.has(path)) return [];
+  return rustRunTimeLines(lines)
+    .filter(([, code]) => PANICKING_MACRO.test(code))
+    .map(([line]) =>
+      finding("RUST-05", path, line, "a panicking macro outside tests: refuse with an error"),
+    );
+}
+
+/** The Rust files that hold a module declared `#[cfg(test)] mod name;`, from every file's text. */
+function testModuleFiles(texts) {
+  const files = new Set();
+  for (const [path, text] of texts) {
+    if (!path.endsWith(".rs")) continue;
+    const folder = /(?:^|\/)(?:lib|main|mod)\.rs$/u.test(path)
+      ? path.replace(/[^/]+$/u, "")
+      : path.replace(/\.rs$/u, "/");
+    for (const match of text.matchAll(/#\[cfg\(test\)\]\s*(?:pub(?:\(crate\))? )?mod (\w+);/gu)) {
+      files.add(`${folder}${match[1]}.rs`);
+    }
+  }
+  return files;
+}
+
 /** Every finding of one file. */
-function fileFindings(path, text) {
+function fileFindings(path, text, testModules = new Set()) {
   const lines = text.split("\n");
   if (lines.at(-1) === "") lines.pop();
   return [
@@ -219,7 +293,9 @@ function fileFindings(path, text) {
     ...fileNameFindings(path),
     ...scriptFindings(path, lines),
     ...docCommentFindings(path, lines),
+    ...joinedDocFindings(path, lines),
     ...markupFindings(path, lines),
+    ...panicFindings(path, lines, testModules),
   ];
 }
 
@@ -254,22 +330,39 @@ function packageFindings(text) {
 
 /** CORE-25 in Cargo.toml: every dependency's version "=x.y.z". */
 function cargoFindings(text) {
-  let inDependencies = false;
-  return text.split("\n").flatMap((line, index) => {
-    const section = /^\[(.+)\]\s*$/u.exec(line);
-    if (section !== null) {
-      inDependencies = /(?:^|\.)(?:dev-|build-)?dependencies$/u.test(section[1]);
-      return [];
-    }
-    const dependency = /^([\w-]+)\s*=\s*(.*)$/u.exec(line);
-    if (!inDependencies || dependency === null) return [];
-    const version = /^"([^"]*)"|version\s*=\s*"([^"]*)"/u.exec(dependency[2]);
-    const value = version?.[1] ?? version?.[2];
-    if (value !== undefined && /^=\d+\.\d+\.\d+/u.test(value)) return [];
-    return [
-      finding("CORE-25", "Cargo.toml", index + 1, `${dependency[1]} is not pinned as "=x.y.z"`),
-    ];
-  });
+  // Cargo's table, quoted and dotted keys are TOML syntax, not line patterns (AUD-024-BLD010).
+  const dependencies = JSON.parse(
+    execFileSync("python3", [join(root, "scripts/cargo-dependencies.py")], {
+      input: text,
+      encoding: "utf8",
+    }),
+  );
+  const exact = /^=\d+\.\d+\.\d+(?:-[\dA-Za-z.-]+)?(?:\+[\dA-Za-z.-]+)?$/u;
+  return dependencies
+    .filter(({ version }) => typeof version !== "string" || !exact.test(version))
+    .map(({ name, section }) =>
+      finding("CORE-25", "Cargo.toml", 0, `${section}.${name} is not pinned as "=x.y.z"`),
+    );
+}
+
+/** Every Cargo spelling of a dependency must preserve the exact-version rule. */
+function cargoControls() {
+  const declarations = [
+    '[dependencies.foo]\nversion = "VERSION"',
+    "[target.'cfg(unix)'.dependencies.foo]\nversion = \"VERSION\"",
+    '[dev-dependencies.foo]\nversion = "VERSION"',
+    '[build-dependencies.foo]\nversion = "VERSION"',
+    '[dependencies]\n  foo = "VERSION"',
+    '[dependencies]\n"foo" = "VERSION"',
+    '[dependencies]\nfoo.version = "VERSION"',
+    '[dependencies] # runtime\nfoo = "VERSION"',
+  ];
+  return declarations
+    .flatMap((text) => [
+      [cargoFindings(text.replace("VERSION", "^1.2")), 1],
+      [cargoFindings(text.replace("VERSION", "=1.2.3")), 0],
+    ])
+    .concat([[cargoFindings('[dependencies.foo]\ngit = "https://example.invalid/foo"'), 1]]);
 }
 
 /** TOOL-05: pnpm-lock.yaml present, and no lockfile of another package manager. */
@@ -281,12 +374,44 @@ function lockfileFindings(exists) {
   return found;
 }
 
+/** TOOL-04: Python's own AST identifies docstrings, including nested ones. */
+function pythonFindings(texts) {
+  const sources = Object.fromEntries([...texts].filter(([path]) => path.endsWith(".py")));
+  return JSON.parse(
+    execFileSync("python3", [join(root, "scripts/python-style.py")], {
+      cwd: root,
+      input: JSON.stringify(sources),
+      encoding: "utf8",
+    }),
+  );
+}
+
+/** Boundary, nesting and string-literal controls for the Python width check. */
+function pythonControls() {
+  const code = (width) => `value = "${"x".repeat(width - 10)}"\n`;
+  const comment = (width) => `# ${"x".repeat(width - 2)}\n`;
+  const doc = (width) => `def f():\n    """\n    ${"x".repeat(width - 4)}\n    """\n`;
+  return [
+    [code(99), 0],
+    [code(100), 1],
+    [comment(72), 0],
+    [comment(73), 1],
+    [doc(72), 0],
+    [doc(73), 1],
+    [`value = "${"#".repeat(80)}"\n`, 0],
+    [`value = """\n${"x".repeat(99)}\n"""\n`, 0],
+    [`class C:\n    """\n    ${"x".repeat(69)}\n    """\n`, 1],
+  ];
+}
+
 /** Every finding of the repository at `root`. */
 function repositoryFindings() {
   const read = (path) => readFileSync(join(root, path), "utf8");
-  const files = repositoryFiles();
+  const texts = new Map(repositoryFiles().map((path) => [path, read(path)]));
+  const testModules = testModuleFiles(texts);
   return [
-    ...files.flatMap((path) => fileFindings(path, read(path))),
+    ...[...texts].flatMap(([path, text]) => fileFindings(path, text, testModules)),
+    ...pythonFindings(texts),
     ...packageFindings(read("package.json")),
     ...cargoFindings(read("Cargo.toml")),
     ...lockfileFindings((name) => existsSync(join(root, name))),
@@ -323,6 +448,22 @@ function fileControls() {
     ["web/a.d.ts", "/** Kinds. */\nexport enum Kind { A }\n", "TS-08"],
     ["web/b.d.ts", "/** A class. */\nexport class A {\n  private b: number;\n}\n", "TS-05"],
     ["web/c.js", "export function f() {}\n", "TS-11"],
+    ["web/joined.js", "/** One item. */\n/** Another item. */\nfunction f() {}\n", "CORE-19"],
+    ["web/typedef.js", "/** @typedef {string} Name */\n/** The item. */\nfunction f() {}\n", null],
+    [
+      "web/import.js",
+      "/** @import {Name} from './a.js' */\n/** The item. */\nconst a = 1;\n",
+      null,
+    ],
+    ["web/inline.js", "/** @type {string} */ let a;\n/** @type {string} */ let b;\n", null],
+    [
+      "web/separate.js",
+      "/** One item. */\nfunction f() {}\n/** Another. */\nfunction g() {}\n",
+      null,
+    ],
+    ["src/joined.rs", "/// One item.\n/// Another item.\nfn f() {}\n", "CORE-19"],
+    ["src/paragraph.rs", "/// The item.\n///\n/// Its details.\nfn f() {}\n", null],
+    ["src/wrapped.rs", "/// The item and its\n/// Wrapped description.\nfn f() {}\n", null],
     [
       "web/d.js",
       '/**\n * A function.\n */\nexport function f() {}\nexport { g } from "./g.js";\n',
@@ -330,17 +471,52 @@ function fileControls() {
     ],
     ["scripts/e.mjs", "const page = `<button on" + 'click="go()">`;\n', "WEB-01"],
     ["scripts/f.mjs", 'const page = `<button id="go">`;\n', null],
+    ["src/g.rs", "fn f(n: u8) {\n    asse" + "rt!(n > 0);\n}\n", "RUST-05"],
+    ["src/h.rs", "fn f() {\n    unreach" + "able!();\n}\n", "RUST-05"],
+    [
+      "src/i.rs",
+      "const _: () = {\n    assert!(1 > 0);\n};\nfn f() {\n    debug_assert!(true);\n}\n" +
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn t() {\n        assert_eq!(1, 1);\n    }\n}\n",
+      null,
+    ],
+    [
+      "src/j.rs",
+      "const fn h() {\n    assert!(true);\n}\n#[cfg(all(test, unix))]\n/// Doc.\nfn t() {\n" +
+        '    assert!(true);\n}\nfn f() {\n    let a = ["//"]; // assert!(false)\n}\n',
+      null,
+    ],
+    ["src/k.rs", 'fn f() {\n    let a = ["//"];\n    todo' + "!();\n}\n", "RUST-05"],
+    [
+      "src/literal-brace.rs",
+      '#[cfg(test)]\nmod tests {\n let s = "}";\n assert!(true);\n}\n',
+      null,
+    ],
+    [
+      "src/after-tests.rs",
+      '#[cfg(test)]\nmod tests {\n let s = "}";\n}\nfn f() { assert!(false); }\n',
+      "RUST-05",
+    ],
+    ["src/raw-literal.rs", 'fn f() { let s = r##"{ assert!(false); }"##; }\n', null],
+    ["src/character-brace.rs", "#[cfg(test)]\nmod tests { let c = '}'; assert!(true); }\n", null],
+    ["src/block-comment.rs", "/* nested /* } */ } */\nfn f() { assert!(false); }\n", "RUST-05"],
   ];
 }
 
 /** The checks against controls they must decide right, and a refused command line. */
 function selfTest() {
+  for (const [index, [text, expected]] of pythonControls().entries()) {
+    const found = pythonFindings(new Map([[`control-${index}.py`, text]]));
+    if (found.length !== expected || found.some((issue) => !issue.startsWith("TOOL-04 "))) {
+      throw new Error(`self-test: Python width control ${index + 1}: ${JSON.stringify(found)}`);
+    }
+  }
   for (const [path, text, rule] of fileControls()) {
     const rules = fileFindings(path, text).map((found) => found.split(" ")[0]);
     const decided = rule === null ? rules.length === 0 : rules.length === 1 && rules[0] === rule;
     if (!decided) throw new Error(`self-test: ${path} gives ${JSON.stringify(rules)}, not ${rule}`);
   }
   const repository = [
+    ...cargoControls(),
     [packageFindings('{"packageManager":"pnpm@12.8.1","devDependencies":{"a":"1.2.3"}}'), 0],
     [packageFindings('{"packageManager":"npm@11.0.0","devDependencies":{"a":"^1.2.3"}}'), 2],
     [
@@ -356,7 +532,7 @@ function selfTest() {
       throw new Error(`self-test: repository control ${index + 1} gives ${JSON.stringify(found)}`);
     }
   }
-  const controls = fileControls().length + repository.length;
+  const controls = fileControls().length + repository.length + pythonControls().length;
   console.log(`The code rules decide all ${controls} of their controls right.`);
 }
 

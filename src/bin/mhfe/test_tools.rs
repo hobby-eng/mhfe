@@ -5,31 +5,28 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::Args;
 use mhfe::vectors::{
-    self, NegativeInput, PublicInput, NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS,
-    SAME_LENGTH_NEGATIVE_INPUTS,
+    self, NegativeInput, PublicInput, CHECKSUM_FILE, NEGATIVE_CASES_STEM, NEGATIVE_INPUTS,
+    PUBLIC_INPUTS, SAME_LENGTH_INPUTS, SAME_LENGTH_NEGATIVE_INPUTS,
 };
-use mhfe::{Password, PhraseLength, Suite};
+use mhfe::{Password, PhraseLength, Suite, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::exit::{Failure, SUCCESS};
 use crate::settings;
 use crate::style::{self, paint, MUTED};
-use crate::time_text::duration;
-
-/// The negative cases file without its ".json" extension; also the --only text that selects it.
-const NEGATIVE_CASES_STEM: &str = "negative-cases";
+use crate::time_text::{self, duration};
 
 #[derive(Args)]
-pub struct VectorOptions {
-    /// Folder for the JSON files and SHA256SUMS
-    #[arg(long, value_name = "DIR", long_help = output_help())]
+pub(crate) struct VectorOptions {
+    /// Folder for the vector files and their checksum list
+    #[arg(long, value_name = "DIR", help = format!("Folder for the JSON files and {CHECKSUM_FILE}"), long_help = output_help())]
     output: PathBuf,
 
     /// Only names that contain TEXT, or "negative-cases"
@@ -44,25 +41,29 @@ pub struct VectorOptions {
 /// The inputs and negative cases of one suite's vector set.
 struct VectorSet {
     suite: &'static str,
+    /// The layout of its vector files.
+    schema: &'static str,
     inputs: &'static [PublicInput],
     negative: &'static [NegativeInput],
 }
 
 const SUITE_3_SET: VectorSet = VectorSet {
     suite: "suite 3",
+    schema: vectors::SCHEMA,
     inputs: &PUBLIC_INPUTS,
     negative: &NEGATIVE_INPUTS,
 };
 
 const SUITE_4_SET: VectorSet = VectorSet {
     suite: "suite 4",
+    schema: vectors::SAME_LENGTH_SCHEMA,
     inputs: &SAME_LENGTH_INPUTS,
     negative: &SAME_LENGTH_NEGATIVE_INPUTS,
 };
 
 fn output_help() -> String {
     style::option_help(&[
-        "Folder for the JSON files and SHA256SUMS.",
+        &format!("Folder for the JSON files and {CHECKSUM_FILE}."),
         "Created when missing. A file of the same name in it is replaced.",
     ])
 }
@@ -77,12 +78,12 @@ fn only_help() -> String {
 }
 
 /// The end of `mhfe test-vectors -h` and `--help`.
-pub fn vectors_help() -> String {
+pub(crate) fn vectors_help() -> String {
     style::examples_with_note(
         &[
             (
                 "mhfe test-vectors --output vectors",
-                "Write every public vector and SHA256SUMS into ./vectors",
+                &format!("Write every public vector and {CHECKSUM_FILE} into ./vectors"),
             ),
             (
                 "mhfe test-vectors --output vectors --only zero-12",
@@ -103,7 +104,7 @@ pub fn vectors_help() -> String {
     )
 }
 
-pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
+pub(crate) fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
     let set = if options.same_length {
         &SUITE_4_SET
     } else {
@@ -111,8 +112,9 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
     };
     style::warn(
         &format!("TEST ONLY: writing the public {} test vectors.", set.suite),
-        "Each takes about two minutes or more at full size.",
+        "",
     );
+    check_selection(set, options.only.as_deref())?;
     fs::create_dir_all(&options.output)?;
     let selected = |name: &str| {
         options
@@ -125,9 +127,10 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
     let mut containers = HashMap::new();
     for input in set.inputs.iter().filter(|input| selected(input.name())) {
         let work = input.work()?;
+        show_vector_estimate(input.name(), work, ENCRYPTION_ROUNDS);
         let mut mhfe = settings::reserve_memory(work)?;
         let started = Instant::now();
-        let file = format!("{}.json", input.name());
+        let file = vectors::file_name(input.name());
         if options.same_length {
             let vector = vectors::generate_same_length(&mut mhfe, input)?;
             containers.insert(input.name(), vector.container.clone());
@@ -152,9 +155,10 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
         for input in set.negative {
             let container = match containers.get(input.container_of()) {
                 Some(container) => container.clone(),
-                None => recorded_container(&options.output, input.container_of())?,
+                None => recorded_container(&options.output, input.container_of(), set.schema)?,
             };
             let work = input.work()?;
+            show_vector_estimate(input.name(), work, ROUNDS);
             let mut mhfe = settings::reserve_memory(work)?;
             let started = Instant::now();
             negative_cases.push(if options.same_length {
@@ -170,7 +174,7 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
         }
         write_json(
             &options.output,
-            &format!("{NEGATIVE_CASES_STEM}.json"),
+            &vectors::file_name(NEGATIVE_CASES_STEM),
             &negative_cases,
         )?;
         written += 1;
@@ -178,27 +182,76 @@ pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
 
     write_checksums(&options.output, set)?;
     style::ok(format!(
-        "Wrote {written} files and SHA256SUMS to {}",
+        "Wrote {written} files and {CHECKSUM_FILE} to {}",
         style::shown_path(&options.output)
     ));
     Ok(SUCCESS)
 }
 
-/// The container of a vector written by an earlier run, for negative cases run without it.
-fn recorded_container(folder: &Path, name: &str) -> Result<String, Failure> {
-    let path = folder.join(format!("{name}.json"));
-    let missing = || {
-        Failure::internal(format!(
-            "The negative cases need {}; write that vector first.",
-            style::shown_path(&path)
-        ))
+/// Refuses, before any folder or file is made, an --only that selects nothing: an empty text, or
+/// one that no vector's name contains, nor "negative-cases" (AUD-024-API010).
+fn check_selection(set: &VectorSet, only: Option<&str>) -> Result<(), Failure> {
+    let Some(text) = only else {
+        return Ok(());
     };
-    let text = fs::read_to_string(&path).map_err(|_| missing())?;
-    let vector: serde_json::Value = serde_json::from_str(&text).map_err(|_| missing())?;
+    let names: Vec<&str> = set
+        .inputs
+        .iter()
+        .map(|input| input.name())
+        .chain([NEGATIVE_CASES_STEM])
+        .collect();
+    if !text.is_empty() && names.iter().any(|name| name.contains(text)) {
+        return Ok(());
+    }
+    Err(Failure::invalid_input(format!(
+        "--only \"{}\" selects none of the {} test vectors; their names are {}.",
+        style::escaped(text),
+        set.suite,
+        names.join(", ")
+    )))
+}
+
+/// The most a vector file holds: about 22 KiB.
+const MAX_VECTOR_FILE: u64 = 1024 * 1024;
+
+/// The container of the vector `name` written by an earlier run, for negative cases run without
+/// it: a file of the set's `schema` and of that name, read to a bound. A missing file is said to
+/// be written first; one that cannot be read, or is not that vector, is refused with the cause
+/// (AUD-024-API011).
+fn recorded_container(folder: &Path, name: &str, schema: &str) -> Result<String, Failure> {
+    let path = folder.join(vectors::file_name(name));
+    let shown = style::shown_path(&path);
+    let unreadable = |error: &dyn std::fmt::Display| {
+        Failure::internal(format!("Could not read {shown}: {error}"))
+    };
+    let file = match fs::File::open(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Failure::internal(format!(
+                "The negative cases need {shown}; write that vector first."
+            )));
+        }
+        file => file.map_err(|error| unreadable(&error))?,
+    };
+    let mut text = String::new();
+    file.take(MAX_VECTOR_FILE + 1)
+        .read_to_string(&mut text)
+        .map_err(|error| unreadable(&error))?;
+    let invalid =
+        |why: &str| Failure::internal(format!("{shown} is not a valid vector file: {why}"));
+    if text.len() as u64 > MAX_VECTOR_FILE {
+        return Err(invalid("it is larger than any vector file"));
+    }
+    let vector: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| invalid(&error.to_string()))?;
+    if vector["schema"] != schema || vector["name"] != name {
+        return Err(invalid(&format!(
+            "it is not the vector {name} of the layout {schema}"
+        )));
+    }
     vector["container"]
         .as_str()
         .map(str::to_owned)
-        .ok_or_else(missing)
+        .ok_or_else(|| invalid("it has no container"))
 }
 
 /// Lists every file of the full set that is present in the folder, read back from disk, so that
@@ -214,14 +267,14 @@ fn write_checksums(folder: &Path, set: &VectorSet) -> Result<(), Failure> {
         .write(true)
         .create(true)
         .truncate(false)
-        .open(folder.join("SHA256SUMS"))?;
+        .open(folder.join(CHECKSUM_FILE))?;
     list.lock()?;
     let names = set
         .inputs
         .iter()
         .map(|input| input.name())
         .chain([NEGATIVE_CASES_STEM])
-        .map(|stem| format!("{stem}.json"));
+        .map(vectors::file_name);
     let mut sums = String::new();
     for name in names {
         match fs::read(folder.join(&name)) {
@@ -257,13 +310,13 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), Failure> {
 }
 
 #[derive(Args)]
-pub struct BenchmarkOptions {
+pub(crate) struct BenchmarkOptions {
     #[command(flatten)]
     settings: settings::Settings,
 }
 
 /// The end of `mhfe test-benchmark -h` and `--help`.
-pub fn benchmark_help() -> String {
+pub(crate) fn benchmark_help() -> String {
     style::examples_with_note(
         &[
             ("mhfe test-benchmark", "Time the default settings"),
@@ -285,7 +338,7 @@ pub fn benchmark_help() -> String {
 struct Measurement {
     suite_id: &'static str,
     implementation: String,
-    argon2_engine: &'static str,
+    argon2_engine: String,
     target: &'static str,
     pim: u32,
     memory_level: u32,
@@ -298,7 +351,7 @@ struct Measurement {
 
 /// Times one encryption and one recovery of the public test phrase and prints a JSON record for
 /// docs/measurements/.
-pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
+pub(crate) fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     style::warn(
         "TEST ONLY: timing one encryption and one recovery with public test data.",
         "",
@@ -331,7 +384,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     let record = Measurement {
         suite_id: mhfe::SUITE_ID,
         implementation: format!("mhfe {}", env!("CARGO_PKG_VERSION")),
-        argon2_engine: argon2_engine(),
+        argon2_engine: mhfe.engine().description(),
         target: std::env::consts::ARCH,
         pim: work.pim(),
         memory_level: work.memory_level(),
@@ -347,15 +400,67 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     Ok(SUCCESS)
 }
 
-/// The Argon2 code that ran, chosen as the engine chooses it (`processor_has_ssse3` in
-/// src/engine/native.rs): x86-64 runs the SSSE3 copy of opt.c where the processor has SSSE3.
-fn argon2_engine() -> &'static str {
-    #[cfg(target_arch = "x86_64")]
-    return if std::arch::is_x86_feature_detected!("ssse3") {
-        "reference C, opt.c with SSSE3, 4 threads"
-    } else {
-        "reference C, opt.c with SSE2, 4 threads"
-    };
-    #[cfg(not(target_arch = "x86_64"))]
-    "reference C, ref.c, 4 threads"
+/// An estimate for the selected input and the operation that writes it.
+fn show_vector_estimate(name: &str, work: WorkFactor, rounds: u32) {
+    style::fact(
+        "Estimate",
+        format!("{name}: {}.", time_text::of_rounds(work, rounds)),
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An --only that selects nothing is refused before anything is written (AUD-024-API010).
+    #[test]
+    fn an_only_that_selects_nothing_is_refused() {
+        for set in [&SUITE_3_SET, &SUITE_4_SET] {
+            assert!(check_selection(set, None).is_ok());
+            assert!(check_selection(set, Some(NEGATIVE_CASES_STEM)).is_ok());
+            assert!(check_selection(set, Some(set.inputs[0].name())).is_ok());
+            for nothing in ["", "no-such-vector"] {
+                let refused = check_selection(set, Some(nothing)).unwrap_err();
+                assert_eq!(refused.exit_code, crate::exit::INVALID_INPUT);
+                assert!(
+                    refused.message.contains("selects none"),
+                    "{}",
+                    refused.message
+                );
+            }
+        }
+    }
+
+    /// A recorded vector that is missing, unreadable or another file is told apart
+    /// (AUD-024-API011).
+    #[test]
+    fn a_recorded_vector_is_read_only_when_it_is_that_vector() {
+        let folder = std::env::temp_dir().join(format!("mhfe-vectors-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        let name = "zero-12";
+        let refusal = |schema| {
+            recorded_container(&folder, name, schema)
+                .unwrap_err()
+                .message
+        };
+        assert!(refusal(vectors::SCHEMA).contains("write that vector first"));
+        let file = folder.join(vectors::file_name(name));
+        fs::write(&file, "{ not json").unwrap();
+        assert!(refusal(vectors::SCHEMA).contains("is not a valid vector file"));
+        let other = serde_json::json!({ "schema": "x", "name": name, "container": "c" });
+        fs::write(&file, other.to_string()).unwrap();
+        assert!(refusal(vectors::SCHEMA).contains("is not the vector zero-12"));
+        let right =
+            serde_json::json!({ "schema": vectors::SCHEMA, "name": name, "container": "c" });
+        fs::write(&file, right.to_string()).unwrap();
+        assert_eq!(
+            recorded_container(&folder, name, vectors::SCHEMA).unwrap(),
+            "c"
+        );
+        assert!(refusal(vectors::SAME_LENGTH_SCHEMA).contains("is not the vector"));
+        fs::remove_file(&file).unwrap();
+        fs::create_dir(&file).unwrap();
+        assert!(refusal(vectors::SCHEMA).contains("Could not read"));
+        fs::remove_dir_all(&folder).unwrap();
+    }
 }

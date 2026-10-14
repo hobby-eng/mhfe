@@ -19,8 +19,8 @@ use crate::MhfeError;
 /// The password of the published vectors unicode-password and same-length-unicode-password: the
 /// ANGSTROM SIGN U+212B among other characters NFKD changes. The bytes after NFKD are the vectors'
 /// password_nfkd_utf8_hex.
-const UNICODE_PASSWORD: &str = "Caf\u{e9} \u{fb01} \u{ff30}\u{212b}\u{2460} \u{1f510} \u{439}";
-const UNICODE_PASSWORD_NFKD: &str = "43616665cc81206669205041cc8a3120f09f949020d0b8cc86";
+use crate::vectors::inputs::UNICODE_PASSWORD;
+use crate::vectors::inputs::UNICODE_PASSWORD_NFKD;
 
 /// The refused characters: the 65 of General_Category Cc in Unicode 17.0.0, U+2028 and U+2029.
 const REFUSED_SCALARS: usize = 67;

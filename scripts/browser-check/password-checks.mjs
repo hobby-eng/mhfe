@@ -176,13 +176,13 @@ export async function checkPasswordStrength(passwords) {
   );
   expectEqual(
     await passwords.strength({ password: CHECK_WORD_MISSING, passwordRepair: { repair: 3 } }),
-    { bits: 77.55, weak: false },
-    "the strength is of the password after its repair: six list words",
+    { bits: 64.625, weak: false },
+    "the strength is of the password after its repair: five drawn words and their check word",
   );
   expectEqual(
     await passwords.strength({ password: CHECK_WORD_CAPITALS, passwordRepair: "corrected" }),
-    { bits: 77.55, weak: false },
-    "the strength is of the corrected password",
+    { bits: 64.625, weak: false },
+    "the strength is of the corrected password: five drawn words and their check word",
   );
   await expectRejection(
     passwords.strength({ password: CHECK_WORD_MISSING, passwordRepair: { repair: 2 } }),
@@ -278,8 +278,8 @@ export async function checkMadePasswordRefusals(passwords) {
   );
   await expectRejection(
     passwords.make({ kind: "words", count: 2, dice: "11111" }),
-    "INVALID_DICE_ROLLS",
-    "dice for one word of two are refused",
+    "INVALID_REQUEST",
+    "dice for one word of two are refused as a count, not as digits (AUD-024-API015)",
   );
   await expectRejection(
     passwords.make({ kind: "words", count: 0 }),

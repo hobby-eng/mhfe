@@ -62,12 +62,15 @@ export function checkPackageFacts() {
   // cannot avoid: the fields that hold secrets, and the advice of PACKAGE_MISMATCH.
   {
     const source = (file) => read(`web/${file}`).toString();
-    const secretFields = (text) =>
-      /const SECRET_FIELDS = \[([^\]]*)\]/u.exec(text)[1].replace(/\s/gu, "");
+    const owners = (text) =>
+      text
+        .split("// SECRET_OWNERS_BEGIN\n")[1]
+        .split("// SECRET_OWNERS_END")[0]
+        .replaceAll("export class ", "class ");
     assert.equal(
-      secretFields(source("runtime.js")),
-      secretFields(source("worker-runtime.js")),
-      "the page and the worker wipe the same secret fields",
+      owners(source("runtime.js")),
+      owners(source("worker-runtime.js")),
+      "the page and the worker use the same secret owners",
     );
     const advice = ": take every file of the package from one build.";
     for (const file of ["runtime.js", "worker-runtime.js"]) {
@@ -364,6 +367,58 @@ function checkCheck({ reduced, steps, onRound, created }) {
     "a recovery is compared again without its rounds",
   );
   checkSession.free();
+
+  const unverified = operations.encrypt(ZERO_24, PASSWORD, reduced).container;
+  const afterDetection = new core.CheckSession(
+    unverified,
+    PASSWORD,
+    "",
+    0,
+    0,
+    0,
+    "words",
+    "0",
+    "",
+    "",
+    noBytes(),
+    reduced,
+    () => {},
+  );
+  try {
+    assert.equal(
+      JSON.parse(afterDetection.compare("words", "0", "", "", noBytes())).outcome,
+      "notVerified",
+    );
+    assert.equal(afterDetection.asksLength(), true, "the library requests the follow-up");
+    for (const [kind, reference, passphrase] of [
+      ["words", "0", noBytes()],
+      ["walletCheck", "", encode("TREZOR")],
+    ]) {
+      expectMessage(
+        "INVALID_REQUEST: invalid request: a follow-up after detection needs a stated short length, an address or a fingerprint",
+        () => afterDetection.compare(kind, reference, "", "", passphrase),
+      );
+    }
+    for (const words of [12, 15, 18, 21]) {
+      assert.equal(
+        JSON.parse(afterDetection.compare("words", String(words), "", "", noBytes())).outcome,
+        "doesNotMatch",
+      );
+    }
+    assert.equal(
+      JSON.parse(afterDetection.compare("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes()))
+        .outcome,
+      "doesNotMatch",
+    );
+    assert.equal(
+      JSON.parse(
+        afterDetection.compare("address", PHRASE_ADDRESS, "bitcoin", "m/84'/0'/0'/0/0", noBytes()),
+      ).outcome,
+      "doesNotMatch",
+    );
+  } finally {
+    afterDetection.free();
+  }
 }
 
 /** The reduced-cost container of PHRASE with its last word missing, for the searches. */

@@ -1,35 +1,50 @@
-"""Independent implementation of MHFE suite 3 for checking the Rust implementation.
+"""Independent implementation of MHFE suite 3 for checking the Rust
+implementation.
 
-Written from the specification alone. It shares no code with the Rust crate: Argon2id comes from
-OpenSSL through Python `cryptography`, BLAKE2b, HMAC and SHA-256 from Python's standard library,
-and the Unicode 17.0.0 character database of the password rule from `unicodedata2`, because
-Python's own `unicodedata` is an older Unicode version. Install the packages with
-`python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`.
-Only public test inputs belong here.
+Written from the specification alone. It shares no code with the Rust
+crate: Argon2id comes from OpenSSL through Python `cryptography`,
+BLAKE2b, HMAC and SHA-256 from Python's standard library, and the
+Unicode 17.0.0 character database of the password rule from
+`unicodedata2`, because Python's own `unicodedata` is an older Unicode
+version. Install the packages with `python3 -m pip install
+--require-hashes -r scripts/independent-suite3-requirements.txt`. Only
+public test inputs belong here.
 
 Usage:
-    python3 scripts/independent-suite3.py encrypt "<phrase>" "<password>" [PIM] [MEM]
-    python3 scripts/independent-suite3.py vector [--trust-argon2-keys] [--record <file>] <file.json> ...
-    python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json
+python3 scripts/independent-suite3.py encrypt "<phrase>" "<password>"
+[PIM] [MEM]
+python3 scripts/independent-suite3.py vector [--trust-argon2-keys]
+[--record <file>] <file.json> ...
+python3 scripts/independent-suite3.py passwords
+tests/fixtures/validation-cases.json
 
-`vector` checks vector files and negative-cases.json: it recomputes every value in both
-directions, including every Argon2id call, about ten seconds each at the defaults. With
---trust-argon2-keys it takes the recorded Argon2id outputs as given, looked up by their salt, and
-checks everything else within a second: packing, salts, masks, rounds, container and recovery.
+`vector` checks vector files and negative-cases.json: it recomputes
+every value in both
+directions, including every Argon2id call, about ten seconds each at the
+defaults. With
+--trust-argon2-keys it takes the recorded Argon2id outputs as given,
+looked up by their salt, and
+checks everything else within a second: packing, salts, masks, rounds,
+container and recovery.
 Negative cases have no recorded keys and need the full check.
 
-`passwords` checks every password-encoding case of the validation fixture: the NFKD result or the
-error that the password rule of the specification gives, including the Unicode 17 rule for
-unassigned code points.
+`passwords` checks every password-encoding case of the validation
+fixture: the NFKD result or the error that the password rule of the
+specification gives, including the Unicode 17 rule for unassigned code
+points.
 
 --record adds the checked files to a JSON record, normally
-tests/fixtures/suite3-vectors/independent-verification.json: the SHA-256 of this script, the
-Python, `cryptography`, `unicodedata2` and OpenSSL versions, and for each file its SHA-256 and how it was checked
-("full" or "recorded-argon2-keys"). Runs with the same script add to the record; a file whose
+tests/fixtures/suite3-vectors/independent-verification.json: the SHA-256
+of this script, the
+Python, `cryptography`, `unicodedata2` and OpenSSL versions, and for
+each file its SHA-256 and how it was checked
+("full" or "recorded-argon2-keys"). Runs with the same script add to the
+record; a file whose
 bytes changed, or a changed script, starts its entry again.
 
-The BIP39 English wordlist is read from the `bip39` crate sources in the Cargo registry, or from
-the file named by the environment variable BIP39_ENGLISH_WORDLIST (one word per line).
+The BIP39 English wordlist is read from the `bip39` crate sources in the
+Cargo registry, or from the file named by the environment variable
+BIP39_ENGLISH_WORDLIST (one word per line).
 """
 
 import glob
@@ -40,17 +55,42 @@ import json
 import os
 import platform
 import re
+import runpy
 import sys
+from pathlib import Path
+
+# Deliberate copy in the four checker entry points: refuse before any
+# optional dependency or test module loads. verify-python-checks.mjs
+# checks
+# their identical refusal under -O, -OO and PYTHONOPTIMIZE.
+if sys.flags.optimize:
+    sys.exit(
+        "Python optimization disables assertions; run this checker "
+        "without -O or PYTHONOPTIMIZE."
+    )
+
+parse_arguments = runpy.run_path(
+    Path(__file__).with_name("independent-arguments.py")
+)["parse_arguments"]
+if __name__ == "__main__":
+    parse_arguments(sys.argv[1:], "passwords")
 
 try:
     import unicodedata2 as unicode17
 except ImportError:
-    sys.exit("Needs unicodedata2: python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt")
+    sys.exit(
+        "Needs unicodedata2: python3 -m pip install --require-hashes "
+        "-r scripts/independent-suite3-requirements.txt"
+    )
 
-# The password rule uses this exact Unicode version (the specification, "Password encoding").
+# The password rule uses this exact Unicode version (the specification,
+# "Password encoding").
 UNICODE_VERSION = "17.0.0"
 if unicode17.unidata_version != UNICODE_VERSION:
-    sys.exit(f"unicodedata2 has Unicode {unicode17.unidata_version}, the password rule needs {UNICODE_VERSION}")
+    sys.exit(
+        f"unicodedata2 has Unicode {unicode17.unidata_version}, "
+        f"the password rule needs {UNICODE_VERSION}"
+    )
 # Longest password after NFKD, in bytes.
 MAX_PASSWORD_BYTES = 1024
 
@@ -64,7 +104,8 @@ LANES = 4
 # Argon2 version 1.3, as the specification and RFC 9106 write it.
 ARGON2_VERSION = 0x13
 KEY_BYTES = 32
-# Entropy bytes of the short phrase lengths, in the order detection tests them.
+# Entropy bytes of the short phrase lengths, in the order detection
+# tests them.
 SHORT_LENGTHS = {12: 16, 15: 20, 18: 24, 21: 28}
 
 
@@ -114,7 +155,9 @@ def be32(value):
 
 
 def openssl_argon2id(password, salt, pim, level):
-    """K_i: Argon2id version 1.3, four lanes, 32 bytes, empty secret and associated data."""
+    """K_i: Argon2id version 1.3, four lanes, 32 bytes, empty secret and
+    associated data.
+    """
     from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 
     kdf = Argon2id(
@@ -124,7 +167,9 @@ def openssl_argon2id(password, salt, pim, level):
 
 
 def round_values(argon2, password, pim, level, round_index, right):
-    """The salt input, salt, Argon2id output, mask input and mask of one round."""
+    """The salt input, salt, Argon2id output, mask input and mask of one
+    round.
+    """
     message = be32(level) + be32(pim) + be32(round_index) + right
     salt_input, mask_input = DS_SALT + message, DS_MASK + message
     salt = hashlib.blake2b(salt_input, digest_size=32).digest()[:16]
@@ -172,7 +217,10 @@ def matching_short_lengths(x):
 
 
 def detected_recovery(x):
-    """Step 3 of recovery with detection: one match, the 24-word reading, or all of them."""
+    """
+    Step 3 of recovery with detection: one match, the 24-word reading,
+    or all of them.
+    """
     lengths = matching_short_lengths(x)
     if len(lengths) == 1:
         return [(lengths[0], True, read_as(x, lengths[0]))]
@@ -180,15 +228,18 @@ def detected_recovery(x):
     return candidates + [(24, False, read_as(x, 24))]
 
 
-# Negative cases recorded before the length rules of recovery, which keep the reading of the
+# Negative cases recorded before the length rules of recovery, which
+# keep the reading of the
 # stated length alone; the corpus holds them byte for byte.
 STATED_READING_ONLY = {"selected-24-words"}
 
 
 def stated_recovery(x, words, name):
-    """Recovery under the length rules of the specification: detection always runs, and a matching
-    layout takes precedence over a stated length. None where a stated short length matches
-    nothing (VERIFIER_MISMATCH)."""
+    """Recovery under the length rules of the specification: detection
+    always runs, and a matching layout takes precedence over a stated
+    length. None where a stated short length matches nothing
+    (VERIFIER_MISMATCH).
+    """
     lengths = matching_short_lengths(x)
     if words == 0:
         return detected_recovery(x)
@@ -208,7 +259,10 @@ def read_as(x, words):
 
 
 class PasswordRefused(Exception):
-    """A password the rule refuses; `code` is the error the specification names."""
+    """
+    A password the rule refuses; `code` is the error the specification
+    names.
+    """
 
     def __init__(self, code):
         super().__init__(code)
@@ -216,14 +270,18 @@ class PasswordRefused(Exception):
 
 
 def encode_password(raw):
-    """P_enc = UTF8(NFKD(P)) under the password rule of the specification, from UTF-8 bytes."""
+    """
+    P_enc = UTF8(NFKD(P)) under the password rule of the specification,
+    from UTF-8 bytes.
+    """
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         raise PasswordRefused("INVALID_PASSWORD_UTF8") from None
     if any(map(is_refused_in_password, text)):
         raise PasswordRefused("CONTROL_CHARACTER_IN_PASSWORD")
-    # Stabilized normalization fails on a code point that Unicode 17.0.0 leaves unassigned (Cn),
+    # Stabilized normalization fails on a code point that Unicode 17.0.0
+    # leaves unassigned (Cn),
     # the noncharacters included; Private Use (Co) is assigned.
     if any(unicode17.category(character) == "Cn" for character in text):
         raise PasswordRefused("UNASSIGNED_CHARACTER")
@@ -236,10 +294,11 @@ def encode_password(raw):
 
 
 def check_password_cases(path):
-    """Every password case of the validation fixture: its NFKD bytes, or their count, or its error.
+    """Every password case of the validation fixture: its NFKD bytes, or
+    their count, or its error.
 
-    A case gives its input either as UTF-8 hex or as a piece repeated `count` times; a long result
-    is given by its length in bytes.
+    A case gives its input either as UTF-8 hex or as a piece repeated
+    `count` times; a long result is given by its length in bytes.
     """
     cases = json.load(open(path, encoding="utf-8"))["passwords"]
     for case in cases:
@@ -251,17 +310,26 @@ def check_password_cases(path):
             encoded = encode_password(raw)
         except PasswordRefused as refusal:
             assert refusal.code == case.get("expected_error"), (
-                f"password case {case['id']}: refused with {refusal.code}, expected {case.get('expected_error')}"
+                f"password case {case['id']}: refused with {refusal.code}, "
+                f"expected {case.get('expected_error')}"
             )
             if "expected_nfkd_bytes" in case:
                 length = len(unicode17.normalize("NFKD", raw.decode("utf-8")).encode("utf-8"))
-                assert length == case["expected_nfkd_bytes"], f"password case {case['id']}: {length} bytes"
+                assert length == case["expected_nfkd_bytes"], (
+                    f"password case {case['id']}: {length} bytes"
+                )
             continue
-        assert "expected_error" not in case, f"password case {case['id']}: accepted, expected {case['expected_error']}"
+        assert "expected_error" not in case, (
+            f"password case {case['id']}: accepted, expected {case['expected_error']}"
+        )
         if "expected_nfkd_utf8_hex" in case:
-            assert encoded.hex() == case["expected_nfkd_utf8_hex"], f"password case {case['id']}: {encoded.hex()}"
+            assert encoded.hex() == case["expected_nfkd_utf8_hex"], (
+                f"password case {case['id']}: {encoded.hex()}"
+            )
         else:
-            assert len(encoded) == case["expected_nfkd_bytes"], f"password case {case['id']}: {len(encoded)} bytes"
+            assert len(encoded) == case["expected_nfkd_bytes"], (
+                f"password case {case['id']}: {len(encoded)} bytes"
+            )
     print(f"{path}: all {len(cases)} password cases reproduced with Unicode {UNICODE_VERSION}")
 
 
@@ -272,7 +340,10 @@ def encrypt(phrase, password_text, pim=0, level=0):
 
 
 def recorded_keys_by_salt(vector):
-    """The --trust-argon2-keys source of K_i: the recorded output for each recorded salt."""
+    """
+    The --trust-argon2-keys source of K_i: the recorded output for each
+    recorded salt.
+    """
     keys = {}
     for direction in ("encryption", "decryption"):
         for entry in vector[direction]["rounds"]:
@@ -286,7 +357,10 @@ def recorded_keys_by_salt(vector):
 
 
 def is_refused_in_password(character):
-    """Control characters (General_Category Cc) and the line and paragraph separators."""
+    """
+    Control characters (General_Category Cc) and the line and paragraph
+    separators.
+    """
     return unicode17.category(character) == "Cc" or character in "\u2028\u2029"
 
 
@@ -299,7 +373,9 @@ def check_password(record):
 
 
 def check_header(record, schema, suite_id=SUITE_ID):
-    """The layout name, the suite (suite 3 unless another is given) and what wrote the file."""
+    """The layout name, the suite (suite 3 unless another is given) and
+    what wrote the file.
+    """
     assert record["schema"] == schema, record["schema"]
     assert record["suite_id"] == suite_id.decode()
     generator = record["generator"]
@@ -313,7 +389,8 @@ def check_vector(vector, trust_keys):
     pim, level = inputs["pim"], inputs["memory_level"]
     assert inputs["password"].encode().hex() == inputs["password_utf8_hex"]
     password = check_password(
-        {"password": inputs["password"], "password_nfkd_utf8_hex": inputs["password_nfkd_utf8_hex"]}
+        {"password": inputs["password"],
+            "password_nfkd_utf8_hex": inputs["password_nfkd_utf8_hex"]}
     )
     assert vector["argon2"] == {
         "variant": "Argon2id",
@@ -351,7 +428,10 @@ def check_vector(vector, trust_keys):
 
 
 def check_negative_case(case):
-    """Recovery with a wrong password or setting: the recorded phrases or error."""
+    """
+    Recovery with a wrong password or setting: the recorded phrases or
+    error.
+    """
     check_header(case, NEGATIVE_SCHEMA)
     pim, level, words = case["pim"], case["memory_level"], case["words"]
     password = check_password(case)
@@ -387,8 +467,10 @@ def sha256_file(path):
 def check_files(
     paths, trust_keys, check_vector=check_vector, check_negative_case=check_negative_case
 ):
-    """Checks each file with a suite's checks, suite 3's unless others are given, and returns the
-    (path, mode) of every file that was checked."""
+    """
+    Checks each file with a suite's checks, suite 3's unless others are
+    given, and returns the (path, mode) of every file that was checked.
+    """
     checked = []
     for path in paths:
         content = json.load(open(path, encoding="utf-8"))
@@ -408,7 +490,10 @@ def check_files(
 
 
 def verifier_description():
-    """What ran the check, so that a reader can tell which implementation agreed."""
+    """
+    What ran the check, so that a reader can tell which implementation
+    agreed.
+    """
     import cryptography
     from cryptography.hazmat.backends.openssl.backend import backend
 
@@ -416,8 +501,10 @@ def verifier_description():
         "program": "scripts/independent-suite3.py",
         "sha256": sha256_file(__file__),
         "python": platform.python_version(),
+        "pythonOptimization": sys.flags.optimize,
         "cryptography": cryptography.__version__,
-        # The compiled module carries no __version__; the installed package names its version.
+        # The compiled module carries no __version__; the installed
+        # package names its version.
         "unicodedata2": (
             f"{importlib.metadata.version('unicodedata2')} (Unicode {unicode17.unidata_version})"
         ),
@@ -426,10 +513,13 @@ def verifier_description():
 
 
 def update_record(record_path, checked):
-    """Adds the checked files to the record, keeping entries that are still valid.
+    """
+    Adds the checked files to the record, keeping entries that are still
+    valid.
 
-    Several checks may run side by side and add to one record, so the file is locked while it is
-    read and rewritten (fcntl: this development script runs on Linux and macOS).
+    Several checks may run side by side and add to one record, so the
+    file is locked while it is read and rewritten (fcntl: this
+    development script runs on Linux and macOS).
     """
     import fcntl
 
@@ -440,7 +530,8 @@ def update_record(record_path, checked):
         text = file.read()
         record = json.loads(text) if text else None
         if record is None or record.get("verifier") != verifier:
-            record = {"schema": "mhfe-independent-verification-v1", "verifier": verifier, "files": []}
+            record = {"schema": "mhfe-independent-verification-v1", "verifier": verifier,
+                "files": []}
 
         entries = {entry["name"]: entry for entry in record["files"]}
         for path, mode in checked:
@@ -460,31 +551,23 @@ def update_record(record_path, checked):
 
 
 def vector_arguments(arguments):
-    """The vector command's arguments: whether to trust the recorded Argon2id keys, the record to
-    update or None, and the files."""
-    trust = "--trust-argon2-keys" in arguments
-    paths = [value for value in arguments if value != "--trust-argon2-keys"]
-    record_path = None
-    if "--record" in paths:
-        position = paths.index("--record")
-        record_path = paths[position + 1]
-        del paths[position : position + 2]
-    return trust, record_path, paths
+    """The vector command's arguments: whether to trust the recorded
+    Argon2id keys, the record to update or None, and the files.
+    """
+    options = parse_arguments(["vector", *arguments], "passwords")
+    return options.trust_argon2_keys, options.record, options.files
 
 
 def main(arguments):
-    command, arguments = arguments[0], arguments[1:]
-    if command == "encrypt":
-        extra = [int(value) for value in arguments[2:4]]
-        print(encrypt(arguments[0], arguments[1], *extra))
+    options = parse_arguments(arguments, "passwords")
+    if options.command == "encrypt":
+        print(encrypt(options.phrase, options.password, options.pim, options.memory_level))
         return
-    if command == "passwords":
-        for path in arguments:
+    if options.command == "passwords":
+        for path in options.files:
             check_password_cases(path)
         return
-    if command != "vector":
-        sys.exit(__doc__)
-    trust, record_path, paths = vector_arguments(arguments)
+    trust, record_path, paths = options.trust_argon2_keys, options.record, options.files
     checked = check_files(paths, trust)
     if record_path is not None:
         update_record(record_path, checked)

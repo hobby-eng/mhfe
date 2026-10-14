@@ -3,3 +3,6 @@
 
 # Prettier: the workspace style, double quotes and 100 columns
 f6067310e5acae95b02b5bc96d78007426c8d15a
+
+# Python terminal fixture comments and docstrings: 72-column wrapping, unchanged executable ASTs
+2242e736e9fa2aade5f89bf28a120d86324ce7e8

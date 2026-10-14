@@ -4,8 +4,23 @@
 import { createECDH, createHash, createHmac, pbkdf2Sync } from "node:crypto";
 
 import {
+  CHECKED_PHRASE,
+  NEW_PASSWORD,
+  ZERO_24,
+  SUITE_3,
+  SUITE_4,
+  WALLET_PASSPHRASE_REQUIRED,
+  REKEY_PASSPHRASE_ONLY_WITH_REFERENCE,
+  PAGE_PARTS,
+  BIP84_PATH,
+  TEST_PASSWORD,
+  PHRASE_ADDRESS,
+  PHRASE_TREZOR_ADDRESS,
+  PHRASE_FINGERPRINT,
+  PHRASE_TREZOR_FINGERPRINT,
   AMBIGUOUS_12_WORDS,
   FULL_SIZE_CONTAINER,
+  KEEP_OLD_CASES,
   PHRASE,
   REDUCED_COST_CONTAINER,
   REDUCED_COST_SAME_LENGTH_CONTAINER,
@@ -14,8 +29,21 @@ import {
 
 // The page's data of scripts/public-test-data.mjs.
 export {
+  CHECKED_PHRASE,
+  NEW_PASSWORD,
+  ZERO_24,
+  SUITE_3,
+  SUITE_4,
+  WALLET_PASSPHRASE_REQUIRED,
+  REKEY_PASSPHRASE_ONLY_WITH_REFERENCE,
+  PAGE_PARTS,
+  BIP84_PATH,
+  TEST_PASSWORD as PASSWORD,
+  PHRASE_ADDRESS as BIP84_ADDRESS,
+  PHRASE_TREZOR_ADDRESS as BIP84_TREZOR_ADDRESS,
   AMBIGUOUS_12_WORDS,
   FULL_SIZE_CONTAINER,
+  KEEP_OLD_CASES,
   PHRASE,
   REDUCED_COST_CONTAINER,
   REDUCED_COST_SAME_LENGTH_CONTAINER,
@@ -24,7 +52,6 @@ export {
 
 // The page's public test data beside scripts/public-test-data.mjs.
 // Passes the wallet check with the passphrase "TREZOR" (TREZOR_COUNTER in src/wallet_check.rs).
-export const CHECKED_PHRASE = "abandon ".repeat(21) + "above proof fatigue";
 // Passes the wallet check without a passphrase (EMPTY_COUNTER in src/wallet_check.rs).
 export const EMPTY_CHECKED_PHRASE = "abandon ".repeat(21) + "absorb another spoil";
 // The wrong password of the page, one letter off PASSWORD.
@@ -103,12 +130,12 @@ function passesWalletCheck(phrase, passphrase) {
   return digest[0] === 0 && digest[1] === 0;
 }
 
-// The computations above must first give the published 73c5da0a and the b4e3f5ed of
-// src/wallet.rs, both of the BIP39 test phrase, and the two public counters of the wallet check,
-// before their other values are trusted.
+// The computations above must first give 73c5da0a, derived from the root key BIP-0084 publishes,
+// and b4e3f5ed, independently computed in src/wallet.rs, both of the BIP39 test phrase, and the two
+// public counters of the wallet check, before their other values are trusted.
 if (
-  masterFingerprint(PHRASE, "") !== "73c5da0a" ||
-  masterFingerprint(PHRASE, "TREZOR") !== "b4e3f5ed"
+  masterFingerprint(PHRASE, "") !== PHRASE_FINGERPRINT ||
+  masterFingerprint(PHRASE, "TREZOR") !== PHRASE_TREZOR_FINGERPRINT
 ) {
   throw new Error("The independent fingerprint computation does not give the published values.");
 }
@@ -120,8 +147,8 @@ if (
   throw new Error("The independent wallet check does not give the published values.");
 }
 export const FINGERPRINTS = {
-  phrase: "73c5da0a",
-  phraseWithTrezor: "b4e3f5ed",
+  phrase: PHRASE_FINGERPRINT,
+  phraseWithTrezor: PHRASE_TREZOR_FINGERPRINT,
   reducedCostContainer: masterFingerprint(REDUCED_COST_CONTAINER, ""),
   sameLengthContainer: masterFingerprint(REDUCED_COST_SAME_LENGTH_CONTAINER, ""),
   fullSizeContainer: masterFingerprint(FULL_SIZE_CONTAINER, ""),
@@ -141,11 +168,8 @@ export const WALLET_CHECKS = {
 };
 
 // The page's own test data.
-export const PASSWORD = "public test password";
-export const NEW_PASSWORD = "another public test password";
 export const THIRD_PASSWORD = "a third public test password";
 // "abandon" 23 times and "art": the 24-word phrase of zero entropy.
-export const ZERO_24 = "abandon ".repeat(23) + "art";
 // The public check word vector of the specification (src/check_word.rs), typed in other ways.
 export const CHECK_WORD_PASSWORD = "jovial trailing chokehold pavilion cresting ninth";
 export const CHECK_WORD_DICE = "35214 62431 15543 44126 21365";
@@ -153,17 +177,12 @@ export const CHECK_WORD_MISSING = "jovial trailing ? pavilion cresting ninth";
 export const CHECK_WORD_CAPITALS = "JOVIAL Trailing chokehold pavilion cresting ninth";
 // Addresses of PHRASE's wallet (src/wallet.rs): BIP84's published first address, the change
 // address 7 of account 3, the first address with the passphrase "TREZOR" and Ethereum's first.
-export const BIP84_ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
-export const BIP84_PATH = "m/84'/0'/0'/0/0";
 export const BIP84_ACCOUNT_3_CHANGE_7 = "bc1q8r4wsa3nye5qypv80vpfg4sh99uf02u5mmh5ry";
-export const BIP84_TREZOR_ADDRESS = "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu";
 export const ETHEREUM_ADDRESS = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94";
 export const ETHEREUM_PATH = "m/44'/60'/0'/0/0";
 // The same BIP84 address with its last character changed: its checksum fails.
 export const DAMAGED_ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyv";
 export const FINGERPRINT = FINGERPRINTS.phrase;
-export const SUITE_3 = "MHFE-BIP39-256-EXPERIMENTAL-3";
-export const SUITE_4 = "MHFE-BIP39-LP-EXPERIMENTAL-4";
 export const REPAIR_PROFILE = "MHFE-REPAIR-1";
 // The repair words' part of the parameters of MhfeRepair and MhfeClient (src/repair.rs).
 export const REPAIR_PARAMETERS = {
@@ -179,7 +198,7 @@ export const REPAIR_PARAMETERS = {
 // The references that identify PHRASE's wallet without a passphrase, with how a check names them.
 export const REFERENCES_WITHOUT_PASSPHRASE = [
   { confirmation: { fingerprint: FINGERPRINT }, description: "a fingerprint" },
-  { confirmation: { address: BIP84_ADDRESS, coin: "bitcoin" }, description: "an address" },
+  { confirmation: { address: PHRASE_ADDRESS, coin: "bitcoin" }, description: "an address" },
 ];
 // The repair words of FULL_SIZE_CONTAINER for each count, from an independent implementation
 // (src/repair.rs).
@@ -202,10 +221,6 @@ export const PASSPHRASE_IF_ANY = { item: "passphraseIfAny" };
 // whose passphrase is not stated or stated against its reference (src/rekey.rs) and of the
 // built-in check where the length has none or is detected (src/error.rs), exactly as the page
 // gets them.
-export const WALLET_PASSPHRASE_REQUIRED =
-  "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase.";
-export const REKEY_PASSPHRASE_ONLY_WITH_REFERENCE =
-  "passphrase belongs only to an address or a fingerprint.";
 export const PASSPHRASE_UNSTATED = "Invalid request: say whether the wallet has a BIP39 passphrase";
 export const PASSPHRASE_CONTRADICTED =
   "Invalid request: the wallet's BIP39 passphrase is stated otherwise than the reference shows";
@@ -215,4 +230,3 @@ export const REFERENCE_REQUIRED =
   "fingerprint of the wallet, or the owner's comparison with the backup, before the phrase is " +
   "encrypted again";
 // The parts a page adds to a self-check, before the library's (PAGE_PARTS in web/runtime.js).
-export const PAGE_PARTS = ["browser-features", "package-parts", "page-encoding"];

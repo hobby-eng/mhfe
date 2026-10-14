@@ -1,0 +1,11 @@
+[package]
+name = "aud024-check-word-labels"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anstyle = "=1.0.14"
+zeroize = "=1.9.1"
+
+[workspace]

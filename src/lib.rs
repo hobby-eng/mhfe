@@ -29,7 +29,8 @@
 //! # Ok::<(), mhfe::MhfeError>(())
 //! ```
 
-// Unsafe code is allowed in one module only, src/engine/ffi.rs, which calls the C code.
+// Unsafe code is allowed locally in engine::ffi for C calls and memory::os for page policy;
+// each foreign-function interface states its reason and each block its safety conditions.
 #![deny(unsafe_code)]
 
 pub mod check_word;
@@ -40,6 +41,15 @@ pub mod engine;
 mod error;
 mod feistel;
 mod hidden;
+#[cfg(all(
+    target_arch = "wasm32",
+    any(
+        feature = "browser-core",
+        feature = "browser-passwords",
+        feature = "browser-wallet"
+    )
+))]
+mod js_error;
 pub mod memory;
 mod mhfe;
 pub mod new_password;
@@ -69,13 +79,19 @@ pub mod vectors;
 pub mod wallet;
 pub mod wallet_check;
 #[cfg(all(feature = "wasm-bindings", target_arch = "wasm32"))]
+#[allow(
+    unreachable_pub,
+    reason = "wasm-bindgen exports are reached by JavaScript through generated glue"
+)]
 mod wasm_api;
 pub mod word_hints;
 pub mod word_wishes;
+#[cfg(not(target_arch = "wasm32"))]
+mod workers;
 
 pub use container::{
-    container_fingerprint, ConfirmationNeeded, ContainerChoice, ContainerFacts, OriginalFacts,
-    BUILT_IN_CHECK_WORD_COUNTS,
+    check_container, container_fingerprint, ConfirmationNeeded, ContainerChoice, ContainerFacts,
+    OriginalFacts, BUILT_IN_CHECK_WORD_COUNTS,
 };
 pub use error::MhfeError;
 pub use hidden::HiddenWallets;
@@ -84,9 +100,7 @@ pub use mhfe::{
     Recovery, RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
 };
 pub use password::{Password, MAX_PASSWORD_BYTES};
-pub use phrase::{
-    check_container, check_phrase, grouped, phrase_from_entropy, read_phrase, WORD_COUNTS,
-};
+pub use phrase::{check_phrase, grouped, phrase_from_entropy, read_phrase, WORD_COUNTS};
 pub use rehearsal::{
     refuse_unused_passphrase, require_built_in_check_length, CheckEvidence, CheckOutcome,
     Confirmation, PassedCheck, PassphraseReferences, RecoveredForCheck, RecoveredForRekey,

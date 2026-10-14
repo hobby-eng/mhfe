@@ -10,19 +10,23 @@ Never include a real seed phrase, password, private key or wallet file.
 
 ## Secrets
 
-- Secrets are typed at a terminal or read from standard input with `--stdin`. At a terminal they
-  are typed on a private screen, the terminal's alternate screen, which shows them as they are
+- Secrets are typed interactively at a terminal or read from standard input with `--stdin`.
+  Where a private screen is available, they are typed on the terminal's alternate screen, which shows them as they are
   typed so that a slip can be seen, and which is cleared and left as soon as they are accepted, or
-  on Ctrl+C; neither the secret nor the result reaches the main screen or its scrollback. A new
+  on Ctrl+C; neither a secret displayed there nor its result reaches the main screen or its scrollback. A new
   container and a recovered seed phrase are shown the same way, until the person presses Enter or
   Escape after writing them down, and a container typed for a recovery or a check is read on a
   private screen as well. Anyone who can see the screen meanwhile can read them. Where no private
-  screen is possible, they are typed without echo. A phrase that the person did not ask to export
+  screen is possible, secrets are typed without echo. `password`, `encrypt`, `decrypt` and `rekey`
+  refuse interactive result display before input or work; explicit redirection still exports the
+  result. `--stdin` uses the script protocol and exports to standard output without a private-screen
+  guarantee. A phrase that the person did not ask to export
   is shown only on a private screen: `new` and `wallets` refuse to start, and `rekey` does not
   offer the owner's comparison, when standard output is not a terminal that has one, such as when
   it goes to a file, a pipe or another terminal than the one the private screen is shown on. The
-  tool never takes secrets from command-line arguments, never writes them to files and never logs
-  them. Error messages never contain a phrase, a password or any part of them.
+  tool never takes secrets from command-line arguments, opens no file to store them and never logs
+  them; a caller can explicitly redirect its standard output. Error messages never contain a phrase,
+  a password or any part of them.
 - A secret's prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
   on an empty line and Ctrl+C keep their meaning. A line of words, such as a seed phrase, a
   container phrase or a chosen word, is no password, so there Tab also completes the word being
@@ -37,20 +41,22 @@ Never include a real seed phrase, password, private key or wallet file.
   `scripts/verify-hidden-input-windows.py` in a Windows pseudo-console; CI runs them on all three
   systems.
 - Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
-  key or mask is wiped when it is dropped; short-lived working buffers inside dependencies, such as
-  those of Unicode normalization and BIP39 word parsing, are not. The Argon2 work area is wiped by
-  the C code at the end of every round (`FLAG_clear_internal_memory`, checked by a test); when a
-  round fails, for example because a thread could not be started, the C code returns before that
-  step and the Rust owner wipes the area instead. This is best effort: a compiler, the operating
-  system, swap or a terminal's scrollback can keep copies beyond the program's reach, and so can the
-  standard library's own buffers: that of standard input, and the line buffer of standard output,
-  which keeps the last line a phrase or a container was printed on until later output overwrites
-  it. Answers read from standard input are limited to
-  8192 bytes and read into a buffer of that size, so the program's copy never has to grow and leave
-  an unwiped copy behind. At a terminal, secrets, a new container and a recovered phrase appear on
-  the terminal's alternate screen, which is cleared before the tool returns to the main screen, so
-  they do not enter its scrollback; a terminal that logs its output or a screen recording keeps
-  them all the same.
+  key or mask is wiped when it is dropped, and so are the SHA-256, SHA-512, HMAC and BLAKE2b states
+  fed with them (their crates' `zeroize` features); short-lived working buffers inside other
+  dependencies, such as those of Unicode normalization, BIP39 word parsing and the PBKDF2 of the
+  BIP39 seed, are not. The Argon2 work area is wiped by the C code at the end of every round
+  (`FLAG_clear_internal_memory`, checked by a test); when a round fails, for example because a
+  thread could not be started, the C code returns before that step and the Rust owner wipes the area
+  instead. This is best effort: a compiler, the operating system, swap or a terminal's scrollback
+  can keep copies beyond the program's reach, and so can the standard library's own buffers: on
+  Windows that of standard input, and everywhere the line buffer of standard output, which keeps the
+  last line a phrase or a container was printed on until later output overwrites it. On Linux and
+  macOS standard input is read straight from its descriptor, one byte at a time, so no other buffer
+  holds an answer. Answers read from standard input are limited to 8192 bytes and read into a buffer
+  of that size, so the program's copy never has to grow and leave an unwiped copy behind. At a
+  terminal, secrets, a new container and a recovered phrase appear on the terminal's alternate
+  screen, which is cleared before the tool returns to the main screen, so they do not enter its
+  scrollback; a terminal that logs its output or a screen recording keeps them all the same.
 - The tool keeps secrets out of core dumps and swap. It forbids core dumps (`RLIMIT_CORE` 0) and,
   on Linux, makes itself non-dumpable (`PR_SET_DUMPABLE` 0), which also keeps other programs of the
   same user from attaching to it or reading its memory through `/proc`, so a crash writes nothing
@@ -77,9 +83,10 @@ Never include a real seed phrase, password, private key or wallet file.
   browser or on Windows.
   The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
   can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
-  area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap in memory
-  (zram) is safe only without a writeback device, or with one encrypted as above. macOS encrypts
-  its swap; on Windows, use BitLocker or no page file.
+  area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell, as for a
+  device whose entry in /sys it cannot see; swap in memory (zram) is safe only without a writeback
+  device, or with one encrypted as above. macOS encrypts its swap; on Windows, use BitLocker or no
+  page file.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original seed phrase: a typing mistake or a
   hardware fault cannot silently produce a container that no password opens. At a terminal the
@@ -113,32 +120,37 @@ Never include a real seed phrase, password, private key or wallet file.
   only on the private screen and only to a person at a terminal; nothing is changed unless they
   choose it, and the summary says only how the check word came out. The list positions it computes
   are wiped. The check word adds no strength and is as secret as the rest of the password.
-- Nothing connects to a network. The browser package loads no remote resources and contains no
-  network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
-  (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which
-  listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
+- The browser JavaScript loads no remote resources. The build removes the unused Emscripten and
+  wasm-bindgen file loaders (`scripts/remove-network-code.mjs`); a shared lexical gate checks
+  known network and dynamic-code constructs, with two counted Worker exceptions. The gate is a
+  tripwire for those constructs, not a proof about arbitrary code. The native `mhfe serve` and
+  the browser package's Python launcher listen on 127.0.0.1 for the one page they serve and never
+  receive a secret (see below).
 - On Linux the kernel enforces this. A command that handles secrets (`encrypt`, `decrypt`, `check`,
   `rekey`, `new`, `wallets`, `repair`, `repair-words`, `password`) runs under a seccomp filter that
   refuses to create any socket, and refuses io_uring altogether, whose operations could create one
-  without the system call the filter sees; and under a Landlock ruleset that refuses every write to
-  the file system (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect). Both cover every
-  thread the command starts, Argon2's included, and cannot be undone. A command started directly
-  also moves into a network namespace of its own, with only inactive loopback and no external
-  routes; where the system allows no user namespaces it runs on without one. Its summary says
-  "isolated network, no new sockets or file writes" with the namespace and "no new sockets or file
-  writes" without it. The start menu runs each command in a thread of its own, so that it can still
-  start `mhfe serve`, which is not isolated because the browser it opens must write its profile; a
-  thread cannot get a namespace of its own, so the menu's commands have the filter and the ruleset
-  only. The summary of a command says what the kernel enforces. These boundaries do not revoke
-  descriptors already open: an inherited socket remains in its original network namespace, and an
-  already writable file, pipe or redirected standard output remains writable. They therefore
-  restrict new access rather than guarantee containment of arbitrary compromised code. Start the
-  tool from a trusted terminal in the offline environment described above. `serve` remains outside
-  these command restrictions so that a browser can reach its localhost listener.
+  without the system call the filter sees; under a Landlock ruleset that refuses every write to the
+  file system (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect); and under a second
+  seccomp filter that refuses what Landlock leaves of a write: changing a file's mode, owner,
+  extended attributes or times, and truncating it by path, which Landlock refuses only from Linux
+  6.2. "No new file writes" is stated only when both hold. All of them cover every thread the
+  command starts, Argon2's included, and cannot be undone. A command started directly also moves
+  into a network namespace of its own, with only inactive loopback and no external routes; where the
+  system allows no user namespaces it runs on without one. Its summary says "isolated network, no
+  new sockets or file writes" with the namespace and "no new sockets or file writes" without it. The
+  start menu runs each command in a thread of its own, so that it can still start `mhfe serve`,
+  which is not isolated because the browser it opens must write its profile; a thread cannot get a
+  namespace of its own, so the menu's commands have the filter and the ruleset only. The summary of
+  a command says what the kernel enforces. These restrictions do not revoke descriptors already open:
+  an inherited socket remains in its original network namespace, and an already writable file, pipe
+  or redirected standard output remains writable. They therefore restrict new access rather than
+  guarantee containment of arbitrary compromised code. Start the tool from a trusted terminal in the
+  offline environment described above. `serve` remains outside these command restrictions so that a
+  browser can reach its localhost listener.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 
-## The C engine and its boundary
+## The C engine and its interface
 
 Argon2 is the reference C implementation, vendored unchanged (see
 [`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code of the library
@@ -193,8 +205,9 @@ the tool and the documented page behaviour show the consequences before the choi
   miscopied word through about once in 16 to 128, against once in 256 for 24 words.
 - Its state is the entropy itself, 128 to 224 bits in two halves of 64 to 112 bits, so each round's
   salt is drawn from at most 2^64 to 2^112 values. The specification extends its analysis of
-  plausible deniability to this state, but does not assert its suite 3 conjectures on attack cost
-  for it; treat the format as newer and less analysed than the 24-word one.
+  plausible deniability to this state. Its suite 3 guessing bounds, proved in the random-oracle
+  model for the specified single-container or single known-pair games, do not extend to suite 4; treat
+  the format as newer and less analysed than the 24-word one.
 - A container is told apart from its original seed phrase only by the user's own records: both are
   valid phrases of the same length, and a wallet accepts either.
 
@@ -204,8 +217,12 @@ the tool and the documented page behaviour show the consequences before the choi
 package's `mhfe-fast-mode.py` is the same launcher for computers with Python but without mhfe; it
 uses only the Python standard library, keeps every rule below, and
 `scripts/verify-fast-mode-script.py` tests it on the same cases as `mhfe serve`, including its
-security headers. Their threat model: other programs and web pages on the same computer may try to
-talk to them.
+security headers; the request heads and checksum files that both must decide alike are one list,
+`tests/fixtures/fast-mode-cases.json`, which the tests of both read. Their threat model: other
+programs and web pages on the same computer may try to talk to them.
+
+Both serve only a file whose name ends in lower-case `.html`; this suffix rule is case-sensitive.
+Other names have their own refusal, even when the checksum line is well formed.
 
 - Each listens on 127.0.0.1 only, on a random port, and answers only `GET` and `HEAD` of `/`.
 - It refuses any request whose `Host` header is not exactly `127.0.0.1:<port>`. A web page on
@@ -220,10 +237,11 @@ talk to them.
 - It reads no request body, keeps no log, serves no other file and lists no directory. It never
   receives a secret: the page does all the work in the browser.
 - It serves a page only when the checksum file `mhfe-fast-mode.sha256` next to it names that page
-  with a matching SHA-256, and otherwise refuses with a message and serves nothing. This catches a
-  damaged, swapped or partly updated page. It does not replace checking the release: someone who
-  can change the page can change the checksum file next to it too, so compare the release files
-  with the published `SHA256SUMS` once, after downloading.
+  with a matching SHA-256, and otherwise refuses with a message and serves nothing. Both must be
+  regular files, the checksum file at most 4 KiB and the page at most 64 MiB, and nothing beyond
+  that is read of them. This catches a damaged, swapped or partly updated page. It does not replace
+  checking the release: someone who can change the page can change the checksum file next to it too,
+  so compare the release files with the published `SHA256SUMS` once, after downloading.
 
 A secret typed into a page in standard mode stays in that tab; it is never passed to the fast-mode
 tab.
@@ -241,11 +259,16 @@ control of crash reports and no isolation of its own.
   scripts only by hash, WebAssembly and `blob:` workers. The page passes its files to each class
   as text and bytes.
 - Every operation runs in a worker of its own, which is terminated when the operation ends; that
-  frees the Argon2 memory. The worker is a boundary for responsiveness and cancellation, not a
+  frees the Argon2 memory. The worker provides responsiveness and cancellation, not a
   vault: it runs in the page's browser process and origin. A cancelled operation is stopped at
   once, and its memory is freed without being overwritten; so is the work area of an Argon2 round
   that fails, which the C code leaves unwiped in the browser.
-- Two kinds of work hold secrets in workers for longer. A session of hidden wallets keeps its
+- A page callback that fails, or whose answer is refused, also ends its worker without guaranteeing
+  the Rust session's own wipe (`CALLBACK_FAILED`, or the returned `TypeError` or `MhfeError`).
+  So do `PACKAGE_MISMATCH`, an unexpected worker message and `WORKER_FAILED`, including a failed
+  send. Normal worker completions attempt their explicit cleanup; termination alone promises no
+  overwrite.
+- Some work holds secrets in workers for longer. A session of hidden wallets keeps its
   worker with its Argon2 work area, the main wallet's BIP39 passphrase and the passwords used so
   far, which it needs to refuse a password used twice, until the page closes it; `close()`
   overwrites them before the worker ends, and a close while a wallet opens stops the worker at
@@ -253,23 +276,29 @@ control of crash reports and no isolation of its own.
   default as many as the processor has cores, at most eight, or as many as the page asks for, each
   from the browser's random generator (`crypto.getRandomValues`), and every worker ends with the
   draw.
+- A rekey waiting for the owner or `onConfirmAgain` keeps its old and new passwords and recovered
+  state; a check waiting for `onNoLength` keeps its recovered state. The wait lasts as long as the
+  page takes to answer. Cancel the operation when the user leaves or stops using it.
 - A password, a BIP39 passphrase, a phrase and dice rolls given to a class are copied into UTF-8
   bytes only after the class's check at start has passed and every setting is checked. The copies
-  are transferred to the worker, so that none stays with the class, and are wiped when the
-  operation cannot start; a `Uint8Array` the page passes is copied, not emptied. Text with an
-  unpaired surrogate is refused instead of being silently changed by the browser. In the worker,
-  the Rust code takes these bytes into buffers that it wipes, and it wipes its own copies of the
-  keys and states; a result that holds a secret is written into a buffer of its final size, which
-  is wiped once the result has become a JavaScript string. Copies that the compiler and the
-  dependencies leave on the WebAssembly's stack, such as the BIP39 seed and the BIP32 master key
-  of a fingerprint or a wallet check and the passphrase in BIP39's PBKDF2 salt block, stay until
-  later calls overwrite them or the worker ends, also while a session waits; a browser locks no
-  memory. An operation in which the WebAssembly stops (a trap) ends with `INTERNAL_ERROR` and its
-  worker is terminated without its session being wiped.
+  are transferred to the worker, so that none stays with the class, and are wiped when the operation
+  cannot start; a `Uint8Array` the page passes is copied, not emptied. Text with an unpaired
+  surrogate is refused instead of being silently changed by the browser. In the worker, the Rust
+  code takes these bytes into buffers that it wipes, and it wipes its own copies of the keys and
+  states; a result that holds a secret is written into a buffer of its final size, which is wiped
+  once the result has become a JavaScript string. Copies that the compiler and the dependencies
+  leave on the WebAssembly's stack, such as the BIP39 seed and the BIP32 master key of a fingerprint
+  or a wallet check and the passphrase in BIP39's PBKDF2 salt block, are zeroed by the worker after
+  every operation and before every question to the page, when no WebAssembly code runs
+  (AUD-024-SEC003); Argon2's C code clears the stack each lane leaves after every segment, natively
+  and in both browser builds (AUD-024-SEC002). A browser locks no memory. An operation in which the
+  WebAssembly stops (a trap) ends with `INTERNAL_ERROR` and its worker is terminated without its
+  session being wiped.
 - What the page holds as a JavaScript string cannot be wiped, since browsers cannot erase strings:
   a password or phrase typed into the page, a recovered or new phrase, the phrase shown to the
   owner to confirm a rekey, the phrases of hidden wallets, a generated password and the words of a
-  check word review. Pass passwords and passphrases as `Uint8Array` where possible, keep such
+  check word review, `readPhrase()`'s written-out words and the secret-derived strings returned by
+  `wordHints()`. Pass passwords and passphrases as `Uint8Array` where possible, keep such
   values on screen only as long as needed and close the tab afterwards.
 - The rules of the library hold in the browser too: a rekey seals only a recovery that is confirmed,
   the wallet check of a new phrase needs a BIP39 passphrase and never confirms a rekey, and a hidden

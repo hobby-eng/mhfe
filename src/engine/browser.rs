@@ -16,6 +16,7 @@ extern "C" {
     pub type JsArgon2;
 
     /// Fills `key` with Argon2id(password, salt) at the given cost, four lanes, version 1.3.
+    ///
     /// The slices are views into this module's memory, so no JavaScript copy of the password is
     /// made on the way. Throws an Error whose message starts with an error code on failure.
     #[wasm_bindgen(method, catch)]
@@ -91,14 +92,19 @@ pub(super) fn derive_with(
 /// The error of a failed call of the Argon2 build: "MEMORY_ALLOCATION_FAILED: …" becomes
 /// [`MhfeError::MemoryAllocation`], anything else [`MhfeError::Argon2`].
 fn error_of(error: JsValue, cost: Argon2Cost) -> MhfeError {
-    let message = crate::wasm_api::js_message(&error)
+    let message = crate::js_error::message(&error)
         .unwrap_or_else(|| "the browser Argon2 engine failed".to_owned());
     if message.starts_with("MEMORY_ALLOCATION_FAILED") {
         MhfeError::MemoryAllocation {
             bytes: cost.memory_bytes(),
         }
     } else {
-        MhfeError::Argon2(message)
+        MhfeError::Argon2(
+            message
+                .strip_prefix("ARGON2_FAILED: ")
+                .unwrap_or(&message)
+                .to_owned(),
+        )
     }
 }
 

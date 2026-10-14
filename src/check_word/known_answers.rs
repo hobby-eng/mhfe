@@ -14,20 +14,17 @@ use crate::self_check::{
     damaged, expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
 
-/// SHA-256 of the vendored eff_large_wordlist.txt, as vendor/eff-large-wordlist.md records it for
-/// the file the EFF publishes. It confirms that the embedded bytes are that file; it is not an
-/// independent answer of the code.
-const EFF_LIST_SHA256: &str = "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e";
+use crate::eff::EFF_LIST_SHA256;
 
 /// One public vector: five dice rolls, the check index and the password.
 #[derive(Clone, Copy)]
-struct CheckWordVector {
-    rolls: &'static str,
-    check_index: usize,
-    password: &'static str,
+pub(super) struct CheckWordVector {
+    pub(super) rolls: &'static str,
+    pub(super) check_index: usize,
+    pub(super) password: &'static str,
 }
 
-const VECTORS: [CheckWordVector; 4] = [
+pub(super) const VECTORS: [CheckWordVector; 4] = [
     CheckWordVector {
         rolls: "11111 11112 11113 11114 11115",
         check_index: 104,
@@ -51,7 +48,8 @@ const VECTORS: [CheckWordVector; 4] = [
 ];
 
 /// The specification: "In the third row, an erased third word is recovered as chokehold."
-const ERASED: (&str, usize, &str) = ("jovial trailing ? pavilion cresting ninth", 3, "chokehold");
+pub(super) const ERASED: (&str, usize, &str) =
+    ("jovial trailing ? pavilion cresting ninth", 3, "chokehold");
 /// The third row with its check word replaced: all six words are in the list but do not fit.
 const MISMATCH: &str = "jovial trailing chokehold pavilion cresting zoom";
 

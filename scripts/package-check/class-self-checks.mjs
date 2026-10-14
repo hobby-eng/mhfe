@@ -4,7 +4,7 @@
 // that it starts with no part passed on the page.
 import assert from "node:assert/strict";
 
-import { FULL_SIZE_CONTAINER, PHRASE } from "../public-test-data.mjs";
+import { FULL_SIZE_CONTAINER, PHRASE, PAGE_PARTS } from "../public-test-data.mjs";
 import { expectPhraseTransferred, fieldsOf, nextTurn } from "./expect.mjs";
 import { readOtherBuild } from "./manifest.mjs";
 import { BUILD_ID, VERSION, bindings, noop, parameters } from "./package.mjs";
@@ -22,18 +22,7 @@ import { StandInWorker, servedByTheWebAssembly, started } from "./stand-in-worke
 
 /** A WebAssembly object of a test's own, on which no part has passed yet. */
 const ownWasm = () => new Uint8Array(wasm);
-/** A part the page checks itself. */
-const pagePart = (id, outcome = "passed", detail) => {
-  const label = {
-    "browser-features": "Browser features",
-    "package-parts": "Package parts",
-    "page-encoding": "Text encoding of the page",
-  }[id];
-  return detail === undefined ? { id, label, outcome } : { id, label, outcome, detail };
-};
-const PAGE_PARTS_OF_SECRETS = ["browser-features", "package-parts", "page-encoding"].map((id) =>
-  pagePart(id),
-);
+const PAGE_PARTS_OF_SECRETS = PAGE_PARTS.map((id) => part(id));
 /** The self-check workers started from here on. */
 const checksFrom = (start) => StandInWorker.checks.slice(start);
 /** What each of `workers` was asked first: its module, operation, tier and skipped parts. */
@@ -92,8 +81,8 @@ async function checkPartsOncePerPage({ MhfeWallet, MhfeRepair, MhfePasswords, Mh
     buildId: BUILD_ID,
     // No secrets, so no check of their encoding.
     components: [
-      pagePart("browser-features"),
-      pagePart("package-parts"),
+      part("browser-features"),
+      part("package-parts"),
       ...REPAIR_PARTS.map((id) => part(id)),
     ],
   });
@@ -201,14 +190,16 @@ async function checkFailedPartCloses({ MhfeRepair }, { damagedCard }) {
   let worker;
   StandInWorker.serveCheck = (message, worker) =>
     message.module === "repair"
-      ? JSON.parse(
+      ? // The package's worker says its build before any news (AUD-024-API006).
+        (worker.reply({ type: "ready", buildId: BUILD_ID }),
+        JSON.parse(
           damagedCard.selfCheckRepair(
             message.tier,
             message.skip,
             (id, label) => worker.reply({ type: "componentStart", value: { id, label } }),
             (json) => worker.reply({ type: "component", value: JSON.parse(json) }),
           ),
-        )
+        ))
       : servedByTheWebAssembly(message, worker);
   const brokenRepair = new MhfeRepair({ workerSource: "repair worker", wasm: ownWasm() });
   const brokenReport = await brokenRepair.startupCheck();
@@ -219,8 +210,8 @@ async function checkFailedPartCloses({ MhfeRepair }, { damagedCard }) {
     version: VERSION,
     buildId: BUILD_ID,
     components: [
-      pagePart("browser-features"),
-      pagePart("package-parts"),
+      part("browser-features"),
+      part("package-parts"),
       part("bip39-words"),
       cardRefused,
       part("wallet-hashes"),
@@ -489,9 +480,9 @@ async function checkPageEncoding({ MhfePasswords, MhfeWallet }) {
     version: null,
     buildId: BUILD_ID,
     components: [
-      pagePart("browser-features"),
-      pagePart("package-parts"),
-      pagePart("page-encoding", "failed", "the page encodes text into other UTF-8 bytes"),
+      part("browser-features"),
+      part("package-parts"),
+      part("page-encoding", "failed", "the page encodes text into other UTF-8 bytes"),
     ],
   });
   globalThis.TextEncoder = RealEncoder;
@@ -501,7 +492,7 @@ async function checkPageEncoding({ MhfePasswords, MhfeWallet }) {
   const acceptsSurrogates = new MhfeWallet({ workerSource: "wallet worker", wasm: ownWasm() });
   assert.deepEqual(
     (await acceptsSurrogates.startupCheck()).components[2],
-    pagePart("page-encoding", "failed", "a lone surrogate is accepted instead of refused"),
+    part("page-encoding", "failed", "a lone surrogate is accepted instead of refused"),
   );
   String.prototype.isWellFormed = realIsWellFormed;
   assert.equal(StandInWorker.checks.length, checksBefore, "no worker ran for a page that failed");
@@ -520,7 +511,7 @@ async function checkWithoutWebAssembly({ MhfeClient, MhfeRepair }, checksBefore)
   globalThis.WebAssembly = RealWebAssembly;
   assert.deepEqual(
     noWebAssemblyReport.components[0],
-    pagePart("browser-features", "failed", "the browser lacks WebAssembly"),
+    part("browser-features", "failed", "the browser lacks WebAssembly"),
   );
   assert.equal(noWebAssemblyReport.passed, false);
   await assert.rejects(noWebAssembly.readContainer("c"), { code: "SELF_CHECK_FAILED" });
@@ -610,11 +601,10 @@ async function checkCoreFullCheck({ MhfeClient }, processParts, notRunHere) {
         ...notRunHere,
       ],
     });
-    const ran = [...CORE_PARTS, SIZES_SINGLE.id, ...(fast ? [SIZES_THREADED.id] : [])];
-    assert.deepEqual(progressEvents, [
-      ...ran.flatMap((id) => [`start ${id}`, `end ${id} passed`]),
-      ...processParts.flatMap(({ id }) => [`start ${id}`, `end ${id} notAvailable`]),
-    ]);
+    assert.deepEqual(
+      progressEvents,
+      fullReport.components.flatMap(({ id, outcome }) => [`start ${id}`, `end ${id} ${outcome}`]),
+    );
     const fullChecks = checksFrom(checksBefore);
     assert.deepEqual(firstMessages(fullChecks), [
       { module: "core", operation: "selfCheck", tier: "full", skip: [] },

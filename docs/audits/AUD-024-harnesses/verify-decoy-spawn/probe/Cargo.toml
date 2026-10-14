@@ -1,0 +1,15 @@
+[package]
+name = "aud024-verify-decoy-spawn"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mhfe-experimental = { path = "../../../../.." }
+
+# The CLI's release profile (mhfe Cargo.toml [profile.release]), so a panic aborts as it does there.
+[profile.release]
+panic = "abort"
+opt-level = 3
+
+[workspace]

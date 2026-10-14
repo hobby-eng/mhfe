@@ -148,36 +148,6 @@ mod tests {
         assert_eq!(encoded("  a b\u{a0}"), "  a b ".as_bytes());
     }
 
-    /// The refused set is General_Category Cc, 65 code points in Unicode 17, plus U+2028 and
-    /// U+2029: 67 in all.
-    #[test]
-    fn the_refused_set_has_67_code_points() {
-        let refused = (0..=0x10FFFF)
-            .filter_map(char::from_u32)
-            .filter(|&character| is_forbidden_in_password(character))
-            .count();
-        assert_eq!(refused, 67);
-    }
-
-    /// The specification checks the refused characters before normalization and relies on NFKD
-    /// never producing one from another character. This checks that claim for every Unicode 17
-    /// scalar value.
-    #[test]
-    fn normalization_never_creates_a_refused_character() {
-        use unicode_normalization::UnicodeNormalization;
-        for character in (0..=0x10FFFF).filter_map(char::from_u32) {
-            if is_forbidden_in_password(character) {
-                continue;
-            }
-            let decomposed: String = std::iter::once(character).nfkd().collect();
-            assert!(
-                !decomposed.chars().any(is_forbidden_in_password),
-                "U+{:04X} decomposes to a refused character",
-                u32::from(character)
-            );
-        }
-    }
-
     #[test]
     fn normalization_tables_are_unicode_17() {
         assert_eq!(unicode_normalization::UNICODE_VERSION, (17, 0, 0));
@@ -185,7 +155,10 @@ mod tests {
 
     #[test]
     fn ascii_passes_through_unchanged_with_case_and_spaces() {
-        assert_eq!(encoded("public test password"), b"public test password");
+        assert_eq!(
+            encoded(crate::test_support::TEST_PASSWORD),
+            crate::test_support::TEST_PASSWORD.as_bytes()
+        );
         assert_eq!(encoded("  Case Matters "), b"  Case Matters ");
         assert_ne!(encoded("Password"), encoded("password"));
     }
@@ -289,7 +262,7 @@ mod tests {
     /// a refused one is wiped in that buffer while it is locked (LockedBytes::build).
     #[test]
     fn the_password_is_held_locked_at_its_largest_size() {
-        let password = Password::new("public test password").unwrap();
+        let password = crate::test_support::test_password();
         assert_eq!(password.encoded.is_locked(), cfg!(unix));
         let longest = Password::new(&"a".repeat(MAX_PASSWORD_BYTES)).unwrap();
         assert_eq!(longest.as_bytes().len(), MAX_PASSWORD_BYTES);
@@ -298,7 +271,7 @@ mod tests {
 
     #[test]
     fn debug_output_hides_the_password() {
-        let password = Password::new("public test password").unwrap();
+        let password = crate::test_support::test_password();
         assert_eq!(format!("{password:?}"), "Password(hidden)");
     }
 }

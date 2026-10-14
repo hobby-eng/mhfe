@@ -18,7 +18,7 @@ use crate::{flow, readme, style};
 
 /// Which checks a command runs at its start.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Checks {
+pub(crate) enum Checks {
     /// Every part: for every command that reads a secret, and for the menu once.
     EveryPart,
     /// The cipher's hashes alone, SHA-256 among them: for `mhfe serve`, which handles no secret
@@ -32,7 +32,7 @@ pub enum Checks {
 /// Argon2 engine, then the process's own protections. `random` is the generator new passwords and
 /// phrases are drawn from, which only the full self-test tries; at start only scripted sources are
 /// used, so that no draw can wait for the system's generator.
-pub fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
+pub(crate) fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
     sets::native(random)
         .with(CoreDumpCheck)
         .with(IsolationCheck)
@@ -42,7 +42,7 @@ pub fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a>
 /// Runs `checks` at the startup tier; on a failure, says which part failed and returns the exit
 /// code to stop with, after the message has been shown. A part that only warns, such as memory
 /// that cannot be locked, is stated where it matters, in the summary of the settings.
-pub fn check(checks: Checks) -> Result<(), Failure> {
+pub(crate) fn check(checks: Checks) -> Result<(), Failure> {
     let mut set = match checks {
         Checks::EveryPart => every_part(None),
         Checks::Hashes => sets::hashes(),
@@ -78,7 +78,7 @@ fn failure_text(failed: &ComponentResult) -> String {
 /// Runs `set` at `tier`, with `on_start` told the label of every part as it starts and `on_result`
 /// every outcome. While a part runs, its label is kept for the panic hook, so that a part that
 /// stops the program, as a damaged table could, is named: "<what>: <label>: the program stopped."
-pub fn run_named(
+pub(crate) fn run_named(
     set: &mut SelfCheck<'_>,
     tier: Tier,
     what: &'static str,
@@ -118,7 +118,7 @@ fn running() -> MutexGuard<'static, Option<Running>> {
 
 /// Held by every test that runs checks, so that only one names its running part at a time.
 #[cfg(test)]
-pub fn one_test_at_a_time() -> MutexGuard<'static, ()> {
+pub(crate) fn one_test_at_a_time() -> MutexGuard<'static, ()> {
     static TESTS: Mutex<()> = Mutex::new(());
     TESTS.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -132,26 +132,34 @@ fn stopped_text(part: Running) -> String {
     format!("{}: {}: the program stopped.", part.what, part.label)
 }
 
-/// Installs, once, a panic hook that names the part a check was running when the program panicked,
-/// leaves the private screen with the summary so far and the terminal as it found it, and ends
-/// the tool with exit code 1 instead of an abort. Outside the checks it leaves panics to the hook
-/// before it.
-fn install_panic_hook() {
+/// Installs, once, a panic hook that leaves the private screen with the summary so far and the
+/// terminal as it found it, and ends the tool with exit code 1 instead of an abort, which would
+/// skip that cleanup, whatever panicked (AUD-024-FUN009). It names the part a check was running;
+/// elsewhere the hook before it says where the program stopped first. Every message it writes
+/// goes through the tool's non-panicking macros. A test's panic outside a check goes on as before.
+pub(crate) fn install_panic_hook() {
     static INSTALLED: Once = Once::new();
     INSTALLED.call_once(|| {
         let before = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             // try_lock: the panic may have come while the lock was held.
             let part = RUNNING.try_lock().ok().and_then(|guard| *guard);
-            let Some(part) = part else {
+            if part.is_none() {
                 before(info);
-                return;
-            };
+                if cfg!(test) {
+                    return;
+                }
+            }
             flow::end_at_exit();
             crate::terminal::leave_steps();
-            anstream::eprintln!();
-            style::error_wrapped(&stopped_text(part));
-            style::more(readme::SELF_TEST);
+            eprintln!();
+            match part {
+                Some(part) => {
+                    style::error_wrapped(&stopped_text(part));
+                    style::more(readme::SELF_TEST);
+                }
+                None => style::error_wrapped(STOPPED),
+            }
             // A test goes on unwinding; the tool ends with the exit code of an internal error.
             if !cfg!(test) {
                 hidden_input::restore_and_exit(exit_after_panic);
@@ -159,6 +167,9 @@ fn install_panic_hook() {
         }));
     });
 }
+
+/// What the panic hook says when the program stopped outside a check.
+const STOPPED: &str = "The program stopped on an internal error; nothing was saved.";
 
 fn exit_after_panic() -> ! {
     std::process::exit(INTERNAL_ERROR)
@@ -203,8 +214,7 @@ mod tests {
         assert_eq!(
             library.len(),
             27,
-            "the plan's 22 parts of the library, the address search, the search for missing words, \
-             the chosen word of a new phrase, the word hints and the password strength estimate"
+            "the core, Argon2 sizes, passwords, wallet and repair sets, and memory locking"
         );
     }
 

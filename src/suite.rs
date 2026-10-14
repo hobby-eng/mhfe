@@ -10,16 +10,16 @@ use crate::MhfeError;
 /// Suite identifier; the round domain strings are built from it.
 pub const SUITE_ID: &str = "MHFE-BIP39-256-EXPERIMENTAL-3";
 /// Domain string for the round salt: `SUITE_ID || "/ROUND-SALT"`, no terminating NUL.
-pub const DS_SALT: &[u8] = b"MHFE-BIP39-256-EXPERIMENTAL-3/ROUND-SALT";
+pub(crate) const DS_SALT: &[u8] = b"MHFE-BIP39-256-EXPERIMENTAL-3/ROUND-SALT";
 /// Domain string for the round mask: `SUITE_ID || "/ROUND-MASK"`, no terminating NUL.
-pub const DS_MASK: &[u8] = b"MHFE-BIP39-256-EXPERIMENTAL-3/ROUND-MASK";
+pub(crate) const DS_MASK: &[u8] = b"MHFE-BIP39-256-EXPERIMENTAL-3/ROUND-MASK";
 
 /// Suite 4, which keeps the length of a 12- to 21-word original.
 pub const SAME_LENGTH_SUITE_ID: &str = "MHFE-BIP39-LP-EXPERIMENTAL-4";
 /// Suite 4's salt domain: `SAME_LENGTH_SUITE_ID || "/ROUND-SALT"`.
-pub const SAME_LENGTH_DS_SALT: &[u8] = b"MHFE-BIP39-LP-EXPERIMENTAL-4/ROUND-SALT";
+pub(crate) const SAME_LENGTH_DS_SALT: &[u8] = b"MHFE-BIP39-LP-EXPERIMENTAL-4/ROUND-SALT";
 /// Suite 4's mask domain: `SAME_LENGTH_SUITE_ID || "/ROUND-MASK"`.
-pub const SAME_LENGTH_DS_MASK: &[u8] = b"MHFE-BIP39-LP-EXPERIMENTAL-4/ROUND-MASK";
+pub(crate) const SAME_LENGTH_DS_MASK: &[u8] = b"MHFE-BIP39-LP-EXPERIMENTAL-4/ROUND-MASK";
 
 /// The suite of a container. Suite 3 is the default for every original; suite 4 is used only
 /// when the user chooses it ("Choosing the suite").
@@ -30,6 +30,7 @@ pub enum Suite {
     #[default]
     TwentyFourWords,
     /// Suite 4: a 12-, 15-, 18- or 21-word original becomes a container of the same length.
+    ///
     /// Nothing detects a wrong password, the container shows the original's length, and a word
     /// copied wrongly passes the shorter checksum more often.
     SameLength,
@@ -206,6 +207,10 @@ impl WorkFactor {
 
     /// `m(MEM) = (2 + MEM mod 2) * 2^(20 + floor(MEM / 2))` KiB: 2, 3, 4, 6, 8, 12 GiB and so on,
     /// up to 3 TiB. Integers only, as the specification requires.
+    ///
+    /// # Panics
+    ///
+    /// Never: a level above 21 is refused when the settings are made.
     #[expect(
         clippy::expect_used,
         reason = "WorkFactor::of refuses a level above 21, and 3 * 2^30 KiB is below 2^32 - 1"

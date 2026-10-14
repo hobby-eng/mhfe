@@ -6,7 +6,8 @@ use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
 use crate::memory::LockedBytes;
 use crate::mhfe::{
-    read_same_length, recover, suite_3_state, PhraseLength, RecoveredPhrase, Recovery,
+    every_reading, read_same_length, recover, suite_3_state, PhraseLength, RecoveredPhrase,
+    Recovery,
 };
 use crate::packing::STATE_WORDS;
 use crate::suite::Suite;
@@ -43,6 +44,13 @@ impl<'a> Confirmation<'a> {
     /// original that passes a short check by chance, which encryption warns of, would be sealed
     /// again as that shorter phrase, another wallet (AUD-017-FUN001).
     pub fn refuse_for(&self, needed: ConfirmationNeeded) -> Result<(), MhfeError> {
+        // A passphrase too long for any seed, before any work (AUD-024-API019).
+        if let Some(passphrase) = self
+            .wallet_reference()
+            .and_then(|reference| reference.passphrase())
+        {
+            crate::wallet::require_passphrase_size(passphrase)?;
+        }
         let refused = match needed {
             ConfirmationNeeded::BuiltInCheck => false,
             ConfirmationNeeded::WalletOrOwner => {
@@ -141,8 +149,9 @@ impl RecoveredForRekey {
     /// `confirmation` confirms it. A 12- to 21-word original of a 24-word container passes its
     /// built-in check at the length the owner states; a 24-word original, a detected length or a
     /// same-length container, which the built-in check does not confirm, need a wallet reference
-    /// or the owner. A reference given is compared with every reading; `before_compare` is called
-    /// before it is. Several short lengths that pass by accident are refused with
+    /// or the owner. A reference given is compared with every reading, whatever length is stated,
+    /// as the rehearsal check compares it (AUD-024-FUN008); `before_compare` is called before it
+    /// is. The reading it matches says when its length is not the stated one. Several short lengths that pass by accident are refused with
     /// [`MhfeError::AmbiguousLength`], as one phrase is sealed, and a stated length the built-in
     /// check contradicts with [`MhfeError::LengthDiffers`].
     pub fn confirm(
@@ -152,10 +161,10 @@ impl RecoveredForRekey {
         before_compare: &mut dyn FnMut() -> Result<(), MhfeError>,
     ) -> Result<RecoveredPhrase, MhfeError> {
         confirmation.refuse_for(self.facts.confirmation_needed(length)?)?;
-        let readings = self.readings(length)?;
         if let Some(reference) = confirmation.wallet_reference() {
             // An address or the fingerprint tells the readings apart, as the rehearsal check
             // compares them: the one that matches is the wallet's.
+            let readings = self.every_reading(length)?;
             before_compare()?;
             for reading in readings {
                 if compare(reading.phrase(), reference)?.matches() {
@@ -164,7 +173,7 @@ impl RecoveredForRekey {
             }
             return Err(MhfeError::ReferenceMismatch);
         }
-        let reading = one_reading(readings)?;
+        let reading = one_reading(self.readings(length)?)?;
         let by_owner = matches!(confirmation, Confirmation::Owner);
         // A check that finds another length than the one stated takes precedence, but seals the
         // phrase only once the wallet confirms it: the owner, who compares the phrase shown with
@@ -225,6 +234,17 @@ impl RecoveredForRekey {
         })
     }
 
+    /// Every reading of the state worth comparing with a wallet, for a `length` the container
+    /// allows: those of the length detection for a 24-word container, the one reading of a
+    /// same-length one.
+    fn every_reading(&self, length: PhraseLength) -> Result<Vec<RecoveredPhrase>, MhfeError> {
+        self.facts.require_length(length)?;
+        match self.suite {
+            Suite::TwentyFourWords => every_reading(suite_3_state(&self.state)?, length),
+            Suite::SameLength => Ok(vec![read_same_length(&self.state)?]),
+        }
+    }
+
     /// The readings of the state for `length`, under the length rules of recovery: a built-in
     /// check that passes takes precedence over a stated length.
     fn readings(&self, length: PhraseLength) -> Result<Vec<RecoveredPhrase>, MhfeError> {
@@ -270,7 +290,7 @@ mod tests {
     use super::*;
     use crate::test_support::{
         reduced, test_password, wrong_password, ABANDON_12 as ABANDON, ABANDON_12_FINGERPRINT,
-        ABANDON_24,
+        ABANDON_24, AMBIGUOUS_12_21,
     };
     use crate::wallet;
 
@@ -384,6 +404,70 @@ mod tests {
             )
             .unwrap();
         assert_eq!(phrase.phrase(), ART);
+    }
+
+    /// A wallet reference confirms the reading it matches, whatever length the length rules give
+    /// or the person states, as the rehearsal check compares it (AUD-024-FUN008): a 24-word
+    /// original whose 12-word reading passes the built-in check too, and a 12-word original after
+    /// a stated 21 words, which pass as well, was refused as ambiguous.
+    #[test]
+    fn a_wallet_reference_confirms_the_reading_it_matches_at_any_length() {
+        use sha2::{Digest, Sha256};
+        let password = test_password();
+        let none = &mut |_, _| Ok(());
+        let mut mhfe = reduced();
+        let words = |count| PhraseLength::Words(WordCount::new(count).unwrap());
+        let fingerprint_of = |phrase: &str| Reference::Fingerprint {
+            fingerprint: wallet::master_fingerprint(phrase, "").unwrap(),
+            passphrase: "",
+        };
+        // The state of the 24-word phrase of entropy 0^16 || SHA-256(0^16)[..16] is that of the
+        // 12-word phrase of 0^16 with its built-in check.
+        let mut entropy = [0u8; 32];
+        entropy[16..].copy_from_slice(&Sha256::digest([0u8; 16])[..16]);
+        let both = bip39::Mnemonic::from_entropy(&entropy).unwrap().to_string();
+        let container = mhfe
+            .encrypt(&both, &password, Suite::TwentyFourWords, none)
+            .unwrap();
+        let own = fingerprint_of(&both);
+        for length in [PhraseLength::Detect, words(15), words(24)] {
+            let reading = mhfe
+                .recover_confirmed_reporting(
+                    &container,
+                    &password,
+                    length,
+                    Confirmation::Wallet(&own),
+                    none,
+                    &mut || Ok(()),
+                )
+                .unwrap();
+            assert_eq!((reading.phrase(), reading.words()), (both.as_str(), 24));
+        }
+
+        let container = mhfe
+            .encrypt(AMBIGUOUS_12_21, &password, Suite::TwentyFourWords, none)
+            .unwrap();
+        let recovered = mhfe
+            .recover_for_rekey(
+                &container,
+                &password,
+                words(21),
+                Confirmation::BuiltInCheck,
+                none,
+            )
+            .unwrap();
+        assert!(matches!(
+            recovered.confirm(words(21), Confirmation::BuiltInCheck, &mut || Ok(())),
+            Err(MhfeError::AmbiguousLength { .. })
+        ));
+        let own = fingerprint_of(AMBIGUOUS_12_21);
+        let reading = recovered
+            .confirm(words(21), Confirmation::Wallet(&own), &mut || Ok(()))
+            .unwrap();
+        assert_eq!(
+            (reading.phrase(), reading.words(), reading.stated_words()),
+            (AMBIGUOUS_12_21, 12, Some(21))
+        );
     }
 
     /// The re-encryption guard: a same-length container needs its own length, and a reference.

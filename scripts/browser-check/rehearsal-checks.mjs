@@ -212,6 +212,32 @@ export async function checkRehearsalOtherContainers(helpers) {
 /** The wallet check of a 24-word phrase, and the length the page gives when none is detected. */
 export async function checkRehearsalWalletCheck(helpers) {
   const { client, made, matched, notMatched, notVerified, onChecked } = helpers;
+  let emptyEvidence;
+  const emptyChecked = await client.check({
+    container: made.emptyChecked,
+    password: PASSWORD,
+    reference: { words: 0 },
+    onNoLength: (evidence) => {
+      emptyEvidence = evidence;
+      return null;
+    },
+  });
+  const expectedEmptyEvidence = {
+    builtInCheck: null,
+    matchingLengths: [],
+    walletCheck: true,
+    passed: [{ check: "walletCheck" }],
+  };
+  expectEqual(
+    emptyChecked,
+    { outcome: "notVerified", path: null, evidence: expectedEmptyEvidence },
+    "a wallet check with no passphrase stays in the unverified rehearsal's evidence",
+  );
+  expectEqual(
+    emptyEvidence,
+    expectedEmptyEvidence,
+    "onNoLength receives the wallet check with no passphrase",
+  );
   // A pass of the 16-bit check is a fact beside the result, not a verification of the reading.
   expectEqual(
     await client.check({

@@ -48,7 +48,8 @@ function argon2Engine(module) {
           );
         }
         if (code !== 0) {
-          throw new Error(`ARGON2_FAILED: the reference code returned error ${code}`);
+          const message = module.UTF8ToString(module._argon2_error_message(code) >>> 0);
+          throw new Error(`ARGON2_FAILED: ${message}`);
         }
         key.set(module.HEAPU8.subarray(keyPointer, keyPointer + ARGON2_KEY_BYTES));
       } finally {

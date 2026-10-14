@@ -252,9 +252,8 @@ impl WordWishes {
 
 /// The number of a word as typed, `label` naming it in a refusal.
 fn number_of(typed: &str, label: &str) -> Result<u16, MhfeError> {
-    // The lower-case copy of a chosen word is part of a secret phrase: wiped when done.
-    let lower = Zeroizing::new(typed.trim().to_lowercase());
-    phrase::complete_word(&lower)
+    // Read as a phrase's word is (phrase::typed_word).
+    phrase::typed_word(typed.trim())
         .and_then(phrase::word_number)
         // The word itself is not repeated: it is about to become part of a secret phrase.
         .ok_or_else(|| wish(format!("{label} is not an English BIP39 word")))
@@ -436,6 +435,14 @@ mod tests {
         );
         // Four letters of a word are enough, in any case.
         assert!(WordWishes::new(&[at(2, "HAPP")], &[]).is_ok());
+        // Only ASCII letters change case, as in a phrase: the Kelvin sign is no k
+        // (AUD-024-FUN012).
+        let kelvin = "\u{212A}ite";
+        assert!(crate::phrase::parse(&format!("{kelvin} {}", "abandon ".repeat(11))).is_err());
+        assert!(refused(&[at(2, kelvin)], &[])
+            .ends_with("the chosen word is not an English BIP39 word"));
+        assert!(refused(&[], &[kelvin]).ends_with("never to use is not an English BIP39 word"));
+        assert!(WordWishes::new(&[at(2, "KITE")], &["Kite"]).is_err());
     }
 
     #[test]

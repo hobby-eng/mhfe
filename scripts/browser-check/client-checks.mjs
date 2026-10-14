@@ -79,11 +79,11 @@ export async function checkConstruction(client, compiled) {
 }
 
 /** MhfeClient.readPhrase, readContainer and the search for missing words without repair words. */
-export async function checkReading(client) {
+export async function checkReading(client, made) {
   group("MhfeClient.readPhrase and readContainer");
   await checkReadPhrase(client);
   await checkReadContainer(client);
-  await checkCandidateSearch(client);
+  await checkCandidateSearch(client, made);
 }
 
 /** readPhrase: the forms it reads, the containers a phrase can have, and its refusals. */
@@ -186,7 +186,7 @@ export async function checkReadContainer(client) {
 }
 
 /** searchCandidates, searchDecoy and searchWallet without the repair words. */
-export async function checkCandidateSearch(client) {
+export async function checkCandidateSearch(client, made) {
   // The search for missing words without the repair words: the candidates, and the decoy
   // wallet, the container itself, found by its fingerprint without a password or Argon2.
   const missingLast = FULL_SIZE_CONTAINER.split(" ")
@@ -226,6 +226,78 @@ export async function checkCandidateSearch(client) {
     { found: false, container: null },
     "searchDecoy finds nothing with another fingerprint",
   );
+  const missingReduced = REDUCED_COST_CONTAINER.split(" ").slice(0, -1).concat("?").join(" ");
+  for (const reference of [
+    { fingerprint: FINGERPRINTS.phrase },
+    { address: BIP84_ADDRESS, coin: "bitcoin", path: "m/84'/0'/0'/0/0" },
+    { builtInCheck: true },
+  ]) {
+    const steps = [];
+    const recovered = await client.searchWallet({
+      container: missingReduced,
+      password: PASSWORD,
+      reference,
+      onProgress: (step) => steps.push(step),
+    });
+    expectEqual(
+      fieldsOf(recovered, ["found", "container", "words", "containerFingerprint"]),
+      {
+        found: true,
+        container: REDUCED_COST_CONTAINER,
+        words: [{ position: 24, word: "sweet" }],
+        containerFingerprint: FINGERPRINTS.reducedCostContainer,
+      },
+      "searchWallet finds the missing word with " + JSON.stringify(reference),
+    );
+    expect(
+      steps.length > 0 &&
+        steps.every(
+          (step, index) =>
+            step.stage === "search" &&
+            step.candidates === 8 &&
+            step.candidate >= 1 &&
+            step.candidate <= 8 &&
+            step.rounds === 12 &&
+            step.round === (index % 12) + 1 &&
+            (index === 0 ||
+              step.candidate === steps[index - 1].candidate + (step.round === 1 ? 1 : 0)),
+        ),
+      "searchWallet reports each candidate and all twelve rounds in order",
+    );
+  }
+  const missingChecked = made.checked.split(" ").slice(0, -1).concat("?").join(" ");
+  const checkedSearch = await client.searchWallet({
+    container: missingChecked,
+    password: PASSWORD,
+    reference: { walletCheck: true },
+    passphrase: "TREZOR",
+  });
+  expectEqual(
+    fieldsOf(checkedSearch, ["found", "container", "words"]),
+    {
+      found: true,
+      container: made.checked,
+      words: [{ position: 24, word: made.checked.split(" ").at(-1) }],
+    },
+    "searchWallet restores the checked wallet's container with its passphrase",
+  );
+  let searchCancelled = false;
+  await expectRejection(
+    client.searchWallet({
+      container: missingReduced,
+      password: PASSWORD,
+      reference: { fingerprint: FINGERPRINTS.phrase },
+      onProgress: ({ candidate, round }) => {
+        if (candidate === 1 && round === 2) {
+          searchCancelled = true;
+          client.cancel();
+        }
+      },
+    }),
+    "CANCELLED",
+    "cancel during a candidate recovery stops searchWallet",
+  );
+  expect(searchCancelled, "searchWallet reaches the candidate where the page cancels");
   await expectRejection(
     client.searchWallet({
       container: missingLast.replace(/^\S+/, "?"),
@@ -243,7 +315,11 @@ export async function checkCancelAndCallbacks(client) {
   const container = REDUCED_COST_CONTAINER;
   const cancelledAtOnce = client.decrypt({ container, password: PASSWORD });
   client.cancel();
-  await expectRejection(cancelledAtOnce, "CANCELLED", "cancel before the first round");
+  await expectRejection(
+    cancelledAtOnce,
+    "CANCELLED",
+    "cancel() before the first round refuses with CANCELLED",
+  );
   const cancelledLater = client.decrypt({
     container,
     password: PASSWORD,
@@ -251,7 +327,11 @@ export async function checkCancelAndCallbacks(client) {
       if (round === 2) client.cancel();
     },
   });
-  await expectRejection(cancelledLater, "CANCELLED", "cancel in the second round");
+  await expectRejection(
+    cancelledLater,
+    "CANCELLED",
+    "cancel() in the second round refuses with CANCELLED",
+  );
   expect(
     (await rejectionOf(cancelledLater)) instanceof MhfeCancelledError,
     "a cancelled operation rejects with MhfeCancelledError",

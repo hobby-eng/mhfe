@@ -1,0 +1,10 @@
+[package]
+name = "aud024-verify-uniform-below-panics"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+mhfe-experimental = { path = "@REPO@" }
+
+[workspace]

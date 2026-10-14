@@ -4,11 +4,12 @@
 //! terminal, when `NO_COLOR` is set, or when the terminal cannot show colours, and enables them
 //! in the Windows console. Only the standard sixteen terminal colours are used, so every colour
 //! scheme shows them. Results for scripts never carry colour.
+//! TERM=dumb always disables colour, except an explicit nonempty CLICOLOR_FORCE without NO_COLOR.
 
 use std::fmt::{Display, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use anstream::{eprint, eprintln};
 use anstyle::{AnsiColor, Style};
 use zeroize::Zeroizing;
 
@@ -16,11 +17,28 @@ use crate::exit::{capitalize, Failure};
 use crate::flow::{self, Kind};
 use crate::hidden_input;
 
+/// Apply CORE-38 before clap renders help or usage; CI and CLICOLOR cannot override TERM=dumb.
+pub(crate) fn configure_colours() {
+    if plain_dumb_terminal(
+        std::env::var("TERM").ok().as_deref(),
+        std::env::var("NO_COLOR").ok().as_deref(),
+        std::env::var("CLICOLOR_FORCE").ok().as_deref(),
+    ) {
+        anstream::ColorChoice::Never.write_global();
+    }
+}
+
+/// NO_COLOR takes precedence, then explicit forced colour, then a dumb terminal's limitation.
+fn plain_dumb_terminal(term: Option<&str>, no_colour: Option<&str>, forced: Option<&str>) -> bool {
+    no_colour.is_some_and(|value| !value.is_empty())
+        || (term == Some("dumb") && !forced.is_some_and(|value| !value.is_empty()))
+}
+
 /// Writes `line` and a line break to standard output, the result of a command, and flushes it. An
 /// error, a closed pipe or a full disk included, is the failure "Input or output failed" (exit 1),
 /// never a panic, so that a result that did not arrive is not reported as success
 /// (AUD-023-FUN001). Every result goes through here; messages go to standard error.
-pub fn out(line: impl Display) -> Result<(), Failure> {
+pub(crate) fn out(line: impl Display) -> Result<(), Failure> {
     use std::io::Write as _;
     let mut stdout = anstream::stdout().lock();
     writeln!(stdout, "{line}")?;
@@ -29,25 +47,37 @@ pub fn out(line: impl Display) -> Result<(), Failure> {
 }
 
 /// Titles, section headings and the words `mhfe` and its commands.
-pub const HEADING: Style = AnsiColor::Cyan.on_default().bold();
+pub(crate) const HEADING: Style = AnsiColor::Cyan.on_default().bold();
 /// Command names and the progress bar.
-pub const ACCENT: Style = AnsiColor::Cyan.on_default();
+pub(crate) const ACCENT: Style = AnsiColor::Cyan.on_default();
 /// Questions and the words of a phrase.
-pub const STRONG: Style = Style::new().bold();
+pub(crate) const STRONG: Style = Style::new().bold();
 /// Labels, numbers, hints and anything secondary. Bright black is the grey of most schemes;
 /// "dim" text is too faint in some terminals.
-pub const MUTED: Style = AnsiColor::BrightBlack.on_default();
-pub const GOOD: Style = AnsiColor::Green.on_default().bold();
-pub const WARNING: Style = AnsiColor::Yellow.on_default().bold();
-pub const BAD: Style = AnsiColor::Red.on_default().bold();
+pub(crate) const MUTED: Style = AnsiColor::BrightBlack.on_default();
+pub(crate) const GOOD: Style = AnsiColor::Green.on_default().bold();
+pub(crate) const WARNING: Style = AnsiColor::Yellow.on_default().bold();
+/// Every help screen's final safety line, shared with the Python launcher by its parity test.
+pub(crate) const SAFETY_LINE: &str =
+    "Experimental: not independently reviewed; do not use it to protect real funds.";
+
+/// End every command's short and long help with the shared note and yellow safety line.
+pub(crate) fn help_ending(text: impl Display) -> String {
+    format!(
+        "{text}\n{}\n{}",
+        help_note("Use MHFE on a trusted computer without a network connection."),
+        paint(WARNING, SAFETY_LINE)
+    )
+}
+pub(crate) const BAD: Style = AnsiColor::Red.on_default().bold();
 
 /// Items of running text as English lists them: "a", "a and b", "a, b and c".
-pub fn and_list<T: AsRef<str>>(items: &[T]) -> String {
+pub(crate) fn and_list<T: AsRef<str>>(items: &[T]) -> String {
     list(items, "and")
 }
 
 /// Choices of running text as English lists them: "a", "a or b", "a, b or c".
-pub fn or_list<T: AsRef<str>>(items: &[T]) -> String {
+pub(crate) fn or_list<T: AsRef<str>>(items: &[T]) -> String {
     list(items, "or")
 }
 
@@ -64,13 +94,13 @@ fn list<T: AsRef<str>>(items: &[T], conjunction: &str) -> String {
 
 /// `text` in `style`. For public text only: the result is an ordinary string, which is not
 /// wiped. Secret words are painted by [`boxed_words`].
-pub fn paint(style: Style, text: impl Display) -> String {
+pub(crate) fn paint(style: Style, text: impl Display) -> String {
     format!("{style}{text}{style:#}")
 }
 
 /// The first lines of a command: its name and what it does. A command shown one step at a time
 /// heads every step and its summary itself (flow.rs).
-pub fn title(what: &str) -> usize {
+pub(crate) fn title(what: &str) -> usize {
     if flow::is_active() {
         return 0;
     }
@@ -78,7 +108,7 @@ pub fn title(what: &str) -> usize {
 }
 
 /// Writes the title line at once, after a blank line; returns the rows they took.
-pub fn write_title(what: &str) -> usize {
+pub(crate) fn write_title(what: &str) -> usize {
     let line = format!(
         "{} {} {}",
         paint(HEADING, "MHFE"),
@@ -94,25 +124,25 @@ pub fn write_title(what: &str) -> usize {
 /// line wider than the terminal wraps onto further rows, which a redraw that moves the cursor up
 /// must count, also in a narrow window (AUD-008-UI001). A line that fills its last row exactly
 /// takes no more: the cursor moves on only with the next character.
-pub fn rows(line: &str) -> usize {
+pub(crate) fn rows(line: &str) -> usize {
     rows_of_cells(visible_width(line), hidden_input::columns_or_default())
 }
 
 /// The rows that `cells` cells take on a terminal `columns` wide, written on a line of their own:
 /// one at least, and a line that fills its last row exactly takes no more. The one row rule of
 /// every redraw (AUD-023-ARC014).
-pub fn rows_of_cells(cells: usize, columns: usize) -> usize {
+pub(crate) fn rows_of_cells(cells: usize, columns: usize) -> usize {
     cells.div_ceil(columns.max(1)).max(1)
 }
 
 /// One line of a summary table: a grey label and its value.
-pub fn fact(label: &str, value: impl Display) {
+pub(crate) fn fact(label: &str, value: impl Display) {
     fact_as(Kind::Fact, label, value);
 }
 
 /// A line of a summary table of `kind`: in a command shown one step at a time it waits for the
 /// summary at the end.
-pub fn fact_as(kind: Kind, label: &str, value: impl Display) {
+pub(crate) fn fact_as(kind: Kind, label: &str, value: impl Display) {
     // Wrapped under its column, so that a long value never passes the text width (AUD-023-UI007).
     let lines = fact_lines(label, &value.to_string());
     if !flow::keep(kind, &lines) {
@@ -122,10 +152,10 @@ pub fn fact_as(kind: Kind, label: &str, value: impl Display) {
 
 /// [`fact`] that is shown at the top of the next step too, so that it is read before the work it
 /// describes starts.
-pub fn fact_before_work(label: &str, value: impl Display) {
-    let line = fact_line(label, value);
-    if !flow::keep_next(Kind::Fact, std::slice::from_ref(&line)) {
-        eprintln!("{line}");
+pub(crate) fn fact_before_work(label: &str, value: impl Display) {
+    let lines = fact_lines(label, &value.to_string());
+    if !flow::keep_next(Kind::Fact, &lines) {
+        write_lines(&lines);
     }
 }
 
@@ -139,17 +169,8 @@ fn fact_line(label: &str, value: impl Display) -> String {
 /// The width a fact's label is padded to; its value starts one column after it.
 const FACT_LABEL_WIDTH: usize = 10;
 
-/// [`fact`] for a value that may be longer than a line: wrapped to the text width under its own
-/// column.
-pub fn fact_wrapped(label: &str, value: &str) {
-    let lines = fact_lines(label, value);
-    if !flow::keep(Kind::Fact, &lines) {
-        write_lines(&lines);
-    }
-}
-
-/// The lines of [`fact_wrapped`]: the first beside the label, the others under the value.
-pub fn fact_lines(label: &str, value: &str) -> Vec<String> {
+/// The lines of [`fact`]: the first beside the label, the others under the value.
+pub(crate) fn fact_lines(label: &str, value: &str) -> Vec<String> {
     // Two columns of indent, the label and the one space after it.
     let value_column = 2 + FACT_LABEL_WIDTH + 1;
     wrap(value, TEXT_WIDTH - value_column)
@@ -167,7 +188,7 @@ pub fn fact_lines(label: &str, value: &str) -> Vec<String> {
 
 /// Something that went right, after a green tick. It is shown at once, on the step it belongs to,
 /// and kept for the summary too.
-pub fn ok(text: impl Display) {
+pub(crate) fn ok(text: impl Display) {
     let lines = ok_lines(&text.to_string());
     write_lines(&lines);
     flow::keep_shown(Kind::Result, &lines);
@@ -190,21 +211,44 @@ fn ok_lines(text: &str) -> Vec<String> {
 }
 
 /// The green tick of something that went right or that a choice gives.
-pub const TICK: &str = "✓";
+pub(crate) const TICK: &str = "✓";
+
+/// The note beside openly shown master key fingerprints (DOC-05).
+pub(crate) const FINGERPRINT_NOTE: &str = "They do not reveal the phrase.";
+
+/// Keeps the note beside a fingerprint recorded in the summary's facts.
+pub(crate) fn fingerprint_fact() {
+    fact("Fingerprints", FINGERPRINT_NOTE);
+}
 
 /// A line of what a choice gives, indented under its name: a green tick, then `text`.
-pub fn gives(text: &str) {
-    eprintln!("  {} {text}", paint(GOOD, TICK));
+pub(crate) fn gives(text: &str) {
+    write_lines(&choice_lines(GOOD, TICK, text));
 }
 
 /// A line of what a choice costs, indented under its name: a yellow "!", then `text`.
-pub fn costs(text: &str) {
-    eprintln!("  {} {text}", paint(WARNING, "!"));
+pub(crate) fn costs(text: &str) {
+    write_lines(&choice_lines(WARNING, "!", text));
+}
+
+/// Choice facts keep their indent and colour only their mark, wrapping under the text.
+fn choice_lines(style: Style, mark: &str, text: &str) -> Vec<String> {
+    wrap(text, TEXT_WIDTH - 4)
+        .iter()
+        .enumerate()
+        .map(|(index, line)| {
+            if index == 0 {
+                format!("  {} {line}", paint(style, mark))
+            } else {
+                format!("    {line}")
+            }
+        })
+        .collect()
 }
 
 /// Advice that can be read and passed over, in grey, wrapped to the text width. Returns the lines
 /// it took, for a step that erases itself once answered (terminal::Step).
-pub fn hint(text: &str) -> usize {
+pub(crate) fn hint(text: &str) -> usize {
     let lines = wrap(text, TEXT_WIDTH);
     for line in &lines {
         eprintln!("{}", paint(MUTED, line));
@@ -215,7 +259,7 @@ pub fn hint(text: &str) -> usize {
 /// A grey line that links to the README section explaining what a screen only names; returns
 /// the lines it took on the screen. In a command shown one step at a time it goes with the
 /// summary line or warning before it.
-pub fn more(place: &str) -> usize {
+pub(crate) fn more(place: &str) -> usize {
     let line = more_line(place);
     if !flow::keep_link(line.clone()) {
         return 0;
@@ -225,14 +269,14 @@ pub fn more(place: &str) -> usize {
 }
 
 /// A link line, also used by choice lists that retain only its visible width for redraws.
-pub fn more_line(place: &str) -> String {
+pub(crate) fn more_line(place: &str) -> String {
     format!("  {}", paint(MUTED, format!("More: {place}")))
 }
 
 /// A warning: a yellow headline after "!", then `body` wrapped, every line marked with "!". In a
 /// command shown one step at a time it is kept for the summary and shown at the top of the next
 /// step, so that it is read before the person goes on.
-pub fn warn(headline: &str, body: &str) {
+pub(crate) fn warn(headline: &str, body: &str) {
     let lines = marked(WARNING, "!", headline, body);
     if !flow::keep_notice(&lines) {
         write_lines(&lines);
@@ -240,13 +284,13 @@ pub fn warn(headline: &str, body: &str) {
 }
 
 /// A warning about the screen it is on, such as the wait to clear it, never kept for a summary.
-pub fn warn_here(headline: &str, body: &str) {
+pub(crate) fn warn_here(headline: &str, body: &str) {
     write_lines(&marked(WARNING, "!", headline, body));
 }
 
 /// A warning shown at once, next to what it is about, and kept for the summary too, such as the
 /// status of a recovered phrase.
-pub fn warn_now(headline: &str, body: &str) {
+pub(crate) fn warn_now(headline: &str, body: &str) {
     let lines = marked(WARNING, "!", headline, body);
     write_lines(&lines);
     flow::keep_shown(Kind::Notice, &lines);
@@ -254,7 +298,7 @@ pub fn warn_now(headline: &str, body: &str) {
 
 /// A mistake in an answer that can be typed again: the message wrapped, every line after a yellow
 /// "!". Returns the lines it took, as `hint` does.
-pub fn retry(text: impl Display) -> usize {
+pub(crate) fn retry(text: impl Display) -> usize {
     let lines = retry_lines(text);
     write_lines(&lines);
     lines.iter().map(|line| rows(line)).sum()
@@ -262,7 +306,7 @@ pub fn retry(text: impl Display) -> usize {
 
 /// [`retry`] for an answer that is asked again on a step of its own: in a command shown one step
 /// at a time the message heads that step, and is kept nowhere.
-pub fn retry_next(text: impl Display) {
+pub(crate) fn retry_next(text: impl Display) {
     let lines = retry_lines(text);
     if !flow::show_at_next_step(&lines) {
         write_lines(&lines);
@@ -282,7 +326,7 @@ const ERROR_MARK: &str = "✗ Error:";
 /// An error message after a red "✗ Error:", wrapped to the text width, every further line indented
 /// under the first, so that a long message, such as a check at start that failed, reads well in
 /// an 80-column terminal.
-pub fn error_wrapped(text: &str) {
+pub(crate) fn error_wrapped(text: &str) {
     write_lines(&error_lines(text));
 }
 
@@ -290,7 +334,7 @@ pub fn error_wrapped(text: &str) {
 /// arguments it lists below that, a tip, the usage, a pointer to --help), shown as mhfe shows an
 /// error: the message, with the listed arguments joined into it, after one red "✗ Error:", then
 /// every other line of clap's in grey.
-pub fn usage_error(clap_text: &str) {
+pub(crate) fn usage_error(clap_text: &str) {
     write_lines(&usage_error_lines(clap_text));
 }
 
@@ -328,7 +372,7 @@ fn usage_error_lines(clap_text: &str) -> Vec<String> {
 
 /// [`error_lines`] for the tests of other modules, which check how a message is shown.
 #[cfg(test)]
-pub fn error_lines_for_test(text: &str) -> Vec<String> {
+pub(crate) fn error_lines_for_test(text: &str) -> Vec<String> {
     error_lines(text)
 }
 
@@ -350,7 +394,12 @@ fn error_lines(text: &str) -> Vec<String> {
 
 /// A row of a report table, such as one part of `mhfe self-test`: the grey label padded to
 /// `label_width`, then `value` in `style`, wrapped to the text width under its own column.
-pub fn report_row(label: &str, label_width: usize, style: Style, value: &str) -> Vec<String> {
+pub(crate) fn report_row(
+    label: &str,
+    label_width: usize,
+    style: Style,
+    value: &str,
+) -> Vec<String> {
     // Two columns of indent and two between label and value; the value keeps at least
     // REPORT_VALUE_MIN columns, also beside a label that is too long for the table.
     let value_column = 2 + label_width + 2;
@@ -376,7 +425,7 @@ const REPORT_VALUE_MIN: usize = 24;
 
 /// An error or a failed check: a red headline after "✗", then `body` wrapped, every line
 /// marked in red. It is shown at once and kept for the summary too.
-pub fn alarm(headline: &str, body: &str) {
+pub(crate) fn alarm(headline: &str, body: &str) {
     let lines = marked(BAD, "✗", headline, body);
     write_lines(&lines);
     flow::keep_shown(Kind::Notice, &lines);
@@ -396,6 +445,31 @@ fn marked(style: Style, mark: &str, headline: &str, body: &str) -> Vec<String> {
     lines
 }
 
+/// Whether a message could not be written to standard error.
+static MESSAGE_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Writes a message to standard error, with colours as the terminal takes them, as anstream's
+/// `eprint!` does, but without its panic on a failed write: a failure other than a closed pipe is
+/// remembered for the exit code ([`message_failed`], AUD-024-FUN009). A test writes where the test
+/// harness collects its output.
+pub(crate) fn write_message(arguments: std::fmt::Arguments<'_>) {
+    if cfg!(test) {
+        std::eprint!("{arguments}");
+        return;
+    }
+    let mut stream = anstream::stderr();
+    if let Err(error) = std::io::Write::write_fmt(&mut stream, arguments) {
+        if error.kind() != std::io::ErrorKind::BrokenPipe {
+            MESSAGE_FAILED.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Whether a message could not be written to standard error, as on a full disk.
+pub(crate) fn message_failed() -> bool {
+    MESSAGE_FAILED.load(Ordering::Relaxed)
+}
+
 fn write_lines(lines: &[String]) {
     for line in lines {
         eprintln!("{line}");
@@ -405,11 +479,13 @@ fn write_lines(lines: &[String]) {
 /// Longest line of running text, so that messages read well in an 80-column terminal, and of a
 /// list, which redraws itself by moving the cursor up line by line, as a line the terminal wrapped
 /// would upset.
-pub const TEXT_WIDTH: usize = 78;
+pub(crate) const TEXT_WIDTH: usize = 78;
 
 /// Breaks `text` into lines of at most `width` visible characters at spaces; a line break in
 /// `text` is kept. Colour codes do not count towards the width.
-pub fn wrap(text: &str, width: usize) -> Vec<String> {
+// Deliberate copy in the standalone Python launcher: shared ASCII/ANSI display cases
+// are compared by its parity tests; Python documents its Unicode width approximation.
+pub(crate) fn wrap(text: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     for paragraph in text.split('\n') {
         let mut line = String::new();
@@ -436,7 +512,9 @@ pub fn wrap(text: &str, width: usize) -> Vec<String> {
 }
 
 /// Characters a terminal shows for `text`, without colour codes such as "\u{1b}[1m".
-pub fn visible_width(text: &str) -> usize {
+// Deliberate copy in the standalone Python launcher: shared ASCII/ANSI display cases
+// are compared by its parity tests; Python documents its Unicode width approximation.
+pub(crate) fn visible_width(text: &str) -> usize {
     let mut width = 0;
     let mut in_code = false;
     for character in text.chars() {
@@ -452,7 +530,7 @@ pub fn visible_width(text: &str) -> usize {
 }
 
 /// Writes a question: its words in bold, a closing note such as "(hidden):" or "[1]:" in grey.
-pub fn prompt(text: &str) {
+pub(crate) fn prompt(text: &str) {
     let (question, note) = text.split_at(note_start(text));
     eprint!("{}{}", paint(STRONG, question), paint(MUTED, note));
 }
@@ -467,7 +545,7 @@ fn note_start(text: &str) -> usize {
 }
 
 /// Words per row when a phrase is shown for writing down.
-const WORDS_PER_ROW: usize = 4;
+pub(crate) const WORDS_PER_ROW: usize = 4;
 /// One cell: a number right-aligned in three places, ". ", and a word of up to eight letters,
 /// the longest in the English BIP39 list.
 const CELL_WIDTH: usize = 3 + 2 + 8;
@@ -477,8 +555,9 @@ const CELL_GAP: usize = 3;
 const INNER_WIDTH: usize = WORDS_PER_ROW * CELL_WIDTH + (WORDS_PER_ROW - 1) * CELL_GAP + 2;
 
 /// A phrase in a frame, numbered, four words to a row, the numbers grey and the words bold.
+///
 /// The lines are wiped when dropped, because the words may be secret.
-pub fn boxed_words(phrase: &str) -> Vec<Zeroizing<String>> {
+pub(crate) fn boxed_words(phrase: &str) -> Vec<Zeroizing<String>> {
     let border = "─".repeat(INNER_WIDTH);
     let mut lines = vec![Zeroizing::new(paint(MUTED, format!("┌{border}┐")))];
     let words: Vec<&str> = phrase.split(' ').collect();
@@ -510,10 +589,10 @@ pub fn boxed_words(phrase: &str) -> Vec<Zeroizing<String>> {
 }
 
 /// Cells of a progress bar: two for each of the 12 rounds of a stage.
-pub const BAR_CELLS: u32 = 24;
+pub(crate) const BAR_CELLS: u32 = 24;
 
 /// "████████░░░░" with `done` of `total` rounds filled.
-pub fn bar(done: u32, total: u32) -> String {
+pub(crate) fn bar(done: u32, total: u32) -> String {
     let filled = (done * BAR_CELLS / total.max(1)).min(BAR_CELLS) as usize;
     let empty = BAR_CELLS as usize - filled;
     format!(
@@ -528,7 +607,7 @@ pub fn bar(done: u32, total: u32) -> String {
 /// When one first column is longer than [`HELP_COLUMN_LIMIT`], such as a full example command,
 /// every row is stacked instead: the command on its own line, its explanation indented below it,
 /// and a blank line between rows.
-pub fn help_section(heading: &str, rows: &[(&str, &str)]) -> String {
+pub(crate) fn help_section(heading: &str, rows: &[(&str, &str)]) -> String {
     let mut text = format!("{}\n", paint(HEADING, heading));
     if rows.iter().any(|(left, _)| left.len() > HELP_COLUMN_LIMIT) {
         for (index, (left, right)) in rows.iter().enumerate() {
@@ -563,20 +642,20 @@ const HELP_STACKED_INDENT: usize = 6;
 
 /// Width of the help texts: they read well in an 80-column terminal and stay the same in a
 /// wider one.
-pub const HELP_WIDTH: usize = hidden_input::DEFAULT_COLUMNS;
+pub(crate) const HELP_WIDTH: usize = hidden_input::DEFAULT_COLUMNS;
 
 /// Indent at which clap prints the explanation of an option in `--help`.
 const OPTION_HELP_INDENT: usize = 10;
 
 /// The explanation of an option in `--help`: paragraphs broken into lines by hand, because clap
 /// is built without its optional wrapping feature. clap indents every line itself.
-pub fn option_help(paragraphs: &[&str]) -> String {
+pub(crate) fn option_help(paragraphs: &[&str]) -> String {
     help_paragraphs(paragraphs, HELP_WIDTH - OPTION_HELP_INDENT)
 }
 
 /// A count as a word, as in "Five dice words": the words up to twenty, digits above, so that a
 /// label follows its constant (AUD-023-ARC007). `capital` starts it with a capital.
-pub fn number_word(count: usize, capital: bool) -> String {
+pub(crate) fn number_word(count: usize, capital: bool) -> String {
     const WORDS: [&str; 21] = [
         "zero",
         "one",
@@ -608,11 +687,11 @@ pub fn number_word(count: usize, capital: bool) -> String {
 }
 
 /// The short help of every `--stdin` that reads the answers of a command.
-pub const STDIN_HELP: &str = "Read the answers from standard input";
+pub(crate) const STDIN_HELP: &str = "Read the answers from standard input";
 
 /// The long help of such a `--stdin`: [`STDIN_HELP`], with `condition` after it where the option
 /// needs another, then `paragraphs`.
-pub fn stdin_help(condition: Option<&str>, paragraphs: &[&str]) -> String {
+pub(crate) fn stdin_help(condition: Option<&str>, paragraphs: &[&str]) -> String {
     let first = match condition {
         Some(condition) => format!("{STDIN_HELP}; {condition}."),
         None => format!("{STDIN_HELP}."),
@@ -621,7 +700,7 @@ pub fn stdin_help(condition: Option<&str>, paragraphs: &[&str]) -> String {
 }
 
 /// What a command does, for the top of its `--help`: the one-line summary, then paragraphs.
-pub fn command_about(paragraphs: &[&str]) -> String {
+pub(crate) fn command_about(paragraphs: &[&str]) -> String {
     help_paragraphs(paragraphs, HELP_WIDTH)
 }
 
@@ -634,7 +713,7 @@ fn help_paragraphs(paragraphs: &[&str], width: usize) -> String {
 }
 
 /// A closing paragraph of a help text, in grey, wrapped to the help width.
-pub fn help_note(text: &str) -> String {
+pub(crate) fn help_note(text: &str) -> String {
     wrap(text, HELP_WIDTH)
         .iter()
         .map(|line| format!("{}\n", paint(MUTED, line)))
@@ -642,13 +721,13 @@ pub fn help_note(text: &str) -> String {
 }
 
 /// The end of a command's help: its examples, then a grey note.
-pub fn examples_with_note(rows: &[(&str, &str)], note: &str) -> String {
+pub(crate) fn examples_with_note(rows: &[(&str, &str)], note: &str) -> String {
     let examples = help_section("Examples:", rows);
     format!("{examples}\n{}", help_note(note))
 }
 
 /// The colours of `mhfe --help`, matching the rest of the tool.
-pub fn help_styles() -> clap::builder::Styles {
+pub(crate) fn help_styles() -> clap::builder::Styles {
     clap::builder::Styles::styled()
         .header(HEADING)
         .usage(HEADING)
@@ -659,16 +738,17 @@ pub fn help_styles() -> clap::builder::Styles {
         .error(BAD)
 }
 
-/// The text of a line without its colour codes, as the tests read what the tool wrote.
 /// A path as a message shows it, every control character escaped, such as `\u{1b}`, so that a
 /// terminal shows a folder or file name instead of carrying it out (AUD-015-SEC002): a name may
 /// hold any character but `/`.
-pub fn shown_path(path: &Path) -> String {
+pub(crate) fn shown_path(path: &Path) -> String {
     escaped(&path.to_string_lossy())
 }
 
 /// `text` with every control character escaped, as [`shown_path`] shows a path.
-pub fn escaped(text: &str) -> String {
+// Deliberate copy in the standalone Python launcher: shared ASCII/ANSI display cases
+// are compared by its parity tests; Python documents its Unicode width approximation.
+pub(crate) fn escaped(text: &str) -> String {
     text.chars()
         .map(|character| {
             if character.is_control() {
@@ -680,8 +760,9 @@ pub fn escaped(text: &str) -> String {
         .collect()
 }
 
+/// The text of a line without its colour codes, as the tests read what the tool wrote.
 #[cfg(test)]
-pub fn plain(line: &str) -> String {
+pub(crate) fn plain(line: &str) -> String {
     let mut text = String::new();
     let mut in_code = false;
     for character in line.chars() {
@@ -698,6 +779,17 @@ pub fn plain(line: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dumb_terminals_stay_plain_unless_colour_is_explicitly_forced() {
+        for forced in [None, Some("")] {
+            assert!(plain_dumb_terminal(Some("dumb"), None, forced));
+        }
+        assert!(!plain_dumb_terminal(Some("dumb"), None, Some("1")));
+        assert!(!plain_dumb_terminal(Some("dumb"), None, Some("0")));
+        assert!(plain_dumb_terminal(Some("dumb"), Some("1"), Some("1")));
+        assert!(!plain_dumb_terminal(Some("xterm"), None, None));
+    }
 
     #[test]
     fn every_line_of_the_frame_has_the_same_width() {

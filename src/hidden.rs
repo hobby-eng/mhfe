@@ -59,19 +59,18 @@ pub struct HiddenWallets {
 }
 
 impl HiddenWallets {
-    /// The error codes of [`Self::open`] after which a session stays open for another password: a
-    /// password used already, one whose wallet would pass a check, and a password refused before
-    /// any work. Any other error ends the session.
+    /// Refusals from [`Self::open`] and password construction in the binding that allow another
+    /// password in the same session. Any other error ends it. Codes come from the error variants.
     pub const KEEPS_SESSION_OPEN: [&'static str; 9] = [
-        "PASSWORD_ALREADY_USED",
-        "HIDDEN_WALLET_PASSES_CHECK",
-        "PASSWORDS_DIFFER",
-        "PASSWORD_REPAIR_NOT_OFFERED",
-        "EMPTY_PASSWORD",
-        "PASSWORD_TOO_LONG",
-        "INVALID_PASSWORD_UTF8",
-        "CONTROL_CHARACTER_IN_PASSWORD",
-        "UNASSIGNED_CHARACTER",
+        MhfeError::PasswordAlreadyUsed.code(),
+        MhfeError::HiddenWalletPassesCheck.code(),
+        MhfeError::PasswordsDiffer.code(),
+        MhfeError::PasswordRepairNotOffered.code(),
+        MhfeError::EmptyPassword.code(),
+        MhfeError::PasswordTooLong(0).code(),
+        MhfeError::InvalidPasswordUtf8.code(),
+        MhfeError::ControlCharacterInPassword.code(),
+        MhfeError::UnassignedCharacter.code(),
     ];
 
     /// A session on `container`, which must have 24 words, with the main wallet's passphrase,
@@ -79,6 +78,7 @@ impl HiddenWallets {
     pub fn new(container: &str, main_passphrase: &str) -> Result<Self, MhfeError> {
         let facts = ContainerFacts::read(container)?;
         facts.require_hidden_wallets()?;
+        crate::wallet::require_passphrase_size(main_passphrase)?;
         Ok(Self {
             container: facts.words().to_owned(),
             passphrase: LockedText::copy_of(main_passphrase),

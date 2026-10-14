@@ -9,8 +9,10 @@ use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
-use crate::rehearsal::{Confirmation, RecoveredForRekey};
-use crate::{Mhfe, MhfeError, Password, PhraseLength, WorkFactor, ROUNDS};
+use crate::rehearsal::{
+    refuse_unused_passphrase, Confirmation, PassphraseReferences, RecoveredForRekey,
+};
+use crate::{Mhfe, MhfeError, Password, PhraseLength, WordCount, WorkFactor, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -86,6 +88,11 @@ impl ConfirmedPhrase {
         &self,
         passphrase: &str,
     ) -> Result<ReplacementRehearsal, MhfeError> {
+        // Only the fingerprint of an owner's confirmation takes a passphrase; beside the built-in
+        // check or a confirming reference it would be dropped without a word (AUD-024-API017).
+        if !self.rehearsed_by_fingerprint() {
+            refuse_unused_passphrase(passphrase, PassphraseReferences::Rekey)?;
+        }
         if self.phrase.verified() {
             return Ok(ReplacementRehearsal::BuiltInCheck);
         }
@@ -143,10 +150,8 @@ impl Rekey {
         })
     }
 
-    /// States the length of the phrase, as the owner does after a recovery that found several
-    /// ([`MhfeError::AmbiguousLength`], [`Rekey::owner_lengths_after`]): refused, as by
-    /// [`Rekey::new`], when the container cannot have it.
-    pub fn set_length(&mut self, length: PhraseLength) -> Result<(), MhfeError> {
+    /// Sets only a length accepted by the owner follow-up below.
+    fn set_length(&mut self, length: PhraseLength) -> Result<(), MhfeError> {
         self.container.require_length(length)?;
         self.length = length;
         Ok(())
@@ -154,9 +159,13 @@ impl Rekey {
 
     /// How the recovered phrase must be confirmed: by its built-in check at a stated 12- to 21-word
     /// length, or by the wallet or its owner, also for a detected length.
+    ///
+    /// # Panics
+    ///
+    /// Never: the length was checked against the container when it was set.
     #[expect(
         clippy::expect_used,
-        reason = "Rekey::new and Rekey::set_length accept only a length the container can have"
+        reason = "Rekey::new and Rekey::owner_states accept only a length the container can have"
     )]
     pub fn confirmation_needed(&self) -> ConfirmationNeeded {
         self.container
@@ -170,7 +179,7 @@ impl Rekey {
     /// ends the rekey; otherwise those lengths, empty where only a receiving address or the
     /// fingerprint tells the readings apart, and a front end offers the owner only when there are
     /// some. After [`MhfeError::AmbiguousLength`] the owner states one of them
-    /// ([`Rekey::set_length`]); after [`MhfeError::LengthDiffers`] it is the stated length, at
+    /// ([`Rekey::owner_states`]); after [`MhfeError::LengthDiffers`] it is the stated length, at
     /// which the owner is shown the reading the built-in check found.
     pub fn owner_lengths_after(
         &self,
@@ -188,6 +197,70 @@ impl Rekey {
             }
             _ => None,
         })
+    }
+
+    /// The length the owner may state after a refused confirmation. With one allowed length,
+    /// `None` selects it; with several, the owner must state one. The choice is checked against
+    /// this refusal and recovery before the rekey's length changes.
+    pub fn owner_states(
+        &mut self,
+        recovered: &RecoveredForRekey,
+        refusal: &MhfeError,
+        words: Option<WordCount>,
+    ) -> Result<WordCount, MhfeError> {
+        let lengths = self
+            .owner_lengths_after(recovered, refusal)?
+            .ok_or_else(|| {
+                MhfeError::InvalidRequest(
+                    "this refusal does not allow another confirmation".to_owned(),
+                )
+            })?;
+        if lengths.is_empty() {
+            return Err(MhfeError::InvalidRequest(
+                "the owner cannot confirm this phrase: an address or the fingerprint does"
+                    .to_owned(),
+            ));
+        }
+        let selected = words.map(WordCount::get).or_else(|| match lengths[..] {
+            [only] => Some(only),
+            _ => None,
+        });
+        let Some(selected) = selected.filter(|words| lengths.contains(words)) else {
+            return Err(MhfeError::InvalidRequest(format!(
+                "the owner confirms a reading of {lengths:?} words here, not {}",
+                selected.unwrap_or(0)
+            )));
+        };
+        let words = WordCount::new(selected)?;
+        self.set_length(PhraseLength::Words(words))?;
+        Ok(words)
+    }
+
+    /// Another confirmation after `refusal`, on the same recovered state. Only the owner's
+    /// confirmation can state a length, which [`Rekey::owner_states`] validates. A wallet
+    /// reference always compares the readings under the original recovery rules.
+    pub fn confirm_again(
+        &mut self,
+        recovered: &RecoveredForRekey,
+        refusal: &MhfeError,
+        confirmation: Confirmation<'_>,
+        words: Option<WordCount>,
+        wallet_has_passphrase: Option<bool>,
+        progress: StageCallback<'_>,
+    ) -> Result<ConfirmedPhrase, MhfeError> {
+        if self.owner_lengths_after(recovered, refusal)?.is_none() {
+            return Err(MhfeError::InvalidRequest(
+                "this refusal does not allow another confirmation".to_owned(),
+            ));
+        }
+        if matches!(confirmation, Confirmation::Owner) {
+            self.owner_states(recovered, refusal, words)?;
+        } else if words.is_some() {
+            return Err(MhfeError::InvalidRequest(
+                "only the owner's confirmation states a length".to_owned(),
+            ));
+        }
+        self.confirm(recovered, confirmation, wallet_has_passphrase, progress)
     }
 
     /// Refuses a new password and settings that would give the old container again: with the same
@@ -309,6 +382,11 @@ impl Rekey {
     /// words if given. The settings are the engine's own, so that the refusal of the old password
     /// and settings judges what the encryption really uses. The old `Mhfe` should be dropped
     /// before `mhfe` is made, so that both work areas are never reserved at once.
+    ///
+    /// A phrase confirmed by [`Confirmation::Owner`] is sealed only after the owner's explicit
+    /// yes, [`ConfirmedPhrase::confirmed_by_owner`]; before it, [`ConfirmedPhrase::awaits_owner`],
+    /// the seal is refused with [`MhfeError::InvalidRequest`], not with the owner's no,
+    /// `NOT_CONFIRMED_BY_OWNER` (AUD-024-API012).
     pub fn seal<E: Argon2Engine>(
         &self,
         mhfe: &mut Mhfe<E>,
@@ -320,7 +398,11 @@ impl Rekey {
     ) -> Result<Sealed, MhfeError> {
         // The owner's comparison is a confirmation only once the owner has said yes.
         if confirmed.awaits_owner {
-            return Err(MhfeError::NotConfirmedByOwner);
+            return Err(MhfeError::InvalidRequest(
+                "the owner has not confirmed the recovered phrase yet; seal it only after their \
+                 explicit yes (ConfirmedPhrase::confirmed_by_owner)"
+                    .to_owned(),
+            ));
         }
         self.check_new(new_password, mhfe.work_factor())?;
         // A container of the old one's kind: 24 words, or the same length as the phrase.
@@ -440,10 +522,9 @@ mod tests {
     /// settings, which would give the old container again.
     #[test]
     fn the_engines_settings_are_the_ones_judged() {
-        const ABANDON: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
-                               abandon abandon abandon about";
+        const ABANDON: &str = crate::test_support::ABANDON_12;
         let none = &mut |_, _| Ok(());
-        let old = password("public test password");
+        let old = password(crate::test_support::TEST_PASSWORD);
         let old_work = WorkFactor::default();
         let container = reduced(old_work)
             .encrypt(ABANDON, &old, crate::Suite::TwentyFourWords, none)
@@ -451,7 +532,7 @@ mod tests {
         let rekey = Rekey::new(
             &container,
             words(12),
-            password("public test password"),
+            password(crate::test_support::TEST_PASSWORD),
             old_work,
         )
         .unwrap();
@@ -506,7 +587,7 @@ mod tests {
     #[test]
     fn the_wallet_passphrase_is_shown_or_stated() {
         let fingerprint = |passphrase| Reference::Fingerprint {
-            fingerprint: [0x73, 0xc5, 0xda, 0x0a],
+            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT,
             passphrase,
         };
         let without = fingerprint("");
@@ -557,15 +638,14 @@ mod tests {
         );
         assert!(matches!(refused, Err(MhfeError::InvalidRequest(_))));
         let same_length = Rekey::new(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-             abandon about",
+            crate::test_support::ABANDON_12,
             PhraseLength::Detect,
             password("old password"),
             WorkFactor::default(),
         )
         .unwrap();
         let without = Reference::Fingerprint {
-            fingerprint: [0x73, 0xc5, 0xda, 0x0a],
+            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT,
             passphrase: "",
         };
         let unstated = same_length.recover(
@@ -578,7 +658,7 @@ mod tests {
             matches!(unstated, Err(MhfeError::InvalidRequest(text)) if text.contains("say whether"))
         );
         let with = Reference::Fingerprint {
-            fingerprint: [0x73, 0xc5, 0xda, 0x0a],
+            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT,
             passphrase: "TREZOR",
         };
         let contradicted = same_length.recover(
@@ -607,7 +687,7 @@ mod tests {
     fn a_wallet_with_a_passphrase_keeps_it_after_a_rekey() {
         use crate::operation::KeepItem;
         let work = WorkFactor::default();
-        let old = password("public test password");
+        let old = password(crate::test_support::TEST_PASSWORD);
         let container = reduced(work)
             .encrypt(ABANDON_12, &old, crate::Suite::SameLength, &mut |_, _| {
                 Ok(())
@@ -655,7 +735,7 @@ mod tests {
     /// A 24-word container of `phrase` under a public password at the reduced cost, with the
     /// rekey of it for `length`, stated or detected.
     fn rekey_of(phrase: &str, length: PhraseLength) -> Rekey {
-        let old = password("public test password");
+        let old = password(crate::test_support::TEST_PASSWORD);
         let container = reduced(WorkFactor::default())
             .encrypt(phrase, &old, crate::Suite::TwentyFourWords, &mut |_, _| {
                 Ok(())
@@ -699,6 +779,14 @@ mod tests {
             by_reference.replacement_rehearsal(""),
             Ok(ReplacementRehearsal::ConfirmingReference)
         );
+        // A passphrase where neither rehearsal takes one is refused, not dropped
+        // (AUD-024-API017).
+        for confirmed in [&short, &by_reference] {
+            assert!(matches!(
+                confirmed.replacement_rehearsal("TREZOR"),
+                Err(MhfeError::InvalidRequest(_))
+            ));
+        }
 
         let without = recover(&full, Confirmation::Owner, false);
         assert!(!without.rehearsal_needs_passphrase());
@@ -856,7 +944,7 @@ mod tests {
                 &mut |_| Ok(()),
             )
         };
-        assert!(matches!(seal(&shown), Err(MhfeError::NotConfirmedByOwner)));
+        assert!(matches!(seal(&shown), Err(MhfeError::InvalidRequest(_))));
         let yes = shown.confirmed_by_owner();
         assert!(!yes.awaits_owner());
         assert!(seal(&yes).is_ok());
@@ -920,7 +1008,7 @@ mod tests {
     /// same-length container has its own length only.
     #[test]
     fn a_length_set_later_must_fit_the_container() {
-        let old = password("public test password");
+        let old = password(crate::test_support::TEST_PASSWORD);
         let container = reduced(WorkFactor::default())
             .encrypt(ABANDON_12, &old, crate::Suite::SameLength, &mut |_, _| {
                 Ok(())
@@ -960,17 +1048,27 @@ mod tests {
             rekey.owner_lengths_after(&state, &refusal).unwrap(),
             Some(vec![12, 21])
         );
+        for choice in [None, Some(crate::WordCount::new(18).unwrap())] {
+            assert!(matches!(
+                rekey.owner_states(&state, &refusal, choice),
+                Err(MhfeError::InvalidRequest(_))
+            ));
+        }
         // The owner states the 21-word reading and is shown it; then the 12-word one.
-        rekey.set_length(words(21)).unwrap();
+        rekey
+            .owner_states(&state, &refusal, Some(crate::WordCount::new(21).unwrap()))
+            .unwrap();
         let shown = confirm(&rekey, &state, Confirmation::Owner).unwrap();
         assert_eq!(shown.phrase().words(), 21);
-        rekey.set_length(words(12)).unwrap();
+        rekey
+            .owner_states(&state, &refusal, Some(crate::WordCount::new(12).unwrap()))
+            .unwrap();
         let shown = confirm(&rekey, &state, Confirmation::Owner).unwrap();
         assert_eq!(shown.phrase().phrase(), AMBIGUOUS);
 
         // A stated length the check contradicts: the owner compares the reading the check found
         // at the stated length, never beside 24 stated words.
-        let rekey = stated(ABANDON_12, 15);
+        let mut rekey = stated(ABANDON_12, 15);
         let state = rekey
             .recover_state(
                 &mut reduced(WorkFactor::default()),
@@ -992,6 +1090,47 @@ mod tests {
             rekey.owner_lengths_after(&state, &refusal).unwrap(),
             Some(vec![15])
         );
+        for other in [12, 18, 21, 24] {
+            let refusal_of_owner = rekey
+                .confirm_again(
+                    &state,
+                    &refusal,
+                    Confirmation::Owner,
+                    Some(crate::WordCount::new(other).unwrap()),
+                    Some(false),
+                    &mut |_, _, _| Ok(()),
+                )
+                .err()
+                .unwrap();
+            assert_eq!(
+                refusal_of_owner,
+                MhfeError::InvalidRequest(format!(
+                    "the owner confirms a reading of [15] words here, not {other}"
+                ))
+            );
+        }
+        let fingerprint = Reference::Fingerprint {
+            fingerprint: crate::wallet::master_fingerprint(ABANDON_12, "").unwrap(),
+            passphrase: "",
+        };
+        assert_eq!(
+            rekey
+                .confirm_again(
+                    &state,
+                    &refusal,
+                    Confirmation::Wallet(&fingerprint),
+                    Some(crate::WordCount::new(15).unwrap()),
+                    Some(false),
+                    &mut |_, _, _| Ok(())
+                )
+                .err()
+                .unwrap(),
+            MhfeError::InvalidRequest("only the owner's confirmation states a length".to_owned())
+        );
+        assert_eq!(
+            rekey.owner_states(&state, &refusal, None).unwrap().get(),
+            15
+        );
         let as_24 = stated(ABANDON_12, 24);
         let beside_24 = MhfeError::LengthDiffers {
             stated: 24,
@@ -1012,6 +1151,10 @@ mod tests {
             .unwrap();
         assert_eq!(mismatch, MhfeError::ReferenceMismatch);
         assert_eq!(rekey.owner_lengths_after(&state, &mismatch).unwrap(), None);
+        assert!(matches!(
+            rekey.owner_states(&state, &mismatch, None),
+            Err(MhfeError::InvalidRequest(_))
+        ));
         let right = fingerprint(crate::wallet::master_fingerprint(ABANDON_12, "").unwrap());
         let confirmed = confirm(&rekey, &state, Confirmation::Wallet(&right)).unwrap();
         assert_eq!(confirmed.phrase().phrase(), ABANDON_12);

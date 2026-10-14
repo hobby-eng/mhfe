@@ -150,8 +150,12 @@ Every secret-handling command runs [startup checks](#mhfe-self-test) before aski
 `mhfe <command> --help` lists the options. Keep a compatible program offline with the backup.
 The grey "More:" links lead to the sections below.
 
-At a terminal, typed and displayed secrets use private screens cleared when the step ends, keeping
-them out of ordinary scrollback; terminal logging or screen recording can still retain them.
+In interactive use, secrets shown on a terminal use private screens cleared when the step ends,
+keeping them out of ordinary scrollback; terminal logging or screen recording can still retain them.
+Without a private screen, input stays hidden. `password`, `encrypt`, `decrypt` and `rekey` refuse
+interactive display of their result before input or work; use a capable terminal or explicitly
+redirect the result. Script output with `--stdin` is an explicit export and has no private-screen
+protection.
 Enter or Escape clears a displayed result after you have copied it. The final summary contains no
 secret words. Commands that require such a screen say so below; [For scripts](#for-scripts)
 describes redirected input and output.
@@ -160,13 +164,16 @@ A grey word-list hint counts matches after one letter, lists them from two and r
 Tab completes the common prefix; Ctrl+W deletes the last word. Password hints use the EFF list,
 where Tab remains part of the password. Hints appear only where the input is already visible.
 Seed, container and repair words accept four-letter prefixes and any letter case; passwords have
-their own [exact-text rules](#mhfe-password).
+their own [exact-text rules](#mhfe-password). At a terminal shortened, differently cased or ambiguous-prefix words are shown
+in full before the next question. Check their spelling and press Enter. The original seed phrase
+is shown only on a private screen; if none is available, the tool says it was not shown.
 
 A shown seed phrase, a newly made container or a container repaired by `mhfe repair` has an
 eight-hex-digit master key fingerprint below it. It identifies the wallet with the passphrase
 in `mhfe new`, and otherwise the wallet without one. Under a container it identifies the
 container's own wallet, not your original wallet. For a wallet with a passphrase, compare its
-fingerprint through [`mhfe check`](#mhfe-check). This line is absent from script output and
+fingerprint through [`mhfe check`](#mhfe-check). They do not reveal the phrase.
+This line is absent from script output and
 container phrases repaired or found inside another command.
 
 ### `mhfe password`
@@ -182,8 +189,10 @@ count; control characters, line and paragraph separators and characters unassign
 apart from the container: it is shown once and not stored.
 
 `mhfe encrypt` warns below an estimated 50 bits. Its offline estimator recognises the EFF and BIP39
-lists, common passwords, years, repetitions, sequences, keyboard rows and substitutions, but may
-overrate unfamiliar words or names. Generated passwords have a known strength.
+lists, common passwords, years, repeated words and groups of characters, sequences, keyboard rows
+and substitutions, but may overrate unfamiliar words or names. Generated passwords have a known
+strength; a password with a check word counts its five drawn words, as the check word follows from
+them.
 
 The menu offers five words, five words with a check word, or sixteen characters; Enter generates
 another and Escape leaves. `encrypt`, `new` and `rekey` offer these same choices before setting a
@@ -239,19 +248,23 @@ Enter the container from your written copy.
 
 A receiving address compares the intended wallet, including its BIP39 passphrase; a master key
 fingerprint is quicker but only 32 bits. Do not keep either reference beside the container. MHFE
-asks for the coin, or takes `--coin`, and searches the first 100 receiving and change addresses of
+asks for the coin, or takes `--coin` with its exact lower-case identifier, and searches the first 100 receiving and change addresses of
 accounts 0 to 9 on its standard paths, or the one specified by `--path`.
 
 Supported addresses are Bitcoin, Ethereum and all EVM networks (including BNB Smart Chain, Polygon,
 Avalanche C-Chain, Arbitrum, Optimism and Base), XRP, Tron, transparent Zcash, Dogecoin, Bitcoin Cash,
 Litecoin, Ethereum Classic, Cosmos, Injective and Dash. Dash includes Core `X…` and Platform
-`dash1k…` (DIP17, `m/9'/5'/17'/account'/0'-1'/index`). Shielded Zcash (`zs1…`, `u1…`) and Dash
+`dash1k…` and `tdash1k…` (DIP17, `m/9'/5'/17'/account'/0'-1'/index`, coin type 1 on testnet).
+Token-aware Bitcoin Cash (`bitcoincash:z…`), Zcash TEX (`tex1…`, `textest1…`) and Dash Core
+testnet (`y…`) are unsupported; use the supported form of the same key on its supported network.
+Shielded Zcash (`zs1…`, `u1…`) and Dash
 Orchard (`dash1z…`) are unsupported: use the same wallet's transparent address.
 
 Other references in the menu are the [built-in check](#24-words-or-the-same-length) for a short
 original in a 24-word container, and the [phrase + passphrase check](#mhfe-new) for a new 24-word
-phrase drawn with it. The latter checks only the 24-word reading, requires a nonempty passphrase
-and does not identify the wallet.
+phrase drawn with it (`--wallet-check`). The latter checks only the 24-word reading, where no shorter reading passes
+its built-in check (that one then matches, as the length rules give it), requires a nonempty
+passphrase and does not identify the wallet.
 
 For the built-in check, "Detect automatically" (`--words auto`) finds a passing short length and
 asks whether the original wallet has a passphrase (`--passphrase-used yes|no` answers beforehand),
@@ -262,7 +275,9 @@ fingerprint confirms the same recovery without repeating the rounds. A detected 
 precedence over a stated one, and the summary reports it.
 
 A mismatch cannot identify which input is wrong: the password, settings, container, passphrase or
-reference. Script input and its default coin are in [For scripts](#for-scripts).
+reference. Passing own checks is useful evidence; when they pass beside a mismatched wallet
+reference, compare the reference, its coin or path and the BIP39 passphrase first.
+Script input and its default coin are in [For scripts](#for-scripts).
 
 ### `mhfe decrypt`
 
@@ -307,13 +322,17 @@ is a weak reference. It is unavailable without a private screen. The 16-bit phra
 check is reported when it passes, but never suffices to confirm a rekey. Re-encrypting under the old
 password would prove nothing either. Another confirmation attempt reuses the recovered state.
 
-`--confirm check|address|fingerprint|show` selects confirmation. MHFE asks explicitly, with no
+`--confirm check|address|fingerprint|show` selects confirmation. With `--confirm address`,
+`--coin` skips the coin question and `--path` compares only that path. Those fields also apply
+to an address confirmation after a length refusal; they are refused with another confirmation kind.
+MHFE asks explicitly, with no
 default, whether the wallet has a BIP39 passphrase, so the retention list includes it;
 `--passphrase-used yes|no` answers beforehand. For an address or fingerprint, it asks for the
 passphrase only when you said there is one and refuses an empty answer. Those reference inputs are
 collected before recovery. After owner-only confirmation of an unchecked phrase, MHFE asks for its
 wallet passphrase if used and gives the fingerprint for rehearsing the new container with
 `mhfe check --fingerprint`.
+Fingerprints do not reveal the phrase.
 
 New settings and a [new password](#mhfe-password) then produce a container as in
 [`mhfe encrypt`](#mhfe-encrypt). Rehearse its written copy, preferably on another day. **The old
@@ -520,11 +539,14 @@ and integration and startup/full checks are documented in that guide.
   passphrase of the original seed phrase on the next line, for the 16-bit check, read only when a
   24-word reading comes out; with `--repair`, the repair words follow the container on their own
   line, `?` marking unreadable words in either, and the repair is told on standard error. `check`
-  takes `--repair` the same way;
+  takes `--repair` the same way. Output is one line per reading:
+  `<words> <verified|unverified> <phrase>`, with checked readings first when several lengths
+  pass. All messages go to standard error;
 - `check`: the container and the password, then with `--address` or `--fingerprint` the reference
   and the BIP39 passphrase (an empty line if the wallet has none); with `--words N` nothing more,
   and with `--words auto` the BIP39 passphrase of the original seed phrase (an empty line if none).
-  `check --stdin` needs one of these three options, because it cannot ask which reference to use.
+  With `--wallet-check`, the nonempty BIP39 passphrase follows the password.
+  `check --stdin` needs one of these reference options, because it cannot ask which one to use.
   Nor can it ask for the coin: `--address` without `--coin` means a Bitcoin address, as in earlier
   versions. The summary then says "Bitcoin, as no --coin was given", and an address that is not
   Bitcoin's is refused with a message that names Bitcoin and `--coin`; give `--coin`, such as
@@ -566,18 +588,18 @@ MHFE's own prompts or the `systemd-ask-password` example above.
 
 The exit code tells what happened:
 
-| Code | Meaning                                                                                             |
-| ---- | --------------------------------------------------------------------------------------------------- |
-| 0    | Done; for `check`, the recovery matches                                                             |
-| 1    | Internal error, a failed self-test, or a failed check of a new container, which is not shown        |
-| 2    | Invalid input: phrase, container, password, setting, address or option                              |
-| 3    | Does not match: wrong password, PIM, memory level, container or selected length                     |
-| 4    | Not enough memory for the memory level                                                              |
-| 5    | Not verified (`check`): no address or fingerprint for a 24-word reading, or several lengths pass    |
-| 130  | Cancelled: Ctrl+C, Escape or q at a list, Ctrl+D at a secret's prompt, SIGTERM or a closed terminal |
+| Code | Meaning                                                                                                   |
+| ---- | --------------------------------------------------------------------------------------------------------- |
+| 0    | Done; for `check`, the recovery matches                                                                   |
+| 1    | Internal error, a failed self-test, or a failed check of a new container, which is not shown              |
+| 2    | Invalid input: phrase, container, password, setting, address or option                                    |
+| 3    | Does not match: wrong password, PIM, memory level, container or selected length                           |
+| 4    | Not enough memory for the memory level                                                                    |
+| 5    | Not verified (`check`): no address or fingerprint for a 24-word reading, or several lengths pass          |
+| 130  | Cancelled: Ctrl+C, Escape or q at a list, Ctrl+D at an empty prompt or list, SIGTERM or a closed terminal |
 
 A command is cancelled with Ctrl+C at any moment, with Escape, or q, at a list of answers, and with
-Ctrl+D on the empty prompt of a secret. Ctrl+C stops the tool at once, also in the middle of a
+Ctrl+D at an empty prompt or list. Ctrl+C stops the tool at once, also in the middle of a
 round; the operating system then discards its memory. SIGTERM and a closed terminal end it in the
 same way at any moment, and Ctrl+\ and Ctrl+Z do so while it works; at a question they are ordinary
 keys. Each first restores the terminal and leaves the private screen.
@@ -597,7 +619,9 @@ GitHub build attestations bind each archive to its source commit and workflow. C
 connected computer before carrying the archive offline:
 
 ```bash
-gh attestation verify mhfe-v0.6.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe
+gh attestation verify mhfe-v0.6.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe \
+  --signer-workflow hobby-eng/mhfe/.github/workflows/release.yml \
+  --source-ref refs/tags/v0.6.0 --deny-self-hosted-runners
 ```
 
 For v0.3.0 to v0.5.0, the
@@ -609,7 +633,7 @@ maps the attested old commits to the commits their tags now name.
 The [developer guide](https://github.com/hobby-eng/mhfe/blob/main/docs/DEVELOPMENT.md) covers builds,
 checks, independent vectors, generated tables and the vendored Argon2 engine. The
 [API guide](https://github.com/hobby-eng/mhfe/blob/main/docs/API.md) describes Rust and browser callers;
-[SECURITY.md](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md) records security boundaries.
+[SECURITY.md](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md) records trust boundaries.
 
 MHFE was written with extensive use of ChatGPT and Claude and went through numerous cross-checks and
 audits, also made with these tools ([audit records](https://github.com/hobby-eng/mhfe/blob/main/docs/audits/README.md)).
@@ -624,7 +648,10 @@ candidates for a 24-word container or 128 for 12 words. MHFE asks what you know:
 
 - **The container's own wallet:** give its fingerprint or a receiving/change address, and any
   BIP39 passphrase used with that container phrase. Candidates are compared directly on every CPU
-  core without MHFE recovery: seconds for one word, up to minutes for two. A two-word address search
+  core without MHFE recovery: seconds for one word, up to minutes for two. Every candidate is
+  compared; a fingerprint is a 32-bit check, so another of the 262,144 candidates of two missing
+  words of 12 can share it, about once in 16,384 searches, and MHFE then says so and takes none:
+  search again with an address, which tells them apart. A two-word address search
   covers the first 20 receiving and 20 change addresses of account 0; the next prompt, or
   `--scan-gap N`, extends that to 100, 500 or another count.
 - **Your original wallet:** give its address or fingerprint, and its passphrase if used. Every
@@ -637,7 +664,10 @@ candidates for a 24-word container or 128 for 12 words. MHFE asks what you know:
   An unchecked 24-word original or same-length container cannot identify one this way.
 
 The reference field accepts eight hex digits as a fingerprint and otherwise an address, whose coin
-is then asked. MHFE names whose passphrase it needs and asks for it only if you say it is used.
+is asked or supplied with `--coin`. `--path` restricts the address comparison to that one path,
+for either the container's own wallet or the original wallet. Coin and path fields are refused
+with a fingerprint reference.
+MHFE names whose passphrase it needs and asks for it only if you say it is used.
 For two missing words only the container's own wallet is available; same-length containers need
 that reference, or the original wallet for a one-word search. A refusal or empty result returns to
 the reference choices without retyping the container. Every found word is shown before use.

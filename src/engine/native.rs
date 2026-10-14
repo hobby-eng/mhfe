@@ -38,6 +38,19 @@ pub(super) fn processor_has_ssse3() -> bool {
     false
 }
 
+/// The compiled core selected by the same flag passed to the reference implementation.
+pub(super) fn core_name(ssse3: bool) -> &'static str {
+    if cfg!(target_arch = "x86_64") {
+        if ssse3 {
+            "opt.c with SSSE3"
+        } else {
+            "opt.c with SSE2"
+        }
+    } else {
+        "ref.c"
+    }
+}
+
 /// Checks, without allocating anything, that this build and computer can run `work`: the memory
 /// level is supported and the memory is free.
 /// A program calls it before asking for secrets and reserves the memory after the password is
@@ -58,6 +71,12 @@ pub fn highest_available_level() -> Option<u32> {
 }
 
 impl NativeEngine {
+    /// The reference C core this instance uses and its parallel thread count. Measurement
+    /// records describe the allocated engine, including its cached processor selection.
+    pub fn description(&self) -> String {
+        format!("reference C, {}, {LANES} threads", core_name(self.ssse3))
+    }
+
     /// Checks that the computer can run `work` and reserves its memory once; every round of the
     /// operation then reuses it.
     pub fn new(work: WorkFactor) -> Result<Self, MhfeError> {
@@ -161,21 +180,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn derives_the_same_key_as_the_c_reference_at_a_small_cost() {
-        let cost = Argon2Cost {
+    fn the_description_names_the_core_and_threads_of_the_derivation_inputs() {
+        let engine = NativeEngine::reduced_for_tests(Argon2Cost {
             memory_kib: 1024,
             passes: 1,
+        })
+        .unwrap();
+        let inputs = mhfe_inputs(b"public", b"0123456789abcdef", engine.cost, engine.ssse3);
+        assert_eq!(inputs.ssse3, processor_has_ssse3());
+        let core = if cfg!(target_arch = "x86_64") {
+            if inputs.ssse3 {
+                "opt.c with SSSE3"
+            } else {
+                "opt.c with SSE2"
+            }
+        } else {
+            "ref.c"
         };
-        let mut engine = NativeEngine::reduced_for_tests(cost).unwrap();
-        let mut key = [0u8; KEY_BYTES];
-        engine
-            .derive(b"public test password", b"0123456789abcdef", &mut key)
-            .unwrap();
-        // Same inputs as scripts/verify-argon2-wasm.mjs, tag computed with OpenSSL.
+        // Deliberate copy: the independent assertion binds the label to actual C-call inputs.
         assert_eq!(
-            hex::encode(key),
-            "e0e8eba33f1404a83c911a324d9b49db83dae755f2bdfb4b63043ca5b7125df2"
+            engine.description(),
+            format!("reference C, {core}, {} threads", inputs.threads)
         );
+    }
+
+    #[test]
+    fn derives_the_same_key_as_the_c_reference_at_a_small_cost() {
+        use crate::engine::known_answers::{PASSWORD, SALT, SMALL};
+        let mut engine = NativeEngine::reduced_for_tests(SMALL.cost).unwrap();
+        let mut key = [0u8; KEY_BYTES];
+        engine.derive(PASSWORD, SALT, &mut key).unwrap();
+        assert_eq!(key, SMALL.tag);
     }
 
     #[test]
@@ -203,7 +238,11 @@ mod tests {
         let mut engine = NativeEngine::new(WorkFactor::default()).unwrap();
         let mut key = [0u8; KEY_BYTES];
         engine
-            .derive(b"public test password", b"0123456789abcdef", &mut key)
+            .derive(
+                crate::test_support::TEST_PASSWORD.as_bytes(),
+                b"0123456789abcdef",
+                &mut key,
+            )
             .unwrap();
         assert_eq!(
             hex::encode(key),

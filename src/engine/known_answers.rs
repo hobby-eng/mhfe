@@ -21,14 +21,14 @@ use crate::MhfeError;
 
 /// The public password and salt of the known answers below, the inputs that
 /// scripts/verify-argon2-wasm.mjs gives both Emscripten builds too.
-const PASSWORD: &[u8] = b"public test password";
-const SALT: &[u8; SALT_BYTES] = b"0123456789abcdef";
+pub(super) const PASSWORD: &[u8] = crate::vectors::inputs::TEST_PASSWORD.as_bytes();
+pub(super) const SALT: &[u8; SALT_BYTES] = b"0123456789abcdef";
 
 /// An Argon2id tag of [`PASSWORD`] and [`SALT`] with MHFE's four lanes and 32 bytes.
 #[derive(Clone, Copy)]
-struct KnownTag {
-    cost: Argon2Cost,
-    tag: [u8; KEY_BYTES],
+pub(super) struct KnownTag {
+    pub(super) cost: Argon2Cost,
+    pub(super) tag: [u8; KEY_BYTES],
 }
 
 impl KnownTag {
@@ -38,8 +38,8 @@ impl KnownTag {
 }
 
 /// The tags were computed with OpenSSL through Python cryptography 46.0.5, an implementation
-/// independent of the reference C code (scripts/verify-argon2-wasm.mjs, lines 19 to 33).
-const SMALL: KnownTag = KnownTag {
+/// independent of the reference C code (`expectedTags` in scripts/verify-argon2-wasm.mjs).
+pub(super) const SMALL: KnownTag = KnownTag {
     cost: Argon2Cost {
         memory_kib: 1024,
         passes: 1,
@@ -154,13 +154,13 @@ pub(in crate::engine) mod rfc_9106 {
 #[cfg(not(target_arch = "wasm32"))]
 fn cores() -> Vec<(bool, &'static str)> {
     if cfg!(target_arch = "x86_64") {
-        let mut cores = vec![(false, "the SSE2 core")];
+        let mut cores = vec![(false, super::native::core_name(false))];
         if super::native::processor_has_ssse3() {
-            cores.push((true, "the SSSE3 core"));
+            cores.push((true, super::native::core_name(true)));
         }
         cores
     } else {
-        vec![(false, "the Argon2 core")]
+        vec![(false, super::native::core_name(false))]
     }
 }
 
@@ -259,7 +259,7 @@ impl Argon2Answers for NativeArgon2 {
             Err(_) => {
                 return ComponentOutcome::NotAvailable(format!(
                     "the computer could not reserve {} MiB",
-                    largest >> 20
+                    self.sizes[1].mebibytes()
                 ))
             }
         };
@@ -434,13 +434,22 @@ mod tests {
             tag: &mut [u8],
         ) -> Result<(), MhfeError> {
             let mut changed = Argon2Inputs { ..*inputs };
-            changed.lanes = 2;
-            changed.threads = 2;
+            // Only the MHFE-shaped call is damaged; the RFC vector must still pass.
+            if inputs.secret.is_empty() {
+                changed.lanes = 2;
+                changed.threads = 2;
+            }
             ffi::argon2id(&changed, work_area, tag)
         }
         let mut check = NativeArgon2Check::default();
         check.0.call = two_lanes;
-        assert!(check.run(Tier::Startup).is_failure());
+        assert_eq!(
+            check.run(Tier::Startup),
+            ComponentOutcome::Failed(format!(
+                "{} gives another tag for the 1 MiB vector",
+                cores()[0].1
+            ))
+        );
     }
 
     #[test]

@@ -218,7 +218,14 @@ def main():
         "findings": findings,
         "observations": [],
         "informationalObservations": informational,
-        "refutedCandidates": anonymize(workflow["rejected"]),
+        "refutedCandidates": anonymize([
+            item for item in workflow["rejected"]
+            if all(v.get("adjustedSeverity") in (None, "info") for v in item.get("verdicts", []))
+        ]),
+        "unresolvedCandidates": anonymize([
+            item for item in workflow["rejected"]
+            if any(v.get("adjustedSeverity") not in (None, "info") for v in item.get("verdicts", []))
+        ]),
         "completenessGaps": anonymize(workflow["gaps"]),
         "remediation": [
             {
@@ -358,9 +365,20 @@ def main():
             + f": {cell(summary[:600])}{'…' if len(summary) > 600 else ''}"
         )
     lines += ["", "### Refuted candidates", ""]
-    for item in workflow["rejected"]:
-        reasons = "; ".join(cell(v.get("reasoning", ""))[:400] for v in item.get("verdicts", []))
+    for item in report["refutedCandidates"]:
+        reasons = "; ".join(
+            f"real={v.get('real')}, reproduced={v.get('reproduced')}, "
+            f"adjustedSeverity={v.get('adjustedSeverity')}, releaseBlocking={v.get('releaseBlocking')}; "
+            + cell(v.get("reasoning", ""))[:400]
+            + ("… (excerpt; full reason in JSON)" if len(cell(v.get("reasoning", ""))) > 400 else "")
+            for v in item.get("verdicts", [])
+        )
         lines.append(f"- {cell(item['title'])} ({item['severity']}, {cell(item['scope'])}): {reasons}")
+    lines += ["", "### Candidates requiring disposition", ""]
+    for item in report["unresolvedCandidates"]:
+        lines.append(f"- {cell(item['title'])}: the verdict keeps severity above info; "
+                     "assign a finding or an explicit disposition before publication. "
+                     "Full verdicts are retained in unresolvedCandidates in the JSON.")
     lines += ["", "### Completeness gaps reviewed again", ""]
     for gap in workflow["gaps"]:
         lines.append(f"- **{cell(gap['area'])}** ({cell(gap['checks'])}): {cell(gap['why'])}")

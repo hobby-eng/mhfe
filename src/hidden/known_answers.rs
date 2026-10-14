@@ -14,9 +14,7 @@ use crate::Password;
 /// The phrase the zero-24 container opens with its own password: 32 zero bytes, "abandon" 23 times
 /// and "art". Recomputed independently: its state matches no short length's verifier, and its
 /// wallet-check digest with an empty passphrase begins 49f67bdf, which fails, so it is not refused.
-const ZERO_24_WALLET: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
-                              abandon abandon abandon abandon abandon abandon abandon abandon \
-                              abandon abandon abandon abandon abandon abandon abandon art";
+use crate::vectors::inputs::ZERO_24 as ZERO_24_WALLET;
 
 /// The `hidden-wallets` check.
 pub(crate) struct HiddenWalletsCheck {

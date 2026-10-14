@@ -30,6 +30,7 @@
 
 use bip39::{Language, Mnemonic};
 
+use crate::memory::LockedText;
 use crate::phrase::{self, WORD_COUNTS};
 use crate::MhfeError;
 
@@ -95,14 +96,17 @@ impl Field {
         self.exp[usize::from(self.log[usize::from(a)]) + usize::from(self.log[usize::from(b)])]
     }
 
-    fn div(&self, a: u16, b: u16) -> u16 {
-        assert!(b != 0, "division by zero in GF(2^11)");
+    /// `a / b`; `None` for a division by zero, which the callers rule out (AUD-024-API016).
+    fn div(&self, a: u16, b: u16) -> Option<u16> {
+        if b == 0 {
+            return None;
+        }
         if a == 0 {
-            return 0;
+            return Some(0);
         }
         let power =
             usize::from(self.log[usize::from(a)]) + ORDER - usize::from(self.log[usize::from(b)]);
-        self.exp[power]
+        Some(self.exp[power])
     }
 
     /// alpha^power.
@@ -197,13 +201,13 @@ impl Field {
             .map(|(i, &coefficient)| if i % 2 == 1 { coefficient } else { 0 })
             .collect();
         for (&position, &locator) in positions.iter().zip(&locators) {
-            let inverse = self.div(1, locator);
+            let inverse = self.div(1, locator)?;
             let denominator = low_first(&derivative, inverse);
             if denominator == 0 {
                 return None;
             }
             // Forney with the first root alpha^1: e = Omega(X^-1) / Gamma'(X^-1).
-            corrected[position] ^= self.div(low_first(&omega, inverse), denominator);
+            corrected[position] ^= self.div(low_first(&omega, inverse), denominator)?;
         }
         self.syndromes(&corrected, k)
             .iter()
@@ -274,6 +278,10 @@ pub fn require_count(count: usize) -> Result<(), MhfeError> {
 
 /// The repair words of `container`, a valid container of 12 to 24 words: `count` English BIP39
 /// words, one space apart.
+///
+/// # Panics
+///
+/// Never: every word of a parsed container is in the list.
 #[expect(
     clippy::expect_used,
     reason = "every word of a parsed container is in the BIP39 list"
@@ -391,8 +399,23 @@ impl ContainerReading {
     }
 }
 
+/// The refusal of a container phrase of `count` words, `?` included, which no container has; the
+/// repair and the search for missing words give it alike (AUD-024-API013).
+pub(crate) fn wrong_container_length(count: usize) -> MhfeError {
+    MhfeError::InvalidContainer(format!(
+        "it has {count} words, but a container has {}; {}",
+        phrase::word_counts_text(),
+        unreadable_hint()
+    ))
+}
+
 /// What stands for a word that cannot be read, on the container phrase and on the card.
 pub const UNREADABLE: &str = "?";
+
+/// The shared explanation of an unreadable word in a refusal.
+fn unreadable_hint() -> String {
+    format!("type {UNREADABLE} for a word that cannot be read")
+}
 
 /// The name of the profile, which the card carries; a reader of a card skips it.
 pub const PROFILE: &str = "MHFE-REPAIR-1";
@@ -408,19 +431,16 @@ pub const PROFILE: &str = "MHFE-REPAIR-1";
 pub fn repair(written: &str, card: &str) -> Result<Repaired, MhfeError> {
     let (container_words, container_unreadable) = phrase::word_numbers(written);
     if !WORD_COUNTS.contains(&container_words.len()) {
-        return Err(MhfeError::InvalidContainer(format!(
-            "it has {} words, but a container has {}; type ? for a word that cannot be read",
-            container_words.len(),
-            phrase::word_counts_text()
-        )));
+        return Err(wrong_container_length(container_words.len()));
     }
-    let (card_words, card_unreadable) = phrase::word_numbers(&card_text(card));
+    let typed_card = CardWords::read(card);
+    let (card_words, card_unreadable) = phrase::word_numbers(typed_card.words());
     let count = card_words.len();
     require_count(count).map_err(|refused| match refused {
         // A card being typed: say how to mark a word that cannot be read.
-        MhfeError::InvalidRepairWords(reason) => MhfeError::InvalidRepairWords(format!(
-            "{reason}; type ? for a word that cannot be read"
-        )),
+        MhfeError::InvalidRepairWords(reason) => {
+            MhfeError::InvalidRepairWords(format!("{reason}; {}", unreadable_hint()))
+        }
         other => other,
     })?;
     let received: Vec<u16> = container_words.iter().chain(&card_words).copied().collect();
@@ -473,11 +493,36 @@ pub fn repair(written: &str, card: &str) -> Result<Repaired, MhfeError> {
     })
 }
 
+/// The words as written on a repair card, without its profile and numbered labels. Unknown words
+/// stay as typed for the repair operation to validate. The text is locked and wiped by its owner.
+pub struct CardWords {
+    text: LockedText,
+}
+
+impl CardWords {
+    /// Reads only the words from a printed or plain card, retaining the original word spelling.
+    pub fn read(written: &str) -> Self {
+        Self {
+            text: card_text(written),
+        }
+    }
+
+    /// The words as typed, without presentation labels.
+    pub fn words(&self) -> &str {
+        &self.text
+    }
+
+    /// The number of word tokens, before the repair operation checks the card's supported size.
+    pub fn count(&self) -> usize {
+        self.text.split_whitespace().count()
+    }
+}
+
 /// The words of a card as written: the profile's name and the numbers such as "1/4" before each
 /// word are left out, so that a card can be typed as it is.
-pub fn card_text(card: &str) -> String {
-    card.split_whitespace()
-        .filter(|token| {
+fn card_text(card: &str) -> LockedText {
+    LockedText::build::<std::convert::Infallible>(card.len(), |text| {
+        for token in card.split_whitespace().filter(|token| {
             let numbered = token.split_once('/').is_some_and(|(left, right)| {
                 !left.is_empty()
                     && !right.is_empty()
@@ -487,9 +532,15 @@ pub fn card_text(card: &str) -> String {
                         .all(|c| c.is_ascii_digit())
             });
             !numbered && !token.eq_ignore_ascii_case(PROFILE)
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+        }) {
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            text.push_str(token);
+        }
+        Ok(())
+    })
+    .unwrap_or_else(|never| match never {})
 }
 
 #[cfg(test)]
@@ -581,121 +632,24 @@ mod tests {
     /// description without this code, for public containers of 24, 12 and 21 words.
     #[test]
     fn repair_words_match_the_independent_vectors() {
-        let cases = [
-            (
-                fixture_container(include_str!(
-                    "../tests/fixtures/suite3-vectors/zero-12.json"
-                )),
-                [
-                    "labor extra",
-                    "shaft pupil patient jewel",
-                    "credit buzz orbit tired sail coffee",
-                    "appear include vicious move uphold tiger song satoshi",
-                ],
-            ),
-            (
-                fixture_container(include_str!(
-                    "../tests/fixtures/suite4-vectors/same-length-nonzero-12.json"
-                )),
-                [
-                    "motor renew",
-                    "pitch lonely onion erode",
-                    "toe rather ribbon run enforce notice",
-                    "tilt object execute change cube domain vehicle hour",
-                ],
-            ),
-            (
-                fixture_container(include_str!(
-                    "../tests/fixtures/suite4-vectors/same-length-nonzero-21.json"
-                )),
-                [
-                    "glove blossom",
-                    "share mask pave crystal",
-                    "slow issue fame census cabbage clarify",
-                    "potato enemy similar myself check gesture fortune shiver",
-                ],
-            ),
-            (
-                format!("{} art", ["abandon"; 23].join(" ")),
-                [
-                    "clever gravity",
-                    "letter wealth borrow cable",
-                    "clap try lift setup innocent gather",
-                    "mirror coffee census note proof zebra begin barrel",
-                ],
-            ),
-        ];
-        for (container, cards) in cases {
-            for (count, card) in REPAIR_WORD_COUNTS.into_iter().zip(cards) {
+        for row in known_answers::CARDS {
+            for (count, card) in REPAIR_WORD_COUNTS.into_iter().zip(row.cards) {
                 assert_eq!(
-                    repair_words(&container, count).unwrap(),
+                    repair_words(row.container, count).unwrap(),
                     card,
                     "{count} words"
                 );
             }
         }
-    }
-
-    /// The independent implementation's repair cases on zero-12 and same-length-nonzero-21.
-    #[test]
-    fn repairs_match_the_independent_vectors() {
-        let zero_12 = zero_12_container();
-        let cases: [(&str, &str, Vec<usize>, Vec<usize>); 6] = [
-            (
-                "donate stove ? picnic iron rescue trick shrimp roof rib home cigar bag pledge \
-                 also nerve ? famous provide heart ahead chunk caution peace",
-                "shaft pupil patient jewel",
-                vec![3, 17],
-                vec![],
-            ),
-            (
-                "donate stove tower picnic zoo rescue trick shrimp roof rib home cigar bag pledge \
-                 also nerve cycle famous provide abandon ahead chunk caution peace",
-                "shaft pupil patient jewel",
-                vec![5, 20],
-                vec![],
-            ),
-            (
-                "? stove tower picnic iron rescue trick shrimp legal rib home cigar bag pledge \
-                 also nerve cycle famous provide heart ahead chunk caution ?",
-                "shaft pupil patient jewel",
-                vec![1, 9, 24],
-                vec![],
-            ),
-            (
-                "? stove tower picnic iron rescue trick shrimp roof rib home cigar bag pledge also \
-                 nerve cycle famous provide heart ahead chunk caution peace",
-                "shaft ? patient jewel",
-                vec![1],
-                vec![2],
-            ),
-            (&zero_12, "zoo extra", vec![], vec![1]),
-            (
-                "donate abandon tower picnic iron rescue trick shrimp roof rib zoo cigar bag \
-                 pledge also nerve cycle famous provide heart ahead chunk legal peace",
-                "appear include vicious move uphold abandon song satoshi",
-                vec![2, 11, 23],
-                vec![6],
-            ),
+        // The reference inputs are also bound to the published fixture bytes.
+        let fixtures = [
+            include_str!("../tests/fixtures/suite3-vectors/zero-12.json"),
+            include_str!("../tests/fixtures/suite4-vectors/same-length-nonzero-12.json"),
+            include_str!("../tests/fixtures/suite4-vectors/same-length-nonzero-21.json"),
         ];
-        for (written, card, container_words, card_words) in cases {
-            let repaired = repair(written, card).unwrap();
-            assert_eq!(repaired.container, zero_12);
-            assert_eq!(repaired.container_words, container_words, "{written}");
-            assert_eq!(repaired.card_words, card_words, "{card}");
+        for (row, json) in known_answers::CARDS.iter().zip(fixtures) {
+            assert_eq!(row.container, fixture_container(json));
         }
-        let nonzero_21 = fixture_container(include_str!(
-            "../tests/fixtures/suite4-vectors/same-length-nonzero-21.json"
-        ));
-        let repaired = repair(
-            "seat govern run ? flag fragile horse night simple luggage vacuum warfare ? permit gym \
-             upset average blade pen blue zoo",
-            "slow issue fame census ? clarify",
-        )
-        .unwrap();
-        assert_eq!(repaired.container, nonzero_21);
-        assert_eq!(repaired.container_words, vec![4, 13, 21]);
-        assert_eq!(repaired.card_words, vec![5]);
     }
 
     /// Each repaired word is reported with what was read there (the specification asks that no
@@ -837,7 +791,7 @@ mod tests {
                 ContainerReading::NotAContainer
             );
             assert!(ContainerReading::read(&unmarked).can_be_repaired());
-            let repaired = repair(&unmarked, "shaft pupil patient jewel").unwrap();
+            let repaired = repair(&unmarked, known_answers::ZERO_12_CARD.1).unwrap();
             assert_eq!(repaired.container, container);
         }
         let shorter: Vec<&str> = container.split(' ').take(23).collect();

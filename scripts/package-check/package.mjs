@@ -140,7 +140,7 @@ export const drawWithoutWishes = (
     passphrase,
     repeat,
     noBytes(),
-    new Uint32Array(),
+    new Float64Array(),
     "",
     walletCheck,
     random,

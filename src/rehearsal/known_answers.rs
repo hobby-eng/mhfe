@@ -7,17 +7,17 @@
 //! outcome on the published containers that carry it ([`LENGTH_CASES`]).
 
 use crate::mhfe::known_answers::{published, published_table};
-use crate::rehearsal::{CheckEvidence, CheckOutcome, Reference};
+use crate::rehearsal::{CheckEvidence, CheckOutcome, PassedCheck, Reference};
 use crate::self_check::{
     damaged, expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
 use crate::wallet::{Address, Coin, DerivationPath, SearchLimits};
 use crate::WordCount;
 
+use crate::vectors::inputs::WRONG_FINGERPRINT;
 /// The master key fingerprint of zero-12's phrase without a passphrase, derived from the root key
 /// that BIP-0084's test vector publishes, and shown by many wallets.
-const FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
-const WRONG_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0b];
+use crate::vectors::inputs::ZERO_12_FINGERPRINT as FINGERPRINT;
 /// BIP-0084's first receiving address of the same phrase, at its path.
 const ADDRESS: (&str, &str) = (
     "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
@@ -55,12 +55,16 @@ impl OwnReference {
 /// A check of a published container against one of the phrase's own checks, and what the length
 /// rules of recovery must give: the outcome, the length of the one verified reading and every
 /// length whose built-in check passes.
+#[derive(Clone)]
 struct LengthCase {
     vector: &'static str,
     reference: OwnReference,
     outcome: CheckOutcome,
     built_in_check: Option<usize>,
     matching_lengths: &'static [usize],
+    wallet_check: Option<bool>,
+    passed: fn() -> Vec<PassedCheck>,
+    asks_length: bool,
 }
 
 const MATCHES: CheckOutcome = CheckOutcome::Matches { path: None };
@@ -76,6 +80,9 @@ const LENGTH_CASES: &[LengthCase] = &[
         outcome: MATCHES,
         built_in_check: Some(12),
         matching_lengths: &[12],
+        wallet_check: None,
+        passed: || vec![PassedCheck::BuiltInCheck(12)],
+        asks_length: false,
     },
     LengthCase {
         vector: "zero-24",
@@ -83,6 +90,9 @@ const LENGTH_CASES: &[LengthCase] = &[
         outcome: CheckOutcome::DoesNotMatch,
         built_in_check: None,
         matching_lengths: &[],
+        wallet_check: None,
+        passed: || vec![],
+        asks_length: false,
     },
     LengthCase {
         vector: "zero-24",
@@ -90,6 +100,9 @@ const LENGTH_CASES: &[LengthCase] = &[
         outcome: CheckOutcome::NotVerified,
         built_in_check: None,
         matching_lengths: &[],
+        wallet_check: Some(false),
+        passed: || vec![],
+        asks_length: true,
     },
     // 24 zero bytes fail the 16-bit check with "TREZOR": the first counter whose phrase passes
     // with it is 76,562 (src/wallet_check/known_answers.rs).
@@ -99,6 +112,9 @@ const LENGTH_CASES: &[LengthCase] = &[
         outcome: CheckOutcome::DoesNotMatch,
         built_in_check: None,
         matching_lengths: &[],
+        wallet_check: Some(false),
+        passed: || vec![],
+        asks_length: false,
     },
     LengthCase {
         vector: "ambiguous-12-21",
@@ -106,6 +122,9 @@ const LENGTH_CASES: &[LengthCase] = &[
         outcome: CheckOutcome::NotVerified,
         built_in_check: None,
         matching_lengths: &[12, 21],
+        wallet_check: Some(false),
+        passed: || vec![PassedCheck::BuiltInChecks(vec![12, 21])],
+        asks_length: true,
     },
     LengthCase {
         vector: "ambiguous-12-21",
@@ -113,6 +132,9 @@ const LENGTH_CASES: &[LengthCase] = &[
         outcome: MATCHES,
         built_in_check: Some(21),
         matching_lengths: &[12, 21],
+        wallet_check: None,
+        passed: || vec![PassedCheck::BuiltInCheck(21)],
+        asks_length: false,
     },
 ];
 
@@ -120,12 +142,8 @@ impl LengthCase {
     fn run(&self) -> Result<(), String> {
         let reference = self.reference.reference()?;
         let evidence = RehearsalCheck::evidence(self.vector, &reference)?;
-        let given = (
-            &evidence.outcome,
-            evidence.built_in_check,
-            evidence.matching_lengths.as_slice(),
-        );
-        if given == (&self.outcome, self.built_in_check, self.matching_lengths) {
+        let expected = self.expected();
+        if evidence == expected && evidence.own_checks_passed() == (self.passed)() {
             return Ok(());
         }
         Err(format!(
@@ -136,27 +154,32 @@ impl LengthCase {
             describe_expected(self),
         ))
     }
+    fn expected(&self) -> CheckEvidence {
+        CheckEvidence {
+            outcome: self.outcome.clone(),
+            built_in_check: self.built_in_check,
+            matching_lengths: self.matching_lengths.to_vec(),
+            wallet_check: self.wallet_check,
+            asks_length: self.asks_length,
+        }
+    }
 }
 
 /// An outcome with the lengths beside it, as a failure names it.
-fn described(outcome: &CheckOutcome, built_in_check: Option<usize>, lengths: &[usize]) -> String {
-    let built_in = built_in_check.map_or("none".to_owned(), |words| words.to_string());
-    format!(
-        "{}, verified length {built_in}, lengths {lengths:?}",
-        outcome.text()
-    )
+fn described(evidence: &CheckEvidence, passed: &[PassedCheck]) -> String {
+    let built_in = evidence
+        .built_in_check
+        .map_or("none".to_owned(), |words| words.to_string());
+    format!("{}, verified length {built_in}, lengths {:?}, wallet check {:?}, passed {passed:?}, asks length {}",
+        evidence.outcome.text(), evidence.matching_lengths, evidence.wallet_check, evidence.asks_length)
 }
 
 fn describe(evidence: &CheckEvidence) -> String {
-    described(
-        &evidence.outcome,
-        evidence.built_in_check,
-        &evidence.matching_lengths,
-    )
+    described(evidence, &evidence.own_checks_passed())
 }
 
 fn describe_expected(case: &LengthCase) -> String {
-    described(&case.outcome, case.built_in_check, case.matching_lengths)
+    described(&case.expected(), &(case.passed)())
 }
 
 /// The `rehearsal` check.
@@ -291,6 +314,9 @@ mod tests {
             outcome: CheckOutcome::DoesNotMatch,
             built_in_check: None,
             matching_lengths: &[],
+            wallet_check: Some(false),
+            passed: || vec![],
+            asks_length: true,
         }];
         let mut check = RehearsalCheck {
             fingerprint: FINGERPRINT,
@@ -300,9 +326,24 @@ mod tests {
             check.run(Tier::Startup),
             ComponentOutcome::Failed(
                 "zero-24 with the length detected gives \"not verified, verified length none, \
-                 lengths []\", not \"does not match, verified length none, lengths []\""
+                 lengths [], wallet check Some(false), passed [], asks length true\", not \"does not match, verified length none, lengths [], wallet check Some(false), passed [], asks length true\""
                     .to_owned()
             )
         );
+    }
+    #[test]
+    fn wallet_evidence_passed_checks_and_follow_up_decisions_are_checked() {
+        for original in LENGTH_CASES {
+            assert!(original.run().is_ok());
+            let mut wrong = original.clone();
+            wrong.wallet_check = Some(!original.wallet_check.unwrap_or(false));
+            assert!(wrong.run().unwrap_err().contains("wallet check"));
+            let mut wrong = original.clone();
+            wrong.passed = || vec![PassedCheck::WalletCheck];
+            assert!(wrong.run().unwrap_err().contains("passed"));
+            let mut wrong = original.clone();
+            wrong.asks_length = !original.asks_length;
+            assert!(wrong.run().unwrap_err().contains("asks length"));
+        }
     }
 }

@@ -16,6 +16,18 @@ signatures and create a signed annotated tag matching `Cargo.toml`. Run the repo
 `scripts/check.sh` and a cached/uncached canonical comparison locally; keep heavy builds sequential.
 The long vector replays run on GitHub for the tag rather than being duplicated locally.
 
+Build and compare cached and uncached outputs in separate output folders, one after the other:
+
+```sh
+scripts/build-reproducible.sh canonical-output-cached
+REPRODUCIBLE_NO_CACHE=1 scripts/build-reproducible.sh canonical-output-uncached
+cmp canonical-output-cached/release/SHA256SUMS canonical-output-uncached/release/SHA256SUMS
+```
+
+Local prerequisites, including the Playwright browser installation and archive tools, are in
+[DEVELOPMENT.md](DEVELOPMENT.md#checks). Attestation verification needs a GitHub CLI version
+that provides `gh attestation verify` and its policy flags.
+
 ## Sign the downloaded files
 
 Download the complete draft into a fresh ignored folder, for example
@@ -26,6 +38,16 @@ signing. The maintainer's OpenPGP signing fingerprint is:
 ```text
 28FC51B1DB80DF2101128CB30EDD4814591DD095
 ```
+
+For each archive, enforce the release workflow, its tag and hosted runners before signing:
+
+```sh
+gh attestation verify mhfe-v0.6.0-linux-x86_64.tar.gz --repo hobby-eng/mhfe \
+  --signer-workflow hobby-eng/mhfe/.github/workflows/release.yml \
+  --source-ref refs/tags/v0.6.0 --deny-self-hosted-runners
+```
+
+Replace the version and file for the draft being checked, and repeat for every archive.
 
 From that download folder:
 
@@ -57,3 +79,6 @@ also be compared with the one GitHub publishes for the maintainer at
 A valid signature establishes which key signed the checksum file. Its identity still depends on
 checking the fingerprint; downloading a key beside an archive alone does not establish trust.
 GitHub's build attestations additionally bind each archive to the source revision and workflow.
+Verify each downloaded archive with the command above, using that release's version. The
+[GitHub CLI policy options](https://cli.github.com/manual/gh_attestation_verify) constrain the
+signer workflow, source tag and runner; `--repo` alone does not impose those restrictions.

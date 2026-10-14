@@ -6,6 +6,19 @@ release. Without it the canonical job fails before its build and no draft is mad
 builds and the CI checks of the same run, and `vectors.yml` for the tag, go on until they end or
 are cancelled.
 
+## New
+
+- `mhfe new --wallet-check yes|no` and `--choose-word yes|no`,
+  `mhfe check --passphrase-used yes|no` and `--wallet-check`, and
+  `mhfe encrypt --same-length no` answer those questions beforehand.
+- `--coin` and `--path` also reach address confirmation in `rekey` and both wallet references
+  used to find missing container words.
+- The browser client exposes `keepOldContainer()`. Rekey results name their replacement
+  `rehearsal`; owner confirmations state `rehearsalNeedsPassphrase` and accept `{ passphrase }`
+  only where it is needed. `evidence.passed` lists the recovered phrase's passing own checks.
+- Retention lists distinguish `passphraseIfAny` and `wordCount`; keep the latter apart from the
+  container when another length would pass automatic detection.
+
 ## Changed
 
 - The rehearsal check reports one of the specification's three results: "matches", "does not
@@ -19,10 +32,6 @@ are cancelled.
 - MHFE is licensed under the MIT license or the Apache License 2.0, at your option
   (`LICENSE-MIT`, `LICENSE-APACHE`); releases up to 0.6.0 remain available under the MIT license.
   Every release archive carries both licence files.
-- Every question that is not a secret has an option, so that a script can give every answer:
-  `mhfe new --wallet-check yes|no` and `--choose-word yes|no`,
-  `mhfe check --passphrase-used yes|no`, and `mhfe encrypt --same-length no` for a 24-word
-  container.
 - A command that reads a secret refuses at its start, with the advice to run it in a terminal or
   pass `--stdin`, when its standard input is not a terminal and `--stdin` is not given, instead of
   reading that input as answers.
@@ -50,14 +59,29 @@ are cancelled.
 - Keys typed during the start or during long work no longer answer the next question or close a
   screen that shows a secret once.
 - At `TERM=dumb` the word prompts write no cursor-control sequences and no hint rows.
-- The `--stdin` help of encrypt, decrypt and check names the second line of standard output that
-  `--repair-words` or `--repair` adds, and `mhfe serve` shows the checksum file's format with its
-  two spaces.
+- Interactive result display is refused before input or work without a private screen; explicit
+  redirection and the `--stdin` export protocol remain supported.
+- Refused secret lines can be retyped without losing earlier work; an over-long line is discarded
+  through Enter, even if its paste pauses. Invalid UTF-8 on standard input has exit code 2.
+- Accepted abbreviated, differently cased or ambiguous-prefix words are read back in full. Secret
+  words are shown only on the private input screen; the next question waits for confirmation.
+- Both localhost launchers report SIGINT, SIGTERM and SIGHUP consistently with exit code 130;
+  a page must have a lower-case `.html` suffix, with a separate refusal for other names.
+- Encrypt's `--repair-words` adds its repair words as a second line of standard output.
+  Decrypt's and check's `--repair` consume a repair-word line of standard input after the container.
+  Their help names both, and `mhfe serve` explains the checksum file's two-space format.
 - The startup self-checks no longer wait a fixed 0.2 s; they take about 0.08 s.
 - The Python fast-mode launcher keeps serving after a connection fails, as `mhfe serve` does.
 
 ## Browser package
 
+- Secret byte owners collect, transfer and wipe request buffers at any nesting depth. Cancellation
+  also wipes copies held while WebAssembly compilation is pending; JavaScript erasure remains
+  best effort.
+- Malformed worker requests, answers and callback payloads are refused as `PACKAGE_MISMATCH`
+  before page callbacks run.
+- `keepOldContainer()` describes valid old settings above the browser's memory limit without
+  applying the limit for operations that allocate memory.
 - A BIP39 passphrase given where an operation does not use it, inside the reference of `check()`,
   `searchDecoy()` or an address or fingerprint `rekey()`, or beside `{ builtInCheck: true }`, is
   refused with a `TypeError` instead of being dropped.
@@ -67,14 +91,66 @@ are cancelled.
   with `INTERNAL_ERROR`, "The WebAssembly stopped", instead of a wasm-bindgen ownership error.
 - `MhfeRepair`'s startup self-check covers the master key fingerprint that every repair computes,
   and `MhfePasswords` built alone carries only the password cases of its self-check.
-- The documentation says which copies of keys and seeds the WebAssembly cannot wipe, and the host
-  page's duties include every application rule of the specification.
+- The guide documents worker-termination and JavaScript-string erasure limits, pending secret
+  sessions and the host page's offline, network, verification and rehearsal responsibilities.
+
+## Library
+
+- Rehearsal self-checks compare all evidence, including the wallet check, every passed check and
+  the follow-up decision. Old-container keep lists and replacement rehearsal references have
+  independent expected values and damaged-value controls.
+- Rekey self-check controls reach the intended comparison and refusal branches and assert their
+  exact failures. Address search descriptions cover every supported coin and address purpose;
+  the full component check searches all published address vectors within small bounds.
+- The published-round table generator uses Node.js and preserves every table value. Release
+  wrappers share Cargo metadata parsing and archive licence validation; standalone launcher
+  parity covers all shared messages, exits and digest length.
+- Repeated rekey confirmations and rehearsal answers use library rules. `Rekey::confirm_again`
+  validates the owner's length against the preceding refusal; `owner_states` replaces public
+  `set_length`. A rehearsal follow-up refuses detection again and the wallet check through
+  `RecoveredForCheck::compare_after_detection`, shared by the CLI and browser binding.
+- CLI encryption refuses `--same-length` for a 24-word phrase before reading passwords, as the
+  library and browser do, instead of silently selecting the other suite.
+- Terminal screen switches, clears and cursor redraws share a bounded raw writer. A failed
+  switch stops the command before private input or output; only a completed switch sets the
+  private-screen flag. Cleanup remains bounded, and an uncertain screen mode refuses subsequent
+  private operations in the same process.
+- CLI progress labels use the library's reported stage without renumbering rekey or self-test
+  rounds. Test-only vector estimates use the selected work factor and operation's round count;
+  benchmark records ask the engine for its core and thread description.
+- `NewContainer`, `CheckEvidence` and `search::Found` expose read-only methods in place of public
+  fields. This requires source changes for callers that accessed those fields directly.
+- `repair::CardWords` owns normalized as-typed card text in locked memory, exposes its words and
+  count, and wipes it when dropped; the internal card parser is private.
+- `CheckOutcome::NotVerified` adds an outcome, a breaking change for exhaustive matches.
+- New or newly exported APIs include `container_fingerprint`, `grouped`,
+  `refuse_unused_passphrase`, `PassedCheck`, `PassphraseReferences`, `Settings`,
+  `ReplacementRehearsal`, `ConfirmedPhrase`'s rehearsal methods, `Keep::old_container` and
+  `self_check::process`. `ContainerFacts::require_wallet_check` offers the same applicability
+  refusal to each front end.
+- Coin identifiers use exact lower-case spelling without surrounding spaces. `InvalidCoin`
+  is now a unit error variant whose one Display implementation supplies its full sentence.
+- `memory::LockedPages` and `LockedText::from_locked` are internal. Public callers construct
+  locked text through its buffer owner, so a guard for another allocation cannot claim it is locked.
+- Locked-buffer builders verify the allocation address and capacity before returning a fill's
+  result. A replacement allocation of the same capacity and a failed fill cannot bypass the guard.
 
 ## Build, tests and release
 
+- Fast gates check Python widths and the inventory of CLI questions and scoped options. Terminal
+  cases cover explicit scan gaps, address paths, checked passwords, repair, passphrase answers,
+  generated passwords, memory settings and test-tool selection before full-size Argon2 work.
+- Self-checks and unit tests share their public inputs and independent tables; all distinct repair
+  cases remain covered. The published-vector self-test reports its own total round count.
+- Browser self-check timings are reported as information rather than unconditional passing
+  checks. Positive missing-word searches and old-backup descriptions have class/worker coverage.
+- The standard-output check follows stdout aliases and checks production code after test-only
+  items; the Rust rules scanner ignores braces in comments and literals.
 - The Windows zip's permission bits no longer depend on the umask of the checkout, and
   `THIRD_PARTY_NOTICES.md` covers the Rust standard library and the crates it is built from.
 - `BUILD-INFO.txt` reads the vendored Argon2 commit and the Emscripten version from their sources,
   and a check keeps every copy of the pinned versions equal to its source.
-- The vendored Argon2 gate refuses an added file, and the no-network gates share one list of
-  patterns.
+- The vendored Argon2 gate refuses an added file; the lexical network tripwire shares its
+  patterns and checks its two counted Worker exceptions. It does not prove arbitrary code offline.
+- Release README files include their mascot asset and have their relative links checked before
+  packing. Release checksum lists name exactly the archives written by that run.

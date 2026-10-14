@@ -11,6 +11,29 @@ import { wasm } from "./page-classes.mjs";
 import { RealTextEncoder, StandInWorker, encoderKeeping, started } from "./stand-in-worker.mjs";
 import { CHECK_WORD_TAKES_NO_COUNT, TEST_PASSPHRASE, TEST_PASSWORD } from "./test-values.mjs";
 
+/** A synthetic result with every field the wallet binding returns; no cryptographic claim. */
+function drawnPhrase(phrase, walletCheck = false) {
+  return { phrase, words: 24, walletCheck, fingerprintWithPassphrase: "00000000" };
+}
+
+/** Malformed results stop all drawing workers, reject, and free the slot for the next draw. */
+async function checkMalformedDraws(walletClient) {
+  for (const result of [null, 3, {}, { phrase: "public synthetic phrase", words: 24 }]) {
+    StandInWorker.started.length = 0;
+    const drawing = walletClient.drawPhrase({ workers: 2, walletCheck: false });
+    const rejected = assert.rejects(drawing, { code: "PACKAGE_MISMATCH" });
+    await started((message) => message.operation === "drawPhrase");
+    await nextTurn();
+    const workers = StandInWorker.started.filter((worker) => !worker.selfCheck);
+    workers[0].reply({ type: "result", result });
+    await rejected;
+    assert.ok(
+      workers.every((worker) => worker.terminated),
+      "every drawing worker ends",
+    );
+  }
+}
+
 /**
  * The repair, passwords and wallet classes pass their checks with a stand-in worker; gives the
  * wallet's class, whose slot part 4b uses again.
@@ -23,10 +46,12 @@ export async function checkModuleClasses(classes, client, libraryMessages) {
   const walletClient = new MhfeWallet({ workerSource: "wallet worker", wasm });
   await checkWalletPhrases(walletClient, libraryMessages);
   await checkWalletDraws(walletClient);
+  await checkMalformedDraws(walletClient);
   await checkHintsAndCancel(walletClient, passwordsClient, MhfeCancelledError);
   await checkFirstEntryCopies(walletClient, passwordsClient);
   await checkDrawCopies(walletClient, passwordsClient);
   await checkFailingProgress(walletClient);
+  await checkMisspelledOptions(walletClient, passwordsClient);
   console.log("The repair, passwords and wallet classes pass their checks with a stand-in worker.");
   return walletClient;
 }
@@ -206,8 +231,8 @@ async function checkWalletDraws(walletClient) {
   assert.ok(drawWorkers.every((each) => each.messages[0].module === "wallet"));
   drawWorkers[0].reply({ type: "draws", value: 1024 });
   drawWorkers[1].reply({ type: "draws", value: 1024 });
-  drawWorkers[2].reply({ type: "result", result: { phrase: "found", words: 24 } });
-  assert.deepEqual(await drawing, { phrase: "found", words: 24, workers: 3 });
+  drawWorkers[2].reply({ type: "result", result: drawnPhrase("found", true) });
+  assert.deepEqual(await drawing, { ...drawnPhrase("found", true), workers: 3 });
   assert.deepEqual(draws, [1024, 2048]);
   assert.ok(
     drawWorkers.every((each) => each.terminated),
@@ -220,24 +245,26 @@ async function checkWalletDraws(walletClient) {
     neverUse: ["abandon"],
   });
   const wishWorker = await started((message) => message.operation === "drawPhrase");
-  assert.equal(new TextDecoder().decode(wishWorker.messages[0].chosenWords), "zoo");
+  assert.equal(new TextDecoder().decode(wishWorker.messages[0].chosenWords), "\nzoo");
   assert.deepEqual(Array.from(wishWorker.messages[0].places), [0]);
-  assert.equal(wishWorker.messages[0].neverUse, "abandon");
-  wishWorker.reply({ type: "result", result: { phrase: "found", words: 24 } });
-  assert.deepEqual(await wishedDraw, { phrase: "found", words: 24, workers: 1 });
-  for (const chosen of [
-    [{ word: "zoo", position: 0 }],
-    [{ word: "zoo", position: "first" }],
-    [{ position: 1 }],
-    "zoo",
+  // Each word after a line break of its own, so that an empty one stays an entry
+  // (AUD-024-API009).
+  assert.equal(wishWorker.messages[0].neverUse, "\nabandon");
+  wishWorker.reply({ type: "result", result: drawnPhrase("found") });
+  assert.deepEqual(await wishedDraw, { ...drawnPhrase("found"), workers: 1 });
+  for (const [chosen, expected] of [
+    [[{ word: "zoo", position: 0 }], { code: "INVALID_WORD_WISH" }],
+    [[{ word: "zoo", position: "first" }], TypeError],
+    [[{ position: 1 }], TypeError],
+    ["zoo", TypeError],
   ]) {
-    await assert.rejects(walletClient.drawPhrase({ chosen }), TypeError, JSON.stringify(chosen));
+    await assert.rejects(walletClient.drawPhrase({ chosen }), expected, JSON.stringify(chosen));
   }
   await assert.rejects(walletClient.drawPhrase({ neverUse: "abandon" }), TypeError);
   await assert.rejects(walletClient.describeDraw({ walletCheck: "yes" }), TypeError);
   const describing = walletClient.describeDraw({ chosen: [{ word: "zoo", position: 24 }] });
   const describeWorker = await started((message) => message.operation === "describeDraw");
-  assert.equal(new TextDecoder().decode(describeWorker.messages[0].chosenWords), "zoo");
+  assert.equal(new TextDecoder().decode(describeWorker.messages[0].chosenWords), "\nzoo");
   assert.deepEqual(Array.from(describeWorker.messages[0].places), [24]);
   describeWorker.reply({ type: "result", result: { randomness: "ample" } });
   assert.deepEqual(await describing, { randomness: "ample" });
@@ -320,9 +347,9 @@ async function checkDrawCopies(walletClient, passwordsClient) {
   await checkUnmadeEmptyRepetition(walletClient, drawCopies);
 }
 
-/** A count of workers, or a walletCheck, of the wrong kind is refused before any worker starts. */
+/** A refused count or a walletCheck of the wrong kind starts no worker or secret copy. */
 async function checkDrawOptionsRefused(walletClient, drawCopies) {
-  for (const workers of [2 ** 32, 257, 0, 1.5]) {
+  for (const workers of [2 ** 32, 257, 0]) {
     await assert.rejects(
       walletClient.drawPhrase({
         passphrase: TEST_PASSPHRASE,
@@ -330,18 +357,28 @@ async function checkDrawOptionsRefused(walletClient, drawCopies) {
         walletCheck: true,
         workers,
       }),
-      { name: "TypeError", message: "workers must be a whole number from 1 to 256." },
+      { code: "INVALID_REQUEST", message: "Choose between 1 and 256 drawing workers." },
     );
   }
   assert.equal(drawCopies.length, 0, "a refused count copies no passphrase");
   // The type of walletCheck and the count of workers are checked whatever the passphrase, before
   // any worker starts (AUD-015-API001).
   StandInWorker.started.length = 0;
-  for (const [options, message] of [
-    [{ walletCheck: "yes" }, "walletCheck must be true or false."],
-    [{ walletCheck: 1 }, "walletCheck must be true or false."],
-    [{ workers: 0 }, "workers must be a whole number from 1 to 256."],
-    [{ workers: "many" }, "workers must be a whole number from 1 to 256."],
+  for (const [options, expected] of [
+    [{ walletCheck: "yes" }, { name: "TypeError", message: "walletCheck must be true or false." }],
+    [{ walletCheck: 1 }, { name: "TypeError", message: "walletCheck must be true or false." }],
+    [
+      { workers: 0 },
+      { code: "INVALID_REQUEST", message: "Choose between 1 and 256 drawing workers." },
+    ],
+    [
+      { workers: "many" },
+      { name: "TypeError", message: "workers must be a whole number from 1 to 256." },
+    ],
+    [
+      { workers: 1.5 },
+      { name: "TypeError", message: "workers must be a whole number from 1 to 256." },
+    ],
     [
       {
         passphrase: TEST_PASSPHRASE,
@@ -349,10 +386,10 @@ async function checkDrawOptionsRefused(walletClient, drawCopies) {
         walletCheck: false,
         workers: -1,
       },
-      "workers must be a whole number from 1 to 256.",
+      { code: "INVALID_REQUEST", message: "Choose between 1 and 256 drawing workers." },
     ],
   ]) {
-    await assert.rejects(walletClient.drawPhrase(options), { name: "TypeError", message });
+    await assert.rejects(walletClient.drawPhrase(options), expected);
   }
   assert.equal(StandInWorker.started.length, 0, "a refused draw starts no worker");
 }
@@ -455,8 +492,8 @@ async function checkUnmadeEmptyRepetition(walletClient, drawCopies) {
   const afterBroken = walletClient.drawPhrase();
   await started();
   await nextTurn();
-  StandInWorker.started.at(-1).reply({ type: "result", result: { phrase: "next", words: 24 } });
-  assert.deepEqual(await afterBroken, { phrase: "next", words: 24, workers: 1 });
+  StandInWorker.started.at(-1).reply({ type: "result", result: drawnPhrase("next") });
+  assert.deepEqual(await afterBroken, { ...drawnPhrase("next"), workers: 1 });
 }
 
 /**
@@ -476,6 +513,8 @@ async function checkFailingProgress(walletClient) {
   await started();
   await nextTurn();
   const failingWorkers = StandInWorker.started.filter((each) => !each.selfCheck);
+  // The first has loaded and said its build; its news reaches the page only after that.
+  failingWorkers[0].reply({ type: "ready", buildId: BUILD_ID });
   failingWorkers[0].reply({ type: "draws", value: 1024 });
   await assert.rejects(failingDraw, { code: "CALLBACK_FAILED" });
   // A worker that has not yet said it loaded the WebAssembly stops once it has: Firefox crashes the
@@ -486,4 +525,29 @@ async function checkFailingProgress(walletClient) {
   failingWorkers[1].reply({ type: "ready", buildId: BUILD_ID });
   assert.ok(failingWorkers[1].terminated, "it stops as soon as it has loaded");
   StandInWorker.loads = true;
+}
+
+/**
+ * A misspelled option is refused with a TypeError that names it, before any worker starts, rather
+ * than falling back to its default (AUD-024-API003); a key given as undefined counts as absent.
+ */
+async function checkMisspelledOptions(walletClient, passwordsClient) {
+  const misspelled = [
+    [walletClient.describeAddress({ address: "a", coin: "bitcoin", scangap: 5 }), "scangap"],
+    [walletClient.describeDraw({ walletcheck: true }), "walletcheck"],
+    [walletClient.fingerprint({ phrase: "p", passPhrase: "x" }), "passPhrase"],
+    [passwordsClient.make({ kind: "words", Count: 7 }), "Count"],
+    [walletClient.fullCheck({ onprogress: () => {} }), "onprogress"],
+  ];
+  for (const [refused, key] of misspelled) {
+    await assert.rejects(refused, (error) => {
+      assert.ok(error instanceof TypeError, `${key}: ${error}`);
+      assert.match(error.message, new RegExp(`has no option "${key}"`, "u"));
+      return true;
+    });
+  }
+  const undefinedKey = walletClient.describeDraw({ chosen: [], unknown: undefined });
+  const worker = await started((message) => message.operation === "describeDraw");
+  worker.reply({ type: "result", result: { randomness: "full" } });
+  assert.deepEqual(await undefinedKey, { randomness: "full" });
 }

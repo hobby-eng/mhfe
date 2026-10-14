@@ -41,6 +41,11 @@ export type MhfeErrorCode =
   | "REPAIR_NOT_POSSIBLE"
   | "TOO_MANY_MISSING_WORDS"
   /**
+   * Several candidates of a missing-word search match its reference, which therefore cannot tell
+   * them apart, as a fingerprint can happen to: none is taken, and an address tells them apart.
+   */
+  | "SEVERAL_CANDIDATES_MATCH"
+  /**
    * Several lengths pass the built-in check, by rare chance: an address or the fingerprint tells
    * the readings apart, and a rekey needs one of them, or the owner with one of those lengths
    * stated.
@@ -104,6 +109,7 @@ export type MhfeErrorCode =
   | "ARGON2_FAILED"
   /** The BIP39 passphrase bytes are not UTF-8. */
   | "INVALID_PASSPHRASE"
+  | "PASSPHRASE_TOO_LONG"
   /** A choice the API does not know, or a step out of its order. */
   | "INVALID_REQUEST"
   /** An address's coin is not one the check knows. */
@@ -143,13 +149,13 @@ export type MhfeErrorCode =
   | "SESSION_CLOSED"
   /** The worker did not start within a minute, or stopped unexpectedly. */
   | "WORKER_FAILED"
-  /** A callback of the page threw or rejected; its error is the `cause`. */
+  /** A page callback threw or rejected; the message names its option and `cause` is its error. */
   | "CALLBACK_FAILED";
 
 /** The errors every module class of the mhfe browser package rejects with. */
 export class MhfeError extends Error {
   readonly code: MhfeErrorCode;
-  /** For CALLBACK_FAILED, the error that the page's callback threw or its promise rejected with. */
+  /** For CALLBACK_FAILED, the page function's error; a refused answer passes through unchanged. */
   readonly cause?: unknown;
   /** For SELF_CHECK_FAILED from a class whose self-check failed: its report, to show. */
   readonly report?: MhfeSelfCheckReport;

@@ -17,6 +17,12 @@ pub(crate) mod known_answers;
 /// 21 words. A 24-word original fills the container's state and leaves no room for one.
 pub const BUILT_IN_CHECK_WORD_COUNTS: [usize; 4] = packing::SHORT_WORD_COUNTS;
 
+/// Checks a container before anything is computed and returns it as read: every word written
+/// out in full and in lower case, one space apart, so a person can compare it with the backup.
+pub fn check_container(input: &str) -> Result<String, MhfeError> {
+    ContainerFacts::read(input).map(|facts| facts.words().to_owned())
+}
+
 /// A container as read, with what its words alone tell: its suite, the lengths its original may
 /// have and the checks a recovery of it can be compared with.
 pub struct ContainerFacts {
@@ -139,6 +145,13 @@ impl ContainerFacts {
     /// ([`crate::wallet_check`]). Such a phrase has 24 words, so only a 24-word container holds it.
     pub fn offers_wallet_check(&self) -> bool {
         self.suite.holds_full_state()
+    }
+
+    /// Refuses the wallet check on a same-length container before a passphrase is asked for.
+    ///
+    /// This checks the suite only; the reference still validates the passphrase before recovery.
+    pub fn require_wallet_check(&self) -> Result<(), MhfeError> {
+        crate::rehearsal::require_wallet_check(self.suite, self.word_count)
     }
 
     /// How a phrase of the given `length` recovered from this container is confirmed before it is
@@ -298,10 +311,8 @@ mod tests {
         );
     }
 
-    const ZERO_12: &str =
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    const LEGAL_24: &str = "legal winner thank year wave sausage worth useful legal winner thank year \
-                            wave sausage worth useful legal winner thank year wave sausage worth title";
+    const ZERO_12: &str = crate::test_support::ABANDON_12;
+    use crate::test_support::LEGAL_24;
 
     /// A valid phrase of `words` words: all-zero entropy, as in the BIP39 test vectors.
     fn zero_phrase(words: usize) -> Zeroizing<String> {
@@ -334,6 +345,7 @@ mod tests {
         assert_eq!(container.built_in_check_lengths(), [12, 15, 18, 21]);
         assert!(container.opens_hidden_wallets());
         assert!(container.offers_wallet_check());
+        assert!(container.require_wallet_check().is_ok());
         for short in BUILT_IN_CHECK_WORD_COUNTS {
             assert_eq!(
                 container.confirmation_needed(words(short)),
@@ -359,6 +371,10 @@ mod tests {
             assert!(container.built_in_check_lengths().is_empty());
             assert!(!container.opens_hidden_wallets());
             assert!(!container.offers_wallet_check());
+            assert!(matches!(
+                container.require_wallet_check(),
+                Err(MhfeError::NoWalletCheck { .. })
+            ));
             for length in [words(count), PhraseLength::Detect] {
                 assert_eq!(
                     container.confirmation_needed(length),
@@ -401,7 +417,10 @@ mod tests {
     #[test]
     fn a_container_has_the_fingerprint_of_its_own_words() {
         let container = ContainerFacts::read(ZERO_12).unwrap();
-        assert_eq!(container.fingerprint(), Ok([0x73, 0xc5, 0xda, 0x0a]));
+        assert_eq!(
+            container.fingerprint(),
+            Ok(crate::test_support::ABANDON_12_FINGERPRINT)
+        );
     }
 
     #[test]

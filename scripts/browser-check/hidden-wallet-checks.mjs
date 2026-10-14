@@ -86,16 +86,15 @@ export async function checkHiddenWalletRefusals(wallets) {
     "PASSWORD_REPAIR_NOT_OFFERED",
     "a repair the review did not offer is refused",
   );
-  // Nothing is sent for a repair position that is not a word number, so the session stays open.
-  const repairPosition = "a word number from 1.";
+  // Out-of-range whole positions get the same coded refusal as a choice not offered.
   for (const position of [-1, 0, 2 ** 32]) {
-    await expectTypeError(
+    await expectRejection(
       wallets.open({
         password: CHECK_WORD_MISSING,
         passwordRepeat: CHECK_WORD_MISSING,
         passwordRepair: { repair: position },
       }),
-      repairPosition,
+      "PASSWORD_REPAIR_NOT_OFFERED",
       `passwordRepair { repair: ${position} } is refused`,
     );
   }

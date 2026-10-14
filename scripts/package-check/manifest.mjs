@@ -74,6 +74,11 @@ export function checkErrorCodes() {
     sorted([...libraryCodes, ...BROWSER_ERROR_CODES]),
     "MhfeErrorCode is the codes of MhfeError::code() and the browser's own",
   );
+  assert.deepEqual(
+    errorCodes("web/runtime.js", "const KNOWN_ERROR_CODES", "];", /"([A-Z0-9_]+)"/gu),
+    sorted([...libraryCodes, ...BROWSER_ERROR_CODES]),
+    "The deliberate runtime error-code copy covers every declared code and nothing else",
+  );
   // No binding types a code again: each comes from the error it names. Every file of the
   // bindings is read, so that one added later is checked too.
   const bindings = readdirSync(new URL("src/wasm_api/", root), { recursive: true })
@@ -93,7 +98,7 @@ const manifest = JSON.parse(read("dist/modules.json").toString());
 
 /**
  * The manifest matches the files, one build derived from every file a page loads is stamped into
- * each, another build is refused, and no script of the package contains network code, names a
+ * each, another build is refused, and the JavaScript passes the lexical network tripwire, names no
  * coin or carries a wallet vector; gives the other build, which part 4b gives a class file of.
  */
 export async function checkPackageManifest() {
@@ -164,9 +169,8 @@ function checkNoBuilderPaths() {
 }
 
 /**
- * No script of the package contains code that could reach the network, not even code that never
- * runs (scripts/remove-network-code.mjs removes the loaders the tools emit), names a coin or
- * carries a vector; nor does any self-check report.
+ * The package's JavaScript passes the lexical network/dynamic-code tripwire, names no coin and
+ * carries no vector; nor does any self-check report. The Python loopback launcher is not JavaScript.
  */
 function checkPackageScripts() {
   const scriptsOf = (folder, files) =>
@@ -182,7 +186,13 @@ function checkPackageScripts() {
   // and passes a clean script, so that it can fail.
   checkNetworkCodeList();
   for (const script of scripts) {
-    const found = networkCodeIn(read(`dist/${script}`).toString());
+    const workerSite =
+      script === "runtime/runtime.js"
+        ? "runtime"
+        : script === "core/argon2-mt.js"
+          ? "threaded"
+          : undefined;
+    const found = networkCodeIn(read(`dist/${script}`).toString(), workerSite);
     assert.equal(found, undefined, `${script} contains ${found}`);
   }
   // No script names a coin: the coins live in the WebAssembly only, so that a page for one coin
@@ -210,13 +220,20 @@ function checkPackageScripts() {
         "src/wallet/known_answers.rs",
         "src/wallet/known_answers/addresses.rs",
         "src/rehearsal/known_answers.rs",
+        "src/vectors/inputs.rs",
       ]
         .flatMap((path) => rustStrings(read(path).toString()))
         .filter(isVectorText),
     ),
   ];
   assert.ok(vectorTexts.includes(PHRASE_ADDRESS), "the strings of the Rust files are read");
-  assert.ok(vectorTexts.includes(PHRASE), "a string over several lines is read whole");
+  assert.ok(vectorTexts.includes(PHRASE), "the shared Rust phrase is read");
+  const continued = PHRASE.split(" ").join(" \\\n    ");
+  assert.deepEqual(
+    rustStrings(`const PHRASE: &str = "${continued}";`),
+    [PHRASE],
+    "a Rust string over several lines is read whole",
+  );
   for (const script of scripts) {
     const text = read(`dist/${script}`).toString();
     for (const vector of vectorTexts) {
@@ -347,7 +364,7 @@ async function checkOtherBuild(unstampedFiles) {
   checkStampRefusals(unstampedFiles, otherFiles);
   console.log(
     "The manifest matches the files, one build derived from every file a page loads is stamped " +
-      "into each, another build is refused, and no script of the package contains network code, " +
+      "into each, another build is refused, and the package JavaScript passes the lexical network tripwire, " +
       "names a coin or carries a wallet vector.",
   );
   return otherBuildId;

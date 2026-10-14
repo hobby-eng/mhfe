@@ -1,6 +1,5 @@
 //! `mhfe decrypt`: recovers the original phrase from a container.
 
-use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::wallet_check::WALLET_CHECK_BITS;
@@ -18,7 +17,7 @@ use crate::terminal::{self, Input, Progress, Wallet};
 use crate::time_text;
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     #[command(flatten)]
     settings: Settings,
 
@@ -87,21 +86,21 @@ fn stdin_help() -> String {
 }
 
 /// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
-pub const SUMMARY: &str = "Recover the original seed phrase from a container";
+pub(crate) const SUMMARY: &str = "Recover the original seed phrase from a container";
 
 /// The top of `mhfe decrypt --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         SUMMARY,
         &format!(
-            "Runs 12 rounds, {} at the default settings, and shows the recovered seed phrase. Use \
+            "Runs {ROUNDS} rounds, {} at the default settings, and shows the recovered seed phrase. Use \
              the PIM and memory level of the encryption; at the defaults no option is needed.",
             time_text::of_rounds(WorkFactor::default(), ROUNDS)
         ),
     ])
 }
 
-fn examples() -> String {
+pub(crate) fn examples() -> String {
     style::help_section(
         "Examples:",
         &[
@@ -129,13 +128,8 @@ fn examples() -> String {
     )
 }
 
-/// The end of `mhfe decrypt -h`.
-pub fn help() -> String {
-    examples()
-}
-
 /// The end of `mhfe decrypt --help`.
-pub fn long_help() -> String {
+pub(crate) fn long_help() -> String {
     let asks = style::help_section(
         "What it asks for:",
         &[
@@ -163,21 +157,22 @@ pub fn long_help() -> String {
     format!("{asks}\n{}\n{note}", examples())
 }
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     let length = options.words.unwrap_or(PhraseLength::Detect);
     let mut input = Input::new(options.stdin).reading_secrets()?;
+    input.require_private_result()?;
     // At a terminal every step on a screen of its own, the summary at the end.
-    let flow = Flow::start(&input, Operation::Decrypt.title());
+    let flow = Flow::start(&input, Operation::Decrypt.title())?;
     let work = settings::choose(options.settings, &mut input, Operation::Decrypt)?;
 
-    let read = terminal::read_container(
+    let read = terminal::read_container_for(
         &mut input,
         Operation::Decrypt.title(),
         options.repair.card(Operation::Decrypt, work),
+        |container| container.require_length(length),
     )?;
     let container = read.facts;
     // Refused before the password is asked, as the recovery would refuse it.
-    container.require_length(length)?;
     // A search for missing words asked for the password already.
     let password = match read.password {
         Some(password) => password,
@@ -190,13 +185,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         "",
     );
 
-    let mut progress = Progress::start();
+    let mut progress = Progress::start()?;
     let recovery = mhfe.decrypt(
         container.words(),
         &password,
         length,
         &mut |round, rounds| {
-            progress.round_starts(round, rounds);
+            progress.round_starts(mhfe::operation::Stage::Recover, round, rounds);
             Ok(())
         },
     )?;
@@ -205,11 +200,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         Recovery::Phrase(phrase) => std::slice::from_ref(phrase),
         Recovery::Ambiguous(candidates) => candidates.as_slice(),
     };
-    let passphrase =
-        source_check_passphrase(&mut input, readings, options.passphrase_used.given())?;
+    let passphrase = options.source_check_passphrase(
+        &mut input,
+        readings.iter().any(RecoveredPhrase::offers_wallet_check),
+    )?;
 
     // The result appears on a screen of its own, which is cleared once the person is done.
-    let screen = terminal::PrivateScreen::enter_to_show(&input);
+    let screen = terminal::PrivateScreen::enter_to_show(&input)?;
     if screen.is_active() {
         style::title(Operation::Decrypt.title());
     }
@@ -229,30 +226,33 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     Ok(SUCCESS)
 }
 
-/// The BIP39 passphrase for the 16-bit source check, which every recovery evaluates on each
-/// 24-word reading (the specification's recovery rules): asked, with why, only when such a
-/// reading came out, unless `--passphrase-used` answered it (`used`). A script gives it on a line
-/// of its own with `--passphrase-used yes`, and otherwise the check runs with no passphrase.
-fn source_check_passphrase(
-    input: &mut Input,
-    readings: &[RecoveredPhrase],
-    used: Option<bool>,
-) -> Result<LockedText, Failure> {
-    if !readings.iter().any(RecoveredPhrase::offers_wallet_check) {
-        return Ok(LockedText::copy_of(""));
+impl Options {
+    /// The BIP39 passphrase for the 16-bit source check, which every recovery evaluates on each
+    /// 24-word reading (the specification's recovery rules): asked, with why, only when such a
+    /// reading came out, unless `--passphrase-used` answered it (`used`). A script gives it on a line
+    /// of its own with `--passphrase-used yes`, and otherwise the check runs with no passphrase.
+    fn source_check_passphrase(
+        &self,
+        input: &mut Input,
+        offers_wallet_check: bool,
+    ) -> Result<LockedText, Failure> {
+        if !offers_wallet_check {
+            return Ok(LockedText::copy_of(""));
+        }
+        let used = self.passphrase_used.given();
+        if input.is_script() && used != Some(true) {
+            return Ok(LockedText::copy_of(""));
+        }
+        let why = check::source_check_why();
+        check::ask_passphrase_explained(
+            input,
+            Operation::Decrypt,
+            check::ORIGINAL_SEED_PHRASE,
+            &why.each_ref().map(String::as_str),
+            Some(readme::DECRYPT),
+            used,
+        )
     }
-    if input.is_script() && used != Some(true) {
-        return Ok(LockedText::copy_of(""));
-    }
-    let why = check::source_check_why();
-    check::ask_passphrase_explained(
-        input,
-        Operation::Decrypt,
-        check::ORIGINAL_SEED_PHRASE,
-        &why.each_ref().map(String::as_str),
-        Some(readme::DECRYPT),
-        used,
-    )
 }
 
 /// The outcome of the 16-bit source check of a 24-word reading with `passphrase`; nothing for
@@ -360,24 +360,16 @@ fn show_ambiguous(
     input: &Input,
 ) -> Result<(), Failure> {
     eprintln!();
-    // 24 words stated beside a short length whose check passes: that reading comes first, and
-    // the 24-word one, the last, after it, as a 24-word phrase passes a short check by chance
-    // once in 2^32.
-    let read_as_stated = |stated| candidates.last().is_some_and(|last| last.words() == stated);
-    match candidates
-        .first()
-        .map(|first| (first.words(), first.stated_words()))
-    {
-        Some((found, Some(stated))) if read_as_stated(stated) => style::warn_now(
-            &phrase_length::check_finds(found, stated),
-            "Both readings follow, the checked one first: a receiving address of your wallet \
-             tells them apart.",
-        ),
-        _ => style::warn_now(
-            "Several lengths passed their check, a rare accident.",
-            "Compare each with your wallet, or run again with --words N.",
-        ),
-    }
+    let stated = candidates.iter().find_map(RecoveredPhrase::stated_words);
+    let checked: Vec<_> = candidates
+        .iter()
+        .filter(|phrase| phrase.verified())
+        .map(RecoveredPhrase::words)
+        .collect();
+    let includes_stated =
+        stated.is_some_and(|stated| candidates.iter().any(|phrase| phrase.words() == stated));
+    let (headline, next) = ambiguous_notice(&checked, stated, includes_stated, candidates.len());
+    style::warn_now(&headline, &next);
     for candidate in candidates {
         let status = if candidate.verified() {
             "passed its check"
@@ -396,6 +388,37 @@ fn show_ambiguous(
     Ok(())
 }
 
+/// Renders the length facts supplied by the library for all readings, never only the first.
+fn ambiguous_notice(
+    checked: &[usize],
+    stated: Option<usize>,
+    includes_stated: bool,
+    readings: usize,
+) -> (String, String) {
+    let checked = phrase_length::listed(checked);
+    let headline = match stated {
+        Some(stated) if !includes_stated => format!(
+            "The built-in check of {stated} words fails. The checks of {checked} words pass."
+        ),
+        Some(stated) => {
+            format!("The built-in checks of {checked} words pass, but you gave {stated} words.")
+        }
+        None => format!("The built-in checks of {checked} words pass, a rare accident."),
+    };
+    let count = if readings == 2 {
+        "Both".into()
+    } else {
+        format!("All {readings}")
+    };
+    (
+        headline,
+        format!(
+            "{count} readings follow, the checked ones first: compare each with your wallet, \
+         or run again with --words N."
+        ),
+    )
+}
+
 fn print_result(phrase: &RecoveredPhrase, input: &Input) -> Result<(), Failure> {
     if input.is_script() {
         let status = if phrase.verified() {
@@ -410,5 +433,54 @@ fn print_result(phrase: &RecoveredPhrase, input: &Input) -> Result<(), Failure> 
         ))
     } else {
         terminal::print_phrase(phrase.phrase(), Wallet::NoPassphrase, input)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_explicit_no_passphrase_skips_terminal_input_after_recovery() {
+        use clap::Parser;
+        let cli =
+            crate::Cli::try_parse_from(["mhfe", "decrypt", "--passphrase-used", "no"]).unwrap();
+        let crate::Command::Decrypt(options) = cli.command else {
+            unreachable!()
+        };
+        let mut input = Input::terminal_only();
+        let passphrase = options.source_check_passphrase(&mut input, true).unwrap();
+        assert!(passphrase.is_empty());
+    }
+
+    #[test]
+    fn several_checked_lengths_name_the_failed_stated_length_and_every_reading() {
+        let vector: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/suite3-vectors/ambiguous-12-21.json"
+        ))
+        .unwrap();
+        let source =
+            mhfe::OriginalFacts::read(vector["inputs"]["phrase"].as_str().unwrap()).unwrap();
+        let mut checked = vec![source.word_count()];
+        checked.extend_from_slice(source.other_lengths());
+        assert_eq!(checked, [12, 21]);
+        for stated in [15, 18, 24] {
+            let includes_stated = stated == 24;
+            let readings = checked.len() + 1;
+            let (headline, next) =
+                ambiguous_notice(&checked, Some(stated), includes_stated, readings);
+            if includes_stated {
+                assert!(headline.contains("you gave 24 words"), "{headline}");
+            } else {
+                assert!(
+                    headline.contains(&format!("check of {stated} words fails")),
+                    "{headline}"
+                );
+            }
+            assert!(headline.contains("12 and 21"), "{headline}");
+            assert!(next.starts_with("All 3 readings follow"), "{next}");
+        }
+        let (_, next) = ambiguous_notice(&checked, None, false, checked.len() + 1);
+        assert!(next.starts_with("All 3 readings follow"));
     }
 }

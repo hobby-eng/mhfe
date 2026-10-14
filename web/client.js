@@ -35,28 +35,38 @@ import {
   OperationSlot,
   PackageCheck,
   WorkerJob,
+  askPage,
   countsText,
   describeChoice,
   encodeSecret,
+  isRecord,
   packageMismatch,
+  readSetReport,
+  refuseUnknownOptions,
   requireBoolean,
   requireCallback,
+  requireKnownKeys,
   requireSecret,
   secretOrEmpty,
   requireText,
-  secretBuffers,
   sentence,
-  wipeSecrets,
+  SecretRequest,
 } from "../runtime/runtime.js";
 
 export { MhfeCancelledError, MhfeError } from "../runtime/runtime.js";
 
 /**
  * @import { MhfeCheckEvidence, MhfeClient as DeclaredClient, MhfeConfirmation,
- *   MhfeHiddenWallets, MhfeParameters, MhfeProgress, MhfeSources, WordCount } from "./client.d.ts"
- * @import { CheckStep, MhfeComponentResult, MhfeErrorCode, MhfeSelfCheckTier, SetReport,
+ *   MhfeHiddenWallets, MhfeProgress, MhfeSources, WordCount } from "./client.d.ts"
+ * @import { CheckStep, MhfeComponentResult, MhfeErrorCode, MhfeSelfCheckTier,
  *   WorkerAnswer, WorkerHandler, WorkerHandlers, WorkerRequest } from "../runtime/runtime.js"
  */
+
+/** @import { NoKeys } from "./types/api-presence.d.ts" */
+/** @typedef {NoKeys<Exclude<keyof DeclaredClient, keyof MhfeClient>>} DeclaredButMissing */
+/** @typedef {NoKeys<Exclude<keyof MhfeClient, keyof DeclaredClient>>} PresentButUndeclared */
+/** @typedef {NoKeys<Exclude<keyof typeof DeclaredClient, keyof typeof MhfeClient>>} MissingStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof MhfeClient, keyof typeof DeclaredClient>>} ExtraStatics */
 
 /**
  * The options of a method of the declaration, as a page may pass them: any may be missing or
@@ -133,8 +143,8 @@ export const FAST_MODE = "fast";
 /** One lane after another; works everywhere, including a page opened as a file. */
 export const STANDARD_MODE = "standard";
 
-// These limits are checked here, before any secret is copied, so that a refusal never waits for a
-// worker. scripts/verify-browser-package.mjs checks that each equals the core's suiteParameters();
+// Deliberate copy of the library's limits: checked before any secret is copied, so that a refusal
+// never waits for a worker. scripts/verify-browser-package.mjs checks each against suiteParameters();
 // a repair word count of 0 means none.
 /** The reference Argon2 code allows 2 GiB when pointers are 32 bits wide, as in WebAssembly: memory level 0 only. */
 const HIGHEST_BROWSER_MEMORY_LEVEL = 0;
@@ -145,14 +155,23 @@ const BUILT_IN_CHECK_WORD_COUNTS = [12, 15, 18, 21];
 const REPAIR_WORD_COUNTS = [0, 2, 4, 6, 8];
 const DECOY_SCAN_GAP = 20;
 const REFERENCE_KINDS = ["address", "fingerprint", "words", "walletCheck"];
+/** The forms of a reference in each operation's refusal (AUD-024-API004). */
+const ADDRESS_REFERENCE_FORMS = "{ address, coin, path? } or { fingerprint }";
+const CHECK_REFERENCE_FORMS =
+  "{ address, coin, path? }, { fingerprint }, { words } or { walletCheck: true }";
+const WALLET_SEARCH_FORMS =
+  "{ address, coin, path? }, { fingerprint }, { walletCheck: true } or { builtInCheck: true }";
+const NO_LENGTH_FORMS = "{ words: 12 | 15 | 18 | 21 }, { address, coin, path? } or { fingerprint }";
 /** Every key a reference may have: its kind, and the coin and path of an address. */
 const REFERENCE_KEYS = [...REFERENCE_KINDS, "coin", "path"];
+/** The options of a hidden-wallet session's open(). */
+const OPEN_KEYS = ["password", "passwordRepeat", "passwordRepair", "onProgress"];
 /** The name of this module's operations in the package's worker. */
 const CORE_MODULE = "core";
 /** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
 const CLIENT_BUILD_ID = "development";
 
-// The parts of the self-check that run Argon2: its known answer at 1 MiB, and at 64 and 256 MiB.
+// Deliberate copy of the self-check's Argon2 parts: its known answer at 1 MiB, and at 64 and 256 MiB.
 // The page names them before any worker runs; scripts/verify-browser-package.mjs checks that they
 // are the core's parameters().argon2Parts.
 const ARGON2_PART = "argon2";
@@ -301,7 +320,10 @@ export class MhfeClient {
     );
   }
 
-  /** The highest memory level this browser build can use: 0 (2 GiB). */
+  /**
+   * The highest memory level this browser build can use: 0 (2 GiB).
+   * @returns {0}
+   */
   maxSupportedMemLevel() {
     return HIGHEST_BROWSER_MEMORY_LEVEL;
   }
@@ -332,7 +354,7 @@ export class MhfeClient {
     await this.#ready();
     // The phrase goes as bytes that the worker and the WebAssembly wipe, as a password does.
     const message = { operation: "describePhrase", phrase: encodeSecret(phrase, "phrase") };
-    return this.#quick(message, secretBuffers(message));
+    return this.#quick(message);
   }
 
   /**
@@ -373,7 +395,8 @@ export class MhfeClient {
    *
    * `onUnverified({ container, containerFingerprint })` is called after the first 12 rounds, so
    * that the page can show the container while the check runs, marked as not yet verified, and
-   * later say how the check ended: verified, wrong (VERIFICATION_FAILED), or not verified
+   * ask the user not to rely on it until the check ends, and later say how the check ended:
+   * verified, wrong (VERIFICATION_FAILED), or not verified
    * (cancelled or any other error).
    * @param {OptionsOf<"encrypt">} [options]
    */
@@ -491,6 +514,9 @@ export class MhfeClient {
   } = {}) {
     requireText(container, "container");
     const [referenceKind, referenceValue, coin, path] = describeReference(reference);
+    if (referenceValue !== "0") {
+      requirePassphraseFits(referenceKind, passphrase, CHECK_PASSPHRASE_REFERENCES);
+    }
     const [choice, position] = describeChoice(passwordRepair, "passwordRepair");
     requireCallback(onNoLength, "onNoLength");
     const asksLength = onNoLength !== undefined;
@@ -526,16 +552,6 @@ export class MhfeClient {
   }
 
   /**
-   * The candidates of a container phrase with words typed as "?" (MhfeRepair.inspectContainer
-   * says "marked"), before a search without its repair words: `{ missing, candidates,
-   * offersWalletSearch, offersOwnChecks }`, the positions from 1, how many candidate containers
-   * pass the BIP39 checksum, and which searches with the password the library offers for them:
-   * the original seed phrase's wallet (searchWallet() with an address or fingerprint) and its own
-   * checks (searchWallet() with `{ builtInCheck: true }` or `{ walletCheck: true }`). The decoy
-   * search (searchDecoy()) is always offered. More than two missing words reject with
-   * TOO_MANY_MISSING_WORDS.
-   */
-  /**
    * What to keep of the old container of a rekey until the funds of the wallets that other
    * passwords open on it are moved, as the library lists it: `[{ item }]` with "oldContainer" and
    * "oldPasswords", then `{ item: "pim", value }` and `{ item: "memoryLevel", value }` where
@@ -545,12 +561,22 @@ export class MhfeClient {
    * @param {OptionsOf<"keepOldContainer">} [options]
    */
   async keepOldContainer({ pim = 0, memoryLevel = 0 } = {}) {
-    requireSettings(pim, memoryLevel);
+    requireSettingValues(pim, memoryLevel);
     await this.#ready();
     return this.#quick({ operation: "keepOldContainer", pim, memoryLevel });
   }
 
-  /** @param {OptionsOf<"searchCandidates">} [options] */
+  /**
+   * The candidates of a container phrase with words typed as "?" (MhfeRepair.inspectContainer
+   * says "marked"), before a search without its repair words: `{ missing, candidates,
+   * offersWalletSearch, offersOwnChecks }`, the positions from 1, how many candidate containers
+   * pass the BIP39 checksum, and which searches with the password the library offers for them:
+   * the original seed phrase's wallet (searchWallet() with an address or fingerprint) and its own
+   * checks (searchWallet() with `{ builtInCheck: true }` or `{ walletCheck: true }`). The decoy
+   * search (searchDecoy()) is always offered. More than two missing words reject with
+   * TOO_MANY_MISSING_WORDS.
+   * @param {OptionsOf<"searchCandidates">} [options]
+   */
   async searchCandidates({ container } = {}) {
     requireText(container, "container");
     await this.#ready();
@@ -568,8 +594,10 @@ export class MhfeClient {
    * longer in proportion.
    * Progress: `{ stage: "search", candidate, candidates }`.
    * Resolves to `{ found, container, containerFingerprint, words: [{ position, word }], path,
-   * candidates }`, `container` null when none matched. Show the words found and use the container
-   * only after the user has said so.
+   * candidates }`, `container` null when none matched. Every candidate is compared: a reference
+   * that more than one matches, as a fingerprint, a 32-bit check, can among the many candidates
+   * of two missing words, rejects with SEVERAL_CANDIDATES_MATCH, and an address tells them apart.
+   * Show the words found and use the container only after the user has said so.
    * @param {OptionsOf<"searchDecoy">} [options]
    */
   async searchDecoy({
@@ -580,8 +608,8 @@ export class MhfeClient {
     onProgress,
   } = {}) {
     requireText(container, "container");
-    if (!Number.isSafeInteger(scanGap) || scanGap < 1) {
-      throw new TypeError("scanGap must be a whole number of addresses, at least 1.");
+    if (!Number.isSafeInteger(scanGap)) {
+      throw new TypeError("scanGap must be a whole number of addresses.");
     }
     const [referenceKind, referenceValue, coin, path] = describeSearchReference(reference, false);
     return this.#long(
@@ -704,7 +732,8 @@ export class MhfeClient {
    * show nothing, and a reference without a passphrase matches the phrase's wallet without one,
    * which says nothing about funds under a passphrase, so it confirms only a wallet stated to have
    * none: true is refused, as such a wallet is compared with its passphrase. These refusals come
-   * before the first round; only the 1 MiB known answer of the Argon2 build runs first.
+   * before the rekey worker runs its Argon2 known answer or rounds. The class's independent
+   * startup self-check can already have run.
    * `passphrase` belongs only to an address or a fingerprint: a non-empty one with the built-in
    * check or the owner is a TypeError.
    * @param {OptionsOf<"rekey">} [options]
@@ -764,9 +793,12 @@ export class MhfeClient {
     /** @type {WorkerHandlers} */
     const handlers = {
       unverified: onUnverified,
-      // The worker asks the owner only for an owner's confirmation, whose callback `owner` is.
-      ownerCheck: (/** @type {OwnerCheck} */ check) =>
-        answerOwner(/** @type {PageOwner} */ (owner), check),
+      ownerCheck: (/** @type {OwnerCheck} */ check) => {
+        if (owner === undefined) {
+          throw packageMismatch("The worker asked the owner without an owner confirmation");
+        }
+        return answerOwner(owner, check);
+      },
     };
     if (onConfirmAgain !== undefined) {
       handlers.confirmAgain = (/** @type {ConfirmAgainRefusal} */ refusal) =>
@@ -844,7 +876,9 @@ export class MhfeClient {
     };
     /** @type {WorkerJob} */ let job;
     handle = {
-      open: async ({ password, passwordRepeat, passwordRepair, onProgress } = {}) => {
+      open: async (options = {}) => {
+        requireKnownKeys(options, OPEN_KEYS, "open");
+        const { password, passwordRepeat, passwordRepair, onProgress } = options;
         if (job.ended || closing !== null) {
           throw new MhfeError("SESSION_CLOSED", "The session is closed.");
         }
@@ -855,17 +889,18 @@ export class MhfeClient {
         // Built one secret at a time, so that a refused repetition wipes the password's copy too
         // (AUD-011-SEC001).
         /** @type {WorkerRequest} */ const message = { choice, position };
+        let handed = false;
         try {
           message.password = encodeSecret(password, "password");
           message.passwordRepeat = encodeSecret(repeat, "repeated password");
-        } catch (error) {
-          wipeSecrets(message);
-          throw error;
+          return new Promise((/** @type {(wallet: unknown) => void} */ resolve, reject) => {
+            pendingOpen = { resolve, reject, onProgress };
+            sendRequest({ message });
+            handed = true;
+          });
+        } finally {
+          if (!handed) new SecretRequest(message).wipe();
         }
-        return new Promise((/** @type {(wallet: unknown) => void} */ resolve, reject) => {
-          pendingOpen = { resolve, reject, onProgress };
-          sendRequest({ message, transfer: secretBuffers(message) });
-        });
       },
       // Every call returns the same promise, which settles once the session has ended.
       close: () => {
@@ -876,7 +911,7 @@ export class MhfeClient {
     const closeSession = async () => {
       if (nextRequest !== null) {
         // The worker waits: it frees the session, which overwrites its secrets, and ends.
-        sendRequest({ message: { close: true }, transfer: [] });
+        sendRequest({ message: { close: true } });
       } else if (!job.ended) {
         // An open is running: its worker stops at once.
         const open = pendingOpen;
@@ -933,15 +968,12 @@ export class MhfeClient {
   }
 
   /**
-   * A quick operation: the Rust core only, in a worker of its own, never BUSY. `transfer` lists the
-   * buffers of the message's secrets, which the job owns from here on.
+   * A quick operation in a worker of its own, never BUSY. The job owns its secret buffers.
    * @param {WorkerRequest} message
-   * @param {Transferable[]} [transfer]
    */
-  #quick(message, transfer = []) {
+  #quick(message) {
     return new WorkerJob([this.#sources.workerSource]).run(
       { module: CORE_MODULE, ...message },
-      transfer,
       this.#wasm,
     );
   }
@@ -1013,8 +1045,9 @@ export class MhfeClient {
       noPassword = false,
     },
   ) {
-    /** @type {WorkerRequest | null} */
-    let message = { module: CORE_MODULE, ...request, pim, memoryLevel };
+    /** @type {WorkerRequest} */
+    const message = { module: CORE_MODULE, ...request, pim, memoryLevel };
+    let handed = false;
     try {
       // An empty phrase is the core's to refuse (INVALID_PHRASE), as any other invalid one.
       if (phrase !== undefined) message.phrase = encodeSecret(phrase, "phrase");
@@ -1035,11 +1068,11 @@ export class MhfeClient {
         progress: onProgress,
         ...handlers,
       });
-      return { job, done: job.run(message, secretBuffers(message), this.#wasm) };
-    } catch (error) {
-      wipeSecrets(message);
-      message = null;
-      throw error;
+      const done = job.run(message, this.#wasm);
+      handed = true;
+      return { job, done };
+    } finally {
+      if (!handed) new SecretRequest(message).wipe();
     }
   }
 
@@ -1083,21 +1116,19 @@ export class MhfeClient {
       scripts.unshift(this.#sources.argon2SingleThreaded);
     }
     // The worker of this build gives the core's report with its fixed values (web/core-worker.js).
-    const { parameters, ...report } = /** @type {SetReport & { parameters: MhfeParameters }} */ (
-      await new WorkerJob(scripts, handlers).run(
-        {
-          module: CORE_MODULE,
-          operation: "selfCheck",
-          tier,
-          skip,
-          argon2,
-          argon2Script: this.#argon2Script(argon2 && this.mode() === FAST_MODE),
-        },
-        [],
-        this.#wasm,
-      )
+    const result = await new WorkerJob(scripts, handlers).run(
+      {
+        module: CORE_MODULE,
+        operation: "selfCheck",
+        tier,
+        skip,
+        argon2,
+        argon2Script: this.#argon2Script(argon2 && this.mode() === FAST_MODE),
+      },
+      this.#wasm,
     );
-    requireSameLimits(parameters);
+    const report = readSetReport(result);
+    requireSameLimits(isRecord(result) ? result.parameters : undefined);
     return report;
   }
 
@@ -1110,7 +1141,6 @@ export class MhfeClient {
   #processCheck(skip, handlers) {
     return new WorkerJob([this.#sources.workerSource], handlers).run(
       { module: CORE_MODULE, operation: "selfCheckProcess", tier: "full", skip },
-      [],
       this.#wasm,
     );
   }
@@ -1131,20 +1161,99 @@ export class MhfeClient {
         skip: [ARGON2_PART],
         argon2Script: this.#argon2Script(threaded),
       },
-      [],
       this.#wasm,
     );
   }
 }
 
+// The options each method takes, which it refuses others beside (AUD-024-API003); kept in step
+// with client.d.ts.
+refuseUnknownOptions(MhfeClient.prototype, {
+  startupCheck: ["argon2"],
+  fullCheck: ["onProgress"],
+  encrypt: [
+    "phrase",
+    "password",
+    "passwordRepeat",
+    "passwordRepair",
+    "pim",
+    "memoryLevel",
+    "sameLength",
+    "repairWordCount",
+    "walletHasPassphrase",
+    "onProgress",
+    "onUnverified",
+  ],
+  decrypt: [
+    "container",
+    "password",
+    "passwordRepair",
+    "pim",
+    "memoryLevel",
+    "words",
+    "passphrase",
+    "onProgress",
+  ],
+  check: [
+    "container",
+    "password",
+    "passwordRepair",
+    "pim",
+    "memoryLevel",
+    "reference",
+    "passphrase",
+    "onProgress",
+    "onNoLength",
+  ],
+  keepOldContainer: ["pim", "memoryLevel"],
+  searchCandidates: ["container"],
+  searchDecoy: ["container", "reference", "passphrase", "scanGap", "onProgress"],
+  searchWallet: [
+    "container",
+    "password",
+    "passwordRepair",
+    "pim",
+    "memoryLevel",
+    "reference",
+    "passphrase",
+    "onProgress",
+  ],
+  rekey: [
+    "container",
+    "words",
+    "password",
+    "passwordRepair",
+    "pim",
+    "memoryLevel",
+    "newPassword",
+    "newPasswordRepeat",
+    "newPasswordRepair",
+    "newPim",
+    "newMemoryLevel",
+    "repairWordCount",
+    "confirmation",
+    "passphrase",
+    "walletHasPassphrase",
+    "onProgress",
+    "onUnverified",
+    "onConfirmAgain",
+  ],
+  openHiddenWallets: ["container", "pim", "memoryLevel", "mainPassphrase"],
+  selfTest: ["onProgress"],
+});
+
 /**
  * The core's fixed values must be the limits this file checks before any secret is copied
  * (scripts/verify-browser-package.mjs compares them too); otherwise the files come from different
  * builds.
- * @param {MhfeParameters} parameters
+ * @param {unknown} parameters
  */
 function requireSameLimits(parameters) {
   const same =
+    isRecord(parameters) &&
+    isNumberArray(parameters.wordCounts) &&
+    isNumberArray(parameters.builtInCheckWordCounts) &&
+    isNumberArray(parameters.repairWordCounts) &&
     parameters.maxPim === MAX_PIM &&
     parameters.maxMemoryLevel === MAX_MEMORY_LEVEL &&
     parameters.highestBrowserMemoryLevel === HIGHEST_BROWSER_MEMORY_LEVEL &&
@@ -1155,6 +1264,15 @@ function requireSameLimits(parameters) {
   if (!same) {
     throw packageMismatch("The files core/client.js and runtime/mhfe.wasm have different limits");
   }
+}
+
+/**
+ * Numeric-array shape of the core's limits before comparisons use its array methods.
+ * @param {unknown} value
+ * @returns {value is number[]}
+ */
+function isNumberArray(value) {
+  return Array.isArray(value) && value.every((item) => typeof item === "number");
 }
 
 /**
@@ -1194,10 +1312,8 @@ function requireRepetition(password, passwordRepeat, name) {
  * @param {boolean} [isNew]
  */
 function requireSettings(pim, memoryLevel, isNew = false) {
-  const side = isNew ? "new " : "";
-  requireSetting(pim, MAX_PIM, "INVALID_PIM", `${side}PIM`);
-  requireSetting(memoryLevel, MAX_MEMORY_LEVEL, "INVALID_MEMORY_LEVEL", `${side}memory level`);
-  // The library's refusal (WorkFactor::require_level), with its code and message, before any
+  requireSettingValues(pim, memoryLevel, isNew);
+  // Deliberate copy of WorkFactor::require_level's refusal, with its code and message, before any
   // secret reaches a worker; scripts/verify-browser-package.mjs keeps the two in step.
   if (memoryLevel > HIGHEST_BROWSER_MEMORY_LEVEL) {
     throw new MhfeError(
@@ -1207,6 +1323,16 @@ function requireSettings(pim, memoryLevel, isNew = false) {
         "64-bit system for higher levels",
     );
   }
+}
+
+/** Settings for a description need their valid ranges, without reserving browser memory.
+ * @param {number} pim
+ * @param {number} memoryLevel
+ * @param {boolean} [isNew] */
+function requireSettingValues(pim, memoryLevel, isNew = false) {
+  const side = isNew ? "new " : "";
+  requireSetting(pim, MAX_PIM, "INVALID_PIM", `${side}PIM`);
+  requireSetting(memoryLevel, MAX_MEMORY_LEVEL, "INVALID_MEMORY_LEVEL", `${side}memory level`);
 }
 
 /**
@@ -1273,21 +1399,21 @@ function requireRepairWordCount(count) {
  * @returns {[kind: string, reference: string, coin: string, path: string]}
  */
 function describeSearchReference(reference, ofWallet) {
+  const forms = ofWallet ? WALLET_SEARCH_FORMS : ADDRESS_REFERENCE_FORMS;
   const isObject = reference !== null && typeof reference === "object";
   if (ofWallet && isObject && reference.builtInCheck !== undefined) {
     if (reference.builtInCheck !== true || Object.keys(reference).length !== 1) {
-      throw new TypeError("reference.builtInCheck must be true, alone.");
+      throw new TypeError(`reference must be exactly one of ${forms}.`);
     }
     return ["builtInCheck", "", "", ""];
   }
-  if (isObject && (reference.words !== undefined || (!ofWallet && reference.walletCheck))) {
-    throw new TypeError(
-      ofWallet
-        ? "reference must be { address, coin, path? }, { fingerprint }, { walletCheck: true } or { builtInCheck: true }."
-        : "reference must be { address, coin, path? } or { fingerprint }.",
-    );
+  if (
+    isObject &&
+    (reference.words !== undefined || (!ofWallet && reference.walletCheck !== undefined))
+  ) {
+    throw new TypeError(`reference must be exactly one of ${forms}.`);
   }
-  return describeReference(reference);
+  return describeReference(reference, "reference", forms);
 }
 
 /**
@@ -1297,9 +1423,10 @@ function describeSearchReference(reference, ofWallet) {
  * than dropped; `name` is what the page calls the object.
  * @param {unknown} value
  * @param {string} [name]
+ * @param {string} [forms] The forms this operation accepts, in its refusal.
  * @returns {[kind: string, reference: string, coin: string, path: string]}
  */
-function describeReference(value, name = "reference") {
+function describeReference(value, name = "reference", forms = CHECK_REFERENCE_FORMS) {
   const isObject = value !== null && typeof value === "object";
   // The fields of an object, of types not known yet; anything else has none and is refused below.
   const reference = /** @type {Record<string, unknown>} */ (isObject ? value : {});
@@ -1307,10 +1434,7 @@ function describeReference(value, name = "reference") {
     Object.hasOwn(reference, kind) && reference[kind] !== undefined;
   const kinds = isObject ? REFERENCE_KINDS.filter(given) : [];
   if (kinds.length !== 1) {
-    throw new TypeError(
-      `${name} must be exactly one of { address, coin, path? }, { fingerprint }, { words } or ` +
-        "{ walletCheck: true }.",
-    );
+    throw new TypeError(`${name} must be exactly one of ${forms}.`);
   }
   const unknown = Object.keys(reference).find((key) => given(key) && !REFERENCE_KEYS.includes(key));
   if (unknown === "passphrase") {
@@ -1343,7 +1467,7 @@ function describeReference(value, name = "reference") {
     default:
       // 0 detects the length (the library's detection).
       requireWordCount(reference.words);
-      // The library's refusal (rehearsal::require_built_in_check_length), with its code and
+      // Deliberate copy of rehearsal::require_built_in_check_length's refusal, with its code and
       // message, before any secret reaches a worker; scripts/verify-browser-package.mjs keeps the
       // two in step.
       if (reference.words !== 0 && !BUILT_IN_CHECK_WORD_COUNTS.includes(reference.words)) {
@@ -1367,14 +1491,36 @@ function describeReference(value, name = "reference") {
  */
 async function answerOwner(owner, check) {
   const answer = await owner(check);
-  const withPassphrase =
-    typeof answer === "object" && answer !== null && answer.passphrase !== undefined;
+  const withPassphrase = isPassphraseAnswer(answer);
+  if (withPassphrase && !check.rehearsalNeedsPassphrase) {
+    requirePassphraseFits("owner", answer.passphrase, REKEY_PASSPHRASE_REFERENCES);
+  }
   // A passphrase answered is checked as any other: null is a TypeError, not an empty passphrase.
   const message = {
     confirmed: answer === true || withPassphrase,
     passphrase: encodeSecret(withPassphrase ? answer.passphrase : "", "passphrase"),
   };
-  return { message, transfer: secretBuffers(message) };
+  return { message };
+}
+
+/**
+ * Whether the owner's answer is the yes with the wallet's passphrase, `{ passphrase }`: an object
+ * whose only key with a value is passphrase. Any other key is refused rather than read, as
+ * `{ confirmed: false, passphrase }` would otherwise seal the phrase the owner rejected
+ * (AUD-024-API001); an object with no key is a no, as every answer but true.
+ * @param {unknown} answer
+ * @returns {answer is { passphrase: unknown }}
+ */
+function isPassphraseAnswer(answer) {
+  if (typeof answer !== "object" || answer === null) return false;
+  const keys = Object.entries(answer)
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key);
+  if (keys.length === 0) return false;
+  if (keys.length === 1 && keys[0] === "passphrase") return true;
+  throw new TypeError(
+    `The owner callback gives true, false or { passphrase }, not an object with ${keys.join(", ")}.`,
+  );
 }
 
 /** What onNoLength may give instead of detection, which found no verified length. */
@@ -1388,9 +1534,11 @@ const NO_LENGTH_ANSWERS = "a length, an address or a fingerprint";
  * @param {MhfeCheckEvidence} evidence
  */
 async function answerNoLength(onNoLength, evidence) {
-  const answer = await onNoLength(evidence);
+  const answer = await askPage(onNoLength, evidence, "onNoLength");
   if (answer === null || answer === undefined) return null;
   const { passphrase = "", ...reference } = answer;
+  // Deliberate copy: early refusal of RecoveredForCheck::compare_after_detection; package
+  // follow-up checks exercise the class and the binding with the same forbidden references.
   if (reference.words === 0) {
     throw new TypeError(`onNoLength gives ${NO_LENGTH_ANSWERS}, not detection again.`);
   }
@@ -1399,7 +1547,12 @@ async function answerNoLength(onNoLength, evidence) {
   if (reference.walletCheck !== undefined) {
     throw new TypeError(`onNoLength gives ${NO_LENGTH_ANSWERS}, not the wallet check.`);
   }
-  const [referenceKind, value, coin, path] = describeReference(reference);
+  const [referenceKind, value, coin, path] = describeReference(
+    reference,
+    "onNoLength",
+    NO_LENGTH_FORMS,
+  );
+  requirePassphraseFits(referenceKind, passphrase, CHECK_PASSPHRASE_REFERENCES);
   const message = {
     referenceKind,
     reference: value,
@@ -1407,7 +1560,7 @@ async function answerNoLength(onNoLength, evidence) {
     path,
     passphrase: encodeSecret(passphrase, "passphrase"),
   };
-  return { message, transfer: secretBuffers(message) };
+  return { message };
 }
 
 /**
@@ -1421,10 +1574,11 @@ async function answerNoLength(onNoLength, evidence) {
  * @param {(owner: PageOwner) => void} useOwner
  */
 async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths }, useOwner) {
-  const answer = await onConfirmAgain({
-    error: new MhfeError(code, sentence(message)),
-    ownerLengths: [...ownerLengths],
-  });
+  const answer = await askPage(
+    onConfirmAgain,
+    { error: new MhfeError(code, sentence(message)), ownerLengths: [...ownerLengths] },
+    "onConfirmAgain",
+  );
   if (answer === null || answer === undefined) return null;
   const { passphrase = "", words, ...confirmation } = answer;
   const [confirmKind, reference, coin, path, owner] = describeConfirmation(confirmation);
@@ -1433,7 +1587,8 @@ async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths 
   let stated = 0;
   if (owner !== undefined) {
     stated = words ?? (ownerLengths.length === 1 ? ownerLengths[0] : undefined);
-    // The core refuses any other length too; this names the page's mistake at once.
+    // Deliberate copy: Rekey::owner_states owns this rule. Package follow-up checks bind
+    // the early class refusal to the library's allowed ownerLengths and default selection.
     if (!ownerLengths.some((length) => length === stated)) {
       throw new TypeError(
         ownerLengths.length === 0
@@ -1453,7 +1608,7 @@ async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths 
     words: stated,
     passphrase: encodeSecret(passphrase, "passphrase"),
   };
-  return { message: next, transfer: secretBuffers(next) };
+  return { message: next };
 }
 
 // The references that take a passphrase in a check and in a rekey, in the words of the core's
@@ -1474,7 +1629,7 @@ function requirePassphraseFits(confirmKind, passphrase, references) {
   // Only a string or bytes has a length here; any other type is refused when it is encoded.
   const givenPassphrase =
     (typeof passphrase === "string" || passphrase instanceof Uint8Array) && passphrase.length > 0;
-  if (givenPassphrase && (confirmKind === "builtInCheck" || confirmKind === "owner")) {
+  if (givenPassphrase && ["builtInCheck", "words", "owner"].includes(confirmKind)) {
     throw new TypeError(`passphrase belongs only to ${references}.`);
   }
 }
@@ -1509,14 +1664,13 @@ function describeConfirmation(value) {
     // with CALLBACK_FAILED and the page's error as the cause. Its answer, true or
     // `{ passphrase }`, goes on as it is (answerOwner).
     /** @type {PageOwner} */
-    const owner = async (check) => {
-      try {
-        // A function of the page, as checked when the confirmation was given.
-        return await /** @type {{ owner: OwnerCallback }} */ (confirmation).owner(check);
-      } catch (cause) {
-        throw new MhfeError("CALLBACK_FAILED", "The page's owner callback failed.", { cause });
-      }
-    };
+    const owner = (check) =>
+      // A function of the page, as checked when the confirmation was given.
+      askPage(
+        (value) => /** @type {{ owner: OwnerCallback }} */ (confirmation).owner(value),
+        check,
+        "owner",
+      );
     return ["owner", "", "", "", owner];
   }
   if (given.includes("words")) {

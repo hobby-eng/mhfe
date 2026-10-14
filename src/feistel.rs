@@ -44,7 +44,7 @@ pub(crate) type RoundCallback<'a> = &'a mut dyn FnMut(u32) -> Result<(), MhfeErr
 /// The shape of one suite's permutation: its domain strings, the size of its halves and whether
 /// its round message carries the entropy size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Geometry {
+pub(crate) struct Geometry {
     ds_salt: &'static [u8],
     ds_mask: &'static [u8],
     half_bytes: usize,
@@ -54,7 +54,7 @@ pub struct Geometry {
 
 impl Geometry {
     /// Suite 3: the 256-bit packed state in two 128-bit halves.
-    pub const SUITE_3: Self = Self {
+    pub(crate) const SUITE_3: Self = Self {
         ds_salt: DS_SALT,
         ds_mask: DS_MASK,
         half_bytes: STATE_BYTES / 2,
@@ -63,7 +63,7 @@ impl Geometry {
 
     /// Suite 4 for an original of `entropy_bytes` bytes (16, 20, 24 or 28): the entropy itself
     /// in two halves of `ENT/2` bits.
-    pub fn same_length(entropy_bytes: usize) -> Result<Self, MhfeError> {
+    pub(crate) fn same_length(entropy_bytes: usize) -> Result<Self, MhfeError> {
         // The entropy of a 12- to 21-word phrase.
         let words = packing::words_of_entropy(entropy_bytes);
         if !packing::SHORT_WORD_COUNTS.contains(&words)
@@ -81,48 +81,62 @@ impl Geometry {
         })
     }
 
-    pub fn half_bytes(self) -> usize {
+    pub(crate) fn half_bytes(self) -> usize {
         self.half_bytes
     }
 
-    pub fn state_bytes(self) -> usize {
+    pub(crate) fn state_bytes(self) -> usize {
         2 * self.half_bytes
     }
 
-    pub fn ds_salt(self) -> &'static [u8] {
+    pub(crate) fn ds_salt(self) -> &'static [u8] {
         self.ds_salt
     }
 
-    pub fn ds_mask(self) -> &'static [u8] {
+    pub(crate) fn ds_mask(self) -> &'static [u8] {
         self.ds_mask
     }
 }
 
 /// All values of one round, for test vectors. States are `L || R` before and after the round.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
-pub struct RoundTrace {
-    pub round: u32,
-    pub state_before: Vec<u8>,
+pub(crate) struct RoundTrace {
+    pub(crate) round: u32,
+    pub(crate) state_before: Vec<u8>,
     /// `BE32(MEM) || BE32(PIM) || [BE32(ENT)] || BE32(i) || R`, which follows DS_SALT in the
     /// salt input and DS_MASK in the mask message.
-    pub message: Vec<u8>,
-    pub salt: [u8; SALT_BYTES],
-    pub key: [u8; KEY_BYTES],
-    pub mask: Vec<u8>,
-    pub state_after: Vec<u8>,
+    pub(crate) message: Vec<u8>,
+    pub(crate) salt: [u8; SALT_BYTES],
+    pub(crate) key: [u8; KEY_BYTES],
+    pub(crate) mask: Vec<u8>,
+    pub(crate) state_after: Vec<u8>,
 }
 
 /// The permutation for one password, one work factor and one suite's geometry.
-pub struct Permutation<'a> {
-    pub engine: &'a mut dyn Argon2Engine,
-    pub password: &'a Password,
-    pub work: WorkFactor,
-    pub geometry: Geometry,
+pub(crate) struct Permutation<'a> {
+    engine: &'a mut dyn Argon2Engine,
+    password: &'a Password,
+    work: WorkFactor,
+    geometry: Geometry,
 }
 
-impl Permutation<'_> {
+impl<'a> Permutation<'a> {
+    /// A permutation owns its mutable engine access for one password and suite geometry.
+    pub(crate) fn new(
+        engine: &'a mut dyn Argon2Engine,
+        password: &'a Password,
+        work: WorkFactor,
+        geometry: Geometry,
+    ) -> Self {
+        Self {
+            engine,
+            password,
+            work,
+            geometry,
+        }
+    }
     /// `Y = Perm(X)`: rounds 0 to 11.
-    pub fn forward(
+    pub(crate) fn forward(
         &mut self,
         x: &[u8],
         on_round: RoundCallback<'_>,
@@ -139,7 +153,7 @@ impl Permutation<'_> {
     }
 
     /// `X = Perm^-1(Y)`: rounds 11 down to 0. The callback still counts from 1 to 12.
-    pub fn inverse(
+    pub(crate) fn inverse(
         &mut self,
         y: &[u8],
         on_round: RoundCallback<'_>,
@@ -286,7 +300,6 @@ fn join(left: &[u8], right: &[u8]) -> Zeroizing<Vec<u8>> {
     state
 }
 
-/// `half ^= mask`, in the half's own buffer.
 /// The half of the state that takes a round's mask: the left one going forward, the right one
 /// going back.
 #[derive(Clone, Copy)]
@@ -318,6 +331,7 @@ fn apply_round(
     }
 }
 
+/// `half ^= mask`, in the half's own buffer.
 fn xor_in_place(half: &mut [u8], mask: &[u8]) {
     for (byte, mask_byte) in half.iter_mut().zip(mask) {
         *byte ^= mask_byte;
@@ -327,6 +341,19 @@ fn xor_in_place(half: &mut [u8], mask: &[u8]) {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// The hash and MAC states fed with secrets wipe themselves on drop, which each crate's own
+    /// zeroize feature turns on (AUD-024-SEC005); checked when the tests compile. The HMAC and
+    /// BLAKE2b wrappers do not name the marker, but wipe through the cores and digest's buffers
+    /// checked here.
+    #[test]
+    fn the_secret_hash_states_wipe_themselves() {
+        fn wiped<T: ZeroizeOnDrop>() {}
+        wiped::<Sha256>();
+        wiped::<sha2::Sha512>();
+        wiped::<blake2::Blake2bVarCore>();
+        wiped::<hmac::digest::CtOutput<HmacSha256>>();
+    }
 
     /// A stand-in for Argon2 in structural tests: a key that depends on password and salt.
     pub(crate) struct HashEngine;
@@ -356,7 +383,7 @@ pub(crate) mod tests {
 
     #[test]
     fn inverse_undoes_forward() {
-        let password = Password::new("public test password").unwrap();
+        let password = crate::test_support::test_password();
         let mut engine = HashEngine;
         let x: [u8; STATE_BYTES] = std::array::from_fn(|index| index as u8);
         let y = permutation(&mut engine, &password)
@@ -374,7 +401,7 @@ pub(crate) mod tests {
     /// in all but form (AUD-010).
     #[test]
     fn the_state_is_held_in_locked_memory() {
-        let password = Password::new("public test password").unwrap();
+        let password = crate::test_support::test_password();
         let mut engine = HashEngine;
         let mut permutation = permutation(&mut engine, &password);
         let x = [7u8; STATE_BYTES];
@@ -394,7 +421,7 @@ pub(crate) mod tests {
 
     #[test]
     fn traces_record_every_round_in_both_directions() {
-        let password = Password::new("public test password").unwrap();
+        let password = crate::test_support::test_password();
         let mut engine = HashEngine;
         let x: [u8; STATE_BYTES] = std::array::from_fn(|index| 255 - index as u8);
         let mut forward_trace = Vec::new();
@@ -428,7 +455,7 @@ pub(crate) mod tests {
 
     #[test]
     fn the_callback_counts_rounds_and_can_stop_before_one() {
-        let password = Password::new("public test password").unwrap();
+        let password = crate::test_support::test_password();
         let mut engine = HashEngine;
         let mut seen = Vec::new();
         let result = permutation(&mut engine, &password).forward(
@@ -514,7 +541,7 @@ pub(crate) mod tests {
 
     #[test]
     fn same_length_inverse_undoes_forward_for_every_length() {
-        let password = Password::new("public test password").unwrap();
+        let password = crate::test_support::test_password();
         for bytes in [16, 20, 24, 28] {
             let mut engine = HashEngine;
             let mut permutation = Permutation {

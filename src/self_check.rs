@@ -11,10 +11,19 @@
 //! asks for. MHFE's own published vectors at their full cost take minutes and gigabytes and stay
 //! in [`crate::self_test`].
 //!
-//! This module holds no vector and knows no feature: it only runs checks and collects their
-//! outcomes. It measures no time, since a clock is not available everywhere the library runs.
+//! This module runs checks and collects their outcomes; feature modules supply the checks. It
+//! also holds the shared public zero-12 container fixture used by repair and search checks. It
+//! measures no time, since a clock is not available everywhere the library runs.
 
 use crate::MhfeError;
+
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-wallet"
+))]
+pub(crate) mod digests;
 
 pub mod process;
 pub mod sets;

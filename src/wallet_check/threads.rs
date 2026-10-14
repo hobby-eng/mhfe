@@ -10,6 +10,7 @@ use zeroize::Zeroizing;
 
 use super::{PhraseDraw, DRAW_REPORT_INTERVAL, NEW_ENTROPY_BYTES};
 use crate::random::{check_source, RandomSource};
+use crate::workers::start_scoped;
 use crate::MhfeError;
 
 /// A drawn entropy, wiped when dropped.
@@ -54,15 +55,10 @@ impl<'a> ThreadedDraw<'a> {
         S: RandomSource,
         F: Fn() -> S + Sync,
     {
+        let work = || self.work(&mut new_source());
         thread::scope(|scope| {
-            for _ in 1..threads {
-                let started =
-                    thread::Builder::new().spawn_scoped(scope, || self.work(&mut new_source()));
-                if started.is_err() {
-                    break;
-                }
-            }
-            self.work(&mut new_source());
+            start_scoped(scope, threads.saturating_sub(1), &work);
+            work();
         });
         // Nothing panics while the lock is held, so it is never poisoned; this only avoids an
         // unwrap.
@@ -85,8 +81,10 @@ impl<'a> ThreadedDraw<'a> {
         if let Err(error) = check_source(source) {
             return Some(Err(error));
         }
+        // The thread's last entropy, which the next must not repeat (AUD-024-SEC014).
+        let mut previous = Zeroizing::new([0u8; NEW_ENTROPY_BYTES]);
         while !self.ended.load(Ordering::Relaxed) {
-            match self.draw.try_draws(source, 1) {
+            match self.draw.draws_after(source, 1, &mut previous) {
                 Ok(None) => {
                     if let Err(error) = self.count_draw() {
                         return Some(Err(error));

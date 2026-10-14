@@ -57,6 +57,7 @@ pub enum Reading {
     /// One word was left out or is not in the list; the check word restores it.
     Restorable,
     /// All six words are in the list but do not fit: one is wrong, at a place that cannot be told.
+    ///
     /// Each place allows exactly one repair, so there are six.
     Mismatch,
 }
@@ -83,13 +84,22 @@ impl Correction {
     }
 }
 
-/// One word of the reviewed password replaced so that the six fit.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One word of the reviewed password replaced so that the six fit. Its Debug text gives the place
+/// only: the word and where it was typed are parts of the password (AUD-024-SEC006).
+#[derive(Clone, PartialEq, Eq)]
 pub struct Repair {
     position: usize,
     word: &'static str,
     /// Where the word as typed lies in the reviewed text.
     typed: Range<usize>,
+}
+
+impl std::fmt::Debug for Repair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Repair")
+            .field("position", &self.position)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Repair {
@@ -182,6 +192,7 @@ impl PasswordReview {
     }
 
     /// Whether the repairs, or the correction, should be offered before the password as typed.
+    ///
     /// A word typed as "?" asks for the repair, and a corrected password that fits is strong
     /// evidence of the profile. Any other word may belong to a password made without a check
     /// word, which is used as typed unless a repair is chosen.
@@ -393,33 +404,10 @@ mod tests {
             .join(" ")
     }
 
-    /// The public vectors of the specification.
-    const VECTORS: [(&str, usize, &str); 4] = [
-        (
-            "11111 11112 11113 11114 11115",
-            104,
-            "abacus abdomen abdominal abide abiding aids",
-        ),
-        (
-            "66666 66666 66666 66666 66666",
-            7739,
-            "zoom zoom zoom zoom zoom yelling",
-        ),
-        (
-            "35214 62431 15543 44126 21365",
-            4150,
-            "jovial trailing chokehold pavilion cresting ninth",
-        ),
-        (
-            "24255 61534 11111 66622 26522",
-            5527,
-            "drop-down t-shirt abacus yo-yo felt-tip rubble",
-        ),
-    ];
-
     #[test]
     fn the_public_vectors_are_reproduced() {
-        for (rolls, check, expected) in VECTORS {
+        for case in known_answers::VECTORS {
+            let (rolls, check, expected) = (case.rolls, case.check_index, case.password);
             assert_eq!(check_index(&drawn(rolls)), check, "{rolls}");
             assert_eq!(password(&drawn(rolls)), expected);
             assert_eq!(PasswordReview::of(expected).reading(), Reading::Fits);
@@ -429,17 +417,19 @@ mod tests {
     /// "In the third row, an erased third word is recovered as chokehold."
     #[test]
     fn the_erased_third_word_of_the_third_vector_is_chokehold() {
-        let review = PasswordReview::of("jovial trailing ? pavilion cresting ninth");
+        let (erased, position, word) = known_answers::ERASED;
+        let review = PasswordReview::of(erased);
         assert_eq!(review.reading(), Reading::Restorable);
         let repair = &review.repairs()[0];
-        assert_eq!((repair.position(), repair.word()), (3, "chokehold"));
+        assert_eq!((repair.position(), repair.word()), (position, word));
         assert_eq!(review.typed_word(repair), UNREADABLE);
         assert!(review.repairs_first());
     }
 
     #[test]
     fn one_missing_word_is_restored_at_any_place() {
-        for (_, _, expected) in VECTORS {
+        for case in known_answers::VECTORS {
+            let expected = case.password;
             for position in 0..=DRAWN_WORDS {
                 let mut words: Vec<&str> = expected.split(' ').collect();
                 words[position] = "unreadable";
@@ -461,7 +451,7 @@ mod tests {
 
     #[test]
     fn one_wrong_word_leaves_six_repairs_with_the_right_one_among_them() {
-        let (_, _, expected) = VECTORS[0];
+        let expected = known_answers::VECTORS[0].password;
         let typed = expected.replace("abide", "zoom");
         let review = PasswordReview::of(&typed);
         assert_eq!(review.reading(), Reading::Mismatch);
@@ -487,6 +477,25 @@ mod tests {
             assert_eq!(PasswordReview::of(&repaired).reading(), Reading::Fits);
         }
         assert_eq!(&*review.apply(ReviewChoice::AsTyped).unwrap(), typed);
+    }
+
+    #[test]
+    fn the_debug_text_of_a_repair_gives_no_part_of_the_password() {
+        let expected = known_answers::VECTORS[0].password;
+        let reviews = [
+            PasswordReview::of("jovial trailing ? pavilion cresting ninth"),
+            PasswordReview::of(&expected.replace("abide", "zoom")),
+        ];
+        for review in &reviews {
+            for repair in review.repairs() {
+                let text = format!("{repair:?}");
+                assert_eq!(
+                    text,
+                    format!("Repair {{ position: {}, .. }}", repair.position())
+                );
+                assert!(!text.contains(repair.word()), "{text}");
+            }
+        }
     }
 
     #[test]
@@ -550,7 +559,8 @@ mod tests {
 
     #[test]
     fn choices_not_offered_are_refused() {
-        let review = PasswordReview::of("jovial trailing ? pavilion cresting ninth");
+        let (erased, _, _) = known_answers::ERASED;
+        let review = PasswordReview::of(erased);
         assert!(matches!(
             review.apply(ReviewChoice::Repair(2)),
             Err(MhfeError::PasswordRepairNotOffered)

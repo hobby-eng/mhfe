@@ -1,0 +1,653 @@
+{
+  "purpose": "CORE-41 inventory of CLI questions, their answer families and scoped options or justified recovery follow-ups. Secret values remain terminal input. Dynamic answer families are reviewed when their producers change; this gate checks call-site coverage, table completeness and actual clap option existence, not semantics of arbitrary Rust.",
+  "bindings": {
+    "settings": [
+      {
+        "commands": ["new", "encrypt", "decrypt", "check", "rekey", "wallets", "repair"],
+        "options": ["pim", "mem"]
+      },
+      {
+        "commands": ["rekey"],
+        "options": ["new-pim", "new-mem"]
+      }
+    ],
+    "passphrase": [
+      {
+        "commands": ["decrypt", "check", "rekey"],
+        "options": ["passphrase-used"]
+      }
+    ],
+    "coin": [
+      {
+        "commands": ["check", "rekey", "repair", "decrypt", "wallets"],
+        "options": ["coin"]
+      }
+    ],
+    "repair-count": [
+      {
+        "commands": ["encrypt", "new", "rekey"],
+        "options": ["repair-words"]
+      },
+      {
+        "commands": ["repair-words"],
+        "options": ["count"]
+      }
+    ],
+    "repair": [
+      {
+        "commands": ["decrypt", "check", "rekey", "wallets"],
+        "options": ["repair"]
+      }
+    ],
+    "gap": [
+      {
+        "commands": ["decrypt", "check", "rekey", "wallets", "repair"],
+        "options": ["scan-gap"]
+      }
+    ],
+    "length": [
+      {
+        "commands": ["decrypt", "check", "rekey"],
+        "options": ["words"]
+      }
+    ],
+    "suite": [
+      {
+        "commands": ["encrypt"],
+        "options": ["same-length"]
+      }
+    ],
+    "new-password": [
+      {
+        "commands": ["encrypt", "new", "rekey"],
+        "options": ["new-password"]
+      }
+    ],
+    "chosen-words": [
+      {
+        "commands": ["new"],
+        "options": ["choose-word"]
+      }
+    ],
+    "confirm": [
+      {
+        "commands": ["rekey"],
+        "options": ["confirm"]
+      }
+    ],
+    "wallet-check": [
+      {
+        "commands": ["new"],
+        "options": ["wallet-check"]
+      }
+    ],
+    "password-kind": [
+      {
+        "commands": ["password"],
+        "options": ["words", "chars", "check-word"]
+      }
+    ],
+    "self-test": [
+      {
+        "commands": ["self-test"],
+        "options": ["vectors"]
+      }
+    ],
+    "check-address": [
+      {
+        "commands": ["check"],
+        "options": ["address"]
+      }
+    ],
+    "check-fingerprint": [
+      {
+        "commands": ["check"],
+        "options": ["fingerprint"]
+      }
+    ],
+    "check-built-in": [
+      {
+        "commands": ["check"],
+        "options": ["words"]
+      }
+    ],
+    "check-wallet-check": [
+      {
+        "commands": ["check"],
+        "options": ["wallet-check"]
+      }
+    ]
+  },
+  "sites": [
+    {
+      "site": "settings.rs:ask_for_own:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Default settings",
+          "binding": "settings"
+        },
+        {
+          "meaning": "Custom PIM and memory",
+          "binding": "settings"
+        }
+      ]
+    },
+    {
+      "site": "settings.rs:ask_own:ask_number",
+      "occurrences": 2,
+      "answers": [
+        {
+          "meaning": "PIM number",
+          "binding": "settings"
+        },
+        {
+          "meaning": "Memory level number",
+          "binding": "settings"
+        }
+      ]
+    },
+    {
+      "site": "check/passphrase.rs:ask_passphrase_explained:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "No passphrase",
+          "binding": "passphrase",
+          "value": "no"
+        },
+        {
+          "meaning": "Passphrase typed next",
+          "binding": "passphrase",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "site": "check/wallet_reference.rs:ask_for_coin:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Each supported Coin",
+          "binding": "coin"
+        }
+      ]
+    },
+    {
+      "site": "check.rs:ask_for_choice:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Address",
+          "binding": "check-address"
+        },
+        {
+          "meaning": "Fingerprint",
+          "binding": "check-fingerprint"
+        },
+        {
+          "meaning": "Built-in length check or detection",
+          "binding": "check-built-in"
+        },
+        {
+          "meaning": "Phrase and passphrase check",
+          "binding": "check-wallet-check"
+        }
+      ]
+    },
+    {
+      "site": "check.rs:ask_length_after_detection:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "State a short length",
+          "followUp": "The recovered checks are ambiguous; the owner chooses a new comparison after recovery without repeating Argon2."
+        },
+        {
+          "meaning": "Address",
+          "followUp": "The recovered checks are ambiguous; the owner chooses a new comparison after recovery without repeating Argon2."
+        },
+        {
+          "meaning": "Fingerprint",
+          "followUp": "The recovered checks are ambiguous; the owner chooses a new comparison after recovery without repeating Argon2."
+        }
+      ]
+    },
+    {
+      "site": "check_word.rs:decide:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Use the repaired password",
+          "followUp": "A proposed repair of secret input must be reviewed after it is found, before it is used."
+        },
+        {
+          "meaning": "Type it again",
+          "followUp": "A proposed repair of secret input must be reviewed after it is found, before it is used."
+        }
+      ]
+    },
+    {
+      "site": "chosen_words.rs:ask_whether:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "All words random",
+          "binding": "chosen-words"
+        },
+        {
+          "meaning": "Choose words and positions",
+          "binding": "chosen-words"
+        }
+      ]
+    },
+    {
+      "site": "container_repair.rs:wants_repair:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Type container again",
+          "binding": "repair"
+        },
+        {
+          "meaning": "Read repair words",
+          "binding": "repair"
+        }
+      ]
+    },
+    {
+      "site": "container_repair.rs:uses_repair:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Use repaired container",
+          "followUp": "The owner reviews the actual repaired public container before accepting it."
+        },
+        {
+          "meaning": "Type container again",
+          "followUp": "The owner reviews the actual repaired public container before accepting it."
+        }
+      ]
+    },
+    {
+      "site": "container_repair.rs:ask_count:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "No card when offered",
+          "binding": "repair-count"
+        },
+        {
+          "meaning": "Each supported repair-card size",
+          "binding": "repair-count"
+        }
+      ]
+    },
+    {
+      "site": "container_search.rs:ask_what_is_known:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Container wallet reference",
+          "followUp": "An unreadable container lacks repair words; the available search routes depend on its missing words and checks. This is a recovery follow-up."
+        },
+        {
+          "meaning": "Original wallet reference",
+          "followUp": "An unreadable container lacks repair words; the available search routes depend on its missing words and checks. This is a recovery follow-up."
+        },
+        {
+          "meaning": "Original passphrase check",
+          "followUp": "An unreadable container lacks repair words; the available search routes depend on its missing words and checks. This is a recovery follow-up."
+        },
+        {
+          "meaning": "Built-in phrase checks",
+          "followUp": "An unreadable container lacks repair words; the available search routes depend on its missing words and checks. This is a recovery follow-up."
+        },
+        {
+          "meaning": "Type container again",
+          "followUp": "An unreadable container lacks repair words; the available search routes depend on its missing words and checks. This is a recovery follow-up."
+        }
+      ]
+    },
+    {
+      "site": "container_search.rs:ask_scan_gap:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Each offered gap",
+          "binding": "gap"
+        },
+        {
+          "meaning": "Custom gap number",
+          "binding": "gap"
+        }
+      ]
+    },
+    {
+      "site": "container_search.rs:read_own_gap:visible",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Custom gap number",
+          "binding": "gap"
+        }
+      ]
+    },
+    {
+      "site": "container_search.rs:with_container_wallet:ask_passphrase",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "No container wallet passphrase",
+          "followUp": "The recovery route just selected determines whose wallet is searched; a command-level passphrase answer refers to the normal recovery, not this alternate search wallet."
+        },
+        {
+          "meaning": "Container wallet passphrase typed next",
+          "followUp": "The recovery route just selected determines whose wallet is searched; a command-level passphrase answer refers to the normal recovery, not this alternate search wallet."
+        }
+      ]
+    },
+    {
+      "site": "container_search.rs:with_original_wallet:ask_passphrase",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "No original wallet passphrase",
+          "followUp": "The recovery route just selected determines whose wallet is searched; a command-level passphrase answer refers to the normal recovery, not this alternate search wallet."
+        },
+        {
+          "meaning": "Original wallet passphrase typed next",
+          "followUp": "The recovery route just selected determines whose wallet is searched; a command-level passphrase answer refers to the normal recovery, not this alternate search wallet."
+        }
+      ]
+    },
+    {
+      "site": "container_search.rs:starts_long_search:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Start search",
+          "followUp": "The owner accepts the estimated cost of the actual candidate set before a potentially long search."
+        },
+        {
+          "meaning": "Type container again",
+          "followUp": "The owner accepts the estimated cost of the actual candidate set before a potentially long search."
+        }
+      ]
+    },
+    {
+      "site": "container_search.rs:use_found:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Use found container",
+          "followUp": "The owner reviews the actual candidate found by recovery before accepting it."
+        },
+        {
+          "meaning": "Type container again",
+          "followUp": "The owner reviews the actual candidate found by recovery before accepting it."
+        }
+      ]
+    },
+    {
+      "site": "encrypt.rs:run:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Repair-card size delegated to RepairWordsOption",
+          "binding": "repair-count"
+        }
+      ]
+    },
+    {
+      "site": "new_wallet.rs:run:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Repair-card size delegated to RepairWordsOption",
+          "binding": "repair-count"
+        }
+      ]
+    },
+    {
+      "site": "rekey.rs:run:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Repair-card size delegated to RepairWordsOption",
+          "binding": "repair-count"
+        }
+      ]
+    },
+    {
+      "site": "length_choice.rs:choose:choose",
+      "occurrences": 2,
+      "answers": [
+        {
+          "meaning": "Default container length",
+          "binding": "suite"
+        },
+        {
+          "meaning": "Same length as original",
+          "binding": "suite"
+        }
+      ]
+    },
+    {
+      "site": "made_password.rs:ask_kind:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Own password",
+          "binding": "new-password",
+          "value": "own"
+        },
+        {
+          "meaning": "Random words",
+          "binding": "new-password",
+          "value": "words"
+        },
+        {
+          "meaning": "Words and check word",
+          "binding": "new-password",
+          "value": "check-word"
+        },
+        {
+          "meaning": "Random characters",
+          "binding": "new-password",
+          "value": "chars"
+        }
+      ]
+    },
+    {
+      "site": "menu.rs:make_passwords:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Words",
+          "binding": "password-kind"
+        },
+        {
+          "meaning": "Words and check word",
+          "binding": "password-kind"
+        },
+        {
+          "meaning": "Characters",
+          "binding": "password-kind"
+        }
+      ]
+    },
+    {
+      "site": "menu.rs:repair_or_make_words:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "repair subcommand",
+          "followUp": "The launcher selects a subcommand; both answers have direct CLI commands."
+        },
+        {
+          "meaning": "repair-words subcommand",
+          "followUp": "The launcher selects a subcommand; both answers have direct CLI commands."
+        }
+      ]
+    },
+    {
+      "site": "menu.rs:which_self_test:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Component self-test",
+          "binding": "self-test"
+        },
+        {
+          "meaning": "Component and published vector self-test",
+          "binding": "self-test"
+        }
+      ]
+    },
+    {
+      "site": "new_wallet.rs:ask_for_check:choose_without_default",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "No wallet check",
+          "binding": "wallet-check"
+        },
+        {
+          "meaning": "Draw phrase with wallet check",
+          "binding": "wallet-check"
+        }
+      ]
+    },
+    {
+      "site": "phrase_length.rs:ask:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Each allowed phrase length",
+          "binding": "length"
+        },
+        {
+          "meaning": "Detect automatically",
+          "binding": "length"
+        }
+      ]
+    },
+    {
+      "site": "phrase_length.rs:ask_stated:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Each length found in recovered checks",
+          "followUp": "The actual checks after recovery determine which stated lengths are allowed; no pre-recovery length can resolve this ambiguity."
+        }
+      ]
+    },
+    {
+      "site": "rekey.rs:ask_how_to_confirm:choose",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Built-in check when offered",
+          "binding": "confirm"
+        },
+        {
+          "meaning": "Wallet address",
+          "binding": "confirm"
+        },
+        {
+          "meaning": "Wallet fingerprint",
+          "binding": "confirm"
+        },
+        {
+          "meaning": "Owner compares shown phrase",
+          "binding": "confirm"
+        }
+      ]
+    },
+    {
+      "site": "rekey.rs:ask_wallet_passphrase:choose_without_default",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "No wallet passphrase",
+          "binding": "passphrase",
+          "value": "no"
+        },
+        {
+          "meaning": "Wallet has passphrase",
+          "binding": "passphrase",
+          "value": "yes"
+        }
+      ]
+    },
+    {
+      "site": "rekey.rs:owner_confirms:choose_here_without_default",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Shown phrase matches backup",
+          "followUp": "Only the owner can compare the recovered secret with their physical backup; this acknowledgement must occur after it is shown."
+        },
+        {
+          "meaning": "Shown phrase differs from backup",
+          "followUp": "Only the owner can compare the recovered secret with their physical backup; this acknowledgement must occur after it is shown."
+        }
+      ]
+    },
+    {
+      "site": "terminal.rs:choose:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Question delegated unchanged to the terminal adapter",
+          "followUp": "Infrastructure dispatch: the question and its answers are inventoried at their producing call site."
+        }
+      ]
+    },
+    {
+      "site": "terminal.rs:choose_here:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Question delegated unchanged to the terminal adapter",
+          "followUp": "Infrastructure dispatch: the question and its answers are inventoried at their producing call site."
+        }
+      ]
+    },
+    {
+      "site": "terminal.rs:choose_without_default:choose_here_without_default",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Question delegated unchanged to the terminal adapter",
+          "followUp": "Infrastructure dispatch: the question and its answers are inventoried at their producing call site."
+        }
+      ]
+    },
+    {
+      "site": "terminal.rs:choose_here_without_default:choose_here_without_default",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Question delegated unchanged to the terminal adapter",
+          "followUp": "Infrastructure dispatch: the question and its answers are inventoried at their producing call site."
+        }
+      ]
+    },
+    {
+      "site": "wallets.rs:another:choose_here",
+      "occurrences": 1,
+      "answers": [
+        {
+          "meaning": "Open another wallet",
+          "followUp": "Repeat or end an already running private interaction; each wallet uses a separately typed password."
+        },
+        {
+          "meaning": "Finish",
+          "followUp": "Repeat or end an already running private interaction; each wallet uses a separately typed password."
+        }
+      ]
+    }
+  ]
+}

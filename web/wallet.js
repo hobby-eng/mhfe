@@ -21,23 +21,33 @@ import {
   HIGHEST_WORD_POSITION,
   MhfeModuleClass,
   ModuleWorker,
+  refuseUnknownOptions,
   OperationSlot,
+  SecretBytes,
   encodeSecret,
+  isRecord,
+  packageMismatch,
   requireCallback,
   requireSecret,
   requireText,
   secretOrEmpty,
-  wipeSecrets,
+  SecretRequest,
   wordHintsOf,
 } from "../runtime/runtime.js";
 
 export { MhfeCancelledError, MhfeError } from "../runtime/runtime.js";
 
 /**
- * @import { MhfeChosenWord, MhfeWallet as DeclaredWallet, MhfeWalletParameters, MhfeWalletSources }
+ * @import { MhfeChosenWord, MhfeNewPhrase, MhfeWallet as DeclaredWallet, MhfeWalletParameters, MhfeWalletSources }
  *   from "./wallet.d.ts"
  * @import { MhfeSecret, WorkerJob, WorkerRequest } from "../runtime/runtime.js"
  */
+
+/** @import { NoKeys } from "./types/api-presence.d.ts" */
+/** @typedef {NoKeys<Exclude<keyof DeclaredWallet, keyof MhfeWallet>>} DeclaredButMissing */
+/** @typedef {NoKeys<Exclude<keyof MhfeWallet, keyof DeclaredWallet>>} PresentButUndeclared */
+/** @typedef {NoKeys<Exclude<keyof typeof DeclaredWallet, keyof typeof MhfeWallet>>} MissingStatics */
+/** @typedef {NoKeys<Exclude<keyof typeof MhfeWallet, keyof typeof DeclaredWallet>>} ExtraStatics */
 
 /**
  * The options of drawPhrase() as a page may pass them.
@@ -142,8 +152,8 @@ export class MhfeWallet extends MhfeModuleClass {
     }
     requireText(coin, "coin");
     requireText(path, "path");
-    if (!Number.isSafeInteger(scanGap) || scanGap < 0) {
-      throw new TypeError("scanGap must be 0 or a whole number of addresses.");
+    if (!Number.isSafeInteger(scanGap)) {
+      throw new TypeError("scanGap must be a whole number of addresses.");
     }
     await this.#module.ready();
     return this.#module.run({ operation: "describeAddress", address, coin, path, scanGap });
@@ -218,7 +228,7 @@ export class MhfeWallet extends MhfeModuleClass {
     }
     if (workers !== undefined) requireWorkers(workers);
     // A page that asked for the check must never get a phrase without it. The rule is the
-    // library's (wallet_check::require_passphrase), asked here before any worker starts, with its
+    // library's (wallet_check::require_passphrase), a deliberate copy before a worker starts, with its
     // code and message; scripts/verify-browser-package.mjs keeps the two in step.
     if (!hasPassphrase && walletCheck === true) {
       throw new MhfeError(
@@ -250,17 +260,19 @@ export class MhfeWallet extends MhfeModuleClass {
   #draw(passphrase, passphraseRepeat, hasPassphrase, checked, count, wishes, onProgress) {
     // Made before the first copy of the passphrase, so that nothing can fail between that copy
     // and the cleanup below (AUD-012-SEC001).
-    let repeat = new Uint8Array(0);
-    let chosenWords = new Uint8Array(0);
+    let repeat = new SecretBytes(new Uint8Array(0));
+    let chosenWords = new SecretBytes(new Uint8Array(0));
     const first = encodeSecret(passphrase, "passphrase");
     try {
       if (hasPassphrase) {
-        // The library's rule (wallet_check::require_same_passphrase), which every worker applies
+        // Deliberate copy of wallet_check::require_same_passphrase, which every worker applies
         // again, is compared here first, so that a refused passphrase never reaches a worker; its
         // code and message are the library's, and scripts/verify-browser-package.mjs keeps them
         // in step.
         repeat = encodeSecret(passphraseRepeat, "repeated passphrase");
-        const same = repeat.length === first.length && repeat.every((byte, i) => byte === first[i]);
+        const same =
+          repeat.bytes.length === first.bytes.length &&
+          repeat.bytes.every((byte, i) => byte === first.bytes[i]);
         if (!same) {
           throw new MhfeError("PASSPHRASES_DIFFER", "The passphrase and its repetition differ");
         }
@@ -269,9 +281,9 @@ export class MhfeWallet extends MhfeModuleClass {
       const secrets = { passphrase: first, passphraseRepeat: repeat, chosenWords };
       return this.#startDraws(secrets, wishes, checked, count, onProgress);
     } finally {
-      first.fill(0);
-      repeat.fill(0);
-      chosenWords.fill(0);
+      first.wipe();
+      repeat.wipe();
+      chosenWords.wipe();
     }
   }
 
@@ -280,7 +292,7 @@ export class MhfeWallet extends MhfeModuleClass {
    * the chosen words) and the `wishes`, and settles with the first phrase found or the first
    * failure. A failure while the workers are started stops those started, wipes the copies not
    * yet handed to a job and frees the slot.
-   * @param {Record<string, Uint8Array>} secrets
+   * @param {Record<string, SecretBytes>} secrets
    * @param {Wishes} wishes
    * @param {boolean | undefined} checked
    * @param {number} count
@@ -297,11 +309,19 @@ export class MhfeWallet extends MhfeModuleClass {
       /** @type {(error: unknown, result?: unknown) => void} */
       const finish = (error, result) => {
         if (finished) return;
+        /** @type {Omit<MhfeNewPhrase, "workers"> | undefined} */
+        let drawn;
+        if (error === null) {
+          try {
+            drawn = readDrawnPhrase(result);
+          } catch (mismatch) {
+            error = mismatch;
+          }
+        }
         finished = true;
         release();
         for (const job of jobs) job.stop(null);
-        // The worker's result is the phrase drawn; a spread copies the fields of any value.
-        if (error === null) resolve({ .../** @type {object} */ (result), workers: count });
+        if (drawn !== undefined) resolve({ ...drawn, workers: count });
         else reject(error);
       };
       try {
@@ -317,7 +337,8 @@ export class MhfeWallet extends MhfeModuleClass {
           };
           let started;
           try {
-            for (const [field, bytes] of Object.entries(secrets)) message[field] = bytes.slice();
+            for (const [field, bytes] of Object.entries(secrets))
+              message[field] = new SecretBytes(bytes.bytes.slice());
             started = this.#module.start(message, {
               // Returned, so that a rejected promise of the page stops the drawing too.
               draws: (/** @type {number} */ drawn) => {
@@ -326,10 +347,8 @@ export class MhfeWallet extends MhfeModuleClass {
                 return onProgress?.({ stage: "draw", draws: total });
               },
             });
-          } catch (error) {
-            // Not yet a job's: these copies are this class's to wipe.
-            wipeSecrets(message);
-            throw error;
+          } finally {
+            if (started === undefined) new SecretRequest(message).wipe();
           }
           jobs.push(started.job);
           started.done.then(
@@ -350,10 +369,52 @@ export class MhfeWallet extends MhfeModuleClass {
 }
 
 /**
- * The wishes of a new phrase as the WebAssembly takes them: the chosen words one space apart, a
- * secret; the place of each, 0 for anywhere and otherwise its position; and the words never to
- * use, one space apart. Only their types are checked here: the library judges the words, their
- * places and how many (INVALID_WORD_WISH).
+ * A worker's new phrase result, checked before the class releases a drawing's result.
+ * @param {unknown} value
+ * @returns {Omit<MhfeNewPhrase, "workers">}
+ */
+function readDrawnPhrase(value) {
+  if (
+    !isRecord(value) ||
+    typeof value.phrase !== "string" ||
+    value.words !== 24 ||
+    typeof value.walletCheck !== "boolean" ||
+    typeof value.fingerprintWithPassphrase !== "string"
+  ) {
+    throw packageMismatch("The worker returned a malformed new phrase");
+  }
+  return {
+    phrase: value.phrase,
+    words: value.words,
+    walletCheck: value.walletCheck,
+    fingerprintWithPassphrase: value.fingerprintWithPassphrase,
+  };
+}
+
+// The options each method takes, which it refuses others beside (AUD-024-API003); kept in step
+// with wallet.d.ts.
+refuseUnknownOptions(MhfeWallet.prototype, {
+  walletCheck: ["phrase", "passphrase"],
+  wordHints: ["typed"],
+  fingerprint: ["phrase", "passphrase"],
+  describeAddress: ["address", "coin", "path", "scanGap"],
+  describeDraw: ["chosen", "neverUse", "walletCheck"],
+  drawPhrase: [
+    "passphrase",
+    "passphraseRepeat",
+    "walletCheck",
+    "workers",
+    "chosen",
+    "neverUse",
+    "onProgress",
+  ],
+});
+
+/**
+ * The wishes of a new phrase as the WebAssembly takes them: the chosen words, each after a line
+ * break, a secret; the place of each, 0 for anywhere and otherwise its position; and the words
+ * never to use, each after a line break. Types and the wire's numeric range are checked here;
+ * the library judges the words, their places within the phrase and how many (INVALID_WORD_WISH).
  * @param {MhfeChosenWord[]} chosen
  * @param {string[]} neverUse
  * @returns {Wishes}
@@ -368,14 +429,24 @@ function wishesOf(chosen, neverUse) {
   for (const wish of chosen) {
     requireText(wish?.word, "a chosen word");
     const { position } = wish;
-    const whole = typeof position === "number" && Number.isSafeInteger(position) && position >= 1;
-    if (position !== "anywhere" && !(whole && position <= HIGHEST_WORD_POSITION)) {
+    if (position !== "anywhere" && !Number.isSafeInteger(position)) {
       throw new TypeError('A chosen word\'s position is a whole number from 1, or "anywhere".');
+    }
+    // The worker encodes anywhere as 0. A numeric position must fit its positive wire range;
+    // other whole numbers reach the library's own phrase-position rule (AUD-024-API002).
+    if (position !== "anywhere" && (position < 1 || position > HIGHEST_WORD_POSITION)) {
+      throw new MhfeError(
+        "INVALID_WORD_WISH",
+        "A chosen word needs a position from 1, or anywhere.",
+      );
     }
     words.push(wish.word);
     places.push(position === "anywhere" ? 0 : position);
   }
-  return { words: words.join(" "), places, neverUse: neverUse.join(" ") };
+  // Each word after a line break of its own, so that an empty or blank one stays an entry, which
+  // the library refuses, rather than vanishing (AUD-024-API009).
+  const entries = (/** @type {string[]} */ list) => list.map((word) => `\n${word}`).join("");
+  return { words: entries(words), places, neverUse: entries(neverUse) };
 }
 
 /**
@@ -383,8 +454,14 @@ function wishesOf(chosen, neverUse) {
  * @param {number} workers
  */
 function requireWorkers(workers) {
-  if (!Number.isSafeInteger(workers) || workers < 1 || workers > HIGHEST_DRAW_WORKERS) {
+  if (!Number.isSafeInteger(workers)) {
     throw new TypeError(`workers must be a whole number from 1 to ${HIGHEST_DRAW_WORKERS}.`);
+  }
+  if (workers < 1 || workers > HIGHEST_DRAW_WORKERS) {
+    throw new MhfeError(
+      "INVALID_REQUEST",
+      `Choose between 1 and ${HIGHEST_DRAW_WORKERS} drawing workers.`,
+    );
   }
 }
 
@@ -404,11 +481,12 @@ function phraseRequest(operation, phrase, passphrase) {
   requireSecret(passphrase, "passphrase");
   /** @type {WorkerRequest} */
   const message = { operation, phrase: encodeSecret(phrase, "phrase") };
+  let ready = false;
   try {
     message.passphrase = encodeSecret(passphrase, "passphrase");
-  } catch (error) {
-    wipeSecrets(message);
-    throw error;
+    ready = true;
+    return message;
+  } finally {
+    if (!ready) new SecretRequest(message).wipe();
   }
-  return message;
 }

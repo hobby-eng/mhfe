@@ -22,20 +22,22 @@ argon2="vendor/phc-winner-argon2"
 # Only the recorded upstream files are compiled: an added header would shadow a system one.
 node scripts/verify-vendored-argon2.mjs
 
-# ref.c is the portable implementation. The SIMD variant opt.c gave no speed-up in
+# ref.c is the portable implementation, included by src/engine/argon2_ref.c, which clears the
+# stack each segment's fill leaves (AUD-024-SEC002). The SIMD variant opt.c gave no speed-up in
 # WebAssembly and would exclude browsers without WebAssembly SIMD.
 sources=(
   "$argon2/src/argon2.c"
   "$argon2/src/core.c"
   "$argon2/src/encoding.c"
   "$argon2/src/thread.c"
-  "$argon2/src/ref.c"
+  src/engine/argon2_ref.c
   "$argon2/src/blake2/blake2b.c"
 )
 
 common_flags=(
   -O3
   "-I$argon2/include"
+  "-I$argon2/src"
   # One classic script that defines a factory function returning the module.
   -sMODULARIZE=1
   # Embed the WebAssembly as base64: nothing is fetched and the file stays plain ASCII.
@@ -47,8 +49,8 @@ common_flags=(
   -sALLOW_MEMORY_GROWTH=1
   -sMAXIMUM_MEMORY=4GB
   # The JavaScript glue needs nothing else from the module.
-  -sEXPORTED_FUNCTIONS=_argon2id_hash_raw,_malloc,_free
-  -sEXPORTED_RUNTIME_METHODS=HEAPU8
+  -sEXPORTED_FUNCTIONS=_argon2id_hash_raw,_argon2_error_message,_malloc,_free
+  -sEXPORTED_RUNTIME_METHODS=HEAPU8,UTF8ToString
   # No eval() or new Function(), which the strict CSP forbids, and no file system.
   -sDYNAMIC_EXECUTION=0
   -sFILESYSTEM=0

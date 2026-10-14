@@ -1,6 +1,6 @@
-//! The only module with `unsafe` code: the calls into the vendored reference Argon2 C code, the
-//! operating-system queries for free memory, and the calls that keep secrets out of swap and core
-//! dumps. Every `unsafe` block states what it relies on.
+//! The calls into the vendored reference Argon2 C code, operating-system queries for free memory
+//! and exclusion of its work area from core dumps. Secret-buffer page locking belongs to
+//! memory::os. Every `unsafe` block states what it relies on.
 #![allow(
     unsafe_code,
     reason = "C code and operating-system calls are reached only through unsafe foreign functions"
@@ -12,6 +12,9 @@ use std::ffi::{c_char, c_int, CStr};
 use std::ptr::{self, NonNull};
 
 use zeroize::Zeroize;
+
+#[cfg(target_os = "linux")]
+use crate::memory::os::page_size;
 
 use crate::MhfeError;
 
@@ -303,47 +306,6 @@ fn exclude_from_core_dumps(start: *mut u8, bytes: usize) {
 #[cfg(not(target_os = "linux"))]
 fn exclude_from_core_dumps(_start: *mut u8, _bytes: usize) {}
 
-/// The size of a memory page, a power of two, or `None` when the system does not say.
-#[cfg(unix)]
-pub(crate) fn page_size() -> Option<usize> {
-    // SAFETY: sysconf only reads a system value.
-    match usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }) {
-        Ok(page) if page.is_power_of_two() => Some(page),
-        _ => None,
-    }
-}
-
-/// Nothing is locked where there is no mlock, so no page size is needed.
-#[cfg(not(unix))]
-pub(crate) fn page_size() -> Option<usize> {
-    None
-}
-
-/// Asks the operating system to keep the pages under `bytes` bytes at `start` in memory, never in
-/// swap (mlock). Returns whether it agreed: a low RLIMIT_MEMLOCK, for example, refuses.
-#[cfg(unix)]
-pub(crate) fn lock_pages(start: *const u8, bytes: usize) -> bool {
-    // SAFETY: mlock only changes how the kernel treats the pages of this process that contain
-    // the range; it reads and writes no memory, and a range that is not mapped is refused.
-    unsafe { libc::mlock(start.cast(), bytes) == 0 }
-}
-
-/// Undoes [`lock_pages`] for the same range.
-#[cfg(unix)]
-pub(crate) fn unlock_pages(start: *const u8, bytes: usize) {
-    // SAFETY: as for mlock; munlock of pages that are no longer locked or mapped is refused
-    // without effect.
-    unsafe { libc::munlock(start.cast(), bytes) };
-}
-
-#[cfg(not(unix))]
-pub(crate) fn lock_pages(_start: *const u8, _bytes: usize) -> bool {
-    false
-}
-
-#[cfg(not(unix))]
-pub(crate) fn unlock_pages(_start: *const u8, _bytes: usize) {}
-
 impl Drop for WorkArea {
     fn drop(&mut self) {
         // SAFETY: `start` came from `alloc_zeroed` with exactly this layout and is freed once.
@@ -364,6 +326,7 @@ thread_local! {
 }
 
 /// `allocate_cbk`: gives the C code the prepared work area instead of allocating new memory.
+///
 /// The C code calls it on the thread that called `argon2_ctx`, before any worker thread starts.
 unsafe extern "C" fn hand_out_work_area(memory: *mut *mut u8, bytes: usize) -> c_int {
     let area = CURRENT_WORK_AREA.try_with(Cell::get).ok().flatten();
@@ -634,7 +597,7 @@ mod tests {
 
     #[test]
     fn threads_do_not_change_the_result() {
-        let password = b"public test password";
+        let password = crate::test_support::TEST_PASSWORD.as_bytes();
         let salt = b"0123456789abcdef";
         let mut single = inputs(password, salt);
         single.threads = 1;
@@ -647,7 +610,7 @@ mod tests {
         // Changing one input at a time must change the tag, so no field is silently ignored or
         // read from the wrong offset. `threads` is covered by the test above; the callbacks and
         // flags by the work-area tests below.
-        let password = b"public test password";
+        let password = crate::test_support::TEST_PASSWORD.as_bytes();
         let salt = b"0123456789abcdef";
         let base = c_tag(&inputs(password, salt), 32).unwrap();
         type ChangeOneField = fn(&mut Argon2Inputs<'_>);
@@ -680,7 +643,7 @@ mod tests {
         // SAFETY: the C code only reads this global, which is 1 unless someone changes it.
         let clear_internal_memory = unsafe { FLAG_clear_internal_memory };
         assert_eq!(clear_internal_memory, 1, "C code would not wipe");
-        let password = b"public test password";
+        let password = crate::test_support::TEST_PASSWORD.as_bytes();
         let salt = b"0123456789abcdef";
         let mut work_area = WorkArea::allocate(64 * 1024).unwrap();
         let start = work_area.start;
@@ -696,7 +659,7 @@ mod tests {
 
     #[test]
     fn a_work_area_too_small_is_refused_by_the_c_code() {
-        let password = b"public test password";
+        let password = crate::test_support::TEST_PASSWORD.as_bytes();
         let salt = b"0123456789abcdef";
         let mut work_area = WorkArea::allocate(32 * 1024).unwrap();
         let mut output = [0u8; 32];
@@ -729,7 +692,7 @@ mod tests {
         let mut work_area = WorkArea::allocate(32 * 1024).unwrap();
         fill_with_ones(&mut work_area);
         let mut output = [0u8; 32];
-        let password = b"public test password";
+        let password = crate::test_support::TEST_PASSWORD.as_bytes();
         let salt = b"0123456789abcdef";
         argon2id(&inputs(password, salt), &mut work_area, &mut output).unwrap_err();
         assert!(work_area.contents().iter().all(|&byte| byte == 0));
@@ -751,7 +714,7 @@ mod tests {
     fn the_clear_password_flag_is_read_from_its_offset() {
         // With ARGON2_FLAG_CLEAR_PASSWORD (bit 0) the C code wipes the password buffer; this
         // proves that `flags` sits where the C code reads it. MHFE itself never sets it.
-        let mut password = *b"public test password";
+        let mut password = crate::test_support::TEST_PASSWORD.as_bytes().to_vec();
         let salt = *b"0123456789abcdef";
         let mut output = [0u8; 32];
         let mut work_area = WorkArea::allocate(64 * 1024).unwrap();

@@ -8,7 +8,13 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [packageDir] = process.argv.slice(2);
+import { scriptArguments } from "./gate-command-line.mjs";
+
+const {
+  positionals: [packageDir],
+} = scriptArguments("usage: node scripts/write-package-manifest.mjs <package folder>", {
+  operands: 1,
+});
 const cargo = readFileSync("Cargo.toml", "utf8");
 const version = /^version = "([^"]+)"/mu.exec(cargo)[1];
 // The build stamped into the WebAssembly's custom section "mhfe-build".

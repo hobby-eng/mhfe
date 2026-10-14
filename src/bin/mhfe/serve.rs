@@ -22,7 +22,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anstream::eprintln;
 use clap::Args;
 use sha2::{Digest, Sha256};
 
@@ -33,7 +32,8 @@ use crate::style::{self, paint, ACCENT, MUTED};
 /// it beside its HTML file and the launcher finds it without being told. It holds one line in the
 /// format `sha256sum` writes: the SHA-256 of the page, a space, a mode marker (a second space in
 /// text mode, `*` in binary mode) and the page's file name.
-pub const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
+pub(crate) const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
 /// What a checksum file must hold, in words rather than a pattern with two spaces, which the
 /// wrapping of a message would join into one (AUD-023-UI009). Deliberate copy: the Python launcher
 /// (packaging/mhfe-fast-mode.py), which ships alone beside the browser package, says the same, and
@@ -41,26 +41,48 @@ pub const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
 const MALFORMED: &str = "must hold exactly one line: the page's SHA-256, two spaces and its file \
                          name, or one space and * before the name; nothing was served.";
 
+// Deliberate copy in the standalone Python launcher, checked by its parity tests.
+const HTML_SUFFIX: &str = ".html";
+const NON_HTML: &str = "The fast mode serves only a page whose name ends in lower-case {suffix}; \
+                        nothing was served.";
+
 /// Hexadecimal digits of a SHA-256 digest.
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const SHA256_HEX_DIGITS: usize = 64;
 
+/// The most a checksum file may hold: its one line is about 80 bytes. A longer file is malformed,
+/// and nothing beyond this is read of it (AUD-024-FUN005).
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
+const MAX_CHECKSUM_FILE: u64 = 4 * 1024;
+
+/// The most a page may hold: a tool's page is a few megabytes. A larger file is refused, and
+/// nothing beyond this is read of it (AUD-024-FUN005).
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
+const MAX_PAGE: u64 = 64 * 1024 * 1024;
+
 /// Longest request head accepted; real browsers send far less.
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
 /// Time a client has for its whole request head. A limit on each read alone would let a client
 /// that sends one byte at a time keep its connection open for ever.
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const REQUEST_DEADLINE: Duration = Duration::from_secs(10);
 /// Time for sending the whole answer. A limit on each write alone would let a client that reads
 /// slowly, or not at all, keep its connection and thread for ever.
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const RESPONSE_DEADLINE: Duration = Duration::from_secs(10);
 /// Connections answered at the same time; any further one is closed at once. A browser opens
 /// only a few, and the cap keeps a flood of connections from starting a thread each.
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const MAX_CONNECTIONS: usize = 16;
 /// Time the listener waits after a connection it could not accept, such as when the process has
 /// no file descriptor left, so that it does not spin; it then goes on serving (AUD-023-FUN003).
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const ACCEPT_ERROR_PAUSE: Duration = Duration::from_millis(100);
 
 /// Sent with every response. COOP and COEP make the page cross-origin isolated; the others keep
 /// it from being framed, sniffed, cached or followed by a referrer.
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const SECURITY_HEADERS: [(&str, &str); 7] = [
     ("Cross-Origin-Opener-Policy", "same-origin"),
     ("Cross-Origin-Embedder-Policy", "require-corp"),
@@ -72,7 +94,7 @@ const SECURITY_HEADERS: [(&str, &str); 7] = [
 ];
 
 #[derive(Args)]
-pub struct Options {
+pub(crate) struct Options {
     /// The HTML file of the browser tool, with mhfe-fast-mode.sha256
     #[arg(long_help = file_help())]
     file: PathBuf,
@@ -84,7 +106,7 @@ pub struct Options {
 
 fn file_help() -> String {
     style::option_help(&[
-        "The HTML file of the browser tool; mhfe-fast-mode.sha256 must lie next to it.",
+        &format!("The browser tool's file, ending in lower-case {HTML_SUFFIX}; {CHECKSUM_FILE} must lie next to it."),
         &format!(
             "{CHECKSUM_FILE} holds the SHA-256 of the page in the form sha256sum writes. The \
              page is served only when it matches, which catches a damaged, swapped or partly \
@@ -102,10 +124,10 @@ fn no_browser_help() -> String {
 }
 
 /// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
-pub const SUMMARY: &str = "Serve a browser tool on this computer in fast mode";
+pub(crate) const SUMMARY: &str = "Serve a browser tool on this computer in fast mode";
 
 /// The top of `mhfe serve --help`.
-pub fn about() -> String {
+pub(crate) fn about() -> String {
     style::command_about(&[
         SUMMARY,
         "A browser runs the faster, multi-threaded Argon2 only on a page served with special \
@@ -117,7 +139,7 @@ pub fn about() -> String {
 /// The page named in the checksum file next to the program, if that file is there, once the page
 /// is there and has its SHA-256: the menu offers the fast mode only then, and says why not
 /// otherwise (AUD-023-DOC008). `run` checks the page again, as it may change in between.
-pub fn page_next_to_program() -> Result<Option<PathBuf>, Failure> {
+pub(crate) fn page_next_to_program() -> Result<Option<PathBuf>, Failure> {
     let program = std::env::current_exe()?;
     match program.parent() {
         Some(directory) => checked_page_in(directory),
@@ -137,16 +159,21 @@ fn checked_page_in(directory: &Path) -> Result<Option<PathBuf>, Failure> {
 }
 
 /// The SHA-256 and the page name from the checksum file in `directory`.
+// Deliberate copy: packaging/mhfe-fast-mode.py ships alone; parity tests cover both.
 fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
     let path = directory.join(CHECKSUM_FILE);
-    let text = fs::read_to_string(&path).map_err(|error| {
+    let unreadable = |error: &dyn std::fmt::Display| {
         Failure::invalid_input(format!(
             "There is no readable {CHECKSUM_FILE} in {}: {error}. The fast mode serves a page \
              only when its checksum file lies next to it; nothing was served.",
             style::shown_path(directory)
         ))
-    })?;
+    };
     let malformed = || Failure::invalid_input(format!("{} {MALFORMED}", style::shown_path(&path)));
+    let bytes = read_regular_file(&path, MAX_CHECKSUM_FILE)
+        .map_err(|error| unreadable(&error))?
+        .ok_or_else(malformed)?;
+    let text = String::from_utf8(bytes).map_err(|error| unreadable(&error))?;
     let mut lines = text.lines().filter(|line| !line.trim().is_empty());
     let (Some(line), None) = (lines.next(), lines.next()) else {
         return Err(malformed());
@@ -159,11 +186,13 @@ fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
         && name != ".."
         && name != "."
         && !name.chars().any(char::is_control);
-    if !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
-        || !name.ends_with(".html")
-        || !is_plain_name
-    {
+    if !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) || !is_plain_name {
         return Err(malformed());
+    }
+    if !name.ends_with(HTML_SUFFIX) {
+        return Err(Failure::invalid_input(
+            NON_HTML.replace("{suffix}", HTML_SUFFIX),
+        ));
     }
     Ok((digest.to_ascii_lowercase(), name.to_owned()))
 }
@@ -180,6 +209,7 @@ fn split_checksum_line(line: &str) -> Option<(&str, &str)> {
 }
 
 /// The page, read once, after its checksum file next to it has named it with a matching SHA-256.
+// Deliberate copy: packaging/mhfe-fast-mode.py ships alone; parity tests cover both.
 fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
     let directory = match file.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
@@ -192,12 +222,20 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
             file_name(file)
         )));
     }
-    let page = fs::read(file).map_err(|error| {
-        Failure::invalid_input(format!(
-            "Cannot read {}: {error}; nothing was served.",
-            style::shown_path(file)
-        ))
-    })?;
+    let page = read_regular_file(file, MAX_PAGE)
+        .map_err(|error| {
+            Failure::invalid_input(format!(
+                "Cannot read {}: {error}; nothing was served.",
+                style::shown_path(file)
+            ))
+        })?
+        .ok_or_else(|| {
+            Failure::invalid_input(format!(
+                "{} is larger than {} MiB, more than any page of the tools; nothing was served.",
+                style::shown_path(file),
+                MAX_PAGE >> 20
+            ))
+        })?;
     let digest = hex::encode(Sha256::digest(&page));
     if digest != expected {
         return Err(Failure::invalid_input(format!(
@@ -209,8 +247,28 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
     Ok((page, digest))
 }
 
+/// At most `limit` bytes of `path`, which must be a regular file: a FIFO, a device or a folder is
+/// refused before anything is read, opened without waiting so that a FIFO with no writer does not
+/// block. `None` for a longer file, of which nothing beyond the limit is read (AUD-024-FUN005).
+fn read_regular_file(path: &Path, limit: u64) -> io::Result<Option<Vec<u8>>> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "it is not a regular file",
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    Ok((bytes.len() as u64 <= limit).then_some(bytes))
+}
+
 /// The end of `mhfe serve -h` and `--help`.
-pub fn help() -> String {
+pub(crate) fn help() -> String {
     style::examples_with_note(
         &[
             (
@@ -231,9 +289,11 @@ pub fn help() -> String {
 }
 
 /// The title of `mhfe serve`.
+// Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const TITLE: &str = "Fast mode";
 
-pub fn run(options: Options) -> Result<i32, Failure> {
+// Deliberate copy: packaging/mhfe-fast-mode.py ships alone; parity tests cover both.
+pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     style::title(TITLE);
     let (page, digest) = load_checked_page(&options.file)?;
     // The digest on a line of its own, so that wrapping never splits it (AUD-023-UI007).
@@ -291,7 +351,7 @@ fn serve(listener: TcpListener, host: String, page: Vec<u8>, deadline: Duration)
 }
 
 /// The file name of `path` as a message or the menu shows it, control characters escaped.
-pub fn file_name(path: &Path) -> String {
+pub(crate) fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|name| style::escaped(&name.to_string_lossy()))
         .unwrap_or_else(|| style::shown_path(path))
@@ -605,7 +665,15 @@ mod tests {
         let (server_side, _) = listener.accept().unwrap();
         let answer = vec![b'x'; 64 * 1024 * 1024];
         let started = Instant::now();
-        let result = write_until(&server_side, &answer, started + Duration::from_millis(500));
+        let (send, receive) = std::sync::mpsc::channel();
+        let writer = thread::spawn(move || {
+            let result = write_until(&server_side, &answer, started + Duration::from_millis(500));
+            let _ = send.send(result);
+        });
+        let result = receive
+            .recv_timeout(Duration::from_secs(3))
+            .expect("response write did not finish within the test limit");
+        writer.join().expect("the response writer did not panic");
         // Windows takes a whole answer of this size into its loopback buffers, so there the write
         // can finish in time; what every system must show is that it never outlasts the deadline.
         if cfg!(not(windows)) {
@@ -746,25 +814,8 @@ mod tests {
         folder.write_checksum_file(&format!("{digest}  other.html\n"));
         assert!(refusal(&folder).contains("names other.html, not tool.html"));
 
-        for malformed in [
-            String::new(),
-            format!("{digest} tool.html\n"),
-            format!("{digest}*tool.html\n"),
-            format!("{digest}\ttool.html\n"),
-            format!("{digest}  tool.html\n{digest}  tool.html\n"),
-            format!("{digest}  tool.html\n{digest} *tool.html\n"),
-            format!("{digest}  tool.txt\n"),
-            format!("{digest}  ../tool.html\n"),
-            format!("{digest} *../tool.html\n"),
-            // A name a terminal would carry out where it is shown (AUD-015-SEC002).
-            format!("{digest}  x\u{1b}]0;TITLE\u{7}\u{1b}[2Jy.html\n"),
-            format!("{digest}  x\u{9b}2Jy.html\n"),
-            format!("{digest}  x\u{7f}y.html\n"),
-            // A control character at the end is not white space, so it stays in the name.
-            format!("{digest}  tool.html\u{1f}\n"),
-            format!("{}  tool.html\n", &digest[..63]),
-            format!("{}g *tool.html\n", &digest[..63]),
-        ] {
+        for malformed in shared_cases("checksumFiles", "malformed") {
+            let malformed = filled(&malformed, &digest);
             folder.write_checksum_file(&malformed);
             assert!(
                 refusal(&folder).contains("must hold exactly one line"),
@@ -773,6 +824,103 @@ mod tests {
         }
         // Every refusal says that nothing was served.
         assert!(refusal(&folder).contains("nothing was served"));
+    }
+
+    #[test]
+    fn a_non_html_name_is_refused_apart_from_the_checksum_line_format() {
+        let folder = TestFolder::new("non-html-name");
+        let digest = hex::encode(Sha256::digest(PAGE));
+        for case in shared_cases("checksumFiles", "nonHtml") {
+            folder.write_checksum_file(&filled(&case, &digest));
+            let failure = read_checksum_file(&folder.0).unwrap_err();
+            assert_eq!(failure.exit_code, crate::exit::INVALID_INPUT);
+            assert_eq!(failure.message, NON_HTML.replace("{suffix}", HTML_SUFFIX));
+        }
+    }
+
+    /// The cases of `kind` in `group` of the cases both launchers decide alike
+    /// (tests/fixtures/fast-mode-cases.json, which scripts/verify-fast-mode-script.py reads too).
+    fn shared_cases(group: &str, kind: &str) -> Vec<String> {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/fast-mode-cases.json"))
+                .unwrap();
+        cases[group][kind]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|case| case.as_str().unwrap().to_owned())
+            .collect()
+    }
+
+    /// A shared case with the page's `digest` and the address served in it.
+    fn filled(case: &str, digest: &str) -> String {
+        case.replace("{digest63}", digest.get(..63).unwrap_or_default())
+            .replace("{digest}", digest)
+            .replace("{host}", HOST)
+    }
+
+    #[test]
+    fn serves_every_shared_checksum_file_that_is_well_formed() {
+        let digest = hex::encode(Sha256::digest(PAGE));
+        let folder = TestFolder::new("shared");
+        for served in shared_cases("checksumFiles", "served") {
+            folder.write_checksum_file(&filled(&served, &digest));
+            assert!(load_checked_page(&folder.page()).is_ok(), "{served:?}");
+        }
+    }
+
+    /// Every shared request head gets the status the Python launcher gives it (AUD-024-FUN007).
+    #[test]
+    fn every_shared_request_head_gets_its_status() {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/fast-mode-cases.json"))
+                .unwrap();
+        for case in cases["requestHeads"].as_array().unwrap() {
+            let head = filled(case["head"].as_str().unwrap(), "");
+            let bytes: Vec<u8> = if case["encoding"] == "latin-1" {
+                head.chars()
+                    .map(|character| u8::try_from(u32::from(character)).unwrap())
+                    .collect()
+            } else {
+                head.clone().into_bytes()
+            };
+            let status = match read_request_head(&mut io::Cursor::new(bytes)) {
+                Ok(read) => respond(&read, HOST, PAGE).status,
+                Err(_) => 400,
+            };
+            assert_eq!(u64::from(status), case["status"], "{head:?}");
+        }
+    }
+
+    /// A checksum file or a page that is not a regular file, or too large, is refused before it is
+    /// read whole (AUD-024-FUN005).
+    #[test]
+    fn refuses_a_file_too_large_or_not_regular() {
+        let digest = hex::encode(Sha256::digest(PAGE));
+        let folder = TestFolder::new("bounded");
+        folder.write_checksum_file(&format!("{digest}  tool.html\n{}", " ".repeat(4096)));
+        assert!(refusal(&folder).contains("must hold exactly one line"));
+        fs::remove_file(folder.0.join(CHECKSUM_FILE)).unwrap();
+        fs::create_dir(folder.0.join(CHECKSUM_FILE)).unwrap();
+        assert!(refusal(&folder).contains("it is not a regular file"));
+        fs::remove_dir(folder.0.join(CHECKSUM_FILE)).unwrap();
+        // A page one byte over the limit: a sparse file, which takes no room on the disk.
+        let file = fs::File::create(folder.page()).unwrap();
+        file.set_len(MAX_PAGE + 1).unwrap();
+        folder.write_checksum_file(&format!("{digest}  tool.html\n"));
+        assert!(
+            refusal(&folder).contains("is larger than 64 MiB"),
+            "{}",
+            refusal(&folder)
+        );
+        #[cfg(unix)]
+        {
+            // A FIFO with no writer would block a plain open.
+            fs::remove_file(folder.page()).unwrap();
+            let made = Command::new("mkfifo").arg(folder.page()).status().unwrap();
+            assert!(made.success());
+            assert!(refusal(&folder).contains("it is not a regular file"));
+        }
     }
 
     /// The refusal of a malformed checksum file reads the same after the wrapping of an error

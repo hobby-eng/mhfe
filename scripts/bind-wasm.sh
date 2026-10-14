@@ -52,3 +52,5 @@ wasm-bindgen "$target_dir/wasm32-unknown-unknown/release/mhfe.wasm" \
   --no-typescript \
   --out-dir "$out_dir" \
   --out-name mhfe
+# Where the shadow stack ends, for the worker to zero the dead stack between calls.
+node scripts/mark-wasm-stack.mjs "$out_dir/mhfe_bg.wasm"

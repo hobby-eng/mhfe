@@ -63,6 +63,7 @@ impl From<PassedCheck> for PassedJson {
 #[wasm_bindgen]
 pub struct CheckSession {
     recovered: RecoveredForCheck,
+    detection_follow_up: bool,
 }
 
 #[wasm_bindgen]
@@ -74,7 +75,7 @@ impl CheckSession {
     /// [`reference_target`].
     #[expect(
         clippy::too_many_arguments,
-        reason = "the WebAssembly boundary takes every input as an argument of its own"
+        reason = "the WebAssembly binding takes every input as an argument of its own"
     )]
     #[wasm_bindgen(constructor)]
     pub fn new(
@@ -98,6 +99,7 @@ impl CheckSession {
         let password = password_from(password_utf8, choice, position)?;
         let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
         let wallet = reference_target(reference_kind, reference, coin, path)?;
+        wallet.refuse_unused(passphrase).map_err(js_error)?;
         // The library refuses a check that cannot be, an empty passphrase of the wallet check
         // among them, before any round, in the same order for every front end. The work area is
         // freed when this engine is dropped, before the page is asked anything.
@@ -109,7 +111,10 @@ impl CheckSession {
             &mut |stage, round, rounds| report(on_round, stage, round, rounds),
         );
         let recovered = verified(&mhfe, recovered)?;
-        Ok(Self { recovered })
+        Ok(Self {
+            recovered,
+            detection_follow_up: false,
+        })
     }
 
     /// Compares the recovery with a reference given as for [`CheckSession::new`], as JSON
@@ -117,7 +122,7 @@ impl CheckSession {
     /// "evidence": {...}}`: only the outcome comes out, with the facts beside it that reveal no
     /// word, and for a matched address the path where it was found.
     pub fn compare(
-        &self,
+        &mut self,
         reference_kind: &str,
         reference: &str,
         coin: &str,
@@ -127,23 +132,33 @@ impl CheckSession {
         let passphrase = SecretText::new(passphrase_utf8);
         let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
         let wallet = reference_target(reference_kind, reference, coin, path)?;
-        let evidence = self
-            .recovered
-            .compare(&wallet.with(passphrase))
-            .map_err(js_error)?;
+        wallet.refuse_unused(passphrase).map_err(js_error)?;
+        let reference = wallet.with(passphrase);
+        let evidence = if self.detection_follow_up {
+            self.recovered.compare_after_detection(&reference)
+        } else {
+            self.recovered.compare(&reference)
+        }
+        .map_err(js_error)?;
+        self.detection_follow_up |= evidence.asks_length();
         json(&CheckJson {
-            outcome: evidence.outcome.id(),
-            path: evidence.outcome.path().map(ToString::to_string),
+            outcome: evidence.outcome().id(),
+            path: evidence.outcome().path().map(ToString::to_string),
             evidence: EvidenceJson {
                 passed: evidence
                     .own_checks_passed()
                     .into_iter()
                     .map(PassedJson::from)
                     .collect(),
-                built_in_check: evidence.built_in_check,
-                matching_lengths: evidence.matching_lengths,
-                wallet_check: evidence.wallet_check,
+                built_in_check: evidence.built_in_check(),
+                matching_lengths: evidence.matching_lengths().to_vec(),
+                wallet_check: evidence.wallet_check(),
             },
         })
+    }
+    /// Whether the library's detection asks for a stated length or a wallet reference next.
+    #[wasm_bindgen(js_name = asksLength)]
+    pub fn asks_length(&self) -> bool {
+        self.detection_follow_up
     }
 }

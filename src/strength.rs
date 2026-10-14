@@ -7,6 +7,7 @@
 
 use std::sync::OnceLock;
 
+use crate::check_word::{PasswordReview, Reading, DRAWN_WORDS};
 use crate::eff::{EffList, MILLIBITS_PER_WORD};
 use crate::new_password::bits_of;
 
@@ -16,8 +17,9 @@ pub(crate) mod known_answers;
 /// About 50 bits, a little under four different dice words (51.7 bits), the least the README
 /// recommends: a weaker password gets a warning before it protects a phrase.
 pub const WEAK_BELOW_BITS: f64 = 50.0;
-/// Only the first 100 characters are read: they tell a weak password from a strong one, and the
-/// reading stays quick for a password thousands of characters long.
+/// Only the first 100 characters are read part by part, enough to distinguish weak patterns.
+///
+/// Dice words are counted over the whole password before that limited reading.
 const READ_CHARACTERS: usize = 100;
 /// Shorter dictionary words are not looked for: three letters turn up by chance in random
 /// characters too often to tell anything.
@@ -27,6 +29,11 @@ const YEAR_BITS: f64 = 7.64;
 /// A character that repeats, continues or reverses a run (aaa, 123, cba, qwe), or one that
 /// separates two words.
 const PATTERN_BITS: f64 = 1.0;
+/// The shortest group whose repeat counts as a repeat: shorter ones, two characters, turn up by
+/// chance in random characters, and runs of them are counted as runs.
+const SHORTEST_REPEAT: usize = 3;
+/// The characters that separate two words, or two copies of a repeated group.
+const SEPARATORS: &[u8] = b" -_.";
 /// Capital letters or substitutions such as 0 for o inside a word.
 const VARIATION_BITS: f64 = 1.0;
 /// log2 of the kinds of characters: 10 digits, 26 letters, 33 other printable ASCII characters
@@ -91,7 +98,9 @@ pub struct Strength {
 
 impl Strength {
     /// Estimates `password`. A password of different EFF dice words counts 12.9 bits a word, as if
-    /// drawn at random; any other is read part by part.
+    /// drawn at random; one that reads as the check-word recipe's (MHFE-PASSWORD-CHECK-1) counts
+    /// only its five drawn words, as the recipe does, since its sixth follows from them. Any other
+    /// is read part by part.
     pub fn of(password: &str) -> Self {
         Self {
             bits: estimated_bits(password),
@@ -116,7 +125,13 @@ impl Strength {
 }
 
 fn estimated_bits(password: &str) -> f64 {
-    let dice_words = EffList::get().different_dice_words(password);
+    // The check word adds nothing to what an attacker must guess (AUD-024-FUN011).
+    let drawn = if PasswordReview::of(password).reading() == Reading::Fits {
+        first_words(password, DRAWN_WORDS)
+    } else {
+        password
+    };
+    let dice_words = EffList::get().different_dice_words(drawn);
     if dice_words > 0 {
         return bits_of(dice_words * MILLIBITS_PER_WORD);
     }
@@ -125,6 +140,24 @@ fn estimated_bits(password: &str) -> f64 {
         .nth(READ_CHARACTERS)
         .map_or(password.len(), |(index, _)| index);
     read_parts(&password[..end], word_lists())
+}
+
+/// `text` up to the end of its `count`-th word, words being separated by white space.
+fn first_words(text: &str, count: usize) -> &str {
+    let mut words = 0;
+    let mut in_word = false;
+    for (index, character) in text.char_indices() {
+        if character.is_whitespace() {
+            if in_word && words == count {
+                return &text[..index];
+            }
+            in_word = false;
+        } else if !in_word {
+            in_word = true;
+            words += 1;
+        }
+    }
+    text
 }
 
 /// The common passwords and the dictionary, sorted once and shared.
@@ -137,11 +170,12 @@ fn word_lists() -> &'static [WordList; 2] {
     })
 }
 
-/// Adds up the parts of `text` from left to right, taking at each place the longest word of the
-/// lists, else a year, else one character.
+/// Adds up the parts of `text` from left to right, taking at each place a copy of the group just
+/// before it, else the longest word of the lists, else a year, else one character. A copy counts
+/// [`PATTERN_BITS`], as zxcvbn counts a repeat once more than its group (AUD-024-FUN003).
 #[expect(
     clippy::expect_used,
-    reason = "`at` moves by ASCII words, years and whole characters, so it stays on a boundary"
+    reason = "`at` moves by ASCII words, years and whole characters, so it stays on a character boundary"
 )]
 fn read_parts(text: &str, lists: &[WordList]) -> f64 {
     let bytes = text.as_bytes();
@@ -152,6 +186,13 @@ fn read_parts(text: &str, lists: &[WordList]) -> f64 {
     let mut previous: Option<u8> = None;
     let mut previous_word: Option<&str> = None;
     while at < bytes.len() {
+        if let Some(length) = repeated_group(bytes, at) {
+            bits += PATTERN_BITS;
+            previous = None;
+            previous_word = None;
+            at += length;
+            continue;
+        }
         if let Some(word) = longest_word(lists, &bytes[at..]) {
             bits += if previous_word == Some(word.text) {
                 PATTERN_BITS
@@ -177,7 +218,9 @@ fn read_parts(text: &str, lists: &[WordList]) -> f64 {
         let ascii = character
             .is_ascii()
             .then(|| (character as u8).to_ascii_lowercase());
-        let separator = previous_word.is_some() && matches!(character, ' ' | '-' | '_' | '.');
+        let separator = previous_word.is_some()
+            && character.is_ascii()
+            && SEPARATORS.contains(&(character as u8));
         bits += match (previous, ascii) {
             _ if separator => PATTERN_BITS,
             (Some(before), Some(now)) if continues(before, now) => PATTERN_BITS,
@@ -190,6 +233,18 @@ fn read_parts(text: &str, lists: &[WordList]) -> f64 {
         at += character.len_utf8();
     }
     bits
+}
+
+/// The length of the longest group of at least [`SHORTEST_REPEAT`] bytes that `bytes[at..]` starts
+/// with a copy of, the group standing just before `at` or before a separator there. A group that
+/// a copy matches starts and ends on a character boundary, as its copy at `at` does.
+fn repeated_group(bytes: &[u8], at: usize) -> Option<usize> {
+    let rest = &bytes[at..];
+    let separated = at > 0 && SEPARATORS.contains(&bytes[at - 1]);
+    (SHORTEST_REPEAT..=at).rev().find(|&length| {
+        rest.starts_with(&bytes[at - length..at])
+            || (separated && length < at && rest.starts_with(&bytes[at - 1 - length..at - 1]))
+    })
 }
 
 /// A word found at the start of the rest of the password, with the bits it counts.
@@ -314,14 +369,15 @@ mod tests {
         for strong in [
             "Xk7mQ2vR9pLw4tZn",
             "Hq3vNk8wPz2RcY6m",
-            "abacus zoom yearbook zipfile",
+            known_answers::CASES[4].password,
             "correct horse battery staple",
             "correcthorsebatterystaple",
         ] {
             let bits = estimated_bits(strong);
             assert!(!is_weak(bits), "{strong}: {bits:.1} bits");
         }
-        assert!((estimated_bits("abacus zoom yearbook zipfile") - 51.7).abs() < 0.01);
+        let case = known_answers::CASES[4];
+        assert!((estimated_bits(case.password) - f64::from(case.millibits) / 1000.0).abs() < 0.01);
     }
 
     #[test]
@@ -330,6 +386,41 @@ mod tests {
         assert!(estimated_bits("staplestaplestaple") < once + 3.0);
         assert!(estimated_bits("123456789") < 12.0);
         assert!(estimated_bits("zyxwvutsrq") < 15.0);
+    }
+
+    /// A password of the check-word recipe counts its five drawn words only, as the recipe does;
+    /// six list words whose last is not their check word count six (AUD-024-FUN011).
+    #[test]
+    fn the_check_word_adds_no_strength() {
+        let five = 5.0 * 12.925;
+        let bits = estimated_bits("jovial trailing chokehold pavilion cresting ninth");
+        assert!((bits - five).abs() < 1e-9, "{bits}");
+        let six = estimated_bits("jovial trailing chokehold pavilion cresting zoom");
+        assert!((six - 6.0 * 12.925).abs() < 1e-9, "{six}");
+        // The drawn words are counted as any dice words: a repeated one once.
+        let repeated = estimated_bits("zoom zoom zoom zoom zoom yelling");
+        assert!((repeated - 12.925).abs() < 1e-9, "{repeated}");
+        assert_eq!(first_words("  a b  c d", 3), "  a b  c");
+        assert_eq!(first_words("a b", 3), "a b");
+    }
+
+    /// A group of characters that is no list word counts once, its copies a bit each, with or
+    /// without separators between them (AUD-024-FUN003): these were rated above four dice words.
+    #[test]
+    fn repeated_groups_count_once() {
+        for repeated in [
+            "1234 1234 1234 1234 1234",
+            "abcdabcdabcdabcdabcdabcdabcdabcd",
+            "x7Qz-x7Qz-x7Qz-x7Qz-x7Qz",
+            "Zq9!Zq9!Zq9!Zq9!Zq9!Zq9!",
+        ] {
+            let bits = estimated_bits(repeated);
+            assert!(is_weak(bits), "{repeated}: {bits:.1} bits");
+        }
+        let group = estimated_bits("x7Qz");
+        assert!(estimated_bits("x7Qzx7Qzx7Qz") < group + 3.0);
+        // Two characters that recur by chance in random ones are no repeat.
+        assert!(!is_weak(estimated_bits("Xk7mQ2vR9pLw4tZn")));
     }
 
     #[test]

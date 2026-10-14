@@ -9,7 +9,7 @@ use super::{SwapArea, SwapInventory};
 /// The swap areas that are not encrypted by dm-crypt, or whose encryption cannot be told. An
 /// area in memory (zram) is safe only without a writeback device, or with an encrypted one. A
 /// readable empty inventory is distinct from a failed read.
-pub fn unprotected_swap() -> SwapInventory {
+pub(crate) fn unprotected_swap() -> SwapInventory {
     if cfg!(target_os = "linux") {
         unprotected_swap_under(Path::new("/"))
     } else {
@@ -94,17 +94,18 @@ const MAX_DEVICE_DEPTH: usize = 8;
 /// Whether memory swapped to a block device stays off a disk unencrypted: it is encrypted with
 /// dm-crypt, directly or through the devices it is built on (LVM on LUKS), or lies in memory
 /// (zram) without a writeback device or with a protected one. `None` when that cannot be told,
-/// as for a zram writeback device that cannot be resolved (AUD-023-SEC002).
+/// as for a zram writeback device that cannot be resolved (AUD-023-SEC002), or a device whose
+/// entry in /sys cannot be seen, as when /sys is not mounted (AUD-024-SEC011).
 fn protected(root: &Path, device: &str, depth: usize) -> Option<bool> {
+    let sysfs = root.join("sys/class/block").join(device);
+    fs::metadata(&sysfs).ok()?;
     if device.starts_with("zram") {
         // zram writes idle or incompressible pages to its backing device, if it has one; the
-        // attribute is world-readable, and absent where writeback is not built in.
-        let backing = root
-            .join("sys/class/block")
-            .join(device)
-            .join("backing_dev");
-        return match fs::read_to_string(backing) {
-            // No attribute: no writeback. Any other error leaves the device unknown.
+        // attribute is world-readable, and absent from the device's entry where writeback is not
+        // built in.
+        return match fs::read_to_string(sysfs.join("backing_dev")) {
+            // An entry without the attribute: no writeback. Any other error leaves the device
+            // unknown.
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Some(true),
             Err(_) => None,
             Ok(text) if matches!(text.trim(), "" | "none") => Some(true),
@@ -251,6 +252,28 @@ mod tests {
         system.device("zram0", None, &[]);
         fs::create_dir(system.0.join("sys/class/block/zram0/backing_dev")).unwrap();
         assert_eq!(system.unprotected(), area(true));
+    }
+
+    /// A device seen in /dev whose entry in /sys cannot be seen, because /sys is not mounted or
+    /// lacks the device, is unknown: nothing tells whether it writes back or is encrypted
+    /// (AUD-024-SEC011).
+    #[test]
+    fn a_device_without_its_sysfs_entry_is_unknown() {
+        for (name, other) in [("zram0", None), ("zram0", Some("sda1")), ("dm-0", None)] {
+            let system = FakeSystem::new(&format!("/dev/{name} partition 1024 0 100\n"));
+            fs::write(system.0.join("dev").join(name), "").unwrap();
+            if let Some(other) = other {
+                system.device(other, None, &[]);
+            }
+            assert_eq!(
+                system.unprotected(),
+                [SwapArea {
+                    name: format!("/dev/{name}"),
+                    unknown: true
+                }],
+                "{name}, with another device: {other:?}"
+            );
+        }
     }
 
     #[test]

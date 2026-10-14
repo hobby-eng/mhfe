@@ -9,7 +9,7 @@ const DAY: u64 = 24 * HOUR;
 
 /// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the
 /// longer one, rounded to whole units.
-pub fn range(low_seconds: u64, high_seconds: u64) -> String {
+pub(crate) fn range(low_seconds: u64, high_seconds: u64) -> String {
     let (unit_seconds, unit) = match high_seconds {
         s if s < 2 * HOUR => (MINUTE, "minutes"),
         s if s < 3 * DAY => (HOUR, "hours"),
@@ -22,14 +22,14 @@ pub fn range(low_seconds: u64, high_seconds: u64) -> String {
 
 /// The estimated time of `rounds` rounds at `work`, in passes of 12 through the cipher, as a
 /// range: "1 to 2 minutes" for a recovery at the defaults.
-pub fn of_rounds(work: WorkFactor, rounds: u32) -> String {
+pub(crate) fn of_rounds(work: WorkFactor, rounds: u32) -> String {
     let (low, high) = work.estimated_seconds();
     let passes = u64::from(rounds / ROUNDS);
     range(low * passes, high * passes)
 }
 
 /// "45 s", "3 min 20 s", "2 h 5 min", "1 day 3 h".
-pub fn duration(seconds: u64) -> String {
+pub(crate) fn duration(seconds: u64) -> String {
     match seconds {
         s if s < MINUTE => format!("{s} s"),
         s if s < HOUR => format!("{} min {} s", s / MINUTE, s % MINUTE),
