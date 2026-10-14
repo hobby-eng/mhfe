@@ -72,7 +72,7 @@ function sourceFiles(directory, endings) {
 
 /** After these JavaScript tokens a slash starts a regular expression, not a division. */
 const BEFORE_REGEX = new Set([
-  ..."(,=:[!&|?{};+-*%<>~^",
+  ..."(,=:[!&|?{};+-*%<>~^".split(""),
   "return",
   "typeof",
   "case",
@@ -103,134 +103,190 @@ const RUST_RAW = /^(?:b|c)?r(#*)"/u;
  * string that holds the words (AUD-013-ARC002).
  */
 function tokensOf(text, rust) {
-  const tokens = [];
-  const markedLines = new Set();
-  let line = 1;
-  /** Records the lines of the comment `from`..`at` when it marks a deliberate copy. */
-  const comment = (from) => {
-    const body = text.slice(from, at);
+  const tokenizer = new Tokenizer(text, rust);
+  while (!tokenizer.done()) tokenizer.next();
+  return { tokens: tokenizer.tokens, markedLines: tokenizer.markedLines };
+}
+
+/** The reading of one text by tokensOf: where it stands, the line, and what it found so far. */
+class Tokenizer {
+  #text;
+  #rust;
+  #at = 0;
+  #line = 1;
+  tokens = [];
+  markedLines = new Set();
+
+  constructor(text, rust) {
+    this.#text = text;
+    this.#rust = rust;
+  }
+
+  /** Whether the whole text has been read. */
+  done() {
+    return this.#at >= this.#text.length;
+  }
+
+  /** Reads the next token, or white space or a comment. */
+  next() {
+    const text = this.#text;
+    const char = text[this.#at];
+    if (char === "\n") {
+      this.#line += 1;
+      this.#at += 1;
+    } else if (/\s/u.test(char)) this.#at += 1;
+    else if (text.startsWith("//", this.#at)) this.#lineComment();
+    else if (text.startsWith("/*", this.#at)) this.#blockComment();
+    else if (!(this.#rust ? this.#rustLiteral() : this.#scriptLiteral())) this.#plainToken(char);
+  }
+
+  /** Records the lines of the comment `from`..here when it marks a deliberate copy. */
+  #comment(from) {
+    const body = this.#text.slice(from, this.#at);
     if (!DELIBERATE.test(body)) return;
     // Every line of the comment, so that its last line counts as the line above the copy.
-    body.split("\n").forEach((_, offset) => markedLines.add(line + offset));
-  };
-  let at = 0;
-  const push = (from) => {
-    const key = text.slice(from, at);
-    tokens.push({ key, line });
-    line += key.split("\n").length - 1;
-  };
-  /** Moves past a string whose opening quote is at `at`, as far as its closing `quote`. */
-  const skipQuoted = (quote) => {
-    at += 1;
-    while (at < text.length && text[at] !== quote) at += text[at] === "\\" ? 2 : 1;
-    at += 1;
-  };
-  while (at < text.length) {
-    const char = text[at];
-    const rest = text.slice(at, at + 16);
-    if (char === "\n") {
-      line += 1;
-      at += 1;
-    } else if (/\s/u.test(char)) at += 1;
-    else if (text.startsWith("//", at)) {
-      const from = at;
-      while (at < text.length && text[at] !== "\n") at += 1;
-      comment(from);
-    } else if (text.startsWith("/*", at)) {
-      const from = at;
-      if (rust) {
-        // Rust nests block comments.
-        let depth = 0;
-        while (at < text.length) {
-          if (text.startsWith("/*", at)) {
-            depth += 1;
-            at += 2;
-          } else if (text.startsWith("*/", at)) {
-            depth -= 1;
-            at += 2;
-            if (depth === 0) break;
-          } else at += 1;
-        }
-      } else {
-        const close = text.indexOf("*/", at + 2);
-        at = close < 0 ? text.length : close + 2;
-      }
-      comment(from);
-      line += text.slice(from, at).split("\n").length - 1;
-    } else if (rust && RUST_RAW.test(rest)) {
-      const [opening, hashes] = RUST_RAW.exec(rest);
-      const from = at;
-      const close = text.indexOf(`"${hashes}`, at + opening.length);
-      at = close < 0 ? text.length : close + 1 + hashes.length;
-      push(from);
-    } else if (rust && (rest.startsWith('b"') || rest.startsWith('c"'))) {
-      const from = at;
-      at += 1;
-      skipQuoted('"');
-      push(from);
-    } else if (rust && rest.startsWith("b'") && RUST_CHAR.test(rest.slice(1))) {
-      const from = at;
-      at += 1 + RUST_CHAR.exec(rest.slice(1))[0].length;
-      push(from);
-    } else if (rust && char === "'") {
-      // A character literal, or a lifetime or label: the quote and its name.
-      const from = at;
-      const literal = RUST_CHAR.exec(text.slice(at, at + 16));
-      if (literal) at += literal[0].length;
-      else {
-        at += 1;
-        while (at < text.length && /[\p{L}\p{N}_]/u.test(text[at])) at += 1;
-      }
-      push(from);
-    } else if (/[\p{L}_$]/u.test(char)) {
-      const from = at;
-      while (at < text.length && /[\p{L}\p{N}_$]/u.test(text[at])) at += 1;
-      push(from);
-    } else if (/\d/u.test(char)) {
-      const from = at;
-      while (at < text.length && /[\w.]/u.test(text[at]) && !text.startsWith("..", at)) at += 1;
-      push(from);
-    } else if (char === '"' || (!rust && char === "'")) {
-      const from = at;
-      skipQuoted(char);
-      push(from);
-    } else if (!rust && char === "`") {
-      // A template with its expressions, as far as the backtick that closes it.
-      const from = at;
-      at += 1;
-      let depth = 0;
-      while (at < text.length && !(text[at] === "`" && depth === 0)) {
-        if (text[at] === "\\") at += 1;
-        else if (text.startsWith("${", at)) depth += 1;
-        else if (text[at] === "}" && depth > 0) depth -= 1;
-        at += 1;
-      }
-      at += 1;
-      push(from);
-    } else if (
-      !rust &&
-      char === "/" &&
-      (tokens.length === 0 || BEFORE_REGEX.has(tokens.at(-1).key))
-    ) {
-      const from = at;
-      at += 1;
-      let inClass = false;
-      while (at < text.length && (text[at] !== "/" || inClass) && text[at] !== "\n") {
-        if (text[at] === "\\") at += 1;
-        else if (text[at] === "[") inClass = true;
-        else if (text[at] === "]") inClass = false;
-        at += 1;
-      }
-      at += 1;
-      while (at < text.length && /[a-z]/u.test(text[at])) at += 1;
-      push(from);
-    } else {
-      const from = at;
-      at += 1;
-      push(from);
-    }
+    body.split("\n").forEach((_, offset) => this.markedLines.add(this.#line + offset));
   }
-  return { tokens, markedLines };
+
+  /** The token `from`..here, at the line it starts on. */
+  #push(from) {
+    const key = this.#text.slice(from, this.#at);
+    this.tokens.push({ key, line: this.#line });
+    this.#line += key.split("\n").length - 1;
+  }
+
+  /** Moves past a string whose opening quote is here, as far as its closing `quote`. */
+  #skipQuoted(quote) {
+    const text = this.#text;
+    this.#at += 1;
+    while (this.#at < text.length && text[this.#at] !== quote) {
+      this.#at += text[this.#at] === "\\" ? 2 : 1;
+    }
+    this.#at += 1;
+  }
+
+  #lineComment() {
+    const from = this.#at;
+    while (this.#at < this.#text.length && this.#text[this.#at] !== "\n") this.#at += 1;
+    this.#comment(from);
+  }
+
+  #blockComment() {
+    const text = this.#text;
+    const from = this.#at;
+    if (this.#rust) {
+      // Rust nests block comments.
+      let depth = 0;
+      while (this.#at < text.length) {
+        if (text.startsWith("/*", this.#at)) {
+          depth += 1;
+          this.#at += 2;
+        } else if (text.startsWith("*/", this.#at)) {
+          depth -= 1;
+          this.#at += 2;
+          if (depth === 0) break;
+        } else this.#at += 1;
+      }
+    } else {
+      const close = text.indexOf("*/", this.#at + 2);
+      this.#at = close < 0 ? text.length : close + 2;
+    }
+    this.#comment(from);
+    this.#line += text.slice(from, this.#at).split("\n").length - 1;
+  }
+
+  /** A Rust raw, byte or C string, a byte or character literal, or a lifetime; false if none. */
+  #rustLiteral() {
+    const text = this.#text;
+    const from = this.#at;
+    const rest = text.slice(this.#at, this.#at + 16);
+    if (RUST_RAW.test(rest)) {
+      const [opening, hashes] = RUST_RAW.exec(rest);
+      const close = text.indexOf(`"${hashes}`, this.#at + opening.length);
+      this.#at = close < 0 ? text.length : close + 1 + hashes.length;
+    } else if (rest.startsWith('b"') || rest.startsWith('c"')) {
+      this.#at += 1;
+      this.#skipQuoted('"');
+    } else if (rest.startsWith("b'") && RUST_CHAR.test(rest.slice(1))) {
+      this.#at += 1 + RUST_CHAR.exec(rest.slice(1))[0].length;
+    } else if (text[this.#at] === "'") {
+      // A character literal, or a lifetime or label: the quote and its name.
+      const literal = RUST_CHAR.exec(rest);
+      if (literal) this.#at += literal[0].length;
+      else {
+        this.#at += 1;
+        while (this.#at < text.length && /[\p{L}\p{N}_]/u.test(text[this.#at])) this.#at += 1;
+      }
+    } else return false;
+    this.#push(from);
+    return true;
+  }
+
+  /** A JavaScript template or regular expression; false if none starts here. */
+  #scriptLiteral() {
+    const char = this.#text[this.#at];
+    if (char === "`") this.#template();
+    else if (char === "/" && (this.tokens.length === 0 || BEFORE_REGEX.has(this.tokens.at(-1).key)))
+      this.#regex();
+    else return false;
+    return true;
+  }
+
+  /** A template with its expressions, as far as the backtick that closes it. */
+  #template() {
+    const text = this.#text;
+    const from = this.#at;
+    this.#at += 1;
+    let depth = 0;
+    while (this.#at < text.length && !(text[this.#at] === "`" && depth === 0)) {
+      if (text[this.#at] === "\\") this.#at += 1;
+      else if (text.startsWith("${", this.#at)) depth += 1;
+      else if (text[this.#at] === "}" && depth > 0) depth -= 1;
+      this.#at += 1;
+    }
+    this.#at += 1;
+    this.#push(from);
+  }
+
+  /** A regular expression with its flags. */
+  #regex() {
+    const text = this.#text;
+    const from = this.#at;
+    this.#at += 1;
+    let inClass = false;
+    while (
+      this.#at < text.length &&
+      (text[this.#at] !== "/" || inClass) &&
+      text[this.#at] !== "\n"
+    ) {
+      if (text[this.#at] === "\\") this.#at += 1;
+      else if (text[this.#at] === "[") inClass = true;
+      else if (text[this.#at] === "]") inClass = false;
+      this.#at += 1;
+    }
+    this.#at += 1;
+    while (this.#at < text.length && /[a-z]/u.test(text[this.#at])) this.#at += 1;
+    this.#push(from);
+  }
+
+  /** A word, a number, a quoted string, or one character of its own. */
+  #plainToken(char) {
+    const text = this.#text;
+    const from = this.#at;
+    if (/[\p{L}_$]/u.test(char)) {
+      while (this.#at < text.length && /[\p{L}\p{N}_$]/u.test(text[this.#at])) this.#at += 1;
+    } else if (/\d/u.test(char)) {
+      while (
+        this.#at < text.length &&
+        /[\w.]/u.test(text[this.#at]) &&
+        !text.startsWith("..", this.#at)
+      )
+        this.#at += 1;
+    } else if (char === '"' || (!this.#rust && char === "'")) {
+      this.#skipQuoted(char);
+    } else this.#at += 1;
+    this.#push(from);
+  }
 }
 
 /** Tokens after which a new statement starts. */
@@ -403,18 +459,20 @@ function longBody(seed, count = 12) {
   ).join("\n");
 }
 
-/**
- * The checker against controls it must decide right: copies it must find, also in exported
- * declarations and beside `import(…)` and `import.meta`, in Rust beside raw strings and lifetimes,
- * and import and export lists, a deliberate copy and short repeats it must leave alone.
- */
-function selfTest() {
-  const body = longBody(7);
-  const must = (expected, sources, what) => {
-    const found = findCopies(sources, MIN_TOKENS).length > 0;
-    if (found !== expected)
-      throw new Error(`self-test: ${what} ${expected ? "not found" : "found"}`);
-  };
+/** Fails the self-test unless `sources` hold a copy exactly when `expected` says so. */
+function mustFind(expected, sources, what) {
+  const found = findCopies(sources, MIN_TOKENS).length > 0;
+  if (found !== expected) throw new Error(`self-test: ${what} ${expected ? "not found" : "found"}`);
+}
+
+/** A function of `name` with the self-test's long body, a copy of every other such function. */
+function sampleFunction(name) {
+  return `function ${name}(from) {\n  let total = 0;\n${longBody(7)}\n}`;
+}
+
+/** Copies that must be found: ordinary, in exported declarations, beside import.meta, in Rust. */
+function selfTestCopies(body) {
+  const must = mustFind;
   must(
     true,
     [
@@ -460,6 +518,12 @@ function selfTest() {
     ],
     "a Rust copy beside raw strings and lifetimes is",
   );
+}
+
+/** Import and export lists, which are no copies, and the code after them, which is read. */
+function selfTestLists() {
+  const must = mustFind;
+  const fn = sampleFunction;
   const names = Array.from({ length: 40 }, (_, i) => `name${i}`).join(", ");
   must(
     false,
@@ -477,27 +541,7 @@ function selfTest() {
     ],
     "import and export lists are",
   );
-  must(
-    false,
-    [
-      {
-        path: "web/a.js",
-        text: `// A deliberate copy: a worker cannot import.\nfunction a(from) {\n  let total = 0;\n${body}\n}`,
-      },
-      { path: "web/b.js", text: `function b(from) {\n  let total = 0;\n${body}\n}` },
-    ],
-    "a deliberate copy is",
-  );
-  must(
-    false,
-    [
-      { path: "web/a.js", text: `function a(from) {\n  let total = 0;\n${longBody(7, 2)}\n}` },
-      { path: "web/b.js", text: `function b(from) {\n  let total = 0;\n${longBody(7, 2)}\n}` },
-    ],
-    "a short repeat is",
-  );
   // AUD-013-ARC001: lists without a semicolon end with their statement; the code after them counts.
-  const fn = (name) => `function ${name}(from) {\n  let total = 0;\n${body}\n}`;
   must(
     true,
     [
@@ -535,6 +579,31 @@ function selfTest() {
     ],
     "a Rust copy after `use` in a type is",
   );
+}
+
+/** Deliberate copies and their markers, short repeats, and places compared beside a marked one. */
+function selfTestMarkers(body) {
+  const must = mustFind;
+  const fn = sampleFunction;
+  must(
+    false,
+    [
+      {
+        path: "web/a.js",
+        text: `// A deliberate copy: a worker cannot import.\nfunction a(from) {\n  let total = 0;\n${body}\n}`,
+      },
+      { path: "web/b.js", text: `function b(from) {\n  let total = 0;\n${body}\n}` },
+    ],
+    "a deliberate copy is",
+  );
+  must(
+    false,
+    [
+      { path: "web/a.js", text: `function a(from) {\n  let total = 0;\n${longBody(7, 2)}\n}` },
+      { path: "web/b.js", text: `function b(from) {\n  let total = 0;\n${longBody(7, 2)}\n}` },
+    ],
+    "a short repeat is",
+  );
   // AUD-013-ARC002: only a comment marks a deliberate copy, never a string with the words.
   must(
     true,
@@ -565,7 +634,7 @@ function selfTest() {
     must(
       true,
       order.map((text, index) => ({ path: `web/${index}.js`, text })),
-      `two unmarked copies beside a marked one, ${what}, are`,
+      `two unmarked copies beside a marked one, ${String(what)}, are`,
     );
   }
   must(
@@ -587,6 +656,10 @@ function selfTest() {
   );
   if (three.length !== 2)
     throw new Error(`self-test: three equal places give ${three.length} copies`);
+}
+
+/** Thresholds the command line must refuse. */
+function selfTestCommandLine() {
   for (const args of [
     ["--tokens", "NaN"],
     ["--tokens", "Infinity"],
@@ -606,6 +679,19 @@ function selfTest() {
     }
     if (!refused) throw new Error(`self-test: ${args.join(" ")} is accepted`);
   }
+}
+
+/**
+ * The checker against controls it must decide right: copies it must find, also in exported
+ * declarations and beside `import(…)` and `import.meta`, in Rust beside raw strings and lifetimes,
+ * and import and export lists, a deliberate copy and short repeats it must leave alone.
+ */
+function selfTest() {
+  const body = longBody(7);
+  selfTestCopies(body);
+  selfTestLists();
+  selfTestMarkers(body);
+  selfTestCommandLine();
   console.log("The copy check finds the copies of its controls and refuses bad thresholds.");
 }
 
