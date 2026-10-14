@@ -9,6 +9,8 @@
 # Every file is therefore given the same bits before it is packed, by one rule for both kinds of
 # archive: readable by all and writable by the owner alone, executable by all where it is
 # executable at all, as a checkout under umask 022 gives them.
+#
+# no set -euo pipefail: sourced, not run; the scripts that source it set it themselves.
 ARCHIVE_MODES="u+rwX,go+rX,go-w"
 
 # Packs the content of `folder` into the gzip-compressed tar archive `archive`.
