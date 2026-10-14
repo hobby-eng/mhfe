@@ -1,0 +1,37 @@
+// The type check of the page side of the browser package (TS-13): the module classes and their
+// runtime, plain JavaScript checked with the types of their JSDoc comments and of the declaration
+// files beside them. The worker parts run in a worker and have a check of their own,
+// tsconfig.worker.json, which takes the flags from here.
+//
+//   node_modules/.bin/tsc -p web/tsconfig.json
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    // The flags of TS-01.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2024", "dom"],
+    "types": [],
+    // Where the class files' import of "../runtime/runtime.js" leads. The path is the one in the
+    // package, where runtime/ lies beside core/ and each other class folder; in web/ the files lie
+    // side by side, so here the path names runtime/runtime.js at the repository root, which does
+    // not exist. rootDirs joins that folder with types/runtime/, where the import finds a shim for
+    // this check only: it gives the public types of runtime.d.ts and everything runtime.js
+    // exports, with the types of its JSDoc, as the class files also use the runtime's internal
+    // parts, which runtime.d.ts leaves out. Only "#runtime-script" reaches runtime.js itself: an
+    // import of its path would read runtime.d.ts, which TypeScript takes before the script beside
+    // it, while a path mapping that names the file with its extension reads that very file. The
+    // import specifiers and the package's layout stay as they are.
+    "rootDirs": ["../runtime", "types/runtime"],
+    "paths": { "#runtime-script": ["./runtime.js"] }
+  },
+  "files": ["runtime.js", "client.js", "repair.js", "passwords.js", "wallet.js"]
+}

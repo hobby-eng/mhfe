@@ -1,3 +1,4 @@
+// @ts-check
 // The passwords module of the mhfe browser package: the review of a typed password under its check
 // word (MHFE-PASSWORD-CHECK-1), the strength estimate and the password generator. No Argon2. A page
 // supplies the module's files as text and bytes:
@@ -30,6 +31,12 @@ import {
 
 export { MhfeError } from "../runtime/runtime.js";
 
+/**
+ * @import { MhfePasswords as DeclaredPasswords, MhfePasswordsParameters, MhfePasswordsSources }
+ *   from "./passwords.d.ts"
+ * @import { WorkerRequest } from "../runtime/runtime.js"
+ */
+
 /** The name of this module's operations in the package's worker. */
 const PASSWORDS_MODULE = "passwords";
 /**
@@ -43,9 +50,17 @@ const CHECK_WORD_TAKES_NO_COUNT =
 /** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
 const PASSWORDS_BUILD_ID = "development";
 
+/**
+ * The passwords module: the review of a password under its check word, the strength estimate and
+ * the password generator. Its options are those of its declaration, as a page may pass them: any
+ * may be missing or wrong, and each method checks them.
+ * @extends {MhfeModuleClass<MhfePasswordsParameters>}
+ */
 export class MhfePasswords extends MhfeModuleClass {
+  /** @type {ModuleWorker} */
   #module;
 
+  /** @param {Partial<MhfePasswordsSources>} [sources] */
   constructor({ workerSource, wasm } = {}) {
     const module = new ModuleWorker({
       module: PASSWORDS_MODULE,
@@ -68,12 +83,14 @@ export class MhfePasswords extends MhfeModuleClass {
    * repairs: [{ position, word, typed }] }`; `reading` is "notThisShape", "fits", "restorable" or
    * "mismatch". The answers a page offers come from it, and the one chosen goes to the long
    * operation as `passwordRepair`: "asTyped", "corrected" or `{ repair: position }`.
+   * @param {Partial<Parameters<DeclaredPasswords["review"]>[0]>} [options]
    */
   async review({ password, passwordRepeat } = {}) {
     // Both types are checked before they are compared or copied: a repetition left out is none.
     requireSecret(password, "password");
     const repeat = secretOrEmpty(passwordRepeat, "repeated password");
     await this.#module.ready();
+    /** @type {WorkerRequest} */
     const message = {
       operation: "review",
       password: encodeSecret(password, "password"),
@@ -96,6 +113,7 @@ export class MhfePasswords extends MhfeModuleClass {
    * gives it for BIP39 words. A password may hold any text, so a page shows nothing for "noWord"
    * there, and Tab stays a character of the password. Each call starts a worker: a page may ask
    * once typing pauses.
+   * @param {Partial<Parameters<DeclaredPasswords["wordHints"]>[0]>} [options]
    */
   async wordHints({ typed } = {}) {
     return wordHintsOf(this.#module, typed);
@@ -105,6 +123,7 @@ export class MhfePasswords extends MhfeModuleClass {
    * The rough strength of a password or passphrase after the review choice `passwordRepair`, so
    * that it is of the text that will be used. Resolves to `{ bits, weak }`; a weak one deserves a
    * warning before it protects a phrase.
+   * @param {Partial<Parameters<DeclaredPasswords["strength"]>[0]>} [options]
    */
   async strength({ password, passwordRepair } = {}) {
     const [choice, position] = describeChoice(passwordRepair, "passwordRepair");
@@ -125,6 +144,7 @@ export class MhfePasswords extends MhfeModuleClass {
    * gets fewer words than it asked for. With `dice`, five digits from 1 to 6 per word separated by
    * spaces, the words come from real dice; otherwise from the browser's random generator.
    * Resolves to `{ password, bits, weak, checkWord }`.
+   * @param {Partial<NonNullable<Parameters<DeclaredPasswords["make"]>[0]>>} [options]
    */
   async make({ kind = "words", count, dice = "" } = {}) {
     requireText(kind, "kind");

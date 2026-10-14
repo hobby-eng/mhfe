@@ -11,6 +11,7 @@ export {
 /** runtime/worker.js and runtime/mhfe.wasm. */
 export type MhfeWalletSources = MhfePackageParts;
 
+/** A new 24-word phrase, from drawPhrase(). */
 export interface MhfeNewPhrase {
   phrase: string;
   words: 24;

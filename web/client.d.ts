@@ -20,8 +20,11 @@ export const FAST_MODE: "fast";
 /** One lane after another; works everywhere, including a page opened as a file. */
 export const STANDARD_MODE: "standard";
 
+/** The Argon2 mode of the page: fast on a cross-origin isolated page, standard otherwise. */
 export type MhfeMode = typeof FAST_MODE | typeof STANDARD_MODE;
+/** The lengths of a BIP39 phrase that the core takes. */
 export type WordCount = 12 | 15 | 18 | 21 | 24;
+/** The repair words of a new container: 0 for none, or the count of a card. */
 export type RepairWordCount = 0 | 2 | 4 | 6 | 8;
 
 /** runtime/worker.js and runtime/mhfe.wasm, with the core's two Argon2 builds. */
@@ -32,6 +35,7 @@ export interface MhfeSources extends MhfePackageParts {
   argon2SingleThreaded: string;
 }
 
+/** How far a long operation has come, told as each round starts. */
 export interface MhfeProgress {
   /**
    * "encrypt" and "check" for an encryption, "recover" for a recovery or a hidden wallet,
@@ -44,6 +48,7 @@ export interface MhfeProgress {
   rounds: 12 | 24 | 36;
 }
 
+/** The password and settings of an operation that runs Argon2. */
 export interface MhfeSettings {
   /**
    * Password: ordinary single-line text or its UTF-8 bytes. Unpaired surrogates, control characters
@@ -63,6 +68,7 @@ export interface MhfeSettings {
   onProgress?: (progress: MhfeProgress) => void | Promise<void>;
 }
 
+/** The core's fixed values, from parameters(). */
 export interface MhfeParameters {
   /** The package's release version, the same in every module. */
   version: string;
@@ -85,6 +91,7 @@ export interface MhfeParameters {
   argon2Parts: string[];
 }
 
+/** What readPhrase() reads in an original phrase. */
 export interface MhfePhraseFacts {
   /** The phrase with every word written out, for showing back to the user. */
   phrase: string;
@@ -107,6 +114,7 @@ export interface MhfePhraseFacts {
   }[];
 }
 
+/** What readContainer() reads in a container phrase. */
 export interface MhfeContainerFacts {
   /** The container with every word written out, for showing back to the user. */
   container: string;
@@ -169,6 +177,7 @@ export interface MhfeSealed {
   keep: MhfeKeepItem[];
 }
 
+/** One reading of a recovered phrase. */
 export interface MhfeCandidate {
   words: WordCount;
   /**
@@ -197,6 +206,7 @@ export interface MhfeCandidate {
   otherLengths: WordCount[];
 }
 
+/** The result of decrypt(): the readings of the original phrase. */
 export interface MhfeRecovery {
   /**
    * "ambiguous" when several lengths passed their check, or one did beside 24 stated words:
@@ -415,6 +425,7 @@ export type MhfeConfirmAgainAnswer =
       passphrase?: never;
     });
 
+/** The wallet of a new password in a session of hidden wallets. */
 export interface MhfeHiddenWallet {
   phrase: string;
   words: 24;
@@ -460,6 +471,7 @@ export interface MhfeSelfTestFault {
   message: string;
 }
 
+/** The result of selfTest(): whether both published vectors came out as published. */
 export interface MhfeSelfTest {
   passed: boolean;
   suite3: { vector: string; asPublished: boolean };

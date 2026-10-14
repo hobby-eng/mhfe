@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The fast checks of the repository: what CI runs on every push and pull request (CI-04) and what
 # a change passes before it is called done (CORE-43). Formatting, the copy gate, clippy for the
-# native program and for every WebAssembly build, the fast tests and Prettier, in a few minutes.
+# native program and for every WebAssembly build, the fast tests, the browser package's types and
+# Prettier, in a few minutes.
 # scripts/check.sh runs them first, then the slow checks of a release.
 #
 # Needs the pinned Rust toolchain and Node.js with the tools of `pnpm install --frozen-lockfile`.
@@ -28,6 +29,8 @@ for module in browser-core browser-repair browser-passwords browser-wallet; do
 done
 # On x86-64 the tests run both the SSE2 and the SSSE3 copy of the Argon2 core.
 cargo test --locked
+# The browser package's plain JavaScript against its declarations, under the strict flags (TS-13).
+pnpm run --silent check:types
 # The workspace style for JavaScript, Markdown, JSON and YAML: double quotes, 100 columns.
 pnpm run --silent format:check
 echo "The fast checks passed."

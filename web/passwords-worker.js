@@ -1,7 +1,21 @@
+// @ts-check
 // The passwords module's operations in the package's worker, with its self-check, whose full tier
 // tries the worker's crypto.getRandomValues too.
 "use strict";
 
+/**
+ * A request of the passwords module's operations as web/passwords.js sends it; each operation
+ * reads its own fields. The secrets arrive as bytes, which the worker wipes after the operation.
+ * @typedef {SelfCheckRequest & { password: Uint8Array, passwordRepeat: Uint8Array,
+ *   repeated: boolean, choice: string, position: number, kind: string,
+ *   count: number | undefined, rolls: Uint8Array, typed: Uint8Array }} PasswordsRequest
+ */
+
+/**
+ * The passwords module's operations by name, which web/worker-start.js serves.
+ * @type {Record<string, Operation<PasswordsRequest>>}
+ */
+// oxlint-disable-next-line no-unused-vars -- web/worker-start.js serves it in runtime/worker.js
 const PASSWORD_OPERATIONS = {
   parameters: () => JSON.parse(mhfe.passwordParameters()),
   packageVersion: () => mhfe.packageVersion(),

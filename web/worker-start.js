@@ -1,3 +1,4 @@
+// @ts-check
 // The end of the package's worker: it serves the operations of every module, by module and name.
 "use strict";
 

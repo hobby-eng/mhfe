@@ -1,3 +1,4 @@
+// @ts-check
 // The bridge from the Rust core to the Emscripten build of the reference Argon2 code. It is
 // joined into runtime/worker.js by scripts/build-wasm.sh, and the Node.js tests load the same file.
 "use strict";
@@ -12,7 +13,10 @@ const ARGON2_MEMORY_ALLOCATION_ERROR = -22;
  * The object the Rust core calls once per round (see src/engine/browser.rs). `password`,
  * `salt` and `key` are views into the Rust core's memory, so the password is never copied into
  * a JavaScript array on the way.
+ * @param {Argon2Module} module
+ * @returns {Argon2Engine}
  */
+// oxlint-disable-next-line no-unused-vars -- web/core-worker.js calls it in runtime/worker.js
 function argon2Engine(module) {
   return {
     derive(password, salt, memoryKib, passes, key) {
@@ -69,6 +73,13 @@ function argon2Engine(module) {
   };
 }
 
+/**
+ * Overwrites the `length` bytes of the C heap at `pointer`, as `heap` views it, and frees them.
+ * @param {Argon2Module} module
+ * @param {Uint8Array} heap
+ * @param {number} pointer
+ * @param {number} length
+ */
 function wipeAndFree(module, heap, pointer, length) {
   if (pointer !== 0) {
     heap.fill(0, pointer, pointer + length);

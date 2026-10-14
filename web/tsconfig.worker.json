@@ -1,0 +1,25 @@
+// The type check of the worker parts of the browser package (TS-13), with the flags of
+// tsconfig.json. scripts/build-wasm.sh joins these classic scripts after the wasm-bindgen glue
+// into runtime/worker.js, so they share one global scope, run in a Web Worker and import nothing:
+// files without import or export are scripts here ("legacy"), the library is the worker's, and
+// types/worker-globals.d.ts declares what lies in front of them (the glue's `mhfe` and the Argon2
+// builds).
+//
+//   node_modules/.bin/tsc -p web/tsconfig.worker.json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2024", "webworker"],
+    "moduleDetection": "legacy"
+  },
+  "files": [
+    "types/worker-globals.d.ts",
+    "argon2-engine.js",
+    "worker-runtime.js",
+    "core-worker.js",
+    "repair-worker.js",
+    "passwords-worker.js",
+    "wallet-worker.js",
+    "worker-start.js"
+  ]
+}

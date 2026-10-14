@@ -214,6 +214,7 @@ export interface MhfeSelfCheckReport {
 export type MhfeSelfCheckProgress =
   { id: string; label: string; running: true } | (MhfeComponentResult & { running: false });
 
+/** The error of an operation that cancel() stopped, with the code CANCELLED. */
 export class MhfeCancelledError extends MhfeError {
   constructor();
 }
@@ -287,7 +288,7 @@ export class PackageCheck {
     wasm: CompiledModule;
     classFile: string;
     classBuildId: string;
-    needs?: ("random" | "threads")[];
+    needs?: ("random" | "threads")[] | undefined;
     secrets: boolean;
     identityOf?: (id: string) => unknown;
   });

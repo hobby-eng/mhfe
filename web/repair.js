@@ -1,3 +1,4 @@
+// @ts-check
 // The repair module of the mhfe browser package: the repair words of a container and the repair of
 // a damaged container phrase (MHFE-REPAIR-1). No Argon2 and no secret. A page supplies the module's
 // files as text and bytes:
@@ -18,14 +19,27 @@ import { MhfeModuleClass, ModuleWorker, requireText } from "../runtime/runtime.j
 
 export { MhfeError } from "../runtime/runtime.js";
 
+/**
+ * @import { MhfeRepair as DeclaredRepair, MhfeRepairParameters, MhfeRepairSources }
+ *   from "./repair.d.ts"
+ */
+
 /** The name of this module's operations in the package's worker. */
 const REPAIR_MODULE = "repair";
 /** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
 const REPAIR_BUILD_ID = "development";
 
+/**
+ * The repair module: the repair words of a container and the repair of a damaged container phrase.
+ * Its options are those of its declaration, as a page may pass them: any may be missing or wrong,
+ * and each method checks them.
+ * @extends {MhfeModuleClass<MhfeRepairParameters>}
+ */
 export class MhfeRepair extends MhfeModuleClass {
+  /** @type {ModuleWorker} */
   #module;
 
+  /** @param {Partial<MhfeRepairSources>} [sources] */
   constructor({ workerSource, wasm } = {}) {
     const module = new ModuleWorker({
       module: REPAIR_MODULE,
@@ -44,6 +58,7 @@ export class MhfeRepair extends MhfeModuleClass {
    * container phrase. Resolves to `{ profile, words, repairsUnreadable, repairsWrong }`. Make them
    * only from a container whose recovery was rehearsed; a container that does not open its wallet
    * gets a card that repairs the wrong words faithfully.
+   * @param {Partial<Parameters<DeclaredRepair["repairWords"]>[0]>} [options]
    */
   async repairWords({ container, count } = {}) {
     requireText(container, "container");
@@ -60,6 +75,7 @@ export class MhfeRepair extends MhfeModuleClass {
    * cardWords, changes: [{ onCard, position, read, word }] }`; a page shows every change. A repair
    * does not show that the card belongs to the container phrase: only a rehearsal against the
    * wallet does.
+   * @param {Partial<Parameters<DeclaredRepair["repairContainer"]>[0]>} [options]
    */
   async repairContainer({ container, card } = {}) {
     requireText(container, "container");
@@ -75,6 +91,7 @@ export class MhfeRepair extends MhfeModuleClass {
    * "notAContainer", a container's length but not a container, from a typing mistake or a damaged
    * container phrase: offer to type it again or to repair it; "wrongLength", a length no container
    * has.
+   * @param {Partial<Parameters<DeclaredRepair["inspectContainer"]>[0]>} [options]
    */
   async inspectContainer({ container } = {}) {
     requireText(container, "container");
