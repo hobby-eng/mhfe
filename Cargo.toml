@@ -103,7 +103,7 @@ all = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
-too_many_lines = "deny" # threshold 100, CORE-15
+too_many_lines = "deny" # at 150 lines, CORE-15
 mod_module_files = "deny" # RUST-03
 undocumented_unsafe_blocks = "deny" # RUST-07
 

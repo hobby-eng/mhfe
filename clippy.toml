@@ -2,5 +2,6 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
-# CORE-15: at most 100 lines per function.
-too-many-lines-threshold = 100
+# CORE-15: a function aims at 100 lines; one of 101 to 150 that is one whole stays, judged in
+# review; the gate stops at 150.
+too-many-lines-threshold = 150

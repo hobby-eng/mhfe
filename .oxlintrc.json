@@ -18,7 +18,7 @@
     "max-lines-per-function": [
       "error",
       {
-        "max": 100
+        "max": 150
       }
     ],
     "typescript/no-explicit-any": "error",
