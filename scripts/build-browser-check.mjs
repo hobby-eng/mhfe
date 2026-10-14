@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-import { bundleClasses } from "./bundle-browser-classes.mjs";
+import { bundleClasses, pagePolicy } from "./bundle-browser-classes.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFileSync(new URL(path, root));
@@ -127,20 +127,7 @@ main()
   });
 `;
 const script = clientModule + "\n" + checks;
-const scriptHash = createHash("sha256").update(script, "utf8").digest("base64");
-const policy = [
-  "default-src 'none'",
-  `script-src 'sha256-${scriptHash}' 'wasm-unsafe-eval'`,
-  "style-src 'unsafe-inline'",
-  "img-src 'none'",
-  "font-src 'none'",
-  "connect-src 'none'",
-  "worker-src blob:",
-  "object-src 'none'",
-  "frame-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-].join("; ");
+const policy = pagePolicy(script);
 
 const page = `<!doctype html>
 <html lang="en">

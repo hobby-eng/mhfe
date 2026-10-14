@@ -8,6 +8,7 @@ Usage: python3 scripts/verify-fast-mode-script.py
 
 import importlib.util
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -58,6 +59,26 @@ class Routing(unittest.TestCase):
             self.assertIn('("{}", "{}")'.format(name, value), rust)
         self.assertIn("SECURITY_HEADERS: [(&str, &str); {}]".format(len(fast_mode.SECURITY_HEADERS)),
                       rust)
+
+    def test_the_limits_match_the_rust_launcher(self):
+        # The limits of serve.rs, read from its source, so that a change to either launcher alone
+        # fails here (AUD-023-ARC017).
+        with open(os.path.join(os.path.dirname(SCRIPT), "..", "src", "bin", "mhfe", "serve.rs"),
+                  encoding="utf-8") as source:
+            text = source.read()
+
+        def constant(name):
+            return re.search(r"const {}: [^=]+= ([^;]+);".format(name), text).group(1)
+
+        def seconds(value):
+            match = re.fullmatch(r"Duration::from_(secs|millis)\((\d+)\)", value)
+            return int(match.group(2)) / (1 if match.group(1) == "secs" else 1000)
+
+        self.assertEqual(eval(constant("MAX_REQUEST_HEAD"), {}), fast_mode.MAX_REQUEST_HEAD)
+        self.assertEqual(seconds(constant("REQUEST_DEADLINE")), fast_mode.REQUEST_DEADLINE)
+        self.assertEqual(seconds(constant("RESPONSE_DEADLINE")), fast_mode.RESPONSE_DEADLINE)
+        self.assertEqual(int(constant("MAX_CONNECTIONS")), fast_mode.MAX_CONNECTIONS)
+        self.assertEqual(seconds(constant("ACCEPT_ERROR_PAUSE")), fast_mode.ACCEPT_ERROR_PAUSE)
 
     def test_refuses_other_hosts_against_dns_rebinding(self):
         for host in ["localhost:43210", "127.0.0.1", "127.0.0.1:1", "evil.example:43210", ""]:
@@ -158,6 +179,21 @@ class Server(unittest.TestCase):
             pass
         self.assertEqual(status_line(reply), "HTTP/1.1 400 Bad Request")
 
+    def test_a_client_that_does_not_read_is_dropped_at_the_response_deadline(self):
+        # The counterpart of serve.rs's test: a large page to a client that never reads
+        # (AUD-023-ARC017).
+        server, client = socket.socketpair()
+        self.addCleanup(client.close)
+        client.sendall((request("GET", "/", HOST) + "\r\n").encode("ascii"))
+        original = fast_mode.RESPONSE_DEADLINE
+        fast_mode.RESPONSE_DEADLINE = 0.5
+        try:
+            started = time.monotonic()
+            fast_mode.answer(server, HOST, b"x" * (64 * 1024 * 1024), 5.0)
+            self.assertLess(time.monotonic() - started, 3.0, "dropped at the response deadline")
+        finally:
+            fast_mode.RESPONSE_DEADLINE = original
+
     def test_connections_beyond_the_limit_are_closed_at_once(self):
         # Every slot is taken by a client that sends nothing until its deadline.
         idle = [self.connect() for _ in range(fast_mode.MAX_CONNECTIONS)]
@@ -172,6 +208,128 @@ class Server(unittest.TestCase):
         self.assertEqual(data, b"", "the extra connection was closed without an answer")
         self.assertLess(time.monotonic() - started, 0.4, "closed at once, not at a deadline")
         self.assertEqual(len(idle), fast_mode.MAX_CONNECTIONS)
+
+
+class Style(unittest.TestCase):
+    """The launcher writes as mhfe serve does: its help in the same sections with the same safety
+    line, a title, marked success and error lines within 78 columns, and colours by the same
+    environment rules (AUD-023-UI011)."""
+
+    def run_script(self, arguments, environment, terminal):
+        """Runs the script with standard error on a pseudo-terminal or a pipe; its bytes."""
+        import pty
+        import subprocess
+
+        env = {key: value for key, value in os.environ.items()
+               if key not in ("NO_COLOR", "CLICOLOR", "CLICOLOR_FORCE", "TERM")}
+        env.update(environment)
+        if terminal:
+            leader, follower = pty.openpty()
+            process = subprocess.Popen([sys.executable, SCRIPT, *arguments], stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.DEVNULL, stderr=follower, env=env)
+            os.close(follower)
+            output = b""
+            while True:
+                try:
+                    chunk = os.read(leader, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                output += chunk
+            process.wait(10)
+            os.close(leader)
+            return output
+        return subprocess.run([sys.executable, SCRIPT, *arguments], stdin=subprocess.DEVNULL,
+                              capture_output=True, env=env, timeout=10).stderr
+
+    def test_the_help_has_the_sections_and_safety_line_of_mhfe_serve(self):
+        with open(os.path.join(os.path.dirname(SCRIPT), "..", "src", "bin", "mhfe", "serve.rs"),
+                  encoding="utf-8") as source:
+            text = source.read()
+        start = text.index('"The page is served only when {CHECKSUM_FILE}')
+        literal = text[start + 1:text.index('"', start + 1)]
+        safety = " ".join(re.sub(r"\\\n\s*", "", literal).replace(
+            "{CHECKSUM_FILE}", fast_mode.CHECKSUM_FILE).split())
+        self.assertIn(safety, " ".join(fast_mode.HELP.split()))
+        for section in ("Usage:", "Arguments:", "Options:", "Examples:"):
+            self.assertIn("\n{}".format(section), fast_mode.HELP)
+        self.assertTrue(all(len(line) <= 80 for line in fast_mode.HELP.splitlines()))
+
+    def test_messages_are_marked_and_wrapped_as_mhfe_shows_them(self):
+        import contextlib
+        import io
+
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            fast_mode.error("There is no readable {} in {}: No such file or directory. The fast "
+                            "mode serves a page only when its checksum file lies next to it; "
+                            "nothing was served.".format(fast_mode.CHECKSUM_FILE, "/a/b" * 10))
+            fast_mode.ok("SHA-256 of tool.html verified")
+        lines = error.getvalue().splitlines()
+        self.assertEqual(lines[0], "")
+        self.assertTrue(lines[1].startswith("✗ Error: "), lines)
+        self.assertTrue(all(line.startswith(" " * 9) for line in lines[2:-1]), lines)
+        self.assertEqual(lines[-1], "✓ SHA-256 of tool.html verified")
+        self.assertTrue(all(len(line) <= 78 for line in lines), lines)
+
+    def test_colours_follow_the_environment(self):
+        missing = os.path.join(tempfile.gettempdir(), "mhfe-no-such-folder", "tool.html")
+        for environment, terminal, coloured in (
+            ({}, True, True),
+            ({"NO_COLOR": "1"}, True, False),
+            ({"CLICOLOR": "0"}, True, False),
+            ({"TERM": "dumb"}, True, False),
+            ({"CLICOLOR_FORCE": "1"}, False, True),
+            ({}, False, False),
+        ):
+            output = self.run_script([missing], environment, terminal)
+            self.assertIn("Error:".encode(), output)
+            self.assertEqual(b"\x1b[" in output, coloured, (environment, terminal, output))
+
+
+def stopped_by_ctrl_c(*arguments, **options):
+    """A stand-in for serve() that the person stops at once."""
+    raise KeyboardInterrupt
+
+
+class AcceptErrors(unittest.TestCase):
+    """serve() keeps serving after a connection it could not accept, pausing rather than spinning,
+    and ends only when its listener is closed (AUD-023-FUN003)."""
+
+    class StandIn:
+        def __init__(self, errors):
+            self.errors = list(errors)
+            self.calls = []
+            self.closed = False
+
+        def settimeout(self, seconds):
+            pass
+
+        def fileno(self):
+            return -1 if self.closed else 3
+
+        def accept(self):
+            self.calls.append(time.monotonic())
+            if self.errors:
+                raise self.errors.pop(0)
+            self.closed = True
+            raise OSError(9, "Bad file descriptor")
+
+    def test_an_accept_error_does_not_end_serving(self):
+        for error in (ConnectionAbortedError(103, "aborted"), ConnectionResetError(104, "reset"),
+                      OSError(24, "Too many open files"), OSError(23, "Too many open files in system"),
+                      OSError(105, "No buffer space available"), InterruptedError(4, "interrupted")):
+            listener = self.StandIn([error])
+            fast_mode.serve(listener, HOST, PAGE)
+            self.assertEqual(len(listener.calls), 2, "{!r}: serve() looked again".format(error))
+            self.assertTrue(listener.closed)
+
+    def test_the_loop_pauses_rather_than_spins(self):
+        listener = self.StandIn([OSError(24, "Too many open files")] * 3)
+        fast_mode.serve(listener, HOST, PAGE)
+        gaps = [later - earlier for earlier, later in zip(listener.calls, listener.calls[1:])]
+        self.assertTrue(all(gap >= fast_mode.ACCEPT_ERROR_PAUSE * 0.9 for gap in gaps), gaps)
 
 
 class ChecksumFile(unittest.TestCase):
@@ -267,6 +425,18 @@ class ChecksumFile(unittest.TestCase):
         self.write_checksum_file("{}  to\x1bol.html\n".format(self.digest))
         self.assertIn("must hold exactly one line", self.refusal())
 
+    def test_the_checksum_format_is_said_as_mhfe_serve_says_it(self):
+        # The format in words, as MALFORMED in src/bin/mhfe/serve.rs says it, not as a pattern
+        # with two spaces that wrapping would join (AUD-023-UI009).
+        with open(os.path.join(os.path.dirname(SCRIPT), "..", "src", "bin", "mhfe", "serve.rs"),
+                  encoding="utf-8") as rust:
+            source = rust.read()
+        start = source.index('const MALFORMED: &str = "') + len('const MALFORMED: &str = "')
+        literal = source[start:source.index('";', start)]
+        malformed = re.sub(r"\\\n\s*", "", literal)
+        self.write_checksum_file("{}\ttool.html\n".format(self.digest))
+        self.assertTrue(self.refusal().endswith(malformed), self.refusal())
+
     def test_a_checksum_file_that_is_not_utf8_is_refused(self):
         with open(os.path.join(self.folder, fast_mode.CHECKSUM_FILE), "wb") as file:
             file.write(b"\xff\xfe  tool.html\n")
@@ -296,17 +466,55 @@ class ChecksumFile(unittest.TestCase):
                   encoding="utf-8") as source:
             self.assertIn(expected.replace("\\", "\\\\"), source.read())
 
+    def test_the_address_is_shown_whatever_the_opener_does(self):
+        # An opener that starts but fails, or opens an unwanted browser, still leaves the address
+        # on the screen, as mhfe serve does (AUD-023-UI010).
+        import contextlib
+        import io
+
+        self.write_checksum_file("{}  tool.html\n".format(self.digest))
+        for opened in (True, False):
+            error = io.StringIO()
+            original_open, original_serve = fast_mode.webbrowser.open, fast_mode.serve
+            fast_mode.webbrowser.open = lambda address, opened=opened: opened
+            fast_mode.serve = stopped_by_ctrl_c
+            try:
+                with contextlib.redirect_stderr(error):
+                    self.assertEqual(fast_mode.main([self.page]), fast_mode.SUCCESS)
+            finally:
+                fast_mode.webbrowser.open, fast_mode.serve = original_open, original_serve
+            self.assertIn("http://127.0.0.1:", error.getvalue(), repr(error.getvalue()))
+
     def test_without_arguments_the_page_next_to_the_script_is_served(self):
+        import contextlib
+        import io
+
         original = fast_mode.__file__
         fast_mode.__file__ = os.path.join(self.folder, "mhfe-fast-mode.py")
+        served = []
+
+        def serve_once(listener, host, page, *rest):
+            # What a browser gets from the server main() started, then Ctrl+C (AUD-023-ARC017).
+            served.append(fast_mode.respond(request("GET", "/", host) + "\r\n", host, page))
+            raise KeyboardInterrupt
+
+        original_serve = fast_mode.serve
         try:
             # No checksum file: an explanation and the invalid-input exit code.
-            self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.INVALID_INPUT)
-            # A wrong checksum: refused before any socket is opened.
-            self.write_checksum_file("{}  tool.html\n".format("00" * 32))
-            self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.INVALID_INPUT)
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.INVALID_INPUT)
+                # A wrong checksum: refused before any socket is opened.
+                self.write_checksum_file("{}  tool.html\n".format("00" * 32))
+                self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.INVALID_INPUT)
+                # The right one: the page next to the script is served.
+                self.write_checksum_file("{}  tool.html\n".format(self.digest))
+                fast_mode.serve = serve_once
+                self.assertEqual(fast_mode.main(["--no-browser"]), fast_mode.SUCCESS)
         finally:
             fast_mode.__file__ = original
+            fast_mode.serve = original_serve
+        self.assertEqual(status_line(served[0]), "HTTP/1.1 200 OK")
+        self.assertTrue(served[0].endswith(PAGE))
 
 
 if __name__ == "__main__":

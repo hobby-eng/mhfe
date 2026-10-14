@@ -8,9 +8,11 @@
 // uses them: the Argon2 builds embed their WebAssembly (SINGLE_FILE) and read it synchronously,
 // and the worker passes the Rust core to `initSync`. Each loader is replaced by a stub that
 // throws. Every replaced text must occur exactly once, so an update of either tool that changes
-// it stops the build instead of leaving a loader behind. Tools that embed the package, such as the
-// wallet tools, refuse a page that contains fetch or XMLHttpRequest at all.
+// it stops the build instead of leaving a loader behind. What may not remain is the list of
+// scripts/network-code.mjs.
 import { readFileSync, writeFileSync } from "node:fs";
+
+import { checkNetworkCodeList, networkCodeIn } from "./network-code.mjs";
 
 const EMBEDDED = "MHFE loads no files: its WebAssembly is embedded";
 
@@ -24,15 +26,6 @@ const ARGON2_REPLACEMENTS = [
     'readAsync=async url=>{var response=await fetch(url,{credentials:"same-origin"});if(response.ok){return response.arrayBuffer()}throw new Error(response.status+" : "+response.url)}',
     `readAsync=async url=>{throw new Error("${EMBEDDED}")}`,
   ],
-];
-
-/** Code that could reach the network. None of it may remain. */
-const NETWORK_CODE = [
-  /\bfetch\s*\(/u,
-  /\bXMLHttpRequest\b/u,
-  /\bWebSocket\b/u,
-  /\bEventSource\b/u,
-  /\bsendBeacon\b/u,
 ];
 
 function replaceOnce(text, find, replacement, file) {
@@ -79,6 +72,7 @@ function removeFromGlue(text, file) {
   );
 }
 
+checkNetworkCodeList();
 const [kind, ...files] = process.argv.slice(2);
 if ((kind !== "argon2" && kind !== "glue") || files.length === 0) {
   throw new Error("Usage: node scripts/remove-network-code.mjs argon2|glue <file>...");
@@ -91,7 +85,7 @@ for (const file of files) {
   } else {
     text = removeFromGlue(text, file);
   }
-  const left = NETWORK_CODE.find((pattern) => pattern.test(text));
+  const left = networkCodeIn(text);
   if (left !== undefined) throw new Error(`${file}: network code is still present: ${left}`);
   writeFileSync(file, text);
 }

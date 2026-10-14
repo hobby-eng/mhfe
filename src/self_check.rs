@@ -16,6 +16,7 @@
 
 use crate::MhfeError;
 
+pub mod process;
 pub mod sets;
 
 /// How much a self-check runs.
@@ -354,6 +355,14 @@ impl Findings {
     }
 }
 
+/// What a damaged built-in table gives as the detail of a failure.
+pub(crate) const DAMAGED: &str = "the built-in cases are damaged";
+
+/// [`DAMAGED`] as the detail of a failure.
+pub(crate) fn damaged() -> String {
+    DAMAGED.to_owned()
+}
+
 /// `Ok` when `same`, else `Err(what)`: one comparison of a case.
 pub(crate) fn expect(same: bool, what: &str) -> Result<(), String> {
     if same {
@@ -387,6 +396,7 @@ pub(crate) fn stopped(error: MhfeError) -> String {
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
+    feature = "browser-repair",
     feature = "browser-wallet"
 ))]
 #[derive(Clone, Copy)]
@@ -405,6 +415,7 @@ pub(crate) struct DigestCase {
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
+    feature = "browser-repair",
     feature = "browser-wallet"
 ))]
 pub(crate) fn digest_outcome(cases: &[DigestCase]) -> ComponentOutcome {

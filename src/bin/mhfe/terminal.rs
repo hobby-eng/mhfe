@@ -10,7 +10,7 @@ use std::io::{self, BufRead, IsTerminal, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use anstream::{eprint, eprintln, println};
+use anstream::{eprint, eprintln};
 use mhfe::memory::LockedText;
 use mhfe::word_hints::WordList;
 use mhfe::{ContainerFacts, MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
@@ -75,6 +75,20 @@ impl Input {
     pub fn terminal_only() -> Self {
         Self::Terminal {
             command_reads_stdin: false,
+        }
+    }
+
+    /// The input of a command that reads a secret: without --stdin, standard input must be a
+    /// terminal, or the command says at once how to run it, before any question would take the
+    /// lines of a pipe as answers (AUD-023-UI006).
+    pub fn reading_secrets(self) -> Result<Self, Failure> {
+        match self {
+            Self::Terminal {
+                command_reads_stdin,
+            } if !io::stdin().is_terminal() => Err(Failure::invalid_input(no_terminal_advice(
+                command_reads_stdin,
+            ))),
+            input => Ok(input),
         }
     }
 
@@ -152,10 +166,7 @@ impl Input {
     /// that carries out control sequences the words of the list are hinted below them, Tab
     /// completes one and Ctrl+W deletes one; elsewhere as [`Input::visible`].
     pub fn visible_words(&mut self, prompt: &str, list: WordList) -> Result<LockedText, Failure> {
-        let hinted = matches!(self, Self::Terminal { .. })
-            && io::stdin().is_terminal()
-            && io::stderr().is_terminal()
-            && hidden_input::control_sequences();
+        let hinted = matches!(self, Self::Terminal { .. }) && hidden_input::can_redraw();
         if !hinted {
             return self.visible(prompt);
         }
@@ -298,7 +309,11 @@ impl Step {
     pub fn visible(&mut self, input: &mut Input, prompt: &str) -> Result<LockedText, Failure> {
         let answer = input.visible(prompt)?;
         if !input.is_script() {
-            self.lines += rows(prompt.chars().count() + answer.chars().count());
+            // The answer is measured in place: no copy of it is made.
+            self.lines += style::rows_of_cells(
+                style::visible_width(prompt) + style::visible_width(&answer),
+                hidden_input::columns_or_default(),
+            );
         }
         Ok(answer)
     }
@@ -310,14 +325,6 @@ impl Step {
         }
         Ok(())
     }
-}
-
-/// The lines that `characters` take on the terminal, the Enter after them included: a full line
-/// moves on only with the next character, so text that fills its last line exactly takes no more.
-fn rows(characters: usize) -> usize {
-    // When the width cannot be read, the usual 80 columns.
-    let columns = hidden_input::columns().unwrap_or(80);
-    characters.div_ceil(columns).max(1)
 }
 
 /// Set while a container is on the screen whose check has not finished, so that Ctrl+C can say so.
@@ -455,17 +462,17 @@ fn strip_line_ending(line: &mut String) {
 /// Prints a phrase to standard output. For a person: in a frame, numbered, for comparing with
 /// what was written down, and below it on one plain line, for copying. For a script: the plain
 /// line only.
-pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) {
+pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> Result<(), Failure> {
     if input.is_script() {
-        println!("{phrase}");
-        return;
+        return style::out(phrase);
     }
     for line in style::boxed_words(phrase) {
-        println!("{}", *line);
+        style::out(format_args!("{}", *line))?;
     }
     eprintln!("{}", paint(MUTED, "On one line, for copying:"));
-    println!("{phrase}");
+    style::out(phrase)?;
     print_fingerprint(phrase, wallet);
+    Ok(())
 }
 
 /// The wallet a phrase shown opens, whose master key fingerprint is shown under it.
@@ -638,11 +645,7 @@ pub fn output_on_screen() -> bool {
 }
 
 fn terminal_screen_possible(input: &Input) -> bool {
-    !input.is_script()
-        && io::stdin().is_terminal()
-        && io::stderr().is_terminal()
-        && std::env::var("TERM").map_or(true, |term| term != "dumb")
-        && hidden_input::control_sequences()
+    !input.is_script() && hidden_input::can_redraw()
 }
 
 /// Asks the person to write down what the private screen shows, and waits for Enter or Escape,

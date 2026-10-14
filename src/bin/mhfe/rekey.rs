@@ -105,10 +105,13 @@ fn confirm_help() -> String {
     ])
 }
 
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Change the password or settings of a container";
+
 /// The top of `mhfe rekey --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Change the password or settings of a container",
+        SUMMARY,
         "Recovers the seed phrase from the old container, confirms it, by its built-in check, by \
          a receiving address or the master key fingerprint of the wallet, or by showing it to you \
          to compare with your backup, and encrypts it under a new password or new settings. The \
@@ -138,12 +141,26 @@ pub fn help() -> String {
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     // Every answer is a choice at the terminal; no script reads a phrase back and forth.
-    let mut input = Input::terminal_only();
+    let mut input = Input::terminal_only().reading_secrets()?;
     options.new_password.check(&input)?;
     options.repair_words.check()?;
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Rekey.title());
     let old_work = settings::choose(options.old, &mut input, Operation::Rekey)?;
+    let new_settings = Settings {
+        pim: options.new_pim,
+        memory_level: options.new_memory_level,
+    };
+    new_settings.check_given(Operation::RekeyNew)?;
+    // A --confirm that the length given cannot use is refused before anything is typed, by the
+    // library's rule (AUD-023-UI002); one that depends on the container, once it is read.
+    let refuse_confirm = |needed| match options.confirm {
+        Some(Kind::BuiltInCheck) => Confirmation::BuiltInCheck.refuse_for(needed),
+        _ => Ok(()),
+    };
+    if let Some(needed) = options.words.and_then(ConfirmationNeeded::of_any_container) {
+        refuse_confirm(needed)?;
+    }
     // Shown to everyone, so that it says nothing about this container (specification: a hidden
     // wallet behind an honest disclosure). Nothing is destroyed here: the old container keeps
     // opening every wallet with its passwords, so the warning heads the next screen instead of a
@@ -157,6 +174,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     )?;
     let container = read.facts;
     let length = phrase_length(&mut input, options.words, &container)?;
+    refuse_confirm(container.confirmation_needed(length)?)?;
     // A search for missing words asked for the old password already.
     let password = match read.password {
         Some(password) => password,
@@ -306,10 +324,6 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let rehearsal = recovered.replacement_rehearsal(&passphrase)?;
     drop(passphrase);
 
-    let new_settings = Settings {
-        pim: options.new_pim,
-        memory_level: options.new_memory_level,
-    };
     let new_work = settings::choose(new_settings, &mut input, Operation::RekeyNew)?;
     // A 24-word original too can, by rare chance, read as a shorter phrase after recovery.
     let original = OriginalFacts::read(phrase.phrase())?;
@@ -508,7 +522,7 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
     }
     eprintln!();
     eprintln!("{}", paint(HEADING, "Recovered seed phrase"));
-    terminal::print_phrase(phrase, Wallet::NoPassphrase, input);
+    terminal::print_phrase(phrase, Wallet::NoPassphrase, input)?;
     let question = Question {
         text: "Does it match your written record, word for word?",
         explanation: OWNER_CHECKS,

@@ -1,9 +1,11 @@
 name: CI
 
 on:
-  # Branches only: the release workflow calls this one for the tagged commit itself.
+  # Branches only: the release workflow calls this one for the tagged commit itself. Dependabot's
+  # branches are checked through their pull requests alone, so that each of its commits is checked
+  # once, not once for the push and again for the pull request (AUD-023-BLD006).
   push:
-    branches: ["**"]
+    branches: ["**", "!dependabot/**"]
   pull_request:
   # The release workflow runs these checks on the tagged commit before it publishes, so that a
   # release cannot skip any of them (AUD-015-BLD002). Its own canonical job builds the assets.
@@ -11,9 +13,15 @@ on:
   # By hand, the checks with the canonical build of this workflow.
   workflow_dispatch:
 
-# A newer push to the same branch or pull request makes a running check pointless.
+# A newer push to the same branch or pull request makes a running check pointless, and so does a
+# second run of the same commit: a branch of this repository and its pull request share one group
+# (AUD-023-BLD006), while a fork's branch has its own. A tag that release.yml checks has the group
+# of its name.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: >-
+    ci-${{ github.ref_type }}
+    ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+    ${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:

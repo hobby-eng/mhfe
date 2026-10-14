@@ -30,11 +30,11 @@ use crate::self_check::{sets, ComponentCheck, SelfCheck};
 use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
 use crate::{
-    container_fingerprint, Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets, Mhfe,
-    MhfeError, OriginalFacts, PassedCheck, Password, PhraseLength, RecoveredForCheck,
-    RecoveredForRekey, Recovery, RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor,
-    BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
-    WORD_COUNTS,
+    container_fingerprint, refuse_unused_passphrase, Confirmation, ConfirmationNeeded,
+    ContainerFacts, HiddenWallets, Mhfe, MhfeError, OriginalFacts, PassedCheck, Password,
+    PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery, RecoveryStatus, ReferenceTarget,
+    Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS,
+    SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
 };
 
 #[derive(Serialize)]
@@ -201,10 +201,10 @@ enum KeepJson {
     Password,
     Passphrase,
     PassphraseIfAny,
-    RepairWords,
+    RepairWords { apart: bool },
     Pim { value: u32 },
     MemoryLevel { value: u32 },
-    WordCount { words: usize },
+    WordCount { words: usize, apart: bool },
     OldContainer,
     OldPasswords,
 }
@@ -218,10 +218,15 @@ fn keep_json(keep: &Keep) -> Vec<KeepJson> {
             KeepItem::Password => KeepJson::Password,
             KeepItem::Passphrase => KeepJson::Passphrase,
             KeepItem::PassphraseIfAny => KeepJson::PassphraseIfAny,
-            KeepItem::RepairWords => KeepJson::RepairWords,
+            KeepItem::RepairWords => KeepJson::RepairWords {
+                apart: item.kept_apart(),
+            },
             KeepItem::Pim(value) => KeepJson::Pim { value },
             KeepItem::MemoryLevel(value) => KeepJson::MemoryLevel { value },
-            KeepItem::WordCount(words) => KeepJson::WordCount { words },
+            KeepItem::WordCount(words) => KeepJson::WordCount {
+                words,
+                apart: item.kept_apart(),
+            },
             KeepItem::OldContainer => KeepJson::OldContainer,
             KeepItem::OldPasswords => KeepJson::OldPasswords,
         })
@@ -741,7 +746,11 @@ pub fn search_decoy(
 ) -> Result<String, JsError> {
     let passphrase = SecretText::new(passphrase_utf8);
     let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
-    let scan_gap = whole_number(scan_gap, "INVALID_REQUEST", "scanGap")?;
+    let scan_gap = whole_number(
+        scan_gap,
+        MhfeError::InvalidRequest(String::new()).code(),
+        "scanGap",
+    )?;
     let wallet = reference_target(reference_kind, reference, coin, path)?;
     let search = ContainerSearch::new(written).map_err(js_error)?;
     let found = search
@@ -794,7 +803,10 @@ pub fn search_wallet(
         Wallet(ReferenceTarget),
     }
     let compared = match reference_kind {
-        "builtInCheck" => Compared::OwnChecks(None),
+        "builtInCheck" => {
+            refuse_unused_passphrase(passphrase).map_err(js_error)?;
+            Compared::OwnChecks(None)
+        }
         "walletCheck" => Compared::OwnChecks(Some(passphrase)),
         _ => Compared::Wallet(reference_target(reference_kind, reference, coin, path)?),
     };
@@ -865,7 +877,8 @@ pub struct RekeySession {
     new_password: Option<Password>,
     new_work: Option<WorkFactor>,
     repair_word_count: Option<usize>,
-    /// The old container's state between a refused confirmation and the next, in locked memory.
+    /// The old container's state between a refused confirmation and the next, wiped when dropped;
+    /// a browser cannot lock it, so it may be swapped out with the rest of the page.
     recovered: Option<RecoveredForRekey>,
     /// Whether the wallet has a BIP39 passphrase, judged with the first confirmation before the
     /// rounds; it holds for every confirmation that follows, as the command-line tool asks it once.
@@ -955,12 +968,10 @@ fn with_rekey_confirmation<T>(
     let text = passphrase.text(MhfeError::InvalidPassphrase)?;
     // The wallet check (16 bits) and a word count never confirm a phrase to seal again.
     let wallet = match kind {
-        "builtInCheck" | "owner" if !text.is_empty() => {
-            return Err(js_error(MhfeError::InvalidRequest(
-                "a passphrase belongs to an address or fingerprint confirmation".to_owned(),
-            )))
+        "builtInCheck" | "owner" => {
+            refuse_unused_passphrase(text).map_err(js_error)?;
+            None
         }
-        "builtInCheck" | "owner" => None,
         "address" | "fingerprint" => Some(reference_target(kind, reference, coin, path)?),
         other => {
             return Err(js_error(MhfeError::InvalidRequest(format!(
@@ -1035,7 +1046,7 @@ impl RekeySession {
         self.expect(RekeyStep::Made)?;
         let outcome = (|| {
             let password = new_password_from(&typed, &repeat, choice, position)?;
-            let work = work_from(pim, memory_level)?;
+            let work = settings_from(pim, memory_level, true)?;
             self.rekey.check_new(&password, work).map_err(js_error)?;
             let repair = repair_count(repair_word_count)?;
             Ok((password, work, repair))
@@ -1323,7 +1334,11 @@ impl RekeySession {
     /// The length the owner states with `words` for a confirmation of `kind` after a refusal: one
     /// of the lengths the library left the owner, and 0 with every other kind.
     fn owner_length(&self, kind: &str, words: f64) -> Result<Option<PhraseLength>, JsError> {
-        let words = whole_number(words, "INVALID_WORD_COUNT", "the word count")? as usize;
+        let words = whole_number(
+            words,
+            MhfeError::InvalidWordCount(0).code(),
+            "the word count",
+        )? as usize;
         match (kind, words) {
             ("owner", words) if self.owner_lengths.contains(&words) => Ok(Some(
                 PhraseLength::Words(WordCount::new(words).map_err(js_error)?),
@@ -1532,6 +1547,26 @@ pub fn self_check_core(
     )
 }
 
+/// The process parts of the command-line tool's self-test as a web page reports them, at `tier`:
+/// the memory lock from the library's probe, and core dumps, isolation and hidden input, each not
+/// available with the reason ([`sets::browser_process`]). The full self-check of a page runs it.
+/// Returns JSON as described at [`run_self_check`].
+#[wasm_bindgen(js_name = selfCheckProcess)]
+pub fn self_check_process(
+    tier: &str,
+    skip_ids: Vec<String>,
+    on_start: &js_sys::Function,
+    on_result: &js_sys::Function,
+) -> Result<String, JsError> {
+    run_self_check(
+        sets::browser_process(),
+        tier,
+        &skip_ids,
+        on_start,
+        on_result,
+    )
+}
+
 /// The self-check of one of the page's Argon2 builds alone at `tier`: its known answer at 1 MiB,
 /// and in the full tier at 64 and 256 MiB too, where a browser that cannot give the memory makes
 /// that part not available rather than failed. A page runs it for each build in turn, never two at
@@ -1593,22 +1628,50 @@ fn new_password_from(
 
 /// The length of the original seed phrase as the page passes it: a word count, or 0 to detect it.
 fn word_count(words: f64) -> Result<PhraseLength, JsError> {
-    let words = whole_number(words, "INVALID_WORD_COUNT", "the word count")?;
+    let words = whole_number(
+        words,
+        MhfeError::InvalidWordCount(0).code(),
+        "the word count",
+    )?;
     PhraseLength::from_count(words as usize).map_err(js_error)
 }
 
 /// 0 for no repair words, else 2, 4, 6 or 8, which the encryption checks.
 fn repair_count(count: f64) -> Result<Option<usize>, JsError> {
-    match whole_number(count, "INVALID_REPAIR_WORDS", "the repair word count")? {
+    match whole_number(
+        count,
+        MhfeError::InvalidRepairWords(String::new()).code(),
+        "the repair word count",
+    )? {
         0 => Ok(None),
         count => Ok(Some(count as usize)),
     }
 }
 
 fn work_from(pim: f64, memory_level: f64) -> Result<WorkFactor, JsError> {
-    let pim = whole_number(pim, "INVALID_PIM", "the PIM")?;
-    let memory_level = whole_number(memory_level, "INVALID_MEMORY_LEVEL", "the memory level")?;
-    WorkFactor::new(pim, memory_level).map_err(js_error)
+    settings_from(pim, memory_level, false)
+}
+
+/// The settings `pim` and `memory_level`; `new` for the new ones of a rekey, which a refusal names
+/// so ([`WorkFactor::new_settings`]).
+fn settings_from(pim: f64, memory_level: f64, new: bool) -> Result<WorkFactor, JsError> {
+    let side = if new { "new " } else { "" };
+    let pim = whole_number(
+        pim,
+        MhfeError::InvalidPim { pim: 0, new }.code(),
+        &format!("the {side}PIM"),
+    )?;
+    let memory_level = whole_number(
+        memory_level,
+        MhfeError::InvalidMemoryLevel { level: 0, new }.code(),
+        &format!("the {side}memory level"),
+    )?;
+    if new {
+        WorkFactor::new_settings(pim, memory_level)
+    } else {
+        WorkFactor::new(pim, memory_level)
+    }
+    .map_err(js_error)
 }
 
 fn mhfe_for(
@@ -1630,11 +1693,6 @@ fn mhfe_with(
     Ok((Mhfe::with_engine(work, engine), work))
 }
 
-/// The outcome of an operation once the page's Argon2 build has given its known answer again after
-/// the last round. A build that went wrong during the work, such as in the optimized code the
-/// browser made of it, fails here with SELF_CHECK_FAILED, and the result is dropped instead of
-/// returned. The answer is checked after a failed operation too, since a fault of the build is the
-/// more fundamental cause.
 /// Seals a phrase with `seal`, an encryption or a rekey: its rounds reported to `on_round`, the
 /// container before its check to `on_unverified`, and the Argon2 build's known answer checked
 /// after the last round ([`verified`]).
@@ -1656,6 +1714,11 @@ fn sealed_for_page(
     verified(mhfe, sealed)
 }
 
+/// The outcome of an operation once the page's Argon2 build has given its known answer again after
+/// the last round. A build that went wrong during the work, such as in the optimized code the
+/// browser made of it, fails here with SELF_CHECK_FAILED, and the result is dropped instead of
+/// returned. The answer is checked after a failed operation too, since a fault of the build is the
+/// more fundamental cause.
 fn verified<T>(mhfe: &Mhfe<BrowserEngine>, outcome: Result<T, MhfeError>) -> Result<T, JsError> {
     mhfe.engine().verify_known_answer().map_err(js_error)?;
     outcome.map_err(js_error)

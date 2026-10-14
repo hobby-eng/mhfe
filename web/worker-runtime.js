@@ -172,13 +172,37 @@ function packageMismatch(what) {
   return new Error(`PACKAGE_MISMATCH: ${what}: take every file of the package from one build.`);
 }
 
+/**
+ * Runs `use(session)` on a session of the WebAssembly and frees the session after it, unless the
+ * WebAssembly stopped inside (a trap): the instance can then not be called again, a call would
+ * only replace the trap with an error of its own, and the page terminates the worker, whose memory
+ * goes with it. The first error is the one thrown.
+ */
+async function withSession(session, use) {
+  let stopped = false;
+  try {
+    return await use(session);
+  } catch (error) {
+    stopped = error instanceof WebAssembly.RuntimeError;
+    throw error;
+  } finally {
+    if (!stopped) session.free();
+  }
+}
+
 /** The Rust core has its own copies, which it wipes; these are the copies in this worker. */
 function wipeSecrets(message) {
   for (const field of SECRET_FIELDS) message?.[field]?.fill?.(0);
 }
 
-/** Errors from the Rust core read "CODE: message". */
+/**
+ * Errors from the Rust core read "CODE: message". A trap, a Rust panic or a fault of the computer
+ * that stopped the WebAssembly, is INTERNAL_ERROR with the self-check's wording for it.
+ */
 function describeError(error) {
+  if (error instanceof WebAssembly.RuntimeError) {
+    return { code: "INTERNAL_ERROR", message: STOPPED_DETAIL };
+  }
   const text = error instanceof Error ? error.message : String(error);
   const match = /^([A-Z][A-Z0-9_]+): (.*)$/su.exec(text);
   return match === null

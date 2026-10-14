@@ -12,9 +12,21 @@ use anstream::{eprint, eprintln};
 use anstyle::{AnsiColor, Style};
 use zeroize::Zeroizing;
 
-use crate::exit::capitalize;
+use crate::exit::{capitalize, Failure};
 use crate::flow::{self, Kind};
 use crate::hidden_input;
+
+/// Writes `line` and a line break to standard output, the result of a command, and flushes it. An
+/// error, a closed pipe or a full disk included, is the failure "Input or output failed" (exit 1),
+/// never a panic, so that a result that did not arrive is not reported as success
+/// (AUD-023-FUN001). Every result goes through here; messages go to standard error.
+pub fn out(line: impl Display) -> Result<(), Failure> {
+    use std::io::Write as _;
+    let mut stdout = anstream::stdout().lock();
+    writeln!(stdout, "{line}")?;
+    stdout.flush()?;
+    Ok(())
+}
 
 /// Titles, section headings and the words `mhfe` and its commands.
 pub const HEADING: Style = AnsiColor::Cyan.on_default().bold();
@@ -83,9 +95,14 @@ pub fn write_title(what: &str) -> usize {
 /// must count, also in a narrow window (AUD-008-UI001). A line that fills its last row exactly
 /// takes no more: the cursor moves on only with the next character.
 pub fn rows(line: &str) -> usize {
-    // When the width cannot be read, the usual 80 columns.
-    let columns = hidden_input::columns().unwrap_or(80).max(1);
-    visible_width(line).div_ceil(columns).max(1)
+    rows_of_cells(visible_width(line), hidden_input::columns_or_default())
+}
+
+/// The rows that `cells` cells take on a terminal `columns` wide, written on a line of their own:
+/// one at least, and a line that fills its last row exactly takes no more. The one row rule of
+/// every redraw (AUD-023-ARC014).
+pub fn rows_of_cells(cells: usize, columns: usize) -> usize {
+    cells.div_ceil(columns.max(1)).max(1)
 }
 
 /// One line of a summary table: a grey label and its value.
@@ -96,9 +113,10 @@ pub fn fact(label: &str, value: impl Display) {
 /// A line of a summary table of `kind`: in a command shown one step at a time it waits for the
 /// summary at the end.
 pub fn fact_as(kind: Kind, label: &str, value: impl Display) {
-    let line = fact_line(label, value);
-    if !flow::keep(kind, std::slice::from_ref(&line)) {
-        eprintln!("{line}");
+    // Wrapped under its column, so that a long value never passes the text width (AUD-023-UI007).
+    let lines = fact_lines(label, &value.to_string());
+    if !flow::keep(kind, &lines) {
+        write_lines(&lines);
     }
 }
 
@@ -150,9 +168,25 @@ pub fn fact_lines(label: &str, value: &str) -> Vec<String> {
 /// Something that went right, after a green tick. It is shown at once, on the step it belongs to,
 /// and kept for the summary too.
 pub fn ok(text: impl Display) {
-    let line = format!("{} {text}", paint(GOOD, TICK));
-    eprintln!("{line}");
-    flow::keep_shown(Kind::Result, &[line]);
+    let lines = ok_lines(&text.to_string());
+    write_lines(&lines);
+    flow::keep_shown(Kind::Result, &lines);
+}
+
+/// The lines of [`ok`]: wrapped to the text width, the tick on the first and the others indented
+/// under the text, as a warning is (AUD-023-UI007).
+fn ok_lines(text: &str) -> Vec<String> {
+    wrap(text, TEXT_WIDTH - 2)
+        .iter()
+        .enumerate()
+        .map(|(index, line)| {
+            if index == 0 {
+                format!("{} {line}", paint(GOOD, TICK))
+            } else {
+                format!("  {line}")
+            }
+        })
+        .collect()
 }
 
 /// The green tick of something that went right or that a choice gives.
@@ -170,16 +204,7 @@ pub fn costs(text: &str) {
 
 /// A count with thousands separated by commas, such as "2,000".
 pub fn grouped(count: impl Into<u128>) -> String {
-    let count: u128 = count.into();
-    let digits = count.to_string();
-    let mut text = String::new();
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            text.push(',');
-        }
-        text.push(digit);
-    }
-    text
+    mhfe::grouped(count.into())
 }
 
 /// Advice that can be read and passed over, in grey, wrapped to the text width. Returns the lines
@@ -306,6 +331,12 @@ fn usage_error_lines(clap_text: &str) -> Vec<String> {
     lines
 }
 
+/// [`error_lines`] for the tests of other modules, which check how a message is shown.
+#[cfg(test)]
+pub fn error_lines_for_test(text: &str) -> Vec<String> {
+    error_lines(text)
+}
+
 fn error_lines(text: &str) -> Vec<String> {
     // The mark and its space.
     let indent = ERROR_MARK.chars().count() + 1;
@@ -376,7 +407,9 @@ fn write_lines(lines: &[String]) {
     }
 }
 
-/// Longest line of running text, so that messages read well in an 80-column terminal.
+/// Longest line of running text, so that messages read well in an 80-column terminal, and of a
+/// list, which redraws itself by moving the cursor up line by line, as a line the terminal wrapped
+/// would upset.
 pub const TEXT_WIDTH: usize = 78;
 
 /// Breaks `text` into lines of at most `width` visible characters at spaces; a line break in
@@ -416,7 +449,8 @@ pub fn visible_width(text: &str) -> usize {
             '\u{1b}' => in_code = true,
             'm' if in_code => in_code = false,
             _ if in_code => {}
-            _ => width += 1,
+            // Cells, as the terminal shows them: a wide character takes two.
+            _ => width += crate::typed_line::char_cells(character),
         }
     }
     width
@@ -534,7 +568,7 @@ const HELP_STACKED_INDENT: usize = 6;
 
 /// Width of the help texts: they read well in an 80-column terminal and stay the same in a
 /// wider one.
-pub const HELP_WIDTH: usize = 80;
+pub const HELP_WIDTH: usize = hidden_input::DEFAULT_COLUMNS;
 
 /// Indent at which clap prints the explanation of an option in `--help`.
 const OPTION_HELP_INDENT: usize = 10;
@@ -543,6 +577,52 @@ const OPTION_HELP_INDENT: usize = 10;
 /// is built without its optional wrapping feature. clap indents every line itself.
 pub fn option_help(paragraphs: &[&str]) -> String {
     help_paragraphs(paragraphs, HELP_WIDTH - OPTION_HELP_INDENT)
+}
+
+/// A count as a word, as in "Five dice words": the words up to twenty, digits above, so that a
+/// label follows its constant (AUD-023-ARC007). `capital` starts it with a capital.
+pub fn number_word(count: usize, capital: bool) -> String {
+    const WORDS: [&str; 21] = [
+        "zero",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+        "twenty",
+    ];
+    match WORDS.get(count) {
+        Some(word) if capital => capitalize(word),
+        Some(word) => (*word).to_owned(),
+        None => count.to_string(),
+    }
+}
+
+/// The short help of every `--stdin` that reads the answers of a command.
+pub const STDIN_HELP: &str = "Read the answers from standard input";
+
+/// The long help of such a `--stdin`: [`STDIN_HELP`], with `condition` after it where the option
+/// needs another, then `paragraphs`.
+pub fn stdin_help(condition: Option<&str>, paragraphs: &[&str]) -> String {
+    let first = match condition {
+        Some(condition) => format!("{STDIN_HELP}; {condition}."),
+        None => format!("{STDIN_HELP}."),
+    };
+    option_help(&[&[first.as_str()], paragraphs].concat())
 }
 
 /// What a command does, for the top of its `--help`: the one-line summary, then paragraphs.
@@ -791,5 +871,33 @@ mod tests {
         assert_eq!(note_start("Password (hidden): "), 8);
         assert_eq!(note_start("Choice [1]: "), 6);
         assert_eq!(note_start("Choice: "), 8);
+    }
+
+    /// A result and a record with a long text, such as the repair summary of eight repair words
+    /// and six unreadable words, wrap within the text width (AUD-023-UI007).
+    #[test]
+    fn long_results_and_records_wrap_to_the_text_width() {
+        let summary =
+            "Repaired words 10, 12, 14, 16, 18 and 20 of the container phrase and words 1, \
+                       3, 5 and 7 of the card.";
+        let lines = ok_lines(summary);
+        assert!(lines.len() > 1);
+        let records = fact_lines("Repaired", &paint(ACCENT, summary));
+        for line in lines.iter().chain(&records) {
+            assert!(visible_width(line) <= TEXT_WIDTH, "{line}");
+        }
+    }
+
+    /// One row rule for every redraw: an exact fill takes its rows and no more, a wrap one more,
+    /// an empty line one, and a wide character two cells (AUD-023-ARC014).
+    #[test]
+    fn rows_count_cells_as_the_terminal_does() {
+        assert_eq!(rows_of_cells(80, 80), 1);
+        assert_eq!(rows_of_cells(81, 80), 2);
+        assert_eq!(rows_of_cells(0, 80), 1);
+        assert_eq!(rows_of_cells(5, 0), 5);
+        assert_eq!(visible_width("界界"), 4);
+        assert_eq!(visible_width(&paint(GOOD, "ok")), 2);
+        assert_eq!(rows_of_cells(visible_width(&"界".repeat(40)), 79), 2);
     }
 }

@@ -6,9 +6,10 @@
 //! - [`core()`]: everything the encryption, recovery, rehearsal, rekey and hidden-wallet operations
 //!   compute, with Argon2 added by the caller: [`crate::engine::NativeArgon2Check`] natively, the
 //!   page's `BrowserArgon2Check` in a browser, or none for a quick check without Argon2.
-//! - [`repair`]: the repair words and the BIP39 word list they are written in.
-//! - [`passwords`]: the password encoding, the check word, the generator, the word hints and the
-//!   random source.
+//! - [`repair`]: the repair words, the BIP39 word list they are written in, and the wallet hashes,
+//!   seeds and BIP32 keys of the master key fingerprint a repair gives.
+//! - [`passwords`]: the password encoding, the check word, the generator, the strength estimate,
+//!   the word hints and the random source.
 //! - [`wallet`]: the word list, the wallet hashes, seeds, keys and addresses, the address search
 //!   an address check states, the wallet check, the chosen word, the word hints and the random
 //!   source.
@@ -24,16 +25,31 @@ use super::{ComponentCheck, ComponentOutcome, SelfCheck, Tier};
 ))]
 use crate::random::{RandomSource, RandomSourceCheck};
 
-/// A part that this run leaves out, with the reason, so that the report still names it.
+/// A part that this run leaves out, with the reason, so that the report still names it: not run,
+/// or not available where it cannot be checked at all.
 pub struct NotChecked {
     id: &'static str,
     label: &'static str,
     reason: &'static str,
+    available: bool,
 }
 
 impl NotChecked {
     pub fn new(id: &'static str, label: &'static str, reason: &'static str) -> Self {
-        Self { id, label, reason }
+        Self {
+            id,
+            label,
+            reason,
+            available: true,
+        }
+    }
+
+    /// A part that cannot be checked here at all, such as a process part in a web page.
+    pub fn not_available(id: &'static str, label: &'static str, reason: &'static str) -> Self {
+        Self {
+            available: false,
+            ..Self::new(id, label, reason)
+        }
     }
 }
 
@@ -47,7 +63,11 @@ impl ComponentCheck for NotChecked {
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
-        ComponentOutcome::NotRun(self.reason.to_owned())
+        if self.available {
+            ComponentOutcome::NotRun(self.reason.to_owned())
+        } else {
+            ComponentOutcome::NotAvailable(self.reason.to_owned())
+        }
     }
 }
 
@@ -82,19 +102,30 @@ pub fn core<'a>(argon2: Option<Box<dyn ComponentCheck + 'a>>) -> SelfCheck<'a> {
         .with(crate::rehearsal::known_answers::RehearsalCheck::new())
 }
 
-/// The parts of a wallet's keys, which the core compares with and the wallet tools give: the wallet
-/// hashes, seeds, BIP32 keys and addresses.
+/// The parts of a wallet's keys, which the core compares with and the wallet tools give: the master
+/// key fingerprint's parts and the addresses.
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
     feature = "browser-wallet"
 ))]
 fn wallet_keys<'a>() -> SelfCheck<'a> {
+    master_key().with(crate::wallet::known_answers::AddressesCheck::new())
+}
+
+/// The parts of a master key fingerprint, which the repair of a container gives too: the wallet
+/// hashes, seeds and BIP32 keys.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-wallet"
+))]
+fn master_key<'a>() -> SelfCheck<'a> {
     SelfCheck::new()
         .with(crate::wallet::known_answers::WalletHashesCheck::new())
         .with(crate::wallet::known_answers::SeedCheck::new())
         .with(crate::wallet::known_answers::Bip32Check::new())
-        .with(crate::wallet::known_answers::AddressesCheck::new())
 }
 
 /// The hashes of the cipher alone, SHA-256, HMAC-SHA-256 and BLAKE2b-256: for a program that only
@@ -104,12 +135,14 @@ pub fn hashes<'a>() -> SelfCheck<'a> {
     SelfCheck::new().with(crate::mhfe::known_answers::CipherHashesCheck::new())
 }
 
-/// The parts of the repair words: MHFE-REPAIR-1 and the BIP39 word list.
+/// The parts of the repair words: MHFE-REPAIR-1 and the BIP39 word list, with the parts of the
+/// master key fingerprint that a repair gives to tell the container from another.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-repair"))]
 pub fn repair<'a>() -> SelfCheck<'a> {
     SelfCheck::new()
         .with(crate::phrase::known_answers::WordListCheck::new())
         .with(crate::repair::known_answers::RepairWordsCheck::new())
+        .merge(master_key())
 }
 
 /// The parts of the password tools. `random` is the source new passwords are drawn from, which
@@ -120,8 +153,8 @@ pub fn passwords<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> 
         .with(crate::password::known_answers::PasswordUnicodeCheck::new())
         .with(crate::check_word::known_answers::CheckWordCheck::new())
         .with(crate::new_password::known_answers::GeneratorCheck::new())
-        .with(crate::word_hints::known_answers::WordHintsCheck::new())
-        .with(RandomSourceCheck::new(random))
+        .with(crate::strength::known_answers::StrengthCheck::new())
+        .merge(typed_and_drawn(random))
 }
 
 /// The parts of the wallet tools. `random` is the source new phrases are drawn from, which the
@@ -134,8 +167,38 @@ pub fn wallet<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
         .with(crate::wallet::known_answers::AddressSearchCheck::new())
         .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
         .with(crate::word_wishes::known_answers::WordWishesCheck::new())
+        .merge(typed_and_drawn(random))
+}
+
+/// The parts that the password and the wallet tools share last: the word hints of what is typed
+/// and the random source of what is drawn.
+#[cfg(any(
+    not(target_arch = "wasm32"),
+    feature = "browser-passwords",
+    feature = "browser-wallet"
+))]
+fn typed_and_drawn<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
+    SelfCheck::new()
         .with(crate::word_hints::known_answers::WordHintsCheck::new())
         .with(RandomSourceCheck::new(random))
+}
+
+/// What a web page reports of the process parts of the command-line tool: the memory lock, which
+/// [`crate::memory::LockProbe`] finds not available in WebAssembly, and core dumps, isolation and
+/// hidden input, which a page cannot check ([`super::process`]). The browser package's full
+/// self-check runs it.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+pub fn browser_process<'a>() -> SelfCheck<'a> {
+    super::process::PROCESS_PARTS.into_iter().fold(
+        SelfCheck::new().with(crate::memory::LockProbe::default()),
+        |set, part| {
+            set.with(NotChecked::not_available(
+                part.id,
+                part.label,
+                part.in_browser,
+            ))
+        },
+    )
 }
 
 /// Everything the command-line tool computes: the core with the native Argon2 engine and its
@@ -157,7 +220,7 @@ mod tests {
     use super::*;
 
     /// Every check of the plan, in the order the tool runs them, each once.
-    const NATIVE_IDS: [&str; 26] = [
+    const NATIVE_IDS: [&str; 27] = [
         "cipher-hashes",
         "argon2",
         "cipher-rounds",
@@ -179,6 +242,7 @@ mod tests {
         "rehearsal",
         "argon2-sizes",
         "password-generator",
+        "password-strength",
         "word-hints",
         "random-source",
         "address-search",
@@ -195,13 +259,23 @@ mod tests {
     #[test]
     fn the_browser_sets_hold_their_own_parts() {
         assert_eq!(hashes().ids(), ["cipher-hashes"]);
-        assert_eq!(repair().ids(), ["bip39-words", "repair-words"]);
+        assert_eq!(
+            repair().ids(),
+            [
+                "bip39-words",
+                "repair-words",
+                "wallet-hashes",
+                "bip39-seed",
+                "bip32"
+            ]
+        );
         assert_eq!(
             passwords(None).ids(),
             [
                 "password-unicode",
                 "password-check-word",
                 "password-generator",
+                "password-strength",
                 "word-hints",
                 "random-source"
             ]

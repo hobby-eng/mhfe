@@ -136,10 +136,12 @@ export type MhfeKeepItem =
   | { item: "passphrase" }
   /** Any BIP39 passphrase of the wallet, where it is not known whether it has one. */
   | { item: "passphraseIfAny" }
-  | { item: "repairWords" }
+  /** `apart`: kept apart from the container phrase, as the specification advises. */
+  | { item: "repairWords"; apart: true }
   | { item: "pim"; value: number }
   | { item: "memoryLevel"; value: number }
-  | { item: "wordCount"; words: WordCount }
+  /** The note of the word count, kept apart from the container phrase: it tells its length. */
+  | { item: "wordCount"; words: WordCount; apart: true }
   /** Of a rekey's old container (keepOldContainer()). */
   | { item: "oldContainer" }
   | { item: "oldPasswords" };
@@ -615,15 +617,18 @@ export class MhfeClient {
   searchWallet(
     options: Omit<MhfeSettings, "onProgress"> & {
       container: string;
-      reference:
-        | Extract<
-            MhfeReference,
-            { address: string } | { fingerprint: string } | { walletCheck: true }
-          >
-        | { builtInCheck: true };
-      passphrase?: MhfeSecret;
       onProgress?: (progress: MhfeSearchProgress) => void | Promise<void>;
-    },
+    } & (
+        | {
+            reference: Extract<
+              MhfeReference,
+              { address: string } | { fingerprint: string } | { walletCheck: true }
+            >;
+            passphrase?: MhfeSecret;
+          }
+        /** The built-in check takes no passphrase: a non-empty one is a TypeError. */
+        | { reference: { builtInCheck: true }; passphrase?: never }
+      ),
   ): Promise<MhfeSearchResult>;
   /** Encrypts a container again with a new password or settings; see client.js. */
   rekey(

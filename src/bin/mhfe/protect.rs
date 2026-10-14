@@ -23,7 +23,7 @@ use std::cell::Cell;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
+use mhfe::self_check::{process, ComponentCheck, ComponentOutcome, Tier};
 
 /// Forbids core dumps of this process and, on Linux, makes it non-dumpable, which also keeps
 /// other processes of the same user from attaching to it (ptrace) or reading /proc/PID/mem. A
@@ -87,7 +87,7 @@ pub fn interrupt_on_quit_and_suspend() -> bool {
 }
 
 /// The identifier of [`CoreDumpCheck`] in a self-check report.
-pub const CORE_DUMPS_ID: &str = "core-dumps";
+pub const CORE_DUMPS_ID: &str = process::CORE_DUMPS.id;
 
 /// How one protection reads back from the kernel.
 // Windows reads nothing back: there, only the tests construct every variant.
@@ -200,7 +200,7 @@ impl ComponentCheck for CoreDumpCheck {
     }
 
     fn label(&self) -> &'static str {
-        "Core dumps"
+        process::CORE_DUMPS.label
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
@@ -493,7 +493,7 @@ mod platform_probes {
 }
 
 /// The identifier of [`IsolationCheck`] in a self-check report.
-pub const ISOLATION_ID: &str = "isolation";
+pub const ISOLATION_ID: &str = process::ISOLATION.id;
 
 /// The `isolation` check: whether what [`isolate`] reported for the calling thread holds. It is not
 /// a failure when it does not: the summary of the command then states only what holds, with a
@@ -532,7 +532,7 @@ impl ComponentCheck for IsolationCheck {
     }
 
     fn label(&self) -> &'static str {
-        "Isolation"
+        process::ISOLATION.label
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
@@ -823,7 +823,8 @@ pub enum SwapInventory {
 }
 
 /// The swap areas that are not encrypted by dm-crypt, or whose encryption cannot be told. An
-/// area in memory (zram) is safe. A readable empty inventory is distinct from a failed read.
+/// area in memory (zram) is safe only without a writeback device, or with an encrypted one. A
+/// readable empty inventory is distinct from a failed read.
 pub fn unprotected_swap() -> SwapInventory {
     if cfg!(target_os = "linux") {
         unprotected_swap_under(Path::new("/"))
@@ -859,13 +860,13 @@ fn swap_inventory(read: std::io::Result<String>, root: &Path) -> SwapInventory {
                 "partition" => device_of_node(root, &name),
                 _ => device_of_file(root, &name),
             };
-            match device {
-                Some(device) if encrypted(root, &device, 0) => None,
-                Some(_) => Some(SwapArea {
+            match device.map(|device| protected(root, &device, 0)) {
+                Some(Some(true)) => None,
+                Some(Some(false)) => Some(SwapArea {
                     name,
                     unknown: false,
                 }),
-                None => Some(SwapArea {
+                Some(None) | None => Some(SwapArea {
                     name,
                     unknown: true,
                 }),
@@ -906,12 +907,33 @@ fn device_of_file(root: &Path, file: &str) -> Option<String> {
 /// Deepest stack of devices followed: LUKS under LVM under RAID is three.
 const MAX_DEVICE_DEPTH: usize = 8;
 
-/// Whether a block device is encrypted with dm-crypt, directly or through the devices it is
-/// built on (LVM on LUKS), or lies in memory (zram).
-fn encrypted(root: &Path, device: &str, depth: usize) -> bool {
+/// Whether memory swapped to a block device stays off a disk unencrypted: it is encrypted with
+/// dm-crypt, directly or through the devices it is built on (LVM on LUKS), or lies in memory
+/// (zram) without a writeback device or with a protected one. `None` when that cannot be told,
+/// as for a zram writeback device that cannot be resolved (AUD-023-SEC002).
+fn protected(root: &Path, device: &str, depth: usize) -> Option<bool> {
     if device.starts_with("zram") {
-        return true;
+        // zram writes idle or incompressible pages to its backing device, if it has one; the
+        // attribute is world-readable, and absent where writeback is not built in.
+        let backing = root
+            .join("sys/class/block")
+            .join(device)
+            .join("backing_dev");
+        return match fs::read_to_string(backing) {
+            Err(_) => Some(true),
+            Ok(text) if matches!(text.trim(), "" | "none") => Some(true),
+            Ok(text) if depth < MAX_DEVICE_DEPTH => {
+                protected(root, &device_of_node(root, text.trim())?, depth + 1)
+            }
+            Ok(_) => None,
+        };
     }
+    Some(encrypted(root, device, depth))
+}
+
+/// Whether a block device is encrypted with dm-crypt, directly or through the devices it is
+/// built on (LVM on LUKS).
+fn encrypted(root: &Path, device: &str, depth: usize) -> bool {
     let sysfs = root.join("sys/class/block").join(device);
     // dm-crypt gives its devices a UUID starting with CRYPT-.
     if let Ok(uuid) = fs::read_to_string(sysfs.join("dm/uuid")) {
@@ -1011,6 +1033,33 @@ mod tests {
         system.device("dm-2", Some("LVM-xyz"), &["dm-1"]);
         system.device("zram0", None, &[]);
         assert_eq!(system.unprotected(), []);
+    }
+
+    /// zram is in memory unless it writes back to a device: then that device decides, and one that
+    /// cannot be resolved is unknown (AUD-023-SEC002).
+    #[test]
+    fn zram_is_protected_only_without_a_plaintext_writeback_device() {
+        let zram = |backing: Option<&str>| {
+            let system = FakeSystem::new("/dev/zram0 partition 1024 0 100\n");
+            system.device("zram0", None, &[]);
+            system.device("sdb2", None, &[]);
+            system.device("dm-4", Some("CRYPT-LUKS2-abc-swap"), &["sdb3"]);
+            if let Some(backing) = backing {
+                fs::write(system.0.join("sys/class/block/zram0/backing_dev"), backing).unwrap();
+            }
+            system.unprotected()
+        };
+        let area = |unknown| {
+            vec![SwapArea {
+                name: "/dev/zram0".into(),
+                unknown,
+            }]
+        };
+        assert_eq!(zram(None), []);
+        assert_eq!(zram(Some("none\n")), []);
+        assert_eq!(zram(Some("/dev/sdb2\n")), area(false));
+        assert_eq!(zram(Some("/dev/dm-4\n")), []);
+        assert_eq!(zram(Some("/dev/missing\n")), area(true));
     }
 
     #[test]

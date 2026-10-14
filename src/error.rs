@@ -62,8 +62,17 @@ pub enum MhfeError {
         missing: usize,
         limit: usize,
     },
-    InvalidPim(u32),
-    InvalidMemoryLevel(u32),
+    /// A PIM above [`crate::MAX_PIM`]; `new` for the new settings of a rekey, so that the message
+    /// tells them from the old ones.
+    InvalidPim {
+        pim: u32,
+        new: bool,
+    },
+    /// A memory level above [`crate::MAX_MEMORY_LEVEL`]; `new` as for [`MhfeError::InvalidPim`].
+    InvalidMemoryLevel {
+        level: u32,
+        new: bool,
+    },
     EmptyPassword,
     /// The normalized password is longer than 1024 bytes; the value is its length.
     PasswordTooLong(usize),
@@ -241,8 +250,9 @@ impl fmt::Display for MhfeError {
                 f,
                 "with this password the container gives a phrase that passes a check: the built-in \
                  check of a shorter phrase, as the container's own password of a 12- to 21-word \
-                 phrase does, or the wallet check of a new phrase, by chance once in 65,536; \
-                 recovery would take it for a verified or main wallet, so choose another password"
+                 phrase does, or the wallet check of a new phrase, by chance once in {}; \
+                 recovery would take it for a verified or main wallet, so choose another password",
+                crate::phrase::grouped(u128::from(crate::wallet_check::WALLET_CHECK_ODDS))
             ),
             Self::InvalidWordWish(reason) => {
                 write!(f, "the wishes for the new phrase cannot be used: {reason}")
@@ -262,16 +272,16 @@ impl fmt::Display for MhfeError {
                  most {limit}: each further word multiplies the candidates by about 2,048; only \
                  the repair words repair more"
             ),
-            Self::InvalidPim(pim) => {
-                write!(
-                    f,
-                    "the PIM must be a whole number from 0 to {}, not {pim}",
-                    crate::MAX_PIM
-                )
-            }
-            Self::InvalidMemoryLevel(level) => write!(
+            Self::InvalidPim { pim, new } => write!(
                 f,
-                "the memory level must be a whole number from 0 to {}, not {level}",
+                "the {}PIM must be a whole number from 0 to {}, not {pim}",
+                if *new { "new " } else { "" },
+                crate::MAX_PIM
+            ),
+            Self::InvalidMemoryLevel { level, new } => write!(
+                f,
+                "the {}memory level must be a whole number from 0 to {}, not {level}",
+                if *new { "new " } else { "" },
                 crate::MAX_MEMORY_LEVEL
             ),
             Self::EmptyPassword => write!(f, "the password is empty"),
@@ -428,8 +438,8 @@ impl MhfeError {
             Self::InvalidWordWish(_) => "INVALID_WORD_WISH",
             Self::RepairNotPossible { .. } => "REPAIR_NOT_POSSIBLE",
             Self::TooManyMissingWords { .. } => "TOO_MANY_MISSING_WORDS",
-            Self::InvalidPim(_) => "INVALID_PIM",
-            Self::InvalidMemoryLevel(_) => "INVALID_MEMORY_LEVEL",
+            Self::InvalidPim { .. } => "INVALID_PIM",
+            Self::InvalidMemoryLevel { .. } => "INVALID_MEMORY_LEVEL",
             Self::EmptyPassword => "EMPTY_PASSWORD",
             Self::PasswordTooLong(_) => "PASSWORD_TOO_LONG",
             Self::InvalidPasswordUtf8 => "INVALID_PASSWORD_UTF8",

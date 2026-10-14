@@ -106,8 +106,7 @@ pub fn read_line(
         let (mut controls, mut text) = (io::stderr(), anstream::stderr());
         // The prompt's cells by the same rule as the characters typed after it.
         let width = typed_line::text_cells(prompt);
-        // When the width cannot be read, the usual 80 columns.
-        let columns = columns().unwrap_or(80);
+        let columns = columns_or_default();
         let mut screen = LineScreen::new(&mut controls, &mut text, width, columns, content.hints());
         edit_line(&mut io::stdin().lock(), Some(&mut screen), content)
     });
@@ -133,14 +132,30 @@ pub enum Key {
     Other,
 }
 
+/// How soon after a screen or a question first waits for a key a key counts as typed before it
+/// appeared: keys waiting in the terminal or in the standard library's buffer, such as an Enter
+/// typed during a long recovery, arrive within microseconds, while a person needs far longer than
+/// this to read what appeared and answer.
+const TYPED_AHEAD: std::time::Duration = std::time::Duration::from_millis(200);
+
 /// Switches the terminal to single keys without echo, as for a hidden line, runs `choose` with a
-/// function that reads the next key, and restores the terminal, also when `choose` fails.
+/// function that reads the next key, and restores the terminal, also when `choose` fails. A key
+/// typed before the first wait, other than one that quits, is dropped: every list, with a default
+/// answer or without, and every screen that waits to be left take only keys pressed after they
+/// appeared, so that a key typed during long work answers nothing (AUD-018, AUD-023-UI003).
 pub fn with_keys<T>(
     choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
 ) -> Result<T, Failure> {
     with_terminal_switched(platform::single_keys, || {
         let mut keys = TerminalKeys::new(io::stdin().lock());
-        choose(&mut || read_key(&mut keys))
+        let mut waits_since: Option<std::time::Instant> = None;
+        choose(&mut || loop {
+            let since = *waits_since.get_or_insert_with(std::time::Instant::now);
+            let key = read_key(&mut keys)?;
+            if key == Key::Quit || since.elapsed() >= TYPED_AHEAD {
+                return Ok(key);
+            }
+        })
     })
 }
 
@@ -199,7 +214,7 @@ fn echo_stays_on() -> Failure {
 }
 
 /// The identifier of [`HiddenInputCheck`] in a self-check report.
-pub const HIDDEN_INPUT_ID: &str = "hidden-input";
+pub const HIDDEN_INPUT_ID: &str = mhfe::self_check::process::HIDDEN_INPUT.id;
 
 /// The `hidden-input` check of the full self-test: the terminal on standard input is switched as
 /// for a hidden prompt, read back and restored. Every prompt for a secret reads the switch back as
@@ -212,7 +227,7 @@ impl ComponentCheck for HiddenInputCheck {
     }
 
     fn label(&self) -> &'static str {
-        "Hidden input"
+        mhfe::self_check::process::HIDDEN_INPUT.label
     }
 
     /// Only on request: the check at start never touches the terminal, so that nothing typed
@@ -252,10 +267,30 @@ pub fn columns() -> Option<usize> {
     platform::columns()
 }
 
+/// The width assumed when it cannot be read: the usual 80 columns.
+pub const DEFAULT_COLUMNS: usize = 80;
+
+/// [`columns`], or [`DEFAULT_COLUMNS`] when the width cannot be read; at least 1. The one
+/// fallback of every redraw (AUD-023-ARC014).
+pub fn columns_or_default() -> usize {
+    columns().unwrap_or(DEFAULT_COLUMNS).max(1)
+}
+
 /// Whether the terminal on standard error carries out control sequences such as the switch to the
 /// alternate screen; on Windows the console is asked to do so first.
 pub fn control_sequences() -> bool {
     platform::control_sequences()
+}
+
+/// Whether the terminal can redraw what it shows: standard input and standard error are
+/// terminals, TERM is not "dumb", and the terminal carries out control sequences. Lists, word
+/// hints and the private screen need it; elsewhere a line is read and written plainly
+/// (AUD-023-UI004). The one test of TERM=dumb.
+pub fn can_redraw() -> bool {
+    io::stdin().is_terminal()
+        && io::stderr().is_terminal()
+        && std::env::var_os("TERM").is_none_or(|term| term != "dumb")
+        && control_sequences()
 }
 
 /// Whether standard output and standard error are one terminal, so that the private screen,

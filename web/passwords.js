@@ -32,10 +32,14 @@ export { MhfeError } from "../runtime/runtime.js";
 
 /** The name of this module's operations in the package's worker. */
 const PASSWORDS_MODULE = "passwords";
-/** make()'s refusal of a count with the check word (makePassword in src/wasm_api/passwords.rs). */
+/**
+ * make()'s refusal of a count with the check word, in the words of the WebAssembly's
+ * (makePassword in src/wasm_api/passwords.rs), which scripts/verify-browser-package.mjs keeps
+ * equal: a page refuses it before a worker starts.
+ */
 const CHECK_WORD_TAKES_NO_COUNT =
-  'count belongs only to the kinds "words" and "characters": "checkWord" always gives five ' +
-  "words and their check word.";
+  'count belongs only to the kinds "words" and "characters": "checkWord" always gives 5 words ' +
+  "and their check word.";
 /** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
 const PASSWORDS_BUILD_ID = "development";
 

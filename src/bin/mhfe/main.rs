@@ -70,56 +70,66 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Generate a new wallet and its container
-    #[command(long_about = new_wallet::about(), after_help = new_wallet::help())]
-    New(new_wallet::Options),
-    /// Encrypt a seed phrase into a container
     #[command(
+        about = new_wallet::SUMMARY,
+        long_about = new_wallet::about(),
+        after_help = new_wallet::help()
+    )]
+    New(new_wallet::Options),
+    #[command(
+        about = encrypt::SUMMARY,
         long_about = encrypt::about(),
         after_help = encrypt::help(),
         after_long_help = encrypt::long_help()
     )]
     Encrypt(encrypt::Options),
-    /// Recover the original seed phrase from a container
     #[command(
+        about = decrypt::SUMMARY,
         long_about = decrypt::about(),
         after_help = decrypt::help(),
         after_long_help = decrypt::long_help()
     )]
     Decrypt(decrypt::Options),
-    /// Rehearse a recovery without ever showing the phrase
     #[command(
+        about = check::SUMMARY,
         long_about = check::about(),
         after_help = check::help(),
         after_long_help = check::long_help()
     )]
     Check(check::Options),
-    /// Change the password or settings of a container
-    #[command(long_about = rekey::about(), after_help = rekey::help())]
+    #[command(about = rekey::SUMMARY, long_about = rekey::about(), after_help = rekey::help())]
     Rekey(rekey::Options),
-    /// Open hidden wallets with other passwords
-    #[command(long_about = wallets::about(), after_help = wallets::help())]
-    Wallets(wallets::Options),
-    /// Repair a container phrase with its repair words
     #[command(
+        about = wallets::SUMMARY,
+        long_about = wallets::about(),
+        after_help = wallets::help()
+    )]
+    Wallets(wallets::Options),
+    #[command(
+        about = container_repair::REPAIR_SUMMARY,
         long_about = container_repair::repair_about(),
         after_help = container_repair::repair_help()
     )]
     Repair(container_repair::RepairOptions),
-    /// Make repair words for a container phrase
     #[command(
+        about = container_repair::WORDS_SUMMARY,
         long_about = container_repair::words_about(),
         after_help = container_repair::words_help()
     )]
     RepairWords(container_repair::WordsOptions),
-    /// Make a strong password of words or characters
-    #[command(long_about = diceware::about(), after_help = diceware::help())]
+    #[command(
+        about = diceware::SUMMARY,
+        long_about = diceware::about(),
+        after_help = diceware::help()
+    )]
     Password(diceware::Options),
-    /// Run the self-test
-    #[command(long_about = self_test::about(), after_help = self_test::help())]
+    #[command(
+        about = self_test::SUMMARY,
+        long_about = self_test::about(),
+        after_help = self_test::help()
+    )]
     SelfTest(self_test::Options),
-    /// Serve a browser tool on this computer in fast mode
-    #[command(long_about = serve::about(), after_help = serve::help())]
+    #[command(about = serve::SUMMARY, long_about = serve::about(), after_help = serve::help())]
     Serve(serve::Options),
     /// [test only] Write the public suite 3 or suite 4 test vectors
     #[command(after_help = test_tools::vectors_help())]
@@ -135,7 +145,7 @@ fn main_help() -> String {
         "Examples:",
         &[
             ("mhfe", "Choose a command from a menu"),
-            ("mhfe new", "Generate a new wallet and its container"),
+            ("mhfe new", new_wallet::SUMMARY),
             ("mhfe encrypt", "Encrypt a phrase with the default settings"),
             (
                 "mhfe encrypt --pim 1 --mem 1",
@@ -392,6 +402,132 @@ mod tests {
                 );
             }
             assert!(text.contains("\nExamples:\n"), "{help} has no examples");
+        }
+    }
+
+    /// Every result reaches standard output through `style::out`, which reports a write that
+    /// failed, a closed pipe included, instead of panicking or exiting with success
+    /// (AUD-023-FUN001): no other code of the tool prints to standard output.
+    #[test]
+    fn every_result_is_written_through_one_function() {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bin/mhfe");
+        for entry in std::fs::read_dir(folder).unwrap() {
+            let path = entry.unwrap().path();
+            let text = std::fs::read_to_string(&path).unwrap();
+            // The code, not its tests, which may name the macros.
+            let code = text.split("#[cfg(test)]").next().unwrap_or_default();
+            let without_errors = code.replace("eprintln!(", "").replace("eprint!(", "");
+            for macro_call in ["println!(", "print!("] {
+                assert!(
+                    !without_errors.contains(macro_call),
+                    "{} writes to standard output with {macro_call}",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    /// The --stdin helps name every line of a script's input and output: the card line of
+    /// --repair-words in encrypt, the repair words of --repair in decrypt and check, and where
+    /// the dice rolls show (AUD-023-DOC001).
+    #[test]
+    fn the_script_helps_name_every_line() {
+        use clap::CommandFactory;
+        let mut cli = Cli::command();
+        let mut long_help = |name: &str| {
+            let command = cli.find_subcommand_mut(name).unwrap();
+            let text = command.render_long_help().to_string();
+            text.split_whitespace().collect::<Vec<_>>().join(" ")
+        };
+        assert!(long_help("encrypt")
+            .contains("with --repair-words N the repair words on a second line"));
+        for name in ["decrypt", "check"] {
+            assert!(
+                long_help(name).contains(
+                    "With --repair, the repair words come on the line right after the container"
+                ),
+                "{name}"
+            );
+        }
+        let password = long_help("password");
+        assert!(password.contains("shown on the private screen"));
+        assert!(!password.contains("at a hidden prompt"));
+    }
+
+    /// Every limit, list and default a help states is its constant's: a help that typed one
+    /// again would fail here when the constant changes (AUD-023-ARC007).
+    #[test]
+    fn every_help_states_the_limits_of_the_constants() {
+        use clap::CommandFactory;
+        use mhfe::new_password::{
+            DEFAULT_CHARACTERS, DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS, RECOMMENDED_WORDS,
+        };
+        let mut cli = Cli::command();
+        let mut help = |name: &str, long: bool| {
+            let command = cli.find_subcommand_mut(name).unwrap();
+            let text = if long {
+                command.render_long_help()
+            } else {
+                command.render_help()
+            };
+            text.to_string()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let first_last =
+            |counts: &[usize]| format!("{} to {}", counts[0], counts[counts.len() - 1]);
+        let cards: Vec<String> = mhfe::repair::REPAIR_WORD_COUNTS
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        let cards = style::or_list(&cards);
+        for long in [false, true] {
+            for name in ["encrypt", "decrypt", "check", "rekey", "new"] {
+                let text = help(name, long);
+                assert!(text.contains(&format!("0 to {}", mhfe::MAX_PIM)), "{name}");
+                assert!(
+                    text.contains(&format!("0 to {}", mhfe::MAX_MEMORY_LEVEL)),
+                    "{name}"
+                );
+            }
+            let password = help("password", long);
+            assert!(password.contains(&format!(
+                "1 to {MOST_WORDS} (default {DEFAULT_WORDS}; fewer than {RECOMMENDED_WORDS} are weak)"
+            )));
+            assert!(password.contains(&format!("(default {DEFAULT_CHARACTERS})")));
+            assert!(
+                help("repair-words", long).contains(&format!("Number of repair words: {cards}"))
+            );
+        }
+        // The short helps of the length; the long ones list every length.
+        assert!(help("decrypt", false).contains(&first_last(&mhfe::WORD_COUNTS)));
+        assert!(help("check", false).contains(&format!(
+            "{}- to {}-word",
+            mhfe::BUILT_IN_CHECK_WORD_COUNTS[0],
+            mhfe::BUILT_IN_CHECK_WORD_COUNTS[3]
+        )));
+        assert!(help("password", true).contains(&format!("1 to {MOST_CHARACTERS}")));
+        assert!(help("encrypt", true).contains(&format!("none, or {cards} for a card")));
+    }
+
+    /// Each command's summary, which `-h` and the menu show, is the first line of its `--help`
+    /// (AUD-023-ARC006).
+    #[test]
+    fn every_summary_heads_its_long_help() {
+        use clap::CommandFactory;
+        let cli = Cli::command();
+        for command in cli.get_subcommands() {
+            let Some(long) = command.get_long_about() else {
+                continue;
+            };
+            let about = command.get_about().expect("every command has a summary");
+            assert_eq!(
+                long.to_string().lines().next(),
+                Some(about.to_string().as_str()),
+                "{}",
+                command.get_name()
+            );
         }
     }
 

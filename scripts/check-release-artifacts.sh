@@ -21,7 +21,13 @@
 #   scripts/check-release-artifacts.sh --archives <archive> ...
 #
 # checks packed release archives instead: each must carry LICENSE-MIT, LICENSE-APACHE and
-# THIRD_PARTY_NOTICES.md, byte for byte as in this checkout. scripts/package-release.sh runs it on every archive it packs.
+# THIRD_PARTY_NOTICES.md, byte for byte as in this checkout, and its notices must list every crate
+# of the Rust standard library that its programs name. scripts/package-release.sh runs it on every
+# archive it packs.
+#
+# The release program and WebAssembly, and every archive, are refused when they name a crate of
+# the standard library that THIRD_PARTY_NOTICES.md does not list
+# (`scripts/third-party-licenses.py --binaries`, AUD-023-BLD003).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -102,6 +108,7 @@ if failed:
     sys.exit(1)
 print(f"Every archive carries the licence files: {len(sys.argv) - 1} checked.")
 PY
+  python3 scripts/third-party-licenses.py --binaries "$@"
   exit 0
 fi
 
@@ -140,5 +147,6 @@ for artifact in "${release_artifacts[@]}"; do
   fi
 done
 refuse_builder_paths "${release_artifacts[@]}"
+python3 scripts/third-party-licenses.py --binaries "${release_artifacts[@]}"
 echo "The test-only reduced Argon2 engine is in the test binary and in no release artifact, and no"
 echo "release artifact names a directory of this builder."

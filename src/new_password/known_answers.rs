@@ -11,7 +11,6 @@ use crate::random::{uniform_below, ScriptedSource};
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
-use crate::strength::Strength;
 
 /// The 57 characters in the order a draw maps 0 to 56 to them, written out here rather than
 /// read from the generator's own table: digits 2 to 9, capitals without I and O, small letters
@@ -106,7 +105,7 @@ impl ComponentCheck for GeneratorCheck {
         "Password generator"
     }
 
-    fn run(&mut self, tier: Tier) -> ComponentOutcome {
+    fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
         // 228 = 4 x 57 is the first byte refused for 57 values; 62,208 = 8 x 7,776 the first pair
         // refused for 7,776, and the pair is read as a big-endian number.
@@ -131,17 +130,6 @@ impl ComponentCheck for GeneratorCheck {
             )
             .map_err(|what| format!("a stuck source {what}"))
         });
-        if tier == Tier::Full {
-            // The most common leaked password is weak, a generated one of five words and their
-            // check word is not.
-            findings.one(|| {
-                expect(
-                    Strength::of("password").is_weak()
-                        && !Strength::of(DRAWS[0].expected).is_weak(),
-                    "the strength estimate misjudges a password",
-                )
-            });
-        }
         findings.outcome()
     }
 }

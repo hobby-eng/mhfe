@@ -52,6 +52,29 @@ impl Suite {
         }
     }
 
+    /// The suite the specification numbers `number`, as its fixtures name it: 3 or 4.
+    pub fn of_number(number: u64) -> Option<Self> {
+        match number {
+            3 => Some(Self::TwentyFourWords),
+            4 => Some(Self::SameLength),
+            _ => None,
+        }
+    }
+
+    /// Whether `error` is one of the refusals the length rules give a suite 4 phrase or container
+    /// before any Argon2 work: a 24-word original, a length choice that does not apply to the
+    /// suite, or a container whose length the suite does not have. Suite 4's validation fixture
+    /// names these cases "rejected" without an error code.
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+    pub(crate) fn is_length_refusal(error: &MhfeError) -> bool {
+        matches!(
+            error,
+            MhfeError::SameLengthNeedsShortPhrase
+                | MhfeError::LengthChoiceNotApplicable { .. }
+                | MhfeError::InvalidContainer(_)
+        )
+    }
+
     /// The lengths of an original whose built-in check a recovery of a container of this suite
     /// can be compared with: 12 to 21 words in suite 3, none in suite 4, which has no check.
     pub fn built_in_check_lengths(self) -> &'static [usize] {
@@ -119,11 +142,24 @@ pub fn memory_text(bytes: u64) -> String {
 impl WorkFactor {
     /// Accepts PIM `0..=1023` and memory level `0..=21`, before any memory is allocated.
     pub fn new(pim: u32, memory_level: u32) -> Result<Self, MhfeError> {
+        Self::checked(pim, memory_level, false)
+    }
+
+    /// [`WorkFactor::new`] for the new settings of a rekey: a refusal names them as the new PIM or
+    /// the new memory level, so that it is not taken for one of the old container's.
+    pub fn new_settings(pim: u32, memory_level: u32) -> Result<Self, MhfeError> {
+        Self::checked(pim, memory_level, true)
+    }
+
+    fn checked(pim: u32, memory_level: u32, new: bool) -> Result<Self, MhfeError> {
         if pim > MAX_PIM {
-            return Err(MhfeError::InvalidPim(pim));
+            return Err(MhfeError::InvalidPim { pim, new });
         }
         if memory_level > MAX_MEMORY_LEVEL {
-            return Err(MhfeError::InvalidMemoryLevel(memory_level));
+            return Err(MhfeError::InvalidMemoryLevel {
+                level: memory_level,
+                new,
+            });
         }
         Ok(Self { pim, memory_level })
     }
@@ -278,14 +314,30 @@ mod tests {
 
     #[test]
     fn out_of_range_settings_are_rejected() {
-        assert_eq!(WorkFactor::new(1024, 0), Err(MhfeError::InvalidPim(1024)));
+        assert_eq!(
+            WorkFactor::new(1024, 0),
+            Err(MhfeError::InvalidPim {
+                pim: 1024,
+                new: false
+            })
+        );
+        assert_eq!(
+            WorkFactor::new_settings(0, 22).unwrap_err().to_string(),
+            "the new memory level must be a whole number from 0 to 21, not 22"
+        );
         assert_eq!(
             WorkFactor::new(0, 22),
-            Err(MhfeError::InvalidMemoryLevel(22))
+            Err(MhfeError::InvalidMemoryLevel {
+                level: 22,
+                new: false
+            })
         );
         assert_eq!(
             WorkFactor::new(u32::MAX, u32::MAX),
-            Err(MhfeError::InvalidPim(u32::MAX))
+            Err(MhfeError::InvalidPim {
+                pim: u32::MAX,
+                new: false
+            })
         );
     }
 }

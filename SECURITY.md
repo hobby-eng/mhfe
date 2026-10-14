@@ -78,7 +78,8 @@ Never include a real seed phrase, password, private key or wallet file.
   The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
   can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
   area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap in memory
-  (zram) is safe. macOS encrypts its swap; on Windows, use BitLocker or no page file.
+  (zram) is safe only without a writeback device, or with one encrypted as above. macOS encrypts
+  its swap; on Windows, use BitLocker or no page file.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original seed phrase: a typing mistake or a
   hardware fault cannot silently produce a container that no password opens. At a terminal the
@@ -256,9 +257,14 @@ control of crash reports and no isolation of its own.
   are transferred to the worker, so that none stays with the class, and are wiped when the
   operation cannot start; a `Uint8Array` the page passes is copied, not emptied. Text with an
   unpaired surrogate is refused instead of being silently changed by the browser. In the worker,
-  the Rust code takes these bytes into buffers that it wipes, and it wipes its copies of the keys
-  and states; a result that holds a secret is written into a buffer of its final size, which is
-  wiped once the result has become a JavaScript string.
+  the Rust code takes these bytes into buffers that it wipes, and it wipes its own copies of the
+  keys and states; a result that holds a secret is written into a buffer of its final size, which
+  is wiped once the result has become a JavaScript string. Copies that the compiler and the
+  dependencies leave on the WebAssembly's stack, such as the BIP39 seed and the BIP32 master key
+  of a fingerprint or a wallet check and the passphrase in BIP39's PBKDF2 salt block, stay until
+  later calls overwrite them or the worker ends, also while a session waits; a browser locks no
+  memory. An operation in which the WebAssembly stops (a trap) ends with `INTERNAL_ERROR` and its
+  worker is terminated without its session being wiped.
 - What the page holds as a JavaScript string cannot be wiped, since browsers cannot erase strings:
   a password or phrase typed into the page, a recovered or new phrase, the phrase shown to the
   owner to confirm a rekey, the phrases of hidden wallets, a generated password and the words of a

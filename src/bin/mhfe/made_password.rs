@@ -43,16 +43,23 @@ impl PasswordKind {
     pub fn answer(self) -> Answer {
         match self {
             Self::Own => Answer::new("Type my own", "typed twice"),
+            // Labels from the counts the kinds make (AUD-023-ARC007).
             Self::Words => Answer::new(
-                "Five dice words",
+                format!("{} dice words", style::number_word(DEFAULT_WORDS, true)),
                 format!("about {} bits, easy to type", word_bits(DEFAULT_WORDS)),
             ),
             Self::CheckWord => Answer::new(
-                "Five words and a check word",
+                format!(
+                    "{} words and a check word",
+                    style::number_word(mhfe::check_word::DRAWN_WORDS, true)
+                ),
                 "one mistyped word is repaired",
             ),
             Self::Chars => Answer::new(
-                "Sixteen random characters",
+                format!(
+                    "{} random characters",
+                    style::number_word(DEFAULT_CHARACTERS, true)
+                ),
                 format!("about {} bits", character_bits(DEFAULT_CHARACTERS)),
             ),
         }
@@ -235,6 +242,11 @@ mod tests {
 
     /// Public synthetic sentinel only; the child has no terminal and no enclosing private flow.
     const PUBLIC_DISPLAY_SENTINEL: &str = "AUD-020-SEC002-public-display-sentinel";
+    /// Set by the parent for its child, which does nothing without it (AUD-023-ARC001).
+    const CHILD_VARIABLE: &str = "MHFE_TEST_MADE_PASSWORD_CHILD";
+    /// What the child prints once the refusal came: the parent requires it, so that a child that
+    /// did not run, or ran no refusal, fails the parent (AUD-023-ARC001).
+    const CHILD_REFUSED: &str = "made-password child: refused without a private screen";
 
     #[test]
     fn a_generated_password_never_prints_without_a_private_screen() {
@@ -246,8 +258,14 @@ mod tests {
                 "--nocapture",
             ])
             .stdin(std::process::Stdio::null())
+            .env(CHILD_VARIABLE, "1")
             .output()
             .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains(CHILD_REFUSED) && stdout.contains("1 passed"),
+            "the child did not run its refusal: {stdout}"
+        );
         assert!(
             !String::from_utf8_lossy(&output.stderr).contains(PUBLIC_DISPLAY_SENTINEL),
             "the generated password reached stderr without a private screen"
@@ -262,6 +280,10 @@ mod tests {
     #[test]
     #[ignore = "isolated no-terminal child, executed by the parent regression"]
     fn refuse_generated_password_child() {
+        // Run on its own, as `cargo test -- --ignored` would, it does nothing.
+        if std::env::var_os(CHILD_VARIABLE).is_none() {
+            return;
+        }
         let result = show(
             &Input::terminal_only(),
             Operation::Encrypt,
@@ -273,6 +295,7 @@ mod tests {
             panic!("a generated password was shown without a private screen");
         };
         assert!(!failure.message.contains(PUBLIC_DISPLAY_SENTINEL));
+        println!("{CHILD_REFUSED}");
     }
 
     #[test]

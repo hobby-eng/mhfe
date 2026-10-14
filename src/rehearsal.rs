@@ -227,6 +227,20 @@ impl ReferenceTarget {
     }
 }
 
+/// Refuses a BIP39 `passphrase` that is not empty where the comparison takes none: the built-in
+/// check, and the owner's comparison with the backup in a rekey. Dropped without a word, it would
+/// let a person believe the wallet with that passphrase was compared (`INVALID_REQUEST`).
+pub fn refuse_unused_passphrase(passphrase: &str) -> Result<(), MhfeError> {
+    if passphrase.is_empty() {
+        Ok(())
+    } else {
+        Err(MhfeError::InvalidRequest(
+            "a BIP39 passphrase belongs only to an address, a fingerprint or the wallet check"
+                .to_owned(),
+        ))
+    }
+}
+
 impl<'a> Reference<'a> {
     /// The BIP39 passphrase the recovery is compared with; none for the built-in check, which
     /// says nothing about one.
@@ -516,7 +530,7 @@ impl<'a> Confirmation<'a> {
     /// reading. With the length detected the built-in check alone is refused too: a 24-word
     /// original that passes a short check by chance, which encryption warns of, would be sealed
     /// again as that shorter phrase, another wallet (AUD-017-FUN001).
-    pub(crate) fn refuse_for(&self, needed: ConfirmationNeeded) -> Result<(), MhfeError> {
+    pub fn refuse_for(&self, needed: ConfirmationNeeded) -> Result<(), MhfeError> {
         let refused = match needed {
             ConfirmationNeeded::BuiltInCheck => false,
             ConfirmationNeeded::WalletOrOwner => {

@@ -1,12 +1,13 @@
 //! `mhfe decrypt`: recovers the original phrase from a container.
 
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
+use mhfe::wallet_check::WALLET_CHECK_BITS;
 use mhfe::{PhraseLength, RecoveredPhrase, Recovery, RecoveryStatus, WorkFactor, ROUNDS};
 
 use crate::check;
-use crate::container_repair::RepairOption;
+use crate::container_repair::{self, RepairOption};
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::Flow;
 use crate::phrase_length;
@@ -24,15 +25,19 @@ pub struct Options {
     #[command(flatten)]
     repair: RepairOption,
 
-    /// Words of the original seed phrase: 12 to 24, or auto
-    #[arg(long, value_name = "N", value_parser = phrase_length::parse, long_help = words_help())]
+    #[arg(
+        long,
+        value_name = "N",
+        value_parser = phrase_length::parse,
+        help = format!("Words of the original seed phrase: {}, or auto", phrase_length::length_range()),
+        long_help = words_help()
+    )]
     words: Option<PhraseLength>,
 
     #[command(flatten)]
     passphrase_used: check::PassphraseUsedOption,
 
-    /// Read the answers from standard input (for scripts)
-    #[arg(long, long_help = stdin_help())]
+    #[arg(long, help = style::STDIN_HELP, long_help = stdin_help())]
     stdin: bool,
 }
 
@@ -58,20 +63,29 @@ fn words_help() -> String {
 }
 
 fn stdin_help() -> String {
-    style::option_help(&[
-        "Read the answers from standard input (for scripts).",
-        "Input: the container, then the password, one per line, and with --passphrase-used yes \
-         the BIP39 passphrase of the original seed phrase on a third line, for the 16-bit check \
-         of a 24-word reading; without it the check runs with no passphrase. Output: one line \
-         per result, \"<words> <verified|unverified> <phrase>\". Messages, the outcome of the \
-         16-bit check among them, go to standard error.",
-    ])
+    style::stdin_help(
+        None,
+        &[
+            &format!(
+                "Input: the container, then the password, one per line, and with \
+                 --passphrase-used yes the BIP39 passphrase of the original seed phrase on a third \
+                 line, for the {WALLET_CHECK_BITS}-bit check of a 24-word reading; without it the \
+                 check runs with no passphrase. Output: one line per result, \"<words> \
+                 <verified|unverified> <phrase>\". Messages, the outcome of the \
+                 {WALLET_CHECK_BITS}-bit check among them, go to standard error."
+            ),
+            container_repair::REPAIR_LINE,
+        ],
+    )
 }
+
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Recover the original seed phrase from a container";
 
 /// The top of `mhfe decrypt --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Recover the original seed phrase from a container",
+        SUMMARY,
         &format!(
             "Runs 12 rounds, {} at the default settings, and shows the recovered seed phrase. Use \
              the PIM and memory level of the encryption; at the defaults no option is needed.",
@@ -126,9 +140,12 @@ pub fn long_help() -> String {
             ("Password", "on a private screen"),
             (
                 "BIP39 passphrase",
-                "only when a 24-word reading comes out: whether the original seed phrase has \
-                 one, and if so the passphrase, on a private screen, for the 16-bit check of \
-                 that reading; --passphrase-used answers the question",
+                &format!(
+                    "only when a 24-word reading comes out: whether the original seed phrase has \
+                     one, and if so the passphrase, on a private screen, for the \
+                     {WALLET_CHECK_BITS}-bit check of that reading; --passphrase-used answers the \
+                     question"
+                ),
             ),
         ],
     );
@@ -141,7 +158,7 @@ pub fn long_help() -> String {
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     let length = options.words.unwrap_or(PhraseLength::Detect);
-    let mut input = Input::new(options.stdin);
+    let mut input = Input::new(options.stdin).reading_secrets()?;
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Decrypt.title());
     let work = settings::choose(options.settings, &mut input, Operation::Decrypt)?;
@@ -220,11 +237,12 @@ fn source_check_passphrase(
     if input.is_script() && used != Some(true) {
         return Ok(LockedText::copy_of(""));
     }
+    let why = check::source_check_why();
     check::ask_passphrase_explained(
         input,
         Operation::Decrypt,
         check::ORIGINAL_SEED_PHRASE,
-        check::SOURCE_CHECK_WHY,
+        &why.each_ref().map(String::as_str),
         Some(readme::DECRYPT),
         used,
     )
@@ -303,7 +321,7 @@ fn show_single(
             format!("Recovered seed phrase, {} words", phrase.words())
         )
     );
-    print_result(phrase, input);
+    print_result(phrase, input)?;
     Ok(())
 }
 
@@ -364,20 +382,24 @@ fn show_ambiguous(
             paint(STRONG, status)
         );
         tell_source_check(candidate, passphrase)?;
-        print_result(candidate, input);
+        print_result(candidate, input)?;
     }
     Ok(())
 }
 
-fn print_result(phrase: &RecoveredPhrase, input: &Input) {
+fn print_result(phrase: &RecoveredPhrase, input: &Input) -> Result<(), Failure> {
     if input.is_script() {
         let status = if phrase.verified() {
             "verified"
         } else {
             "unverified"
         };
-        println!("{} {status} {}", phrase.words(), phrase.phrase());
+        style::out(format_args!(
+            "{} {status} {}",
+            phrase.words(),
+            phrase.phrase()
+        ))
     } else {
-        terminal::print_phrase(phrase.phrase(), Wallet::NoPassphrase, input);
+        terminal::print_phrase(phrase.phrase(), Wallet::NoPassphrase, input)
     }
 }

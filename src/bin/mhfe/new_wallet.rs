@@ -44,12 +44,32 @@ pub struct Options {
 
     #[command(flatten)]
     never_use: NeverUseOption,
+
+    /// A check with the BIP39 passphrase: yes or no
+    #[arg(
+        long = "wallet-check",
+        value_name = "yes|no",
+        value_parser = crate::check::parse_yes_no,
+        long_help = wallet_check_help()
+    )]
+    wallet_check: Option<bool>,
 }
+
+fn wallet_check_help() -> String {
+    style::option_help(&[
+        "Whether the new phrase is drawn to pass a check with its BIP39 passphrase: yes or no.",
+        "Without it, a person who types a passphrase is asked, with nothing preselected. yes \
+         needs a passphrase; the check's costs are in the README.",
+    ])
+}
+
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Generate a new wallet and its container";
 
 /// The top of `mhfe new --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Generate a new wallet and its container",
+        SUMMARY,
         "Draws a new 24-word seed phrase from the operating system's random generator, shows it \
          once for your wallet, and encrypts it into a container under your password. If you \
          choose, the phrase is drawn so that it passes a check with your BIP39 passphrase, \
@@ -97,7 +117,23 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let work = settings::choose(options.settings, &mut input, Operation::New)?;
     // A wallet check exists only with a passphrase, so its question comes only after one.
     let passphrase = read_new_passphrase(&mut input)?;
-    let checked = !passphrase.is_empty() && ask_for_check()?;
+    let checked = match options.wallet_check {
+        Some(true) if passphrase.is_empty() => {
+            return Err(mhfe::MhfeError::WalletCheckNeedsPassphrase.into())
+        }
+        Some(checked) => {
+            choice::record(
+                "Check",
+                if checked {
+                    CHECK_ANSWERS[1]
+                } else {
+                    CHECK_ANSWERS[0]
+                },
+            );
+            checked
+        }
+        None => !passphrase.is_empty() && ask_for_check()?,
+    };
     if checked {
         let strength = Strength::of(&passphrase);
         let bits = strength.bits();
@@ -166,13 +202,13 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 /// Asks whether the new phrase gets a wallet check with the passphrase. Nothing is preselected
 /// (AUD-010): each choice has its costs, which `?` shows, and a hurried Enter, perhaps typed ahead
 /// after the repeated passphrase, must not decide a property the phrase keeps for ever.
+/// The answers whether the new phrase gets a wallet check, as asked and as recorded.
+const CHECK_ANSWERS: [&str; 2] = ["No check", "A phrase + passphrase check"];
+
 fn ask_for_check() -> Result<bool, Failure> {
     let answers = [
-        Answer::new("No check", "every password opens a valid wallet"),
-        Answer::new(
-            "A phrase + passphrase check",
-            "a recovery recognises a wrong password",
-        ),
+        Answer::new(CHECK_ANSWERS[0], "every password opens a valid wallet"),
+        Answer::new(CHECK_ANSWERS[1], "a recovery recognises a wrong password"),
     ];
     let question = Question {
         text: "Do you want a check that confirms the password at recovery?",
@@ -288,7 +324,7 @@ fn show_new_phrase(input: &Input, phrase: &str, passphrase: &str) -> Result<(), 
     }
     eprintln!();
     eprintln!("{}", paint(HEADING, "New seed phrase, 24 words"));
-    terminal::print_phrase(phrase, Wallet::NewPassphrase(passphrase), input);
+    terminal::print_phrase(phrase, Wallet::NewPassphrase(passphrase), input)?;
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }

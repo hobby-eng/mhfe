@@ -327,7 +327,11 @@ pub(crate) fn review_choice(
         "" | "asTyped" => Ok(None),
         "corrected" => Ok(Some(ReviewChoice::Corrected)),
         "repair" => {
-            let position = whole_number(position, "INVALID_REQUEST", "the repair position")?;
+            let position = whole_number(
+                position,
+                MhfeError::InvalidRequest(String::new()).code(),
+                "the repair position",
+            )?;
             Ok(Some(ReviewChoice::Repair(position as usize)))
         }
         other => Err(js_error(MhfeError::InvalidRequest(format!(

@@ -8,7 +8,9 @@
 
 use crate::mhfe::known_answers::{published, published_table};
 use crate::rehearsal::{CheckEvidence, CheckOutcome, Reference};
-use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
+use crate::self_check::{
+    damaged, expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
+};
 use crate::wallet::{Address, Coin, DerivationPath, SearchLimits};
 use crate::WordCount;
 
@@ -216,10 +218,7 @@ impl ComponentCheck for RehearsalCheck {
         });
         findings.one(|| {
             let address = Address::parse(Coin::Bitcoin, ADDRESS.0).map_err(stopped)?;
-            let path: DerivationPath = ADDRESS
-                .1
-                .parse()
-                .map_err(|_| "the built-in cases are damaged".to_owned())?;
+            let path: DerivationPath = ADDRESS.1.parse().map_err(|_| damaged())?;
             let outcome = Self::check(&Reference::Address {
                 address: &address,
                 passphrase: "",

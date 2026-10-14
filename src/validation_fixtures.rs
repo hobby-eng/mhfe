@@ -16,14 +16,18 @@
 use serde_json::Value;
 
 /// Passwords, settings, phrases, length detection and the verifier's byte order of suite 3.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) const SUITE_3: &str = include_str!("../tests/fixtures/validation-cases.json");
+/// The `passwords` section of the suite 3 fixture alone, as build.rs cuts it out: all that the
+/// password encoding's check reads, so that the passwords module built alone carries no other case.
+pub(crate) const SUITE_3_PASSWORDS: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/validation-passwords.json"));
 /// The round messages of suite 4 for each entropy size, and its refusals before Argon2.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) const SUITE_4: &str =
     include_str!("../tests/fixtures/suite4-vectors/validation-cases.json");
 
-/// What a damaged built-in table gives as the detail of a failure.
-const DAMAGED: &str = "the built-in cases are damaged";
+use crate::self_check::DAMAGED;
 
 /// A fixture as read.
 pub(crate) struct Fixture(Value);
@@ -90,4 +94,18 @@ pub(crate) fn numbers(case: &Value, field: &str) -> Result<Vec<usize>, String> {
                 .ok_or_else(|| DAMAGED.to_owned())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The cut of build.rs is the fixture's passwords section, exactly, and nothing else.
+    #[test]
+    fn the_password_cases_are_the_fixtures() {
+        let whole: Value = serde_json::from_str(SUITE_3).unwrap();
+        let cut: Value = serde_json::from_str(SUITE_3_PASSWORDS).unwrap();
+        assert_eq!(cut.as_object().unwrap().len(), 1);
+        assert_eq!(cut["passwords"], whole["passwords"]);
+    }
 }

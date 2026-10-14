@@ -171,6 +171,20 @@ pub(crate) fn word_counts_text() -> String {
     counts_text(&WORD_COUNTS)
 }
 
+/// A count with its thousands grouped, as messages write it: "65,536". The one formatter of the
+/// library and the command-line tool.
+pub fn grouped(count: u128) -> String {
+    let digits = count.to_string();
+    let mut text = String::new();
+    for (index, digit) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            text.push(',');
+        }
+        text.push(digit);
+    }
+    text
+}
+
 /// Word counts as a message lists them, the last after "or": "12, 15, 18 or 21".
 pub(crate) fn counts_text(counts: &[usize]) -> String {
     let counts: Vec<String> = counts.iter().map(ToString::to_string).collect();

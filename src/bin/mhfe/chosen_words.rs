@@ -29,6 +29,23 @@ pub struct NeverUseOption {
     /// A word the new phrase must not hold
     #[arg(long = "never-use", value_name = "WORD", long_help = never_use_help())]
     never_use: Option<String>,
+
+    /// Choose a word of the new phrase: yes or no
+    #[arg(
+        long = "choose-word",
+        value_name = "yes|no",
+        value_parser = crate::check::parse_yes_no,
+        long_help = choose_word_help()
+    )]
+    choose_word: Option<bool>,
+}
+
+fn choose_word_help() -> String {
+    style::option_help(&[
+        "Whether you choose a word of the new phrase: yes or no.",
+        "no draws every word at random; yes asks for the word on a private screen. Without it, \
+         a person at a terminal is asked.",
+    ])
 }
 
 fn never_use_help() -> String {
@@ -74,7 +91,10 @@ pub fn ask(
 ) -> Result<PhraseDraw, Failure> {
     let given = option.words();
     loop {
-        let wants_words = ask_whether(input)?;
+        let wants_words = match option.choose_word {
+            Some(wants) => wants,
+            None => ask_whether(input)?,
+        };
         if !wants_words && given.is_none() {
             // The wallet check alone costs 16 bits, which is said too.
             tell(draw.odds());
@@ -110,6 +130,9 @@ pub fn ask(
         }
     }
 }
+
+/// The random bits of a new phrase, as the summary names them (AUD-023-ARC007).
+const STATE_BITS: usize = mhfe::wallet_check::NEW_ENTROPY_BYTES * 8;
 
 /// Whether the person wants to choose a word.
 fn ask_whether(input: &mut Input) -> Result<bool, Failure> {
@@ -186,13 +209,13 @@ pub fn tell(odds: WishOdds) {
         Randomness::Full => {}
         Randomness::Ample => style::warn(
             &format!(
-                "The phrase keeps about {bits} of its 256 random bits: still far more than enough."
+                "The phrase keeps about {bits} of its {STATE_BITS} random bits: still far more than enough."
             ),
             "",
         ),
         Randomness::NotRecommended => style::warn(
             &format!(
-                "Not recommended: the phrase keeps about {bits} of its 256 random bits, fewer than \
+                "Not recommended: the phrase keeps about {bits} of its {STATE_BITS} random bits, fewer than \
                  {RECOMMENDED_RANDOM_BITS}."
             ),
             // Only where it helps: a word anywhere already keeps the most (AUD-015-UI003).

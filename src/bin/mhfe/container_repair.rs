@@ -3,7 +3,7 @@
 //! from the container phrase, repair it when words rust away, are scratched or were copied wrongly,
 //! without the password and without Argon2.
 
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::repair::{self, ContainerReading, Repaired};
@@ -30,15 +30,13 @@ pub struct RepairOptions {
     #[command(flatten)]
     scan_gap: ScanGapOption,
 
-    /// Read the answers from standard input (for scripts)
-    #[arg(long, long_help = repair_stdin_help())]
+    #[arg(long, help = style::STDIN_HELP, long_help = repair_stdin_help())]
     stdin: bool,
 }
 
 #[derive(Args)]
 pub struct WordsOptions {
-    /// Number of repair words: 2, 4, 6 or 8
-    #[arg(long, value_name = "N", long_help = count_help())]
+    #[arg(long, value_name = "N", help = count_short_help(), long_help = count_help())]
     count: Option<usize>,
 
     /// Read the container from standard input (for scripts)
@@ -47,23 +45,30 @@ pub struct WordsOptions {
 }
 
 fn repair_stdin_help() -> String {
-    style::option_help(&[
-        "Read the answers from standard input (for scripts).",
-        "Input: the container phrase, then the repair words, one line each, with ? for a word \
+    style::stdin_help(
+        None,
+        &[
+            "Input: the container phrase, then the repair words, one line each, with ? for a word \
          that cannot be read. Output: the repaired container on one line, or nothing when there \
          is nothing to repair.",
-    ])
+        ],
+    )
+}
+
+/// The short help of --count, from the library's counts (AUD-023-ARC007).
+fn count_short_help() -> String {
+    format!("Number of repair words: {}", count_list())
 }
 
 fn count_help() -> String {
     style::option_help(&[
-        &format!("Number of repair words: {}.", count_list()),
+        &format!("{}.", count_short_help()),
         "Asked at a terminal when not given; a script must give it.",
     ])
 }
 
 /// The numbers of repair words a card has, as text: "2, 4, 6 or 8".
-fn count_list() -> String {
+pub fn count_list() -> String {
     let counts: Vec<String> = repair::REPAIR_WORD_COUNTS
         .iter()
         .map(ToString::to_string)
@@ -118,10 +123,13 @@ pub fn words_help() -> String {
     )
 }
 
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const REPAIR_SUMMARY: &str = "Repair a container phrase with its repair words";
+
 /// The top of `mhfe repair --help`.
 pub fn repair_about() -> String {
     style::command_about(&[
-        "Repair a container phrase with its repair words",
+        REPAIR_SUMMARY,
         "Repairs the words of a container phrase that cannot be read or were copied wrongly, from \
          the repair words kept on a card, without the password. Type ? for a word that cannot be \
          read. Each repair word repairs one unreadable word; two repair one wrong word.",
@@ -132,10 +140,13 @@ pub fn repair_about() -> String {
     ])
 }
 
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const WORDS_SUMMARY: &str = "Make repair words for a container phrase";
+
 /// The top of `mhfe repair-words --help`.
 pub fn words_about() -> String {
     style::command_about(&[
-        "Make repair words for a container phrase",
+        WORDS_SUMMARY,
         &format!(
             "Makes {} repair words for a container, to keep on a card apart from the container \
              phrase. mhfe repair then repairs the container phrase with them, without the \
@@ -144,6 +155,11 @@ pub fn words_about() -> String {
         ),
     ])
 }
+
+/// What `--repair` changes in the input of a script, said in the `--stdin` help of each command
+/// that has both (AUD-023-DOC001).
+pub const REPAIR_LINE: &str = "With --repair, the repair words come on the line right after the \
+                               container, and every later answer one line further down.";
 
 /// `--repair` of the commands that read a container phrase: decrypt, check, rekey and wallets.
 #[derive(Args)]
@@ -435,10 +451,7 @@ fn show_repaired(repaired: &Repaired) {
 
 /// The answers whether to use the repaired container phrase.
 fn use_answers() -> [Answer; 2] {
-    [
-        Answer::new("Use it", "and correct your written phrase"),
-        Answer::new("Type the container phrase again", "the repair is not used"),
-    ]
+    container_search::use_or_type_again("and correct your written phrase", "the repair is not used")
 }
 
 /// Asks whether to go on with the repaired container phrase.
@@ -491,7 +504,7 @@ pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
             format!("Repaired container, {} words", container.split(' ').count())
         )
     );
-    terminal::print_phrase(container, Wallet::Container, &input);
+    terminal::print_phrase(container, Wallet::Container, &input)?;
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }
@@ -527,7 +540,7 @@ pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
     if screen.is_active() {
         style::title(WORDS_TITLE);
     }
-    print_card(&words, &input);
+    print_card(&words, &input)?;
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }
@@ -644,10 +657,9 @@ fn ask_when_creating(input: &mut Input) -> Result<Option<usize>, Failure> {
 /// The repair card as it is written down: the profile's name, then the words numbered as "1/4",
 /// as the specification advises, so that the card tells how many words it has. A script gets the
 /// bare words.
-pub fn print_card(words: &str, input: &Input) {
+pub fn print_card(words: &str, input: &Input) -> Result<(), Failure> {
     if input.is_script() {
-        println!("{words}");
-        return;
+        return style::out(words);
     }
     let count = words.split(' ').count();
     eprintln!();
@@ -672,9 +684,10 @@ pub fn print_card(words: &str, input: &Input) {
                 )
             })
             .collect();
-        println!(" {}", cells.join("  "));
+        style::out(format_args!(" {}", cells.join("  ")))?;
     }
     style::hint("Write it on a card as shown, and keep the card apart from the container phrase.");
+    Ok(())
 }
 
 /// Repair words a row of the card, as the words of a phrase are shown.

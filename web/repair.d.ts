@@ -10,6 +10,10 @@ export {
 /** runtime/worker.js and runtime/mhfe.wasm. */
 export type MhfeRepairSources = MhfePackageParts;
 
+/**
+ * A repair card. Write it under `profile` with each word numbered, "1/8" to "8/8", and keep it apart
+ * from the container phrase, guarded like it (docs/BROWSER-PACKAGE.md, "What the page should do").
+ */
 export interface MhfeRepairCard {
   profile: "MHFE-REPAIR-1";
   /** The repair words, one space apart. */

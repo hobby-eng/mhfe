@@ -33,11 +33,12 @@ export const AMBIGUOUS_12_WORDS =
  * the browser package and the browser tests expect.
  */
 export const SELF_CHECK_PARTS = {
-  repair: ["bip39-words", "repair-words"],
+  repair: ["bip39-words", "repair-words", "wallet-hashes", "bip39-seed", "bip32"],
   passwords: [
     "password-unicode",
     "password-check-word",
     "password-generator",
+    "password-strength",
     "word-hints",
     "random-source",
   ],
@@ -99,7 +100,12 @@ export const SELF_CHECK_PARTS = {
     rekey: "Rekey",
     rehearsal: "Rehearsal",
     "password-generator": "Password generator",
+    "password-strength": "Password strength estimate",
     "random-source": "Random source",
+    "memory-locking": "Locked memory",
+    "core-dumps": "Core dumps",
+    isolation: "Isolation",
+    "hidden-input": "Hidden input",
     "browser-features": "Browser features",
     "package-parts": "Package parts",
     "page-encoding": "Text encoding of the page",

@@ -18,18 +18,34 @@ use crate::time_text;
 #[derive(Args, Clone, Copy)]
 pub struct Settings {
     // Options rather than defaults, so that a command can tell whether the person gave them.
-    /// Pass multiplier, 0 to 1023 (default 0)
-    #[arg(long, value_name = "N", long_help = pim_help())]
+    #[arg(long, value_name = "N", help = pim_short_help(), long_help = pim_help())]
     pub pim: Option<u32>,
 
-    /// Memory level, 0 to 21 (default 0: 2 GiB)
-    #[arg(long = "mem", value_name = "LEVEL", long_help = memory_level_help())]
+    #[arg(
+        long = "mem",
+        value_name = "LEVEL",
+        help = memory_level_short_help(),
+        long_help = memory_level_help()
+    )]
     pub memory_level: Option<u32>,
+}
+
+/// The short helps, built from the limits and the default (AUD-023-ARC007).
+fn pim_short_help() -> String {
+    format!("Pass multiplier, {} (default 0)", pim_range())
+}
+
+fn memory_level_short_help() -> String {
+    format!(
+        "Memory level, {} (default 0: {})",
+        level_range(),
+        memory_text(0)
+    )
 }
 
 fn pim_help() -> String {
     style::option_help(&[
-        &format!("Pass multiplier, {} (default 0).", pim_range()),
+        &format!("{}.", pim_short_help()),
         "Every step adds the default work again: PIM 1 doubles the time of the encryption and \
          of every recovery, PIM 9 makes it ten times as long. Each guess of the password costs \
          an attacker the same extra time.",
@@ -41,11 +57,7 @@ fn pim_help() -> String {
 
 fn memory_level_help() -> String {
     style::option_help(&[
-        &format!(
-            "Memory level, {} (default 0: {}).",
-            level_range(),
-            memory_text(0)
-        ),
+        &format!("{}.", memory_level_short_help()),
         "The memory of every Argon2 call, doubling every two levels; the time grows in \
          proportion to it:",
         &memory_levels(),
@@ -62,6 +74,27 @@ impl Settings {
             self.pim.unwrap_or(0),
             self.memory_level.unwrap_or(0),
         )?)
+    }
+
+    /// The settings given for `operation`: those of a rekey's new container are refused as the
+    /// new PIM or memory level ([`WorkFactor::new_settings`]).
+    fn work_factor_for(self, operation: Operation) -> Result<WorkFactor, Failure> {
+        let (pim, level) = (self.pim.unwrap_or(0), self.memory_level.unwrap_or(0));
+        Ok(match operation {
+            Operation::RekeyNew => WorkFactor::new_settings(pim, level)?,
+            _ => WorkFactor::new(pim, level)?,
+        })
+    }
+
+    /// Refuses settings given on the command line that are out of range or that this computer
+    /// cannot run, before anything is typed: a rekey checks its new ones at its start, not after
+    /// the old container's recovery (AUD-023-UI002). Settings that are asked are checked when
+    /// they are answered.
+    pub fn check_given(self, operation: Operation) -> Result<(), Failure> {
+        if self.given() {
+            check_resources(self.work_factor_for(operation)?)?;
+        }
+        Ok(())
     }
 
     /// Whether the command line gives the PIM or the memory level; then nothing is asked.
@@ -121,7 +154,7 @@ pub fn choose(
     if !matches!(operation, Operation::RekeyNew) {
         style::title(operation.title());
     }
-    let defaults = settings.work_factor()?;
+    let defaults = settings.work_factor_for(operation)?;
     let asked = !settings.given() && input.can_ask_again();
     let work = if asked && ask_for_own(input, operation, defaults)? {
         ask_own(input)?
@@ -523,6 +556,15 @@ mod tests {
         assert_eq!(
             swap_warning(&areas(false)).as_deref(),
             Some("Swap on this computer is not encrypted: /swap\\u{1b}file.")
+        );
+        // zram that writes back to a plaintext device is named like any other (AUD-023-SEC002).
+        let zram = SwapInventory::Available(vec![SwapArea {
+            name: "/dev/zram0".into(),
+            unknown: false,
+        }]);
+        assert_eq!(
+            swap_warning(&zram).as_deref(),
+            Some("Swap on this computer is not encrypted: /dev/zram0.")
         );
     }
     use mhfe::MhfeError;

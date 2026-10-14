@@ -30,6 +30,26 @@ pub fn length_list() -> String {
     counts.join(", ")
 }
 
+/// The lengths of an original seed phrase from the shortest to the longest: "12 to 24".
+pub fn length_range() -> String {
+    range_of(&WORD_COUNTS)
+}
+
+/// The lengths that have a built-in check, as a range: "12 to 21".
+pub fn short_range() -> String {
+    range_of(&mhfe::BUILT_IN_CHECK_WORD_COUNTS)
+}
+
+/// The same as an adjective: "12- to 21-word".
+pub fn short_range_words() -> String {
+    let counts = mhfe::BUILT_IN_CHECK_WORD_COUNTS;
+    format!("{}- to {}-word", counts[0], counts[counts.len() - 1])
+}
+
+fn range_of(counts: &[usize]) -> String {
+    format!("{} to {}", counts[0], counts[counts.len() - 1])
+}
+
 /// Word counts in running text: "12", "12 and 21", "12, 15 and 21".
 pub fn listed(lengths: &[usize]) -> String {
     let counts: Vec<String> = lengths.iter().map(ToString::to_string).collect();
@@ -72,8 +92,6 @@ pub fn ask(
     }
 }
 
-/// Asks the length among `lengths` alone, once detection could not settle it: `explanation` says
-/// why, over the question.
 /// The warning that the built-in check found another length than the one stated, which takes
 /// precedence (the length rules of recovery): one wording for every command (AUD-017-ARC001).
 pub fn check_finds(found: usize, stated: usize) -> String {
@@ -83,6 +101,8 @@ pub fn check_finds(found: usize, stated: usize) -> String {
 /// Why the check takes precedence, said after [`check_finds`].
 pub const MORE_RELIABLE: &str = "A check that passes is far more reliable than memory";
 
+/// Asks the length among `lengths` alone, once detection could not settle it: `explanation` says
+/// why, over the question.
 pub fn ask_stated(
     input: &mut Input,
     lengths: &[usize],

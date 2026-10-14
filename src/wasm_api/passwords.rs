@@ -170,13 +170,22 @@ pub fn make_password(
     let rolls = SecretText::new(rolls_utf8);
     let size = |default: usize| match count {
         None => Ok(default),
-        Some(count) => whole_number(count, "INVALID_PASSWORD_SIZE", "the size").map(|n| n as usize),
+        Some(count) => whole_number(
+            count,
+            MhfeError::InvalidPasswordSize(String::new()).code(),
+            "the size",
+        )
+        .map(|n| n as usize),
     };
     let recipe = match kind {
         "words" => PasswordRecipe::words(size(DEFAULT_WORDS)?),
-        "checkWord" if count.is_some() => Err(MhfeError::InvalidRequest(
-            "checkWord takes no count: it always makes five words and their check word".to_owned(),
-        )),
+        // In the same words as the class's TypeError (web/passwords.js), with the count from
+        // the library (AUD-023-ARC007).
+        "checkWord" if count.is_some() => Err(MhfeError::InvalidRequest(format!(
+            "count belongs only to the kinds \"words\" and \"characters\": \"checkWord\" always \
+             gives {} words and their check word",
+            check_word::DRAWN_WORDS
+        ))),
         "checkWord" => Ok(PasswordRecipe::check_word()),
         "characters" => PasswordRecipe::characters(size(DEFAULT_CHARACTERS)?),
         other => Err(MhfeError::InvalidRequest(format!(

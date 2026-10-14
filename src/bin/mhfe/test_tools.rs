@@ -9,7 +9,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use anstream::println;
 use clap::Args;
 use mhfe::vectors::{
     self, NegativeInput, PublicInput, NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS,
@@ -342,7 +341,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     };
     let text = serde_json::to_string_pretty(&record)
         .map_err(|error| Failure::internal(error.to_string()))?;
-    println!("{text}");
+    style::out(format_args!("{text}"))?;
     Ok(SUCCESS)
 }
 

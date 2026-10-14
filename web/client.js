@@ -64,6 +64,8 @@ const BUILT_IN_CHECK_WORD_COUNTS = [12, 15, 18, 21];
 const REPAIR_WORD_COUNTS = [0, 2, 4, 6, 8];
 const DECOY_SCAN_GAP = 20;
 const REFERENCE_KINDS = ["address", "fingerprint", "words", "walletCheck"];
+/** Every key a reference may have: its kind, and the coin and path of an address. */
+const REFERENCE_KEYS = [...REFERENCE_KINDS, "coin", "path"];
 /** The name of this module's operations in the package's worker. */
 const CORE_MODULE = "core";
 /** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
@@ -84,8 +86,8 @@ const ARGON2_SIZES_OF_BUILD = {
 };
 /**
  * What the full self-check lists without running: the published vectors, which take minutes and
- * 2 GiB and run in selfTest() only, and the parts of the command-line tool's self-test that a
- * browser cannot check, with the reason.
+ * 2 GiB and run in selfTest() only. The parts of the command-line tool's self-test that a browser
+ * cannot check come from the WebAssembly, with the reason (selfCheckProcess).
  */
 const NOT_RUN_IN_FULL_CHECK = [
   {
@@ -93,30 +95,6 @@ const NOT_RUN_IN_FULL_CHECK = [
     label: "Published vectors",
     outcome: "notRun",
     detail: "they take minutes and 2 GiB: selfTest() runs them",
-  },
-  {
-    id: "memory-locking",
-    label: "Locked memory",
-    outcome: "notAvailable",
-    detail: "a web page cannot keep its memory out of swap",
-  },
-  {
-    id: "core-dumps",
-    label: "Core dumps",
-    outcome: "notAvailable",
-    detail: "the browser keeps its own crash reports, which a page cannot turn off",
-  },
-  {
-    id: "isolation",
-    label: "Isolation",
-    outcome: "notAvailable",
-    detail: "a web page cannot sandbox itself or prove that it is offline",
-  },
-  {
-    id: "hidden-input",
-    label: "Hidden input",
-    outcome: "notAvailable",
-    detail: "a web page has no terminal whose echo it could read back",
   },
 ];
 
@@ -214,6 +192,7 @@ export class MhfeClient {
         sizesOf(ARGON2_SIZES_OF_BUILD.singleThreaded, false),
         threaded,
         { components: NOT_RUN_IN_FULL_CHECK },
+        { run: (skip, handlers) => this.#processCheck(skip, handlers) },
       ],
       onProgress,
     );
@@ -531,6 +510,7 @@ export class MhfeClient {
   } = {}) {
     requireText(container, "container");
     const [referenceKind, referenceValue, coin, path] = describeSearchReference(reference, true);
+    requirePassphraseFits(referenceKind, passphrase);
     const [choice, position] = describeChoice(passwordRepair, "passwordRepair");
     return this.#long(
       {
@@ -636,7 +616,7 @@ export class MhfeClient {
     requireText(container, "container");
     if (walletHasPassphrase !== undefined) requireWalletPassphrase(walletHasPassphrase);
     requireWordCount(words);
-    requireSettings(newPim, newMemoryLevel);
+    requireSettings(newPim, newMemoryLevel, true);
     requireRepairWordCount(repairWordCount);
     requireCallback(onUnverified, "onUnverified");
     requireCallback(onConfirmAgain, "onConfirmAgain");
@@ -973,6 +953,18 @@ export class MhfeClient {
   }
 
   /**
+   * The process parts of the command-line tool's self-test, in a worker of its own, as the
+   * library reports them in a browser: the memory lock and the parts a page cannot check.
+   */
+  #processCheck(skip, handlers) {
+    return new WorkerJob([this.#sources.workerSource], handlers).run(
+      { module: CORE_MODULE, operation: "selfCheckProcess", tier: "full", skip },
+      [],
+      this.#wasm,
+    );
+  }
+
+  /**
    * One Argon2 build alone at 64 and 256 MiB, in a worker of its own. Its known answer at 1 MiB is
    * left out: the core's check gave it for this mode's build, and these larger ones cover it.
    */
@@ -1031,10 +1023,16 @@ function requireRepetition(password, passwordRepeat, name) {
   return secretOrEmpty(passwordRepeat, `repeated ${name}`);
 }
 
-/** The PIM and memory level, including the browser's memory limit. */
-function requireSettings(pim, memoryLevel) {
-  requireSetting(pim, MAX_PIM, "INVALID_PIM", "pim");
-  requireSetting(memoryLevel, MAX_MEMORY_LEVEL, "INVALID_MEMORY_LEVEL", "memoryLevel");
+/**
+ * The PIM and memory level, including the browser's memory limit; `isNew` for the new settings of
+ * a rekey. Each refusal is the library's sentence for the same code and value (MhfeError's
+ * InvalidPim and InvalidMemoryLevel, WorkFactor::new_settings), which
+ * scripts/verify-browser-package.mjs keeps in step, before any secret reaches a worker.
+ */
+function requireSettings(pim, memoryLevel, isNew = false) {
+  const side = isNew ? "new " : "";
+  requireSetting(pim, MAX_PIM, "INVALID_PIM", `${side}PIM`);
+  requireSetting(memoryLevel, MAX_MEMORY_LEVEL, "INVALID_MEMORY_LEVEL", `${side}memory level`);
   // The library's refusal (WorkFactor::require_level), with its code and message, before any
   // secret reaches a worker; scripts/verify-browser-package.mjs keeps the two in step.
   if (memoryLevel > HIGHEST_BROWSER_MEMORY_LEVEL) {
@@ -1049,25 +1047,33 @@ function requireSettings(pim, memoryLevel) {
 
 function requireSetting(value, highest, code, name) {
   if (!Number.isSafeInteger(value) || value < 0 || value > highest) {
-    throw new MhfeError(code, `${name} must be a whole number from 0 to ${highest}.`);
-  }
-}
-
-/** The length of an original seed phrase: 0 to detect it, or a word count. */
-function requireWordCount(words) {
-  if (words !== 0 && !WORD_COUNTS.includes(words)) {
     throw new MhfeError(
-      "INVALID_WORD_COUNT",
-      `words must be 0 (detect) or ${countsText(WORD_COUNTS)}.`,
+      code,
+      `The ${name} must be a whole number from 0 to ${highest}, not ${String(value)}`,
     );
   }
 }
 
+/**
+ * The length of an original seed phrase: 0 to detect it, or a word count; refused with the
+ * library's sentence (MhfeError::InvalidWordCount).
+ */
+function requireWordCount(words) {
+  if (words !== 0 && !WORD_COUNTS.includes(words)) {
+    throw new MhfeError(
+      "INVALID_WORD_COUNT",
+      `The original seed phrase must have ${countsText(WORD_COUNTS)} words, not ${String(words)}`,
+    );
+  }
+}
+
+/** 0 for no repair words, or a card's count; refused with the library's sentence (repair::require_count). */
 function requireRepairWordCount(count) {
   if (!REPAIR_WORD_COUNTS.includes(count)) {
     throw new MhfeError(
       "INVALID_REPAIR_WORDS",
-      `repairWordCount must be ${countsText(REPAIR_WORD_COUNTS)}.`,
+      `The repair words cannot be used: a card has ${countsText(REPAIR_WORD_COUNTS.slice(1))} ` +
+        `repair words, not ${String(count)}`,
     );
   }
 }
@@ -1096,9 +1102,11 @@ function describeSearchReference(reference, ofWallet) {
 
 /**
  * The one reference of a check. Exactly one of address, fingerprint, words and walletCheck must
- * be given: with several, the check would silently use only one of them.
+ * be given: with several, the check would silently use only one of them. Any other key, such as a
+ * passphrase inside the reference instead of beside it, or a misspelled one, is refused rather
+ * than dropped; `name` is what the page calls the object.
  */
-function describeReference(reference) {
+function describeReference(reference, name = "reference") {
   const isObject = reference !== null && typeof reference === "object";
   const given = (kind) => Object.hasOwn(reference, kind) && reference[kind] !== undefined;
   const kinds = isObject ? REFERENCE_KINDS.filter(given) : [];
@@ -1107,6 +1115,11 @@ function describeReference(reference) {
       "reference must be exactly one of { address, coin, path? }, { fingerprint }, { words } or { walletCheck: true }.",
     );
   }
+  const unknown = Object.keys(reference).find((key) => given(key) && !REFERENCE_KEYS.includes(key));
+  if (unknown === "passphrase") {
+    throw new TypeError(`passphrase is given beside the ${name}, not inside it.`);
+  }
+  if (unknown !== undefined) throw new TypeError(`${name}.${unknown} is not a key of a ${name}.`);
   for (const key of ["coin", "path"]) {
     if (reference[key] !== undefined && kinds[0] !== "address") {
       throw new TypeError(`reference.${key} belongs only to an address reference.`);
@@ -1140,9 +1153,9 @@ function describeReference(reference) {
       if (reference.words !== 0 && !BUILT_IN_CHECK_WORD_COUNTS.includes(reference.words)) {
         throw new MhfeError(
           "INVALID_WORD_COUNT",
-          `A ${reference.words}-word original seed phrase has no built-in check (only 12, 15, 18 ` +
-            "or 21 words have one); compare it with a receiving address or the master key " +
-            "fingerprint of the wallet instead",
+          `A ${reference.words}-word original seed phrase has no built-in check (only ` +
+            `${countsText(BUILT_IN_CHECK_WORD_COUNTS)} words have one); compare it with a ` +
+            "receiving address or the master key fingerprint of the wallet instead",
         );
       }
       return ["words", String(reference.words), "", ""];
@@ -1176,6 +1189,13 @@ async function answerNoLength(onNoLength, evidence) {
   const { passphrase = "", ...reference } = answer;
   if (reference.words === 0) {
     throw new TypeError("onNoLength gives a length or a wallet reference, not detection again.");
+  }
+  // The wallet check (16 bits) tells a right password from a wrong one, not which length or
+  // wallet it is: the check already reports it beside a reading that is not verified.
+  if (reference.walletCheck !== undefined) {
+    throw new TypeError(
+      "onNoLength gives a length, an address or a fingerprint, not the wallet check.",
+    );
   }
   const [referenceKind, value, coin, path] = describeReference(reference);
   const message = {
@@ -1230,15 +1250,18 @@ async function answerConfirmAgain(onConfirmAgain, { code, message, ownerLengths 
 }
 
 /**
- * A passphrase belongs only to an address or a fingerprint: a non-empty one with the built-in
- * check or the owner is a TypeError (the core refuses it too).
+ * A passphrase belongs only to an address, a fingerprint or the wallet check: a non-empty one with
+ * the built-in check or the owner is a TypeError, before any secret reaches a worker (the core
+ * refuses it too, rehearsal::refuse_unused_passphrase).
  */
 function requirePassphraseFits(confirmKind, passphrase) {
   // Only a string or bytes has a length here; any other type is refused when it is encoded.
   const givenPassphrase =
     (typeof passphrase === "string" || passphrase instanceof Uint8Array) && passphrase.length > 0;
   if (givenPassphrase && (confirmKind === "builtInCheck" || confirmKind === "owner")) {
-    throw new TypeError("passphrase belongs only to an address or fingerprint confirmation.");
+    throw new TypeError(
+      "passphrase belongs only to an address, a fingerprint or the wallet check.",
+    );
   }
 }
 
@@ -1265,10 +1288,11 @@ function describeConfirmation(confirmation) {
       throw new TypeError("confirmation must be exactly one kind; owner must be a function.");
     }
     // Whatever the page's callback throws, even an MhfeError of another call, ends the rekey
-    // with CALLBACK_FAILED and the page's error as the cause.
+    // with CALLBACK_FAILED and the page's error as the cause. Its answer, true or
+    // `{ passphrase }`, goes on as it is (answerOwner).
     const owner = async (check) => {
       try {
-        return (await confirmation.owner(check)) === true;
+        return await confirmation.owner(check);
       } catch (cause) {
         throw new MhfeError("CALLBACK_FAILED", "The page's owner callback failed.", { cause });
       }
@@ -1289,6 +1313,6 @@ function describeConfirmation(confirmation) {
         "{ fingerprint } or { owner }.",
     );
   }
-  const [kind, reference, coin, path] = describeReference(confirmation);
+  const [kind, reference, coin, path] = describeReference(confirmation, "confirmation");
   return [kind, reference, coin, path, undefined];
 }

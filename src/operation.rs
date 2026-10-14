@@ -129,12 +129,22 @@ pub enum KeepItem {
     RepairWords,
     Pim(u32),
     MemoryLevel(u32),
-    /// The original phrase's word count, to choose at recovery.
+    /// The original phrase's word count, to choose at recovery, kept apart from the container
+    /// phrase: it tells which length the container hides.
     WordCount(usize),
     /// The old container of a rekey ([`Keep::old_container`]).
     OldContainer,
     /// The passwords that open wallets on the old container of a rekey.
     OldPasswords,
+}
+
+impl KeepItem {
+    /// Whether it is kept apart from the container phrase, as the specification advises: the
+    /// repair words, which repair it without the password, and the note of the word count, which
+    /// tells which length it hides (AUD-023-UI008).
+    pub fn kept_apart(self) -> bool {
+        matches!(self, Self::RepairWords | Self::WordCount(_))
+    }
 }
 
 /// The settings of `work` that differ from their defaults, which the owner keeps: nothing else is

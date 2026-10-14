@@ -31,6 +31,8 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 import { bundleClasses } from "./bundle-browser-classes.mjs";
+import { checkNetworkCodeList, networkCodeIn } from "./network-code.mjs";
+import { isVectorText, rustStrings } from "./rust-strings.mjs";
 import {
   AMBIGUOUS_12_WORDS,
   FULL_SIZE_CONTAINER,
@@ -40,6 +42,10 @@ import {
   SELF_CHECK_PARTS,
   ZERO_24,
 } from "./public-test-data.mjs";
+
+/** What a rekey's recovery returns when the owner has nothing to answer: no phrase to compare, no
+ * wallet check, and no passphrase for the new container's rehearsal. */
+const NOTHING_TO_ASK = { ownerCheck: null, walletCheck: null, rehearsalNeedsPassphrase: false };
 
 const require = createRequire(import.meta.url);
 const root = new URL("../", import.meta.url);
@@ -72,9 +78,19 @@ const PASSPHRASE_NOT_COMPARED =
   "INVALID_REQUEST: invalid request: the reference must be compared with the wallet's BIP39 passphrase, which it has";
 const PASSPHRASE_ANSWER_NOT_BOOLEAN =
   "INVALID_REQUEST: invalid request: walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase";
-/** A rekey's refusal of a passphrase with the built-in check or the owner (src/wasm_api/core.rs). */
+/**
+ * The refusal of a passphrase with the built-in check or the owner, in a rekey and a search
+ * (rehearsal::refuse_unused_passphrase).
+ */
 const PASSPHRASE_WITHOUT_REFERENCE =
-  "INVALID_REQUEST: invalid request: a passphrase belongs to an address or fingerprint confirmation";
+  "INVALID_REQUEST: invalid request: a BIP39 passphrase belongs only to an address, a fingerprint or the wallet check";
+/**
+ * The refusal of a count with the check word, one wording in the WebAssembly and in the class,
+ * which adds a period (AUD-023-ARC007).
+ */
+const CHECK_WORD_TAKES_NO_COUNT =
+  'count belongs only to the kinds "words" and "characters": "checkWord" always gives 5 words ' +
+  "and their check word";
 /** A length without a built-in check confirmed by the built-in check (src/error.rs). */
 const REFERENCE_REQUIRED =
   "REFERENCE_REQUIRED: the built-in check alone does not confirm this recovery: a 24-word original seed phrase, a same-length container and a detected length need a receiving address or the master key fingerprint of the wallet, or the owner's comparison with the backup, before the phrase is encrypted again";
@@ -86,7 +102,7 @@ const WALLET_PASSPHRASE_REQUIRED =
   "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase.";
 /** The client's TypeError for a passphrase with the built-in check or the owner (web/client.js). */
 const PASSPHRASE_ONLY_WITH_REFERENCE =
-  "passphrase belongs only to an address or fingerprint confirmation.";
+  "passphrase belongs only to an address, a fingerprint or the wallet check.";
 /** Values that are not a boolean, which no answer whether the wallet has a passphrase may be. */
 const NOT_BOOLEAN_ANSWERS = ["no", "true", 1, 0, {}];
 /**
@@ -312,7 +328,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   assert.deepEqual(created.keep, [
     { item: "containerWords", words: 24 },
     { item: "password" },
-    { item: "repairWords" },
+    { item: "repairWords", apart: true },
   ]);
   // Twelve rounds of encryption, the unchecked container, then twelve more that check it.
   const expected = Array.from(
@@ -332,7 +348,7 @@ for (const [name, createModule] of Object.entries(builds)) {
     { item: "containerWords", words: 24 },
     { item: "password" },
     { item: "passphrase" },
-    { item: "repairWords" },
+    { item: "repairWords", apart: true },
   ]);
   // Without an answer, undefined or null, what to keep names any passphrase of the wallet in its
   // place: a page need not ask.
@@ -348,7 +364,7 @@ for (const [name, createModule] of Object.entries(builds)) {
         { item: "containerWords", words: 24 },
         { item: "password" },
         { item: "passphraseIfAny" },
-        { item: "repairWords" },
+        { item: "repairWords", apart: true },
       ],
       `encrypt with walletHasPassphrase ${value} names any passphrase of the wallet`,
     );
@@ -580,6 +596,25 @@ for (const [name, createModule] of Object.entries(builds)) {
       () => {},
     ),
   );
+  // The built-in check compares no passphrase: one given is refused, not dropped (AUD-023-API001).
+  expectMessage(PASSPHRASE_WITHOUT_REFERENCE, () =>
+    core.searchWallet(
+      missingLast,
+      PASSWORD,
+      "",
+      0,
+      0,
+      0,
+      "builtInCheck",
+      "",
+      "",
+      "",
+      encode("TREZOR"),
+      reduced,
+      () => {},
+      () => {},
+    ),
+  );
   expectCode("INVALID_REQUEST", () => core.searchCandidates(REDUCED_COST_CONTAINER));
   // An Ethereum address of the same wallet, on Ethereum's path.
   assert.deepEqual(
@@ -750,7 +785,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   rekey.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
   assert.deepEqual(
     JSON.parse(rekey.recover("builtInCheck", "", "", "", noBytes(), false, onRound)),
-    { ownerCheck: null, walletCheck: null },
+    NOTHING_TO_ASK,
   );
   const rekeyed = JSON.parse(rekey.seal(onRound, () => {}));
   rekey.free();
@@ -781,7 +816,7 @@ for (const [name, createModule] of Object.entries(builds)) {
       { item: "containerWords", words: 24 },
       { item: "password" },
       { item: "passphrase" },
-      { item: "repairWords" },
+      { item: "repairWords", apart: true },
     ],
   );
   stated.free();
@@ -808,7 +843,7 @@ for (const [name, createModule] of Object.entries(builds)) {
     JSON.parse(
       refusedLength.confirmAgain("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes(), 0, onRound),
     ),
-    { ownerCheck: null, walletCheck: null },
+    NOTHING_TO_ASK,
   );
   assert.deepEqual(steps, ["compare 12/36"], "confirmed again without a round");
   assert.equal(refusedLength.ownerLengths(), "null", "confirmed, it waits for no other");
@@ -947,7 +982,7 @@ for (const [name, createModule] of Object.entries(builds)) {
         () => {},
       ),
     ),
-    { ownerCheck: null, walletCheck: null },
+    NOTHING_TO_ASK,
   );
   confirmedLength.free();
   // The owner of a contradicted length is shown the reading the check found, with the length
@@ -971,7 +1006,7 @@ for (const [name, createModule] of Object.entries(builds)) {
     JSON.parse(
       detectedLength.recover("fingerprint", PHRASE_FINGERPRINT, "", "", noBytes(), false, () => {}),
     ),
-    { ownerCheck: null, walletCheck: null },
+    NOTHING_TO_ASK,
   );
   detectedLength.free();
 
@@ -1022,7 +1057,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   const sameLengthKeep = (confirmation, answer) => {
     const { session, recover } = recoverAs(confirmation, answer);
     try {
-      assert.deepEqual(JSON.parse(recover()), { ownerCheck: null, walletCheck: null });
+      assert.deepEqual(JSON.parse(recover()), NOTHING_TO_ASK);
       const sealed = JSON.parse(
         session.seal(
           () => {},
@@ -1565,8 +1600,7 @@ for (const [count, rolls] of [
   [5, encode("11111 11112 11113 11114 11115")],
 ]) {
   expectMessage(
-    "INVALID_REQUEST: invalid request: checkWord takes no count: it always makes five words and " +
-      "their check word",
+    `INVALID_REQUEST: invalid request: ${CHECK_WORD_TAKES_NO_COUNT}`,
     () => passwords.makePassword("checkWord", count, rolls, testRandom),
     `checkWord with count ${count} is refused`,
   );
@@ -1788,7 +1822,63 @@ const LIBRARY_MESSAGES = {
   NO_BUILT_IN_CHECK_AT_24: pageMessageOf("INVALID_WORD_COUNT", () =>
     operations.check(FULL_SIZE_CONTAINER, encode("p"), noArgon2, "words", "24"),
   ),
+  // The settings, word counts and repair word counts the client refuses before any worker, in the
+  // library's words for the same value (AUD-023-UI001).
+  INVALID_PIM: pageMessageOf("INVALID_PIM", () =>
+    operations.encrypt(PHRASE, encode("p"), noArgon2, { pim: 1024 }),
+  ),
+  INVALID_MEMORY_LEVEL: pageMessageOf("INVALID_MEMORY_LEVEL", () =>
+    operations.encrypt(PHRASE, encode("p"), noArgon2, { memoryLevel: 22 }),
+  ),
+  INVALID_WORD_COUNT: pageMessageOf("INVALID_WORD_COUNT", () =>
+    operations.decrypt(FULL_SIZE_CONTAINER, encode("p"), noArgon2, { words: 13 }),
+  ),
+  INVALID_REPAIR_WORDS: pageMessageOf("INVALID_REPAIR_WORDS", () =>
+    operations.encrypt(PHRASE, encode("p"), noArgon2, { repairWordCount: 3 }),
+  ),
+  NEW_PIM: pageMessageOf("INVALID_PIM", () => {
+    const session = new core.RekeySession(
+      FULL_SIZE_CONTAINER,
+      0,
+      encode("p"),
+      "",
+      0,
+      0,
+      0,
+      noArgon2,
+    );
+    try {
+      session.setNew(encode("n"), encode("n"), "", 0, 1024, 0, 0);
+    } finally {
+      session.free();
+    }
+  }),
+  NEW_MEMORY_LEVEL: pageMessageOf("INVALID_MEMORY_LEVEL", () => {
+    const session = new core.RekeySession(
+      FULL_SIZE_CONTAINER,
+      0,
+      encode("p"),
+      "",
+      0,
+      0,
+      0,
+      noArgon2,
+    );
+    try {
+      session.setNew(encode("n"), encode("n"), "", 0, 0, 22, 0);
+    } finally {
+      session.free();
+    }
+  }),
 };
+assert.equal(
+  LIBRARY_MESSAGES.INVALID_PIM,
+  "The PIM must be a whole number from 0 to 1023, not 1024",
+);
+assert.equal(
+  LIBRARY_MESSAGES.NEW_PIM,
+  "The new PIM must be a whole number from 0 to 1023, not 1024",
+);
 
 // Phrases reach the WebAssembly as UTF-8 bytes, which the bindings wipe (SecretText in
 // src/wasm_api/mod.rs), as they wipe passwords: wasm-bindgen's own copy of a text argument stays
@@ -2320,6 +2410,19 @@ expectReport(
   WALLET_PARTS,
   { "address-search": part("address-search", "failed", "search 1 of 5 is stated otherwise") },
 );
+// The master key of BIP32 with its key "Bitcoin seed" changed: the fingerprint repairContainer
+// gives is made with it, so the repair module's own check fails (AUD-023-BLD010).
+const damagedMasterKey = bindingsOver(damaged("Bitcoin seed"));
+expectReport(
+  runCheck((start, end) => damagedMasterKey.selfCheckRepair("startup", [], start, end)),
+  "startup",
+  REPAIR_PARTS,
+  REPAIR_PARTS,
+  {
+    "bip39-seed": part("bip39-seed", "failed", "a master key fingerprint differs"),
+    bip32: part("bip32", "failed", "test vector 1 of 2 gives another master key"),
+  },
+);
 console.log("Every module's self-check passes at both tiers and fails on a damaged vector.");
 
 // Part 2c: the package's worker.js in this process, its `self` a stand-in that collects what it
@@ -2708,9 +2811,141 @@ assert.deepEqual(await trapping({ ...repairRequest, compiled: emptyModule }), [
   { type: "component", value: part("repair-words", "failed", "the WebAssembly stopped") },
   { type: "result", result: stoppedReport },
 ]);
+// A WebAssembly that stops inside an operation of a session (a trap) is reported as INTERNAL_ERROR
+// "the WebAssembly stopped", and the worker calls the session no more: freeing it, or asking its
+// ownerLengths, would only replace the trap with wasm-bindgen's ownership error, as the borrow of
+// the trapped call is never released (AUD-023-API002). The core's table and the worker's runtime,
+// unstamped, run over a stand-in of the bindings whose session calls trap.
+const calledAfterTrap = [];
+/** A stand-in session whose operation `trapsIn` traps, and that records any call after that. */
+class TrappingSession {
+  static trapsIn = "";
+  constructor() {
+    this.trapped = false;
+  }
+  #call(name) {
+    if (this.trapped) {
+      calledAfterTrap.push(name);
+      throw new Error("attempted to take ownership of Rust value while it was borrowed");
+    }
+    if (name === TrappingSession.trapsIn) {
+      this.trapped = true;
+      throw new WebAssembly.RuntimeError("unreachable");
+    }
+    return "null";
+  }
+  compare() {
+    return this.#call("compare");
+  }
+  setNew() {
+    return this.#call("setNew");
+  }
+  recover() {
+    return this.#call("recover");
+  }
+  ownerLengths() {
+    return this.#call("ownerLengths");
+  }
+  open() {
+    return this.#call("open");
+  }
+  free() {
+    // A session that did not trap is freed as before.
+    if (this.trapped) this.#call("free");
+  }
+}
+const coreOverStandIns = () => {
+  const posted = [];
+  const workerSelf = { postMessage: (message) => posted.push(structuredClone(message)) };
+  new Function(
+    "self",
+    "mhfe",
+    "createArgon2St",
+    `${read("web/worker-runtime.js")}\n${read("web/argon2-engine.js")}\n` +
+      `${read("web/core-worker.js")}\nserveOperations(mhfe, { core: CORE_OPERATIONS });`,
+  )(
+    workerSelf,
+    {
+      initSync: noop,
+      packageVersion: () => VERSION,
+      suiteParameters: () => JSON.stringify({ hiddenWalletRefusals: [] }),
+      CheckSession: TrappingSession,
+      RekeySession: TrappingSession,
+      HiddenWalletSession: TrappingSession,
+    },
+    async () => ({}),
+  );
+  return { posted, send: (data) => workerSelf.onmessage({ data }) };
+};
+const STOPPED = { code: "INTERNAL_ERROR", message: "the WebAssembly stopped" };
+for (const [operation, trapsIn] of [
+  ["check", "compare"],
+  ["rekey", "recover"],
+  ["hiddenWallets", "open"],
+]) {
+  TrappingSession.trapsIn = trapsIn;
+  calledAfterTrap.length = 0;
+  const { posted, send } = coreOverStandIns();
+  const done = send({ module: "core", operation, compiled: emptyModule, confirmsAgain: true });
+  if (operation === "hiddenWallets") {
+    // The session asks for the first password once it is ready.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(posted.at(-1), { type: "ask", question: "ready", value: null });
+    await send({ type: "answer", value: { password: new Uint8Array([1]) } });
+  }
+  await done;
+  assert.deepEqual(posted.at(-1), { type: "error", error: STOPPED }, `a trap in ${trapsIn}`);
+  assert.deepEqual(calledAfterTrap, [], `nothing is called after a trap in ${trapsIn}`);
+}
 console.log(
   "The worker serves every self-check, names a part that stops, and refuses other builds.",
 );
+
+// The error codes have one source, MhfeError::code() in src/error.rs: the table of docs/API.md
+// lists exactly those, and the page's MhfeErrorCode type those and the browser's own, named here
+// (AUD-023-ARC011). A code added or removed in one place and not the others fails this.
+/** The codes the page's runtime and classes give themselves, never the Rust core. */
+const BROWSER_ERROR_CODES = [
+  "BUSY",
+  "CALLBACK_FAILED",
+  "INVALID_PASSWORD_TEXT",
+  "PACKAGE_MISMATCH",
+  "SESSION_CLOSED",
+  "WORKER_FAILED",
+];
+/** The codes `pattern` finds in `path` between `start` and the first `end` after it, sorted. */
+function errorCodes(path, start, end, pattern) {
+  const text = read(path).toString();
+  const from = text.indexOf(start);
+  assert.ok(from !== -1, `${path} holds ${start}`);
+  const part = text.slice(from, text.indexOf(end, from));
+  return [...new Set([...part.matchAll(pattern)].map((match) => match[1]))].sort();
+}
+const libraryCodes = errorCodes(
+  "src/error.rs",
+  "pub const fn code(&self)",
+  "\n    }\n",
+  /=> "([A-Z0-9_]+)"/gu,
+);
+assert.ok(libraryCodes.length >= 50, "MhfeError::code() gives its codes");
+assert.deepEqual(
+  errorCodes("docs/API.md", "| Code ", "\n\n", /^\| `([A-Z0-9_]+)`/gmu),
+  libraryCodes,
+  "docs/API.md lists exactly the codes of MhfeError::code()",
+);
+assert.deepEqual(
+  errorCodes("web/runtime.d.ts", "export type MhfeErrorCode", ";\n\n", /^ {2}\| "([A-Z0-9_]+)"/gmu),
+  [...libraryCodes, ...BROWSER_ERROR_CODES].sort(),
+  "MhfeErrorCode is the codes of MhfeError::code() and the browser's own",
+);
+// No binding types a code again: each comes from the error it names.
+for (const file of ["core", "mod", "passwords", "repair", "wallet"]) {
+  assert.doesNotMatch(
+    read(`src/wasm_api/${file}.rs`).toString(),
+    /whole_number\([^)]*"[A-Z_]+"/u,
+    `src/wasm_api/${file}.rs passes a code to whole_number as text`,
+  );
+}
 
 // Part 3: the manifest, the versions, and no network code.
 const manifest = JSON.parse(read("dist/modules.json").toString());
@@ -2775,16 +3010,12 @@ const scripts = [
   ...Object.entries(manifest.modules).flatMap(([module, { files }]) => scriptsOf(module, files)),
 ];
 assert.ok(scripts.includes("runtime/worker.js"), "the worker is checked too");
+// The list of scripts/network-code.mjs, which the build checks too, finds each of its samples
+// and passes a clean script, so that it can fail.
+checkNetworkCodeList();
 for (const script of scripts) {
-  const text = read(`dist/${script}`).toString();
-  for (const pattern of [
-    /\bfetch\s*\(/u,
-    /\bXMLHttpRequest\b/u,
-    /\bWebSocket\b/u,
-    /\bEventSource\b/u,
-  ]) {
-    assert.equal(pattern.test(text), false, `${script} contains ${pattern}`);
-  }
+  const found = networkCodeIn(read(`dist/${script}`).toString());
+  assert.equal(found, undefined, `${script} contains ${found}`);
 }
 // No script names a coin: the coins live in the WebAssembly only, so that a page for one coin
 // carries no other coin's name (the wallet tools' Dash edition refuses any other in its page).
@@ -2802,57 +3033,11 @@ for (const script of scripts) {
 // A vector is a string of those files of 8 or more characters that has a digit and no space (an
 // address, a digest, a seed or a path) or 12 words or more (a phrase); the names, identifiers and
 // details of the parts are not vectors.
-/** The string literals of a Rust file, with their escapes resolved. */
-function rustStrings(path) {
-  const source = read(path).toString();
-  const strings = [];
-  let index = 0;
-  while (index < source.length) {
-    if (source.startsWith("//", index)) {
-      index = source.indexOf("\n", index);
-      if (index === -1) break;
-    } else if (source[index] === '"') {
-      let text = "";
-      index += 1;
-      while (source[index] !== '"') {
-        if (source[index] === "\\") {
-          const next = source[index + 1];
-          if (next === "\n") {
-            // A line continuation: the line break and the next line's indentation are left out.
-            index += 2;
-            while (/\s/u.test(source[index])) index += 1;
-            continue;
-          }
-          if (next === "u") {
-            const end = source.indexOf("}", index);
-            text += String.fromCodePoint(parseInt(source.slice(index + 3, end), 16));
-            index = end + 1;
-            continue;
-          }
-          text += { n: "\n", t: "\t", 0: "\0" }[next] ?? next;
-          index += 2;
-        } else {
-          text += source[index];
-          index += 1;
-        }
-      }
-      strings.push(text);
-      index += 1;
-    } else {
-      index += 1;
-    }
-  }
-  return strings;
-}
 const vectorTexts = [
   ...new Set(
     ["src/wallet/known_answers.rs", "src/rehearsal/known_answers.rs"]
-      .flatMap(rustStrings)
-      .filter(
-        (text) =>
-          text.length >= 8 &&
-          ((/[0-9]/u.test(text) && !text.includes(" ")) || text.split(" ").length >= 12),
-      ),
+      .flatMap((path) => rustStrings(read(path).toString()))
+      .filter(isVectorText),
   ),
 ];
 assert.ok(vectorTexts.includes(PHRASE_ADDRESS), "the strings of the Rust files are read");
@@ -3129,7 +3314,7 @@ const sources = {
 };
 
 /** The operations of the self-checks, which a stand-in worker answers by itself. */
-const SELF_CHECK_OPERATIONS = ["selfCheck", "selfCheckArgon2"];
+const SELF_CHECK_OPERATIONS = ["selfCheck", "selfCheckArgon2", "selfCheckProcess"];
 /** Counts the events of the stand-in workers, so that their order can be compared. */
 let workerEvents = 0;
 
@@ -3218,6 +3403,7 @@ function servedByTheWebAssembly(message, worker) {
     "wallet.selfCheck": () => bindings.selfCheckWallet(tier, skip, random, onStart, onResult),
     "core.selfCheck": () => bindings.selfCheckCore(tier, skip, argon2, onStart, onResult),
     "core.selfCheckArgon2": () => bindings.selfCheckArgon2(tier, skip, argon2, onStart, onResult),
+    "core.selfCheckProcess": () => bindings.selfCheckProcess(tier, skip, onStart, onResult),
   }[`${message.module}.${message.operation}`];
   const report = JSON.parse(run());
   return message.module === "core" && message.operation === "selfCheck"
@@ -3413,12 +3599,43 @@ const refusals = [
       message: LIBRARY_MESSAGES.MEMORY_LEVEL_NOT_SUPPORTED_HERE,
     },
   ],
-  [() => encrypt({ password: "p", pim: 1024 }), { code: "INVALID_PIM" }],
+  [
+    () => encrypt({ password: "p", pim: 1024 }),
+    { code: "INVALID_PIM", message: LIBRARY_MESSAGES.INVALID_PIM },
+  ],
+  [
+    () => encrypt({ password: "p", memoryLevel: 22 }),
+    { code: "INVALID_MEMORY_LEVEL", message: LIBRARY_MESSAGES.INVALID_MEMORY_LEVEL },
+  ],
+  [
+    () => encrypt({ password: "p", repairWordCount: 3 }),
+    { code: "INVALID_REPAIR_WORDS", message: LIBRARY_MESSAGES.INVALID_REPAIR_WORDS },
+  ],
+  // A rekey names its new settings, and the old ones as the container's.
+  [
+    () =>
+      rekeyWith({ confirmation: { builtInCheck: true }, walletHasPassphrase: false, newPim: 1024 }),
+    { code: "INVALID_PIM", message: LIBRARY_MESSAGES.NEW_PIM },
+  ],
+  [
+    () =>
+      rekeyWith({
+        confirmation: { builtInCheck: true },
+        walletHasPassphrase: false,
+        newMemoryLevel: 22,
+      }),
+    { code: "INVALID_MEMORY_LEVEL", message: LIBRARY_MESSAGES.NEW_MEMORY_LEVEL },
+  ],
+  [
+    () =>
+      rekeyWith({ confirmation: { builtInCheck: true }, walletHasPassphrase: false, pim: 1024 }),
+    { code: "INVALID_PIM", message: LIBRARY_MESSAGES.INVALID_PIM },
+  ],
   [() => encrypt({ password: "p", onUnverified: "show" }), TypeError],
   [() => client.encrypt(), TypeError],
   [
     () => client.decrypt({ container: "c", password: "p", words: 13 }),
-    { code: "INVALID_WORD_COUNT" },
+    { code: "INVALID_WORD_COUNT", message: LIBRARY_MESSAGES.INVALID_WORD_COUNT },
   ],
   [
     () => client.check({ container: "c", password: "p", reference: { words: 24 } }),
@@ -3514,6 +3731,72 @@ for (const [call, expected] of refusals) {
   await assert.rejects(result, expected);
 }
 
+// A passphrase inside the reference instead of beside it, or a misspelled key, is refused before
+// any message reaches a worker, rather than dropped (AUD-023-API001); so is a passphrase with
+// searchWallet()'s built-in check. The documented shapes still send it.
+const startedBeforeMisplaced = StandInWorker.started.length;
+const misplaced = [];
+for (const [inside, name] of [
+  [{ fingerprint: "00000000", passphrase: "TREZOR" }, "passphrase"],
+  [{ address: "a", coin: "btc", passphrase: "TREZOR" }, "passphrase"],
+  [{ fingerprint: "00000000", passPhrase: "TREZOR" }, "passPhrase"],
+]) {
+  const message = (object) =>
+    name === "passphrase"
+      ? `passphrase is given beside the ${object}, not inside it.`
+      : `${object}.${name} is not a key of a ${object}.`;
+  const reference = { name: "TypeError", message: message("reference") };
+  misplaced.push(
+    [() => client.check({ container: "c", password: "p", reference: inside }), reference],
+    [() => client.searchDecoy({ container: "c ?", reference: inside }), reference],
+    [() => client.searchWallet({ container: "c ?", password: "p", reference: inside }), reference],
+    [
+      () => rekeyWith({ confirmation: inside, walletHasPassphrase: true }),
+      { name: "TypeError", message: message("confirmation") },
+    ],
+  );
+}
+misplaced.push([
+  () =>
+    client.searchWallet({
+      container: "c ?",
+      password: "p",
+      reference: { builtInCheck: true },
+      passphrase: "TREZOR",
+    }),
+  passphraseOnlyWithReference,
+]);
+for (const [call, expected] of misplaced) await assert.rejects(call(), expected);
+assert.equal(StandInWorker.started.length, startedBeforeMisplaced, "no worker was started");
+// The built-in check with an empty passphrase still searches.
+const ownCheckSearch = client.searchWallet({
+  container: "c ?",
+  password: "p",
+  reference: { builtInCheck: true },
+  passphrase: "",
+});
+worker = await started();
+assert.equal(worker.messages[0].referenceKind, "builtInCheck");
+worker.reply({ type: "result", result: { found: [] } });
+assert.deepEqual(await ownCheckSearch, { found: [] });
+// The wallet check is no answer to onNoLength: it tells neither the length nor the wallet.
+const noLengthWalletCheck = client.check({
+  container: "c",
+  password: "p",
+  reference: { words: 0 },
+  onNoLength: () => ({ walletCheck: true, passphrase: "TREZOR" }),
+});
+worker = await started();
+worker.reply({ type: "ask", question: "noLength", value: { builtInCheck: null } });
+await assert.rejects(
+  noLengthWalletCheck,
+  (error) =>
+    error.code === "CALLBACK_FAILED" &&
+    error.cause instanceof TypeError &&
+    error.cause.message ===
+      "onNoLength gives a length, an address or a fingerprint, not the wallet check.",
+);
+
 // A check that fails after the container was shown rejects, so the page can mark it as wrong.
 const shown = [];
 const failing = encrypt({ password: "p", onUnverified: ({ container }) => shown.push(container) });
@@ -3583,9 +3866,39 @@ const shownToOwner = {
 worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(ownerChecks, [shownToOwner]);
-assert.deepEqual(worker.messages[1], { type: "answer", value: true });
+// The owner's yes goes back with the passphrase for the new container's rehearsal, empty here.
+const OWNER_YES = { type: "answer", value: { confirmed: true, passphrase: new Uint8Array(0) } };
+assert.deepEqual(worker.messages[1], OWNER_YES);
 worker.reply({ type: "result", result: { container: "n" } });
 assert.deepEqual(await rekeying, { container: "n" });
+// The owner's yes with the wallet's passphrase, for the new container's rehearsal, reaches the
+// worker as a yes with the passphrase as bytes; any other answer is a no.
+for (const [answer, confirmed, passphrase] of [
+  [{ passphrase: "TREZOR" }, true, "TREZOR"],
+  [1, false, ""],
+  [{}, false, ""],
+]) {
+  const answered = client.rekey({
+    container: "c",
+    words: 15,
+    password: "old",
+    newPassword: "new",
+    newPasswordRepeat: "new",
+    confirmation: { owner: () => answer },
+    walletHasPassphrase: true,
+  });
+  worker = await started();
+  worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const { value } = worker.messages[1];
+  assert.deepEqual(
+    [value.confirmed, new TextDecoder().decode(value.passphrase)],
+    [confirmed, passphrase],
+    `the owner's answer ${JSON.stringify(answer)}`,
+  );
+  worker.reply({ type: "result", result: { container: "n" } });
+  await answered;
+}
 // After a refusal that allows another confirmation the worker asks the page (AUD-017-UI002): the
 // page gets the refusal as an MhfeError with the owner's lengths, and its answer goes back with
 // its passphrase as bytes, or with the length the owner compares; the owner callback of the
@@ -3635,7 +3948,7 @@ assert.deepEqual(fieldsOf(worker.messages[2].value, ["confirmKind", "words"]), {
 worker.reply({ type: "ask", question: "ownerCheck", value: shownToOwner });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(confirmAgainCalls.at(-1), ["owner", shownToOwner]);
-assert.deepEqual(worker.messages[3], { type: "answer", value: true });
+assert.deepEqual(worker.messages[3], OWNER_YES);
 worker.reply({ type: "result", result: { container: "n" } });
 assert.deepEqual(await confirmingAgain, { container: "n" });
 const notAsking = rekeyWith({ confirmation: { builtInCheck: true }, walletHasPassphrase: false });
@@ -3693,6 +4006,19 @@ for (const [answer, ownerLengths, message] of [
   );
   assert.equal(worker.terminated, true, `${message}: the worker stops`);
 }
+// A trap in the worker's session reaches the page as INTERNAL_ERROR "The WebAssembly stopped", and
+// the worker, whose instance cannot be called again, is terminated (AUD-023-API002).
+const trappedRekey = rekeyWith({
+  confirmation: { builtInCheck: true },
+  walletHasPassphrase: false,
+});
+worker = await started();
+worker.reply({
+  type: "error",
+  error: { code: "INTERNAL_ERROR", message: "the WebAssembly stopped" },
+});
+await assert.rejects(trappedRekey, { code: "INTERNAL_ERROR", message: "The WebAssembly stopped" });
+assert.equal(worker.terminated, true, "the worker of a trapped session is terminated");
 // Whether a left-out answer is enough is the core's to judge, from the reference's passphrase:
 // the client sends it as it is, undefined, with the passphrase as bytes.
 const byFingerprint = rekeyWith({
@@ -4061,9 +4387,7 @@ const workersBeforeCount = StandInWorker.started.length;
 for (const count of [7, 5, 0]) {
   await assert.rejects(passwordsClient.make({ kind: "checkWord", count }), {
     name: "TypeError",
-    message:
-      'count belongs only to the kinds "words" and "characters": "checkWord" always gives five ' +
-      "words and their check word.",
+    message: `${CHECK_WORD_TAKES_NO_COUNT}.`,
   });
 }
 assert.equal(StandInWorker.started.length, workersBeforeCount, "no worker was started");
@@ -4569,6 +4893,9 @@ assert.deepEqual(brokenReport, {
     pagePart("package-parts"),
     part("bip39-words"),
     cardRefused,
+    part("wallet-hashes"),
+    part("bip39-seed"),
+    part("bip32"),
   ],
 });
 const SELF_CHECK_FAILED_MESSAGE =
@@ -4595,8 +4922,32 @@ worker.reply({ type: "result", result: { profile: "MHFE-REPAIR-1" } });
 assert.deepEqual(await brokenParameters, { profile: "MHFE-REPAIR-1" });
 const brokenFull = await brokenRepair.fullCheck();
 assert.deepEqual(
-  brokenFull.components.at(-1),
+  brokenFull.components.find(({ id }) => id === "repair-words"),
   part("repair-words", "failed", "card 1 of 4 gives other words"),
+);
+// The master key with "Bitcoin seed" damaged, which repairContainer's fingerprint uses, closes the
+// class too (AUD-023-BLD010).
+StandInWorker.serveCheck = (message, worker) =>
+  message.module === "repair"
+    ? JSON.parse(
+        damagedMasterKey.selfCheckRepair(
+          message.tier,
+          message.skip,
+          () => {},
+          () => {},
+        ),
+      )
+    : servedByTheWebAssembly(message, worker);
+const masterKeyBroken = new MhfeRepair({ workerSource: "repair worker", wasm: ownWasm() });
+const masterKeyBrokenReport = await masterKeyBroken.startupCheck();
+assert.equal(masterKeyBrokenReport.passed, false);
+assert.deepEqual(
+  masterKeyBrokenReport.components.find(({ id }) => id === "bip39-seed"),
+  part("bip39-seed", "failed", "a master key fingerprint differs"),
+);
+await assert.rejects(
+  masterKeyBroken.repairContainer({ container: FULL_SIZE_CONTAINER, card: "labor extra" }),
+  { code: "SELF_CHECK_FAILED" },
 );
 StandInWorker.serveCheck = servedByTheWebAssembly;
 // A failed full self-check closes a class too.
@@ -4828,7 +5179,21 @@ assert.ok(
 assert.equal(StandInWorker.checks.length, checksBefore, "no worker ran for either");
 
 // The full self-check of the core: every part at the full tier, then Argon2 at 64 and 256 MiB with
-// each build in turn, each worker ended before the next starts, then the parts not run here.
+// each build in turn, each worker ended before the next starts, then the parts not run here: the
+// published vectors, and the process parts of the command-line tool, which the WebAssembly reports
+// from the library (src/self_check/process.rs and memory::LockProbe), so that the page follows a
+// change there (AUD-023-ARC005).
+const PROCESS_PARTS = JSON.parse(bindings.selfCheckProcess("full", [], noop, noop)).components;
+assert.deepEqual(
+  PROCESS_PARTS.map(({ id, label, outcome }) => [id, label, outcome]),
+  [
+    ["memory-locking", LABELS["memory-locking"], "notAvailable"],
+    ["core-dumps", LABELS["core-dumps"], "notAvailable"],
+    ["isolation", LABELS.isolation, "notAvailable"],
+    ["hidden-input", LABELS["hidden-input"], "notAvailable"],
+  ],
+);
+assert.equal(PROCESS_PARTS[0].detail, "a web page cannot keep its memory out of swap");
 const NOT_RUN_HERE = [
   {
     id: "published-vectors",
@@ -4836,30 +5201,7 @@ const NOT_RUN_HERE = [
     outcome: "notRun",
     detail: "they take minutes and 2 GiB: selfTest() runs them",
   },
-  {
-    id: "memory-locking",
-    label: "Locked memory",
-    outcome: "notAvailable",
-    detail: "a web page cannot keep its memory out of swap",
-  },
-  {
-    id: "core-dumps",
-    label: "Core dumps",
-    outcome: "notAvailable",
-    detail: "the browser keeps its own crash reports, which a page cannot turn off",
-  },
-  {
-    id: "isolation",
-    label: "Isolation",
-    outcome: "notAvailable",
-    detail: "a web page cannot sandbox itself or prove that it is offline",
-  },
-  {
-    id: "hidden-input",
-    label: "Hidden input",
-    outcome: "notAvailable",
-    detail: "a web page has no terminal whose echo it could read back",
-  },
+  ...PROCESS_PARTS,
 ];
 const SIZES_SINGLE = {
   id: "argon2-sizes-single-threaded",
@@ -4899,10 +5241,10 @@ for (const fast of [false, true]) {
     ],
   });
   const ran = [...CORE_PARTS, SIZES_SINGLE.id, ...(fast ? [SIZES_THREADED.id] : [])];
-  assert.deepEqual(
-    progressEvents,
-    ran.flatMap((id) => [`start ${id}`, `end ${id} passed`]),
-  );
+  assert.deepEqual(progressEvents, [
+    ...ran.flatMap((id) => [`start ${id}`, `end ${id} passed`]),
+    ...PROCESS_PARTS.flatMap(({ id }) => [`start ${id}`, `end ${id} notAvailable`]),
+  ]);
   const fullChecks = checksFrom(checksBefore);
   assert.deepEqual(firstMessages(fullChecks), [
     { module: "core", operation: "selfCheck", tier: "full", skip: [] },
@@ -4910,6 +5252,7 @@ for (const fast of [false, true]) {
     ...(fast
       ? [{ module: "core", operation: "selfCheckArgon2", tier: "full", skip: ["argon2"] }]
       : []),
+    { module: "core", operation: "selfCheckProcess", tier: "full", skip: [] },
   ]);
   assert.deepEqual(await Promise.all(fullChecks.map((each) => each.script.text())), [
     // On an isolated page the single-threaded build follows the threaded one, for the check to
@@ -4917,6 +5260,7 @@ for (const fast of [false, true]) {
     `${fast ? "threaded source\n;\nsingle-threaded" : "single-threaded"} source\n;\nworker source`,
     "single-threaded source\n;\nworker source",
     ...(fast ? ["threaded source\n;\nworker source"] : []),
+    "worker source",
   ]);
   for (let index = 1; index < fullChecks.length; index += 1) {
     assert.ok(
@@ -4924,7 +5268,10 @@ for (const fast of [false, true]) {
       "never two at once",
     );
   }
-  assert.equal(fullChecks.at(-1).messages[0].argon2Script === null, !fast);
+  const lastArgon2 = fullChecks.findLast(
+    ({ messages }) => messages[0].operation === "selfCheckArgon2",
+  );
+  assert.equal(lastArgon2.messages[0].argon2Script === null, !fast);
   delete globalThis.crossOriginIsolated;
 }
 

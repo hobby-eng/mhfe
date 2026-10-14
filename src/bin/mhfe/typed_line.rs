@@ -9,6 +9,7 @@
 //! (scripts/generate-cell-widths.py says which terminals may differ). The line begins right after
 //! its prompt, which begins a row of its own.
 
+use std::fmt::Write as _;
 use std::io::{self, Write};
 
 use mhfe::word_hints::{Hint, WordList};
@@ -17,7 +18,7 @@ use anstyle::Style;
 use zeroize::Zeroizing;
 
 use crate::cell_widths;
-use crate::style::{paint, MUTED, WARNING};
+use crate::style::{MUTED, WARNING};
 
 /// Rows of words at most below the line; the rest is counted on a row of its own.
 const HINT_ROWS: usize = 3;
@@ -157,8 +158,11 @@ impl<'a> LineScreen<'a> {
         self.controls.flush()
     }
 
-    /// The rows that show `hint`, each narrower than the terminal so that none wraps.
-    fn rows_of(&self, hints: Hints, hint: Hint) -> Vec<String> {
+    /// The rows that show `hint`, each narrower than the terminal so that none wraps. A row may
+    /// hold the list words that match a typed seed phrase or password, so each is built in one
+    /// buffer reserved at its final size and wiped when dropped, with no copy on the way
+    /// (AUD-023-SEC001).
+    fn rows_of(&self, hints: Hints, hint: Hint) -> Vec<Zeroizing<String>> {
         let name = hints.list.name();
         match hint {
             Hint::Nothing => Vec::new(),
@@ -179,16 +183,22 @@ impl<'a> LineScreen<'a> {
 
     /// `words` in columns, at most [`HINT_ROWS`] rows of them, and how many more on a row of its
     /// own.
-    fn word_rows(&self, words: &[&str]) -> Vec<String> {
+    fn word_rows(&self, words: &[&str]) -> Vec<Zeroizing<String>> {
         let longest = words.iter().map(|word| word.len()).max().unwrap_or(0);
         let cell = longest + WORD_GAP;
         let per_row = (self.room() / cell).max(1);
         let shown = words.len().min(per_row * HINT_ROWS);
-        let mut rows: Vec<String> = words[..shown]
+        let mut rows: Vec<Zeroizing<String>> = words[..shown]
             .chunks(per_row)
             .map(|row| {
-                let cells: Vec<String> = row.iter().map(|word| format!("{word:<cell$}")).collect();
-                self.hint_row(MUTED, cells.concat().trim_end())
+                let mut cells = Zeroizing::new(String::with_capacity(row.len() * cell));
+                for word in row {
+                    // Writing into a String cannot fail.
+                    let _ = write!(cells, "{word:<cell$}");
+                }
+                let end = cells.trim_end().len();
+                cells.truncate(end);
+                self.hint_row(MUTED, &cells)
             })
             .collect();
         if shown < words.len() {
@@ -200,9 +210,13 @@ impl<'a> LineScreen<'a> {
     /// A hint row in `style`, indented and cut to the room of the terminal, so that a fixed text
     /// wider than a narrow terminal never wraps onto the row the typed line comes back to
     /// (AUD-015-UI001). Every hint is ASCII: list words, numbers and fixed text.
-    fn hint_row(&self, style: Style, text: &str) -> String {
+    fn hint_row(&self, style: Style, text: &str) -> Zeroizing<String> {
         let shown = &text[..text.len().min(self.room())];
-        format!("{INDENT}{}", paint(style, shown))
+        let codes = format!("{style}{style:#}").len();
+        let mut row = Zeroizing::new(String::with_capacity(INDENT.len() + codes + shown.len()));
+        // Writing into a String cannot fail.
+        let _ = write!(row, "{INDENT}{style}{shown}{style:#}");
+        row
     }
 
     /// The columns a hint row may fill after its indent: all but the last, where a terminal would
@@ -236,7 +250,7 @@ pub(crate) fn text_cells(text: &str) -> usize {
 }
 
 /// The cells of one character (cell_widths.rs).
-fn char_cells(character: char) -> usize {
+pub(crate) fn char_cells(character: char) -> usize {
     let code_point = u32::from(character);
     let found = cell_widths::RUNS.binary_search_by(|&(start, end, _)| {
         if end < code_point {
@@ -479,5 +493,72 @@ mod tests {
     #[test]
     fn a_narrow_terminal_gets_no_hints() {
         assert_eq!(screen_of(&["z"], 0, 20, BIP39, |_| {}), "z|");
+    }
+
+    /// The test binary's allocator, which counts the blocks freed on a watching thread that still
+    /// hold [`WATCHED`]: a copy of a hint word that was not wiped (AUD-023-SEC001). A global
+    /// allocator is unsafe code by nature; it exists only in the test binary.
+    #[allow(unsafe_code)]
+    mod freed {
+        use std::alloc::{GlobalAlloc, Layout, System};
+        use std::cell::Cell;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        /// An EFF word a hint row shows, which no other test of this binary frees.
+        pub const WATCHED: &[u8] = b"zookeeper";
+        pub static UNWIPED: AtomicUsize = AtomicUsize::new(0);
+
+        thread_local! {
+            pub static WATCHING: Cell<bool> = const { Cell::new(false) };
+        }
+
+        pub struct Inspecting;
+
+        // SAFETY: every call is passed on to the system allocator unchanged; dealloc only reads
+        // the block it is given before it is freed.
+        unsafe impl GlobalAlloc for Inspecting {
+            unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+                unsafe { System.alloc(layout) }
+            }
+
+            unsafe fn dealloc(&self, block: *mut u8, layout: Layout) {
+                if WATCHING.with(Cell::get) {
+                    // SAFETY: the block is `layout.size()` bytes, allocated and not yet freed.
+                    let bytes = unsafe { std::slice::from_raw_parts(block, layout.size()) };
+                    if bytes.windows(WATCHED.len()).any(|window| window == WATCHED) {
+                        UNWIPED.fetch_add(1, Ordering::SeqCst);
+                    }
+                }
+                unsafe { System.dealloc(block, layout) }
+            }
+        }
+
+        #[global_allocator]
+        static ALLOCATOR: Inspecting = Inspecting;
+    }
+
+    /// The rows of a hint leave no unwiped copy of its words when they are dropped: neither the
+    /// word rows of a typed seed phrase nor those of a password typed from the EFF list.
+    #[test]
+    fn hint_rows_leave_no_copy_of_their_words() {
+        use std::sync::atomic::Ordering;
+        let mut written = Vec::new();
+        let mut text = Vec::new();
+        let screen = LineScreen::new(&mut written, &mut text, 0, 80, BIP39);
+        let eff = Hints {
+            list: WordList::Eff,
+            says_no_word: false,
+        };
+        let words = Hint::Words(&["zoning", "zookeeper", "zoologist"]);
+        freed::WATCHING.with(|watching| watching.set(true));
+        let before = freed::UNWIPED.load(Ordering::SeqCst);
+        for hints in [BIP39.unwrap(), eff] {
+            let rows = screen.rows_of(hints, words);
+            assert!(rows.iter().any(|row| row.contains("zookeeper")));
+            drop(rows);
+        }
+        let unwiped = freed::UNWIPED.load(Ordering::SeqCst) - before;
+        freed::WATCHING.with(|watching| watching.set(false));
+        assert_eq!(unwiped, 0, "freed blocks that still hold a hint word");
     }
 }

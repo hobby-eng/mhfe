@@ -260,6 +260,17 @@ for (const [args, choice] of [
     choice.otherLengths.length > 0,
     `mhfe ${args.join(" ")} warns exactly when readPhrase() lists other lengths`,
   );
+  // The note of the word count is kept apart from the container phrase (AUD-023-UI008).
+  if (choice.otherLengths.length > 0) {
+    assert.ok(
+      result.stderr
+        .replace(/^! /gmu, "")
+        .split(/\s+/u)
+        .join(" ")
+        .includes("keep that note apart from the container phrase"),
+      `mhfe ${args.join(" ")}: ${result.stderr}`,
+    );
+  }
 }
 assert.deepEqual(
   facts.containers.map((choice) => choice.otherLengths),

@@ -11,7 +11,7 @@
 use super::{digest, digest_passes, verify, PhraseDraw, NEW_ENTROPY_BYTES};
 use crate::random::ScriptedSource;
 use crate::self_check::{
-    expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
+    damaged, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
 
 /// A vector: the entropy 192 zero bits and a 64-bit counter, a passphrase, the whole digest `T`
@@ -126,10 +126,7 @@ impl ComponentCheck for WalletCheckProfile {
         // A draw with the check from a source scripted to give the first vector's entropy after
         // the two probes of the source check: the passing phrase, read back and checked again.
         findings.one(|| {
-            let first = self
-                .vectors
-                .first()
-                .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
+            let first = self.vectors.first().ok_or_else(damaged)?;
             let draw = PhraseDraw::with_check(first.passphrase).map_err(stopped)?;
             let mut source = ScriptedSource::after_probes(&entropy(first.counter));
             let drawn = draw.draw(&mut source, &mut |_| Ok(())).map_err(stopped)?;

@@ -3,7 +3,7 @@
 
 use std::cell::RefCell;
 
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use clap::Args;
 use mhfe::operation::{Encryption, Keep, KeepItem, Sealed, StageCallback, WalletPassphrase};
 use mhfe::{MhfeError, OriginalFacts, Password, Suite, WorkFactor, ENCRYPTION_ROUNDS};
@@ -28,9 +28,16 @@ pub struct Options {
     #[command(flatten)]
     settings: Settings,
 
-    /// A container as long as the 12- to 21-word phrase
-    #[arg(long, long_help = same_length_help())]
-    same_length: bool,
+    #[arg(
+        help = format!("Keep a {} length: yes (alone) or no", crate::phrase_length::short_range_words()),
+        long,
+        value_name = "yes|no",
+        num_args = 0..=1,
+        default_missing_value = "yes",
+        value_parser = crate::check::parse_yes_no,
+        long_help = same_length_help()
+    )]
+    same_length: Option<bool>,
 
     #[command(flatten)]
     new_password: NewPasswordOption,
@@ -38,14 +45,14 @@ pub struct Options {
     #[command(flatten)]
     repair_words: RepairWordsOption,
 
-    /// Read the answers from standard input (for scripts)
-    #[arg(long, long_help = stdin_help())]
+    #[arg(long, help = style::STDIN_HELP, long_help = stdin_help())]
     stdin: bool,
 }
 
 fn same_length_help() -> String {
     style::option_help(&[
-        "Keep the length of a 12- to 21-word phrase instead of making 24 words.",
+        "Keep the length of a 12- to 21-word phrase instead of making 24 words: --same-length \
+         alone or --same-length yes; --same-length no makes 24 words without asking.",
         "Without it, a person at a terminal is asked, and 24 words is the default. A container \
          of the phrase's own length looks like any other phrase, but nothing detects a wrong \
          password: it opens another, empty wallet. The container also shows the phrase's \
@@ -55,19 +62,25 @@ fn same_length_help() -> String {
 }
 
 fn stdin_help() -> String {
-    style::option_help(&[
-        "Read the answers from standard input (for scripts).",
-        "Input: the phrase, the password and the password again, one per line. Output: the \
-         container on one line, printed only after its check has passed. Messages go to \
-         standard error, so standard output holds the container alone. The container has 24 \
-         words unless --same-length is given.",
-    ])
+    style::stdin_help(
+        None,
+        &[
+            "Input: the phrase, the password and the password again, one per line. Output: the \
+         container on one line, printed only after its check has passed, and with \
+         --repair-words N the repair words on a second line. Messages go to standard error, so \
+         standard output holds nothing else. The container has 24 words unless --same-length \
+         is given.",
+        ],
+    )
 }
+
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Encrypt a seed phrase into a container";
 
 /// The top of `mhfe encrypt --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Encrypt a seed phrase into a container",
+        SUMMARY,
         "The container is itself a valid BIP39 phrase: 24 words by default, or for a 12- to \
          21-word phrase, if you choose so, as many words as the phrase. With the default settings \
          the container and the password are all that recovery needs. Encryption runs 24 rounds: 12 \
@@ -116,16 +129,25 @@ pub fn long_help() -> String {
         &[
             (
                 "Original seed phrase",
-                "on a private screen; 12 to 24 words; four letters per word are enough",
+                &format!(
+                    "on a private screen; {} words; four letters per word are enough",
+                    crate::phrase_length::length_range()
+                ),
             ),
             (
                 "Container length",
-                "for 12 to 21 words: 24 words (default) or the same length; ? explains both",
+                &format!(
+                    "for {} words: 24 words (default) or the same length; ? explains both",
+                    crate::phrase_length::short_range()
+                ),
             ),
             (
                 "Repair words",
-                "at a terminal: none, or 2, 4, 6 or 8 for a card kept apart from the container \
-                 phrase",
+                // AUD-015-ARC001, completed by AUD-023-ARC007: the counts from the library.
+                &format!(
+                    "at a terminal: none, or {} for a card kept apart from the container phrase",
+                    container_repair::count_list()
+                ),
             ),
             ("Password", "on a private screen, typed twice"),
         ],
@@ -139,7 +161,7 @@ pub fn long_help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    let mut input = Input::new(options.stdin);
+    let mut input = Input::new(options.stdin).reading_secrets()?;
     options.new_password.check(&input)?;
     options.repair_words.check()?;
     // At a terminal every step on a screen of its own, the summary at the end.
@@ -227,6 +249,9 @@ pub fn show_sealing(
     // reads as final, and the warning goes to standard error only (AUD-015-SEC005).
     let person_reads_output = !input.is_script() && terminal::output_on_screen();
     let mut screen = None;
+    // A container that could not be written stops the work: the library hears a cancel, and
+    // the output's own error is what the command reports.
+    let mut not_written = None;
     let sealed = sealing(
         &mut |_, round, rounds| {
             progress.borrow_mut().round_starts(round, rounds);
@@ -242,19 +267,25 @@ pub fn show_sealing(
                 if shown.is_active() {
                     style::title(operation.title());
                 }
-                show_before_the_check(container, input);
                 screen = Some(shown);
+                if let Err(failure) = show_before_the_check(container, input) {
+                    not_written = Some(failure);
+                    return Err(MhfeError::Cancelled);
+                }
             }
             Ok(())
         },
     );
+    if let Some(failure) = not_written {
+        return Err(failure);
+    }
     progress.into_inner().finish();
     let Some(screen) = screen else {
         // Nothing was shown before the check: the container comes out only once it has passed.
         let sealed = sealed?;
-        println!("{}", sealed.container());
+        style::out(format_args!("{}", sealed.container()))?;
         if let Some(card) = sealed.repair_words() {
-            println!("{card}");
+            style::out(format_args!("{card}"))?;
         }
         if !input.is_script() {
             report_check(Ok(()));
@@ -266,7 +297,7 @@ pub fn show_sealing(
     // The card is made from the container once its check has passed (the specification's
     // MHFE-REPAIR-1), below it on the same screen.
     if let Some(card) = sealed.as_ref().ok().and_then(Sealed::repair_words) {
-        container_repair::print_card(card, input);
+        container_repair::print_card(card, input)?;
     }
     if screen.is_active() {
         terminal::wait_to_leave()?;
@@ -284,11 +315,22 @@ pub fn show_sealing(
 /// a terminal or with --same-length. A 24-word phrase has no other form.
 fn choose_suite(
     original: &OriginalFacts,
-    same_length: bool,
+    same_length: Option<bool>,
     input: &Input,
 ) -> Result<Suite, Failure> {
     let words = original.word_count();
-    if same_length {
+    if same_length == Some(false) {
+        // The choices come with the recommended 24 words first.
+        let choices = original.container_choices();
+        if choices.len() > 1 {
+            choice::record(
+                "Container",
+                &format!("{} words (--same-length no)", choices[0].word_count()),
+            );
+        }
+        return Ok(Suite::TwentyFourWords);
+    }
+    if same_length == Some(true) {
         Suite::SameLength.require_original(words)?;
         choice::record(
             "Container",
@@ -310,20 +352,33 @@ pub fn what_to_keep(keep: &Keep) -> String {
     let items: Vec<String> = keep
         .items()
         .iter()
-        .map(|item| match item {
-            KeepItem::ContainerWords(words) => format!("the {words} words"),
-            KeepItem::Password => "the password".to_owned(),
-            KeepItem::Passphrase => "the BIP39 passphrase".to_owned(),
-            KeepItem::PassphraseIfAny => "any BIP39 passphrase of the wallet".to_owned(),
-            KeepItem::RepairWords => "the repair words apart from the container phrase".to_owned(),
-            KeepItem::Pim(pim) => format!("PIM {pim}"),
-            KeepItem::MemoryLevel(level) => format!("memory level {level}"),
-            KeepItem::WordCount(words) => format!("the word count, {words}"),
-            KeepItem::OldContainer => "the old container".to_owned(),
-            KeepItem::OldPasswords => "its passwords".to_owned(),
+        .map(|item| {
+            let what = item_text(*item);
+            // The library says what is kept apart from the container phrase (AUD-023-UI008).
+            if item.kept_apart() {
+                format!("{what} apart from the container phrase")
+            } else {
+                what
+            }
         })
         .collect();
     style::and_list(&items)
+}
+
+/// One item of what to keep, as the summary names it.
+fn item_text(item: KeepItem) -> String {
+    match item {
+        KeepItem::ContainerWords(words) => format!("the {words} words"),
+        KeepItem::Password => "the password".to_owned(),
+        KeepItem::Passphrase => "the BIP39 passphrase".to_owned(),
+        KeepItem::PassphraseIfAny => "any BIP39 passphrase of the wallet".to_owned(),
+        KeepItem::RepairWords => "the repair words".to_owned(),
+        KeepItem::Pim(pim) => format!("PIM {pim}"),
+        KeepItem::MemoryLevel(level) => format!("memory level {level}"),
+        KeepItem::WordCount(words) => format!("the word count, {words},"),
+        KeepItem::OldContainer => "the old container".to_owned(),
+        KeepItem::OldPasswords => "its passwords".to_owned(),
+    }
 }
 
 /// Says whether the container shown turned back into the phrase. A container written down before
@@ -352,7 +407,7 @@ fn report_check(checked: Result<(), &MhfeError>) {
 }
 
 /// Shows the container after the first twelve rounds, clearly marked as not yet verified.
-fn show_before_the_check(container: &str, input: &Input) {
+fn show_before_the_check(container: &str, input: &Input) -> Result<(), Failure> {
     eprintln!();
     eprintln!(
         "{}",
@@ -361,7 +416,7 @@ fn show_before_the_check(container: &str, input: &Input) {
             format!("Container, {} words", container.split(' ').count())
         )
     );
-    terminal::print_phrase(container, Wallet::Container, input);
+    terminal::print_phrase(container, Wallet::Container, input)?;
     eprintln!();
     style::warn_here(
         "Not verified yet: write it down, but wait for the check.",
@@ -369,6 +424,7 @@ fn show_before_the_check(container: &str, input: &Input) {
     );
     eprintln!();
     terminal::set_unverified_container_shown(true);
+    Ok(())
 }
 
 /// Reads the original phrase on the private screen, where it is shown as it is typed. A valid
@@ -404,7 +460,10 @@ pub fn warn_if_detection_would_mislead(others: &[usize], words: usize) {
     // Set apart from the summary above and below it.
     eprintln!();
     style::warn(
-        &format!("Write down that your phrase has {words} words."),
+        &format!(
+            "Write down that your phrase has {words} words, and keep that note apart from the \
+             container phrase."
+        ),
         &format!(
             "By rare chance it also reads as {} words: recover it with mhfe decrypt --words \
              {words}.",
@@ -631,7 +690,7 @@ mod tests {
                 false,
                 Some(15)
             )),
-            "the 24 words, the password and the word count, 15"
+            "the 24 words, the password and the word count, 15, apart from the container phrase"
         );
     }
 
@@ -655,7 +714,8 @@ mod tests {
                 false,
                 Some(24)
             )),
-            "the 24 words, the password, PIM 1 and the word count, 24"
+            "the 24 words, the password, PIM 1 and the word count, 24, apart from the container \
+             phrase"
         );
     }
 }

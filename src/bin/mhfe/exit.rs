@@ -76,8 +76,8 @@ impl From<MhfeError> for Failure {
             | MhfeError::InvalidRepairWords(_)
             | MhfeError::RepairNotPossible { .. }
             | MhfeError::TooManyMissingWords { .. }
-            | MhfeError::InvalidPim(_)
-            | MhfeError::InvalidMemoryLevel(_)
+            | MhfeError::InvalidPim { .. }
+            | MhfeError::InvalidMemoryLevel { .. }
             | MhfeError::EmptyPassword
             | MhfeError::PasswordTooLong(_)
             | MhfeError::InvalidPasswordUtf8

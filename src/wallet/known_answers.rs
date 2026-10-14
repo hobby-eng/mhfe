@@ -16,8 +16,8 @@ use super::{
 };
 use crate::phrase::known_answers::TREZOR_ENGLISH;
 use crate::self_check::{
-    digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, DigestCase,
-    Findings, Tier,
+    damaged, digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome,
+    DigestCase, Findings, Tier, DAMAGED,
 };
 
 fn sha512(_: &[u8], message: &[u8]) -> Vec<u8> {
@@ -227,8 +227,7 @@ impl SeedCheck {
     }
 
     fn seed(phrase: &str, passphrase: &str, expected: &str) -> Result<(), String> {
-        let mnemonic = Mnemonic::parse_in(Language::English, phrase)
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let mnemonic = Mnemonic::parse_in(Language::English, phrase).map_err(|_| damaged())?;
         let seed = bip39_seed(&mnemonic, passphrase);
         expect(hex::encode(&seed[..]) == expected, "differs")
     }
@@ -261,12 +260,7 @@ impl ComponentCheck for SeedCheck {
                 .map(|vector| vector.phrase)
                 .zip(self.trezor_seeds.iter().copied())
                 .collect();
-            findings.one(|| {
-                expect(
-                    cases.len() == TREZOR_ENGLISH.len(),
-                    "the built-in cases are damaged",
-                )
-            });
+            findings.one(|| expect(cases.len() == TREZOR_ENGLISH.len(), DAMAGED));
             findings.each("test vector seed", &cases, |&(phrase, seed)| {
                 Self::seed(phrase, "TREZOR", seed)
             });
@@ -330,8 +324,7 @@ impl Bip32Check {
     }
 
     fn vector(case: &Bip32Case) -> Result<(), String> {
-        let seed =
-            hex::decode(case.seed).map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let seed = hex::decode(case.seed).map_err(|_| damaged())?;
         let master = ExtendedKey::from_hmac(b"Bitcoin seed", &[&seed]).map_err(stopped)?;
         expect(
             hex::encode(&master.key[..]) == case.master_key
@@ -675,7 +668,7 @@ pub(crate) const ADDRESSES: [AddressCase; 43] = [
 
 /// Addresses of the table above with one character changed, one for each checksum: each must be
 /// refused, never read as another address.
-const DAMAGED: [(Coin, &str); 9] = [
+const DAMAGED_ADDRESSES: [(Coin, &str); 9] = [
     // Base58Check
     (Coin::Bitcoin, "1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabB"),
     // Bech32 (BIP173)
@@ -724,21 +717,18 @@ impl AddressesCheck {
     pub(crate) fn new() -> Self {
         Self {
             addresses: &ADDRESSES,
-            damaged: &DAMAGED,
+            damaged: &DAMAGED_ADDRESSES,
         }
     }
 
     fn address(case: &AddressCase, masters: &[(&str, ExtendedKey)]) -> Result<(), String> {
         let address = Address::parse(case.coin, case.address).map_err(stopped)?;
-        let path: DerivationPath = case
-            .path
-            .parse()
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let path: DerivationPath = case.path.parse().map_err(|_| damaged())?;
         let master = masters
             .iter()
             .find(|(passphrase, _)| *passphrase == case.passphrase)
             .map(|(_, master)| master)
-            .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
+            .ok_or_else(damaged)?;
         let key = master.derive(&path.0).map_err(stopped)?;
         let program = program_for(&key, address.address_type).map_err(stopped)?;
         expect(program == address.program, "differs")
@@ -789,10 +779,7 @@ impl ComponentCheck for AddressesCheck {
         });
         if full {
             findings.each("search", &SEARCHES, |&(index, expected)| {
-                let case = self
-                    .addresses
-                    .get(index)
-                    .ok_or_else(|| "the built-in cases are damaged".to_owned())?;
+                let case = self.addresses.get(index).ok_or_else(damaged)?;
                 let address = Address::parse(case.coin, case.address).map_err(stopped)?;
                 let limits = SearchLimits::new(4, 8).map_err(stopped)?;
                 let found = find_address(ABANDON, case.passphrase, &address, None, limits)
@@ -1138,7 +1125,7 @@ mod tests {
             },
             "address 3 of 18 differs",
         );
-        let mut damaged = DAMAGED;
+        let mut damaged = DAMAGED_ADDRESSES;
         damaged[4].1 = "rHsMGQEkVNJmpGWs8XUBoTBiAAbwxZN5v3";
         fails_with(
             AddressesCheck {

@@ -157,10 +157,7 @@ fn what_is_known_answers(offered: Offered) -> (Vec<Known>, Vec<Answer>) {
             Answer::new("Nothing", "12- to 21-word phrases; slow"),
         ));
     }
-    known.push((
-        Known::TypeAgain,
-        Answer::new("Type the container phrase again", "no search"),
-    ));
+    known.push((Known::TypeAgain, Answer::new(TYPE_AGAIN, "no search")));
     known.into_iter().unzip()
 }
 
@@ -469,11 +466,23 @@ fn run_long(
     Ok(found)
 }
 
-fn found_answers() -> [Answer; 2] {
+/// The answer that leaves a container phrase and asks for it again.
+const TYPE_AGAIN: &str = "Type the container phrase again";
+
+/// Whether to use a container phrase that a search or a repair found: `used` says what using it
+/// asks of the owner, `not_used` what typing it again leaves.
+pub fn use_or_type_again(used: &'static str, not_used: &'static str) -> [Answer; 2] {
     [
-        Answer::new("Use it", "and write the found words on your copy"),
-        Answer::new("Type the container phrase again", "the search is not used"),
+        Answer::new("Use it", used),
+        Answer::new(TYPE_AGAIN, not_used),
     ]
+}
+
+fn found_answers() -> [Answer; 2] {
+    use_or_type_again(
+        "and write the found words on your copy",
+        "the search is not used",
+    )
 }
 
 /// Shows the container phrase found, each missing word as found, and asks before it is used.

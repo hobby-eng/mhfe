@@ -16,8 +16,7 @@
 //! or a terminal that cannot do this, is asked with numbered lines instead (`Input::choose` in
 //! terminal.rs).
 
-use std::io::{self, IsTerminal, Write};
-use std::time::{Duration, Instant};
+use std::io::{self, Write};
 
 use anstream::eprintln;
 use zeroize::Zeroizing;
@@ -28,17 +27,13 @@ use crate::hidden_input::{self, Key};
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 use crate::terminal;
 
-/// The width that a line of a list must not exceed: the list redraws itself by moving the cursor
-/// up line by line, which a line wrapped by the terminal would upset. As style.rs: 78 columns.
-pub const LINE_WIDTH: usize = 78;
-
 /// The indent of an explanation.
 const TEXT_INDENT: &str = "  ";
 
 /// A question with what explains it.
 pub struct Question<'a> {
     pub text: &'a str,
-    /// Short lines, each written to fit LINE_WIDTH with its indent; "" separates two topics.
+    /// Short lines, each written to fit style::TEXT_WIDTH with its indent; "" separates two topics.
     pub explanation: &'a [&'a str],
     /// The README section that explains the question, linked on one grey line.
     pub more: Option<&'a str>,
@@ -83,11 +78,9 @@ pub struct Help<'a> {
     pub show: &'a dyn Fn(),
 }
 
-/// Whether a list can be shown: it reads single keys from a terminal and draws on one.
+/// Whether a list can be shown: it reads single keys from a terminal and redraws on one.
 pub fn can_run() -> bool {
-    io::stdin().is_terminal()
-        && io::stderr().is_terminal()
-        && std::env::var_os("TERM").is_none_or(|term| term != "dumb")
+    hidden_input::can_redraw()
 }
 
 /// Asks `question` and returns the index of the chosen answer, or `None` when the person pressed
@@ -149,14 +142,9 @@ fn run_list(
     hidden_input::with_keys(|next_key| {
         let mut selected = start;
         let mut drawn = draw(question, answers, selected, help_hint);
-        let shown_at = Instant::now();
         let selected = loop {
+            // No key typed before the question appeared answers it (hidden_input::with_keys).
             let key = next_key()?;
-            // An answer that must be the person's own takes no key typed before the question
-            // appeared, such as during a long recovery: those keys arrive at once (AUD-018).
-            if start.is_none() && shown_at.elapsed() < TYPED_AHEAD && key != Key::Quit {
-                continue;
-            }
             match (key, selected) {
                 (Key::Up, Some(index)) => selected = Some(index.checked_sub(1).unwrap_or(last)),
                 (Key::Up, None) => selected = Some(last),
@@ -192,11 +180,6 @@ fn run_list(
         Ok(Some(selected))
     })
 }
-
-/// How soon after a question with no default answer a key counts as typed before it appeared:
-/// keys waiting in the terminal or in the standard library's buffer arrive within microseconds,
-/// while a person needs far longer than this to read the question and answer.
-const TYPED_AHEAD: Duration = Duration::from_millis(200);
 
 /// The line that records an answer: a grey label and the answer in cyan, as a fact of a summary.
 pub fn record(label: &str, answer: &str) {
@@ -244,14 +227,14 @@ impl DrawnRows {
     fn rows_at(&self, columns: usize) -> usize {
         self.widths
             .iter()
-            .map(|width| width.div_ceil(columns.max(1)).max(1))
+            .map(|&width| style::rows_of_cells(width, columns))
             .sum()
     }
 }
 
-/// The width of the terminal now; when it cannot be read, the usual 80 columns.
+/// The width of the terminal now, or the default where it cannot be read.
 fn current_columns() -> usize {
-    hidden_input::columns().unwrap_or(80).max(1)
+    hidden_input::columns_or_default()
 }
 
 /// Draws the question block and retains only its line widths for later redraws.
@@ -314,7 +297,7 @@ fn draw_question_rows(question: &Question) -> DrawnRows {
 pub fn fits(explanation: &[&str]) -> bool {
     explanation
         .iter()
-        .all(|line| TEXT_INDENT.len() + line.chars().count() <= LINE_WIDTH)
+        .all(|line| TEXT_INDENT.len() + line.chars().count() <= style::TEXT_WIDTH)
 }
 
 /// The keys of a list: "↑ ↓ choose · Enter selects · 1 or 2 at once · Esc cancels", with the help
@@ -335,7 +318,7 @@ fn hint(answers: usize, help_hint: Option<&str>, marked: bool) -> String {
         "Enter selects once one is marked"
     };
     let line = format!("↑ ↓ choose · {enter} · {numbers} at once{help} · Esc cancels");
-    if line.chars().count() <= LINE_WIDTH {
+    if line.chars().count() <= style::TEXT_WIDTH {
         return line;
     }
     // Too long for one line, as with no answer marked and an explanation behind ?: the keys that
@@ -365,7 +348,7 @@ fn label_width(entries: &[(&str, &str)]) -> usize {
 }
 
 /// The widest line of a list as drawn: "› 1  ", the labels padded to the longest, two spaces and
-/// the note. A list wider than [`LINE_WIDTH`] has a note cut with "…".
+/// the note. A list wider than [`style::TEXT_WIDTH`] has a note cut with "…".
 #[cfg(test)]
 pub fn widest_line(entries: &[(&str, &str)]) -> usize {
     let label_width = label_width(entries);
@@ -389,7 +372,7 @@ pub fn answers_fit(answers: &[Answer]) -> bool {
         .iter()
         .map(|answer| (answer.label.as_str(), answer.note.as_str()))
         .collect();
-    widest_line(&entries) <= LINE_WIDTH
+    widest_line(&entries) <= style::TEXT_WIDTH
 }
 
 /// The entries with `selected` highlighted, or none.
@@ -409,7 +392,7 @@ fn draw_entry_rows(entries: &[(&str, &str)], selected: Option<usize>) -> DrawnRo
             (" ".to_owned(), Zeroizing::new((*label).to_owned()))
         };
         // Marker, number and the gaps: "› 1  " and two spaces before the note.
-        let note_room = LINE_WIDTH.saturating_sub(5 + label_width + 2);
+        let note_room = style::TEXT_WIDTH.saturating_sub(5 + label_width + 2);
         let note = shortened(note, note_room);
         let line = Zeroizing::new(if note.is_empty() {
             format!("{marker} {number}  {}", *shown_label)
@@ -476,7 +459,7 @@ mod tests {
             hint(4, Some("? explains both"), true),
             "↑ ↓ choose · Enter selects · 1 to 4 at once · ? explains both · Esc cancels"
         );
-        assert!(hint(9, Some("? explains both"), true).chars().count() <= LINE_WIDTH);
+        assert!(hint(9, Some("? explains both"), true).chars().count() <= style::TEXT_WIDTH);
         assert_eq!(
             hint(12, None, true),
             "↑ ↓ choose · Enter selects · 1 to 9 at once · Esc cancels"
@@ -497,7 +480,8 @@ mod tests {
                 for marked in [true, false] {
                     let text = hint(answers, help, marked);
                     assert!(
-                        text.lines().all(|line| line.chars().count() <= LINE_WIDTH),
+                        text.lines()
+                            .all(|line| line.chars().count() <= style::TEXT_WIDTH),
                         "{text}"
                     );
                 }

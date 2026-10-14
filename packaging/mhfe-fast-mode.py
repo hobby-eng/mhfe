@@ -25,6 +25,7 @@ import hashlib
 import os
 import socket
 import sys
+import textwrap
 import threading
 import time
 import unicodedata
@@ -42,6 +43,9 @@ RESPONSE_DEADLINE = 10.0
 # Connections answered at the same time; any further one is closed at once. A browser opens only
 # a few, and the cap keeps a flood of connections from starting a thread each.
 MAX_CONNECTIONS = 16
+# Seconds the listener waits after a connection it could not accept, such as when the process has
+# no file descriptor left, so that it does not spin; it then goes on serving (AUD-023-FUN003).
+ACCEPT_ERROR_PAUSE = 0.1
 # Seconds the listener waits for a connection before it looks again. On Windows a waiting
 # accept() does not notice Ctrl+C, so the wait is kept short.
 ACCEPT_INTERVAL = 1.0
@@ -68,7 +72,19 @@ SHA256_HEX_DIGITS = 64
 
 # Exit codes, as the mhfe program uses them.
 SUCCESS = 0
+INTERNAL_ERROR = 1
 INVALID_INPUT = 2
+
+# The terminal style of mhfe (src/bin/mhfe/style.rs), with the standard library alone
+# (AUD-023-UI011): a title line, a tick before what went right, "✗ Error:" before a refusal, lines
+# of at most 78 columns, and colours only for a terminal that shows them.
+TEXT_WIDTH = 78
+TICK = "✓"
+ERROR_MARK = "✗ Error:"
+HEADING, ACCENT, STRONG, MUTED, GOOD, BAD = "1;36", "36", "1", "90", "1;32", "1;31"
+# What a fact's label is padded to, as style::fact pads it.
+FACT_LABEL_WIDTH = 10
+TITLE = "Fast mode"
 
 
 class Refused(Exception):
@@ -84,13 +100,109 @@ RUST_WHITESPACE = (
 )
 
 
+def colours():
+    """Whether standard error shows colours, by the rules mhfe follows (anstream): never on
+    Windows, whose console this script cannot switch to them; CLICOLOR_FORCE turns them on, and
+    NO_COLOR, TERM=dumb or CLICOLOR=0 off; otherwise only on a terminal."""
+    environment = os.environ
+    if os.name == "nt":
+        return False
+    if environment.get("CLICOLOR_FORCE", "0") not in ("", "0"):
+        return True
+    if environment.get("NO_COLOR", "") != "" or environment.get("TERM") == "dumb":
+        return False
+    if environment.get("CLICOLOR") == "0":
+        return False
+    return sys.stderr.isatty()
+
+
+def paint(style, text):
+    """`text` in `style`, an SGR code, where colours are shown."""
+    return "\x1b[{}m{}\x1b[0m".format(style, text) if colours() else text
+
+
+def wrapped(text, width):
+    """`text` in lines of at most `width` columns, words never split, as style::wrap does."""
+    return textwrap.wrap(text, width, break_long_words=False, break_on_hyphens=False) or [""]
+
+
+def say(lines):
+    for line in lines:
+        print(line, file=sys.stderr)
+
+
+def title():
+    """The first line, as every mhfe command starts: "MHFE · Fast mode" after a blank line."""
+    say(["", "{} {} {}".format(paint(HEADING, "MHFE"), paint(MUTED, "·"), paint(STRONG, TITLE))])
+
+
+def ok(text):
+    """Something that went right: a tick, the text wrapped and indented under it."""
+    lines = wrapped(text, TEXT_WIDTH - 2)
+    say(["{} {}".format(paint(GOOD, TICK), lines[0])] + ["  " + line for line in lines[1:]])
+
+
+def fact(label, value):
+    """A labelled value on a line of its own, as style::fact shows it."""
+    say(["  {} {}".format(paint(MUTED, label.ljust(FACT_LABEL_WIDTH)), value)])
+
+
+def error(text):
+    """A refusal: "✗ Error:", then the text wrapped under it, as mhfe shows an error."""
+    indent = len(ERROR_MARK) + 1
+    lines = wrapped(text, TEXT_WIDTH - indent)
+    first = "{} {}".format(paint(BAD, ERROR_MARK), lines[0])
+    say(["", first] + [" " * indent + line for line in lines[1:]])
+
+
+# The help, in the sections and words of `mhfe serve --help`.
+HELP = """Serve an MHFE browser tool on this computer in fast mode
+
+A browser runs the faster, multi-threaded Argon2 only on a page served with
+special headers. This script serves one page from this computer (127.0.0.1)
+with those headers and opens it in the browser, as mhfe serve does.
+
+Usage: python3 mhfe-fast-mode.py [OPTIONS] [FILE]
+
+Arguments:
+  [FILE]        The HTML file of the browser tool; mhfe-fast-mode.sha256 must
+                lie next to it. Without it, the page that mhfe-fast-mode.sha256
+                next to this script names.
+
+Options:
+  --no-browser  Print the address instead of opening the browser
+  -h, --help    Print help
+
+Examples:
+  python3 mhfe-fast-mode.py
+      Serve the page next to this script, as a double-click does
+
+  python3 mhfe-fast-mode.py --no-browser tool.html
+      Serve the page and print its address to open by hand
+
+The page is served only when mhfe-fast-mode.sha256 lies next to it and holds its
+SHA-256, and only to this computer (127.0.0.1). It sees none of your secrets:
+all the work happens in the page.
+"""
+
+
 class Parser(argparse.ArgumentParser):
     """argparse, with its error messages shown as every other message is: a mistyped argument may
-    hold control characters (AUD-018)."""
+    hold control characters (AUD-018); and its help in mhfe's sections, without argparse's own
+    colours (Python 3.14 adds them)."""
+
+    def __init__(self, **options):
+        try:
+            super().__init__(color=False, **options)
+        except TypeError:
+            super().__init__(**options)
+
+    def format_help(self):
+        return HELP
 
     def error(self, message):
-        self.print_usage(sys.stderr)
-        self.exit(INVALID_INPUT, "{}: error: {}\n".format(self.prog, shown(message)))
+        error(shown(message))
+        self.exit(INVALID_INPUT)
 
 
 def shown(text):
@@ -205,7 +317,12 @@ def serve(listener, host, page, deadline_seconds=REQUEST_DEADLINE):
         except socket.timeout:
             continue  # No connection yet; looking again lets Ctrl+C through.
         except OSError:
-            return  # The listener was closed.
+            if listener.fileno() == -1:
+                return  # The listener was closed.
+            # A connection that cannot be accepted is dropped, after a pause, and serving goes on,
+            # as mhfe serve does (AUD-023-FUN003).
+            time.sleep(ACCEPT_ERROR_PAUSE)
+            continue
         if not slots.acquire(blocking=False):
             connection.close()
             continue
@@ -236,8 +353,8 @@ def read_checksum_file(directory):
             )
         )
     malformed = Refused(
-        '{} must hold exactly one line, "<SHA-256>  <page>.html" or "<SHA-256> *<page>.html"; '
-        "nothing was served.".format(shown(path))
+        "{} must hold exactly one line: the page's SHA-256, two spaces and its file name, or one "
+        "space and * before the name; nothing was served.".format(shown(path))
     )
     # Lines as Rust's str::lines splits them: at "\n", without a "\r" before it.
     lines = [line[:-1] if line.endswith("\r") else line for line in text.split("\n")]
@@ -317,14 +434,14 @@ def main(arguments):
     )
     options = parser.parse_args(arguments)
 
+    title()
     try:
         if options.file is None:
             here = os.path.dirname(os.path.abspath(__file__))
             if not os.path.isfile(os.path.join(here, CHECKSUM_FILE)):
-                print(
-                    "Put the tool's HTML file and its checksum file {} next to this script, or\n"
-                    "run: python3 mhfe-fast-mode.py <file.html>".format(CHECKSUM_FILE),
-                    file=sys.stderr,
+                error(
+                    "Put the tool's HTML file and its checksum file {} next to this script, or "
+                    "run: python3 mhfe-fast-mode.py <file.html>".format(CHECKSUM_FILE)
                 )
                 return INVALID_INPUT
             path = os.path.join(here, read_checksum_file(here)[1])
@@ -332,11 +449,11 @@ def main(arguments):
             path = options.file
         page, digest = load_checked_page(path)
     except Refused as refusal:
-        print("Error: {}".format(refusal), file=sys.stderr)
+        error(str(refusal))
         return INVALID_INPUT
-    print(
-        "SHA-256 of {} verified: {}".format(shown(os.path.basename(path)), digest), file=sys.stderr
-    )
+    # The digest on a line of its own, so that wrapping never splits it, as mhfe serve shows it.
+    ok("SHA-256 of {} verified".format(shown(os.path.basename(path))))
+    fact("SHA-256", paint(MUTED, digest))
 
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))
@@ -344,16 +461,28 @@ def main(arguments):
     port = listener.getsockname()[1]
     address = "http://127.0.0.1:{}/".format(port)
     # The address holds no secret, so handing it to the browser is safe.
+    # The address is always shown, as mhfe serve shows it: an opener that starts can still fail,
+    # or open an unwanted browser (AUD-023-UI010).
+    shown_address = paint(ACCENT, address)
     if options.no_browser or not webbrowser.open(address):
-        print("Open {} in your browser.".format(address), file=sys.stderr)
-    print("Fast mode is running. Close this window or press Ctrl+C to stop.", file=sys.stderr)
+        say(["Open {} in your browser.".format(shown_address)])
+    else:
+        say(["Opened {}; if no browser shows it, open it yourself.".format(shown_address)])
+    ok("{} {}".format(
+        paint(GOOD, "Fast mode is running."),
+        paint(MUTED, "Close this window or press Ctrl+C to stop."),
+    ))
     try:
         serve(listener, "127.0.0.1:{}".format(port), page)
     except KeyboardInterrupt:
-        print("\nStopped.", file=sys.stderr)
+        say(["", "Stopped."])
+        return SUCCESS
     finally:
         listener.close()
-    return SUCCESS
+    # serve() returns only when its listener closes, which nothing but this function does: say so,
+    # with a code that keeps a double-clicked window open (AUD-023-FUN003).
+    error("The server stopped serving unexpectedly.")
+    return INTERNAL_ERROR
 
 
 def started_by_double_click(arguments):
@@ -362,6 +491,8 @@ def started_by_double_click(arguments):
 
 
 if __name__ == "__main__":
+    # The marks ✓ and ✗ reach a console with a legacy code page as "?" rather than as an error.
+    sys.stderr.reconfigure(errors="replace")
     code = main(sys.argv[1:])
     if code != SUCCESS and started_by_double_click(sys.argv[1:]):
         # Keep the window open so that the message can be read.

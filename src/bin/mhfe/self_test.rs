@@ -38,10 +38,13 @@ pub struct Options {
     vectors: bool,
 }
 
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Run the self-test";
+
 /// The top of `mhfe self-test --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Run the self-test",
+        SUMMARY,
         "Compares every part of this program with its known answers on this computer: the \
          hashes, Argon2id at 1, 64 and 256 MiB, the rounds of the cipher with the published test \
          vectors, the formats, passwords, word lists, repair words, check words, wallet keys and \
@@ -66,16 +69,18 @@ fn vectors_help() -> String {
     ])
 }
 
+/// The answer of the menu and the example of the help for the quick self-test.
+pub const EVERY_PART: &str = "Every part";
+/// The same for the self-test with the published vectors.
+pub const WITH_VECTORS: &str = "Every part and the published vectors";
+
 /// The end of `mhfe self-test --help`.
 pub fn help() -> String {
     style::help_section(
         "Examples:",
         &[
-            ("mhfe self-test", "Every part, in a few seconds"),
-            (
-                "mhfe self-test --vectors",
-                "Every part and the published vectors",
-            ),
+            ("mhfe self-test", &format!("{EVERY_PART}, in a few seconds")),
+            ("mhfe self-test --vectors", WITH_VECTORS),
         ],
     )
 }

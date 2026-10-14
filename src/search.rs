@@ -42,9 +42,9 @@ pub type CandidateProgress<'a> = &'a mut dyn FnMut(usize, usize) -> Result<(), M
 /// Hears every round of a search that recovers each candidate: `(candidate, count, round,
 /// rounds)`; an error stops it.
 pub type RecoveryProgress<'a> = &'a mut dyn FnMut(usize, usize, u32, u32) -> Result<(), MhfeError>;
-/// Compares candidate `index` with the reference, from any of the threads that share them.
-/// Compares one candidate; the second argument says when the search was stopped, which a long
-/// address search asks between its addresses.
+/// Compares candidate `index` with the reference, from any of the threads that share them; the
+/// second argument says when the search was stopped, which a long address search asks between its
+/// addresses.
 type CandidateCompare<'a> =
     &'a (dyn Fn(usize, &dyn Fn() -> bool) -> Result<CheckOutcome, MhfeError> + Sync);
 /// The most missing words a search with the owner's wallet looks for: each candidate takes a full

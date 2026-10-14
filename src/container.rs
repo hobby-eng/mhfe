@@ -40,6 +40,19 @@ pub enum ConfirmationNeeded {
     WalletOrOwner,
 }
 
+impl ConfirmationNeeded {
+    /// What a recovery at `length` needs whatever the container, where the length alone decides:
+    /// a detected length and 24 words need a wallet or the owner on every container. A 12- to
+    /// 21-word length depends on the container's suite (`None`). A front end can refuse a
+    /// confirmation that cannot apply before the container is typed.
+    pub fn of_any_container(length: PhraseLength) -> Option<Self> {
+        match length {
+            PhraseLength::Words(words) if packing::SHORT_WORD_COUNTS.contains(&words.get()) => None,
+            _ => Some(Self::WalletOrOwner),
+        }
+    }
+}
+
 impl ContainerFacts {
     /// Reads a container, refusing anything but a valid English BIP39 phrase of 12, 15, 18, 21
     /// or 24 words with [`MhfeError::InvalidContainer`]. Any spacing and letter case and the first
@@ -362,6 +375,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Where the length alone decides the confirmation, every container agrees.
+    #[test]
+    fn the_length_alone_decides_for_24_words_and_detection() {
+        let lengths = WORD_COUNTS
+            .into_iter()
+            .map(words)
+            .chain([PhraseLength::Detect]);
+        for length in lengths {
+            for count in WORD_COUNTS {
+                let container = ContainerFacts::read(&zero_phrase(count)).unwrap();
+                if let (Some(needed), Ok(actual)) = (
+                    ConfirmationNeeded::of_any_container(length),
+                    container.confirmation_needed(length),
+                ) {
+                    assert_eq!(needed, actual, "{length:?} on {count} words");
+                }
+            }
+        }
+        assert_eq!(ConfirmationNeeded::of_any_container(words(12)), None);
     }
 
     /// The well-known fingerprint of the all-zero 12-word phrase without a passphrase.

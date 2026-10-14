@@ -6,7 +6,7 @@
 //! is a quick, weaker check; the built-in check of a short original confirms only that the
 //! password recovers a consistent phrase.
 
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::wallet::{
@@ -21,7 +21,7 @@ use mhfe::{
 use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Question};
-use crate::container_repair::RepairOption;
+use crate::container_repair::{self, RepairOption};
 use crate::exit::{refused, Failure, NOT_VERIFIED, NO_MATCH, SUCCESS};
 use crate::flow::Flow;
 use crate::phrase_length;
@@ -51,16 +51,24 @@ pub struct Options {
     #[arg(long, long_help = fingerprint_help())]
     fingerprint: bool,
 
-    /// Built-in check of a 12- to 21-word seed phrase, or auto
-    #[arg(long, value_name = "N", value_parser = phrase_length::parse, long_help = words_help())]
+    #[arg(
+        long,
+        value_name = "N",
+        value_parser = phrase_length::parse,
+        help = format!("Built-in check of a {} seed phrase, or auto", phrase_length::short_range_words()),
+        long_help = words_help()
+    )]
     words: Option<PhraseLength>,
 
     /// With --address: look only at this derivation path
     #[arg(long, value_name = "PATH", requires = "address", long_help = path_help())]
     path: Option<DerivationPath>,
 
-    /// Read the answers from standard input (for scripts)
-    #[arg(long, requires = "reference", long_help = stdin_help())]
+    /// With --words auto: whether the original seed phrase has a BIP39 passphrase, for its check
+    #[command(flatten)]
+    passphrase_used: PassphraseUsedOption,
+
+    #[arg(long, help = style::STDIN_HELP, requires = "reference", long_help = stdin_help())]
     stdin: bool,
 }
 
@@ -128,21 +136,27 @@ fn path_help() -> String {
 }
 
 fn stdin_help() -> String {
-    style::option_help(&[
-        "Read the answers from standard input (for scripts); needs a reference option.",
-        "Input: the container, the password, then with --address or --fingerprint the \
+    style::stdin_help(
+        Some("needs a reference option"),
+        &[
+            "Input: the container, the password, then with --address or --fingerprint the \
          reference and the BIP39 passphrase (an empty line if none), and with --words auto the \
          BIP39 passphrase of the original seed phrase (an empty line if none), one per line. With \
          --address, --coin names the coin of the address; without it the address is \
          Bitcoin's. Output: \"matches\" with exit code 0, \"does not match\" with exit code \
          3, or \"not verified\" with exit code 5, the reason on standard error.",
-    ])
+            container_repair::REPAIR_LINE,
+        ],
+    )
 }
+
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Rehearse a recovery without ever showing the phrase";
 
 /// The top of `mhfe check --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Rehearse a recovery without ever showing the phrase",
+        SUMMARY,
         "Runs the same 12 rounds as a recovery and compares the result with something you know \
          about the wallet: a receiving address, the master key fingerprint, or, for a 12- to \
          21-word original seed phrase, its built-in check. Without a reference option it offers a \
@@ -234,7 +248,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     if let Some(PhraseLength::Words(words)) = options.words {
         mhfe::require_built_in_check_length(words)?;
     }
-    let mut input = Input::new(options.stdin);
+    let mut input = Input::new(options.stdin).reading_secrets()?;
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Check.title());
     let work = settings::choose(options.settings, &mut input, Operation::Check)?;
@@ -289,7 +303,11 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             }
         }
         Choice::OwnChecks => {
-            check_passphrase = read_own_checks_passphrase(&mut input, Operation::Check)?;
+            check_passphrase = read_own_checks_passphrase(
+                &mut input,
+                Operation::Check,
+                options.passphrase_used.given(),
+            )?;
             Reference::own_checks(&check_passphrase)
         }
     };
@@ -336,19 +354,22 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     eprintln!();
     if input.is_script() {
         // Scripts read exactly these words, the specification's.
-        println!("{}", outcome.text());
+        style::out(format_args!("{}", outcome.text()))?;
     }
     let shown = !input.is_script();
     let passed = || passed_lines(choice, &evidence, with_passphrase, read.found_by.as_deref());
     match outcome {
         CheckOutcome::Matches { path } => {
             if shown {
-                println!("{}", paint(style::GOOD, format!("{} matches", style::TICK)));
+                style::out(format_args!(
+                    "{}",
+                    paint(style::GOOD, format!("{} matches", style::TICK))
+                ))?;
                 // Every check that passed on a line of its own: the container phrase's checksum,
                 // what found missing words, the reference compared with, and the original seed
                 // phrase's own checks that the same recovery shows.
                 for line in passed() {
-                    println!("  {} {line}", paint(style::GOOD, style::TICK));
+                    style::out(format_args!("  {} {line}", paint(style::GOOD, style::TICK)))?;
                 }
                 // Which account and address of the wallet it is; a path given with --path is
                 // shown too.
@@ -373,9 +394,9 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         }
         CheckOutcome::NotVerified => {
             if shown {
-                println!("{}", paint(style::WARNING, "! not verified"));
+                style::out(format_args!("{}", paint(style::WARNING, "! not verified")))?;
                 for line in passed() {
-                    println!("  {} {line}", paint(style::GOOD, style::TICK));
+                    style::out(format_args!("  {} {line}", paint(style::GOOD, style::TICK)))?;
                 }
             }
             style::hint(&not_verified_reason(choice, &evidence));
@@ -384,7 +405,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         }
         CheckOutcome::DoesNotMatch => {
             if shown {
-                println!("{}", paint(style::BAD, "✗ does not match"));
+                style::out(format_args!("{}", paint(style::BAD, "✗ does not match")))?;
             }
             style::hint(no_match_reason(choice));
             style::more(readme::CHECK);
@@ -430,10 +451,12 @@ fn not_verified_reason(choice: Choice, evidence: &CheckEvidence) -> String {
              wallet.",
             style::grouped(1u32 << WALLET_CHECK_BITS)
         ),
-        _ => "No length of 12 to 21 words passes its built-in check, so the recovery reads 24 \
-              words, as it does for a wrong password: a receiving address (--address) or the \
-              fingerprint tells them apart."
-            .to_owned(),
+        _ => format!(
+            "No length of {} words passes its built-in check, so the recovery reads 24 words, as \
+             it does for a wrong password: a receiving address (--address) or the fingerprint \
+             tells them apart.",
+            phrase_length::short_range()
+        ),
     }
 }
 
@@ -572,7 +595,7 @@ fn ask_for_choice(input: &mut Input, container: &ContainerFacts) -> Result<Choic
     if container.offers_wallet_check() {
         answers.push(Answer::new(
             "The phrase + passphrase check",
-            "16-bit hash of the BIP39 seed",
+            format!("{WALLET_CHECK_BITS}-bit hash of the BIP39 seed"),
         ));
     }
     let question = Question::new(
@@ -825,7 +848,12 @@ impl Compared {
 }
 
 /// Said over the question about the length when detection found none.
-const NO_LENGTH_FOUND: &str = "No length of 12 to 21 words passes its built-in check.";
+fn no_length_found() -> String {
+    format!(
+        "No length of {} words passes its built-in check.",
+        phrase_length::short_range()
+    )
+}
 /// Said under what detection found, over the question about the length.
 const TWENTY_FOUR_COMPARED: &str =
     "A 24-word phrase is compared with an address or the fingerprint.";
@@ -842,7 +870,7 @@ fn ask_length_after_detection(
     path: Option<DerivationPath>,
 ) -> Result<Compared, Failure> {
     let found = match &detected.matching_lengths[..] {
-        [] => NO_LENGTH_FOUND.to_owned(),
+        [] => no_length_found(),
         lengths => several_lengths(lengths),
     };
     let mut explanation = vec![found.as_str()];
@@ -977,7 +1005,8 @@ impl PassphraseUsedOption {
     }
 }
 
-fn parse_yes_no(text: &str) -> Result<bool, String> {
+/// The value of an option that answers a yes-or-no question: yes or no.
+pub fn parse_yes_no(text: &str) -> Result<bool, String> {
     match text {
         "yes" => Ok(true),
         "no" => Ok(false),
@@ -1002,16 +1031,18 @@ pub fn ask_passphrase(
 /// every recovery evaluates (the specification's recovery rules). Longer than the usual link, as
 /// the owner asked (2026-10-09): nothing else on the screen says why a tool that only decrypts
 /// wants a passphrase.
-pub const SOURCE_CHECK_WHY: &[&str] = &[
-    "A new 24-word phrase can carry a 16-bit check tied to its BIP39",
-    "passphrase, as mhfe new offers. The container does not show whether",
-    "this one does, so MHFE tests every 24-word reading with the passphrase",
-    "you give here, or with none.",
-    "",
-    "A pass makes a right password very likely. A failure means something",
-    "only if the wallet was made with the check. The passphrase is used for",
-    "this test alone and is not kept.",
-];
+pub fn source_check_why() -> [String; 8] {
+    [
+        format!("A new 24-word phrase can carry a {WALLET_CHECK_BITS}-bit check tied to its BIP39"),
+        "passphrase, as mhfe new offers. The container does not show whether".to_owned(),
+        "this one does, so MHFE tests every 24-word reading with the passphrase".to_owned(),
+        "you give here, or with none.".to_owned(),
+        String::new(),
+        "A pass makes a right password very likely. A failure means something".to_owned(),
+        "only if the wallet was made with the check. The passphrase is used for".to_owned(),
+        "this test alone and is not kept.".to_owned(),
+    ]
+}
 
 /// [`ask_passphrase`] with an explanation under the question and a link to `more`.
 pub fn ask_passphrase_explained(
@@ -1054,11 +1085,12 @@ fn passphrase_answers(whose: &str) -> [Answer; 2] {
 fn read_own_checks_passphrase(
     input: &mut Input,
     operation: Operation,
+    given: Option<bool>,
 ) -> Result<LockedText, Failure> {
     if input.is_script() {
         return read_passphrase_of(input, operation, ORIGINAL_SEED_PHRASE);
     }
-    ask_passphrase(input, operation, ORIGINAL_SEED_PHRASE)
+    ask_passphrase_explained(input, operation, ORIGINAL_SEED_PHRASE, &[], None, given)
 }
 
 /// The BIP39 passphrase of a wallet named `wallet`, such as "the main wallet", or none.
@@ -1088,7 +1120,8 @@ mod tests {
     #[test]
     fn the_coin_explanation_fits_a_list() {
         assert!(crate::choice::fits(COIN_EXPLANATION));
-        assert!(crate::choice::fits(SOURCE_CHECK_WHY));
+        let why = source_check_why();
+        assert!(crate::choice::fits(&why.each_ref().map(String::as_str)));
     }
 
     fn evidence(

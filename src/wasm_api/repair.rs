@@ -12,6 +12,7 @@ use crate::repair::{
     self, ContainerReading, Repaired, PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS,
 };
 use crate::self_check::sets;
+use crate::MhfeError;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,7 +48,11 @@ struct CardJson {
 /// The repair words of a container, as JSON `{ profile, words, repairsUnreadable, repairsWrong }`.
 #[wasm_bindgen(js_name = repairWords)]
 pub fn repair_words(container: &str, count: f64) -> Result<String, JsError> {
-    let count = whole_number(count, "INVALID_REPAIR_WORDS", "the repair word count")? as usize;
+    let count = whole_number(
+        count,
+        MhfeError::InvalidRepairWords(String::new()).code(),
+        "the repair word count",
+    )? as usize;
     let words = repair::repair_words(container, count).map_err(js_error)?;
     let (unreadable, wrong) = repair::capacity(count);
     json(&CardJson {

@@ -34,6 +34,11 @@ use crate::style::{self, paint, ACCENT, MUTED};
 /// format `sha256sum` writes: the SHA-256 of the page, a space, a mode marker (a second space in
 /// text mode, `*` in binary mode) and the page's file name.
 pub const CHECKSUM_FILE: &str = "mhfe-fast-mode.sha256";
+/// What a checksum file must hold, in words rather than a pattern with two spaces, which the
+/// wrapping of a message would join into one (AUD-023-UI009). The Python launcher
+/// (packaging/mhfe-fast-mode.py) says the same.
+const MALFORMED: &str = "must hold exactly one line: the page's SHA-256, two spaces and its file \
+                         name, or one space and * before the name; nothing was served.";
 
 /// Hexadecimal digits of a SHA-256 digest.
 const SHA256_HEX_DIGITS: usize = 64;
@@ -49,6 +54,9 @@ const RESPONSE_DEADLINE: Duration = Duration::from_secs(10);
 /// Connections answered at the same time; any further one is closed at once. A browser opens
 /// only a few, and the cap keeps a flood of connections from starting a thread each.
 const MAX_CONNECTIONS: usize = 16;
+/// Time the listener waits after a connection it could not accept, such as when the process has
+/// no file descriptor left, so that it does not spin; it then goes on serving (AUD-023-FUN003).
+const ACCEPT_ERROR_PAUSE: Duration = Duration::from_millis(100);
 
 /// Sent with every response. COOP and COEP make the page cross-origin isolated; the others keep
 /// it from being framed, sniffed, cached or followed by a referrer.
@@ -92,28 +100,39 @@ fn no_browser_help() -> String {
     ])
 }
 
+/// The one-line summary of the command: `-h`, the first line of `--help`, and its menu entry.
+pub const SUMMARY: &str = "Serve a browser tool on this computer in fast mode";
+
 /// The top of `mhfe serve --help`.
 pub fn about() -> String {
     style::command_about(&[
-        "Serve a browser tool on this computer in fast mode",
+        SUMMARY,
         "A browser runs the faster, multi-threaded Argon2 only on a page served with special \
          headers. mhfe serve serves one page from this computer (127.0.0.1) with those \
          headers and opens it in the browser.",
     ])
 }
 
-/// The page named in the checksum file next to the program, if that file is there. `run` then
-/// checks the page against it.
+/// The page named in the checksum file next to the program, if that file is there, once the page
+/// is there and has its SHA-256: the menu offers the fast mode only then, and says why not
+/// otherwise (AUD-023-DOC008). `run` checks the page again, as it may change in between.
 pub fn page_next_to_program() -> Result<Option<PathBuf>, Failure> {
     let program = std::env::current_exe()?;
-    let Some(directory) = program.parent() else {
-        return Ok(None);
-    };
+    match program.parent() {
+        Some(directory) => checked_page_in(directory),
+        None => Ok(None),
+    }
+}
+
+/// [`page_next_to_program`] for the program's `directory`.
+fn checked_page_in(directory: &Path) -> Result<Option<PathBuf>, Failure> {
     if !directory.join(CHECKSUM_FILE).is_file() {
         return Ok(None);
     }
     let (_, name) = read_checksum_file(directory)?;
-    Ok(Some(directory.join(name)))
+    let page = directory.join(name);
+    load_checked_page(&page)?;
+    Ok(Some(page))
 }
 
 /// The SHA-256 and the page name from the checksum file in `directory`.
@@ -126,13 +145,7 @@ fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
             style::shown_path(directory)
         ))
     })?;
-    let malformed = || {
-        Failure::invalid_input(format!(
-            "{} must hold exactly one line, \"<SHA-256>  <page>.html\" or \"<SHA-256> \
-             *<page>.html\"; nothing was served.",
-            style::shown_path(&path)
-        ))
-    };
+    let malformed = || Failure::invalid_input(format!("{} {MALFORMED}", style::shown_path(&path)));
     let mut lines = text.lines().filter(|line| !line.trim().is_empty());
     let (Some(line), None) = (lines.next(), lines.next()) else {
         return Err(malformed());
@@ -216,20 +229,27 @@ pub fn help() -> String {
     )
 }
 
+/// The title of `mhfe serve`.
+const TITLE: &str = "Fast mode";
+
 pub fn run(options: Options) -> Result<i32, Failure> {
+    style::title(TITLE);
     let (page, digest) = load_checked_page(&options.file)?;
-    style::ok(format!(
-        "SHA-256 of {} verified: {}",
-        file_name(&options.file),
-        paint(MUTED, &digest)
-    ));
+    // The digest on a line of its own, so that wrapping never splits it (AUD-023-UI007).
+    style::ok(format!("SHA-256 of {} verified", file_name(&options.file)));
+    style::fact("SHA-256", paint(MUTED, &digest));
 
     let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))?;
     let port = listener.local_addr()?.port();
     let address = format!("http://127.0.0.1:{port}/");
     let host = format!("127.0.0.1:{port}");
+    // The address is always shown: an opener that starts can still fail, or open an unwanted
+    // browser (AUD-023-UI010).
+    let shown = paint(ACCENT, &address);
     if options.no_browser || open_browser(&address).is_err() {
-        eprintln!("Open {} in your browser.", paint(ACCENT, &address));
+        eprintln!("Open {shown} in your browser.");
+    } else {
+        eprintln!("Opened {shown}; if no browser shows it, open it yourself.");
     }
     style::ok(format!(
         "{} {}",
@@ -247,7 +267,12 @@ fn serve(listener: TcpListener, host: String, page: Vec<u8>, deadline: Duration)
     let host: Arc<str> = host.into();
     let page: Arc<[u8]> = page.into();
     let active = Arc::new(AtomicUsize::new(0));
-    for stream in listener.incoming().flatten() {
+    for stream in listener.incoming() {
+        // A connection that cannot be accepted is dropped, after a pause, and serving goes on.
+        let Ok(stream) = stream else {
+            thread::sleep(ACCEPT_ERROR_PAUSE);
+            continue;
+        };
         if active.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
             active.fetch_sub(1, Ordering::SeqCst);
             continue; // Dropping the stream closes the connection.
@@ -510,9 +535,41 @@ mod tests {
 
     #[test]
     fn stops_reading_an_endless_request_head() {
-        let endless = "GET / HTTP/1.1\r\n".to_owned() + &"X-Filler: a\r\n".repeat(5000);
-        let mut reader = BufReader::new(endless.as_bytes());
-        assert!(read_request_head(&mut reader).is_err());
+        // A head that does end, but after more than MAX_REQUEST_HEAD bytes: refused only by the
+        // limit, so that the test fails without it (AUD-023-ARC017). One that ends within it is
+        // read.
+        let filler = "X-Filler: a\r\n".repeat(MAX_REQUEST_HEAD / 13 + 1);
+        let long = format!("GET / HTTP/1.1\r\n{filler}\r\n");
+        assert!(long.len() > MAX_REQUEST_HEAD);
+        assert!(read_request_head(&mut BufReader::new(long.as_bytes())).is_err());
+        let within = format!("GET / HTTP/1.1\r\n{}\r\n", "X-Filler: a\r\n".repeat(100));
+        assert!(read_request_head(&mut BufReader::new(within.as_bytes())).is_ok());
+    }
+
+    /// While MAX_CONNECTIONS clients hold their slots, one more is closed at once, and once they
+    /// are gone the page is served again (AUD-023-ARC017).
+    #[test]
+    fn connections_beyond_the_limit_are_closed_at_once() {
+        let port = start_server(Duration::from_secs(2));
+        let idle: Vec<TcpStream> = (0..MAX_CONNECTIONS)
+            .map(|_| TcpStream::connect(("127.0.0.1", port)).unwrap())
+            .collect();
+        thread::sleep(Duration::from_millis(200));
+        let mut extra = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        extra
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let started = Instant::now();
+        let mut answer = Vec::new();
+        let _ = extra.read_to_end(&mut answer);
+        assert!(answer.is_empty(), "the extra connection was answered");
+        assert!(
+            started.elapsed() < Duration::from_millis(1500),
+            "closed at once, not at a deadline"
+        );
+        drop(idle);
+        thread::sleep(Duration::from_millis(200));
+        assert!(get(port).starts_with("HTTP/1.1 200 OK\r\n"));
     }
 
     /// Starts the server loop on a free port with a short request deadline; returns the port.
@@ -715,5 +772,47 @@ mod tests {
         }
         // Every refusal says that nothing was served.
         assert!(refusal(&folder).contains("nothing was served"));
+    }
+
+    /// The refusal of a malformed checksum file reads the same after the wrapping of an error
+    /// message, with a long absolute path: the format is in words (AUD-023-UI009).
+    #[test]
+    fn the_checksum_format_survives_wrapping() {
+        let path =
+            Path::new("/home/someone/a/rather/long/folder/name/of/the/tools").join(CHECKSUM_FILE);
+        let message = format!("{} {MALFORMED}", style::shown_path(&path));
+        let shown = style::error_lines_for_test(&message).join(" ");
+        let words: Vec<&str> = shown.split_whitespace().collect();
+        assert!(
+            words.join(" ").contains(
+                "the page's SHA-256, two spaces and its file name, or one space and * before the name"
+            ),
+            "{shown}"
+        );
+    }
+
+    /// The menu's fast-mode entry needs the page as its checksum file names it: a missing or
+    /// changed page, or a malformed file, gives the reason instead, and no file no entry
+    /// (AUD-023-DOC008). `run` still refuses a page changed after the menu was built.
+    #[test]
+    fn the_fast_mode_is_offered_only_for_a_checked_page() {
+        let digest = hex::encode(Sha256::digest(PAGE));
+        let folder = TestFolder::new("offered");
+        assert_eq!(checked_page_in(&folder.0).unwrap(), None);
+        folder.write_checksum_file(&format!("{digest}  tool.html\n"));
+        assert_eq!(checked_page_in(&folder.0).unwrap(), Some(folder.page()));
+        fs::write(folder.page(), b"changed").unwrap();
+        let changed = checked_page_in(&folder.0).unwrap_err().message;
+        assert!(changed.contains("The page has changed"), "{changed}");
+        assert!(load_checked_page(&folder.page()).is_err());
+        fs::remove_file(folder.page()).unwrap();
+        let missing = checked_page_in(&folder.0).unwrap_err().message;
+        assert!(missing.contains("Cannot read"), "{missing}");
+        folder.write_checksum_file("not a checksum line\n");
+        let malformed = checked_page_in(&folder.0).unwrap_err().message;
+        assert!(
+            malformed.contains("must hold exactly one line"),
+            "{malformed}"
+        );
     }
 }

@@ -71,10 +71,14 @@ af2ab481fcf5ef00f1b2deb346bda3642797b417fc0ed98bfb7ae80e716f90d1  src/thread.c
 
 To check the vendored files against this list, run from the repository root:
 
-````sh
-sed -n '/^```text$/,/^```$/p' vendor/phc-winner-argon2.md | grep -v '^```' \
-  | (cd vendor/phc-winner-argon2 && sha256sum --check)
-````
+```sh
+node scripts/verify-vendored-argon2.mjs
+```
+
+It refuses a changed or missing file, a file that is not listed and anything that is not a plain
+file, such as a link: an added header would be compiled in, since both builds search
+`phc-winner-argon2/include` before the system folders. `scripts/check.sh` runs it, and both stages
+of the canonical build run it before they compile the code.
 
 ## Review of upstream issues and pull requests
 
