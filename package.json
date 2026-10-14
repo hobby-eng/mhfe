@@ -1,15 +1,18 @@
 {
   "name": "mhfe-tooling",
   "private": true,
-  "description": "Development tools for the mhfe repository: the Prettier formatter, the TypeScript compiler that checks the browser package against its declarations, and Playwright for the real-browser check. The program itself is Rust.",
+  "description": "Development tools for the mhfe repository: the Prettier formatter, the oxlint linter with its type-aware rules, the TypeScript compiler that checks the browser package against its declarations, and Playwright for the real-browser check. The program itself is Rust.",
   "packageManager": "pnpm@12.8.1",
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "lint": "oxlint --type-aware --report-unused-disable-directives web scripts",
     "check:types": "tsc -p web/tsconfig.json && tsc -p web/tsconfig.worker.json",
     "check:browsers": "node scripts/verify-browsers.mjs"
   },
   "devDependencies": {
+    "oxlint": "1.88.0",
+    "oxlint-tsgolint": "7.0.2004",
     "playwright": "1.64.0",
     "prettier": "3.9.9",
     "typescript": "7.0.2"

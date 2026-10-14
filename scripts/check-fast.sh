@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The fast checks of the repository: what CI runs on every push and pull request (CI-04) and what
 # a change passes before it is called done (CORE-43). Formatting, the copy gate, clippy for the
-# native program and for every WebAssembly build, the fast tests, the browser package's types and
-# Prettier, in a few minutes.
+# native program and for every WebAssembly build, the fast tests, the browser package's types, the
+# lint and Prettier, in a few minutes.
 # scripts/check.sh runs them first, then the slow checks of a release.
 #
 # Needs the pinned Rust toolchain and Node.js with the tools of `pnpm install --frozen-lockfile`.
@@ -31,6 +31,9 @@ done
 cargo test --locked
 # The browser package's plain JavaScript against its declarations, under the strict flags (TS-13).
 pnpm run --silent check:types
+# oxlint with type information over the browser package and the scripts: the guide's TypeScript
+# rules, the length of files and functions (CORE-15) and oxlint's correctness category.
+pnpm run --silent lint
 # The workspace style for JavaScript, Markdown, JSON and YAML: double quotes, 100 columns.
 pnpm run --silent format:check
 echo "The fast checks passed."
