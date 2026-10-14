@@ -63,6 +63,10 @@ After `scripts/check.sh` has built the browser package, check it in Chromium and
 pnpm run check:browsers
 ```
 
+`node scripts/verify-browsers.mjs --browser firefox --mode fast` checks one browser in one mode,
+for example to run a page again and again. A page that stops leaves its partial results, the check
+it was in and its console messages in `target/browser-check/`.
+
 The canonical Docker build is:
 
 ```sh

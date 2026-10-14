@@ -1,6 +1,9 @@
 // Runs the browser package from dist/ in real browsers, Chromium and Firefox, with Playwright:
 //
-//   node scripts/verify-browsers.mjs
+//   node scripts/verify-browsers.mjs [--browser chromium|firefox] [--mode standard|fast]
+//
+// Without an option it checks both browsers in both modes; an option keeps one of them, for
+// example to run Firefox's fast mode again and again.
 //
 // Build the package first with scripts/build-wasm.sh, install the tools with
 // `pnpm install --frozen-lockfile` and the two browsers with
@@ -40,6 +43,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 
 import { chromium, firefox } from "playwright";
 
@@ -76,6 +80,34 @@ const STALL_MS = 120_000;
 const PAGE_LIMIT_MS = 3_600_000;
 /** How often the script asks the page how far it is. */
 const POLL_MS = 2_000;
+/** The browsers and the modes a run can check. */
+const BROWSERS = { chromium, firefox };
+const MODES = ["standard", "fast"];
+/** The usage, said with a refused command line. */
+const USAGE =
+  "usage: node scripts/verify-browsers.mjs [--browser chromium|firefox] [--mode standard|fast]";
+
+/** The browsers and modes of the command line, all of each by default; null for a refused one. */
+function selection(args) {
+  try {
+    const { values } = parseArgs({
+      args,
+      options: { browser: { type: "string" }, mode: { type: "string" } },
+    });
+    const browsers = values.browser === undefined ? Object.keys(BROWSERS) : [values.browser];
+    const modes = values.mode === undefined ? MODES : [values.mode];
+    const known = browsers.every((name) => Object.hasOwn(BROWSERS, name));
+    return known && modes.every((mode) => MODES.includes(mode)) ? { browsers, modes } : null;
+  } catch {
+    return null;
+  }
+}
+
+const selected = selection(process.argv.slice(2));
+if (selected === null) {
+  console.error(USAGE);
+  process.exit(2);
+}
 
 // The password whose encryption check the wrapper below spoils.
 const FAULTY_CHECK_PASSWORD = "public test password, faulty check";
@@ -221,11 +253,11 @@ const addresses = {
 };
 let failed = false;
 try {
-  for (const browserType of [chromium, firefox]) {
-    const browser = await browserType.launch();
+  for (const name of selected.browsers) {
+    const browser = await BROWSERS[name].launch();
     try {
-      for (const [mode, address] of Object.entries(addresses)) {
-        failed = !(await checkPage(browser, browserType.name(), mode, address)) || failed;
+      for (const mode of selected.modes) {
+        failed = !(await checkPage(browser, name, mode, addresses[mode])) || failed;
       }
     } finally {
       await browser.close();
@@ -238,7 +270,10 @@ if (failed) {
   console.error("The browser check failed.");
   process.exit(1);
 }
-console.log("The browser package passes its checks in Chromium and Firefox, in both modes.");
+console.log(
+  `The browser package passes its checks in ${selected.browsers.join(" and ")}, in ` +
+    `${selected.modes.join(" and ")} mode.`,
+);
 
 /** Opens the page in a new tab and reports its results; true when everything passed. */
 async function checkPage(browser, browserName, mode, address) {
@@ -256,7 +291,10 @@ async function checkPage(browser, browserName, mode, address) {
   try {
     await page.goto(address);
     const { mode: clientMode, results, failures } = await pageOutcome(page, pageErrors);
-    if (clientMode !== mode) failures.push(`the client ran in ${clientMode} mode, not ${mode}`);
+    // A page that stopped has no mode to compare: its stop is the failure.
+    if (clientMode !== null && clientMode !== mode) {
+      failures.push(`the client ran in ${clientMode} mode, not ${mode}`);
+    }
     for (const url of strayRequests) failures.push(`a request left the page: ${url}`);
     for (const error of pageErrors) failures.push(`uncaught page error: ${error}`);
     const lines = [
