@@ -27,6 +27,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { runGate } from "./gate-command-line.mjs";
+
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 /** The vendored folder and the document that lists its files, from the repository root. */
 const FOLDER = "vendor/phc-winner-argon2";
@@ -199,16 +201,14 @@ function selfTest() {
   );
 }
 
-const args = process.argv.slice(2);
-if (args.length === 1 && args[0] === "--self-test") {
-  selfTest();
-} else if (args.length === 0) {
-  if (!check(root)) {
-    console.error(`The vendored Argon2 code differs from the list in ${LIST}.`);
-    process.exit(1);
-  }
-  console.log(`${FOLDER} holds exactly the files listed in ${LIST}.`);
-} else {
-  console.error(USAGE);
-  process.exit(2);
-}
+runGate(USAGE, {
+  selfTest,
+  check: () => {
+    if (!check(root)) {
+      console.error(`The vendored Argon2 code differs from the list in ${LIST}.`);
+      return false;
+    }
+    console.log(`${FOLDER} holds exactly the files listed in ${LIST}.`);
+    return true;
+  },
+});

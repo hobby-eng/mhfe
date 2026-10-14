@@ -96,16 +96,8 @@ def encrypt(phrase, password_text, pim=0, level=0):
     return suite3.entropy_to_phrase(y)
 
 
-def check_header(record, schema):
-    assert record["schema"] == schema, record["schema"]
-    assert record["suite_id"] == SUITE_ID.decode()
-    generator = record["generator"]
-    assert generator["program"] == "mhfe test-vectors"
-    assert generator["version"] and generator["argon2"], "the generator is not named"
-
-
 def check_vector(vector, trust_keys):
-    check_header(vector, SCHEMA)
+    suite3.check_header(vector, SCHEMA, SUITE_ID)
     inputs = vector["inputs"]
     pim, level = inputs["pim"], inputs["memory_level"]
     assert inputs["password"].encode().hex() == inputs["password_utf8_hex"]
@@ -156,7 +148,7 @@ def check_vector(vector, trust_keys):
 def check_negative_case(case):
     """Recovery with a wrong password or setting gives another phrase of the same length and no
     error; another chosen length is refused before any Argon2id work."""
-    check_header(case, NEGATIVE_SCHEMA)
+    suite3.check_header(case, NEGATIVE_SCHEMA, SUITE_ID)
     pim, level, words = case["pim"], case["memory_level"], case["words"]
     password = suite3.check_password(case)
     container_words = len(case["container"].split())
@@ -207,25 +199,6 @@ def check_validation_cases(path):
     )
 
 
-def check_files(paths, trust_keys):
-    checked = []
-    for path in paths:
-        content = json.load(open(path, encoding="utf-8"))
-        if isinstance(content, list):
-            if trust_keys:
-                print(f"{path}: skipped, negative cases need the full Argon2id check")
-                continue
-            for case in content:
-                check_negative_case(case)
-            print(f"{path}: all {len(content)} negative cases reproduced", flush=True)
-        else:
-            check_vector(content, trust_keys)
-            how = "with the recorded Argon2id keys" if trust_keys else "in both directions"
-            print(f"{path}: every value reproduced {how}", flush=True)
-        checked.append((path, "recorded-argon2-keys" if trust_keys else "full"))
-    return checked
-
-
 # Taken before main() puts verifier_description below in its place, which would otherwise call
 # itself.
 suite3_verifier_description = suite3.verifier_description
@@ -251,14 +224,8 @@ def main(arguments):
         return
     if command != "vector":
         sys.exit(__doc__)
-    trust = "--trust-argon2-keys" in arguments
-    arguments = [value for value in arguments if value != "--trust-argon2-keys"]
-    record_path = None
-    if "--record" in arguments:
-        position = arguments.index("--record")
-        record_path = arguments[position + 1]
-        del arguments[position : position + 2]
-    checked = check_files(arguments, trust)
+    trust, record_path, paths = suite3.vector_arguments(arguments)
+    checked = suite3.check_files(paths, trust, check_vector, check_negative_case)
     if record_path is not None:
         # The suite 3 record format, with this script as the verifier.
         suite3.verifier_description = verifier_description

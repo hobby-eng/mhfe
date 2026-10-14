@@ -18,6 +18,19 @@ export function noRoundExpected(stage, round) {
   throw new Error(`the refusal came after ${stage} round ${round} had started`);
 }
 
+/**
+ * Expects the first message to `worker` to carry `phrase` as bytes, transferred in a buffer of its
+ * own before the buffers of the lengths `others`.
+ */
+export function expectPhraseTransferred(worker, phrase, others, description) {
+  assert.equal(new TextDecoder().decode(worker.messages[0].phrase), phrase);
+  assert.deepEqual(
+    worker.transfers[0].map(({ byteLength }) => byteLength),
+    [phrase.length, ...others],
+    description,
+  );
+}
+
 /** The named fields of an object, to compare them without the others. */
 export function fieldsOf(object, names) {
   return Object.fromEntries(names.map((name) => [name, object[name]]));

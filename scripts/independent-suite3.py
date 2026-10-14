@@ -298,10 +298,10 @@ def check_password(record):
     return password
 
 
-def check_header(record, schema):
-    """The layout name, the suite and what wrote the file."""
+def check_header(record, schema, suite_id=SUITE_ID):
+    """The layout name, the suite (suite 3 unless another is given) and what wrote the file."""
     assert record["schema"] == schema, record["schema"]
-    assert record["suite_id"] == SUITE_ID.decode()
+    assert record["suite_id"] == suite_id.decode()
     generator = record["generator"]
     assert generator["program"] == "mhfe test-vectors"
     assert generator["version"] and generator["argon2"], "the generator is not named"
@@ -384,8 +384,11 @@ def sha256_file(path):
         return hashlib.sha256(file.read()).hexdigest()
 
 
-def check_files(paths, trust_keys):
-    """Checks each file and returns the (path, mode) of every file that was checked."""
+def check_files(
+    paths, trust_keys, check_vector=check_vector, check_negative_case=check_negative_case
+):
+    """Checks each file with a suite's checks, suite 3's unless others are given, and returns the
+    (path, mode) of every file that was checked."""
     checked = []
     for path in paths:
         content = json.load(open(path, encoding="utf-8"))
@@ -456,6 +459,19 @@ def update_record(record_path, checked):
     print(f"{record_path}: recorded {len(checked)} checked files")
 
 
+def vector_arguments(arguments):
+    """The vector command's arguments: whether to trust the recorded Argon2id keys, the record to
+    update or None, and the files."""
+    trust = "--trust-argon2-keys" in arguments
+    paths = [value for value in arguments if value != "--trust-argon2-keys"]
+    record_path = None
+    if "--record" in paths:
+        position = paths.index("--record")
+        record_path = paths[position + 1]
+        del paths[position : position + 2]
+    return trust, record_path, paths
+
+
 def main(arguments):
     command, arguments = arguments[0], arguments[1:]
     if command == "encrypt":
@@ -468,14 +484,8 @@ def main(arguments):
         return
     if command != "vector":
         sys.exit(__doc__)
-    trust = "--trust-argon2-keys" in arguments
-    arguments = [value for value in arguments if value != "--trust-argon2-keys"]
-    record_path = None
-    if "--record" in arguments:
-        position = arguments.index("--record")
-        record_path = arguments[position + 1]
-        del arguments[position : position + 2]
-    checked = check_files(arguments, trust)
+    trust, record_path, paths = vector_arguments(arguments)
+    checked = check_files(paths, trust)
     if record_path is not None:
         update_record(record_path, checked)
 

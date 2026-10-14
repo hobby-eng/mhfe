@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { PHRASE } from "../public-test-data.mjs";
 import { checkClientRefusals, checkMisplacedPassphrases, clientCalls } from "./client-refusals.mjs";
 import { checkRekeyCallbacks } from "./client-rekey.mjs";
-import { nextTurn } from "./expect.mjs";
+import { expectPhraseTransferred, nextTurn } from "./expect.mjs";
 import { sources } from "./page-classes.mjs";
 import {
   RealTextEncoder,
@@ -75,10 +75,10 @@ async function checkEncryptRequest(client) {
   // The phrase goes as bytes too, transferred with the passwords, so that the worker and the
   // WebAssembly wipe it (AUD-010); the non-secret request carries none of the secrets.
   assert.ok(worker.messages[0].phrase instanceof Uint8Array, "the phrase goes as bytes");
-  assert.equal(new TextDecoder().decode(worker.messages[0].phrase), PHRASE);
-  assert.deepEqual(
-    worker.transfers[0].map(({ byteLength }) => byteLength),
-    [PHRASE.length, 20, 20],
+  expectPhraseTransferred(
+    worker,
+    PHRASE,
+    [20, 20],
     "the phrase and both passwords are transferred, in buffers of their own",
   );
   worker.reply({ type: "progress", value: { stage: "encrypt", round: 12, rounds: 24 } });

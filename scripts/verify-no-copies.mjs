@@ -1,7 +1,7 @@
 // Finds code copied from one place to another: the same run of at least MIN_TOKENS tokens in two
-// places of the Rust library, the command-line tool and the WASM bindings (src/) or of the browser
-// package's JavaScript and declarations (web/), whatever the white space, the line breaks and the
-// comments. It reads the code with a small tokenizer of its own, so that it needs no package.
+// places of the Rust library, the command-line tool and the WASM bindings (src/), the browser
+// package's JavaScript and declarations (web/), the Rust tests (tests/) or the JavaScript of the
+// scripts (scripts/), whatever the white space, the line breaks and the comments. It reads the code with a small tokenizer of its own, so that it needs no package.
 //
 // A copy is reported as "file A:lines = file B:lines": the code belongs in one function that both
 // call (AGENTS.md, Object-oriented design and no repetition). A deliberate copy, such as a fast
@@ -33,6 +33,8 @@ const MIN_TOKENS = 50;
 const SOURCES = [
   { directory: "src", endings: [".rs"] },
   { directory: "web", endings: [".js", ".ts"] },
+  { directory: "tests", endings: [".rs"] },
+  { directory: "scripts", endings: [".mjs", ".js"] },
 ];
 /** Data, not code: generated tables that are long by nature and never repeat logic. */
 const DATA_FILES = new Set(["src/mhfe/published_rounds.rs"]);
@@ -720,5 +722,5 @@ if (copies.length > 0) {
   process.exit(1);
 }
 console.log(
-  `No copies of ${minTokens} tokens or more in ${sources.length} files of src/ and web/.`,
+  `No copies of ${minTokens} tokens or more in ${sources.length} files of ${SOURCES.map(({ directory }) => `${directory}/`).join(", ")}.`,
 );

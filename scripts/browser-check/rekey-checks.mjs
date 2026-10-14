@@ -121,12 +121,7 @@ export async function checkRekeyResult(helpers, wallet) {
   });
   expectEqual(
     log.lines,
-    [
-      ...roundLines("recover", 1, 12, 36),
-      ...roundLines("encrypt", 13, 24, 36),
-      "unverified",
-      ...roundLines("check", 25, 36, 36),
-    ],
+    rekeyLines([], ["unverified"]),
     "a rekey reports 36 rounds: recover, encrypt, the unverified container, check",
   );
   expectEqual(

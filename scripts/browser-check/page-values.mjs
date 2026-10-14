@@ -165,6 +165,22 @@ export const FINGERPRINT = FINGERPRINTS.phrase;
 export const SUITE_3 = "MHFE-BIP39-256-EXPERIMENTAL-3";
 export const SUITE_4 = "MHFE-BIP39-LP-EXPERIMENTAL-4";
 export const REPAIR_PROFILE = "MHFE-REPAIR-1";
+// The repair words' part of the parameters of MhfeRepair and MhfeClient (src/repair.rs).
+export const REPAIR_PARAMETERS = {
+  repairWordCounts: [2, 4, 6, 8],
+  recommendedRepairWords: 4,
+  repairCapacities: [
+    { count: 2, unreadable: 2, wrong: 1 },
+    { count: 4, unreadable: 4, wrong: 2 },
+    { count: 6, unreadable: 6, wrong: 3 },
+    { count: 8, unreadable: 8, wrong: 4 },
+  ],
+};
+// The references that identify PHRASE's wallet without a passphrase, with how a check names them.
+export const REFERENCES_WITHOUT_PASSPHRASE = [
+  { confirmation: { fingerprint: FINGERPRINT }, description: "a fingerprint" },
+  { confirmation: { address: BIP84_ADDRESS, coin: "bitcoin" }, description: "an address" },
+];
 // The repair words of FULL_SIZE_CONTAINER for each count, from an independent implementation
 // (src/repair.rs).
 export const FULL_SIZE_REPAIR_WORDS = {

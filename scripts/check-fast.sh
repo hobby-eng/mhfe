@@ -16,8 +16,9 @@ cd "$repo_root"
 remap_builder_paths "$repo_root"
 
 cargo fmt --check
-# No code copied from one place to another in the library, the tool, the bindings or the page
-# classes: each rule lives in one function that every front end calls (CORE-10).
+# No code copied from one place to another in the library, the tool, the bindings, the page
+# classes, the tests or the scripts: each rule lives in one function that its callers call
+# (CORE-10).
 node scripts/verify-no-copies.mjs --self-test
 node scripts/verify-no-copies.mjs
 # The guide's rules the other gates cannot see: the length of Rust, Python and shell files, script

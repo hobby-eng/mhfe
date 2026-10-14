@@ -8,6 +8,19 @@ import { readFileSync } from "node:fs";
 
 const runtimeImport = /^(?:import|export) \{[^}]*\} from "\.\.\/runtime\/runtime\.js";\n/gmu;
 
+/** The repository's root, as a URL. */
+export const root = new URL("../", import.meta.url);
+
+/** The bytes of the repository's file at `path`, from the root. */
+export function read(path) {
+  return readFileSync(new URL(path, root));
+}
+
+/** JSON that is safe inside a script element: "</script" cannot appear in it. */
+export function inline(value) {
+  return JSON.stringify(value).replaceAll("<", "\\u003c");
+}
+
 /** The runtime and the class files `paths` (relative to dist/) as one module's text. */
 export function bundleClasses(root, paths) {
   const read = (path) => readFileSync(new URL(`dist/${path}`, root)).toString();

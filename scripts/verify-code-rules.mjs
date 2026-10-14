@@ -31,6 +31,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { reported, runGate } from "./gate-command-line.mjs";
+
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 /** CORE-15's limit for a file. */
 const MAX_FILE_LINES = 800;
@@ -358,20 +360,13 @@ function selfTest() {
   console.log(`The code rules decide all ${controls} of their controls right.`);
 }
 
-const args = process.argv.slice(2);
-if (args.length === 1 && args[0] === "--self-test") {
-  selfTest();
-} else if (args.length === 0) {
-  const found = repositoryFindings();
-  for (const line of found) console.error(line);
-  if (found.length > 0) {
-    console.error(
-      `${found.length} breaks of the coding guide (see the top of scripts/verify-code-rules.mjs).`,
-    );
-    process.exit(1);
-  }
-  console.log("The repository keeps the coding guide's rules that code-rules checks.");
-} else {
-  console.error(USAGE);
-  process.exit(2);
-}
+runGate(USAGE, {
+  selfTest,
+  check: () =>
+    reported(
+      repositoryFindings(),
+      (count) =>
+        `${count} breaks of the coding guide (see the top of scripts/verify-code-rules.mjs).`,
+      "The repository keeps the coding guide's rules that code-rules checks.",
+    ),
+});

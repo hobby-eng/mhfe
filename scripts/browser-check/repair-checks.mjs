@@ -35,14 +35,7 @@ export async function checkRepairWords(repair) {
     {
       version: VERSION,
       profile: REPAIR_PROFILE,
-      repairWordCounts: [2, 4, 6, 8],
-      recommendedRepairWords: 4,
-      repairCapacities: [
-        { count: 2, unreadable: 2, wrong: 1 },
-        { count: 4, unreadable: 4, wrong: 2 },
-        { count: 6, unreadable: 6, wrong: 3 },
-        { count: 8, unreadable: 8, wrong: 4 },
-      ],
+      ...REPAIR_PARAMETERS,
     },
     "parameters gives every fixed value; the module also takes the WebAssembly as bytes",
   );

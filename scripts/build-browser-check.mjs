@@ -7,14 +7,9 @@
 // address to also decrypt and check, "#selftest" to run the self-test with the published vectors,
 // or "#check" to run the full self-check of every class, in seconds. Public test data only.
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 
-import { bundleClasses, pagePolicy } from "./bundle-browser-classes.mjs";
-
-const root = new URL("../", import.meta.url);
-const read = (path) => readFileSync(new URL(path, root));
-/** JSON that is safe inside a script element: "</script" cannot appear in it. */
-const inline = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
+import { bundleClasses, inline, pagePolicy, read, root } from "./bundle-browser-classes.mjs";
 
 const clientModule = bundleClasses(root, [
   "core/client.js",

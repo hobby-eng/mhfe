@@ -60,12 +60,7 @@ export async function checkRekeySameLength(helpers) {
   );
   expectEqual(
     addressLog.lines,
-    [
-      ...roundLines("recover", 1, 12, 36),
-      "compare 12/36",
-      ...roundLines("encrypt", 13, 24, 36),
-      ...roundLines("check", 25, 36, 36),
-    ],
+    rekeyLines(["compare 12/36"], []),
     "a rekey confirmed by the wallet compares once after the recovery",
   );
   const byEthereum = await client.rekey({
@@ -86,10 +81,7 @@ export async function checkRekeySameLengthPassphrase(helpers, sameLength) {
   // A wallet stated to have a passphrase is compared with it: a reference without it would
   // match the phrase's wallet without one and say nothing about the funds under the passphrase
   // (the specification's re-encryption rules), so it is refused before any round.
-  for (const { confirmation, description } of [
-    { confirmation: { fingerprint: FINGERPRINT }, description: "a fingerprint" },
-    { confirmation: { address: BIP84_ADDRESS, coin: "bitcoin" }, description: "an address" },
-  ]) {
+  for (const { confirmation, description } of REFERENCES_WITHOUT_PASSPHRASE) {
     for (const passphrase of [undefined, ""]) {
       await expectRejection(
         client.rekey({ ...sameBase, confirmation, passphrase, walletHasPassphrase: true }),

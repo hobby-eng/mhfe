@@ -36,7 +36,7 @@
 //
 // The page's code is in scripts/browser-check/: its constants in page-values.mjs, and its checks,
 // which run from their source text in the page, in the other modules (harness.mjs says how).
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -58,13 +58,8 @@ import * as rekeySameLengthChecks from "./browser-check/rekey-same-length-checks
 import * as repairChecks from "./browser-check/repair-checks.mjs";
 import * as selfChecks from "./browser-check/self-checks.mjs";
 import * as walletChecks from "./browser-check/wallet-checks.mjs";
-import { bundleClasses, pagePolicy } from "./bundle-browser-classes.mjs";
+import { bundleClasses, inline, pagePolicy, read, root } from "./bundle-browser-classes.mjs";
 import { FULL_SIZE_CONTAINER } from "./public-test-data.mjs";
-
-const root = new URL("../", import.meta.url);
-const read = (path) => readFileSync(new URL(path, root));
-/** JSON that is safe inside a script element: "</script" cannot appear in it. */
-const inline = (value) => JSON.stringify(value).replaceAll("<", "\\u003c");
 
 // How long a page may take (AUD-023-BLD005). Its checks take a minute or two, but each of its two
 // drawings of a phrase that passes the wallet check takes about 65,536 BIP39 seeds on average, a

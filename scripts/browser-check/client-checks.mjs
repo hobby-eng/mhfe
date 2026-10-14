@@ -49,14 +49,7 @@ export async function checkConstruction(client, compiled) {
       highestBrowserMemoryLevel: 0,
       wordCounts: [12, 15, 18, 21, 24],
       builtInCheckWordCounts: [12, 15, 18, 21],
-      repairWordCounts: [2, 4, 6, 8],
-      recommendedRepairWords: 4,
-      repairCapacities: [
-        { count: 2, unreadable: 2, wrong: 1 },
-        { count: 4, unreadable: 4, wrong: 2 },
-        { count: 6, unreadable: 6, wrong: 3 },
-        { count: 8, unreadable: 8, wrong: 4 },
-      ],
+      ...REPAIR_PARAMETERS,
       hiddenWalletRefusals: [
         "PASSWORD_ALREADY_USED",
         "HIDDEN_WALLET_PASSES_CHECK",

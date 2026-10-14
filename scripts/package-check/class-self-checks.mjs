@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 
 import { FULL_SIZE_CONTAINER, PHRASE } from "../public-test-data.mjs";
-import { fieldsOf, nextTurn } from "./expect.mjs";
+import { expectPhraseTransferred, fieldsOf, nextTurn } from "./expect.mjs";
 import { readOtherBuild } from "./manifest.mjs";
 import { BUILD_ID, VERSION, bindings, noop, parameters } from "./package.mjs";
 import { importClassText, sources, wasm } from "./page-classes.mjs";
@@ -188,11 +188,7 @@ async function checkFirstOperationWaits({ MhfeClient }) {
   );
   assert.ok(checksFrom(checksBefore)[0].terminatedAt < worker.createdAt);
   // The phrase is copied into bytes only after the check, and transferred (AUD-010).
-  assert.equal(new TextDecoder().decode(worker.messages[0].phrase), PHRASE);
-  assert.deepEqual(
-    worker.transfers[0].map(({ byteLength }) => byteLength),
-    [PHRASE.length],
-  );
+  expectPhraseTransferred(worker, PHRASE, [], "the phrase is transferred alone");
   worker.reply({ type: "result", result: { phrase: PHRASE } });
   assert.deepEqual(await gatedReading, { phrase: PHRASE });
 }

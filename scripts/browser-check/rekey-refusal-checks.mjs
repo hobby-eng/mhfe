@@ -48,16 +48,7 @@ export async function checkRekeyLengthDiffers(helpers) {
     [["LENGTH_DIFFERS", lengthDiffers(12, 15), [15]]],
     "the page was given the refusal and the stated length for the owner",
   );
-  expectEqual(
-    againLog.lines,
-    [
-      ...roundLines("recover", 1, 12, 36),
-      "compare 12/36",
-      ...roundLines("encrypt", 13, 24, 36),
-      ...roundLines("check", 25, 36, 36),
-    ],
-    "the recovery's rounds ran once",
-  );
+  expectEqual(againLog.lines, rekeyLines(["compare 12/36"], []), "the recovery's rounds ran once");
   await expectExactRefusal(
     client.rekey({ ...base, words: 15, onConfirmAgain: () => null }),
     "LENGTH_DIFFERS",
@@ -156,10 +147,7 @@ export async function checkRekeyPassphraseRefusals(helpers) {
   const { client, base, ownerBase, sameBase, expectPassphraseRefusal } = helpers;
   // A reference with an empty passphrase matches the phrase's wallet without one, as it does
   // here, and proves nothing about funds under a passphrase: without the answer it is refused.
-  for (const { confirmation, description } of [
-    { confirmation: { fingerprint: FINGERPRINT }, description: "a fingerprint" },
-    { confirmation: { address: BIP84_ADDRESS, coin: "bitcoin" }, description: "an address" },
-  ]) {
+  for (const { confirmation, description } of REFERENCES_WITHOUT_PASSPHRASE) {
     for (const passphrase of [undefined, "", encode("")]) {
       await expectPassphraseRefusal(
         { ...sameBase, confirmation, passphrase, walletHasPassphrase: undefined },

@@ -226,6 +226,20 @@ export function roundLines(stage, first, last, rounds) {
   );
 }
 
+/**
+ * The progress lines of a rekey of a 12-word phrase in 36 rounds: the recovery's, the lines
+ * `afterRecovery`, the encryption's, the lines `afterEncryption` and the check's.
+ */
+export function rekeyLines(afterRecovery, afterEncryption) {
+  return [
+    ...roundLines("recover", 1, 12, 36),
+    ...afterRecovery,
+    ...roundLines("encrypt", 13, 24, 36),
+    ...afterEncryption,
+    ...roundLines("check", 25, 36, 36),
+  ];
+}
+
 /** The bytes of a base64 text, such as the package's WebAssembly. */
 export function bytes(base64) {
   return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
