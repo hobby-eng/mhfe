@@ -1,0 +1,78 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "es2024": true
+  },
+  "ignorePatterns": ["dist/**", "target/**", "node_modules/**", "docs/audits/**"],
+  "rules": {
+    "max-lines": [
+      "error",
+      {
+        "max": 800
+      }
+    ],
+    "max-lines-per-function": [
+      "error",
+      {
+        "max": 100
+      }
+    ],
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "import/no-default-export": "error",
+    "import/no-cycle": "error",
+    "unicorn/filename-case": [
+      "error",
+      {
+        "case": "kebabCase"
+      }
+    ],
+    "no-restricted-properties": [
+      "error",
+      {
+        "property": "innerHTML",
+        "message": "WEB-01: put text in with textContent."
+      },
+      {
+        "property": "outerHTML",
+        "message": "WEB-01: build elements with createElement."
+      },
+      {
+        "property": "insertAdjacentHTML",
+        "message": "WEB-01: build elements with createElement."
+      },
+      {
+        "object": "document",
+        "property": "write",
+        "message": "WEB-01: no HTML from strings."
+      },
+      {
+        "object": "document",
+        "property": "writeln",
+        "message": "WEB-01: no HTML from strings."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["web/**"],
+      "env": {
+        "browser": true,
+        "worker": true
+      },
+      "rules": {
+        "no-console": "error"
+      }
+    },
+    {
+      "files": ["scripts/**"],
+      "env": {
+        "node": true
+      }
+    }
+  ]
+}

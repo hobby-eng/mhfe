@@ -26,9 +26,9 @@ as `CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS`.
 Run the smallest check appropriate to a change. The fast tests use a reduced Argon2 cost.
 `scripts/check-fast.sh` runs the fast checks that CI runs on every push and pull request:
 formatting, the copy gate, clippy for every build, the fast tests, the browser package's types
-(`pnpm run check:types`) and Prettier. The complete local check, `scripts/check.sh`, adds the
-builds, the browser package, CLI/browser parity and the terminal cases at full size, but not the
-full-size vectors; CI runs it for a release tag and by hand:
+(`pnpm run check:types`), the lint (`pnpm run lint`) and Prettier. The complete local check,
+`scripts/check.sh`, adds the builds, the browser package, CLI/browser parity and the terminal
+cases at full size, but not the full-size vectors; CI runs it for a release tag and by hand:
 
 ```sh
 cargo test --locked

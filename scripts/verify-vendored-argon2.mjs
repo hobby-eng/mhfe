@@ -115,6 +115,7 @@ function check(base) {
  * file set or of a listed file's bytes is refused.
  */
 function selfTest() {
+  /** @type {[what: string, change: (folder: string) => void, expected: string[]][]} */
   const cases = [
     ["the unchanged copy", () => {}, []],
     [
@@ -159,8 +160,9 @@ function selfTest() {
       const folder = join(scratch, "phc-winner-argon2");
       cpSync(join(root, FOLDER), folder, { recursive: true });
       change(folder);
-      const found = differences(folder, document).sort();
-      if (JSON.stringify(found) !== JSON.stringify([...expected].sort())) {
+      const byName = (a, b) => a.localeCompare(b);
+      const found = differences(folder, document).sort(byName);
+      if (JSON.stringify(found) !== JSON.stringify([...expected].sort(byName))) {
         throw new Error(`self-test: ${what} gives ${JSON.stringify(found)}`);
       }
     } finally {
@@ -168,7 +170,8 @@ function selfTest() {
     }
   }
   // Each damaged list must be refused for its own reason, not for any error.
-  for (const [what, edit, reason] of [
+  /** @type {[what: string, edit: (text: string) => string, reason: RegExp][]} */
+  const damagedLists = [
     [
       "a list without its block",
       (text) => text.replace("```text", "```"),
@@ -180,7 +183,8 @@ function selfTest() {
       (text) => text.replace(/^([0-9a-f]{64}) {2}LICENSE$/mu, "$1 LICENSE"),
       /not a "<SHA-256>  <path>" line/u,
     ],
-  ]) {
+  ];
+  for (const [what, edit, reason] of damagedLists) {
     let refusal = null;
     try {
       listedFiles(edit(document));
