@@ -17,6 +17,19 @@ cd "$repo_root"
 . packaging/remap-builder-paths.sh
 remap_builder_paths "$repo_root"
 
+# Every commit that .git-blame-ignore-revs names must be in the history, or git blame skips
+# nothing. It needs the full history, which a shallow clone lacks.
+if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+  echo "A shallow clone cannot check .git-blame-ignore-revs: git fetch --unshallow first." >&2
+  exit 1
+fi
+while read -r hash; do
+  if ! git cat-file -e "$hash^{commit}" 2>/dev/null; then
+    echo ".git-blame-ignore-revs names $hash, which is not a commit of this repository." >&2
+    exit 1
+  fi
+done < <(grep -Ev '^(#|$)' .git-blame-ignore-revs)
+
 # The vendored Argon2 code must be byte for byte the recorded upstream files, with none added.
 node scripts/verify-vendored-argon2.mjs --self-test
 node scripts/verify-vendored-argon2.mjs

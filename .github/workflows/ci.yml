@@ -39,6 +39,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The release checks read the commits that .git-blame-ignore-revs names.
+          fetch-depth: ${{ env.RELEASE_CHECKS == 'true' && '0' || '1' }}
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Verify standalone dependency graph
