@@ -30,12 +30,13 @@ const fn at(coin: Coin, path: &'static str, address: &'static str, startup: bool
     }
 }
 
-/// Where the wallets of [`ABANDON`] put each address, also the table of the wallet's unit tests. The
-/// Bitcoin mainnet values at index 0 are the published vectors of BIP44, BIP49, BIP84 and BIP86,
-/// and the Dash Platform values the official DIP17/DIP18 vectors; the other Bitcoin values were
-/// computed with Python's hashlib, and the other coins with the audited JavaScript libraries
-/// @scure/bip32, @noble/hashes, @noble/curves and @scure/base, and ethers for EIP-55, each of
-/// which first reproduced BIP84's vector.
+/// Where the wallets of [`ABANDON`] put each address, also the table of the wallet's unit tests.
+/// Published vectors: BIP-0084's m/84'/0'/0'/0/0, 0/1 and 1/0, BIP-0086's m/86'/0'/0'/0/0 and 1/0,
+/// BIP-0049's testnet m/49'/1'/0'/0/0, and the official DIP17/DIP18 vectors of Dash Platform.
+/// BIP-0044 publishes no address, and BIP-0049 no mainnet one: those rows and the other Bitcoin
+/// values were computed with Python's hashlib, and the other coins with the audited JavaScript
+/// libraries @scure/bip32, @noble/hashes, @noble/curves and @scure/base, and ethers for EIP-55,
+/// each of which first reproduced BIP84's vector.
 pub(crate) const ADDRESSES: [AddressCase; 43] = [
     at(
         Coin::Bitcoin,
@@ -332,16 +333,17 @@ const DAMAGED_ADDRESSES: [(Coin, &str); 9] = [
     (Coin::Tron, "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdJ"),
 ];
 
-/// The master key fingerprint of [`ABANDON`] without a passphrase, the published 73c5da0a.
+/// The master key fingerprint of [`ABANDON`] without a passphrase, 73c5da0a, derived from the root
+/// key that BIP-0084's test vector publishes.
 const ABANDON_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
 
 /// Searches the full self-test runs: an address found under the second root of its coin, and one
 /// at account 3, the change chain and index 7, within 4 accounts and 8 indexes.
 const SEARCHES: [(usize, &str); 2] = [(29, "m/44'/0'/0'/0/0"), (9, "m/84'/0'/3'/1/7")];
 
-/// The `addresses` check: the published master fingerprint, each address at its path derived from
-/// one master key per passphrase, and the damaged addresses refused. The full self-test adds every
-/// address of the table and two searches.
+/// The `addresses` check: the master fingerprint of BIP-0084's root key, each address at its path
+/// derived from one master key per passphrase, and the damaged addresses refused. The full
+/// self-test adds every address of the table and two searches.
 pub(crate) struct AddressesCheck {
     addresses: &'static [AddressCase],
     damaged: &'static [(Coin, &'static str)],

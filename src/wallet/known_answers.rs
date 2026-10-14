@@ -207,7 +207,8 @@ const TREZOR_SEEDS: [&str; 24] = [
 ];
 
 /// The master key fingerprint of [`ABANDON`] with "TREZOR", computed with a pure Python BIP32 that
-/// first reproduced BIP-0032's test vectors; without a passphrase it is the published 73c5da0a.
+/// first reproduced BIP-0032's test vectors; without a passphrase it is 73c5da0a, that of the root
+/// key BIP-0084's test vector publishes.
 const TREZOR_FINGERPRINT: [u8; 4] = [0xb4, 0xe3, 0xf5, 0xed];
 
 /// The `bip39-seed` check.

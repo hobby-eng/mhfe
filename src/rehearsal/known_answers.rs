@@ -1,10 +1,10 @@
 //! Known answers of the rehearsal check: the self-check `rehearsal`.
 //!
 //! The published container zero-12 with its password, replayed with its recorded round keys and
-//! compared with each kind of reference: the master key fingerprint 73c5da0a (published), the
-//! receiving address of BIP84's test vector at its path, and the built-in check. A fingerprint
-//! that differs in one bit must not match. The length rules give each outcome on the published
-//! containers that carry it ([`LENGTH_CASES`]).
+//! compared with each kind of reference: the master key fingerprint 73c5da0a of the root key that
+//! BIP84's test vector publishes, the receiving address of BIP84's test vector at its path, and the
+//! built-in check. A fingerprint that differs in one bit must not match. The length rules give each
+//! outcome on the published containers that carry it ([`LENGTH_CASES`]).
 
 use crate::mhfe::known_answers::{published, published_table};
 use crate::rehearsal::{CheckEvidence, CheckOutcome, Reference};
@@ -14,8 +14,8 @@ use crate::self_check::{
 use crate::wallet::{Address, Coin, DerivationPath, SearchLimits};
 use crate::WordCount;
 
-/// The master key fingerprint of zero-12's phrase without a passphrase, published by BIP-0084's
-/// test vector and many wallets.
+/// The master key fingerprint of zero-12's phrase without a passphrase, derived from the root key
+/// that BIP-0084's test vector publishes, and shown by many wallets.
 const FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
 const WRONG_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0b];
 /// BIP-0084's first receiving address of the same phrase, at its path.
