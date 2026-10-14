@@ -25,6 +25,7 @@ export interface MhfeRepairCard {
   repairsWrong: number;
 }
 
+/** A container repaired from the words of its phrase and of its card, from repairContainer(). */
 export interface MhfeRepaired {
   /** The repaired container, every word in full. */
   container: string;
@@ -42,6 +43,7 @@ export interface MhfeRepaired {
   changes: { onCard: boolean; position: number; read: string | null; word: string }[];
 }
 
+/** What a container phrase as typed is, from inspectContainer(). */
 export interface MhfeContainerReading {
   /**
    * "container": valid as it stands. "marked": words typed as "?"; ask for the repair words at

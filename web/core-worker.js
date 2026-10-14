@@ -1,3 +1,4 @@
+// @ts-check
 // The core module's operations in the package's worker: encryption, recovery, the rehearsal check,
 // rekey, hidden wallets, the self-test and the self-checks. For an operation that needs Argon2, the
 // core places one Emscripten build of the reference Argon2 code (argon2-mt.js or argon2-st.js) in
@@ -5,11 +6,72 @@
 // web/argon2-engine.js bridges it to the WebAssembly.
 "use strict";
 
-/** The parts of a self-check that run Argon2, as the core names them (src/engine). */
+/**
+ * A request of the core's operations as web/client.js sends it; each operation reads its own
+ * fields. The secrets arrive as bytes, which the worker wipes after the operation.
+ * @typedef {SelfCheckRequest & ReferenceFields & { phrase: Uint8Array, password: Uint8Array,
+ *   passwordRepeat: Uint8Array, choice: string, position: number, pim: number,
+ *   memoryLevel: number, sameLength: boolean, repairWordCount: number,
+ *   walletHasPassphrase: boolean | null | undefined, container: string, words: number,
+ *   asksLength: boolean, scanGap: number, argon2: boolean, argon2Script: Blob | null,
+ *   newPassword: Uint8Array, newPasswordRepeat: Uint8Array, newChoice: string,
+ *   newPosition: number, newPim: number, newMemoryLevel: number, confirmKind: string,
+ *   confirmsAgain: boolean, mainPassphrase: Uint8Array }} CoreRequest
+ */
+
+/**
+ * A reference that a recovery is compared with, as a check's request and the page's answer to
+ * "noLength" (answerNoLength in web/client.js) carry it.
+ * @typedef {{ referenceKind: string, reference: string, coin: string, path: string,
+ *   passphrase: Uint8Array }} ReferenceFields
+ */
+
+/**
+ * The page's answer to "confirmAgain" (answerConfirmAgain in web/client.js): another confirmation.
+ * @typedef {{ confirmKind: string, reference: string, coin: string, path: string,
+ *   passphrase: Uint8Array, words: number }} ConfirmationFields
+ */
+
+/**
+ * The page's next request in a session of hidden wallets (openHiddenWallets in web/client.js): a
+ * password typed twice with its review choice, or the end of the session.
+ * @typedef {{ close?: boolean, password: Uint8Array, passwordRepeat: Uint8Array, choice: string,
+ *   position: number }} HiddenWalletRequest
+ */
+
+/**
+ * A rekey's recovery once it is confirmed, as RekeySession.recover() and confirmAgain() give it:
+ * what the owner compares, if the owner confirms, and the 16-bit source check.
+ * @typedef {{ ownerCheck: Record<string, unknown> | null, rehearsalNeedsPassphrase: boolean,
+ *   walletCheck: boolean | null }} ConfirmedRecovery
+ */
+
+/**
+ * An Emscripten build of the reference Argon2 code that may be in front of this file
+ * (argon2Builds).
+ * @typedef {{ name: string, file: string, create: Argon2Factory | undefined, buildId: string }}
+ *   Argon2Build
+ */
+
+/**
+ * The Argon2 bridge of a self-check, and how its parts read (argon2ForCheck).
+ * @typedef {{ argon2: Argon2Engine, outcomeOf: (result: ComponentResult) => ComponentResult }}
+ *   Argon2ForCheck
+ */
+
+/**
+ * The parts of a self-check that run Argon2, as the core names them (src/engine).
+ * @type {() => string[]}
+ */
 const argon2Parts = () => JSON.parse(mhfe.suiteParameters()).argon2Parts;
 /** What an Argon2 part of a self-check adds when the threaded build did not start. */
 const FALLBACK_NOTE = "the check ran the single-threaded build of the standard mode instead";
 
+/**
+ * The core's operations by name, which web/worker-start.js serves.
+ * @type {Record<string, Operation<CoreRequest>>}
+ */
+// oxlint-disable-next-line no-unused-vars -- web/worker-start.js serves it in runtime/worker.js
 const CORE_OPERATIONS = {
   parameters: () => JSON.parse(mhfe.suiteParameters()),
   packageVersion: () => mhfe.packageVersion(),
@@ -78,6 +140,7 @@ const CORE_OPERATIONS = {
       host.progress,
     );
     return withSession(session, async () => {
+      /** @type {(reference: ReferenceFields) => { outcome: string, evidence: unknown }} */
       const compare = (reference) =>
         JSON.parse(
           session.compare(
@@ -91,7 +154,10 @@ const CORE_OPERATIONS = {
       const result = compare(request);
       // Detection that found no verified length, none or several, asks the page for the length.
       if (result.outcome !== "notVerified" || !request.asksLength) return result;
-      const next = await host.ask("noLength", result.evidence);
+      // The page answers with a reference or null (answerNoLength in web/client.js).
+      const next = /** @type {ReferenceFields | null} */ (
+        await host.ask("noLength", result.evidence)
+      );
       if (next === null) return result;
       try {
         return compare(next);
@@ -221,10 +287,13 @@ const CORE_OPERATIONS = {
       );
       const recovered = await recoverConfirmed(session, request, host);
       if (recovered.ownerCheck !== null) {
-        const answer = await host.ask("ownerCheck", {
-          ...recovered.ownerCheck,
-          rehearsalNeedsPassphrase: recovered.rehearsalNeedsPassphrase,
-        });
+        // The page answers with the owner's yes or no (answerOwner in web/client.js).
+        const answer = /** @type {{ confirmed: boolean, passphrase: Uint8Array } | null} */ (
+          await host.ask("ownerCheck", {
+            ...recovered.ownerCheck,
+            rehearsalNeedsPassphrase: recovered.rehearsalNeedsPassphrase,
+          })
+        );
         try {
           session.ownerAnswer(answer?.confirmed === true, answer?.passphrase ?? new Uint8Array());
         } finally {
@@ -254,9 +323,13 @@ const CORE_OPERATIONS = {
       argon2,
     );
     return withSession(session, async () => {
+      /** @type {Set<string>} */
       const keepsSessionOpen = new Set(JSON.parse(mhfe.suiteParameters()).hiddenWalletRefusals);
-      let next = await host.ask("ready", null);
+      // The page answers each question with its next request (openHiddenWallets in
+      // web/client.js).
+      let next = /** @type {HiddenWalletRequest | null} */ (await host.ask("ready", null));
       while (next !== null && next?.close !== true) {
+        /** @type {[question: string, value: unknown]} */
         let reply;
         try {
           const wallet = JSON.parse(
@@ -277,7 +350,7 @@ const CORE_OPERATIONS = {
         } finally {
           wipeSecrets(next);
         }
-        next = await host.ask(...reply);
+        next = /** @type {HiddenWalletRequest | null} */ (await host.ask(...reply));
       }
       return { closed: true };
     });
@@ -289,6 +362,10 @@ const CORE_OPERATIONS = {
  * core allows another on the same recovery (its ownerLengths), the page is asked for one, if it
  * gives them (`request.confirmsAgain`), and it is confirmed without the rounds again; null from
  * the page, or no answer asked for, ends the rekey with the refusal.
+ * @param {mhfe.RekeySession} session
+ * @param {CoreRequest} request
+ * @param {WorkerHost} host
+ * @returns {Promise<ConfirmedRecovery>}
  */
 async function recoverConfirmed(session, request, host) {
   let confirm = () =>
@@ -310,9 +387,13 @@ async function recoverConfirmed(session, request, host) {
       if (error instanceof WebAssembly.RuntimeError) throw error;
       refusal = error;
     }
+    /** @type {number[] | null} */
     const ownerLengths = JSON.parse(session.ownerLengths());
     if (ownerLengths === null || !request.confirmsAgain) throw refusal;
-    const next = await host.ask("confirmAgain", { ...describeError(refusal), ownerLengths });
+    // The page answers with another confirmation or null (answerConfirmAgain in web/client.js).
+    const next = /** @type {ConfirmationFields | null} */ (
+      await host.ask("confirmAgain", { ...describeError(refusal), ownerLengths })
+    );
     if (next === null) throw refusal;
     confirm = () => {
       try {
@@ -332,7 +413,10 @@ async function recoverConfirmed(session, request, host) {
   }
 }
 
-/** The Argon2 bridge over the Emscripten build placed in front of this file; see startArgon2. */
+/**
+ * The Argon2 bridge over the Emscripten build placed in front of this file; see startArgon2.
+ * @param {CoreRequest} request
+ */
 async function argon2For(request) {
   const builds = argon2Builds();
   const build = builds.threaded.create === undefined ? builds.singleThreaded : builds.threaded;
@@ -348,11 +432,14 @@ async function argon2For(request) {
  * every call with the causes, and those parts are not available rather than failed. A wrong
  * answer of a build that started stays a failure, and parts of different builds stay an error
  * (PACKAGE_MISMATCH).
+ * @param {CoreRequest} request
+ * @returns {Promise<Argon2ForCheck>}
  */
 async function argon2ForCheck(request) {
   const builds = argon2Builds();
   const tried = [builds.threaded, builds.singleThreaded].filter(({ create }) => create);
   if (tried.length === 0) throw noArgon2Build();
+  /** @type {string[]} */
   const failures = [];
   for (const build of tried) {
     try {
@@ -379,6 +466,9 @@ async function argon2ForCheck(request) {
 /**
  * A part of a self-check whose Argon2 build started after the threaded one did not, `failures`
  * naming why: it passes with a warning that says so, and its failure, a wrong answer, says so too.
+ * @param {ComponentResult} result
+ * @param {string[]} failures
+ * @returns {ComponentResult}
  */
 function afterFallback(result, failures) {
   if (failures.length === 0 || !argon2Parts().includes(result.id)) return result;
@@ -391,6 +481,7 @@ function afterFallback(result, failures) {
  * The Emscripten builds of the reference Argon2 code that may be placed in front of this file:
  * the factory each defines, and its build, which scripts/stamp-build-id.mjs stamps into it. A
  * build that is not in front leaves its names undefined, hence typeof.
+ * @returns {{ threaded: Argon2Build, singleThreaded: Argon2Build }}
  */
 function argon2Builds() {
   return {
@@ -416,6 +507,9 @@ function argon2Builds() {
 /**
  * Starts one of the Argon2 builds of argon2Builds(), once it is known to be of this worker's
  * build: an Argon2 build of another build is refused before it runs (PACKAGE_MISMATCH).
+ * @param {Argon2Build} build
+ * @param {Blob | null} threadedScript
+ * @returns {Promise<Argon2Module>}
  */
 function startArgon2(build, threadedScript) {
   if (build.create === undefined) throw noArgon2Build();
@@ -440,6 +534,7 @@ function startArgon2(build, threadedScript) {
   return build.create();
 }
 
+/** The error of an operation that needs Argon2 when no Argon2 build is in front of the worker. */
 function noArgon2Build() {
   return new Error("INTERNAL_ERROR: this operation needs an Argon2 build in front of the worker");
 }

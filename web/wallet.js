@@ -1,3 +1,4 @@
+// @ts-check
 // The wallet module of the mhfe browser package: the wallet check of a recovered phrase
 // (MHFE-WALLET-CHECK-SEED-1), master key fingerprints, what an address check searches, and new
 // 24-word phrases. No Argon2. A page supplies the module's files as text and bytes:
@@ -32,6 +33,22 @@ import {
 
 export { MhfeCancelledError, MhfeError } from "../runtime/runtime.js";
 
+/**
+ * @import { MhfeChosenWord, MhfeWallet as DeclaredWallet, MhfeWalletParameters, MhfeWalletSources }
+ *   from "./wallet.d.ts"
+ * @import { MhfeSecret, WorkerJob, WorkerRequest } from "../runtime/runtime.js"
+ */
+
+/**
+ * The options of drawPhrase() as a page may pass them.
+ * @typedef {Partial<NonNullable<Parameters<DeclaredWallet["drawPhrase"]>[0]>>} DrawOptions
+ */
+
+/**
+ * The wishes of a new phrase as the worker takes them (wishesOf).
+ * @typedef {{ words: string, places: number[], neverUse: string }} Wishes
+ */
+
 /** Workers that draw a checked phrase at once by default; each takes a processor core. */
 const MOST_DRAW_WORKERS = 8;
 /**
@@ -45,11 +62,19 @@ const WALLET_MODULE = "wallet";
 /** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
 const WALLET_BUILD_ID = "development";
 
+/**
+ * The wallet module: the wallet check of a recovered phrase, master key fingerprints, what an
+ * address check searches, and new 24-word phrases. Its options are those of its declaration, as a
+ * page may pass them: any may be missing or wrong, and each method checks them.
+ * @extends {MhfeModuleClass<MhfeWalletParameters>}
+ */
 export class MhfeWallet extends MhfeModuleClass {
+  /** @type {ModuleWorker} */
   #module;
   /** The drawing of a phrase, the class's one long operation, held as MhfeClient holds its own. */
   #slot = new OperationSlot();
 
+  /** @param {Partial<MhfeWalletSources>} [sources] */
   constructor({ workerSource, wasm } = {}) {
     const module = new ModuleWorker({
       module: WALLET_MODULE,
@@ -69,6 +94,7 @@ export class MhfeWallet extends MhfeModuleClass {
    * The check is offered with a passphrase only: an empty one is refused
    * (WALLET_CHECK_NEEDS_PASSPHRASE), and so is a phrase of another length (INVALID_WORD_COUNT).
    * A pass is evidence, not proof, and never says which wallet it is.
+   * @param {Partial<Parameters<DeclaredWallet["walletCheck"]>[0]>} [options]
    */
   async walletCheck({ phrase, passphrase } = {}) {
     requireText(phrase, "phrase");
@@ -84,12 +110,16 @@ export class MhfeWallet extends MhfeModuleClass {
    * with how many words begin with it, "words" from two letters, with those words, "noWord" when
    * none does, and "nothing" otherwise; `completion` is what Tab adds. Each call starts a worker:
    * a page may ask once typing pauses.
+   * @param {Partial<Parameters<DeclaredWallet["wordHints"]>[0]>} [options]
    */
   async wordHints({ typed } = {}) {
     return wordHintsOf(this.#module, typed);
   }
 
-  /** The master key fingerprint of a phrase with a BIP39 passphrase, which may be empty. */
+  /**
+   * The master key fingerprint of a phrase with a BIP39 passphrase, which may be empty.
+   * @param {Partial<Parameters<DeclaredWallet["fingerprint"]>[0]>} [options]
+   */
   async fingerprint({ phrase, passphrase } = {}) {
     requireText(phrase, "phrase");
     const given = secretOrEmpty(passphrase, "passphrase");
@@ -103,6 +133,7 @@ export class MhfeWallet extends MhfeModuleClass {
    * to one path. No coin is the default, so that a page for one coin names no other. `scanGap`, 0
    * by default for the usual search, states instead the first account's first `scanGap`
    * receiving and change addresses, where MhfeClient.searchDecoy() looks for two missing words.
+   * @param {Partial<Parameters<DeclaredWallet["describeAddress"]>[0]>} [options]
    */
   async describeAddress({ address, coin, path = "", scanGap = 0 } = {}) {
     requireText(address, "address");
@@ -130,6 +161,7 @@ export class MhfeWallet extends MhfeModuleClass {
    * wallet from a decoy. `fixedPosition` says the chosen word has a position, where "anywhere"
    * would keep more. `chosen` and `neverUse` as for drawPhrase(); `walletCheck` whether the phrase
    * will get the check.
+   * @param {Partial<NonNullable<Parameters<DeclaredWallet["describeDraw"]>[0]>>} [options]
    */
   async describeDraw({ chosen = [], neverUse = [], walletCheck = false } = {}) {
     const wishes = wishesOf(chosen, neverUse);
@@ -157,6 +189,7 @@ export class MhfeWallet extends MhfeModuleClass {
    * describeDraw() tells what they cost first. `onProgress({ stage: "draw", draws })` reports the
    * draws of all workers; cancel() stops them. Resolves to `{ phrase, words, walletCheck,
    * fingerprintWithPassphrase, workers }`.
+   * @param {DrawOptions} [options]
    */
   async drawPhrase({
     passphrase,
@@ -206,6 +239,13 @@ export class MhfeWallet extends MhfeModuleClass {
    * Draws on `count` workers at once once the class is ready; see drawPhrase(). This class's own
    * copies of the passphrase are wiped when the setup ends, however it ends: each worker has
    * copies of its own, which its job wipes (AUD-012-SEC001).
+   * @param {MhfeSecret} passphrase
+   * @param {MhfeSecret} passphraseRepeat
+   * @param {boolean} hasPassphrase
+   * @param {boolean | undefined} checked whether the phrase gets the wallet check
+   * @param {number} count
+   * @param {Wishes} wishes
+   * @param {DrawOptions["onProgress"]} onProgress
    */
   #draw(passphrase, passphraseRepeat, hasPassphrase, checked, count, wishes, onProgress) {
     // Made before the first copy of the passphrase, so that nothing can fail between that copy
@@ -240,25 +280,35 @@ export class MhfeWallet extends MhfeModuleClass {
    * the chosen words) and the `wishes`, and settles with the first phrase found or the first
    * failure. A failure while the workers are started stops those started, wipes the copies not
    * yet handed to a job and frees the slot.
+   * @param {Record<string, Uint8Array>} secrets
+   * @param {Wishes} wishes
+   * @param {boolean | undefined} checked
+   * @param {number} count
+   * @param {DrawOptions["onProgress"]} onProgress
+   * @returns {Promise<unknown>}
    */
   #startDraws(secrets, wishes, checked, count, onProgress) {
     return new Promise((resolve, reject) => {
+      /** @type {WorkerJob[]} */
       const jobs = [];
       let finished = false;
       let release = () => {};
       // The first result or failure ends the drawing, stops every worker and frees the slot.
+      /** @type {(error: unknown, result?: unknown) => void} */
       const finish = (error, result) => {
         if (finished) return;
         finished = true;
         release();
         for (const job of jobs) job.stop(null);
-        if (error === null) resolve({ ...result, workers: count });
+        // The worker's result is the phrase drawn; a spread copies the fields of any value.
+        if (error === null) resolve({ .../** @type {object} */ (result), workers: count });
         else reject(error);
       };
       try {
-        const draws = new Array(count).fill(0);
+        const draws = Array.from({ length: count }, () => 0);
         release = this.#slot.hold((error) => finish(error));
         for (let index = 0; index < count && !finished; index += 1) {
+          /** @type {WorkerRequest} */
           const message = {
             operation: "drawPhrase",
             walletCheck: checked,
@@ -270,7 +320,7 @@ export class MhfeWallet extends MhfeModuleClass {
             for (const [field, bytes] of Object.entries(secrets)) message[field] = bytes.slice();
             started = this.#module.start(message, {
               // Returned, so that a rejected promise of the page stops the drawing too.
-              draws: (drawn) => {
+              draws: (/** @type {number} */ drawn) => {
                 draws[index] = drawn;
                 const total = draws.reduce((sum, value) => sum + value, 0);
                 return onProgress?.({ stage: "draw", draws: total });
@@ -304,6 +354,9 @@ export class MhfeWallet extends MhfeModuleClass {
  * secret; the place of each, 0 for anywhere and otherwise its position; and the words never to
  * use, one space apart. Only their types are checked here: the library judges the words, their
  * places and how many (INVALID_WORD_WISH).
+ * @param {MhfeChosenWord[]} chosen
+ * @param {string[]} neverUse
+ * @returns {Wishes}
  */
 function wishesOf(chosen, neverUse) {
   if (!Array.isArray(chosen)) throw new TypeError("chosen must be an array of { word, position }.");
@@ -315,7 +368,7 @@ function wishesOf(chosen, neverUse) {
   for (const wish of chosen) {
     requireText(wish?.word, "a chosen word");
     const { position } = wish;
-    const whole = Number.isSafeInteger(position) && position >= 1;
+    const whole = typeof position === "number" && Number.isSafeInteger(position) && position >= 1;
     if (position !== "anywhere" && !(whole && position <= HIGHEST_WORD_POSITION)) {
       throw new TypeError('A chosen word\'s position is a whole number from 1, or "anywhere".');
     }
@@ -325,13 +378,17 @@ function wishesOf(chosen, neverUse) {
   return { words: words.join(" "), places, neverUse: neverUse.join(" ") };
 }
 
-/** Refuses a number of drawing workers outside 1 to HIGHEST_DRAW_WORKERS. */
+/**
+ * Refuses a number of drawing workers outside 1 to HIGHEST_DRAW_WORKERS.
+ * @param {number} workers
+ */
 function requireWorkers(workers) {
   if (!Number.isSafeInteger(workers) || workers < 1 || workers > HIGHEST_DRAW_WORKERS) {
     throw new TypeError(`workers must be a whole number from 1 to ${HIGHEST_DRAW_WORKERS}.`);
   }
 }
 
+/** As many workers as the processor's cores, at most MOST_DRAW_WORKERS. */
 function defaultWorkers() {
   return Math.min(globalThis.navigator?.hardwareConcurrency || 1, MOST_DRAW_WORKERS);
 }
@@ -339,9 +396,13 @@ function defaultWorkers() {
 /**
  * The request of `operation` on a phrase with a BIP39 passphrase, both as byte copies that the
  * worker and the WebAssembly wipe. A refused passphrase leaves no copy of the phrase behind.
+ * @param {string} operation
+ * @param {string} phrase
+ * @param {MhfeSecret} passphrase
  */
 function phraseRequest(operation, phrase, passphrase) {
   requireSecret(passphrase, "passphrase");
+  /** @type {WorkerRequest} */
   const message = { operation, phrase: encodeSecret(phrase, "phrase") };
   try {
     message.passphrase = encodeSecret(passphrase, "passphrase");

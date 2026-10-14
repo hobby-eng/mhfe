@@ -15,6 +15,7 @@ export {
 /** runtime/worker.js and runtime/mhfe.wasm. */
 export type MhfePasswordsSources = MhfePackageParts;
 
+/** The review of a typed password under its check word profile, from review(). */
 export interface MhfePasswordReview {
   profile: "MHFE-PASSWORD-CHECK-1";
   reading: "notThisShape" | "fits" | "restorable" | "mismatch";
