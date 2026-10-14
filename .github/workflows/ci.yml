@@ -27,6 +27,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # The slow checks of a release, which a push or a pull request never runs (CI-04): for a release
+  # tag, which release.yml checks through this workflow, and by hand.
+  RELEASE_CHECKS: ${{ github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' }}
+
 jobs:
   check:
     runs-on: ubuntu-24.04
@@ -54,23 +59,28 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-      # The workspace style for JavaScript, TypeScript, Markdown, JSON and YAML: double quotes,
-      # 100 columns. Prettier comes from package-lock.json, checked against its integrity hash.
-      - name: Check formatting
-        run: |
-          npm ci --ignore-scripts
-          npm run format:check
+      # The tools come from package-lock.json, each checked against its integrity hash.
+      - name: Install the Node.js tools
+        run: npm ci --ignore-scripts
+      # Formatting, the copy gate, clippy for native and WebAssembly, the fast tests (including the
+      # C/Rust Argon2 cross-check) and Prettier.
+      - name: Run the fast checks
+        if: ${{ env.RELEASE_CHECKS != 'true' }}
+        run: scripts/check-fast.sh
       - name: Install Emscripten 6.0.12
+        if: ${{ env.RELEASE_CHECKS == 'true' }}
         run: |
           git clone --depth 1 --branch 6.0.12 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
           "$RUNNER_TEMP/emsdk/emsdk" install 6.0.12
           "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.12
       - name: Install pinned wasm-bindgen CLI
+        if: ${{ env.RELEASE_CHECKS == 'true' }}
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
-      # Formatting, clippy for native and WebAssembly, the fast tests (including the C/Rust
-      # Argon2 cross-check), both Emscripten builds under Node.js, the browser package and the
-      # release-artifact check. The full-size vector replay runs in vectors.yml.
+      # The fast checks, then both Emscripten builds under Node.js, the browser package, each
+      # module built alone, the terminal with the full-size cases and the release-artifact check.
+      # The full-size vector replay runs in vectors.yml.
       - name: Run all checks
+        if: ${{ env.RELEASE_CHECKS == 'true' }}
         run: |
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           scripts/check.sh
@@ -81,13 +91,14 @@ jobs:
       # scripts/verify-browsers.mjs, so that the step's own limit never cuts a page off before it
       # reports (AUD-023-BLD005).
       - name: Check the browser package in Chromium and Firefox
+        if: ${{ env.RELEASE_CHECKS == 'true' }}
         timeout-minutes: 245
         run: |
           npx playwright install --with-deps chromium firefox
           node scripts/verify-browsers.mjs
       # The results and console messages of each page, for a run that failed or stopped.
       - name: Keep the browser logs
-        if: ${{ failure() }}
+        if: ${{ failure() && env.RELEASE_CHECKS == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-check-${{ github.sha }}
@@ -118,6 +129,7 @@ jobs:
         run: cargo test --locked
       - name: Build the command-line tool
         run: cargo build --locked
+      # The fast cases; those that run Argon2 at full size run in scripts/check.sh, on Linux.
       - name: Check hidden input in a Unix pseudo-terminal
         if: runner.os == 'macOS'
         timeout-minutes: 10

@@ -7,6 +7,7 @@ The specification and vectors for this implementation live in `../mhfe_spec`; an
 ## Commands
 
 - Toolchain: Rust 1.99.0 from `rust-toolchain.toml`, with the `CARGO_HOME` and `RUSTUP_HOME` set in the environment (never the home-directory defaults). Emscripten 6.0.12 from `../workingspace/emsdk` (`source ../workingspace/emsdk/emsdk_env.sh`) for the browser builds.
+- Fast checks, as CI runs them on every push: `scripts/check-fast.sh`.
 - Targeted: `cargo test --locked <name>` (fast: the tests use a reduced Argon2 cost); `cargo clippy --locked --all-targets --all-features -- -D warnings`; `cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings`; `cargo fmt --check`; `npm ci --ignore-scripts && npm run format:check` (Prettier for Markdown and JavaScript).
 - Browser package: `scripts/build-wasm.sh`, then `node scripts/verify-argon2-wasm.mjs` and `node scripts/verify-browser-package.mjs`; `node scripts/verify-browsers.mjs` runs it in Chromium and Firefox at a reduced cost (Playwright from `npm ci`, browsers from `npx playwright install chromium firefox`); `node scripts/build-browser-check.mjs` writes a full-size page for a real browser.
 - The terminal cell table `src/bin/mhfe/cell_widths.rs` is generated: `python3 scripts/generate-cell-widths.py` (`--check` compares), with `unicodedata2` 17.0.1, which holds the Unicode 17.0.0 database, from `scripts/independent-suite3-requirements.txt`; `vectors.yml` checks it at every release.

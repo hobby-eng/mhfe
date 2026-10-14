@@ -1,9 +1,10 @@
 # Preparing and signing a release
 
-The branch CI must pass for the exact release commit, including Linux, Windows, macOS and the
-Chromium/Firefox browser checks. The tag workflow then runs every CI check again on the tagged
-commit (it calls `ci.yml`: `scripts/check.sh`, the Chromium/Firefox checks and the Windows and macOS
-tests with their terminal suites), builds the four canonical Docker archives and both macOS
+The branch CI, which runs the fast checks on Linux, Windows and macOS, must pass for the exact
+release commit; run the Chromium/Firefox browser checks by hand (`ci.yml` through
+workflow_dispatch) or locally before tagging. The tag workflow then runs the release checks on the
+tagged commit (it calls `ci.yml`: `scripts/check.sh`, the Chromium/Firefox checks and the Windows
+and macOS tests with their terminal suites), builds the four canonical Docker archives and both macOS
 archives, audits dependencies, and creates a draft only once all of these jobs pass. Finish the
 draft locally so the OpenPGP private key never enters GitHub Actions. The same tag starts the Test
 vectors workflow on its own: it replays every full-cost suite 3 and suite 4 vector with the native
