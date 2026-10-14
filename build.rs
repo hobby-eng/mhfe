@@ -5,6 +5,7 @@
 //! (`scripts/build-argon2-wasm.sh`) and the WebAssembly core calls it through JavaScript.
 
 use std::env;
+use std::error::Error;
 use std::path::{Path, PathBuf};
 
 const ARGON2_DIR: &str = "vendor/phc-winner-argon2";
@@ -27,35 +28,35 @@ const VALIDATION_FIXTURE: &str = "tests/fixtures/validation-cases.json";
 /// `OUT_DIR/validation-passwords.json`, so that a build with the passwords module alone carries
 /// the password cases and none of the cases of the formats check (AUD-023-BLD009). The fixture is
 /// written with two spaces per level, so the section ends at the first `]` at its own level.
-fn write_password_cases() {
+fn write_password_cases(out_dir: &Path) -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed={VALIDATION_FIXTURE}");
-    let fixture = std::fs::read_to_string(VALIDATION_FIXTURE).expect("the fixture is readable");
+    let fixture = std::fs::read_to_string(VALIDATION_FIXTURE)
+        .map_err(|error| format!("{VALIDATION_FIXTURE}: {error}"))?;
     let start = fixture
         .find("\n  \"passwords\": [")
-        .expect("the fixture has a passwords section");
+        .ok_or("the fixture has no passwords section")?;
     let length = fixture[start..]
         .find("\n  ]")
-        .expect("the passwords section ends")
+        .ok_or("the passwords section does not end")?
         + "\n  ]".len();
-    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
     std::fs::write(
         out_dir.join("validation-passwords.json"),
         format!("{{{}\n}}\n", &fixture[start..start + length]),
-    )
-    .expect("OUT_DIR is writable");
+    )?;
+    Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=build.rs");
-    write_password_cases();
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo sets no OUT_DIR")?);
+    write_password_cases(&out_dir)?;
     println!("cargo:rerun-if-changed={ARGON2_DIR}");
     println!("cargo:rerun-if-changed={SIMD_CHOICE}");
 
-    let target_arch =
-        env::var("CARGO_CFG_TARGET_ARCH").expect("Cargo sets the target architecture");
+    let target_arch = env::var("CARGO_CFG_TARGET_ARCH")?;
     let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap_or_default();
     if target_arch == "wasm32" {
-        return;
+        return Ok(());
     }
 
     let argon2 = Path::new(ARGON2_DIR);
@@ -82,7 +83,6 @@ fn main() {
         // the SSSE3 code in opt.c, so cl gets that macro directly. clang-cl takes -m options.
         let compiler = build.get_compiler();
         let microsoft_cl = compiler.is_like_msvc() && !compiler.is_like_clang_cl();
-        let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
         for (variant, flag, cl_macro) in [
             ("sse2", "-msse2", None),
             ("ssse3", "-mssse3", Some("__SSSE3__")),
@@ -120,4 +120,5 @@ fn main() {
     }
 
     build.compile("argon2");
+    Ok(())
 }

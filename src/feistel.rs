@@ -255,6 +255,7 @@ pub(crate) fn round_salt(geometry: Geometry, message: &[u8]) -> [u8; SALT_BYTES]
 }
 
 /// `M_i = Trunc_h(HMAC-SHA-256(K_i, DS_MASK || message))`, as long as one half.
+#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
 pub(crate) fn round_mask(geometry: Geometry, key: &[u8; KEY_BYTES], message: &[u8]) -> Vec<u8> {
     let mut mac =
         <HmacSha256 as KeyInit>::new_from_slice(key).expect("HMAC accepts a key of any length");

@@ -64,8 +64,11 @@ pub enum Reading {
 /// How the written form of a password differs from the text typed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Correction {
+    /// Spaces before, after or between the words were removed.
     ExtraSpaces,
+    /// Capital letters were made small.
     Capitals,
+    /// Both: extra spaces removed and capitals made small.
     SpacesAndCapitals,
 }
 
@@ -306,11 +309,8 @@ fn token_ranges(text: &str) -> Vec<Range<usize>> {
 
 /// The index at `position` that makes the six fit, the other five as given.
 fn restored_index(indexes: &[usize], position: usize) -> usize {
-    let mut drawn: Zeroizing<[usize; DRAWN_WORDS]> = Zeroizing::new(
-        indexes[..DRAWN_WORDS]
-            .try_into()
-            .expect("a password of the profile has five drawn words"),
-    );
+    let mut drawn = Zeroizing::new([0usize; DRAWN_WORDS]);
+    drawn.copy_from_slice(&indexes[..DRAWN_WORDS]);
     if position == DRAWN_WORDS {
         return check_index(&drawn);
     }
@@ -321,6 +321,10 @@ fn restored_index(indexes: &[usize], position: usize) -> usize {
 }
 
 /// The inverse of `weight` modulo 7,776, which exists because the weight is coprime to it.
+#[expect(
+    clippy::expect_used,
+    reason = "every weight is coprime to 7,776, so its inverse exists"
+)]
 fn inverse(weight: usize) -> usize {
     (1..LIST_SIZE)
         .find(|&candidate| weight * candidate % LIST_SIZE == 1)

@@ -1,0 +1,6 @@
+# Tests may unwrap, expect and panic (RUST-01, RUST-05); library and front-end code returns errors.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+# CORE-15: at most 100 lines per function.
+too-many-lines-threshold = 100

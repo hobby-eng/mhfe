@@ -145,17 +145,18 @@ Argon2 is the reference C implementation, vendored unchanged (see
 is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
 The engine module also makes the calls that lock secrets in memory and keep the work area out of
 core dumps (`mlock`, `madvise`). The command-line tool denies unsafe code too, except in
-`src/bin/mhfe/protect.rs`, which forbids core dumps (`setrlimit`, `prctl`), routes Ctrl+\\ and
-Ctrl+Z to the Ctrl+C handler (`sigaction`, `raise`), isolates a command (seccomp through `prctl`,
-Landlock, a network namespace through `unshare`), and reads each protection back by asking for it
-or trying what it forbids (`getrlimit`, `prctl`, `socket`, io_uring, `open`); and in
-`src/bin/mhfe/hidden_input.rs`, which switches the terminal's echo and line mode for a secret's
-prompt and a list (`tcgetattr`/`tcsetattr` on Unix, `GetConsoleMode`/`SetConsoleMode` on Windows,
-where it also has the console carry out control sequences) and restores them, reads the
-terminal's width and whether a key follows Escape (`ioctl`/`select` on Unix,
-`GetConsoleScreenBufferInfo`/`PeekConsoleInputW` on Windows), and tells whether standard output is
-the terminal the private screen is shown on (`fstat` on Unix, `GetConsoleMode` on Windows). The
-engine module keeps these invariants:
+`src/bin/mhfe/protect.rs` with its modules `protect/seccomp.rs` and `protect/landlock.rs`, which
+forbids core dumps (`setrlimit`, `prctl`), routes Ctrl+\\ and Ctrl+Z to the Ctrl+C handler
+(`sigaction`, `raise`), isolates a command (seccomp through `prctl`, Landlock, a network namespace
+through `unshare`), and reads each protection back by asking for it or trying what it forbids
+(`getrlimit`, `prctl`, `socket`, io_uring, `open`); and in the terminal modules of
+`src/bin/mhfe/hidden_input.rs`, `hidden_input/unix.rs` and `hidden_input/windows.rs`, which switch
+the terminal's echo and line mode for a secret's prompt and a list (`tcgetattr`/`tcsetattr` on
+Unix, `GetConsoleMode`/`SetConsoleMode` on Windows, where they also have the console carry out
+control sequences) and restore them, read the terminal's width and whether a key follows Escape
+(`ioctl`/`select` on Unix, `GetConsoleScreenBufferInfo`/`PeekConsoleInputW` on Windows), and tell
+whether standard output is the terminal the private screen is shown on (`fstat` on Unix,
+`GetConsoleMode` on Windows). The engine module keeps these invariants:
 
 - `argon2_context` is copied field for field; compile-time assertions check its size, alignment and
   every field offset on 32- and 64-bit targets, and a test proves that every field reaches the C

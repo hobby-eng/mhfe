@@ -94,6 +94,19 @@ browser-passwords = ["wasm-bindings"]
 # Wallet check of a phrase, master key fingerprints, address search scopes and new phrases.
 browser-wallet = ["wasm-bindings"]
 
+[lints.rust]
+unsafe_code = "deny" # not "forbid": the operating-system modules allow it locally (RUST-07)
+missing_docs = "deny" # library crates
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+too_many_lines = "deny" # threshold 100, CORE-15
+mod_module_files = "deny" # RUST-03
+undocumented_unsafe_blocks = "deny" # RUST-07
+
 [profile.release]
 codegen-units = 1
 lto = true

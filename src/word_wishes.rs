@@ -69,6 +69,7 @@ pub enum Randomness {
 pub struct WishOdds {
     /// The random bits it keeps, about.
     pub random_bits: f64,
+    /// How that compares with the recommendation, as a front end says it.
     pub randomness: Randomness,
     /// The draws it is expected to take, the wallet check's included.
     pub expected_draws: f64,

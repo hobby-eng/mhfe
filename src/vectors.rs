@@ -18,6 +18,13 @@ use crate::{
     SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
 
+mod inputs;
+
+// The phrases and the password that the tests of other modules share (test_support.rs).
+#[cfg(test)]
+pub(crate) use inputs::{AMBIGUOUS_12_21, NONZERO_12, TEST_PASSWORD, ZERO_12, ZERO_24};
+pub use inputs::{NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS, SAME_LENGTH_NEGATIVE_INPUTS};
+
 /// Identifies this file layout; a changed layout gets a new name.
 pub const SCHEMA: &str = "mhfe-suite-3-vector-v2";
 /// The layout of a negative case.
@@ -35,8 +42,11 @@ const ARGON2_VERSION: u32 = 0x13;
 /// independent check records its own revision next to them (independent-verification.json).
 #[derive(Serialize)]
 pub struct Generator {
+    /// The program and command that wrote it.
     pub program: &'static str,
+    /// The program's version.
     pub version: &'static str,
+    /// The Argon2 implementation the program used.
     pub argon2: &'static str,
 }
 
@@ -47,46 +57,75 @@ const GENERATOR: Generator = Generator {
              f57e61e19229e23c4445b85494dbf7c07de721cb",
 };
 
+/// A suite 3 vector: one encryption and the matching recovery, with every intermediate value.
 #[derive(Serialize)]
 pub struct Vector {
+    /// The file layout, [`SCHEMA`].
     pub schema: &'static str,
+    /// The suite, [`SUITE_ID`].
     pub suite_id: &'static str,
+    /// The vector's name, also its file name without `.json`.
     pub name: String,
+    /// That the file is public test data only.
     pub warning: &'static str,
+    /// What wrote the file.
     pub generator: Generator,
+    /// The phrase, the password and the settings.
     pub inputs: Inputs,
+    /// The parameters of every Argon2id call.
     pub argon2: Argon2Parameters,
+    /// How the phrase became the state the rounds start from.
     pub packing: Packing,
+    /// The rounds of the encryption.
     pub encryption: Pass,
+    /// The container, 24 words.
     pub container: String,
+    /// The rounds of the recovery.
     pub decryption: Pass,
+    /// Every reading the recovery gives, as its length detection finds them.
     pub recovery: Vec<RecoveredCandidate>,
 }
 
+/// The public inputs of a vector.
 #[derive(Serialize)]
 pub struct Inputs {
+    /// The original seed phrase.
     pub phrase: String,
     /// The password as typed; `password_nfkd_utf8_hex` is `P_enc`, what Argon2 receives.
     pub password: String,
+    /// The password as typed, its UTF-8 bytes in hexadecimal.
     pub password_utf8_hex: String,
+    /// `P_enc`: the password after NFKD normalization, its UTF-8 bytes in hexadecimal.
     pub password_nfkd_utf8_hex: String,
+    /// The PIM.
     pub pim: u32,
+    /// The memory level.
     pub memory_level: u32,
 }
 
+/// The parameters of every Argon2 call of a vector.
 #[derive(Serialize)]
 pub struct Argon2Parameters {
+    /// The Argon2 variant, "Argon2id".
     pub variant: &'static str,
+    /// The Argon2 version as RFC 9106 numbers it, 0x13.
     pub version: u32,
+    /// Memory in KiB.
     pub memory_kib: u32,
+    /// Passes over the memory, `t`.
     pub passes: u32,
+    /// Lanes, `p`.
     pub lanes: u32,
+    /// The length of each key in bytes.
     pub output_bytes: usize,
 }
 
+/// How a suite 3 vector's phrase becomes the state the rounds start from.
 #[derive(Serialize)]
 pub struct Packing {
+    /// The phrase's word count.
     pub words: usize,
+    /// `E`, the phrase's entropy.
     pub entropy_hex: String,
     /// `V_r`; empty for a 24-word phrase.
     pub verifier_hex: String,
@@ -98,31 +137,47 @@ pub struct Packing {
 /// encrypting, 11 down to 0 when decrypting.
 #[derive(Serialize)]
 pub struct Pass {
+    /// The state before the first round.
     pub input_state_hex: String,
+    /// Every round, in the order it ran.
     pub rounds: Vec<Round>,
+    /// The state after the last round.
     pub output_state_hex: String,
 }
 
+/// Every value of one Feistel round.
 #[derive(Serialize)]
 pub struct Round {
+    /// The round number `i`, 0 to 11.
     pub round: u32,
+    /// `L` before the round.
     pub left_before_hex: String,
+    /// `R` before the round.
     pub right_before_hex: String,
     /// The BLAKE2b-256 input `DS_SALT || BE32(MEM) || BE32(PIM) || BE32(i) || R`.
     pub salt_input_hex: String,
+    /// `S_i`, the Argon2 salt.
     pub salt_hex: String,
+    /// `K_i`, the key Argon2id returned.
     pub argon2_key_hex: String,
     /// The HMAC-SHA-256 message `DS_MASK || BE32(MEM) || BE32(PIM) || BE32(i) || R`.
     pub mask_input_hex: String,
+    /// `M_i`, the mask.
     pub mask_hex: String,
+    /// `L` after the round.
     pub left_after_hex: String,
+    /// `R` after the round.
     pub right_after_hex: String,
 }
 
+/// One reading of a recovery.
 #[derive(Serialize)]
 pub struct RecoveredCandidate {
+    /// Its length in words.
     pub words: usize,
+    /// Whether a built-in check verifies it.
     pub verified: bool,
+    /// The phrase.
     pub phrase: String,
 }
 
@@ -141,24 +196,36 @@ impl RecoveredCandidate {
 /// message carries `BE32(ENT)`.
 #[derive(Serialize)]
 pub struct SameLengthVector {
+    /// The file layout, [`SAME_LENGTH_SCHEMA`].
     pub schema: &'static str,
+    /// The suite, [`SAME_LENGTH_SUITE_ID`].
     pub suite_id: &'static str,
+    /// The vector's name, also its file name without `.json`.
     pub name: String,
+    /// That the file is public test data only.
     pub warning: &'static str,
+    /// What wrote the file.
     pub generator: Generator,
+    /// The phrase, the password and the settings.
     pub inputs: Inputs,
+    /// The parameters of every Argon2id call.
     pub argon2: Argon2Parameters,
+    /// The state the rounds start from.
     pub state: SameLengthState,
+    /// The rounds of the encryption.
     pub encryption: Pass,
     /// As many words as the phrase.
     pub container: String,
+    /// The rounds of the recovery.
     pub decryption: Pass,
     /// The one reading of a same-length container: never verified, since it has no check.
     pub recovery: RecoveredCandidate,
 }
 
+/// The state of a suite 4 vector and the geometry it gives.
 #[derive(Serialize)]
 pub struct SameLengthState {
+    /// The phrase's word count.
     pub words: usize,
     /// `ENT`, which every salt and mask message carries as `BE32(ENT)`.
     pub entropy_bits: u32,
@@ -398,14 +465,17 @@ pub struct PublicInput {
 }
 
 impl PublicInput {
+    /// The vector's name.
     pub const fn name(&self) -> &'static str {
         self.name
     }
 
+    /// The original seed phrase.
     pub const fn phrase(&self) -> &'static str {
         self.phrase
     }
 
+    /// The password.
     pub const fn password(&self) -> &'static str {
         self.password
     }
@@ -422,105 +492,6 @@ impl PublicInput {
         Ok((password, Zeroizing::new(source.to_entropy())))
     }
 }
-
-/// BIP39's all-zero 12-word phrase.
-pub(crate) const ZERO_12: &str =
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-/// BIP39's all-zero 24-word phrase.
-pub(crate) const ZERO_24: &str =
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                       abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                       abandon abandon abandon abandon abandon art";
-const ZERO_15: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                       abandon abandon abandon abandon abandon address";
-const ZERO_18: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                       abandon abandon abandon abandon abandon abandon abandon abandon agent";
-const ZERO_21: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                       abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-                       abandon abandon admit";
-/// BIP39's 12-word phrase of 0x7f bytes.
-pub(crate) const NONZERO_12: &str =
-    "legal winner thank year wave sausage worth useful legal winner thank yellow";
-const NONZERO_21: &str = "letter advice cage absurd amount doctor acoustic avoid letter advice \
-                          cage absurd amount doctor acoustic avoid letter advice cage absurd apart";
-/// NFKD changes all but the spaces and the emoji: e + U+0301, "fi", "P", "A" + U+030A, "1",
-/// and U+0438 U+0306.
-const UNICODE_PASSWORD: &str = "Caf\u{E9} \u{FB01} \u{FF30}\u{212B}\u{2460} \u{1F510} \u{439}";
-/// The password of the public test vectors.
-pub(crate) const TEST_PASSWORD: &str = "public test password";
-/// A 12-word phrase whose packed state passes the 21-word built-in check too, by chance.
-pub(crate) const AMBIGUOUS_12_21: &str =
-    "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
-const OTHER_PASSWORD: &str = "audit probe password 2026";
-
-const fn input(
-    name: &'static str,
-    phrase: &'static str,
-    password: &'static str,
-    pim: u32,
-    memory_level: u32,
-) -> PublicInput {
-    PublicInput {
-        name,
-        phrase,
-        password,
-        pim,
-        memory_level,
-    }
-}
-
-/// The suite 3 vector set: every phrase length with zero and non-zero entropy, a non-zero PIM, a
-/// non-zero memory level and both together, a password that NFKD changes, a password with
-/// leading, repeated and trailing spaces, and a phrase whose state passes two short checks.
-pub const PUBLIC_INPUTS: [PublicInput; 17] = [
-    input("zero-12", ZERO_12, TEST_PASSWORD, 0, 0),
-    input("zero-15", ZERO_15, TEST_PASSWORD, 0, 0),
-    input("zero-18", ZERO_18, TEST_PASSWORD, 0, 0),
-    input("zero-21", ZERO_21, TEST_PASSWORD, 0, 0),
-    input("zero-24", ZERO_24, TEST_PASSWORD, 0, 0),
-    input("nonzero-12", NONZERO_12, OTHER_PASSWORD, 0, 0),
-    input(
-        "nonzero-15",
-        "legal winner thank year wave sausage worth useful legal winner thank year wave sausage \
-         wise",
-        OTHER_PASSWORD,
-        0,
-        0,
-    ),
-    input(
-        "nonzero-18",
-        "letter advice cage absurd amount doctor acoustic avoid letter advice cage absurd amount \
-         doctor acoustic avoid letter always",
-        OTHER_PASSWORD,
-        0,
-        0,
-    ),
-    input("nonzero-21", NONZERO_21, OTHER_PASSWORD, 0, 0),
-    input(
-        "nonzero-24",
-        "legal winner thank year wave sausage worth useful legal winner thank year wave sausage \
-         worth useful legal winner thank year wave sausage worth title",
-        OTHER_PASSWORD,
-        0,
-        0,
-    ),
-    input("zero-12-pim-1", ZERO_12, TEST_PASSWORD, 1, 0),
-    input("zero-12-memory-level-1", ZERO_12, TEST_PASSWORD, 0, 1),
-    input("zero-12-pim-1-memory-level-1", ZERO_12, TEST_PASSWORD, 1, 1),
-    input("zero-24-pim-1-memory-level-1", ZERO_24, TEST_PASSWORD, 1, 1),
-    input("unicode-password", ZERO_12, UNICODE_PASSWORD, 0, 0),
-    // Leading, repeated and trailing spaces are part of the password: nothing is trimmed.
-    input(
-        "spaces-password",
-        ZERO_12,
-        "  public   test password  ",
-        0,
-        0,
-    ),
-    // Its state passes both the 12- and the 21-word check, so recovery lists both and the
-    // 24-word reading.
-    input("ambiguous-12-21", AMBIGUOUS_12_21, TEST_PASSWORD, 0, 0),
-];
 
 /// A negative case: a recovery of the container of the positive vector that `container_of`
 /// names, with a wrong password or setting, or with a length stated or chosen that is not the
@@ -542,6 +513,7 @@ pub struct NegativeInput {
 }
 
 impl NegativeInput {
+    /// The case's name.
     pub const fn name(&self) -> &'static str {
         self.name
     }
@@ -551,6 +523,7 @@ impl NegativeInput {
         self.container_of
     }
 
+    /// The password the case recovers with.
     pub const fn password(&self) -> &'static str {
         self.password
     }
@@ -566,60 +539,6 @@ impl NegativeInput {
     }
 }
 
-const fn negative(
-    name: &'static str,
-    container_of: &'static str,
-    password: &'static str,
-    pim: u32,
-    memory_level: u32,
-    words: usize,
-) -> NegativeInput {
-    NegativeInput {
-        name,
-        container_of,
-        password,
-        pim,
-        memory_level,
-        words,
-    }
-}
-
-/// Wrong password, PIM and memory level for a 12-word container; a wrong password for a 24-word
-/// container, which has no check and yields another valid phrase; and the right password with
-/// 24 words stated for a 12-word container: `selected-24-words`, the historical record of the
-/// unverified 24-word reading alone, and `stated-24-words`, the recovery under the length rules,
-/// the verified 12-word reading first and the 24-word one after it.
-pub const NEGATIVE_INPUTS: [NegativeInput; 7] = [
-    negative(
-        "wrong-password-detect",
-        "zero-12",
-        "public test passworD",
-        0,
-        0,
-        0,
-    ),
-    negative(
-        "wrong-password-12-words",
-        "zero-12",
-        "public test passworD",
-        0,
-        0,
-        12,
-    ),
-    negative("wrong-pim", "zero-12", TEST_PASSWORD, 1, 0, 0),
-    negative("wrong-memory-level", "zero-12", TEST_PASSWORD, 0, 1, 0),
-    negative(
-        "wrong-password-24-words",
-        "zero-24",
-        "public test passworD",
-        0,
-        0,
-        0,
-    ),
-    negative("selected-24-words", "zero-12", TEST_PASSWORD, 0, 0, 24),
-    negative("stated-24-words", "zero-12", TEST_PASSWORD, 0, 0, 24),
-];
-
 /// Negative cases recorded before the length rules of recovery, which keep the reading of the
 /// stated length alone; the corpus holds them byte for byte (mhfe_spec vectors/suite3/README.md).
 /// scripts/independent-suite3.py, the independent oracle, keeps its own copy, as it shares no code
@@ -628,93 +547,33 @@ pub const NEGATIVE_INPUTS: [NegativeInput; 7] = [
 /// told here only.
 const STATED_READING_ONLY: [&str; 1] = ["selected-24-words"];
 
-/// The suite 4 vector set: every short length at the defaults, zero and non-zero entropy, a
-/// non-zero PIM, memory level 1, both together, and a password that NFKD changes.
-pub const SAME_LENGTH_INPUTS: [PublicInput; 10] = [
-    input("same-length-zero-12", ZERO_12, TEST_PASSWORD, 0, 0),
-    input("same-length-zero-15", ZERO_15, TEST_PASSWORD, 0, 0),
-    input("same-length-zero-18", ZERO_18, TEST_PASSWORD, 0, 0),
-    input("same-length-zero-21", ZERO_21, TEST_PASSWORD, 0, 0),
-    input("same-length-nonzero-12", NONZERO_12, OTHER_PASSWORD, 0, 0),
-    input("same-length-nonzero-21", NONZERO_21, OTHER_PASSWORD, 0, 0),
-    input("same-length-zero-12-pim-1", ZERO_12, TEST_PASSWORD, 1, 0),
-    input(
-        "same-length-zero-12-memory-level-1",
-        ZERO_12,
-        TEST_PASSWORD,
-        0,
-        1,
-    ),
-    input(
-        "same-length-zero-12-pim-1-memory-level-1",
-        ZERO_12,
-        TEST_PASSWORD,
-        1,
-        1,
-    ),
-    input(
-        "same-length-unicode-password",
-        ZERO_15,
-        UNICODE_PASSWORD,
-        0,
-        0,
-    ),
-];
-
-/// Suite 4 recoveries with a wrong password, PIM or memory level, which give another valid
-/// phrase of the same length without any error, and with another length chosen, which is refused
-/// before any Argon2 work.
-pub const SAME_LENGTH_NEGATIVE_INPUTS: [NegativeInput; 4] = [
-    negative(
-        "same-length-wrong-password",
-        "same-length-zero-12",
-        "public test passworD",
-        0,
-        0,
-        0,
-    ),
-    negative(
-        "same-length-wrong-pim",
-        "same-length-zero-12",
-        TEST_PASSWORD,
-        1,
-        0,
-        0,
-    ),
-    negative(
-        "same-length-wrong-memory-level",
-        "same-length-zero-12",
-        TEST_PASSWORD,
-        0,
-        1,
-        0,
-    ),
-    negative(
-        "same-length-other-length-chosen",
-        "same-length-zero-12",
-        TEST_PASSWORD,
-        0,
-        0,
-        15,
-    ),
-];
-
 /// The recorded outcome of a negative case: the phrases recovery produced, or its error code. For
 /// a case of `STATED_READING_ONLY` it keeps only the reading of the stated length.
 #[derive(Serialize)]
 pub struct NegativeCase {
+    /// The file layout, [`NEGATIVE_SCHEMA`] or [`SAME_LENGTH_NEGATIVE_SCHEMA`].
     pub schema: &'static str,
+    /// The suite, [`SUITE_ID`] or [`SAME_LENGTH_SUITE_ID`].
     pub suite_id: &'static str,
+    /// The case's name.
     pub name: String,
+    /// What wrote the file.
     pub generator: Generator,
+    /// The container recovered.
     pub container: String,
+    /// The password as typed.
     pub password: String,
+    /// `P_enc`: the password after NFKD normalization, its UTF-8 bytes in hexadecimal.
     pub password_nfkd_utf8_hex: String,
+    /// The PIM.
     pub pim: u32,
+    /// The memory level.
     pub memory_level: u32,
     /// 0 for automatic detection.
     pub words: usize,
+    /// The readings the recovery gave; empty where it failed.
     pub recovery: Vec<RecoveredCandidate>,
+    /// The error code of a recovery that failed ([`MhfeError::code`]).
     pub error_code: Option<&'static str>,
 }
 
@@ -802,6 +661,7 @@ fn run_negative<E: Argon2Engine>(
 
 #[cfg(test)]
 mod tests {
+    use super::inputs::{input, ZERO_15};
     use super::*;
 
     /// The independent oracle exempts the same negative cases from the length rules as this

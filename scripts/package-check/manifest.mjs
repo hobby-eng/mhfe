@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,14 +74,12 @@ export function checkErrorCodes() {
     sorted([...libraryCodes, ...BROWSER_ERROR_CODES]),
     "MhfeErrorCode is the codes of MhfeError::code() and the browser's own",
   );
-  // No binding types a code again: each comes from the error it names.
-  for (const path of [
-    "src/wasm_api/core.rs",
-    "src/wasm_api/mod.rs",
-    "src/wasm_api/passwords.rs",
-    "src/wasm_api/repair.rs",
-    "src/wasm_api/wallet.rs",
-  ]) {
+  // No binding types a code again: each comes from the error it names. Every file of the
+  // bindings is read, so that one added later is checked too.
+  const bindings = readdirSync(new URL("src/wasm_api/", root), { recursive: true })
+    .filter((name) => name.endsWith(".rs"))
+    .map((name) => `src/wasm_api/${name}`);
+  for (const path of ["src/wasm_api.rs", ...sorted(bindings)]) {
     assert.doesNotMatch(
       read(path).toString(),
       /whole_number\([^)]*"[A-Z_]+"/u,

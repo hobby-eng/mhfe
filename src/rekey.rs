@@ -45,6 +45,7 @@ pub enum ReplacementRehearsal {
 }
 
 impl ConfirmedPhrase {
+    /// The recovered phrase.
     pub fn phrase(&self) -> &RecoveredPhrase {
         &self.phrase
     }
@@ -153,6 +154,10 @@ impl Rekey {
 
     /// How the recovered phrase must be confirmed: by its built-in check at a stated 12- to 21-word
     /// length, or by the wallet or its owner, also for a detected length.
+    #[expect(
+        clippy::expect_used,
+        reason = "Rekey::new and Rekey::set_length accept only a length the container can have"
+    )]
     pub fn confirmation_needed(&self) -> ConfirmationNeeded {
         self.container
             .confirmation_needed(self.length)

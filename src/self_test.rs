@@ -69,10 +69,12 @@ impl SelfTest {
         })
     }
 
+    /// The name of the built-in suite 3 vector.
     pub fn suite_3_vector(&self) -> &str {
         &self.suite_3.name
     }
 
+    /// The name of the built-in suite 4 vector.
     pub fn suite_4_vector(&self) -> &str {
         &self.suite_4.name
     }
@@ -241,10 +243,16 @@ pub enum SelfTestFault {
     /// salt, or in the state the round started from, which the round before made with its mask
     /// and state update, or which the packing of the phrase or container and the encoding of the
     /// password made for the first round of an operation.
-    Argon2Input { round: u32 },
+    Argon2Input {
+        /// The round, 1 to 24.
+        round: u32,
+    },
     /// Argon2id was given the input the published vector records for this round and returned
     /// another key: the fault lies in Argon2id.
-    Argon2Key { round: u32 },
+    Argon2Key {
+        /// The round, 1 to 24.
+        round: u32,
+    },
     /// Every round gave Argon2id its published input and got its published key, yet a result
     /// differs: the fault lies after the last Argon2id call of an operation, in its last mask and
     /// state update or in writing the container or the phrase.
@@ -335,6 +343,7 @@ impl SelfTestResult {
         self.suite_4
     }
 
+    /// Whether both vectors gave their published results.
     pub fn passed(self) -> bool {
         self.suite_3 && self.suite_4
     }

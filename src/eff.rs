@@ -33,6 +33,10 @@ impl EffList {
     /// The list, read on first use. The self-check of the password check word reads it with
     /// [`EffList::try_get`] at every start, so that a damaged list stops the program there with a
     /// clear error instead of here.
+    #[expect(
+        clippy::expect_used,
+        reason = "the list is compiled in, and the startup self-check reads it before any caller"
+    )]
     pub fn get() -> &'static EffList {
         Self::try_get().expect("the vendored EFF list is complete")
     }

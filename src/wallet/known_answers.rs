@@ -22,6 +22,7 @@ fn sha512(_: &[u8], message: &[u8]) -> Vec<u8> {
     sha2::Sha512::digest(message).to_vec()
 }
 
+#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
 fn hmac_sha512(key: &[u8], message: &[u8]) -> Vec<u8> {
     use hmac::{KeyInit, Mac};
     let mut mac = <hmac::Hmac<sha2::Sha512> as KeyInit>::new_from_slice(key)

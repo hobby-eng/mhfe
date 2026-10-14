@@ -189,10 +189,12 @@ impl WorkFactor {
         Ok(Self { pim, memory_level })
     }
 
+    /// The PIM, 0 to [`MAX_PIM`].
     pub fn pim(self) -> u32 {
         self.pim
     }
 
+    /// The memory level, 0 to [`MAX_MEMORY_LEVEL`].
     pub fn memory_level(self) -> u32 {
         self.memory_level
     }
@@ -204,11 +206,16 @@ impl WorkFactor {
 
     /// `m(MEM) = (2 + MEM mod 2) * 2^(20 + floor(MEM / 2))` KiB: 2, 3, 4, 6, 8, 12 GiB and so on,
     /// up to 3 TiB. Integers only, as the specification requires.
+    #[expect(
+        clippy::expect_used,
+        reason = "WorkFactor::of refuses a level above 21, and 3 * 2^30 KiB is below 2^32 - 1"
+    )]
     pub fn memory_kib(self) -> u32 {
         let kib = (2 + u64::from(self.memory_level % 2)) << (20 + self.memory_level / 2);
         u32::try_from(kib).expect("level 21 is 3 * 2^30 KiB, below the Argon2 limit of 2^32 - 1")
     }
 
+    /// [`WorkFactor::memory_kib`] in bytes.
     pub fn memory_bytes(self) -> u64 {
         u64::from(self.memory_kib()) * 1024
     }

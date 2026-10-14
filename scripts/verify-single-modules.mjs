@@ -21,6 +21,7 @@ const read = (path) => readFileSync(new URL(path, root));
  */
 const OWNERS = {
   "src/mhfe/known_answers.rs": ["core"],
+  "src/mhfe/known_answers/published.rs": ["core"],
   "src/container/known_answers.rs": ["core"],
   "src/operation/known_answers.rs": ["core"],
   "src/search/known_answers.rs": ["core"],
@@ -132,6 +133,8 @@ const MODULES = {
 for (const [module, { check, vector, holds = [], lacks = [] }] of Object.entries(MODULES)) {
   const { glue, wasm } = build(module);
   const run = (bytes) => {
+    // The module's own wasm-bindgen glue, which this script just built, as a worker loads it.
+    // oxlint-disable-next-line typescript/no-implied-eval -- the glue is a classic script to run
     const mhfe = new Function(`${glue}\nreturn mhfe;`)();
     mhfe.initSync({ module: new WebAssembly.Module(bytes) });
     return JSON.parse(check(mhfe));

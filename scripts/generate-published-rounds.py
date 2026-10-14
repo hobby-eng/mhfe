@@ -2,9 +2,10 @@
 """Writes src/mhfe/published_rounds.rs from the published vectors in tests/fixtures.
 
 The self-checks replay every published vector through the library with the round keys the vector
-records (src/mhfe/known_answers.rs), so they need each vector's inputs, container, recovery and the
-salt and Argon2id key of each of its twelve rounds. This script copies exactly those values; it
-computes nothing. The output is deterministic: the same fixtures give the same bytes. The unit test
+records (src/mhfe/known_answers.rs, with the record types in src/mhfe/known_answers/published.rs),
+so they need each vector's inputs, container, recovery and the salt and Argon2id key of each of
+its twelve rounds. This script copies exactly those values; it computes nothing. The output is
+deterministic: the same fixtures give the same bytes. The unit test
 published_round_table_equals_the_fixtures compares every value with the fixtures again.
 
 Usage: python3 scripts/generate-published-rounds.py [--check]
