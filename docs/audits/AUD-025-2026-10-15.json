@@ -1,0 +1,1114 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-025",
+  "auditNumber": 25,
+  "date": "2026-10-15",
+  "title": "Remaining CORE conformance work after AUD-024 remediation",
+  "reviewer": {
+    "name": "Codex scoped review",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "968424528984235635f187551126b2925d705297",
+    "commitComplete": false,
+    "workingTree": "Pre-existing uncommitted AUD-024 refactor and interruption follow-up; 150 modified tracked files and 78 untracked files before AUD-025 records.",
+    "sourceFingerprint": "12c7f4fb5b4ad9ba4cb7e20a9eee0c97922125128781f7a8a57b6c1e366e45f6",
+    "sourceFileCount": 453,
+    "fingerprintAlgorithm": "SHA-256 of sorted file SHA-256, two spaces, relative path, LF rows, excluding docs/audits/"
+  },
+  "scope": {
+    "focus": "Remaining CORE-01 through CORE-52 conformance and implementation estimate",
+    "inventoriedFirstPartyCodeFiles": 336,
+    "coverageLedger": [
+      {
+        "id": "CHECK-SEC-001",
+        "title": "Threat model and secret ownership",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-SEC-002",
+        "title": "Secret Vault, CSP, sandbox, and transport",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-SEC-003",
+        "title": "Network egress and secret guards",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-SEC-004",
+        "title": "Randomness, encryption, and authentication",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-SEC-005",
+        "title": "Secret lifecycle and exceptional paths",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-SEC-006",
+        "title": "Browser injection, persistence, and sensitive APIs",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-SEC-007",
+        "title": "Read-only guarantees and availability bounds",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-FUN-001",
+        "title": "BIP39, entropy, and seed interpretation",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-FUN-002",
+        "title": "HD derivation and every coin/profile",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-FUN-003",
+        "title": "BIP85, BIP38, messages, and Silent Payments",
+        "outcome": "not-applicable",
+        "evidenceOrGap": "MHFE has no corresponding BIP85/BIP38/message/Silent-Payment, descriptor/multisig, transaction/PSBT or connected discovery/provider feature."
+      },
+      {
+        "id": "CHECK-FUN-004",
+        "title": "Scripts, descriptors, Miniscript, and multisig",
+        "outcome": "not-applicable",
+        "evidenceOrGap": "MHFE has no corresponding BIP85/BIP38/message/Silent-Payment, descriptor/multisig, transaction/PSBT or connected discovery/provider feature."
+      },
+      {
+        "id": "CHECK-FUN-005",
+        "title": "Transactions, PSBT version context, and commitments",
+        "outcome": "not-applicable",
+        "evidenceOrGap": "MHFE has no corresponding BIP85/BIP38/message/Silent-Payment, descriptor/multisig, transaction/PSBT or connected discovery/provider feature."
+      },
+      {
+        "id": "CHECK-FUN-006",
+        "title": "Recovery and backup formats",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-FUN-007",
+        "title": "Discovery, providers, proofs, and accounting",
+        "outcome": "not-applicable",
+        "evidenceOrGap": "MHFE has no corresponding BIP85/BIP38/message/Silent-Payment, descriptor/multisig, transaction/PSBT or connected discovery/provider feature."
+      },
+      {
+        "id": "CHECK-API-001",
+        "title": "Actual dependency call contracts",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "Current public Rust and browser error surface examined; no dependency implementation re-audit."
+      },
+      {
+        "id": "CHECK-API-002",
+        "title": "Async state, cancellation, and revisions",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-API-003",
+        "title": "Public export schema and monetary fidelity",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "Result/vector writable representation examined; serialized output was not regenerated."
+      },
+      {
+        "id": "CHECK-API-004",
+        "title": "Encoding and import/export interoperability",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-BLD-001",
+        "title": "Manifest, flags, and feature composition",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "Current source/type/lint/module gates pass; complete release matrix excluded."
+      },
+      {
+        "id": "CHECK-BLD-002",
+        "title": "Matrix depth and runtime sampling",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-BLD-003",
+        "title": "Lockfiles, source provenance, and licenses",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-BLD-004",
+        "title": "Canonical WASM and Docker bytes",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-BLD-005",
+        "title": "Artifacts, CI, and release workflows",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-UI-001",
+        "title": "Real files and representative viewports",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-UI-002",
+        "title": "Navigation, inputs, and state preservation",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-UI-003",
+        "title": "Secret visibility, help, QR, and accessibility",
+        "outcome": "not run in this scoped review",
+        "evidenceOrGap": "Outside this CORE-conformance assessment; earlier runtime/security evidence is not a fresh check of this item."
+      },
+      {
+        "id": "CHECK-ARC-001",
+        "title": "Ownership, imports, and composition seams",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "Public owner types, module interfaces and remaining free operations inspected; conformance gaps confirmed."
+      },
+      {
+        "id": "CHECK-ARC-002",
+        "title": "Dead code, duplication, and false positives",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "Copy gates, public-surface inventory and false-positive challenges; CORE-10 protocol follow-up remains."
+      },
+      {
+        "id": "CHECK-ARC-003",
+        "title": "Comments, tests, and production-path fidelity",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "Gate controls and actual-class witness; no replay of historical audit workloads."
+      },
+      {
+        "id": "CHECK-DOC-001",
+        "title": "User-facing capability and safety descriptions",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "Claims of complete CORE compliance compared with actual code and retained dispositions."
+      },
+      {
+        "id": "CHECK-DOC-002",
+        "title": "Commands, metadata, links, and legal materials",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "Guide, API and handover context checked; not a complete legal/help audit."
+      },
+      {
+        "id": "CHECK-DOC-003",
+        "title": "Audit records and evidence consistency",
+        "outcome": "partial scoped review",
+        "evidenceOrGap": "New record pair/schema/links and retained evidence bindings validated separately."
+      }
+    ],
+    "coreRuleCoverage": [
+      {
+        "rules": [
+          "CORE-01",
+          "CORE-02",
+          "CORE-03",
+          "CORE-04",
+          "CORE-05",
+          "CORE-08",
+          "CORE-10",
+          "CORE-11",
+          "CORE-14",
+          "CORE-51"
+        ],
+        "coverage": "Manual public-interface and rule-ownership review; residual gaps and bounded observations below."
+      },
+      {
+        "rules": [
+          "CORE-06",
+          "CORE-07",
+          "CORE-09",
+          "CORE-12",
+          "CORE-13",
+          "CORE-52"
+        ],
+        "coverage": "Selected extension/host-adapter/delegation seams challenged; no complete redesign verdict."
+      },
+      {
+        "rules": [
+          "CORE-15",
+          "CORE-20",
+          "CORE-21",
+          "CORE-25"
+        ],
+        "coverage": "Fresh applicable source/lint/type gates; retained fast-suite compilation/format. Gate success is narrower than every manual obligation."
+      },
+      {
+        "rules": [
+          "CORE-16",
+          "CORE-17",
+          "CORE-18",
+          "CORE-19"
+        ],
+        "coverage": "Selected source readability, naming and copied semantic facts inspected; no line-by-line claim for every file."
+      },
+      {
+        "rules": [
+          "CORE-22",
+          "CORE-23"
+        ],
+        "coverage": "Selected result/error paths and stable-code witness; internal startup error gap confirmed."
+      },
+      {
+        "rules": [
+          "CORE-24",
+          "CORE-46",
+          "CORE-47",
+          "CORE-48",
+          "CORE-49",
+          "CORE-50"
+        ],
+        "coverage": "Selected ownership/validation interfaces inspected; security/cryptography behavior not re-audited or newly certified."
+      },
+      {
+        "rules": [
+          "CORE-26",
+          "CORE-27",
+          "CORE-28",
+          "CORE-29",
+          "CORE-30",
+          "CORE-31",
+          "CORE-32",
+          "CORE-33",
+          "CORE-34"
+        ],
+        "coverage": "Existing gate controls and test organization reviewed; current check-fast execution is separately retained evidence, no new full self-test/browser/vector replay."
+      },
+      {
+        "rules": [
+          "CORE-35",
+          "CORE-36",
+          "CORE-37",
+          "CORE-38",
+          "CORE-39",
+          "CORE-40",
+          "CORE-41",
+          "CORE-42"
+        ],
+        "coverage": "Prior CLI audit/remediation dispositions consulted; terminal interaction/layout not freshly re-executed."
+      },
+      {
+        "rules": [
+          "CORE-43",
+          "CORE-44",
+          "CORE-45"
+        ],
+        "coverage": "Assessment only: new failing witnesses retained, no production remediation, commit, push or release acceptance."
+      }
+    ]
+  },
+  "procedureHashes": {
+    "FULL_AUDIT_GUIDE.md": {
+      "path": "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md",
+      "sha256": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7"
+    },
+    "AUDIT_STANDARD.md": {
+      "path": "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md",
+      "sha256": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593"
+    },
+    "AUDIT_TEMPLATE.md": {
+      "path": "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md",
+      "sha256": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210"
+    },
+    "audit-report.schema.json": {
+      "path": "multi-chain-wallet-tools/docs/audit-report.schema.json",
+      "sha256": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+    }
+  },
+  "checks": [
+    {
+      "name": "copy-controls",
+      "command": [
+        "node",
+        "scripts/verify-no-copies.mjs",
+        "--self-test"
+      ],
+      "startedUtc": "2026-10-15T10:10:50.717267+00:00",
+      "endedUtc": "2026-10-15T10:10:50.781423+00:00",
+      "exitCode": 0,
+      "logSha256": "ab465e0d07a6f39a7db2aa117b199976425ca3478d36b44aed63d9baec7fa419",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "copy-gate",
+      "command": [
+        "node",
+        "scripts/verify-no-copies.mjs"
+      ],
+      "startedUtc": "2026-10-15T10:10:50.781773+00:00",
+      "endedUtc": "2026-10-15T10:10:51.849367+00:00",
+      "exitCode": 0,
+      "logSha256": "76825605a07e532f147bcb39ffa144e60df7112fc2e173ee2ee1fd21a1924947",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "code-controls",
+      "command": [
+        "node",
+        "scripts/verify-code-rules.mjs",
+        "--self-test"
+      ],
+      "startedUtc": "2026-10-15T10:10:51.849665+00:00",
+      "endedUtc": "2026-10-15T10:10:52.465360+00:00",
+      "exitCode": 0,
+      "logSha256": "18727f4ef4704051f0e31435d5d663bb810616ecc87b69330468e3233a50e047",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "code-gate",
+      "command": [
+        "node",
+        "scripts/verify-code-rules.mjs"
+      ],
+      "startedUtc": "2026-10-15T10:10:52.465729+00:00",
+      "endedUtc": "2026-10-15T10:10:52.781395+00:00",
+      "exitCode": 0,
+      "logSha256": "910330597c5f6dd619956579e00fe6c13951331bcbde4b9aff784fe13e14df30",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "module-controls",
+      "command": [
+        "node",
+        "scripts/verify-module-boundaries.mjs",
+        "--self-test"
+      ],
+      "startedUtc": "2026-10-15T10:10:52.781821+00:00",
+      "endedUtc": "2026-10-15T10:10:52.814538+00:00",
+      "exitCode": 0,
+      "logSha256": "93b94921be160a6b2e1254e113021b0192ddbf2518264c7e8f05c31d75f3eebd",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "module-gate",
+      "command": [
+        "node",
+        "scripts/verify-module-boundaries.mjs"
+      ],
+      "startedUtc": "2026-10-15T10:10:52.814714+00:00",
+      "endedUtc": "2026-10-15T10:10:52.929114+00:00",
+      "exitCode": 0,
+      "logSha256": "fd9bf6cc35d09a775fd394a3d54dbe426b8415921819deab30540abddeebb825",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "error-controls",
+      "command": [
+        "node",
+        "scripts/verify-error-contracts.mjs",
+        "--self-test"
+      ],
+      "startedUtc": "2026-10-15T10:10:52.929322+00:00",
+      "endedUtc": "2026-10-15T10:10:52.961352+00:00",
+      "exitCode": 0,
+      "logSha256": "9349f9ad679417119b4d428c667178278e6ec2efa5c4e8c19c07116544d33417",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "error-gate",
+      "command": [
+        "node",
+        "scripts/verify-error-contracts.mjs"
+      ],
+      "startedUtc": "2026-10-15T10:10:52.961516+00:00",
+      "endedUtc": "2026-10-15T10:10:53.126218+00:00",
+      "exitCode": 0,
+      "logSha256": "41dd091cca74a28290189d1b2112d995e5184641ee142e64b7b936c5f4f5b6aa",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "browser-source",
+      "command": [
+        "node",
+        "scripts/verify-browser-source.mjs"
+      ],
+      "startedUtc": "2026-10-15T10:10:53.126463+00:00",
+      "endedUtc": "2026-10-15T10:10:53.190827+00:00",
+      "exitCode": 0,
+      "logSha256": "fd42136cc6255d150c4779ecec476f96dbbc1a0bddc1721d9df6cac280ae1917",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "types",
+      "command": [
+        "pnpm",
+        "run",
+        "--silent",
+        "check:types"
+      ],
+      "startedUtc": "2026-10-15T10:10:53.191207+00:00",
+      "endedUtc": "2026-10-15T10:10:53.606818+00:00",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "pnpm",
+        "run",
+        "--silent",
+        "lint"
+      ],
+      "startedUtc": "2026-10-15T10:10:53.607090+00:00",
+      "endedUtc": "2026-10-15T10:10:54.172882+00:00",
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "outcome": "passed",
+      "execution": "newly executed"
+    },
+    {
+      "command": [
+        "node",
+        "docs/audits/AUD-025-harnesses/core-review.mjs",
+        "--self-test"
+      ],
+      "startedUtc": "2026-10-15T10:16:52.015218+00:00",
+      "endedUtc": "2026-10-15T10:16:52.041473+00:00",
+      "exitCode": 0,
+      "logSha256": "2aed2124786d1bcbe4a1a55203e0fc12de3eddd1a3f806b273771b2b76518e08",
+      "name": "witness-controls",
+      "outcome": "passed",
+      "expectedExitCode": 0,
+      "execution": "newly executed"
+    },
+    {
+      "command": [
+        "node",
+        "docs/audits/AUD-025-harnesses/core-review.mjs",
+        "--check"
+      ],
+      "startedUtc": "2026-10-15T10:16:52.041610+00:00",
+      "endedUtc": "2026-10-15T10:16:52.081445+00:00",
+      "exitCode": 1,
+      "logSha256": "445a30d91d91285a70bd6b10d9d54662838fd064492f65a42e3f7a9ac572a8d6",
+      "name": "conformance-witness",
+      "outcome": "confirmed conformance gaps",
+      "expectedExitCode": 1,
+      "execution": "newly executed"
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-025-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "Public value records retain writable fields outside the earlier invariant-bearing-field fix",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "rules": [
+        "CORE-02",
+        "CORE-11"
+      ],
+      "relatedFindings": [
+        "AUD-024-ARC020"
+      ],
+      "affectedFiles": [
+        "src/repair.rs:413",
+        "src/suite.rs:17",
+        "src/word_hints.rs:59",
+        "src/word_wishes.rs:70",
+        "src/self_check/process.rs:8",
+        "src/self_check/detail.rs:250",
+        "src/vectors.rs:59"
+      ],
+      "evidence": "The production lexical inventory finds 101 public fields in these seven files, excluding the private native FFI representation. The bounded witness prints representative result fields. Source declarations and callers were inspected; the inventory count is not 101 independent defects.",
+      "reproduction": "Run node docs/audits/AUD-025-harnesses/core-review.mjs --check (exit 1), or inspect the listed pub struct fields. A consumer can write Repaired.container_words, Argon2Cost.memory_kib, Completion.letters and WishOdds.random_bits directly.",
+      "expected": "CORE-02 says owner types keep fields private; CORE-11 makes fields private by default. The current guide has no general public-DTO exemption.",
+      "observed": "The earlier fix encapsulated NewContainer, CheckEvidence and Found, while ordinary value/result/vector records still expose fields. That earlier bounded fix is present; these additional records are a broader conformance gap.",
+      "impact": "Bounded maintainability and API evolution cost. Result representations are writable rather than owned behind an interface. No invalid encryption result, secret disclosure or broken invariant is demonstrated. Public vector records intentionally contain only public test data.",
+      "recommendedFix": "Make value/result fields private, expose the meaningful read operations and only necessary constructors, and update existing callers. Preserve serialized JSON and secret-owner lifetimes. Avoid empty wrappers introduced solely to satisfy syntax.",
+      "requiredVerification": "Compile native and WASM consumers; run nearest result, repair, parameter, hint, wish and serialization tests plus fast gates. Check published vector bytes or retained-round fixtures without a full-cost replay. Review public Rust API documentation and browser binding parity.",
+      "baselineStatus": "open"
+    },
+    {
+      "id": "AUD-025-ARC002",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "The internal Argon2 startup error has an error-code prefix but no readonly code property",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "rules": [
+        "TS-06",
+        "CORE-23"
+      ],
+      "affectedFiles": [
+        "web/core-worker.js:151"
+      ],
+      "evidence": "A VM evaluates only the actual standalone Argon2StartError definition with synthetic build/issue values. It returns name=Argon2StartError, hasCode=false, and a message beginning INTERNAL_ERROR. No worker or Argon2 operation starts.",
+      "reproduction": "Run the retained harness --self-test (exit 0), then --check (exit 1). The latter prints actualStartupError.hasCode=false.",
+      "expected": "TS-06 requires every error class to carry a readonly code from the module code list; CORE-23 requires stable codes separate from person-facing text.",
+      "observed": "The class keeps typed private build/issue context and formats INTERNAL_ERROR into message, but provides no code property.",
+      "impact": "Limited internal error-contract inconsistency. Existing worker serialization still produces coded public failures; this probe does not establish a public API failure or a privacy regression. The sanitized context/fallback behavior is intentional and must be preserved.",
+      "recommendedFix": "Add a readonly code using the existing error-code source and derive the message consistently while retaining sanitized build/issue detail.",
+      "requiredVerification": "Run the witness and error-contract controls, JS type/lint checks, and nearest worker-startup privacy/fallback tests. Preserve rejection of arbitrary backend exception text.",
+      "baselineStatus": "open"
+    },
+    {
+      "id": "AUD-025-FUN001",
+      "category": "FUN",
+      "title": "An outside EFF word index can overflow the public weighted check-word calculation",
+      "rules": [
+        "CORE-22",
+        "CORE-32",
+        "CORE-48"
+      ],
+      "affectedFiles": [
+        "src/check_word.rs",
+        "src/new_password.rs"
+      ],
+      "evidence": "The retained check-index-red test panics on usize::MAX in the fifth index; the same boundary now returns ReviewError::InvalidIndex/INVALID_REQUEST before arithmetic. All 15 nearest check-word tests pass, including literal boundary answers and startup refusal.",
+      "reproduction": "cargo test --locked --lib an_outside_list_index_is_refused_without_overflow; red exit 101, final exit 0.",
+      "expected": "Every index outside the 7,776-word list is refused without overflow, wraparound or echoing input.",
+      "observed": "The inherited index-level calculation multiplied unchecked usize indexes. The owner API now validates every index before the shared weighted helper.",
+      "impact": "Bounded input-refusal defect: invalid direct index callers could panic in a checked build or get a wrapped answer. No valid password/output mismatch or secret disclosure was demonstrated.",
+      "recommendedFix": "Validate all indexes at the public owner boundary and preserve valid outputs and generator error classification.",
+      "requiredVerification": "Literal zero/mixed/upper-bound answers, 7776 and usize::MAX refusals, generator/check-word tests and startup refusal.",
+      "kind": "finding",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403"
+    },
+    {
+      "id": "AUD-025-API001",
+      "category": "API",
+      "title": "Worker round progress accepts negative, fractional and over-total counters",
+      "rules": [
+        "CORE-10",
+        "CORE-32",
+        "CORE-48"
+      ],
+      "affectedFiles": [
+        "web/runtime-parts/protocol.js"
+      ],
+      "evidence": "The retained protocol-regression-red fails for the actual source with its former numeric-only guard; protocol-regression-green passes. Package checks also refuse malformed messages before invoking callbacks and terminate their workers.",
+      "reproduction": "node scripts/verify-browser-source.mjs; the retained former-guard control exits 1, final source exits 0.",
+      "expected": "Round stages carry safe integers 1 through the declared total; search candidate 0 remains a valid initial observation.",
+      "observed": "Finite numeric round values previously passed irrespective of sign, fraction or relation to the total. The non-search guard now enforces all three bounds.",
+      "impact": "Malformed worker progress could reach a page handler. No cryptographic output change or cross-worker code execution is demonstrated.",
+      "recommendedFix": "Validate safe-integer rounds and bounds before callback dispatch while preserving valid search/progress messages.",
+      "requiredVerification": "Negative/fractional/zero/over-total refusals, each valid stage/total and endpoints, initial search 0 and package protocol/cancellation checks.",
+      "kind": "finding",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403"
+    },
+    {
+      "id": "AUD-025-FUN002",
+      "category": "FUN",
+      "title": "An overlong BIP39 token is copied before its inevitable refusal",
+      "rules": [
+        "CORE-24",
+        "CORE-48",
+        "CORE-50"
+      ],
+      "affectedFiles": [
+        "src/phrase.rs"
+      ],
+      "evidence": "Static review confirmed typed_word called to_ascii_lowercase before any token-length guard. Public Phrase::read tests now refuse a 9-byte and a 100,000-byte synthetic token with the same position/code and no input echo. Both real-browser smokes also refuse an overlong token.",
+      "reproduction": "cargo test --locked --lib an_overlong_word_is_refused_at_its_position_without_echoing_it; exit 0 after the guard.",
+      "expected": "An impossible English word or prefix is refused before an unnecessary secret allocation.",
+      "observed": "The shared reader now checks LONGEST_WORD before lowercasing. Every accepted English word and prefix remains within this bound.",
+      "impact": "Unnecessary input-proportional transient allocation on malformed input; no external exploit, global allocator bound or actual secret-memory residue is claimed.",
+      "recommendedFix": "Apply the existing longest-word bound before allocating the lowercase copy.",
+      "requiredVerification": "Public boundary refusals, normalization/prefix known answers, native/WASM checks and real-worker overlong refusal.",
+      "kind": "finding",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403"
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-024-ARC023",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Closed on source 9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403 by owner-method migration or explicit synchronized protocol copies; see dated remediation verification.",
+      "scope": "Residual CORE-03 compliance at the original check_index site; original historical report/addenda are unchanged.",
+      "baselineStatus": "open",
+      "baselineEvidence": "Most original entries are now owner methods, but src/check_word.rs:76 still exports check_index as a free pure calculation, explicitly retained for index-level callers. This is one of the original finding sites. The new explanation is useful but is not an owner-approved exception to CORE-03. Other inventory candidates need ownership review, not an automatic claim of 25 defects."
+    },
+    {
+      "id": "AUD-024-ARC004",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Closed on source 9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403 by owner-method migration or explicit synchronized protocol copies; see dated remediation verification.",
+      "scope": "Same marker/synchronization obligation at additional protocol sites; this does not assert that the original twelve listed sites remain unmarked.",
+      "requiredVerification": "Import/derive shared protocol facts where feasible; otherwise document the permitted copy and add a comparison with the authoritative library values. Retain malformed-message refusal and early validation before secret transfer.",
+      "baselineStatus": "open",
+      "baselineEvidence": "Original marked-copy repairs are present. Broader current review finds unmarked Rust-derived protocol facts at web/runtime-parts/protocol.js:71-78 (stage names and 12/24/36 progress totals), and :102 (24-word opened result). Rust owns these in src/operation.rs, src/mhfe.rs and src/suite.rs. The progress copies have no adjacent deliberate-copy reason. Existing protocol tests cover malformed values; no claim is made that every allowed stage/total lacks coverage."
+    }
+  ],
+  "limitations": [
+    "This is a solo scoped CORE conformance assessment, not a new full security/all-files audit or independent completeness review.",
+    "All 336 first-party code files were inventoried; manual inspection focused on relevant interfaces, copied facts and prior findings. Inventory is not line-by-line review of all 336 files.",
+    "The Rust lexical reader excludes test-only items, but is not a semantic Rust parser and may miss macros or alternate declaration forms. Public field/function counts are candidates, not separate finding totals.",
+    "No full-cost Argon2, full vector replay, canonical Docker build, fresh browser matrix or Windows/macOS native acceptance was executed.",
+    "The earlier AUD-024 154 verified / 4 fixed / 1 accepted disposition is historical and scoped; it does not establish literal compliance with every CORE review rule.",
+    "No production, test, dependency, workflow, vector, specification, browser package or neighboring repository was changed during this baseline.",
+    "The 4-8 hour implementation estimate is an engineering range, with up to 12 hours contingency for public API/caller migration. Platform/canonical acceptance is separate and cannot be scheduled without the required hosts/artifacts."
+  ],
+  "implementationPlan": [
+    {
+      "work": "Encapsulate remaining public value/result/vector records and migrate callers while preserving serialization",
+      "hours": "1.5-2.5"
+    },
+    {
+      "work": "Complete public operation ownership, starting with original check_index residual; review all 25 candidates",
+      "hours": "1-2"
+    },
+    {
+      "work": "Finish copied-rule traceability/synchronization and internal error code; focused controls",
+      "hours": "0.5-1"
+    },
+    {
+      "work": "Native/WASM fast checks, affected browser package tests, documentation and wallet-tools handover",
+      "hours": "1-2.5"
+    }
+  ],
+  "estimateHours": {
+    "normal": [
+      4,
+      8
+    ],
+    "contingencyUpper": 12,
+    "excludesPlatformAcceptance": true
+  },
+  "historicalEvidence": {
+    "checkFast": {
+      "binding": "AUD-025-evidence/retained-fresh-check-fast-host.command.json (local only)",
+      "sourceIdentity": "12c7f4fb5b4ad9ba4cb7e20a9eee0c97922125128781f7a8a57b6c1e366e45f6",
+      "executedUtc": "2026-10-15T09:43:13Z through 2026-10-15T09:46:44Z",
+      "notNewlyExecutedInThisReview": true
+    },
+    "audit24": "154 verified in stated scope, four fixed awaiting platform/canonical execution, one owner-accepted UI019"
+  },
+  "generalObservations": [
+    "web/client-parts/values.js deliberately copies library limits, with a marker/reason and checkClientLimits comparison; retaining that fast path satisfies the exception rather than requiring duplicate validation removal.",
+    "Private FFI input layout, wasm-bindgen export functions, CLI I/O adapters and script entry points are not automatically illegal public library modules.",
+    "Single-level browser facade delegation and unabstracted native OS details are review judgments, not newly confirmed defects solely because a wrapper/trait could be added.",
+    "The old workspace handover checklist predates the completed toolchain, gate and module-splitting work; it is not a reliable count of remaining implementation."
+  ],
+  "reportDocument": {
+    "path": "docs/audits/AUD-025-2026-10-15.md",
+    "sha256": "5d9df05c0f341142af4036d5046a6f6c269d6155a92801fd79d8a527a0dc5ec0"
+  },
+  "remediationFollowUp": {
+    "date": "2026-10-15",
+    "commit": "12f12032cca2215d11237e4e717690a1ccd75f29",
+    "verificationCommit": "12f12032cca2215d11237e4e717690a1ccd75f29",
+    "sourceFingerprint": "9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403",
+    "sourceFileCount": 454,
+    "fingerprintAlgorithm": "SHA-256 of sorted file SHA-256, two spaces, relative path, LF rows, excluding docs/audits/",
+    "scope": "AUD-025 fixes, original-ID ARC023/ARC004 follow-ups, additional confirmed boundary cases and CORE-53 independent verification; no full-security/all-files or release acceptance.",
+    "dispositions": [
+      {
+        "id": "AUD-025-ARC001",
+        "status": "verified"
+      },
+      {
+        "id": "AUD-025-ARC002",
+        "status": "verified"
+      },
+      {
+        "id": "AUD-024-ARC023",
+        "status": "verified"
+      },
+      {
+        "id": "AUD-024-ARC004",
+        "status": "verified"
+      },
+      {
+        "id": "AUD-025-FUN001",
+        "status": "verified"
+      },
+      {
+        "id": "AUD-025-API001",
+        "status": "verified"
+      },
+      {
+        "id": "AUD-025-FUN002",
+        "status": "verified"
+      }
+    ],
+    "browserPackage": {
+      "version": "0.6.1",
+      "buildId": "3960d7efc76707ce",
+      "modulesJsonSha256": "dbab17f06a044cfc6ccb81f4d98c447af235b2c6bf07b296aa242a70247252e5",
+      "readmeSha256": "6e2900527761bedcf3466a95572071919f6308de5ff3887bb61c43eb5466f92f",
+      "docOnlyRebuildByteIdentical": true,
+      "upstreamPackageFingerprint": "45c54477d712d03848880a4cfd0133cf7b98f7fcb943fc9d3293b93765dbfb5c"
+    },
+    "startupTiming": {
+      "nativeOptimizedMs": 59.1,
+      "nativeBudgetMs": 250,
+      "nativeDebugMs": 567.8,
+      "chromiumCoreMs": 188,
+      "firefoxCoreMs": 218,
+      "otherBrowserModulesMs": [
+        13,
+        26
+      ],
+      "strengthenedBrowserSmoke": {
+        "chromiumCoreMs": 195,
+        "firefoxCoreMs": 207,
+        "otherModulesRangeMs": [
+          12,
+          28
+        ]
+      }
+    },
+    "checks": [
+      {
+        "name": "check-index-red",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--lib",
+          "an_outside_list_index_is_refused_without_overflow"
+        ],
+        "exitCode": 101,
+        "startedUtc": "2026-10-15T10:49:13.728317+00:00",
+        "endedUtc": "2026-10-15T10:49:19.359566+00:00",
+        "logSha256": "49abf5e4b70b0ef2490ede58daac1590de94ad66721acf70a4d031ca6a2728d3"
+      },
+      {
+        "name": "check-index-green",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--lib",
+          "check_word"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T10:49:49.425943+00:00",
+        "endedUtc": "2026-10-15T10:49:51.848094+00:00",
+        "logSha256": "83a6cc310b4d864b01af6dbb89196ca473004f0d268608e3c66b1fa51a8cf5ae"
+      },
+      {
+        "name": "protocol-regression-red",
+        "command": [
+          "node",
+          "scripts/verify-browser-source.mjs"
+        ],
+        "exitCode": 1,
+        "startedUtc": "2026-10-15T10:52:55.490872+00:00",
+        "endedUtc": "2026-10-15T10:52:55.555686+00:00",
+        "logSha256": "a5da64cdcb38e326e697dca34c241bfaecb9c95906b24e79d612997cc161ca82"
+      },
+      {
+        "name": "protocol-regression-green",
+        "command": [
+          "node",
+          "scripts/verify-browser-source.mjs"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T10:52:55.609056+00:00",
+        "endedUtc": "2026-10-15T10:52:55.673324+00:00",
+        "logSha256": "fd42136cc6255d150c4779ecec476f96dbbc1a0bddc1721d9df6cac280ae1917"
+      },
+      {
+        "name": "exact-phrase-buffer",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--lib",
+          "phrase"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:02:07.833566+00:00",
+        "endedUtc": "2026-10-15T11:02:12.916046+00:00",
+        "logSha256": "e4d3b64f3e6e6e49f814fd7eae79088fe9de5ee1f2c6115ab298ae39e3ca5daa"
+      },
+      {
+        "name": "original-owner-buffer",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--lib",
+          "an_original_is_read_as_typed_into_locked_memory"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:02:12.957336+00:00",
+        "endedUtc": "2026-10-15T11:02:13.072143+00:00",
+        "logSha256": "fa61b3a6c62dba51113b1ec3935a5bfe733d337af37e1442d37313b395546088"
+      },
+      {
+        "name": "fast-final-3",
+        "command": [
+          "scripts/check-fast.sh"
+        ],
+        "exitCode": 1,
+        "startedUtc": "2026-10-15T11:02:37.093520+00:00",
+        "endedUtc": "2026-10-15T11:05:18.642019+00:00",
+        "logSha256": "2a2110200fd6171c9b5a39848558e3b1673200f5d3fd318aec543d1c88fae2f0"
+      },
+      {
+        "name": "final-format",
+        "command": [
+          "pnpm",
+          "run",
+          "--silent",
+          "format:check"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:06:37.469104+00:00",
+        "endedUtc": "2026-10-15T11:06:41.142138+00:00",
+        "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      {
+        "name": "final-lint",
+        "command": [
+          "pnpm",
+          "run",
+          "--silent",
+          "lint"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:06:41.187786+00:00",
+        "endedUtc": "2026-10-15T11:06:42.009770+00:00",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "final-owner-gate",
+        "command": [
+          "node",
+          "scripts/verify-code-rules.mjs"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:06:42.048704+00:00",
+        "endedUtc": "2026-10-15T11:06:42.564508+00:00",
+        "logSha256": "910330597c5f6dd619956579e00fe6c13951331bcbde4b9aff784fe13e14df30"
+      },
+      {
+        "name": "owner-gate-final-controls-3",
+        "command": [
+          "node",
+          "scripts/verify-code-rules.mjs",
+          "--self-test"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:05:09.510225+00:00",
+        "endedUtc": "2026-10-15T11:05:10.527441+00:00",
+        "logSha256": "18727f4ef4704051f0e31435d5d663bb810616ecc87b69330468e3233a50e047"
+      },
+      {
+        "name": "release-startup-budget",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--release",
+          "--lib",
+          "the_startup_set_stays_within_its_budget",
+          "--",
+          "--nocapture"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:08:41.269656+00:00",
+        "endedUtc": "2026-10-15T11:09:16.637094+00:00",
+        "logSha256": "bc75de79774f8381e115cdc3558f035016e9b57797b077e511e3100a9383b21e"
+      },
+      {
+        "name": "rustdoc-final-2",
+        "command": [
+          "cargo",
+          "doc",
+          "--locked",
+          "--no-deps",
+          "--all-features"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:10:23.091999+00:00",
+        "endedUtc": "2026-10-15T11:10:23.808712+00:00",
+        "logSha256": "522533266058bc5db0ebc45d118c03b222ffba4b579dd5e2641e80d906c5a018"
+      },
+      {
+        "name": "browser-rebuild",
+        "command": [
+          "scripts/build-wasm.sh"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:06:01.467470+00:00",
+        "endedUtc": "2026-10-15T11:06:29.906498+00:00",
+        "logSha256": "8a658b9fda321dceb30e71c996b4fe1a3c188fa000ea59305e13241230236071"
+      },
+      {
+        "name": "browser-rebuild-doc-only",
+        "command": [
+          "scripts/build-wasm.sh"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:10:40.602922+00:00",
+        "endedUtc": "2026-10-15T11:10:59.771618+00:00",
+        "logSha256": "2e757ecc8557c1739f6755bd7870f36b05022b5d47585d520f964df56f6f19d3"
+      },
+      {
+        "name": "argon2-wasm-final",
+        "command": [
+          "node",
+          "scripts/verify-argon2-wasm.mjs"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:06:49.696603+00:00",
+        "endedUtc": "2026-10-15T11:06:50.664186+00:00",
+        "logSha256": "1c1efc8c24b9db19c0efcf71b6db33e1fc71a4025e75d16b30e3abc64095a2c1"
+      },
+      {
+        "name": "browser-package-final",
+        "command": [
+          "node",
+          "scripts/verify-browser-package.mjs"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:06:50.695760+00:00",
+        "endedUtc": "2026-10-15T11:07:19.643110+00:00",
+        "logSha256": "8c9cff0df365c70b9db59188437ded13b9345e9c9c17f9d5616e78a4d7a54fc7"
+      },
+      {
+        "name": "browser-smoke-final-2",
+        "command": [
+          "node",
+          "docs/audits/AUD-025-harnesses/browser-remediation-smoke.mjs"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:08:13.912331+00:00",
+        "endedUtc": "2026-10-15T11:08:16.934299+00:00",
+        "logSha256": "8a9e137dd69b89b029cd11cb0dbea434825e5a6352b973cf4743ca2674f971c0"
+      },
+      {
+        "name": "browser-smoke-final-4",
+        "command": [
+          "node",
+          "docs/audits/AUD-025-harnesses/browser-remediation-smoke.mjs"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:14:07.425571+00:00",
+        "endedUtc": "2026-10-15T11:14:10.096440+00:00",
+        "logSha256": "e20155b33f3d86b05a1a650bd5d3c4db48327266c8524132a401cbbb5c0b688a"
+      },
+      {
+        "name": "final-witness-controls",
+        "command": [
+          "node",
+          "docs/audits/AUD-025-harnesses/core-review.mjs",
+          "--self-test"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:09:57.089629+00:00",
+        "endedUtc": "2026-10-15T11:09:57.122063+00:00",
+        "logSha256": "2aed2124786d1bcbe4a1a55203e0fc12de3eddd1a3f806b273771b2b76518e08"
+      },
+      {
+        "name": "final-witness",
+        "command": [
+          "node",
+          "docs/audits/AUD-025-harnesses/core-review.mjs",
+          "--check"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:09:57.151628+00:00",
+        "endedUtc": "2026-10-15T11:09:57.216292+00:00",
+        "logSha256": "d858210f8328a9401140f2457b3f2d84b6ca181f03f3743b277eb2227fab6551"
+      },
+      {
+        "name": "final-surface-inventory",
+        "command": [
+          "node",
+          "docs/audits/AUD-025-harnesses/core-review.mjs",
+          "--inventory"
+        ],
+        "exitCode": 0,
+        "startedUtc": "2026-10-15T11:09:57.249851+00:00",
+        "endedUtc": "2026-10-15T11:09:57.415097+00:00",
+        "logSha256": "cc8ff75302457aeadab5c2e2c29c3f483612078bf7674c23624a305a4c44e284"
+      }
+    ],
+    "independentReview": {
+      "reviewers": 1,
+      "mode": "Read-only; implementer made all changes; follow-ups challenged and re-reviewed.",
+      "reviewedSnapshot": "AUD-025-evidence/remediation/review-10-code-snapshot.json",
+      "reviewedSnapshotSha256": "c8204c7979c0dc34162f4def65ad2f9977ce4b3a998c4ef212c00d3214e4006f",
+      "coreGuideSha256": "51ac92ddffea253bb7ed2f1926eb4cab6c2f52d336af95c1d63f3ebdd9fce066",
+      "resourceBudget": "At most 2 GiB for local checks; reserve for OS/other sessions; one heavy check at a time. Available memory sampled around 5.6-6.6 GiB; no reviewer builds/Argon2.",
+      "limitation": "Earlier review-05/07/08 snapshots and final follow-up establish changed-file coverage, not independent whole-project completeness."
+    },
+    "limitations": [
+      "Full-cost Argon2/vector replays and canonical Docker/release acceptance were not run.",
+      "Real-browser smoke covers standard mode only; Node package checks exercise both Argon2 builds and their full known answers, not a fresh full real-browser fast-mode matrix.",
+      "Actual Windows/macOS protection and canonical packing acceptance remain the four previously recorded AUD-024 execution gaps.",
+      "The library ownership gate is a lexical regression tripwire, not a semantic Rust/macro parser.",
+      "No benchmark guarantees startup time on every machine; reported timings are this execution."
+    ],
+    "handover": "Final package identity and all source API/metadata/readonly/progress changes sent to the existing wallet-tools session; host integration is owned there. Downstream older retention fixtures must include apart:true for repairWords/wordCount, owned by KeepItem::kept_apart; this predates the discovery baseline.",
+    "downstreamReportedEvidence": {
+      "session": "wallet-tools",
+      "producerFileCount": 17,
+      "runtimeFileCount": 15,
+      "sourceFileCount": 454,
+      "sourceFingerprint": "9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403",
+      "checker": "tooling/verify-mhfe-vector.mjs",
+      "result": "passed, reported by downstream session; not locally re-executed",
+      "coverage": "Both reduced suite reference containers, repair/search/wallet/fingerprint/wishes, new metadata and kept-apart fixtures."
+    },
+    "verificationCommitMeaning": "Exact source-byte identity of the retained precommit verification; no claim of a new execution after committing."
+  },
+  "commitBinding": {
+    "recordedUtc": "2026-10-15T11:28:45.646779+00:00",
+    "implementationCommit": "12f12032cca2215d11237e4e717690a1ccd75f29",
+    "implementationTree": "5d459d943687c991ad2c6b0a66295b0aebf9600b",
+    "sshSigned": true,
+    "authorAndCommitterOffset": "+0000",
+    "sourceFingerprint": "9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403",
+    "sourceFileCount": 454,
+    "fingerprintAlgorithm": "SHA-256 of sorted file SHA-256, two spaces, relative path, LF rows, excluding docs/audits/",
+    "scope": "Owner-authorized local commit binding for the existing AUD-024 remediation and scoped AUD-025 verification; no new audit, test rerun, push or release.",
+    "verification": "The committed non-audit bytes exactly match the retained final source manifest. Historical discovery identities, check records, results and execution gaps are unchanged.",
+    "whitespaceObservation": "git diff --cached --check returned 2 only for the unchanged upstream MinGW copyright at line 450; its pinned SHA-256 is af23297b7d17e8e31817a5d58088de6fdafe34705bb5a7d1d330f08711b31314. No source or gate was changed to suppress it."
+  }
+}

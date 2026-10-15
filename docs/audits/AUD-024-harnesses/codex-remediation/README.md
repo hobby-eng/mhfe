@@ -65,3 +65,62 @@ bytes and `codex-probe-format-equivalence.json` remain in ignored local evidence
 Rust/source-file hashes remain those recorded by each mutation run. No original log was rewritten.
 When rewriting an audited commit later, update this record and the case-name probe's pinned base
 together, as the workspace's commit rules require.
+
+## Completion of the previously deferred changes
+
+The owner's later authorization extends this remediation from `968424528984235635f187551126b2925d705297`
+on `main`. Its source and artifact manifests and individual results are recorded separately in
+the report's final remediation section. The original snapshot, failed checks and publication
+checkpoint above remain historical. No additional checkout or audit number is involved.
+
+The implementation now supplies these maintained controls, run in the existing checkout:
+
+```sh
+cargo test --locked --test error_contracts
+node scripts/verify-error-contracts.mjs --self-test
+node scripts/verify-error-contracts.mjs
+node scripts/verify-module-boundaries.mjs --self-test
+node scripts/verify-module-boundaries.mjs
+node scripts/verify-browser-source.mjs
+python3 docs/audits/AUD-024-harnesses/verify-error-text-sites/scan.py
+python3 docs/audits/AUD-024-harnesses/verify-platform-hardening/platform_hardening.py
+bash docs/audits/AUD-024-harnesses/verify-web-file-sizes/check-web-file-sizes.sh
+python3 scripts/third-party-licenses.py --self-test
+bash scripts/verify-archive-packing.sh
+```
+
+Expected: zero exit codes. Error contracts independently name all 52 retained codes, check owned
+causes, canonical cancellation and shared format/passphrase conversions. Structural controls
+reject free-text errors, low-level dependencies on cipher execution, broken source joins and
+missing inputs. Coin extension is checked by a synthetic declaration in the wallet's own unit
+tests; the older `new-coin-touches.sh` is not used because it extracts a second working tree.
+Packing controls cover the GNU and Python tar packers and ZIP under four umasks. MinGW controls
+reject missing or changed notices; a retained public Windows binary can additionally be supplied
+through the documented archive/binary verifier options. These controls do not rebuild a release.
+
+After rebuilding with `scripts/build-wasm.sh`, run `node scripts/verify-browser-package.mjs`,
+`node scripts/verify-single-modules.mjs`, and `node scripts/verify-cli-browser-parity.mjs` with
+the current CLI path. Real browser checks use `node scripts/verify-browsers.mjs`, one browser
+and mode at a time through its `--browser` and `--mode` options. These checks keep their specified
+Argon2 known answers and use the documented reduced cost for ordinary operations. Startup
+privacy controls cover synchronous throws, rejected promises, unreadable exception messages and
+fatal package mismatches without fallback. No `--full` option or full-cost vector replay is part
+of this continuation. Bound jobs and serialize them with other sessions as the workspace rules
+require; the report distinguishes execution from source inspection and cross-compilation.
+
+For a focused retry of the standalone launcher's startup check, add
+`--browser chromium --mode fast --launcher python` (or `firefox`). The default still executes
+the complete native route and the Python startup route. Clients expose `cancel()` for ongoing
+core/wallet operations; the smoke check does not invent a `close()` method on module classes.
+
+Linux tests and a Windows cross-compiler cannot establish actual Windows console, page-lock,
+process-access or crash-report behavior, or macOS debugger policy and signed archive behavior.
+Those native-platform checks remain explicit verification limitations until executed there.
+
+## Implementation commit binding — 2026-10-15 (UTC)
+
+The current remediation source is recorded in SSH-signed implementation commit
+`12f12032cca2215d11237e4e717690a1ccd75f29`, source fingerprint `9d485ddc61c3edfe51a864160a712e96945f7cf8108d00f1728fcd4ec384e403` (454 non-audit files).
+This identity supplements the historical discovery/continuation snapshots above. The retained
+checks were performed before committing on those exact source bytes; committing did not rerun
+them. The associated report preserves the remaining platform and release acceptance limits.
