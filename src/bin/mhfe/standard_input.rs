@@ -107,6 +107,7 @@ fn read_byte(into: &mut u8) -> io::Result<usize> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
     use super::*;
 
     /// Every reader of the tool goes through [`StandardInput`]: no other code of the binary reads

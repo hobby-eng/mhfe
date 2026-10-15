@@ -6,6 +6,7 @@ the missing-word search, at prompts that precede the work.
 """
 
 import os
+import sys
 
 from .constants import (
     ADDRESS_ASKED,
@@ -34,7 +35,7 @@ def explicit_address_options_skip_questions_and_refuse_misplaced_options():
              "--coin", "ethereum", "--path", ETHEREUM_PATH,
              "--passphrase-used", "yes", "--repair-words", "0",
              "--new-password", "own")
-    session = Session(rekey, capped=True)
+    session = Session(rekey, capped=sys.platform == "linux")
     session.wait_for(CONTAINER_ASKED)
     session.answer(CONTAINER.encode() + ENTER, b"Old container password")
     session.answer(b"test password\r", ADDRESS_ASKED)
