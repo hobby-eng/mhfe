@@ -16,8 +16,9 @@ from .constants import (
     LEAVE_PRIVATE,
     PHRASE,
     PROGRAM,
+    READ_BACK_PROMPT,
 )
-from .session import READ_BACK_PROMPT, Session
+from .session import Session
 
 WRITTEN_OUT = b"Accepted words, written out:"
 

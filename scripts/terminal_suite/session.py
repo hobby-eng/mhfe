@@ -32,13 +32,8 @@ from .constants import (
     LEAVE_PRIVATE,
     PROGRAM,
     QUIET_SECONDS,
+    READ_BACK_PROMPT,
 )
-
-# Most cases test a later operation: accept the explicit spelling
-# read-back along the way.
-# Cases that check that screen themselves pass auto_read_back=False and
-# answer it explicitly.
-READ_BACK_PROMPT = b"Check the written-out words; Enter continues."
 
 
 def attach_terminal():

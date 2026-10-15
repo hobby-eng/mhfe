@@ -56,6 +56,7 @@ if shared.FULL:
     sys.exit(2)
 CONTAINER, CANCELLED = shared.CONTAINER, shared.CANCELLED
 REFUSED, ACCEPTED = shared.REFUSED.decode(), shared.ACCEPTED.decode()
+READ_BACK_PROMPT = shared.READ_BACK_PROMPT.decode()
 # ConPTY uses a different Backspace byte; all other keys are shared
 # public input.
 BACKSPACE = "\x08"
@@ -91,10 +92,16 @@ class Session:
         """
         start = len(self.output)
         end = time.monotonic() + limit
-        while time.monotonic() < end:
+        while True:
+            remaining = end - time.monotonic()
+            if remaining <= 0:
+                break
+            # pywinpty 3.0.5 reads through this socket. A blocking recv
+            # must not outlive the prompt deadline.
+            self.process.fileobj.settimeout(remaining)
             try:
                 self.output += self.process.read(4096)
-            except EOFError:
+            except (EOFError, TimeoutError):
                 break
             for needle in needles:
                 if needle in self.output[start:]:
@@ -123,7 +130,10 @@ class Session:
         self.wait_for("original seed phrase: ")
         # The container is read on a step of its own and taken at once.
         self.type(CONTAINER + "\r")
-        self.wait_for("Container password: ")
+        password_prompt = "Container password: "
+        if self.wait_for(password_prompt, READ_BACK_PROMPT) == READ_BACK_PROMPT:
+            self.type(ENTER)
+            self.wait_for(password_prompt)
 
 
 def check_password(label, password, expected):
@@ -198,6 +208,8 @@ def check_menu():
 
 
 def main():
+    # Keep progress visible if the console or tool stops replying.
+    sys.stdout.reconfigure(line_buffering=True)
     for label, key in CONTROLS.items():
         check_password(label, SECRET + key + "x", REFUSED)
         print(f"refused: a password with {label}")

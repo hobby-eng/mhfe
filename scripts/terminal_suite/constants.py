@@ -38,6 +38,9 @@ ARGUMENTS = parse_arguments()
 PROGRAM, FULL = ARGUMENTS.program, ARGUMENTS.full
 ZERO_12 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-12.json").read_text())
 CONTAINER, PHRASE = ZERO_12["container"], ZERO_12["inputs"]["phrase"]
+# The spelling screen's confirmation, shared by the Unix and Windows
+# drivers before either waits for the next input prompt.
+READ_BACK_PROMPT = b"Check the written-out words; Enter continues."
 ZERO_24 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-24.json").read_text())
 # Exit codes of the tool when the person cancels, when an answer or the
 # setup is refused, when
