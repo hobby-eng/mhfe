@@ -893,7 +893,7 @@ is described above.
 - `sec1` 0.8.1: `Apache-2.0 OR MIT`, used under MIT; [text 17](#text-17).
 - `serde` 1.0.229: `MIT OR Apache-2.0`, used under MIT; [text 20](#text-20).
 - `serde_core` 1.0.229: `MIT OR Apache-2.0`, used under MIT; [text 20](#text-20).
-- `serde_json` 1.0.151: `MIT OR Apache-2.0`, used under MIT; [text 20](#text-20).
+- `serde_json` 1.0.154: `MIT OR Apache-2.0`, used under MIT; [text 20](#text-20).
 - `sha2` 0.10.9: `MIT OR Apache-2.0`, used under MIT; [text 39](#text-39).
 - `sha2` 0.11.0: `MIT OR Apache-2.0`, used under MIT; [text 40](#text-40).
 - `sha3` 0.12.0: `MIT OR Apache-2.0`, used under MIT; [text 41](#text-41).
@@ -1610,7 +1610,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 20
 
-MIT, for ctrlc 3.5.2, group 0.14.0, itoa 1.0.18, once_cell 1.21.4, pin-project-lite 0.2.17, serde 1.0.229, serde_core 1.0.229, serde_json 1.0.151, unicode-ident 1.0.26, zmij 1.0.23.
+MIT, for ctrlc 3.5.2, group 0.14.0, itoa 1.0.18, once_cell 1.21.4, pin-project-lite 0.2.17, serde 1.0.229, serde_core 1.0.229, serde_json 1.0.154, unicode-ident 1.0.26, zmij 1.0.23.
 
 ```
 Permission is hereby granted, free of charge, to any

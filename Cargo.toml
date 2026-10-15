@@ -35,7 +35,7 @@ hmac = { version = "=0.13.0", features = ["zeroize"] }
 # secp256k1 arithmetic for BIP32 in the rehearsal check; audited by NCC Group.
 k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic"] }
 serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.151"
+serde_json = "=1.0.154"
 sha2 = { version = "=0.11.0", features = ["zeroize"] }
 # Keccak-256 for Ethereum, EVM, Tron and Injective addresses in the rehearsal check.
 sha3 = { version = "=0.12.0", default-features = false }
@@ -70,7 +70,7 @@ windows-sys = { version = "=0.61.2", features = [
 
 [build-dependencies]
 # Compiles the vendored reference Argon2 C code (build.rs).
-cc = "=1.6.0"
+cc = "=1.8.0"
 
 [dev-dependencies]
 # An independent Argon2 implementation, used only to cross-check the C engine in tests.

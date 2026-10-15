@@ -137,6 +137,7 @@ are cancelled.
 
 ## Build, tests and release
 
+- Update the pinned Rust dependencies `cc` to 1.8.0 and `serde_json` to 1.0.154.
 - Fast gates check Python widths and the inventory of CLI questions and scoped options. Terminal
   cases cover explicit scan gaps, address paths, checked passwords, repair, passphrase answers,
   generated passwords, memory settings and test-tool selection before full-size Argon2 work.
