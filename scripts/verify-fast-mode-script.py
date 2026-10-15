@@ -673,6 +673,21 @@ class ChecksumFile(unittest.TestCase):
             os.mkfifo(self.page)
             self.assertIn("it is not a regular file", self.refusal())
 
+    def test_refuses_a_directory_before_the_os_refuses_opening_it(self):
+        os.remove(self.page)
+        os.mkdir(self.page)
+        with mock.patch.object(fast_mode.os, "open", side_effect=PermissionError(
+                "synthetic Windows directory denial")) as opening:
+            with self.assertRaisesRegex(OSError, "it is not a regular file"):
+                fast_mode.read_regular_file(self.page, fast_mode.MAX_PAGE)
+        opening.assert_not_called()
+
+    def test_rechecks_the_opened_file_after_the_path_check(self):
+        directory = os.stat(self.folder)
+        with mock.patch.object(fast_mode.os, "fstat", return_value=directory):
+            with self.assertRaisesRegex(OSError, "it is not a regular file"):
+                fast_mode.read_regular_file(self.page, fast_mode.MAX_PAGE)
+
     def test_an_unforeseen_error_is_said_and_keeps_its_exit_code(self):
         error = io.StringIO()
         with contextlib.redirect_stderr(error), mock.patch.object(

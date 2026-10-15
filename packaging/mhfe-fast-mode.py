@@ -590,12 +590,13 @@ def read_regular_file(path, limit):
     None for a longer file, of which nothing beyond the limit is read.
     As read_regular_file in src/bin/mhfe/serve.rs (AUD-024-FUN005).
     """
+    # Windows refuses to open a directory before fstat can check it.
+    require_regular_file(os.stat(path))
     flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
     descriptor = os.open(path, flags)
     try:
-        # Before fdopen, which refuses a folder in words of its own.
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise OSError("it is not a regular file")
+        # The path may have been replaced since stat checked it.
+        require_regular_file(os.fstat(descriptor))
         file = os.fdopen(descriptor, "rb")
     except BaseException:
         os.close(descriptor)
@@ -603,6 +604,11 @@ def read_regular_file(path, limit):
     with file:
         data = file.read(limit + 1)
     return data if len(data) <= limit else None
+
+
+def require_regular_file(metadata):
+    if not stat.S_ISREG(metadata.st_mode):
+        raise OSError("it is not a regular file")
 
 
 # Deliberate copy: serve::read_checksum_file; launcher ships without

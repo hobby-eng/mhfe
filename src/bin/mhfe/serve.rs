@@ -251,20 +251,28 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
 /// refused before anything is read, opened without waiting so that a FIFO with no writer does not
 /// block. `None` for a longer file, of which nothing beyond the limit is read (AUD-024-FUN005).
 fn read_regular_file(path: &Path, limit: u64) -> io::Result<Option<Vec<u8>>> {
+    // Windows refuses to open a directory before its handle can be checked.
+    require_regular_file(&fs::metadata(path)?)?;
     let mut options = fs::OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
     let file = options.open(path)?;
-    if !file.metadata()?.is_file() {
+    // The path may have been replaced since its metadata was read.
+    require_regular_file(&file.metadata()?)?;
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    Ok((bytes.len() as u64 <= limit).then_some(bytes))
+}
+
+fn require_regular_file(metadata: &fs::Metadata) -> io::Result<()> {
+    if !metadata.is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "it is not a regular file",
         ));
     }
-    let mut bytes = Vec::new();
-    file.take(limit + 1).read_to_end(&mut bytes)?;
-    Ok((bytes.len() as u64 <= limit).then_some(bytes))
+    Ok(())
 }
 
 /// The end of `mhfe serve -h` and `--help`.
@@ -903,6 +911,16 @@ mod tests {
         fs::remove_file(folder.0.join(CHECKSUM_FILE)).unwrap();
         fs::create_dir(folder.0.join(CHECKSUM_FILE)).unwrap();
         assert!(refusal(&folder).contains("it is not a regular file"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let checksum = folder.0.join(CHECKSUM_FILE);
+            let permissions = fs::metadata(&checksum).unwrap().permissions();
+            fs::set_permissions(&checksum, fs::Permissions::from_mode(0o000)).unwrap();
+            let message = refusal(&folder);
+            fs::set_permissions(&checksum, permissions).unwrap();
+            assert!(message.contains("it is not a regular file"), "{message}");
+        }
         fs::remove_dir(folder.0.join(CHECKSUM_FILE)).unwrap();
         // A page one byte over the limit: a sparse file, which takes no room on the disk.
         let file = fs::File::create(folder.page()).unwrap();
