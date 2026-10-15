@@ -7,6 +7,7 @@
 
 export * from "../../runtime.js";
 export * from "#runtime-script";
+export type * from "../runtime-shared.d.ts";
 
 import { MhfeModuleClass as ScriptModuleClass } from "#runtime-script";
 

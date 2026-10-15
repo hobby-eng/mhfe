@@ -380,7 +380,7 @@ mod tests {
         let mut set = mhfe::self_check::SelfCheck::new()
             .with(Fixed(
                 "cipher-rounds",
-                ComponentOutcome::Failed("vector 4 of 10 gives another container".into()),
+                crate::test_support::failed_cipher_case(),
             ))
             .with(Fixed(
                 crate::protect::CORE_DUMPS_ID,

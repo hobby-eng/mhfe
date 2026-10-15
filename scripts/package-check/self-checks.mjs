@@ -235,6 +235,7 @@ function checkSourcesAndSkippedParts() {
 
 /** Only "startup" and "full" are tiers, refused before any part runs. */
 function checkTierNames() {
+  const privateMarker = "public synthetic secret in the wrong tier field";
   for (const { tier, check } of [
     { tier: "nightly", check: (start) => bindings.selfCheckRepair("nightly", [], start, noop) },
     {
@@ -242,10 +243,14 @@ function checkTierNames() {
       check: (start) => bindings.selfCheckCore("Startup", [], undefined, start, noop),
     },
     { tier: "", check: (start) => bindings.selfCheckArgon2("", [], realArgon2, start, noop) },
+    {
+      tier: privateMarker,
+      check: (start) => bindings.selfCheckRepair(privateMarker, [], start, noop),
+    },
   ]) {
     const started = [];
     expectMessage(
-      `INVALID_REQUEST: invalid request: a self-check tier is "startup" or "full", not "${tier}"`,
+      'INVALID_REQUEST: invalid request: a self-check tier is "startup" or "full"',
       () => check((id) => started.push(id)),
     );
     assert.deepEqual(started, [], `no part runs for the tier "${tier}"`);

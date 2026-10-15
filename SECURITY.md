@@ -48,20 +48,30 @@ Never include a real seed phrase, password, private key or wallet file.
   (`FLAG_clear_internal_memory`, checked by a test); when a round fails, for example because a
   thread could not be started, the C code returns before that step and the Rust owner wipes the area
   instead. This is best effort: a compiler, the operating system, swap or a terminal's scrollback
-  can keep copies beyond the program's reach, and so can the standard library's own buffers: on
-  Windows that of standard input, and everywhere the line buffer of standard output, which keeps the
-  last line a phrase or a container was printed on until later output overwrites it. On Linux and
-  macOS standard input is read straight from its descriptor, one byte at a time, so no other buffer
-  holds an answer. Answers read from standard input are limited to 8192 bytes and read into a buffer
+  can keep copies beyond the program's reach, and so can the standard library's line buffer of
+  standard output, which keeps the last line a phrase or a container was printed on until later
+  output overwrites it. Standard input bypasses the standard library's persistent buffer: Unix
+  descriptors and Windows pipes read one byte at a time, and the Windows console reads one Unicode
+  scalar with `ReadConsoleW`. Pending UTF-8 bytes are held in an owned buffer, locked where the
+  system permits, and wiped when consumed or dropped. Answers are limited to 8192 bytes and read into a buffer
   of that size, so the program's copy never has to grow and leave an unwiped copy behind. At a
   terminal, secrets, a new container and a recovered phrase appear on the terminal's alternate
   screen, which is cleared before the tool returns to the main screen, so they do not enter its
   scrollback; a terminal that logs its output or a screen recording keeps them all the same.
-- The tool keeps secrets out of core dumps and swap. It forbids core dumps (`RLIMIT_CORE` 0) and,
+- The CLI requests native crash-dump and memory-access protections. It forbids Unix core dumps
+  (`RLIMIT_CORE` 0) and,
   on Linux, makes itself non-dumpable (`PR_SET_DUMPABLE` 0), which also keeps other programs of the
   same user from attaching to it or reading its memory through `/proc`, so a crash writes nothing
-  to disk; the Argon2 work area is marked `MADV_DONTDUMP` as well. The secrets the program keeps
-  beyond a moment are held in locked memory (`mlock`), so that the system does not write them to
+  to disk; the Argon2 work area is marked `MADV_DONTDUMP` as well. Windows opts the process out of
+  Windows Error Reporting with `SEM_NOGPFAULTERRORBOX`, read back through `GetErrorMode`, and sets
+  a restrictive process DACL. An `OWNER RIGHTS` ACE also removes the owner's implicit ability to
+  grant itself memory-read access; the exact DACL is read back before secret input. macOS requests
+  `PT_DENY_ATTACH`; release binaries are ad-hoc signed with the hardened runtime and no debugger
+  entitlement. `csops` reads that running policy back; local builds without a verified runtime
+  report that limitation. These measures cannot stop an administrator, a privileged debugger,
+  a handle obtained before hardening, or a host that controls the program itself.
+  The secrets the program keeps beyond a moment are held in locked memory (`mlock` on Unix,
+  `VirtualLock` on Windows), so that the system does not write them to
   swap: the line a secret is typed into at a terminal or read from standard input; the password as
   Argon2 receives it; a BIP39 passphrase and its normalized form; a password made by the generator
   or completed by its check word; a seed phrase as text, whether typed, recovered, new or a hidden
@@ -79,14 +89,16 @@ Never include a real seed phrase, password, private key or wallet file.
   from it, each round's Argon2 key, salt and mask, the lines of the frame a phrase is shown in at a
   terminal, and buffers inside dependencies. The system locks whole pages, and one page may hold
   several secrets, so the tool counts the secrets on each page and unlocks it only after the last
-  of them is wiped. This is best effort, natively on Linux and macOS; nothing is locked in a
-  browser or on Windows.
+  of them is wiped. This is best effort on native Linux, macOS and Windows builds; Windows may
+  increase its small working-set allowance when the existing quota refuses a lock, with a 64 MiB
+  ceiling for that allowance. A browser locks nothing.
   The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
   can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
   area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell, as for a
   device whose entry in /sys it cannot see; swap in memory (zram) is safe only without a writeback
   device, or with one encrypted as above. macOS encrypts its swap; on Windows, use BitLocker or no
-  page file.
+  page file. MHFE does not inspect Windows pagefile encryption, so it warns that protection is
+  unknown rather than reporting a protected or absent pagefile.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original seed phrase: a typing mistake or a
   hardware fault cannot silently produce a container that no password opens. At a terminal the
@@ -153,15 +165,17 @@ Never include a real seed phrase, password, private key or wallet file.
 ## The C engine and its interface
 
 Argon2 is the reference C implementation, vendored unchanged (see
-[`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code of the library
-is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
-The engine module also makes the calls that lock secrets in memory and keep the work area out of
-core dumps (`mlock`, `madvise`). The command-line tool denies unsafe code too, except in
+[`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). The library denies unsafe Rust except
+in the small native-call modules: `src/engine/ffi.rs` owns the C engine and work-area dump
+exclusion, and `src/memory/os.rs` with `memory/os/windows.rs` owns page locking. The command-line
+tool denies unsafe code too, except in
 `src/bin/mhfe/protect.rs` with its modules `protect/seccomp.rs` and `protect/landlock.rs`, which
 forbids core dumps (`setrlimit`, `prctl`), routes Ctrl+\\ and Ctrl+Z to the Ctrl+C handler
 (`sigaction`, `raise`), isolates a command (seccomp through `prctl`, Landlock, a network namespace
 through `unshare`), and reads each protection back by asking for it or trying what it forbids
-(`getrlimit`, `prctl`, `socket`, io_uring, `open`); and in the terminal modules of
+(`getrlimit`, `prctl`, `socket`, io_uring, `open`); its `protect/windows.rs` owns the Windows
+error-mode and process-DACL calls, and `protect/macos.rs` owns `ptrace` and `csops`. Raw input calls
+live in `standard_input.rs` and `standard_input/windows.rs`. The terminal modules of
 `src/bin/mhfe/hidden_input.rs`, `hidden_input/unix.rs` and `hidden_input/windows.rs`, which switch
 the terminal's echo and line mode for a secret's prompt and a list (`tcgetattr`/`tcsetattr` on
 Unix, `GetConsoleMode`/`SetConsoleMode` on Windows, where they also have the console carry out

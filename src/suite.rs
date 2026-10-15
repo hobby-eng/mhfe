@@ -1,11 +1,112 @@
 //! The two suites and their two settings (specification: "Suite parameters", "Suite 4" and
 //! "Work factor").
 
+use crate::text::memory_text;
+
 use std::fmt;
 
-use crate::engine::Argon2Cost;
+use crate::packing;
 use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
-use crate::MhfeError;
+mod format_error;
+pub use format_error::FormatError;
+mod error;
+pub use error::SettingsError;
+
+/// Memory and passes of one Argon2id call.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Argon2Cost {
+    /// Memory in KiB, the unit Argon2 uses.
+    memory_kib: u32,
+    /// Passes over the memory, Argon2's `t`.
+    passes: u32,
+}
+
+impl Argon2Cost {
+    /// Raw Argon2 parameters, in KiB and passes. The backend validates them on derivation;
+    /// a suite's validated parameters come from [`WorkFactor::argon2_cost`].
+    pub const fn new(memory_kib: u32, passes: u32) -> Self {
+        Self { memory_kib, passes }
+    }
+
+    /// Memory in KiB, the unit Argon2 uses.
+    pub const fn memory_kib(self) -> u32 {
+        self.memory_kib
+    }
+
+    /// Passes over the memory, Argon2's `t`.
+    pub const fn passes(self) -> u32 {
+        self.passes
+    }
+
+    /// The memory in bytes.
+    pub fn memory_bytes(self) -> u64 {
+        u64::from(self.memory_kib) * 1024
+    }
+}
+
+/// The length of an original phrase: 12, 15, 18, 21 or 24 words, the BIP39 lengths MHFE takes.
+///
+/// It is made only by [`WordCount::new`], so it never holds any other number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WordCount(usize);
+
+impl WordCount {
+    /// Refuses, before a container is read, a built-in check at a length that has none in any container
+    /// (`INVALID_WORD_COUNT`): only a 12- to 21-word original carries one.
+    pub fn require_built_in_check(self) -> Result<(), FormatError> {
+        if !SHORT_WORD_COUNTS.contains(&self.get()) {
+            return Err(FormatError::NoBuiltInCheckAtLength(self.get()));
+        }
+        Ok(())
+    }
+
+    /// Refuses every other number with [`FormatError::InvalidWordCount`].
+    pub fn new(words: usize) -> Result<Self, FormatError> {
+        packing::entropy_bytes(words)?;
+        Ok(Self(words))
+    }
+
+    /// The number of words.
+    pub fn get(self) -> usize {
+        self.0
+    }
+
+    /// The bytes of entropy a BIP39 phrase of this length carries: 16 for 12 words, 32 for 24.
+    pub fn entropy_bytes(self) -> usize {
+        packing::entropy_of_words(self.0)
+    }
+}
+
+/// How recovery of a 24-word container learns the length of the original phrase. A same-length
+/// container keeps its original's length and takes only [`PhraseLength::Detect`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PhraseLength {
+    /// Tests the 12-, 15-, 18- and 21-word layouts and falls back to 24 words.
+    Detect,
+    /// The length the user states. The layouts are tested all the same, and a built-in check that
+    /// passes takes precedence over the stated length (the specification's recovery rules): a
+    /// person can misremember a length, while a check passes by chance at most once in 2^32.
+    Words(WordCount),
+}
+
+impl PhraseLength {
+    /// The word count a front end passes as a number, 0 standing for detection, as the browser
+    /// package and `--words auto` take it.
+    pub fn from_count(count: usize) -> Result<Self, FormatError> {
+        match count {
+            0 => Ok(Self::Detect),
+            words => WordCount::new(words).map(Self::Words),
+        }
+    }
+
+    /// The stated word count; `None` for detection.
+    pub(crate) fn stated(self) -> Option<usize> {
+        match self {
+            Self::Detect => None,
+            Self::Words(words) => Some(words.get()),
+        }
+    }
+}
 
 /// Suite identifier; the round domain strings are built from it.
 pub const SUITE_ID: &str = "MHFE-BIP39-256-EXPERIMENTAL-3";
@@ -47,11 +148,11 @@ impl Suite {
 
     /// The suite of a container with `words` words, as recovery selects it: 24 words are suite 3
     /// and 12 to 21 words suite 4. The word count does not show that a phrase is a container.
-    pub fn of_container(words: usize) -> Result<Self, MhfeError> {
+    pub fn of_container(words: usize) -> Result<Self, FormatError> {
         match words {
             STATE_WORDS => Ok(Self::TwentyFourWords),
             words if SHORT_WORD_COUNTS.contains(&words) => Ok(Self::SameLength),
-            other => Err(MhfeError::InvalidWordCount(other)),
+            other => Err(FormatError::InvalidWordCount(other)),
         }
     }
 
@@ -63,21 +164,6 @@ impl Suite {
             4 => Some(Self::SameLength),
             _ => None,
         }
-    }
-
-    /// Whether `error` is one of the refusals the length rules give a suite 4 phrase or container
-    /// before any Argon2 work: a 24-word original, a length choice that does not apply to the
-    /// suite, or a container whose length the suite does not have. The last has the code of any
-    /// unreadable container, so the caller reads the container first. Suite 4's validation fixture
-    /// names these cases "rejected" without an error code.
-    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
-    pub(crate) fn is_length_refusal(error: &MhfeError) -> bool {
-        matches!(
-            error,
-            MhfeError::SameLengthNeedsShortPhrase
-                | MhfeError::LengthChoiceNotApplicable { .. }
-                | MhfeError::InvalidContainer(_)
-        )
     }
 
     /// The lengths of an original whose built-in check a recovery of a container of this suite
@@ -92,9 +178,9 @@ impl Suite {
     /// Refuses an original of `words` words that this suite has no container for: suite 4 has
     /// none for a 24-word phrase, which fills the whole state and leaves nothing to keep its
     /// length (`SAME_LENGTH_NEEDS_SHORT_PHRASE`).
-    pub fn require_original(self, words: usize) -> Result<(), MhfeError> {
+    pub fn require_original(self, words: usize) -> Result<(), FormatError> {
         if self == Self::SameLength && words == STATE_WORDS {
-            return Err(MhfeError::SameLengthNeedsShortPhrase);
+            return Err(FormatError::SameLengthNeedsShortPhrase);
         }
         Ok(())
     }
@@ -128,22 +214,6 @@ pub struct WorkFactor {
     memory_level: u32,
 }
 
-/// A memory size as every front end writes it: whole tebibytes from 1 TiB on, as the highest
-/// levels are, else gibibytes with one decimal unless whole: "2 GiB", "1.5 GiB", "3 TiB". Integers
-/// only.
-pub fn memory_text(bytes: u64) -> String {
-    const GIB: u64 = 1 << 30;
-    const TIB: u64 = 1 << 40;
-    if bytes >= TIB && bytes.is_multiple_of(TIB) {
-        return format!("{} TiB", bytes / TIB);
-    }
-    if bytes.is_multiple_of(GIB) {
-        return format!("{} GiB", bytes / GIB);
-    }
-    let tenths = bytes / (GIB / 10);
-    format!("{}.{} GiB", tenths / 10, tenths % 10)
-}
-
 /// Which settings a PIM or a memory level belongs to: those of the operation, or the new ones of a
 /// rekey, which a refusal names as such so that they are not taken for the old container's. Its
 /// [`fmt::Display`] gives the words that name the settings in a message: "the" or "the new".
@@ -166,23 +236,27 @@ impl fmt::Display for Settings {
 
 impl WorkFactor {
     /// Accepts PIM `0..=1023` and memory level `0..=21`, before any memory is allocated.
-    pub fn new(pim: u32, memory_level: u32) -> Result<Self, MhfeError> {
+    pub fn new(pim: u32, memory_level: u32) -> Result<Self, SettingsError> {
         Self::of(Settings::Current, pim, memory_level)
     }
 
     /// [`WorkFactor::new`] for the new settings of a rekey: a refusal names them as the new PIM or
     /// the new memory level, so that it is not taken for one of the old container's.
-    pub fn new_settings(pim: u32, memory_level: u32) -> Result<Self, MhfeError> {
+    pub fn new_settings(pim: u32, memory_level: u32) -> Result<Self, SettingsError> {
         Self::of(Settings::New, pim, memory_level)
     }
 
     /// [`WorkFactor::new`] for the settings `settings`, which a refusal names.
-    pub(crate) fn of(settings: Settings, pim: u32, memory_level: u32) -> Result<Self, MhfeError> {
+    pub(crate) fn of(
+        settings: Settings,
+        pim: u32,
+        memory_level: u32,
+    ) -> Result<Self, SettingsError> {
         if pim > MAX_PIM {
-            return Err(MhfeError::InvalidPim { pim, settings });
+            return Err(SettingsError::InvalidPim { pim, settings });
         }
         if memory_level > MAX_MEMORY_LEVEL {
-            return Err(MhfeError::InvalidMemoryLevel {
+            return Err(SettingsError::InvalidMemoryLevel {
                 level: memory_level,
                 settings,
             });
@@ -225,16 +299,16 @@ impl WorkFactor {
         u64::from(self.memory_kib()) * 1024
     }
 
-    /// The memory of every Argon2 call as [`memory_text`] writes it: "2 GiB" at level 0.
+    /// The memory of every Argon2 call as a display size: "2 GiB" at level 0.
     pub fn memory_text(self) -> String {
         memory_text(self.memory_bytes())
     }
 
     /// Refuses a memory level above `highest`, the most a build or host provides, such as a
     /// browser's (`MEMORY_LEVEL_NOT_SUPPORTED_HERE`), before any memory is used.
-    pub fn require_level(self, highest: u32) -> Result<(), MhfeError> {
+    pub fn require_level(self, highest: u32) -> Result<(), SettingsError> {
         if self.memory_level > highest {
-            return Err(MhfeError::MemoryLevelNotSupportedHere {
+            return Err(SettingsError::MemoryLevelNotSupportedHere {
                 level: self.memory_level,
                 highest_supported: highest,
             });
@@ -306,7 +380,7 @@ mod tests {
         }
         assert_eq!(
             Suite::of_container(13),
-            Err(MhfeError::InvalidWordCount(13))
+            Err(FormatError::InvalidWordCount(13))
         );
         assert_eq!(Suite::default(), Suite::TwentyFourWords);
         assert_eq!(Suite::SameLength.id(), "MHFE-BIP39-LP-EXPERIMENTAL-4");
@@ -353,7 +427,7 @@ mod tests {
     fn out_of_range_settings_are_rejected() {
         assert_eq!(
             WorkFactor::new(1024, 0),
-            Err(MhfeError::InvalidPim {
+            Err(SettingsError::InvalidPim {
                 pim: 1024,
                 settings: Settings::Current
             })
@@ -364,14 +438,14 @@ mod tests {
         );
         assert_eq!(
             WorkFactor::new(0, 22),
-            Err(MhfeError::InvalidMemoryLevel {
+            Err(SettingsError::InvalidMemoryLevel {
                 level: 22,
                 settings: Settings::Current
             })
         );
         assert_eq!(
             WorkFactor::new(u32::MAX, u32::MAX),
-            Err(MhfeError::InvalidPim {
+            Err(SettingsError::InvalidPim {
                 pim: u32::MAX,
                 settings: Settings::Current
             })

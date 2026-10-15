@@ -10,6 +10,9 @@
 //! the fault lies before Argon2id, or it was given the recorded input and returned another key, so
 //! the fault lies in Argon2id at full size. See [`SelfTestFault`].
 
+mod error;
+pub use error::{SelfTestError, VectorField};
+
 use std::fmt;
 
 use serde_json::Value;
@@ -17,7 +20,7 @@ use serde_json::Value;
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::mhfe::known_answers::{published_in, published_table, PublishedRound, PublishedVector};
 use crate::operation::{RoundCounter, Stage, StageCallback};
-use crate::{Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WorkFactor, ROUNDS};
+use crate::{Mhfe, Password, PhraseLength, Recovery, Suite, WorkFactor, ROUNDS};
 
 /// The public vectors, as the repository and the specification publish them.
 const SUITE_3_VECTOR: &str = include_str!("../tests/fixtures/suite3-vectors/zero-12.json");
@@ -34,30 +37,28 @@ struct Vector {
 }
 
 impl Vector {
-    fn read(json: &str) -> Result<Self, MhfeError> {
-        let value: Value = serde_json::from_str(json).map_err(|error| {
-            MhfeError::Internal(format!("a built-in vector is damaged: {error}"))
-        })?;
-        let text = |pointer: &str| {
+    fn read(json: &str) -> Result<Self, SelfTestError> {
+        let value: Value = serde_json::from_str(json).map_err(|_| SelfTestError::DamagedVector)?;
+        let text = |field: VectorField| {
             value
-                .pointer(pointer)
+                .pointer(field.pointer())
                 .and_then(Value::as_str)
                 .map(str::to_owned)
-                .ok_or_else(|| MhfeError::Internal(format!("a built-in vector lacks {pointer}")))
+                .ok_or(SelfTestError::MissingField(field))
         };
-        let number = |pointer: &str| {
+        let number = |field: VectorField| {
             value
-                .pointer(pointer)
+                .pointer(field.pointer())
                 .and_then(Value::as_u64)
                 .and_then(|number| u32::try_from(number).ok())
-                .ok_or_else(|| MhfeError::Internal(format!("a built-in vector lacks {pointer}")))
+                .ok_or(SelfTestError::MissingField(field))
         };
         Ok(Self {
-            name: text("/name")?,
-            phrase: text("/inputs/phrase")?,
-            password: text("/inputs/password")?,
-            container: text("/container")?,
-            work: WorkFactor::new(number("/inputs/pim")?, number("/inputs/memory_level")?)?,
+            name: text(VectorField::Name)?,
+            phrase: text(VectorField::Phrase)?,
+            password: text(VectorField::Password)?,
+            container: text(VectorField::Container)?,
+            work: WorkFactor::new(number(VectorField::Pim)?, number(VectorField::MemoryLevel)?)?,
         })
     }
 }
@@ -70,15 +71,13 @@ pub struct SelfTest {
 
 impl SelfTest {
     /// The vectors built into the program, which must have the same settings.
-    pub fn published() -> Result<Self, MhfeError> {
+    pub fn published() -> Result<Self, SelfTestError> {
         let test = Self {
             suite_3: Vector::read(SUITE_3_VECTOR)?,
             suite_4: Vector::read(SUITE_4_VECTOR)?,
         };
         if test.suite_3.work != test.suite_4.work {
-            return Err(MhfeError::Internal(
-                "the built-in vectors have different settings".to_owned(),
-            ));
+            return Err(SelfTestError::DifferentSettings);
         }
         Ok(test)
     }
@@ -103,17 +102,14 @@ impl SelfTest {
     /// suite 4 vector (rounds 13 to 24, [`Stage::Recover`]) with `mhfe`, which must be at
     /// the vectors' settings, [`SelfTest::work`], and compares both results with the published
     /// ones. An `mhfe` at other settings is refused before the first round
-    /// ([`MhfeError::InvalidRequest`]).
+    /// (`INVALID_REQUEST`).
     pub fn run<E: Argon2Engine>(
         &self,
         mhfe: &mut Mhfe<E>,
         progress: StageCallback<'_>,
-    ) -> Result<SelfTestResult, MhfeError> {
+    ) -> Result<SelfTestResult, SelfTestError> {
         if mhfe.work_factor() != self.work() {
-            return Err(MhfeError::InvalidRequest(
-                "the self-test runs at the settings of its vectors, PIM 0 and memory level 0"
-                    .to_owned(),
-            ));
+            return Err(SelfTestError::WrongSettings(self.work()));
         }
         let expected = self.expected_calls(published_table())?;
         let (work, engine) = mhfe.parts_mut();
@@ -128,7 +124,7 @@ impl SelfTest {
         &self,
         mhfe: &mut Mhfe<E>,
         progress: StageCallback<'_>,
-    ) -> Result<(bool, bool), MhfeError> {
+    ) -> Result<(bool, bool), SelfTestError> {
         let rounds = RoundCounter::starting_after(0, SELF_TEST_ROUNDS);
         let password = Password::new(&self.suite_3.password)?;
         let encrypted = mhfe.encrypt_unchecked(
@@ -157,9 +153,11 @@ impl SelfTest {
     fn expected_calls(
         &self,
         table: &'static [PublishedVector],
-    ) -> Result<Vec<ExpectedCall>, MhfeError> {
-        let suite_3 = published_in(table, &self.suite_3.name).map_err(MhfeError::Internal)?;
-        let suite_4 = published_in(table, &self.suite_4.name).map_err(MhfeError::Internal)?;
+    ) -> Result<Vec<ExpectedCall>, SelfTestError> {
+        let suite_3 = published_in(table, &self.suite_3.name)
+            .map_err(|_| SelfTestError::MissingPublishedVector)?;
+        let suite_4 = published_in(table, &self.suite_4.name)
+            .map_err(|_| SelfTestError::MissingPublishedVector)?;
         let call =
             |vector: &'static PublishedVector, round: &'static PublishedRound| ExpectedCall {
                 password_nfkd: vector.password_nfkd,
@@ -243,7 +241,7 @@ impl<E: Argon2Engine> Argon2Engine for RoundKeyWitness<'_, E> {
         password: &[u8],
         salt: &[u8; SALT_BYTES],
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), crate::engine::EngineError> {
         self.engine.derive(password, salt, key)?;
         self.calls += 1;
         if self.first_fault.is_none() {
@@ -386,12 +384,13 @@ mod tests {
     struct StandIn;
 
     impl Argon2Engine for StandIn {
+        // Deliberate copy: this independent fixture engine implements the shared trait signature.
         fn derive(
             &mut self,
             password: &[u8],
             salt: &[u8; SALT_BYTES],
             key: &mut [u8; KEY_BYTES],
-        ) -> Result<(), MhfeError> {
+        ) -> Result<(), crate::engine::EngineError> {
             if PublishedRoundKeys::of(published_table())
                 .derive(password, salt, key)
                 .is_err()
@@ -432,13 +431,14 @@ mod tests {
         }
     }
 
+    // Deliberate copy: this fault-injecting engine needs its own trait implementation.
     impl<E: Argon2Engine> Argon2Engine for Fault<E> {
         fn derive(
             &mut self,
             password: &[u8],
             salt: &[u8; SALT_BYTES],
             key: &mut [u8; KEY_BYTES],
-        ) -> Result<(), MhfeError> {
+        ) -> Result<(), crate::engine::EngineError> {
             self.calls += 1;
             let here = self.calls == self.at;
             let mut salt = *salt;
@@ -465,7 +465,7 @@ mod tests {
             rounds += 1;
             Ok(())
         });
-        assert!(matches!(refused, Err(MhfeError::InvalidRequest(_))));
+        assert!(matches!(refused, Err(SelfTestError::WrongSettings(_))));
         assert_eq!(rounds, 0);
     }
 

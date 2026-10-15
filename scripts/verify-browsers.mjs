@@ -1,9 +1,11 @@
 // Runs the browser package from dist/ in real browsers, Chromium and Firefox, with Playwright:
 //
 //   node scripts/verify-browsers.mjs [--browser chromium|firefox] [--mode standard|fast]
+//     [--launcher native|python]
 //
 // Without an option it checks both browsers in both modes; an option keeps one of them, for
-// example to run Firefox's fast mode again and again.
+// example to run Firefox's fast mode again and again. --launcher selects one fast-mode route
+// and requires --mode fast; python repeats only the standalone launcher's startup check.
 //
 // Build the package first with scripts/build-wasm.sh, install the tools with
 // `pnpm install --frozen-lockfile` and the two browsers with
@@ -92,19 +94,29 @@ const BROWSERS = { chromium, firefox };
 const MODES = ["standard", "fast"];
 /** The usage, said with a refused command line. */
 const USAGE =
-  "usage: node scripts/verify-browsers.mjs [--browser chromium|firefox] [--mode standard|fast]";
+  "usage: node scripts/verify-browsers.mjs [--browser chromium|firefox] [--mode standard|fast] " +
+  "[--launcher native|python (requires --mode fast)]";
 
 /** The browsers and modes of the command line, all of each by default; null for a refused one. */
 function selection(args) {
   try {
     const { values } = parseArgs({
       args,
-      options: { browser: { type: "string" }, mode: { type: "string" } },
+      options: {
+        browser: { type: "string" },
+        mode: { type: "string" },
+        launcher: { type: "string" },
+      },
     });
     const browsers = values.browser === undefined ? Object.keys(BROWSERS) : [values.browser];
     const modes = values.mode === undefined ? MODES : [values.mode];
+    const launchers = values.launcher === undefined ? ["native", "python"] : [values.launcher];
     const known = browsers.every((name) => Object.hasOwn(BROWSERS, name));
-    return known && modes.every((mode) => MODES.includes(mode)) ? { browsers, modes } : null;
+    const routes = launchers.every((launcher) => ["native", "python"].includes(launcher));
+    const fastOnly = values.launcher === undefined || values.mode === "fast";
+    return known && modes.every((mode) => MODES.includes(mode)) && routes && fastOnly
+      ? { browsers, modes, launchers }
+      : null;
   } catch {
     return null;
   }
@@ -242,7 +254,7 @@ writeFileSync(pagePath, page);
 // suite uses the native launcher; Python gets the same startup smoke check in each browser.
 writeLauncherChecksum(pagePath);
 let native;
-if (selected.modes.includes("fast")) {
+if (selected.modes.includes("fast") && selected.launchers.includes("native")) {
   execFileSync("cargo", ["build", "--locked", "--bin", "mhfe"], { stdio: "inherit" });
   native = nativeBinary("mhfe");
 }
@@ -254,20 +266,16 @@ for (const name of selected.browsers) {
       if (mode === "standard") {
         failed = !(await checkPage(browser, name, mode, pathToFileURL(pagePath).href)) || failed;
       } else {
-        const launcher = await FastModeLauncher.start("native", pagePath, native);
-        try {
-          failed = !(await checkPage(browser, name, mode, launcher.address, "native")) || failed;
-        } finally {
-          await launcher.stop();
-        }
-        const smokePath = writeSmokePage(classes, sources, checks);
-        const python = await FastModeLauncher.start("python", smokePath);
-        try {
-          failed = !(await checkPage(browser, name, mode, python.address, "python")) || failed;
-        } finally {
-          await python.stop();
-          // The next native launch serves the complete suite, whose digest differs.
-          writeLauncherChecksum(pagePath);
+        for (const route of selected.launchers) {
+          const path = route === "native" ? pagePath : writeSmokePage(classes, sources, checks);
+          const launcher = await FastModeLauncher.start(route, path, native);
+          try {
+            failed = !(await checkPage(browser, name, mode, launcher.address, route)) || failed;
+          } finally {
+            await launcher.stop();
+            // The next native launch serves the complete suite, whose digest differs.
+            if (route === "python") writeLauncherChecksum(pagePath);
+          }
         }
       }
     }
@@ -279,9 +287,15 @@ if (failed) {
   console.error("The browser check failed.");
   process.exit(1);
 }
+const checked =
+  selected.modes.length === 1 && selected.launchers.join() === "python"
+    ? "The Python launcher startup check passes"
+    : "The browser package passes its checks";
+const routes = selected.modes.includes("fast")
+  ? ` (${selected.launchers.join(" and ")} launcher)`
+  : "";
 console.log(
-  `The browser package passes its checks in ${selected.browsers.join(" and ")}, in ` +
-    `${selected.modes.join(" and ")} mode.`,
+  `${checked} in ${selected.browsers.join(" and ")}, in ${selected.modes.join(" and ")} mode${routes}.`,
 );
 
 /** A startup-only page for the standalone Python route, without repeating random phrase draws. */
@@ -294,7 +308,7 @@ function writeSmokePage(classes, sources, checks) {
       await checkStartupChecks(client, repair, passwords, wallet);
       return client.mode();
     } finally {
-      client.close(); repair.close(); passwords.close(); wallet.close();
+      client.cancel(); wallet.cancel();
     }
   }`;
   const smokeScript = classes + sources + checks.replace(String(harness.main), smokeMain);

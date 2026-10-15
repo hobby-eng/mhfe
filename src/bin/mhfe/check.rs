@@ -6,6 +6,9 @@
 //! is a quick, weaker check; the built-in check of a short original confirms only that the
 //! password recovers a consistent phrase.
 
+#[cfg(test)]
+use mhfe::wallet::Fingerprint;
+
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::wallet::{Coin, DerivationPath, SearchLimits};
@@ -253,10 +256,10 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
             })
         },
     )?;
-    let container = read.facts;
+    let (container, password, found_by, _) = read.into_parts();
     // Refused before the password is asked, as the check would refuse it.
     // A search for missing words asked for the password already.
-    let password = match read.password {
+    let password = match password {
         Some(password) => password,
         None => terminal::read_password(&mut input, Operation::Check)?,
     };
@@ -270,7 +273,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     drop(recovered);
     // The result follows the summary on the main screen.
     flow.finish();
-    report(&input, compared, read.found_by.as_deref())
+    report(&input, compared, found_by.as_deref())
 }
 
 /// Refuses options that cannot go together before anything is asked: only a short original
@@ -278,7 +281,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
 /// `--coin` and `--path` to an address.
 fn refuse_early(options: &Options) -> Result<(), Failure> {
     if let Some(PhraseLength::Words(words)) = options.words {
-        mhfe::require_built_in_check_length(words)?;
+        words.require_built_in_check()?;
     }
     refuse_misplaced_passphrase_used(options)?;
     refuse_misplaced_address_options(options)
@@ -404,11 +407,11 @@ fn compare(
     options: &Options,
 ) -> Result<Compared, Failure> {
     let compared = Compared::with(choice, reference, recovered)?;
-    if compared.asks_length && !input.is_script() {
+    if compared.asks_length() && !input.is_script() {
         return ask_length_after_detection(
             input,
             recovered,
-            &compared.evidence,
+            compared.evidence(),
             options.repair.address().coin(),
             options.repair.address().path(),
         );
@@ -419,14 +422,11 @@ fn compare(
 /// Reports the outcome: to a script the specification's words, to a person every check that
 /// passed and what the outcome means. Returns the exit code of the outcome.
 fn report(input: &Input, compared: Compared, found_by: Option<&str>) -> Result<i32, Failure> {
-    let Compared {
-        choice,
-        evidence,
-        asks_length: _,
-        identifies_wallet,
-        with_passphrase,
-    } = compared;
-    let outcome = &evidence.outcome;
+    let choice = compared.choice();
+    let evidence = compared.evidence();
+    let identifies_wallet = compared.identifies_wallet();
+    let with_passphrase = compared.with_passphrase();
+    let outcome = evidence.outcome();
 
     eprintln!();
     if input.is_script() {
@@ -437,7 +437,7 @@ fn report(input: &Input, compared: Compared, found_by: Option<&str>) -> Result<i
     let passed = || {
         passed_lines(
             choice,
-            &evidence,
+            evidence,
             identifies_wallet,
             with_passphrase,
             found_by,
@@ -462,7 +462,7 @@ fn report(input: &Input, compared: Compared, found_by: Option<&str>) -> Result<i
                     style::fact("Found at", paint(ACCENT, path));
                 }
                 if let (Choice::BuiltInCheck(stated), Some(found)) =
-                    (choice, evidence.built_in_check)
+                    (choice, evidence.built_in_check())
                 {
                     if found != stated {
                         style::warn(
@@ -484,7 +484,7 @@ fn report(input: &Input, compared: Compared, found_by: Option<&str>) -> Result<i
                     style::out(format_args!("  {} {line}", paint(style::GOOD, style::TICK)))?;
                 }
             }
-            style::hint(&not_verified_reason(choice, &evidence));
+            style::hint(&not_verified_reason(choice, evidence));
             style::more(readme::CHECK);
             Ok(NOT_VERIFIED)
         }
@@ -496,7 +496,7 @@ fn report(input: &Input, compared: Compared, found_by: Option<&str>) -> Result<i
                     style::out(format_args!("  {} {line}", paint(style::GOOD, style::TICK)))?;
                 }
             }
-            style::hint(no_match_reason(choice, &evidence));
+            style::hint(no_match_reason(choice, evidence));
             style::more(readme::CHECK);
             Ok(NO_MATCH)
         }
@@ -505,7 +505,7 @@ fn report(input: &Input, compared: Compared, found_by: Option<&str>) -> Result<i
 
 /// Why nothing matched, by what was compared.
 fn no_match_reason(choice: Choice, evidence: &DisplayedEvidence) -> &'static str {
-    if !evidence.passed.is_empty() {
+    if !evidence.passed().is_empty() {
         return "The recovery passed its own checks, but the wallet reference does not match. \
                 Check the reference, its coin or path, and the BIP39 passphrase.";
     }
@@ -526,7 +526,7 @@ fn no_match_reason(choice: Choice, evidence: &DisplayedEvidence) -> &'static str
 /// built-in checks, of which at most one is the phrase's, or a 24-word reading, which a wrong
 /// password gives too and which only a wallet reference verifies.
 fn not_verified_reason(choice: Choice, evidence: &DisplayedEvidence) -> String {
-    if let [_, _, ..] = evidence.matching_lengths[..] {
+    if let [_, _, ..] = evidence.matching_lengths()[..] {
         let stated = match choice {
             Choice::BuiltInCheck(words) => format!("The built-in check of {words} words fails. "),
             _ => String::new(),
@@ -534,7 +534,7 @@ fn not_verified_reason(choice: Choice, evidence: &DisplayedEvidence) -> String {
         return format!(
             "{stated}{} State the length (--words N) or compare with a receiving address \
              (--address).",
-            several_lengths(&evidence.matching_lengths)
+            several_lengths(evidence.matching_lengths())
         );
     }
     match choice {
@@ -542,7 +542,7 @@ fn not_verified_reason(choice: Choice, evidence: &DisplayedEvidence) -> String {
             "A wrong password passes the {WALLET_CHECK_BITS}-bit phrase + passphrase check about \
              once in {}: only a receiving address (--address) or the fingerprint proves the \
              wallet.",
-            mhfe::grouped(wallet_check::WALLET_CHECK_ODDS)
+            mhfe::GroupedCount::new(wallet_check::WALLET_CHECK_ODDS)
         ),
         _ => format!(
             "No length of {} words passes its built-in check, so the recovery reads 24 words, as \
@@ -581,7 +581,7 @@ fn passed_lines(
     };
     let mut lines = vec!["the container phrase passes its BIP39 checksum".to_owned()];
     lines.extend(found_by.map(ToOwned::to_owned));
-    if evidence.outcome.matches() && identifies_wallet {
+    if evidence.outcome().matches() && identifies_wallet {
         lines.extend(match choice {
             Choice::Address => Some(format!("the receiving address of the wallet, {passphrase}")),
             Choice::Fingerprint => Some(format!(
@@ -591,7 +591,7 @@ fn passed_lines(
             _ => None,
         });
     }
-    lines.extend(evidence.passed.iter().map(|passed| match passed {
+    lines.extend(evidence.passed().iter().map(|passed| match passed {
         PassedCheck::BuiltInCheck(words) => built_in_line(*words),
         PassedCheck::BuiltInChecks(lengths) => format!(
             "the built-in checks of {} words",
@@ -610,7 +610,7 @@ fn wallet_check_line() -> String {
     format!("the phrase + passphrase check: its first {WALLET_CHECK_BITS} bits are zero")
 }
 
-/// The pass of the 16-bit source check as a fact, in the specification's words.
+/// The pass of the 16-bit wallet check as a fact, in the specification's words.
 fn wallet_check_passes() -> String {
     format!("The 24-word reading passes the {WALLET_CHECK_BITS}-bit check.")
 }
@@ -690,13 +690,13 @@ fn ask_length_after_detection(
     coin: Option<Coin>,
     path: Option<DerivationPath>,
 ) -> Result<Compared, Failure> {
-    let found = match &detected.matching_lengths[..] {
+    let found = match detected.matching_lengths() {
         [] => no_length_found(),
         lengths => several_lengths(lengths),
     };
     let mut explanation = vec![found.as_str()];
     let source_check = wallet_check_passes();
-    if detected.wallet_check == Some(true) {
+    if detected.wallet_check() == Some(true) {
         explanation.push(&source_check);
     }
     explanation.push(TWENTY_FOUR_COMPARED);
@@ -754,7 +754,7 @@ mod tests {
                 .unwrap(),
                 path: None,
             },
-            Choice::Fingerprint => ReferenceTarget::Fingerprint([0; 4]),
+            Choice::Fingerprint => ReferenceTarget::Fingerprint(Fingerprint::from_bytes([0; 4])),
             Choice::BuiltInCheck(words) => {
                 ReferenceTarget::Length(PhraseLength::Words(WordCount::new(words).unwrap()))
             }
@@ -820,7 +820,7 @@ mod tests {
     #[test]
     fn wallet_check_option_selects_its_reference_without_a_question() {
         let options = options_of(&["--wallet-check"]);
-        let phrase = mhfe::phrase_from_entropy(&[0; 32]).unwrap();
+        let phrase = mhfe::Phrase::from_entropy(&[0; 32]).unwrap().into_words();
         let container = ContainerFacts::read(&phrase).unwrap();
         let mut input = Input::terminal_only();
         assert!(matches!(
@@ -855,7 +855,10 @@ mod tests {
             ],
         ] {
             let failure = refuse_early(&options_of(refused)).unwrap_err();
-            assert!(failure.message.contains("only to --address"), "{refused:?}");
+            assert!(
+                failure.message().contains("only to --address"),
+                "{refused:?}"
+            );
         }
         for accepted in [
             &[
@@ -879,13 +882,13 @@ mod tests {
         wallet_check: Option<bool>,
         passed: &[PassedCheck],
     ) -> DisplayedEvidence {
-        DisplayedEvidence {
+        DisplayedEvidence::fixture(
             outcome,
             built_in_check,
-            matching_lengths: matching_lengths.to_vec(),
+            matching_lengths.to_vec(),
             wallet_check,
-            passed: passed.to_vec(),
-        }
+            passed.to_vec(),
+        )
     }
 
     const MATCHES: CheckOutcome = CheckOutcome::Matches { path: None };

@@ -753,7 +753,9 @@ mod tests {
     }
 
     fn refusal(folder: &TestFolder) -> String {
-        load_checked_page(&folder.page()).unwrap_err().message
+        load_checked_page(&folder.page())
+            .unwrap_err()
+            .into_message()
     }
 
     #[test]
@@ -841,8 +843,8 @@ mod tests {
         for case in shared_cases("checksumFiles", "nonHtml") {
             folder.write_checksum_file(&filled(&case, &digest));
             let failure = read_checksum_file(&folder.0).unwrap_err();
-            assert_eq!(failure.exit_code, crate::exit::INVALID_INPUT);
-            assert_eq!(failure.message, NON_HTML.replace("{suffix}", HTML_SUFFIX));
+            assert_eq!(failure.exit_code(), crate::exit::INVALID_INPUT);
+            assert_eq!(failure.message(), NON_HTML.replace("{suffix}", HTML_SUFFIX));
         }
     }
 
@@ -969,14 +971,14 @@ mod tests {
         folder.write_checksum_file(&format!("{digest}  tool.html\n"));
         assert_eq!(checked_page_in(&folder.0).unwrap(), Some(folder.page()));
         fs::write(folder.page(), b"changed").unwrap();
-        let changed = checked_page_in(&folder.0).unwrap_err().message;
+        let changed = checked_page_in(&folder.0).unwrap_err().into_message();
         assert!(changed.contains("The page has changed"), "{changed}");
         assert!(load_checked_page(&folder.page()).is_err());
         fs::remove_file(folder.page()).unwrap();
-        let missing = checked_page_in(&folder.0).unwrap_err().message;
+        let missing = checked_page_in(&folder.0).unwrap_err().into_message();
         assert!(missing.contains("Cannot read"), "{missing}");
         folder.write_checksum_file("not a checksum line\n");
-        let malformed = checked_page_in(&folder.0).unwrap_err().message;
+        let malformed = checked_page_in(&folder.0).unwrap_err().into_message();
         assert!(
             malformed.contains("must hold exactly one line"),
             "{malformed}"

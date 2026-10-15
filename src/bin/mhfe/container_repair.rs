@@ -3,13 +3,16 @@
 //! from the container phrase, repair it when words rust away, are scratched or were copied wrongly,
 //! without the password and without Argon2.
 
+mod reviewed;
+pub(crate) use reviewed::Reviewed;
+
 use clap::Args;
 use mhfe::memory::LockedText;
-use mhfe::repair::{self, ContainerReading, Repaired};
+use mhfe::repair::{self, ContainerReading, RepairWordCount, Repaired};
 use mhfe::search::DECOY_SCAN_GAP;
 use mhfe::wallet::SearchLimits;
 use mhfe::word_hints::WordList;
-use mhfe::{ContainerFacts, Password, WorkFactor};
+use mhfe::{ContainerFacts, WorkFactor};
 
 use crate::check::AddressOptions;
 use crate::choice::{Answer, Question};
@@ -268,12 +271,12 @@ fn repair_option_help() -> String {
 /// settings of the container.
 #[derive(Clone)]
 pub(crate) struct SearchContext {
-    pub(crate) operation: Operation,
-    pub(crate) work: SearchWork,
+    operation: Operation,
+    work: SearchWork,
     /// `--scan-gap`, or `None` to ask.
-    pub(crate) scan_gap: Option<u32>,
+    scan_gap: Option<u32>,
     /// The address metadata given before input is read.
-    pub(crate) address: AddressOptions,
+    address: AddressOptions,
 }
 
 /// The settings a search that recovers candidates runs at.
@@ -286,6 +289,16 @@ pub(crate) enum SearchWork {
 }
 
 impl SearchContext {
+    pub(crate) const fn operation(&self) -> Operation {
+        self.operation
+    }
+    pub(crate) const fn scan_gap(&self) -> Option<u32> {
+        self.scan_gap
+    }
+    pub(crate) fn address(&self) -> &AddressOptions {
+        &self.address
+    }
+
     /// The settings of a search that recovers candidates, asked for here where the command has
     /// not settled them.
     pub(crate) fn work(&self, input: &mut Input) -> Result<WorkFactor, Failure> {
@@ -305,30 +318,6 @@ pub(crate) enum CardAsked {
     WhenNeeded(SearchContext),
     /// Never, where repair words are made rather than used.
     Never,
-}
-
-/// A container phrase as typed, repaired with its card, found by a search or as it was, ready
-/// to be read.
-pub(crate) struct Reviewed {
-    pub(crate) words: LockedText,
-    /// What was repaired, for the summary, without the words: "word 3 of the container phrase".
-    pub(crate) repaired: Option<String>,
-    /// The container password, when a search asked for it already.
-    pub(crate) password: Option<Password>,
-    /// What a search for missing words matched, such as "the container's own wallet: master key
-    /// fingerprint e0f73b78", for a check to list among its matches.
-    pub(crate) found_by: Option<String>,
-}
-
-impl Reviewed {
-    fn as_typed(words: LockedText) -> Self {
-        Self {
-            words,
-            repaired: None,
-            password: None,
-            found_by: None,
-        }
-    }
 }
 
 /// Looks at a container phrase as typed before it is read and repairs it with its card where
@@ -374,12 +363,12 @@ fn wants_repair(input: &mut Input) -> Result<bool, Failure> {
             "from the card kept apart from it",
         ),
     ];
-    let question = Question {
-        text: "Type the container phrase again, or repair it?",
-        explanation: &[],
-        more: Some(readme::REPAIR),
-        record: None,
-    };
+    let question = Question::with_details(
+        "Type the container phrase again, or repair it?",
+        &[],
+        Some(readme::REPAIR),
+        None,
+    );
     Ok(input.choose_here(&question, &answers)? == 1)
 }
 
@@ -425,22 +414,22 @@ fn repair_with_card(
             };
         }
         let then = "Type them again, or Enter alone without them.";
-        if let Some(repaired) = input.accepted(repair::repair(written, &card), then)? {
+        if let Some(repaired) = input.accepted(RepairWordCount::repair(written, &card), then)? {
             let typed = repair::CardWords::read(&card);
             let count = typed.count();
             terminal::read_back(
                 input,
                 typed.words(),
-                &repair::repair_words(&repaired.container, count)?,
+                &RepairWordCount::new(count)?.words_of(repaired.container())?,
                 false,
             )?;
             break repaired;
         }
     };
-    if repaired.changes.is_empty() {
+    if repaired.changes().is_empty() {
         style::ok(NOTHING_TO_REPAIR);
         return Ok(Some(Reviewed::as_typed(LockedText::copy_of(
-            &repaired.container,
+            repaired.container(),
         ))));
     }
     if input.is_script() {
@@ -453,15 +442,15 @@ fn repair_with_card(
             return Ok(None);
         }
     }
-    Ok(Some(Reviewed {
-        words: LockedText::copy_of(&repaired.container),
-        repaired: Some(format!(
+    Ok(Some(Reviewed::new(
+        LockedText::copy_of(repaired.container()),
+        Some(format!(
             "{}, with its repair words",
             repaired_parts(&repaired)
         )),
-        password: None,
-        found_by: None,
-    }))
+        None,
+        None,
+    )))
 }
 
 /// Said when the card finds nothing to repair.
@@ -478,11 +467,11 @@ fn show_repaired(repaired: &Repaired) {
             HEADING,
             format!(
                 "Repaired container phrase, {} words",
-                repaired.container.split(' ').count()
+                repaired.container().split(' ').count()
             )
         )
     );
-    for line in style::boxed_words(&repaired.container) {
+    for line in style::boxed_words(repaired.container()) {
         eprintln!("{}", *line);
     }
     report_changes(repaired);
@@ -496,12 +485,7 @@ fn use_answers() -> [Answer; 2] {
 /// Asks whether to go on with the repaired container phrase.
 fn uses_repair(input: &mut Input) -> Result<bool, Failure> {
     let answers = use_answers();
-    let question = Question {
-        text: "Use the repaired container phrase?",
-        explanation: &[],
-        more: None,
-        record: None,
-    };
+    let question = Question::with_details("Use the repaired container phrase?", &[], None, None);
     Ok(input.choose_here(&question, &answers)? == 0)
 }
 
@@ -525,12 +509,12 @@ pub(crate) fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
         address: options.address.clone(),
     };
     let read = terminal::read_container(&mut input, REPAIR_TITLE, CardAsked::Always(search))?;
-    if read.repaired.is_none() {
+    if read.repaired().is_none() {
         // The card agreed with the container phrase, which the repair has said already.
         flow.finish();
         return Ok(SUCCESS);
     }
-    let container = read.facts.words();
+    let container = read.facts().words();
     // The repaired container is shown privately, as a container always is.
     let screen = PrivateScreen::enter_to_show(&input)?;
     if screen.is_active() {
@@ -563,19 +547,19 @@ pub(crate) fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
 
 pub(crate) fn run_words(options: WordsOptions) -> Result<i32, Failure> {
     if let Some(count) = options.count {
-        repair::require_count(count)?;
+        RepairWordCount::new(count)?;
     }
     let mut input = Input::new(options.stdin).reading_secrets()?;
     let flow = Flow::start(&input, WORDS_TITLE)?;
     style::title(WORDS_TITLE);
     let read = terminal::read_container(&mut input, WORDS_TITLE, CardAsked::Never)?;
-    let container = read.facts;
+    let (container, _, _, _) = read.into_parts();
     let count = match options.count {
         Some(count) => count,
         // Without --count a script is refused by clap, so the person at a terminal is asked.
         None => ask_count(&mut input, false)?.unwrap_or(repair::RECOMMENDED_REPAIR_WORDS),
     };
-    let words = repair::repair_words(container.words(), count)?;
+    let words = RepairWordCount::new(count)?.words_of(container.words())?;
     let screen = PrivateScreen::enter_to_show(&input)?;
     if screen.is_active() {
         style::title(WORDS_TITLE);
@@ -598,17 +582,13 @@ pub(crate) fn run_words(options: WordsOptions) -> Result<i32, Failure> {
 /// `offer_none`, as when a container is made, "none" too, which gives `None`.
 pub(crate) fn ask_count(input: &mut Input, offer_none: bool) -> Result<Option<usize>, Failure> {
     // The recommended count first, then the others in order, each with what it repairs.
-    let counts: Vec<usize> = std::iter::once(repair::RECOMMENDED_REPAIR_WORDS)
-        .chain(
-            repair::REPAIR_WORD_COUNTS
-                .into_iter()
-                .filter(|&count| count != repair::RECOMMENDED_REPAIR_WORDS),
-        )
-        .collect();
+    let mut counts = RepairWordCount::offered();
+    counts.sort_by_key(|count| count.get() != repair::RECOMMENDED_REPAIR_WORDS);
     let mut answers: Vec<Answer> = counts
         .iter()
         .map(|&count| {
-            let (unreadable, wrong) = repair::capacity(count);
+            let (unreadable, wrong) = count.capacity();
+            let count = count.get();
             let recommended = if count == repair::RECOMMENDED_REPAIR_WORDS {
                 " (recommended)"
             } else {
@@ -624,14 +604,14 @@ pub(crate) fn ask_count(input: &mut Input, offer_none: bool) -> Result<Option<us
     if offer_none {
         answers.push(Answer::new("No repair words", "nothing to keep apart"));
     }
-    let question = Question {
-        text: "Repair words for the container phrase?",
-        explanation: REPAIR_EXPLAINED,
-        more: Some(readme::REPAIR),
-        record: Some("Repair"),
-    };
+    let question = Question::with_details(
+        "Repair words for the container phrase?",
+        REPAIR_EXPLAINED,
+        Some(readme::REPAIR),
+        Some("Repair"),
+    );
     let chosen = input.choose(&question, &answers)?;
-    Ok(counts.get(chosen).copied())
+    Ok(counts.get(chosen).copied().map(RepairWordCount::get))
 }
 
 /// What repair words do, under the question whether to make them.
@@ -657,7 +637,10 @@ impl RepairWordsOption {
     pub(crate) fn check(&self) -> Result<(), Failure> {
         match self.count {
             None | Some(NO_REPAIR_WORDS) => Ok(()),
-            Some(count) => Ok(repair::require_count(count)?),
+            Some(count) => {
+                RepairWordCount::new(count)?;
+                Ok(())
+            }
         }
     }
 
@@ -734,14 +717,14 @@ pub(crate) fn print_card(words: &str, input: &Input) -> Result<(), Failure> {
 /// became, as a terminal and a script show it.
 fn report_changes(repaired: &Repaired) {
     style::ok(what_was_repaired(repaired));
-    for change in &repaired.changes {
-        let place = if change.on_card { "card" } else { "word" };
-        let read = change.read.as_deref().unwrap_or("unreadable");
+    for change in repaired.changes() {
+        let place = if change.on_card() { "card" } else { "word" };
+        let read = change.read().unwrap_or("unreadable");
         eprintln!(
             "  {} {} → {}",
-            paint(MUTED, format!("{place} {:>2}", change.position)),
+            paint(MUTED, format!("{place} {:>2}", change.position())),
             paint(MUTED, format!("{read:<10}")),
-            paint(STRONG, &change.word)
+            paint(STRONG, change.word())
         );
     }
 }
@@ -765,8 +748,8 @@ fn repaired_parts(repaired: &Repaired) -> String {
         }
     };
     let parts: Vec<String> = [
-        part(&repaired.container_words, "container phrase"),
-        part(&repaired.card_words, "card"),
+        part(repaired.container_words(), "container phrase"),
+        part(repaired.card_words(), "card"),
     ]
     .into_iter()
     .flatten()
@@ -794,18 +777,28 @@ mod tests {
 
     #[test]
     fn the_repaired_words_are_listed_plainly() {
-        let repaired = |container: Vec<usize>, card: Vec<usize>| Repaired {
-            container: String::new(),
-            container_words: container,
-            card_words: card,
-            changes: Vec::new(),
+        let repaired = |container: &[usize], card: &[usize]| {
+            let fixture: serde_json::Value = serde_json::from_str(include_str!(
+                "../../../tests/fixtures/suite3-vectors/zero-12.json"
+            ))
+            .unwrap();
+            let original = fixture["container"].as_str().unwrap();
+            let repair = RepairWordCount::new(4).unwrap().words_of(original).unwrap();
+            let damage = |text: &str, positions: &[usize]| {
+                let mut words: Vec<&str> = text.split_whitespace().collect();
+                for position in positions {
+                    words[position - 1] = "?";
+                }
+                words.join(" ")
+            };
+            RepairWordCount::repair(&damage(original, container), &damage(&repair, card)).unwrap()
         };
         assert_eq!(
-            what_was_repaired(&repaired(vec![3], vec![])),
+            what_was_repaired(&repaired(&[3], &[])),
             "Repaired word 3 of the container phrase."
         );
         assert_eq!(
-            what_was_repaired(&repaired(vec![3, 9, 17], vec![2])),
+            what_was_repaired(&repaired(&[3, 9, 17], &[2])),
             "Repaired words 3, 9 and 17 of the container phrase and word 2 of the card."
         );
     }

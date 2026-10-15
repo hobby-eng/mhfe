@@ -8,7 +8,7 @@
 //! independent of this one, after it had reproduced the BIP39 English list's SHA-256, BIP-0039's
 //! first seed with "TREZOR" and both published passing digests.
 
-use super::{digest, digest_passes, verify, PhraseDraw, NEW_ENTROPY_BYTES};
+use super::{digest, digest_passes, PhraseDraw, WalletCheck, NEW_ENTROPY_BYTES};
 use crate::random::ScriptedSource;
 use crate::self_check::{
     damaged, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
@@ -92,24 +92,27 @@ impl WalletCheckProfile {
     }
 
     /// The digest of a vector, compared whole with the published one, and the criterion on it.
-    fn vector(vector: &WalletCheckVector) -> Result<(), String> {
+    fn vector(vector: &WalletCheckVector) -> Result<(), crate::self_check::FailureDetail> {
         let entropy = entropy(vector.counter);
         let digest = digest(&entropy, vector.passphrase).map_err(stopped)?;
         expect(
             hex::encode(&digest[..]) == vector.digest,
-            "gives another digest",
+            crate::self_check::KnownAnswerDifference::GivesAnotherDigest,
         )?;
         expect(
             digest_passes(&digest) == vector.passes,
             if vector.passes {
-                "fails where it must pass"
+                crate::self_check::KnownAnswerDifference::FailsWhereItMustPass
             } else {
-                "passes where it must fail"
+                crate::self_check::KnownAnswerDifference::PassesWhereItMustFail
             },
         )?;
         if vector.passes {
             let phrase = crate::phrase::phrase_from_entropy(&entropy).map_err(stopped)?;
-            expect(phrase.ends_with(vector.ends_with), "gives other words")?;
+            expect(
+                phrase.ends_with(vector.ends_with),
+                crate::self_check::KnownAnswerDifference::GivesOtherWords,
+            )?;
         }
         Ok(())
     }
@@ -132,7 +135,7 @@ impl ComponentCheck for WalletCheckProfile {
             .copied()
             .collect();
         let mut findings = Findings::new();
-        findings.each("vector", &vectors, Self::vector);
+        findings.each(crate::self_check::CaseKind::Vector, &vectors, Self::vector);
         // A draw with the check from a source scripted to give the first vector's entropy after
         // the two probes of the source check: the passing phrase, read back and checked again.
         findings.one(|| {
@@ -142,7 +145,7 @@ impl ComponentCheck for WalletCheckProfile {
             let drawn = draw.draw(&mut source, &mut |_| Ok(())).map_err(stopped)?;
             expect(
                 drawn.checked() && drawn.phrase().ends_with(first.ends_with),
-                "a draw gives another phrase",
+                crate::self_check::KnownAnswerDifference::ADrawGivesAnotherPhrase,
             )
         });
         // An entropy of zeros means the source filled nothing.
@@ -152,14 +155,23 @@ impl ComponentCheck for WalletCheckProfile {
                 PhraseDraw::unchecked().try_draws(&mut zeros, 1),
                 "RANDOM_FAILED",
             )
-            .map_err(|what| format!("a source of zeros {what}"))
+            .map_err(|what| crate::self_check::FailureDetail::Context {
+                context: crate::self_check::CheckContext::ASourceOfZeros,
+                cause: Box::new(what),
+            })
         });
         // Without a passphrase, anyone who sees the phrase could test it.
         findings.one(|| {
             let phrase = crate::phrase::phrase_from_entropy(&entropy(VECTORS[0].counter))
                 .map_err(stopped)?;
-            expect_refusal(verify(&phrase, ""), "WALLET_CHECK_NEEDS_PASSPHRASE")
-                .map_err(|what| format!("a check without a passphrase {what}"))
+            expect_refusal(
+                WalletCheck::new("").verify(&phrase),
+                "WALLET_CHECK_NEEDS_PASSPHRASE",
+            )
+            .map_err(|what| crate::self_check::FailureDetail::Context {
+                context: crate::self_check::CheckContext::ACheckWithoutAPassphrase,
+                cause: Box::new(what),
+            })
         });
         findings.outcome()
     }
@@ -186,9 +198,9 @@ mod tests {
         let mut check = WalletCheckProfile {
             vectors: Box::leak(Box::new(vectors)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("vector 1 of 2 gives another digest".to_owned())
+            "vector 1 of 2 gives another digest".to_owned()
         );
         // A vector that must fail, turned into one that must pass.
         let mut vectors = VECTORS;
@@ -196,9 +208,9 @@ mod tests {
         let mut check = WalletCheckProfile {
             vectors: Box::leak(Box::new(vectors)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("vector 2 of 2 fails where it must pass".to_owned())
+            "vector 2 of 2 fails where it must pass".to_owned()
         );
         // The whole digest of a vector that fails is compared, its last digit too.
         let mut vectors = VECTORS;
@@ -206,9 +218,9 @@ mod tests {
         let mut check = WalletCheckProfile {
             vectors: Box::leak(Box::new(vectors)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("vector 2 of 2 gives another digest".to_owned())
+            "vector 2 of 2 gives another digest".to_owned()
         );
         let mut vectors = VECTORS;
         vectors[3].counter = 98_917;
@@ -216,9 +228,9 @@ mod tests {
             vectors: Box::leak(Box::new(vectors)),
         };
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Full),
-            ComponentOutcome::Failed("vector 4 of 4 gives another digest".to_owned())
+            "vector 4 of 4 gives another digest".to_owned()
         );
     }
 }

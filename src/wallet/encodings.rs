@@ -4,101 +4,89 @@
 
 use sha3::{Digest, Keccak256};
 
+use super::coins::{AddressFamily, Base58Rules, HumanPart, PlatformRules, WitnessRules};
 use super::{Address, AddressType, Coin};
-use crate::MhfeError;
+use super::{AddressIssue, WalletError};
 
 /// Reads `text` as a single-key receiving address of `coin` ([`Address::parse`]).
-pub(super) fn parse(coin: Coin, text: &str) -> Result<Address, MhfeError> {
-    let address = match coin {
-        Coin::Bitcoin if is_bech32(text, &["bc1", "tb1"]) => parse_segwit(coin, text)?,
-        Coin::Litecoin if is_bech32(text, &["ltc1"]) => parse_segwit(coin, text)?,
-        Coin::BitcoinCash if !text.starts_with('1') => parse_cashaddr(text)?,
-        Coin::Ethereum | Coin::EthereumClassic => parse_hex(coin, text)?,
-        Coin::Cosmos => parse_bech32_account(coin, text, "cosmos", AddressType::P2pkh)?,
-        Coin::Injective => parse_bech32_account(coin, text, "inj", AddressType::Keccak)?,
-        Coin::Dash if is_bech32(text, &["dash1", "tdash1"]) => parse_dash_platform(text)?,
-        Coin::Zcash if is_bech32(text, &["tex1", "textest1"]) => {
-            return Err(invalid_address(
-                "the TEX address form is not supported; give its transparent t1… form on mainnet",
-            ));
+pub(super) fn parse(coin: Coin, text: &str) -> Result<Address, WalletError> {
+    let rules = coin.rules();
+    if let Some(witness) = rules
+        .witness()
+        .filter(|rules| is_bech32(text, rules.hrps()))
+    {
+        return parse_segwit(coin, text, witness);
+    }
+    if let Some(platform) = rules
+        .platform()
+        .filter(|rules| is_bech32(text, rules.hrps()))
+    {
+        return parse_platform(coin, text, platform);
+    }
+    match rules.family() {
+        AddressFamily::Hex => parse_hex(coin, text),
+        AddressFamily::Account { hrp, kind } => parse_bech32_account(coin, text, hrp, kind),
+        AddressFamily::Cashaddr {
+            prefix,
+            legacy_start,
+        } if !text.starts_with(legacy_start) => parse_cashaddr(coin, text, prefix),
+        AddressFamily::Transparent { refused } => {
+            let lowercase = text.to_ascii_lowercase();
+            for (prefixes, reason) in refused {
+                if prefixes.iter().any(|prefix| lowercase.starts_with(prefix)) {
+                    return Err(invalid_address(*reason));
+                }
+            }
+            parse_base58(coin, text, rules.base58())
         }
-        Coin::Zcash if is_shielded_zcash(text) => {
-            return Err(invalid_address(
-                "it is shielded; use a transparent t1… address of the same wallet",
-            ))
+        AddressFamily::Base58 | AddressFamily::Cashaddr { .. } => {
+            parse_base58(coin, text, rules.base58())
         }
-        _ => parse_base58(coin, text)?,
-    };
-    Ok(address)
+    }
 }
 
-fn invalid_address(reason: &str) -> MhfeError {
-    MhfeError::InvalidAddress(reason.to_owned())
+fn invalid_address(issue: AddressIssue) -> WalletError {
+    issue.into()
 }
 
 /// The refusal of an address whose checksum or encoding does not decode.
-fn malformed_address() -> MhfeError {
-    invalid_address("its checksum or format is wrong")
+fn malformed_address() -> WalletError {
+    invalid_address(AddressIssue::Malformed)
 }
 
-fn not_of(coin: Coin) -> MhfeError {
-    MhfeError::InvalidAddress(format!(
-        // "an address of" reads right for every coin name ("a Ethereum address" would not).
-        "it is not an address of {} ({})",
-        coin.name(),
-        coin.address_forms()
-    ))
+fn not_of(coin: Coin) -> WalletError {
+    AddressIssue::NotOfCoin(coin).into()
 }
-
-/// Prefixes of Zcash shielded addresses: Sapling (Bech32), unified (Bech32m) and Sprout (Base58),
-/// on mainnet and testnet. Deriving them needs Zcash's own curves and key tree (ZIP-32), so a
-/// check refuses them and asks for the wallet's transparent address instead of searching in vain.
-const ZCASH_SHIELDED_PREFIXES: &[&str] = &["zs1", "ztestsapling1", "u1", "utest1", "zc", "zt"];
-
-fn is_shielded_zcash(text: &str) -> bool {
-    let lowercase = text.to_ascii_lowercase();
-    ZCASH_SHIELDED_PREFIXES
-        .iter()
-        .any(|prefix| lowercase.starts_with(prefix))
-}
-
-/// The type byte that starts a Dash Platform address (DIP18): a payment address of a DIP17 key,
-/// or an Orchard shielded address.
-pub(super) const DASH_PLATFORM_P2PKH: u8 = 0xb0;
-const DASH_ORCHARD: u8 = 0x10;
 
 /// Dash Platform addresses, Bech32m with the prefix "dash" or "tdash" (DIP18). A payment address
 /// of a single key is read; an Orchard address is refused, as its keys need Orchard's own
 /// cryptography, and so is any other kind.
-fn parse_dash_platform(text: &str) -> Result<Address, MhfeError> {
+fn parse_platform(coin: Coin, text: &str, rules: PlatformRules) -> Result<Address, WalletError> {
     use bech32::primitives::decode::CheckedHrpstring;
     let decoded =
         CheckedHrpstring::new::<bech32::Bech32m>(text).map_err(|_| malformed_address())?;
-    let testnet = match decoded.hrp().as_str().to_ascii_lowercase().as_str() {
-        "dash" => false,
-        "tdash" => true,
-        _ => return Err(not_of(Coin::Dash)),
-    };
+    let testnet = network_of(rules.hrps(), decoded.hrp().as_str()).ok_or_else(|| not_of(coin))?;
     let data: Vec<u8> = decoded.byte_iter().collect();
     match data.split_first() {
-        Some((&DASH_PLATFORM_P2PKH, hash)) if hash.len() != 20 => {
-            Err(invalid_address("it has the wrong length"))
+        Some((&kind, hash))
+            if kind == rules.payment_type()
+                && hash.len() != AddressType::DashPlatform.program_bytes() =>
+        {
+            Err(invalid_address(AddressIssue::WrongLength))
         }
-        Some((&DASH_PLATFORM_P2PKH, _)) if !whole_payment_payload(&decoded) => {
+        Some((&kind, _)) if kind == rules.payment_type() && !whole_payment_payload(&decoded) => {
             Err(malformed_address())
         }
-        Some((&DASH_PLATFORM_P2PKH, hash)) => Ok(Address {
-            coin: Coin::Dash,
+        Some((&kind, hash)) if kind == rules.payment_type() => Ok(Address {
+            coin,
             testnet,
             address_type: AddressType::DashPlatform,
             program: hash.to_vec(),
         }),
-        Some((&DASH_ORCHARD, _)) => Err(invalid_address(
-            "it is shielded; use a Dash Core X… or Platform dash1k… address of the same wallet",
-        )),
-        _ => Err(invalid_address(
-            "it is not the Platform payment address of a single key",
-        )),
+        Some((&kind, _)) if kind == rules.shielded_type() => {
+            Err(invalid_address(rules.shielded_reason()))
+        }
+        _ => Err(invalid_address(AddressIssue::PlatformSingleKey)),
     }
 }
 
@@ -107,9 +95,9 @@ fn parse_dash_platform(text: &str) -> Result<Address, MhfeError> {
 /// (BIP173). byte_iter alone would read the same bytes from another group added at the end or from
 /// padding bits set, and take such a string for the address (AUD-008-FUN001).
 fn whole_payment_payload(decoded: &bech32::primitives::decode::CheckedHrpstring) -> bool {
-    /// 21 bytes are 168 bits: 34 groups of five bits, 170 bits, the last two of them padding.
-    const GROUPS: usize = 34;
-    const PADDING_MASK: u8 = 0b11;
+    const BITS: usize = (1 + AddressType::DashPlatform.program_bytes()) * 8;
+    const GROUPS: usize = BITS.div_ceil(5);
+    const PADDING_MASK: u8 = (1 << (GROUPS * 5 - BITS)) - 1;
     let groups = decoded.data_part_ascii_no_checksum();
     let padding_is_zero = groups
         .last()
@@ -119,29 +107,30 @@ fn whole_payment_payload(decoded: &bech32::primitives::decode::CheckedHrpstring)
 }
 
 /// Whether `text` starts with one of the Bech32 prefixes, in either case.
-fn is_bech32(text: &str, prefixes: &[&str]) -> bool {
-    let lowercase = text.to_ascii_lowercase();
-    prefixes.iter().any(|prefix| lowercase.starts_with(prefix))
+fn is_bech32(text: &str, hrps: &[HumanPart]) -> bool {
+    hrps.iter().any(|hrp| hrp.starts(text))
+}
+
+/// The network of a decoded HRP, using the same parts that selected its parser.
+fn network_of(hrps: &[HumanPart], text: &str) -> Option<bool> {
+    hrps.iter()
+        .find(|hrp| hrp.text().eq_ignore_ascii_case(text))
+        .map(|hrp| hrp.testnet())
 }
 
 /// SegWit addresses of Bitcoin and Litecoin, Bech32 and Bech32m (BIP173, BIP350).
-fn parse_segwit(coin: Coin, text: &str) -> Result<Address, MhfeError> {
+fn parse_segwit(coin: Coin, text: &str, rules: WitnessRules) -> Result<Address, WalletError> {
     let (hrp, version, program) = bech32::segwit::decode(text).map_err(|_| malformed_address())?;
     // BIP173 allows an address written all in capitals, as in QR codes; the decoder has already
     // refused mixed case, and keeps the prefix as written.
-    let testnet = match (coin, hrp.as_str().to_ascii_lowercase().as_str()) {
-        (Coin::Bitcoin, "bc") | (Coin::Litecoin, "ltc") => false,
-        (Coin::Bitcoin, "tb") => true,
-        _ => return Err(not_of(coin)),
+    let testnet = network_of(rules.hrps(), hrp.as_str()).ok_or_else(|| not_of(coin))?;
+    let address_type = match (version.to_u8(), program.len()) {
+        (0, size) if size == AddressType::P2wpkh.program_bytes() => AddressType::P2wpkh,
+        (1, size) if rules.taproot() && size == AddressType::P2tr.program_bytes() => {
+            AddressType::P2tr
+        }
+        _ => return Err(AddressIssue::WitnessForm(coin).into()),
     };
-    let address_type =
-        match (version.to_u8(), program.len(), coin) {
-            (0, 20, _) => AddressType::P2wpkh,
-            (1, 32, Coin::Bitcoin) => AddressType::P2tr,
-            _ => return Err(invalid_address(
-                "only single-key addresses (bc1q with 42 characters, bc1p or ltc1q) can be checked",
-            )),
-        };
     Ok(Address {
         coin,
         testnet,
@@ -150,69 +139,32 @@ fn parse_segwit(coin: Coin, text: &str) -> Result<Address, MhfeError> {
     })
 }
 
-/// The version prefixes of a coin's Base58Check addresses: prefix, type and whether it is a
-/// Bitcoin test network address. A "3..." Bitcoin or Litecoin address is taken as nested SegWit,
-/// the only single-key address of that form.
-fn base58_versions(coin: Coin) -> &'static [(&'static [u8], AddressType, bool)] {
-    use AddressType::{Keccak, P2pkh, P2shP2wpkh};
-    match coin {
-        Coin::Bitcoin => &[
-            (&[0x00], P2pkh, false),
-            (&[0x05], P2shP2wpkh, false),
-            (&[0x6f], P2pkh, true),
-            (&[0xc4], P2shP2wpkh, true),
-        ],
-        // "L..." and "M...", and the "3..." that Litecoin used before "M...".
-        Coin::Litecoin => &[
-            (&[0x30], P2pkh, false),
-            (&[0x32], P2shP2wpkh, false),
-            (&[0x05], P2shP2wpkh, false),
-        ],
-        Coin::Dogecoin => &[(&[0x1e], P2pkh, false)],
-        Coin::Dash => &[(&[0x4c], P2pkh, false)],
-        // "t1...": a two-byte prefix.
-        Coin::Zcash => &[(&[0x1c, 0xb8], P2pkh, false)],
-        // The legacy form "1...", the same as Bitcoin's.
-        Coin::BitcoinCash => &[(&[0x00], P2pkh, false)],
-        Coin::Xrp => &[(&[0x00], P2pkh, false)],
-        Coin::Tron => &[(&[0x41], Keccak, false)],
-        Coin::Ethereum | Coin::EthereumClassic | Coin::Cosmos | Coin::Injective => &[],
-    }
-}
-
 /// Base58Check addresses: a version prefix and a 20-byte hash. XRP writes them with its own
 /// alphabet.
-fn parse_base58(coin: Coin, text: &str) -> Result<Address, MhfeError> {
-    let alphabet = match coin {
-        Coin::Xrp => bs58::Alphabet::RIPPLE,
-        _ => bs58::Alphabet::BITCOIN,
-    };
+fn parse_base58(coin: Coin, text: &str, rules: Base58Rules) -> Result<Address, WalletError> {
     let decoded = bs58::decode(text)
-        .with_alphabet(alphabet)
+        .with_alphabet(rules.alphabet())
         .with_check(None)
         .into_vec()
         .map_err(|_| malformed_address())?;
-    // Dash Core testnet versions, distinct from the supported Platform testnet form.
-    const DASH_TESTNET_P2PKH: u8 = 0x8c;
-    const DASH_TESTNET_P2SH: u8 = 0x13;
-    if coin == Coin::Dash && decoded.len() == 21 {
-        match decoded[0] {
-            DASH_TESTNET_P2PKH => return Err(invalid_address(
-                "Dash Core testnet addresses (y…) are not supported; give a mainnet X… address",
-            )),
-            DASH_TESTNET_P2SH => return Err(invalid_address(
-                "Dash Core testnet P2SH addresses are not supported; give a single-key mainnet X… address",
-            )),
-            _ => {}
+    // A rejected network version carries its own explanation in the coin's policy.
+    if decoded.len() == 1 + AddressType::P2pkh.program_bytes() {
+        if let Some((_, reason)) = rules
+            .refused()
+            .iter()
+            .find(|(version, _)| *version == decoded[0])
+        {
+            return Err(invalid_address(*reason));
         }
     }
-    let &(prefix, address_type, testnet) = base58_versions(coin)
+    let &(prefix, address_type, testnet, _) = rules
+        .versions()
         .iter()
-        .find(|(prefix, _, _)| decoded.starts_with(prefix))
+        .find(|(prefix, _, _, _)| decoded.starts_with(prefix))
         .ok_or_else(|| not_of(coin))?;
     let hash = &decoded[prefix.len()..];
-    if hash.len() != 20 {
-        return Err(invalid_address("it has the wrong length"));
+    if hash.len() != address_type.program_bytes() {
+        return Err(invalid_address(AddressIssue::WrongLength));
     }
     Ok(Address {
         coin,
@@ -229,9 +181,9 @@ fn parse_bech32_account(
     text: &str,
     prefix: &str,
     address_type: AddressType,
-) -> Result<Address, MhfeError> {
-    const ACCOUNT_BYTES: usize = 20;
-    const ACCOUNT_DATA_GROUPS: usize = ACCOUNT_BYTES * 8 / 5;
+) -> Result<Address, WalletError> {
+    let account_bytes = address_type.program_bytes();
+    let account_data_groups = account_bytes * 8 / 5;
     // Cosmos SDK accounts use Bech32 (BIP173), never Bech32m: the same data with the other
     // checksum is not a valid address (AUD-007-FUN001).
     use bech32::primitives::decode::CheckedHrpstring;
@@ -241,12 +193,12 @@ fn parse_bech32_account(
     }
     // A 160-bit account has exactly 32 groups, with no padding. byte_iter alone discards
     // incomplete trailing bytes and would accept an extra five-bit group (AUD-007-FUN003).
-    if decoded.data_part_ascii_no_checksum().len() != ACCOUNT_DATA_GROUPS {
-        return Err(invalid_address("it has the wrong length"));
+    if decoded.data_part_ascii_no_checksum().len() != account_data_groups {
+        return Err(invalid_address(AddressIssue::WrongLength));
     }
     let program: Vec<u8> = decoded.byte_iter().collect();
-    if program.len() != ACCOUNT_BYTES {
-        return Err(invalid_address("it has the wrong length"));
+    if program.len() != account_bytes {
+        return Err(invalid_address(AddressIssue::WrongLength));
     }
     Ok(Address {
         coin,
@@ -258,21 +210,19 @@ fn parse_bech32_account(
 
 /// Ethereum-style addresses: "0x" and 40 hexadecimal digits. In mixed case they carry the EIP-55
 /// checksum, which must hold; all in lower or upper case they carry none.
-fn parse_hex(coin: Coin, text: &str) -> Result<Address, MhfeError> {
+fn parse_hex(coin: Coin, text: &str) -> Result<Address, WalletError> {
     let digits = text
         .strip_prefix("0x")
         .or_else(|| text.strip_prefix("0X"))
         .ok_or_else(|| not_of(coin))?;
     let program = hex::decode(digits)
         .ok()
-        .filter(|bytes| bytes.len() == 20)
-        .ok_or_else(|| invalid_address("it is not 40 hexadecimal digits after 0x"))?;
+        .filter(|bytes| bytes.len() == AddressType::Keccak.program_bytes())
+        .ok_or_else(|| invalid_address(AddressIssue::HexDigits))?;
     let mixed_case = digits.chars().any(|c| c.is_ascii_lowercase())
         && digits.chars().any(|c| c.is_ascii_uppercase());
     if mixed_case && eip55(&program) != digits {
-        return Err(invalid_address(
-            "its EIP-55 checksum, the mix of capital and small letters, is wrong",
-        ));
+        return Err(invalid_address(AddressIssue::Eip55Checksum));
     }
     Ok(Address {
         coin,
@@ -306,25 +256,22 @@ fn eip55(address: &[u8]) -> String {
         .collect()
 }
 
-/// The CashAddr alphabet and the prefix of Bitcoin Cash addresses.
+/// The CashAddr alphabet.
 const CASHADDR_CHARSET: &[u8; 32] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-const CASHADDR_PREFIX: &str = "bitcoincash";
 // CashTokens' token-aware single-key version, with a 160-bit hash.
 const CASHADDR_TOKEN_P2PKH: u8 = 0x10;
 
 /// A Bitcoin Cash CashAddr address, with or without its "bitcoincash:" prefix, in either case. Only
 /// the legacy P2PKH form with a 160-bit hash (version byte 0, "q...") is accepted. The token-aware
 /// single-key form is recognised and refused with its supported alternative.
-fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
+fn parse_cashaddr(coin: Coin, text: &str, prefix: &str) -> Result<Address, WalletError> {
     let lowercase = text.to_ascii_lowercase();
     if lowercase != text && text.to_ascii_uppercase() != text {
-        return Err(invalid_address(
-            "it mixes capital and small letters, which CashAddr does not allow",
-        ));
+        return Err(invalid_address(AddressIssue::CashaddrCase));
     }
     let payload = match lowercase.split_once(':') {
-        Some((CASHADDR_PREFIX, payload)) => payload,
-        Some(_) => return Err(not_of(Coin::BitcoinCash)),
+        Some((given, payload)) if given == prefix => payload,
+        Some(_) => return Err(not_of(coin)),
         None => lowercase.as_str(),
     };
     let values = payload
@@ -336,9 +283,9 @@ fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
                 .map(|v| v as u8)
         })
         .collect::<Option<Vec<u8>>>()
-        .ok_or_else(|| not_of(Coin::BitcoinCash))?;
+        .ok_or_else(|| not_of(coin))?;
     // The prefix enters the checksum as the low five bits of each character, then a zero.
-    let mut checked: Vec<u8> = CASHADDR_PREFIX.bytes().map(|byte| byte & 0x1f).collect();
+    let mut checked: Vec<u8> = prefix.bytes().map(|byte| byte & 0x1f).collect();
     checked.push(0);
     checked.extend_from_slice(&values);
     // Eight five-bit values of checksum follow the data.
@@ -348,19 +295,17 @@ fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
     let data = regroup_five_to_eight(&values[..values.len() - 8]).ok_or_else(malformed_address)?;
     // Version byte 0: P2PKH with a 160-bit hash.
     match data.split_first() {
-        Some((0, hash)) if hash.len() == 20 => Ok(Address {
-            coin: Coin::BitcoinCash,
+        Some((0, hash)) if hash.len() == AddressType::P2pkh.program_bytes() => Ok(Address {
+            coin,
             testnet: false,
             address_type: AddressType::P2pkh,
             program: hash.to_vec(),
         }),
         // CashTokens' token-aware P2PKH flag, with the same 160-bit public-key hash.
-        Some((&CASHADDR_TOKEN_P2PKH, hash)) if hash.len() == 20 => Err(invalid_address(
-            "the token-aware address form is not supported; give the bitcoincash:q… address of the same key",
-        )),
-        _ => Err(invalid_address(
-            "only single-key addresses (bitcoincash:q…) can be checked",
-        )),
+        Some((&CASHADDR_TOKEN_P2PKH, hash)) if hash.len() == AddressType::P2pkh.program_bytes() => {
+            Err(invalid_address(AddressIssue::CashToken))
+        }
+        _ => Err(invalid_address(AddressIssue::CashSingleKey)),
     }
 }
 

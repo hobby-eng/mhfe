@@ -1,6 +1,6 @@
 # Sourced, not run, by scripts/package-release.sh, which packs every release archive with it, and
-# by scripts/verify-archive-packing.sh, which checks it. Needs GNU tar (as $tar_command), gzip and
-# zip.
+# by scripts/verify-archive-packing.sh, which checks it. Uses Python 3 on macOS; elsewhere GNU tar
+# (as $tar_command) and gzip. ZIP archives need zip.
 #
 # An archive's bytes must depend on its content alone, never on the builder: file order, times and
 # owners are fixed, and so are the permission bits. Docker's COPY keeps the bits of the checkout,
@@ -17,8 +17,18 @@ ARCHIVE_MODES="u+rwX,go+rX,go-w"
 pack_tar() {
   local folder="$1" archive="$2"
   chmod -R "$ARCHIVE_MODES" "$folder"
+  if [[ "$(uname -s)" == Darwin ]]; then
+    pack_tar_portable "$folder" "$archive"
+    return
+  fi
   "$tar_command" --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
     -C "$folder" -cf - . | gzip -n > "$archive"
+}
+
+# The macOS runner already provides Python: no Homebrew install may alter an attested build job.
+# repo_root is the checkout of the caller that sourced this file.
+pack_tar_portable() {
+  python3 "$repo_root/packaging/pack-tar.py" "$1" "$2"
 }
 
 # Packs the content of `folder` into the zip archive `archive`, an absolute path.

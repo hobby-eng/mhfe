@@ -17,6 +17,17 @@ This file ships with every release.
   every release. No file has been changed; any future change would be recorded as a separate patch
   file next to `vendor/phc-winner-argon2.md`.
 
+## MinGW-w64 runtime (Windows)
+
+The canonical Windows executable links MinGW-w64 CRT objects, including startup, relocation,
+math and formatting code. Their complete package copyright and licence texts, also covering
+winpthreads when linked, ship as `licenses/mingw-w64-COPYRIGHT` in the Windows archive.
+The unchanged source text is [`vendor/mingw-w64-runtime-COPYRIGHT`](https://github.com/hobby-eng/mhfe/blob/main/vendor/mingw-w64-runtime-COPYRIGHT);
+[`vendor/mingw-w64-runtime.md`](https://github.com/hobby-eng/mhfe/blob/main/vendor/mingw-w64-runtime.md) records its package provenance.
+Components retain their individual terms, including public-domain, Zope Public License 2.1
+and Lucent/David M. Gay notices. The complete package notice also lists components MHFE does
+not link.
+
 ## EFF large wordlist
 
 - Source: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt, included unchanged in
@@ -804,7 +815,7 @@ DEALINGS IN THE SOFTWARE.
 The `mhfe` command-line tools and the browser package of a release are compiled from
 the Rust crates below. Each crate is listed with its licence expression, the licence
 MHFE uses it under and the text of that licence. The other third-party material, the
-Argon2 reference code, the EFF wordlist and the JavaScript code of the browser package,
+Argon2 reference code, the EFF wordlist, the MinGW runtime and the browser JavaScript,
 is described above.
 
 ### How the licence is chosen

@@ -94,10 +94,10 @@ impl ComponentCheck for StrengthCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("password", self.cases, |case| {
+        findings.each(crate::self_check::CaseKind::Password, self.cases, |case| {
             expect(
                 Strength::of(case.password).millibits() == case.millibits,
-                "gives another estimate",
+                crate::self_check::KnownAnswerDifference::GivesAnotherEstimate,
             )
         });
         findings.outcome()

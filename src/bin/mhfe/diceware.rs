@@ -7,8 +7,8 @@ use std::io::IsTerminal;
 use clap::Args;
 use mhfe::check_word::DRAWN_WORDS;
 use mhfe::new_password::{
-    character_bits, word_bits, word_index_of_rolls, PasswordRecipe, CHARACTERS, DEFAULT_CHARACTERS,
-    DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
+    Millibits, PasswordRecipe, CHARACTERS, DEFAULT_CHARACTERS, DEFAULT_WORDS, MOST_CHARACTERS,
+    MOST_WORDS, RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
 };
 use zeroize::Zeroizing;
 
@@ -84,13 +84,13 @@ fn words_help() -> String {
         &format!(
             "Each word adds about {} bits: {} words give about {} bits, {} about {}, {} about \
              {}. Fewer than {} get a warning.",
-            word_bits(1),
+            Millibits::words(1),
             style::number_word(RECOMMENDED_WORDS, false),
-            word_bits(RECOMMENDED_WORDS),
+            Millibits::words(RECOMMENDED_WORDS),
             style::number_word(DEFAULT_WORDS, false),
-            word_bits(DEFAULT_WORDS),
+            Millibits::words(DEFAULT_WORDS),
             style::number_word(DEFAULT_WORDS + 1, false),
-            word_bits(DEFAULT_WORDS + 1),
+            Millibits::words(DEFAULT_WORDS + 1),
             style::number_word(RECOMMENDED_WORDS, false)
         ),
     ])
@@ -120,9 +120,9 @@ fn chars_help() -> String {
              characters, about {} bits each. {} give about {} bits, but words are easier to \
              type correctly years later.",
             CHARACTERS.len(),
-            character_bits(1),
+            Millibits::characters(1),
             style::number_word(DEFAULT_CHARACTERS, true),
-            character_bits(DEFAULT_CHARACTERS)
+            Millibits::characters(DEFAULT_CHARACTERS)
         ),
     ])
 }
@@ -156,13 +156,13 @@ pub(crate) fn help() -> String {
     let five = format!(
         "{} random words, about {} bits",
         style::number_word(DEFAULT_WORDS, true),
-        word_bits(DEFAULT_WORDS)
+        Millibits::words(DEFAULT_WORDS)
     );
     let more = DEFAULT_WORDS + 1;
     let six = format!(
         "{} words, about {} bits",
         style::number_word(more, true),
-        word_bits(more)
+        Millibits::words(more)
     );
     let more_command = format!("mhfe password --words {more}");
     let more_dice_command = format!("mhfe password --dice --words {more}");
@@ -170,12 +170,12 @@ pub(crate) fn help() -> String {
     let checked = format!(
         "{} words and a check word, about {} bits",
         style::number_word(DRAWN_WORDS, true),
-        word_bits(DRAWN_WORDS)
+        Millibits::words(DRAWN_WORDS)
     );
     let characters = format!(
         "{} random characters, about {} bits",
         style::number_word(DEFAULT_CHARACTERS, true),
-        character_bits(DEFAULT_CHARACTERS)
+        Millibits::characters(DEFAULT_CHARACTERS)
     );
     style::examples_with_note(
         &[
@@ -235,16 +235,16 @@ fn start(input: &Input, recipe: &PasswordRecipe) -> Result<Flow, Failure> {
     style::title(TITLE);
     eprintln!();
     if recipe.is_weak() {
-        let (unit, recommended, default, bits): (_, _, _, fn(usize) -> String) =
+        let (unit, recommended, default, bits): (_, _, _, fn(usize) -> Millibits) =
             if recipe.is_characters() {
                 (
                     "characters",
                     RECOMMENDED_CHARACTERS,
                     DEFAULT_CHARACTERS,
-                    character_bits,
+                    Millibits::characters,
                 )
             } else {
-                ("words", RECOMMENDED_WORDS, DEFAULT_WORDS, word_bits)
+                ("words", RECOMMENDED_WORDS, DEFAULT_WORDS, Millibits::words)
             };
         style::warn(
             &format!("Fewer than {recommended} {unit} is weak."),
@@ -317,7 +317,7 @@ fn index_from_dice(input: &mut Input, number: usize) -> Result<usize, Failure> {
         let typed = input.secret(&format!(
             "Word {number}: roll five dice and type the five digits"
         ))?;
-        match word_index_of_rolls(number, &typed) {
+        match mhfe::eff::EffList::word_index_of_rolls(number, &typed) {
             Ok(index) => return Ok(index),
             Err(error) => {
                 style::retry(exit::refused(&error, "Type them again, for example 35142."));

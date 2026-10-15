@@ -124,12 +124,7 @@ pub(crate) fn ask_stated(
     explanation: &[&str],
     record: &'static str,
 ) -> Result<WordCount, Failure> {
-    let question = Question {
-        text: LENGTH_ASKED,
-        explanation,
-        more: None,
-        record: Some(record),
-    };
+    let question = Question::with_details(LENGTH_ASKED, explanation, None, Some(record));
     let chosen = input.choose(&question, &length_answers(lengths))?;
     Ok(WordCount::new(lengths[chosen])?)
 }

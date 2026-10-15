@@ -12,6 +12,8 @@
 //! match, zero-24 with its length detected and only the built-in check, and zero-12 with 15 words
 //! stated and only the built-in check, which finds 12 (AUD-015-FUN001).
 
+use crate::wallet::Fingerprint;
+
 use super::{ConfirmedPhrase, Rekey, ReplacementRehearsal};
 use crate::mhfe::known_answers::{published_in, published_table, PublishedVector};
 use crate::rehearsal::{Confirmation, Reference};
@@ -60,7 +62,7 @@ struct Refusal {
     /// A wrong fingerprint as the confirmation, or the built-in check alone.
     wrong_fingerprint: bool,
     code: &'static str,
-    what: &'static str,
+    what: crate::self_check::CheckContext,
 }
 
 const REFUSALS: [Refusal; 4] = [
@@ -70,7 +72,7 @@ const REFUSALS: [Refusal; 4] = [
         words: Some(12),
         wrong_fingerprint: false,
         code: "NEW_PASSWORD_SAME_AS_OLD",
-        what: "the same password and settings",
+        what: crate::self_check::CheckContext::TheSamePasswordAndSettings,
     },
     // zero-24 has no built-in check: a reference confirms it, and a wrong one is refused.
     Refusal {
@@ -79,7 +81,7 @@ const REFUSALS: [Refusal; 4] = [
         words: Some(24),
         wrong_fingerprint: true,
         code: "REFERENCE_MISMATCH",
-        what: "a fingerprint that does not match",
+        what: crate::self_check::CheckContext::AFingerprintThatDoesNotMatch,
     },
     // A detected length is never confirmed by the built-in check alone, before any Argon2 work.
     Refusal {
@@ -88,7 +90,7 @@ const REFUSALS: [Refusal; 4] = [
         words: None,
         wrong_fingerprint: false,
         code: "REFERENCE_REQUIRED",
-        what: "a detected length with the built-in check alone",
+        what: crate::self_check::CheckContext::ADetectedLengthWithTheBuiltInCheckAlone,
     },
     // zero-12 with 15 words stated: its built-in check finds 12, which takes precedence, but only
     // the wallet then confirms the phrase.
@@ -98,12 +100,15 @@ const REFUSALS: [Refusal; 4] = [
         words: Some(15),
         wrong_fingerprint: false,
         code: "LENGTH_DIFFERS",
-        what: "a stated length the built-in check contradicts",
+        what: crate::self_check::CheckContext::AStatedLengthTheBuiltInCheckContradicts,
     },
 ];
 
 impl Refusal {
-    fn run(&self, vectors: &'static [PublishedVector]) -> Result<(), String> {
+    fn run(
+        &self,
+        vectors: &'static [PublishedVector],
+    ) -> Result<(), crate::self_check::FailureDetail> {
         let vector = published_in(vectors, self.vector)?;
         let length = match self.words {
             Some(words) => PhraseLength::Words(WordCount::new(words).map_err(stopped)?),
@@ -114,10 +119,13 @@ impl Refusal {
         if let Some(name) = self.new_vector {
             let new = published_in(vectors, name)?;
             return expect_refusal(rekey.check_new(&new.password()?, new.work()?), self.code)
-                .map_err(|what| format!("{} {what}", self.what));
+                .map_err(|what| crate::self_check::FailureDetail::Context {
+                    context: self.what,
+                    cause: Box::new(what),
+                });
         }
         let reference = Reference::Fingerprint {
-            fingerprint: WRONG_FINGERPRINT,
+            fingerprint: Fingerprint::from_bytes(WRONG_FINGERPRINT),
             passphrase: "",
         };
         let confirmation = if self.wrong_fingerprint {
@@ -131,8 +139,12 @@ impl Refusal {
             Some(false),
             &mut |_, _, _| Ok(()),
         );
-        expect_refusal(result.map(|_| ()), self.code)
-            .map_err(|what| format!("{} {what}", self.what))
+        expect_refusal(result.map(|_| ()), self.code).map_err(|what| {
+            crate::self_check::FailureDetail::Context {
+                context: self.what,
+                cause: Box::new(what),
+            }
+        })
     }
 }
 
@@ -157,13 +169,17 @@ const REPLACEMENTS: [ReplacementCase; 3] = [
         vector: "zero-24",
         owner: true,
         passphrase: "",
-        expected: ReplacementRehearsal::Fingerprint([0x54, 0x36, 0xd7, 0x24]),
+        expected: ReplacementRehearsal::Fingerprint(Fingerprint::from_bytes([
+            0x54, 0x36, 0xd7, 0x24,
+        ])),
     },
     ReplacementCase {
         vector: "zero-24",
         owner: true,
         passphrase: "TREZOR",
-        expected: ReplacementRehearsal::Fingerprint([0x88, 0xbc, 0xa9, 0x2b]),
+        expected: ReplacementRehearsal::Fingerprint(Fingerprint::from_bytes([
+            0x88, 0xbc, 0xa9, 0x2b,
+        ])),
     },
 ];
 
@@ -187,7 +203,7 @@ impl RekeyCheck {
         }
     }
 
-    fn case(&self, case: &RekeyCase) -> Result<(), String> {
+    fn case(&self, case: &RekeyCase) -> Result<(), crate::self_check::FailureDetail> {
         let from = published_in(self.vectors, case.from)?;
         let to = published_in(self.vectors, case.to)?;
         let length = if case.detected {
@@ -199,7 +215,7 @@ impl RekeyCheck {
             Rekey::new(from.container, length, from.password()?, from.work()?).map_err(stopped)?;
         // A detected length is confirmed by the wallet: here its fingerprint.
         let fingerprint = Reference::Fingerprint {
-            fingerprint: crate::wallet::master_fingerprint(from.phrase, "").map_err(stopped)?,
+            fingerprint: crate::wallet::Fingerprint::of(from.phrase, "").map_err(stopped)?,
             passphrase: "",
         };
         let confirmation = if case.detected {
@@ -217,7 +233,7 @@ impl RekeyCheck {
             .map_err(stopped)?;
         expect(
             confirmed.replacement_rehearsal("").map_err(stopped)? == case.replacement,
-            "the replacement rehearsal differs",
+            crate::self_check::KnownAnswerDifference::TheReplacementRehearsalDiffers,
         )?;
         self.sealed_as(&rekey, &confirmed, to)
     }
@@ -225,7 +241,7 @@ impl RekeyCheck {
     /// One recovery, a refused confirmation, then another on the same recovery (AUD-017-UI002):
     /// zero-12 with 15 words stated, whose built-in check finds 12, leaves the owner the stated
     /// length; its fingerprint confirms it without the rounds again.
-    fn confirmed_again(&self) -> Result<(), String> {
+    fn confirmed_again(&self) -> Result<(), crate::self_check::FailureDetail> {
         let from = published_in(self.vectors, "zero-12")?;
         let mut rekey = Rekey::new(
             from.container,
@@ -244,21 +260,27 @@ impl RekeyCheck {
         let confirm = |confirmation| {
             rekey.confirm(&recovered, confirmation, Some(false), &mut |_, _, _| Ok(()))
         };
-        let refusal = match confirm(Confirmation::BuiltInCheck) {
-            Ok(_) => return Err("the built-in check confirmed 15 stated words".to_owned()),
-            Err(refusal) => refusal,
-        };
-        expect_refusal(Err::<(), _>(refusal.clone()), "LENGTH_DIFFERS")
-            .map_err(|what| format!("15 stated words {what}"))?;
+        let refusal =
+            match confirm(Confirmation::BuiltInCheck) {
+                Ok(_) => return Err(crate::self_check::FailureDetail::from(
+                    crate::self_check::KnownAnswerDifference::TheBuiltInCheckConfirmedStated15Words,
+                )),
+                Err(refusal) => refusal,
+            };
+        expect_refusal(Err::<(), _>(refusal.clone()), "LENGTH_DIFFERS").map_err(|what| {
+            crate::self_check::FailureDetail::Context {
+                context: crate::self_check::CheckContext::Stated15Words,
+                cause: Box::new(what),
+            }
+        })?;
         expect(
             rekey
                 .owner_lengths_after(&recovered, &refusal)
                 .map_err(stopped)?
-                == Some(vec![15]),
-            "the owner is not left the stated length after the refusal",
+                == Some(vec![15]), crate::self_check::KnownAnswerDifference::TheOwnerIsNotLeftTheStatedLengthAfterTheRefusal,
         )?;
         let fingerprint = Reference::Fingerprint {
-            fingerprint: crate::wallet::master_fingerprint(from.phrase, "").map_err(stopped)?,
+            fingerprint: crate::wallet::Fingerprint::of(from.phrase, "").map_err(stopped)?,
             passphrase: "",
         };
         let confirmed = rekey
@@ -278,7 +300,7 @@ impl RekeyCheck {
         )
     }
 
-    fn replacement(&self, case: &ReplacementCase) -> Result<(), String> {
+    fn replacement(&self, case: &ReplacementCase) -> Result<(), crate::self_check::FailureDetail> {
         let vector = published_in(self.vectors, case.vector)?;
         let rekey = Rekey::new(
             vector.container,
@@ -288,7 +310,7 @@ impl RekeyCheck {
         )
         .map_err(stopped)?;
         let reference = Reference::Fingerprint {
-            fingerprint: crate::wallet::master_fingerprint(vector.phrase, case.passphrase)
+            fingerprint: crate::wallet::Fingerprint::of(vector.phrase, case.passphrase)
                 .map_err(stopped)?,
             passphrase: case.passphrase,
         };
@@ -307,7 +329,7 @@ impl RekeyCheck {
             .map_err(stopped)?;
         expect(
             confirmed.awaits_owner() == case.owner,
-            "the owner's confirmation step differs",
+            crate::self_check::KnownAnswerDifference::TheOwnerSConfirmationStepDiffers,
         )?;
         let confirmed = if case.owner {
             confirmed.confirmed_by_owner()
@@ -319,7 +341,7 @@ impl RekeyCheck {
                 .replacement_rehearsal(case.passphrase)
                 .map_err(stopped)?
                 == case.expected,
-            "the replacement rehearsal differs",
+            crate::self_check::KnownAnswerDifference::TheReplacementRehearsalDiffers,
         )
     }
 
@@ -329,7 +351,7 @@ impl RekeyCheck {
         rekey: &Rekey,
         confirmed: &ConfirmedPhrase,
         to: &PublishedVector,
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::self_check::FailureDetail> {
         let sealed = rekey
             .seal(
                 &mut to.mhfe(self.vectors)?,
@@ -342,7 +364,7 @@ impl RekeyCheck {
             .map_err(stopped)?;
         expect(
             sealed.container() == to.container,
-            "the sealed container differs from the published one",
+            crate::self_check::KnownAnswerDifference::TheSealedContainerDiffersFromThePublishedOne,
         )
     }
 }
@@ -358,14 +380,22 @@ impl ComponentCheck for RekeyCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("rekey", self.cases, |case| self.case(case));
+        findings.each(crate::self_check::CaseKind::Rekey, self.cases, |case| {
+            self.case(case)
+        });
         if self.confirm_again {
             findings.one(|| self.confirmed_again());
         }
-        findings.each("refusal", self.refusals, |case| case.run(self.vectors));
-        findings.each("replacement", self.replacements, |case| {
-            self.replacement(case)
-        });
+        findings.each(
+            crate::self_check::CaseKind::Refusal,
+            self.refusals,
+            |case| case.run(self.vectors),
+        );
+        findings.each(
+            crate::self_check::CaseKind::Replacement,
+            self.replacements,
+            |case| self.replacement(case),
+        );
         findings.outcome()
     }
 }
@@ -415,11 +445,9 @@ mod tests {
             .container;
         let mut check = one_case("zero-12", "unicode-password", false);
         check.vectors = crate::self_check::leak(vectors);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(
-                "rekey 1 of 1 the sealed container differs from the published one".to_owned()
-            )
+            "rekey 1 of 1 the sealed container differs from the published one".to_owned()
         );
         let mut again = RekeyCheck {
             cases: &[],
@@ -428,11 +456,9 @@ mod tests {
             replacements: &[],
             ..RekeyCheck::new()
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             again.run(Tier::Startup),
-            ComponentOutcome::Failed(
-                "the sealed container differs from the published one".to_owned()
-            )
+            "the sealed container differs from the published one".to_owned()
         );
     }
     #[test]
@@ -453,12 +479,12 @@ mod tests {
                 confirm_again: false,
                 ..RekeyCheck::new()
             };
-            assert_eq!(
+            crate::self_check::assert_failed!(
                 check.run(Tier::Startup),
-                ComponentOutcome::Failed(format!(
+                format!(
                     "refusal 1 of 1 {} is accepted instead of refused with {}",
                     original.what, original.code
-                ))
+                )
             );
         }
     }
@@ -468,9 +494,10 @@ mod tests {
         for original in REPLACEMENTS {
             let mut wrong = original.clone();
             wrong.expected = match original.expected {
-                ReplacementRehearsal::Fingerprint(mut bytes) => {
+                ReplacementRehearsal::Fingerprint(fingerprint) => {
+                    let mut bytes = fingerprint.bytes();
                     bytes[0] ^= 1;
-                    ReplacementRehearsal::Fingerprint(bytes)
+                    ReplacementRehearsal::Fingerprint(bytes.into())
                 }
                 _ => ReplacementRehearsal::BuiltInCheck,
             };
@@ -481,11 +508,9 @@ mod tests {
                 replacements: crate::self_check::leak([wrong]),
                 ..RekeyCheck::new()
             };
-            assert_eq!(
+            crate::self_check::assert_failed!(
                 check.run(Tier::Startup),
-                ComponentOutcome::Failed(
-                    "replacement 1 of 1 the replacement rehearsal differs".to_owned()
-                )
+                "replacement 1 of 1 the replacement rehearsal differs".to_owned()
             );
         }
         for original in CASES {
@@ -495,11 +520,9 @@ mod tests {
                 cases: crate::self_check::leak([wrong]),
                 ..RekeyCheck::new()
             };
-            assert_eq!(
+            crate::self_check::assert_failed!(
                 check.run(Tier::Startup),
-                ComponentOutcome::Failed(
-                    "rekey 1 of 1 the replacement rehearsal differs".to_owned()
-                )
+                "rekey 1 of 1 the replacement rehearsal differs".to_owned()
             );
         }
     }

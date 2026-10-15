@@ -1,6 +1,7 @@
 //! The repair module: the repair words of a container and the repair of a damaged container phrase
 //! (MHFE-REPAIR-1), and its self-check. No Argon2 and no secret: a container alone reveals nothing.
 
+use crate::self_check::SelfCheck;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -9,10 +10,9 @@ use super::{
     CapacityJson,
 };
 use crate::repair::{
-    self, ContainerReading, Repaired, PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS,
+    ContainerReading, RepairWordCount, Repaired, PROFILE, RECOMMENDED_REPAIR_WORDS,
+    REPAIR_WORD_COUNTS,
 };
-use crate::self_check::sets;
-use crate::MhfeError;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,13 +48,10 @@ struct CardJson {
 /// The repair words of a container, as JSON `{ profile, words, repairsUnreadable, repairsWrong }`.
 #[wasm_bindgen(js_name = repairWords)]
 pub fn repair_words(container: &str, count: f64) -> Result<String, JsError> {
-    let count = whole_number(
-        count,
-        MhfeError::InvalidRepairWords(String::new()).code(),
-        "the repair word count",
-    )? as usize;
-    let words = repair::repair_words(container, count).map_err(js_error)?;
-    let (unreadable, wrong) = repair::capacity(count);
+    let count = whole_number(count, crate::request::NumberField::RepairWordCount)? as usize;
+    let count = RepairWordCount::new(count).map_err(js_error)?;
+    let words = count.words_of(container).map_err(js_error)?;
+    let (unreadable, wrong) = count.capacity();
     json(&CardJson {
         profile: PROFILE,
         words,
@@ -91,22 +88,22 @@ struct RepairedJson<'a> {
 /// that the card belongs to the container phrase, which only a rehearsal against the wallet does.
 #[wasm_bindgen(js_name = repairContainer)]
 pub fn repair_container(written: &str, card: &str) -> Result<String, JsError> {
-    let repaired: Repaired = repair::repair(written, card).map_err(js_error)?;
-    let fingerprint = container_fingerprint_text(&repaired.container)?;
+    let repaired: Repaired = RepairWordCount::repair(written, card).map_err(js_error)?;
+    let fingerprint = container_fingerprint_text(repaired.container())?;
     json(&RepairedJson {
-        container: &repaired.container,
+        container: repaired.container(),
         container_fingerprint: fingerprint,
-        unchanged: repaired.changes.is_empty(),
-        container_words: &repaired.container_words,
-        card_words: &repaired.card_words,
+        unchanged: repaired.changes().is_empty(),
+        container_words: repaired.container_words(),
+        card_words: repaired.card_words(),
         changes: repaired
-            .changes
+            .changes()
             .iter()
             .map(|change| ChangeJson {
-                on_card: change.on_card,
-                position: change.position,
-                read: change.read.as_deref(),
-                word: &change.word,
+                on_card: change.on_card(),
+                position: change.position(),
+                read: change.read(),
+                word: change.word(),
             })
             .collect(),
     })
@@ -151,5 +148,5 @@ pub fn self_check_repair(
     on_start: &js_sys::Function,
     on_result: &js_sys::Function,
 ) -> Result<String, JsError> {
-    run_self_check(sets::repair(), tier, &skip_ids, on_start, on_result)
+    run_self_check(SelfCheck::repair(), tier, &skip_ids, on_start, on_result)
 }

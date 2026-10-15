@@ -5,6 +5,9 @@
 //! public test inputs; the command-line tool therefore builds vectors only from the fixed
 //! public inputs in its source code and never from anything a user types.
 
+mod error;
+pub use error::VectorError;
+
 use serde::Serialize;
 use zeroize::Zeroizing;
 
@@ -41,9 +44,11 @@ pub const CHECKSUM_FILE: &str = "SHA256SUMS";
 pub const NEGATIVE_CASES_STEM: &str = "negative-cases";
 const FILE_EXTENSION: &str = "json";
 
-/// The JSON filename of a vector or of the negative cases, from its published stem.
-pub fn file_name(stem: &str) -> String {
-    format!("{stem}.{FILE_EXTENSION}")
+impl Vector {
+    /// The JSON filename of a vector or of the negative cases, from its published stem.
+    pub fn file_name(stem: &str) -> String {
+        format!("{stem}.{FILE_EXTENSION}")
+    }
 }
 const WARNING: &str = "Public test data only. This file contains the password and every round \
                        key by design; never use its phrase or password for real funds.";
@@ -53,13 +58,13 @@ const ARGON2_VERSION: u32 = 0x13;
 /// What wrote a vector. The exact source revision is the commit that adds the files; an
 /// independent check records its own revision next to them (independent-verification.json).
 #[derive(Serialize)]
-pub struct Generator {
+struct Generator {
     /// The program and command that wrote it.
-    pub program: &'static str,
+    program: &'static str,
     /// The program's version.
-    pub version: &'static str,
+    version: &'static str,
     /// The Argon2 implementation the program used.
-    pub argon2: &'static str,
+    argon2: &'static str,
 }
 
 const GENERATOR: Generator = Generator {
@@ -73,124 +78,131 @@ const GENERATOR: Generator = Generator {
 #[derive(Serialize)]
 pub struct Vector {
     /// The file layout, [`SCHEMA`].
-    pub schema: &'static str,
+    schema: &'static str,
     /// The suite, [`SUITE_ID`].
-    pub suite_id: &'static str,
+    suite_id: &'static str,
     /// The vector's name, also its file name without `.json`.
-    pub name: String,
+    name: String,
     /// That the file is public test data only.
-    pub warning: &'static str,
+    warning: &'static str,
     /// What wrote the file.
-    pub generator: Generator,
+    generator: Generator,
     /// The phrase, the password and the settings.
-    pub inputs: Inputs,
+    inputs: Inputs,
     /// The parameters of every Argon2id call.
-    pub argon2: Argon2Parameters,
+    argon2: Argon2Parameters,
     /// How the phrase became the state the rounds start from.
-    pub packing: Packing,
+    packing: Packing,
     /// The rounds of the encryption.
-    pub encryption: Pass,
+    encryption: Pass,
     /// The container, 24 words.
-    pub container: String,
+    container: String,
     /// The rounds of the recovery.
-    pub decryption: Pass,
+    decryption: Pass,
     /// Every reading the recovery gives, as its length detection finds them.
-    pub recovery: Vec<RecoveredCandidate>,
+    recovery: Vec<RecoveredCandidate>,
+}
+
+impl Vector {
+    /// The container recorded by this public-input vector.
+    pub fn container(&self) -> &str {
+        &self.container
+    }
 }
 
 /// The public inputs of a vector.
 #[derive(Serialize)]
-pub struct Inputs {
+struct Inputs {
     /// The original seed phrase.
-    pub phrase: String,
+    phrase: String,
     /// The password as typed; `password_nfkd_utf8_hex` is `P_enc`, what Argon2 receives.
-    pub password: String,
+    password: String,
     /// The password as typed, its UTF-8 bytes in hexadecimal.
-    pub password_utf8_hex: String,
+    password_utf8_hex: String,
     /// `P_enc`: the password after NFKD normalization, its UTF-8 bytes in hexadecimal.
-    pub password_nfkd_utf8_hex: String,
+    password_nfkd_utf8_hex: String,
     /// The PIM.
-    pub pim: u32,
+    pim: u32,
     /// The memory level.
-    pub memory_level: u32,
+    memory_level: u32,
 }
 
 /// The parameters of every Argon2 call of a vector.
 #[derive(Serialize)]
-pub struct Argon2Parameters {
+struct Argon2Parameters {
     /// The Argon2 variant, "Argon2id".
-    pub variant: &'static str,
+    variant: &'static str,
     /// The Argon2 version as RFC 9106 numbers it, 0x13.
-    pub version: u32,
+    version: u32,
     /// Memory in KiB.
-    pub memory_kib: u32,
+    memory_kib: u32,
     /// Passes over the memory, `t`.
-    pub passes: u32,
+    passes: u32,
     /// Lanes, `p`.
-    pub lanes: u32,
+    lanes: u32,
     /// The length of each key in bytes.
-    pub output_bytes: usize,
+    output_bytes: usize,
 }
 
 /// How a suite 3 vector's phrase becomes the state the rounds start from.
 #[derive(Serialize)]
-pub struct Packing {
+struct Packing {
     /// The phrase's word count.
-    pub words: usize,
+    words: usize,
     /// `E`, the phrase's entropy.
-    pub entropy_hex: String,
+    entropy_hex: String,
     /// `V_r`; empty for a 24-word phrase.
-    pub verifier_hex: String,
+    verifier_hex: String,
     /// `X = E || V_r`.
-    pub state_hex: String,
+    state_hex: String,
 }
 
 /// One direction of the permutation. Rounds appear in the order they run: 0 to 11 when
 /// encrypting, 11 down to 0 when decrypting.
 #[derive(Serialize)]
-pub struct Pass {
+struct Pass {
     /// The state before the first round.
-    pub input_state_hex: String,
+    input_state_hex: String,
     /// Every round, in the order it ran.
-    pub rounds: Vec<Round>,
+    rounds: Vec<Round>,
     /// The state after the last round.
-    pub output_state_hex: String,
+    output_state_hex: String,
 }
 
 /// Every value of one Feistel round.
 #[derive(Serialize)]
-pub struct Round {
+struct Round {
     /// The round number `i`, 0 to 11.
-    pub round: u32,
+    round: u32,
     /// `L` before the round.
-    pub left_before_hex: String,
+    left_before_hex: String,
     /// `R` before the round.
-    pub right_before_hex: String,
+    right_before_hex: String,
     /// The BLAKE2b-256 input `DS_SALT || BE32(MEM) || BE32(PIM) || BE32(i) || R`.
-    pub salt_input_hex: String,
+    salt_input_hex: String,
     /// `S_i`, the Argon2 salt.
-    pub salt_hex: String,
+    salt_hex: String,
     /// `K_i`, the key Argon2id returned.
-    pub argon2_key_hex: String,
+    argon2_key_hex: String,
     /// The HMAC-SHA-256 message `DS_MASK || BE32(MEM) || BE32(PIM) || BE32(i) || R`.
-    pub mask_input_hex: String,
+    mask_input_hex: String,
     /// `M_i`, the mask.
-    pub mask_hex: String,
+    mask_hex: String,
     /// `L` after the round.
-    pub left_after_hex: String,
+    left_after_hex: String,
     /// `R` after the round.
-    pub right_after_hex: String,
+    right_after_hex: String,
 }
 
 /// One reading of a recovery.
 #[derive(Serialize)]
-pub struct RecoveredCandidate {
+struct RecoveredCandidate {
     /// Its length in words.
-    pub words: usize,
+    words: usize,
     /// Whether a built-in check verifies it.
-    pub verified: bool,
+    verified: bool,
     /// The phrase.
-    pub phrase: String,
+    phrase: String,
 }
 
 impl RecoveredCandidate {
@@ -209,61 +221,70 @@ impl RecoveredCandidate {
 #[derive(Serialize)]
 pub struct SameLengthVector {
     /// The file layout, [`SAME_LENGTH_SCHEMA`].
-    pub schema: &'static str,
+    schema: &'static str,
     /// The suite, [`SAME_LENGTH_SUITE_ID`].
-    pub suite_id: &'static str,
+    suite_id: &'static str,
     /// The vector's name, also its file name without `.json`.
-    pub name: String,
+    name: String,
     /// That the file is public test data only.
-    pub warning: &'static str,
+    warning: &'static str,
     /// What wrote the file.
-    pub generator: Generator,
+    generator: Generator,
     /// The phrase, the password and the settings.
-    pub inputs: Inputs,
+    inputs: Inputs,
     /// The parameters of every Argon2id call.
-    pub argon2: Argon2Parameters,
+    argon2: Argon2Parameters,
     /// The state the rounds start from.
-    pub state: SameLengthState,
+    state: SameLengthState,
     /// The rounds of the encryption.
-    pub encryption: Pass,
+    encryption: Pass,
     /// As many words as the phrase.
-    pub container: String,
+    container: String,
     /// The rounds of the recovery.
-    pub decryption: Pass,
+    decryption: Pass,
     /// The one reading of a same-length container: never verified, since it has no check.
-    pub recovery: RecoveredCandidate,
+    recovery: RecoveredCandidate,
+}
+
+impl SameLengthVector {
+    /// The container recorded by this public-input vector.
+    pub fn container(&self) -> &str {
+        &self.container
+    }
 }
 
 /// The state of a suite 4 vector and the geometry it gives.
 #[derive(Serialize)]
-pub struct SameLengthState {
+struct SameLengthState {
     /// The phrase's word count.
-    pub words: usize,
+    words: usize,
     /// `ENT`, which every salt and mask message carries as `BE32(ENT)`.
-    pub entropy_bits: u32,
+    entropy_bits: u32,
     /// `h / 8`, the size of each Feistel half.
-    pub half_bytes: usize,
+    half_bytes: usize,
     /// `X = E`.
-    pub state_hex: String,
+    state_hex: String,
 }
 
-/// Encrypts the phrase of a public input under its password, recovers it again with automatic
-/// length detection and records every value. Fails if the round trip does not return the
-/// original.
-pub fn generate<E: Argon2Engine>(
-    mhfe: &mut Mhfe<E>,
-    input: &PublicInput,
-) -> Result<Vector, MhfeError> {
-    ensure_public(
-        PUBLIC_INPUTS.contains(input),
-        input.pim,
-        input.memory_level,
-        mhfe.work_factor(),
-    )?;
-    record(mhfe, input)
+impl Vector {
+    /// Encrypts the phrase of a public input under its password, recovers it again with automatic
+    /// length detection and records every value. Fails if the round trip does not return the
+    /// original.
+    pub fn generate<E: Argon2Engine>(
+        mhfe: &mut Mhfe<E>,
+        input: &PublicInput,
+    ) -> Result<Vector, MhfeError> {
+        ensure_public(
+            PUBLIC_INPUTS.contains(input),
+            input.pim,
+            input.memory_level,
+            mhfe.work_factor(),
+        )?;
+        record(mhfe, input)
+    }
 }
 
-/// Writes the transcript of one input; [`generate`] makes sure that it is a public one.
+/// Writes the transcript of one input; [`Vector::generate`] makes sure that it is a public one.
 fn record<E: Argon2Engine>(mhfe: &mut Mhfe<E>, input: &PublicInput) -> Result<Vector, MhfeError> {
     let work = mhfe.work_factor();
     let (password, entropy) = input.password_and_entropy()?;
@@ -301,22 +322,24 @@ fn record<E: Argon2Engine>(mhfe: &mut Mhfe<E>, input: &PublicInput) -> Result<Ve
     })
 }
 
-/// Encrypts the phrase of a public suite 4 input into a container of its own length, recovers it
-/// and records every value. Fails if the round trip does not return the original.
-pub fn generate_same_length<E: Argon2Engine>(
-    mhfe: &mut Mhfe<E>,
-    input: &PublicInput,
-) -> Result<SameLengthVector, MhfeError> {
-    ensure_public(
-        SAME_LENGTH_INPUTS.contains(input),
-        input.pim,
-        input.memory_level,
-        mhfe.work_factor(),
-    )?;
-    record_same_length(mhfe, input)
+impl SameLengthVector {
+    /// Encrypts the phrase of a public suite 4 input into a container of its own length, recovers it
+    /// and records every value. Fails if the round trip does not return the original.
+    pub fn generate<E: Argon2Engine>(
+        mhfe: &mut Mhfe<E>,
+        input: &PublicInput,
+    ) -> Result<SameLengthVector, MhfeError> {
+        ensure_public(
+            SAME_LENGTH_INPUTS.contains(input),
+            input.pim,
+            input.memory_level,
+            mhfe.work_factor(),
+        )?;
+        record_same_length(mhfe, input)
+    }
 }
 
-/// Writes the transcript of one suite 4 input; [`generate_same_length`] makes sure it is public.
+/// Writes the transcript of one suite 4 input; [`SameLengthVector::generate`] makes sure it is public.
 fn record_same_length<E: Argon2Engine>(
     mhfe: &mut Mhfe<E>,
     input: &PublicInput,
@@ -384,9 +407,7 @@ impl RoundTrip {
             Some(&mut decryption_rounds),
         )?;
         if recovered[..] != *x {
-            return Err(MhfeError::Internal(
-                "the vector round trip did not return the original state".to_owned(),
-            ));
+            return Err(MhfeError::Vector(VectorError::RoundTrip));
         }
         Ok(Self {
             y,
@@ -415,8 +436,8 @@ fn argon2_of(work: WorkFactor) -> Argon2Parameters {
     Argon2Parameters {
         variant: "Argon2id",
         version: ARGON2_VERSION,
-        memory_kib: cost.memory_kib,
-        passes: cost.passes,
+        memory_kib: cost.memory_kib(),
+        passes: cost.passes(),
         lanes: LANES,
         output_bytes: KEY_BYTES,
     }
@@ -429,16 +450,16 @@ fn pass(geometry: Geometry, input: &[u8], rounds: &[RoundTrace], output: &[u8]) 
         rounds: rounds
             .iter()
             .map(|trace| Round {
-                round: trace.round,
-                left_before_hex: hex::encode(&trace.state_before[..half]),
-                right_before_hex: hex::encode(&trace.state_before[half..]),
-                salt_input_hex: hex::encode([geometry.ds_salt(), &trace.message[..]].concat()),
-                salt_hex: hex::encode(trace.salt),
-                argon2_key_hex: hex::encode(trace.key),
-                mask_input_hex: hex::encode([geometry.ds_mask(), &trace.message[..]].concat()),
-                mask_hex: hex::encode(&trace.mask),
-                left_after_hex: hex::encode(&trace.state_after[..half]),
-                right_after_hex: hex::encode(&trace.state_after[half..]),
+                round: trace.round(),
+                left_before_hex: hex::encode(&trace.state_before()[..half]),
+                right_before_hex: hex::encode(&trace.state_before()[half..]),
+                salt_input_hex: hex::encode([geometry.ds_salt(), trace.message()].concat()),
+                salt_hex: hex::encode(trace.salt()),
+                argon2_key_hex: hex::encode(trace.key()),
+                mask_input_hex: hex::encode([geometry.ds_mask(), trace.message()].concat()),
+                mask_hex: hex::encode(trace.mask()),
+                left_after_hex: hex::encode(&trace.state_after()[..half]),
+                right_after_hex: hex::encode(&trace.state_after()[half..]),
             })
             .collect(),
         output_state_hex: hex::encode(output),
@@ -456,16 +477,14 @@ fn ensure_public(
     if listed && work.pim() == pim && work.memory_level() == memory_level {
         Ok(())
     } else {
-        Err(MhfeError::Internal(
-            "test vectors are made only from the fixed public inputs, at their own settings".into(),
-        ))
+        Err(MhfeError::Vector(VectorError::PublicInputRequired))
     }
 }
 
 /// One public test case. The phrases are BIP39 test phrases and the passwords are public.
 ///
 /// The fields are private and can only be read, so no code outside this crate can make or change
-/// a `PublicInput`, and [`generate`] also refuses anything that is not in [`PUBLIC_INPUTS`]: the
+/// a `PublicInput`, and [`Vector::generate`] also refuses anything that is not in [`PUBLIC_INPUTS`]: the
 /// specification forbids exporting intermediate states, salts, keys or masks of anything else.
 #[derive(PartialEq, Eq)]
 pub struct PublicInput {
@@ -487,6 +506,7 @@ impl PublicInput {
         self.phrase
     }
 
+    // Deliberate copy: distinct public fixture record types expose their own fields.
     /// The password.
     pub const fn password(&self) -> &'static str {
         self.password
@@ -494,13 +514,13 @@ impl PublicInput {
 
     /// Its PIM and memory level.
     pub fn work(&self) -> Result<WorkFactor, MhfeError> {
-        WorkFactor::new(self.pim, self.memory_level)
+        WorkFactor::new(self.pim, self.memory_level).map_err(Into::into)
     }
 
     /// Its password and the entropy of its phrase, which a record encrypts.
     fn password_and_entropy(&self) -> Result<(Password, Zeroizing<Vec<u8>>), MhfeError> {
         let password = Password::new(self.password)?;
-        let source = phrase::parse(self.phrase).map_err(MhfeError::InvalidPhrase)?;
+        let source = phrase::parse(self.phrase).map_err(MhfeError::from)?;
         Ok((password, Zeroizing::new(source.to_entropy())))
     }
 }
@@ -511,7 +531,7 @@ impl PublicInput {
 /// original, recovery gives the verified original first, beside the unverified 24-word reading;
 /// `stated-24-words` records both, and `selected-24-words` the 24-word reading alone.
 ///
-/// Like [`PublicInput`], it can only be read outside this crate, and [`negative_case`] refuses
+/// Like [`PublicInput`], it can only be read outside this crate, and [`NegativeCase::generate`] refuses
 /// anything that is not in [`NEGATIVE_INPUTS`].
 #[derive(PartialEq, Eq)]
 pub struct NegativeInput {
@@ -542,7 +562,7 @@ impl NegativeInput {
 
     /// Its PIM and memory level.
     pub fn work(&self) -> Result<WorkFactor, MhfeError> {
-        WorkFactor::new(self.pim, self.memory_level)
+        WorkFactor::new(self.pim, self.memory_level).map_err(Into::into)
     }
 
     /// 0 for automatic detection, otherwise the chosen length.
@@ -564,61 +584,65 @@ const STATED_READING_ONLY: [&str; 1] = ["selected-24-words"];
 #[derive(Serialize)]
 pub struct NegativeCase {
     /// The file layout, [`NEGATIVE_SCHEMA`] or [`SAME_LENGTH_NEGATIVE_SCHEMA`].
-    pub schema: &'static str,
+    schema: &'static str,
     /// The suite, [`SUITE_ID`] or [`SAME_LENGTH_SUITE_ID`].
-    pub suite_id: &'static str,
+    suite_id: &'static str,
     /// The case's name.
-    pub name: String,
+    name: String,
     /// What wrote the file.
-    pub generator: Generator,
+    generator: Generator,
     /// The container recovered.
-    pub container: String,
+    container: String,
     /// The password as typed.
-    pub password: String,
+    password: String,
     /// `P_enc`: the password after NFKD normalization, its UTF-8 bytes in hexadecimal.
-    pub password_nfkd_utf8_hex: String,
+    password_nfkd_utf8_hex: String,
     /// The PIM.
-    pub pim: u32,
+    pim: u32,
     /// The memory level.
-    pub memory_level: u32,
+    memory_level: u32,
     /// 0 for automatic detection.
-    pub words: usize,
+    words: usize,
     /// The readings the recovery gave; empty where it failed.
-    pub recovery: Vec<RecoveredCandidate>,
+    recovery: Vec<RecoveredCandidate>,
     /// The error code of a recovery that failed ([`MhfeError::code`]).
-    pub error_code: Option<&'static str>,
+    error_code: Option<&'static str>,
 }
 
-/// Runs one suite 3 negative case at full size and records what recovery gives; for a case of
-/// `STATED_READING_ONLY`, only the reading of the stated length, as the historical record keeps
-/// it.
-pub fn negative_case<E: Argon2Engine>(
-    mhfe: &mut Mhfe<E>,
-    input: &NegativeInput,
-    container: &str,
-) -> Result<NegativeCase, MhfeError> {
-    ensure_public(
-        NEGATIVE_INPUTS.contains(input),
-        input.pim,
-        input.memory_level,
-        mhfe.work_factor(),
-    )?;
-    run_negative(mhfe, input, container, Suite::TwentyFourWords)
+impl NegativeCase {
+    /// Runs one suite 3 negative case at full size and records what recovery gives; for a case of
+    /// `STATED_READING_ONLY`, only the reading of the stated length, as the historical record keeps
+    /// it.
+    pub fn generate<E: Argon2Engine>(
+        mhfe: &mut Mhfe<E>,
+        input: &NegativeInput,
+        container: &str,
+    ) -> Result<NegativeCase, MhfeError> {
+        ensure_public(
+            NEGATIVE_INPUTS.contains(input),
+            input.pim,
+            input.memory_level,
+            mhfe.work_factor(),
+        )?;
+        run_negative(mhfe, input, container, Suite::TwentyFourWords)
+    }
 }
 
-/// Runs one suite 4 negative case at full size and records what recovery gives.
-pub fn same_length_negative_case<E: Argon2Engine>(
-    mhfe: &mut Mhfe<E>,
-    input: &NegativeInput,
-    container: &str,
-) -> Result<NegativeCase, MhfeError> {
-    ensure_public(
-        SAME_LENGTH_NEGATIVE_INPUTS.contains(input),
-        input.pim,
-        input.memory_level,
-        mhfe.work_factor(),
-    )?;
-    run_negative(mhfe, input, container, Suite::SameLength)
+impl NegativeCase {
+    /// Runs one suite 4 negative case at full size and records what recovery gives.
+    pub fn generate_same_length<E: Argon2Engine>(
+        mhfe: &mut Mhfe<E>,
+        input: &NegativeInput,
+        container: &str,
+    ) -> Result<NegativeCase, MhfeError> {
+        ensure_public(
+            SAME_LENGTH_NEGATIVE_INPUTS.contains(input),
+            input.pim,
+            input.memory_level,
+            mhfe.work_factor(),
+        )?;
+        run_negative(mhfe, input, container, Suite::SameLength)
+    }
 }
 
 /// Recovers `container` for a negative case under the suite of its set and records the readings
@@ -641,10 +665,11 @@ fn run_negative<E: Argon2Engine>(
         match mhfe.decrypt(container, &password, length, &mut |_, _| Ok(())) {
             Ok(Recovery::Phrase(phrase)) => (vec![phrase], None),
             Ok(Recovery::Ambiguous(candidates)) => (candidates, None),
-            Err(
-                error @ (MhfeError::VerifierMismatch | MhfeError::LengthChoiceNotApplicable { .. }),
-            ) => (Vec::new(), Some(error.code())),
-            Err(other) => return Err(other),
+            Err(crate::CipherError::Format(
+                error @ (crate::FormatError::VerifierMismatch
+                | crate::FormatError::LengthChoiceNotApplicable { .. }),
+            )) => (Vec::new(), Some(error.code())),
+            Err(other) => return Err(other.into()),
         };
     // The historical cases keep the reading of the stated length alone; every other case records
     // the recovery as the length rules give it.
@@ -713,7 +738,7 @@ mod tests {
         fn checked_length(&self) -> usize {
             Password::new(self.password).unwrap();
             self.work().unwrap();
-            crate::check_phrase(self.phrase).unwrap()
+            crate::phrase::check_phrase(self.phrase).unwrap()
         }
     }
 
@@ -751,7 +776,7 @@ mod tests {
         let phrase = "legal winner thank year wave sausage worth useful legal winner thank yellow";
         let reduced = input("reduced", phrase, "Caf\u{E9} \u{1F510}", 0, 0);
         // A private input at reduced cost, which the public entry point refuses.
-        assert!(generate(&mut mhfe, &reduced).is_err());
+        assert!(Vector::generate(&mut mhfe, &reduced).is_err());
         let vector = record(&mut mhfe, &reduced).unwrap();
 
         assert_eq!(
@@ -824,7 +849,7 @@ mod tests {
         let mut mhfe = crate::test_support::reduced();
         let reduced = input("reduced", ZERO_15, "Caf\u{E9} \u{1F510}", 0, 0);
         // A private input at reduced cost, which the public entry point refuses.
-        assert!(generate_same_length(&mut mhfe, &reduced).is_err());
+        assert!(SameLengthVector::generate(&mut mhfe, &reduced).is_err());
         let vector = record_same_length(&mut mhfe, &reduced).unwrap();
         assert_eq!(vector.suite_id, SAME_LENGTH_SUITE_ID);
         assert_eq!(
@@ -869,7 +894,9 @@ mod tests {
         let refused = input("refused", ZERO_24, TEST_PASSWORD, 0, 0);
         assert_eq!(
             record_same_length(&mut mhfe, &refused).err(),
-            Some(MhfeError::SameLengthNeedsShortPhrase)
+            Some(MhfeError::Format(
+                crate::FormatError::SameLengthNeedsShortPhrase
+            ))
         );
     }
 }

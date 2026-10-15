@@ -135,6 +135,9 @@ jobs:
       # assumes optimized code; the debug build can spend the whole step on that search.
       - name: Build the optimized command-line tool
         run: cargo build --locked --release --bin mhfe
+      - name: Apply and verify the macOS hardened runtime
+        if: runner.os == 'macOS'
+        run: scripts/harden-macos.sh target/release/mhfe
       # The fast cases; those that run Argon2 at full size run in scripts/check.sh, on Linux.
       - name: Check hidden input in a Unix pseudo-terminal
         if: runner.os == 'macOS'

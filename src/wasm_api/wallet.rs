@@ -2,6 +2,7 @@
 //! fingerprints, what an address check searches, new 24-word phrases, and its self-check. No
 //! Argon2.
 
+use crate::self_check::SelfCheck;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -9,8 +10,7 @@ use super::{
     call_page, js_error, json, run_self_check, secret_json, whole_number, yes_or_no, JsRandom,
     SecretText,
 };
-use crate::self_check::sets;
-use crate::wallet::{master_fingerprint_text, AddressSearch, Coin, SearchLimits};
+use crate::wallet::{AddressSearch, Coin, Fingerprint, SearchLimits};
 use crate::wallet_check::{self, PhraseDraw, DRAW_REPORT_INTERVAL, WALLET_CHECK_BITS};
 use crate::word_wishes::{
     Place, Randomness, WordWishes, MAX_CHOSEN_WORDS, MAX_NEVER_USE_WORDS, RECOMMENDED_RANDOM_BITS,
@@ -22,7 +22,7 @@ use crate::MhfeError;
 struct CoinJson {
     id: &'static str,
     name: &'static str,
-    address_forms: &'static str,
+    address_forms: String,
 }
 
 #[derive(Serialize)]
@@ -67,15 +67,12 @@ pub fn wallet_parameters() -> Result<String, JsError> {
 fn wishes_from(chosen_words: &str, places: &[f64], never_use: &str) -> Result<WordWishes, JsError> {
     let words = entries(chosen_words);
     if words.len() != places.len() {
-        return Err(js_error(MhfeError::InvalidRequest(
-            "give one place for every chosen word".to_owned(),
-        )));
+        return Err(js_error(crate::word_wishes::WishError::MismatchedPlaces));
     }
-    let code = MhfeError::InvalidWordWish(String::new()).code();
     let mut chosen: Vec<(Place, &str)> = Vec::with_capacity(words.len());
     for (&place, word) in places.iter().zip(words) {
         chosen.push(
-            match whole_number(place, code, "a chosen word's position")? {
+            match whole_number(place, crate::request::NumberField::ChosenWordPosition)? {
                 0 => (Place::Anywhere, word),
                 position => (Place::At(position as usize), word),
             },
@@ -91,7 +88,7 @@ fn entries(text: &str) -> Vec<&str> {
 
 /// The refusal of chosen words that are not UTF-8 text.
 fn not_utf8() -> MhfeError {
-    MhfeError::InvalidWordWish("the chosen words are not UTF-8 text".to_owned())
+    crate::word_wishes::WishError::Utf8.into()
 }
 
 #[derive(Serialize)]
@@ -123,22 +120,22 @@ pub fn describe_draw(
 ) -> Result<String, JsError> {
     let chosen_words = SecretText::new(chosen_words_utf8);
     let wishes = wishes_from(chosen_words.text(not_utf8())?, &places, never_use)?;
-    let check_bits = if yes_or_no(&wallet_check, "walletCheck")? {
+    let check_bits = if yes_or_no(&wallet_check, crate::request::BooleanField::WalletCheck)? {
         WALLET_CHECK_BITS
     } else {
         0
     };
     let odds = wishes.odds(check_bits);
     json(&DrawJson {
-        random_bits: odds.random_bits,
-        randomness: match odds.randomness {
+        random_bits: odds.random_bits(),
+        randomness: match odds.randomness() {
             Randomness::Full => "full",
             Randomness::Ample => "ample",
             Randomness::NotRecommended => "notRecommended",
         },
-        expected_draws: odds.expected_draws,
-        recognisable: odds.recognisable,
-        fixed_position: odds.fixed_position,
+        expected_draws: odds.expected_draws(),
+        recognisable: odds.recognisable(),
+        fixed_position: odds.fixed_position(),
     })
 }
 
@@ -150,8 +147,10 @@ pub fn wallet_check(phrase_utf8: Vec<u8>, passphrase_utf8: Vec<u8>) -> Result<bo
     // Both under a wiping owner before anything can fail.
     let phrase = SecretText::new(phrase_utf8);
     let passphrase = SecretText::new(passphrase_utf8);
-    let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
-    wallet_check::verify(phrase.phrase()?, passphrase).map_err(js_error)
+    let passphrase = passphrase.passphrase()?;
+    wallet_check::WalletCheck::new(passphrase)
+        .verify(phrase.phrase()?)
+        .map_err(js_error)
 }
 
 /// The master key fingerprint of a phrase, its UTF-8 bytes, with a BIP39 passphrase, which may be
@@ -164,8 +163,10 @@ pub fn wallet_fingerprint(
     // Both under a wiping owner before anything can fail.
     let phrase = SecretText::new(phrase_utf8);
     let passphrase = SecretText::new(passphrase_utf8);
-    let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
-    master_fingerprint_text(phrase.phrase()?, passphrase).map_err(js_error)
+    let passphrase = passphrase.passphrase()?;
+    Fingerprint::of(phrase.phrase()?, passphrase)
+        .map(|fingerprint| fingerprint.to_string())
+        .map_err(js_error)
 }
 
 #[derive(Serialize)]
@@ -193,11 +194,7 @@ pub fn describe_address(
     scan_gap: f64,
 ) -> Result<String, JsError> {
     // 0 is the usual search; a gap is where the decoy search of two missing words looks.
-    let limits = match whole_number(
-        scan_gap,
-        MhfeError::InvalidRequest(String::new()).code(),
-        "the scan gap",
-    )? {
+    let limits = match whole_number(scan_gap, crate::request::NumberField::ScanGap)? {
         0 => SearchLimits::default(),
         gap => SearchLimits::first_account(gap).map_err(js_error)?,
     };
@@ -247,11 +244,13 @@ pub fn draw_phrase(
     let passphrase = SecretText::new(passphrase_utf8);
     let repeat = SecretText::new(passphrase_repeat_utf8);
     let chosen_words = SecretText::new(chosen_words_utf8);
-    let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
-    let repeat = repeat.text(MhfeError::InvalidPassphrase)?;
-    wallet_check::require_same_passphrase(passphrase, repeat).map_err(js_error)?;
+    let passphrase = passphrase.passphrase()?;
+    let repeat = repeat.passphrase()?;
+    wallet_check::WalletCheck::new(passphrase)
+        .require_same_passphrase(repeat)
+        .map_err(js_error)?;
     let wishes = wishes_from(chosen_words.text(not_utf8())?, &places, never_use)?;
-    let wallet_check = yes_or_no(&wallet_check, "walletCheck")?;
+    let wallet_check = yes_or_no(&wallet_check, crate::request::BooleanField::WalletCheck)?;
     let draw = if wallet_check {
         PhraseDraw::with_check(passphrase)
     } else {
@@ -262,9 +261,12 @@ pub fn draw_phrase(
     let phrase = draw
         .draw(&mut random, &mut |draws| {
             call_page(on_draws, &[JsValue::from(draws as f64)])
+                .map_err(|_| crate::wallet_check::WalletCheckError::Cancelled)
         })
         .map_err(js_error)?;
-    let fingerprint = master_fingerprint_text(phrase.phrase(), passphrase).map_err(js_error)?;
+    let fingerprint = Fingerprint::of(phrase.phrase(), passphrase)
+        .map(|fingerprint| fingerprint.to_string())
+        .map_err(js_error)?;
     secret_json(&NewPhraseJson {
         phrase: phrase.phrase(),
         words: phrase.phrase().split(' ').count(),
@@ -289,7 +291,7 @@ pub fn self_check_wallet(
     on_result: &js_sys::Function,
 ) -> Result<String, JsError> {
     run_self_check(
-        sets::wallet(Some(&mut random)),
+        SelfCheck::wallet(Some(&mut random)),
         tier,
         &skip_ids,
         on_start,

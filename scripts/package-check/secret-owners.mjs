@@ -1,7 +1,7 @@
 // Ownership controls that do not depend on any protocol field's spelling.
 import assert from "node:assert/strict";
 
-import { read } from "./package.mjs";
+import { browserSource } from "../browser-source.mjs";
 
 /** Bytes at every request depth transfer once, wipe on refusal, and support explicit disposal. */
 export async function checkSecretOwners(runtime) {
@@ -40,8 +40,7 @@ export async function checkSecretOwners(runtime) {
     assert.deepEqual([...bytes], [0, 0]);
   }
   // An older browser lacks the symbol; it can still use both owners' explicit wipe().
-  const source = read("web/runtime.js")
-    .toString()
+  const source = browserSource("runtime")
     .split("// SECRET_OWNERS_BEGIN\n")[1]
     .split("// SECRET_OWNERS_END")[0]
     .replaceAll("export class ", "class ");

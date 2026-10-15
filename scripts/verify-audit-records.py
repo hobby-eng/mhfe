@@ -13,12 +13,15 @@ that historical harness. The live inventory includes pending renames and
 new, nonignored records. Procedure recovery verifies bytes through every
 reverse edit, then checks every pin, including pins absent from the
 list.
+Retained Python harnesses are parsed without executing their historical
+checks or report generators.
 The optional schema check needs jsonschema, as the retained harness
 does.
 --metadata-only checks a standalone, possibly shallow checkout without
 sibling procedure files or historical Git objects.
 """
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -159,6 +162,19 @@ def amendment_findings(records):
     return found
 
 
+def harness_syntax_findings(sources):
+    """Parse retained Python harnesses without executing their audit
+    work or rewriting historical reports.
+    """
+    found = []
+    for name, source in sources.items():
+        try:
+            ast.parse(source, filename=name)
+        except SyntaxError as error:
+            found.append(f"{name}:{error.lineno}: invalid Python: {error.msg}")
+    return found
+
+
 def owns_open_until_commit_policy(text):
     """Read a report's own policy, excluding quoted finding evidence."""
     kept = []
@@ -242,6 +258,12 @@ def self_test():
     if not owns_open_until_commit_policy(
             "### AUD-024-DOC006\nOld finding.\n## Remediation\n" + policy):
         raise RuntimeError("self-test: a later remediation policy was missed")
+    broken = "lines += local-only: `procedure.md` were applied.\"\n"
+    if harness_syntax_findings({"assemble.py": broken}) != [
+            "assemble.py:1: invalid Python: unterminated string literal (detected at line 1)"]:
+        raise RuntimeError("self-test: the malformed procedure-reference edit was accepted")
+    if harness_syntax_findings({"assemble.py": 'lines += ["local-only: `procedure.md`"]\n'}):
+        raise RuntimeError("self-test: a valid local-only reference was refused")
     print("Audit-record controls passed.")
 
 
@@ -282,12 +304,19 @@ def main():
         found += procedure_findings(records)
     found += disposition_findings(records)
     found += amendment_findings(records)
+    harnesses = {
+        name: (ROOT / name).read_text(encoding="utf-8")
+        for name in live_git("ls-files").stdout.splitlines()
+        if re.match(r"docs/audits/AUD-\d+-harnesses/.*\.py$", name)
+    }
+    found += harness_syntax_findings(harnesses)
     for item in found:
         print(item)
     if found:
         raise SystemExit(1)
     scope = "metadata" if args.metadata_only else "metadata and procedure pins"
     print(f"All {len(records)} audit-record pairs, links, dispositions and {scope} agree.")
+    print(f"All {len(harnesses)} retained Python harnesses parse without executing audit work.")
 
 
 if __name__ == "__main__":

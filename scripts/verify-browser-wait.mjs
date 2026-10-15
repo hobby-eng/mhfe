@@ -2,12 +2,44 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { parseArgs } from "node:util";
 
 if (process.argv.length !== 2) {
   console.error("Usage: node scripts/verify-browser-wait.mjs");
   process.exit(2);
 }
 const source = readFileSync(new URL("verify-browsers.mjs", import.meta.url), "utf8");
+const selectionStart = source.indexOf("function selection(");
+const selectionEnd = source.indexOf("const selected = selection(");
+assert.ok(selectionStart >= 0 && selectionEnd > selectionStart, "the runner defines selection");
+// oxlint-disable-next-line typescript/no-implied-eval -- the runner's own command-line selector
+const select = new Function(
+  "parseArgs",
+  "BROWSERS",
+  "MODES",
+  `${source.slice(selectionStart, selectionEnd)}\nreturn selection;`,
+)(parseArgs, { chromium: {}, firefox: {} }, ["standard", "fast"]);
+assert.deepEqual(select([]), {
+  browsers: ["chromium", "firefox"],
+  modes: ["standard", "fast"],
+  launchers: ["native", "python"],
+});
+for (const launcher of ["native", "python"]) {
+  assert.deepEqual(select(["--browser", "chromium", "--mode", "fast", "--launcher", launcher]), {
+    browsers: ["chromium"],
+    modes: ["fast"],
+    launchers: [launcher],
+  });
+  assert.equal(select(["--launcher", launcher]), null);
+  assert.equal(select(["--mode", "standard", "--launcher", launcher]), null);
+}
+for (const args of [
+  ["--browser", "other"],
+  ["--mode", "other"],
+  ["--mode", "fast", "--launcher", "other"],
+]) {
+  assert.equal(select(args), null);
+}
 const offset = source.indexOf("async function pageOutcome(");
 assert.ok(offset >= 0, "the runner defines its wait loop");
 

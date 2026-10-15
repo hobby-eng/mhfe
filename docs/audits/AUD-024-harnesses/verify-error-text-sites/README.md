@@ -22,7 +22,8 @@ Checks RUST-04 ("its `Display` is the one place its messages are written (CORE-2
 
 ## Inputs
 
-The Rust sources under `src/` of the checkout. Nothing is built or run; no network.
+The Rust sources under `src/` of the checkout. No wallet operation is built or run; no network.
+The remediated tree also needs Node.js for the current structural gate and its synthetic controls.
 
 ## Command (from the repository root)
 
@@ -37,6 +38,23 @@ written)`. Check 1 lists `src/error.rs:413` (`InvalidPasswordSize`); check 2 cou
 37 files (77 in 28 library files outside `src/wasm_api*` and `src/bin`); check 3 lists 11 places,
 among them `src/wasm_api.rs:273` (`"{code}: {name} must be a whole number, not {value}"`).
 
-A fixed tree prints `result: PASS` and exits 0. A documented exception (for example the
-reference implementation's own Argon2 message) has to be removed from the variant list in
-`scan.py` with its reason.
+## The module-owned error model
+
+The historical flat-variant trace above remains available for the original source layout.
+When `src/error_code.rs` is present, the command runs `scripts/verify-error-contracts.mjs` and
+its negative controls instead. A list of old names cannot assess nested typed causes: the new
+gate reads every library error declaration, rejects free-text payloads even in renamed
+variants, checks independent leaves for dependencies on the aggregate `MhfeError`, and rejects
+binding-owned library code prefixes. A failed control or check propagates its failure status.
+
+The only static text field allowed is `SelfCheckError::Failed.component`, a program-defined
+component label. `FailureDetail` retains typed causes, public case metadata and codes. Its
+synthetic `TestMessage(String)` is compiled only for tests; a negative gate control makes sure
+such a test-only enum variant cannot hide a production field after it. Argon2 reference
+messages are validated against a closed table generated from the pinned C source, with a
+private numeric index rather than an arbitrary string payload. Runtime redaction and
+conversion tests complement these structural checks; the gate is not a Rust type checker.
+
+A remediated tree prints `result: PASS (module-owned typed errors and binding messages)` and
+exits 0. Baseline evidence and its checker/source hashes are historical; changing this harness
+does not claim that those checks ran on the later tree.

@@ -3983,6 +3983,29 @@
           "change": "Owner-authorized record-generation correction; historical executions were not repeated."
         }
       ]
+    },
+    {
+      "completedUtc": "2026-10-15T09:50:23.053409+00:00",
+      "authorizedBy": "repository owner",
+      "kind": "historical report-generator repair",
+      "historicalChecksRerun": false,
+      "changes": [
+        "Repair the malformed local-only procedure-reference list introduced while fixing AUD-024-DOC004. Restore the report scope heading/text as a Python string list; preserve the published report and all historical results.",
+        "Add live Python syntax checks with positive/negative controls to scripts/verify-audit-records.py; do not execute historical audit generators."
+      ],
+      "reportDocument": {
+        "document": "docs/audits/AUD-016-2026-10-09.md",
+        "previousSha256": "c052f89249f12661b7386c0446c20247718e983351fda9dcfeba9427749ab322",
+        "sha256": "c052f89249f12661b7386c0446c20247718e983351fda9dcfeba9427749ab322"
+      },
+      "documentBindings": [
+        {
+          "document": "docs/audits/AUD-016-harnesses/assemble.py",
+          "previousRecordedSha256": "87b36182644b5915e98d1cd3516acd2403e6b076e172a0fa071799dd29a7c2d9",
+          "sha256": "a2b0d2777e6463d5a348159a60977378c1e55981c7cf40dd274e7b91a09c7ecb",
+          "change": "Owner-authorized generator syntax repair. Earlier amendment and hash remain historical; no old audit suite or report generator was rerun."
+        }
+      ]
     }
   ]
 }

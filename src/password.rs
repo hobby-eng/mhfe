@@ -10,7 +10,8 @@ use unicode_normalization::UnicodeNormalization;
 use zeroize::Zeroize;
 
 use crate::memory::LockedBytes;
-use crate::MhfeError;
+mod error;
+pub use error::PasswordError;
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -35,47 +36,82 @@ impl Password {
     /// control character, a line or paragraph separator, or a code point that Unicode 17.0.0 does
     /// not assign, or when the result is empty or over 1024 bytes. No case folding, trimming or
     /// other change is applied.
-    pub fn new(text: &str) -> Result<Self, MhfeError> {
+    pub fn new(text: &str) -> Result<Self, PasswordError> {
         // A password is ordinary single-line text: invisible characters such as NUL or TAB, and
         // line breaks, which Windows and other systems write differently, could not be typed or
         // pasted the same way everywhere. NFKD produces none of them from another character (a
         // test checks every code point), so checking the input is enough.
         if text.chars().any(is_forbidden_in_password) {
-            return Err(MhfeError::ControlCharacterInPassword);
+            return Err(PasswordError::ControlCharacterInPassword);
         }
 
         // The stabilization rule: a string with an unassigned code point is not normalized at
         // all, so that a later Unicode version cannot change what the password means.
         if !text.chars().all(is_assigned_in_unicode_17) {
-            return Err(MhfeError::UnassignedCharacter);
+            return Err(PasswordError::UnassignedCharacter);
         }
 
         // The buffer is allocated once at its largest allowed size and never grows, so no
         // reallocation can leave an unwiped copy of the password behind. It is locked before the
         // password is written into it; a password refused here is wiped while it is still locked.
         let encoded = LockedBytes::build(MAX_PASSWORD_BYTES, |encoded| {
-            let mut encoded_length = 0usize;
+            // A single input scalar can expand under NFKD. Count beyond usize without wrapping
+            // even for a maximal addressable input; only the bounded encoded buffer is allocated.
+            let mut encoded_length = 0u128;
             let mut character_bytes = [0u8; 4];
             for character in text.nfkd() {
                 let bytes = character.encode_utf8(&mut character_bytes).as_bytes();
-                encoded_length += bytes.len();
-                if encoded_length <= MAX_PASSWORD_BYTES {
+                encoded_length += bytes.len() as u128;
+                if encoded_length <= MAX_PASSWORD_BYTES as u128 {
                     encoded.extend_from_slice(bytes);
                 }
             }
             character_bytes.zeroize();
             match encoded_length {
-                0 => Err(MhfeError::EmptyPassword),
-                length if length > MAX_PASSWORD_BYTES => Err(MhfeError::PasswordTooLong(length)),
+                0 => Err(PasswordError::EmptyPassword),
+                length if length > MAX_PASSWORD_BYTES as u128 => {
+                    Err(PasswordError::PasswordTooLong(length))
+                }
                 _ => Ok(()),
             }
         })?;
         Ok(Self { encoded })
     }
 
+    /// Checks a new password as every front end does, in this order: the password's own rules first
+    /// ([`Password::new`]), then that `repeat`, where it is typed twice, is exactly the same text
+    /// (`PASSWORDS_DIFFER`), compared before any review.
+    pub fn check_typed_twice(typed: &str, repeat: Option<&str>) -> Result<(), PasswordError> {
+        Password::new(typed)?;
+        match repeat {
+            Some(repeat) => Self::require_same(typed, repeat),
+            None => Ok(()),
+        }
+    }
+
+    /// Refuses a repetition that is not exactly the password typed first (`PASSWORDS_DIFFER`): for a
+    /// front end that checks the first entry's rules before it asks for the repetition.
+    pub fn require_same(typed: &str, repeat: &str) -> Result<(), PasswordError> {
+        if repeat != typed {
+            return Err(PasswordError::PasswordsDiffer);
+        }
+        Ok(())
+    }
+
+    /// The password a person typed, twice for a new one, checked as [`Password::check_typed_twice`], then with
+    /// the review `choice` applied and the text that gives checked as a password again.
+    pub fn from_typed(
+        typed: &str,
+        repeat: Option<&str>,
+        choice: Option<crate::check_word::ReviewChoice>,
+    ) -> Result<Password, PasswordError> {
+        Self::check_typed_twice(typed, repeat)?;
+        Password::new(&crate::check_word::PasswordReview::choose(typed, choice)?)
+    }
+
     /// Same as [`Password::new`] for a password that arrives as UTF-8 bytes, as from a browser.
-    pub fn from_utf8(bytes: &[u8]) -> Result<Self, MhfeError> {
-        let text = std::str::from_utf8(bytes).map_err(|_| MhfeError::InvalidPasswordUtf8)?;
+    pub fn from_utf8(bytes: &[u8]) -> Result<Self, PasswordError> {
+        let text = std::str::from_utf8(bytes).map_err(|_| PasswordError::InvalidPasswordUtf8)?;
         Self::new(text)
     }
 
@@ -139,7 +175,7 @@ mod tests {
             assert!(
                 matches!(
                     Password::new(text),
-                    Err(MhfeError::ControlCharacterInPassword)
+                    Err(PasswordError::ControlCharacterInPassword)
                 ),
                 "{text:?}"
             );
@@ -211,7 +247,10 @@ mod tests {
         for character in unassigned.into_iter().chain(noncharacters) {
             let text = format!("valid{character}");
             assert!(
-                matches!(Password::new(&text), Err(MhfeError::UnassignedCharacter)),
+                matches!(
+                    Password::new(&text),
+                    Err(PasswordError::UnassignedCharacter)
+                ),
                 "{character:?}"
             );
         }
@@ -219,7 +258,10 @@ mod tests {
 
     #[test]
     fn rejects_empty_and_invalid_utf8_passwords() {
-        assert!(matches!(Password::new(""), Err(MhfeError::EmptyPassword)));
+        assert!(matches!(
+            Password::new(""),
+            Err(PasswordError::EmptyPassword)
+        ));
         for invalid in [
             &[0xff][..],
             &[0xc0, 0xaf],
@@ -228,7 +270,7 @@ mod tests {
         ] {
             assert!(matches!(
                 Password::from_utf8(invalid),
-                Err(MhfeError::InvalidPasswordUtf8)
+                Err(PasswordError::InvalidPasswordUtf8)
             ));
         }
     }
@@ -238,11 +280,11 @@ mod tests {
         assert_eq!(encoded(&"a".repeat(1024)).len(), 1024);
         assert!(matches!(
             Password::new(&"a".repeat(1025)),
-            Err(MhfeError::PasswordTooLong(1025))
+            Err(PasswordError::PasswordTooLong(1025))
         ));
         assert!(matches!(
             Password::new(&"\u{44F}".repeat(513)), // я, two bytes each
-            Err(MhfeError::PasswordTooLong(1026))
+            Err(PasswordError::PasswordTooLong(1026))
         ));
 
         // U+FDFA expands to 18 characters, 33 UTF-8 bytes: 31 copies fit, 32 do not.
@@ -251,7 +293,7 @@ mod tests {
         assert_eq!(encoded(&expanding.repeat(31)).len(), 1023);
         assert!(matches!(
             Password::new(&expanding.repeat(32)),
-            Err(MhfeError::PasswordTooLong(1056))
+            Err(PasswordError::PasswordTooLong(1056))
         ));
 
         // The ligature fi shrinks from three bytes to two: 1,536 input bytes are accepted.

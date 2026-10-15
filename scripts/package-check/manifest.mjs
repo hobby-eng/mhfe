@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { browserSource } from "../browser-source.mjs";
 import { checkNetworkCodeList, networkCodeIn } from "../network-code.mjs";
 import { PHRASE } from "../public-test-data.mjs";
 import { isVectorText, rustStrings } from "../rust-strings.mjs";
@@ -39,7 +40,7 @@ const BROWSER_ERROR_CODES = [
 ];
 /** The codes `pattern` finds in `path` between `start` and the first `end` after it, sorted. */
 function errorCodes(path, start, end, pattern) {
-  const text = read(path).toString();
+  const text = path === "web/runtime.js" ? browserSource("runtime") : read(path).toString();
   const from = text.indexOf(start);
   assert.ok(from !== -1, `${path} holds ${start}`);
   const part = text.slice(from, text.indexOf(end, from));
@@ -47,18 +48,18 @@ function errorCodes(path, start, end, pattern) {
 }
 
 /**
- * The error codes have one source, MhfeError::code() in src/error.rs: the table of docs/API.md
+ * The error codes have one source, ErrorCode in src/error_code.rs: the table of docs/API.md
  * lists exactly those, and the page's MhfeErrorCode type those and the browser's own, named here
  * (AUD-023-ARC011). A code added or removed in one place and not the others fails this.
  */
 export function checkErrorCodes() {
   const libraryCodes = errorCodes(
-    "src/error.rs",
-    "pub const fn code(&self)",
-    "\n    }\n",
+    "src/error_code.rs",
+    "error_codes! {",
+    "\n}\n",
     /=> "([A-Z0-9_]+)"/gu,
   );
-  assert.ok(libraryCodes.length >= 50, "MhfeError::code() gives its codes");
+  assert.ok(libraryCodes.length >= 50, "ErrorCode gives every library code");
   assert.deepEqual(
     errorCodes("docs/API.md", "| Code ", "\n\n", /^\| `([A-Z0-9_]+)`/gmu),
     libraryCodes,

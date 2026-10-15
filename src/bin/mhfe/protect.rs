@@ -25,10 +25,19 @@ use std::cell::Cell;
 
 use mhfe::self_check::{process, ComponentCheck, ComponentOutcome, Tier};
 
-/// Forbids core dumps of this process and, on Linux, makes it non-dumpable, which also keeps
-/// other processes of the same user from attaching to it (ptrace) or reading /proc/PID/mem. A
-/// crash then writes nothing to disk, wherever systemd-coredump or apport would put it. Called
-/// first in `main`; a refusal, which no usual system gives, changes nothing else.
+#[cfg(target_os = "macos")]
+mod macos;
+
+#[cfg(any(windows, target_os = "macos"))]
+#[cfg(test)]
+mod test_process;
+#[cfg(windows)]
+mod windows;
+
+/// Forbids Unix core dumps, opts out of Windows Error Reporting and refuses other same-user
+/// programs' memory access: Linux's non-dumpable flag, Windows's process DACL and macOS's
+/// PT_DENY_ATTACH. Called first in `main`; CoreDumpCheck reads the available policies back before
+/// any secret is accepted. Privileged debuggers and handles already opened remain outside this.
 pub(crate) fn harden_process() {
     #[cfg(unix)]
     {
@@ -44,6 +53,10 @@ pub(crate) fn harden_process() {
         // SAFETY: PR_SET_DUMPABLE takes an integer and touches no memory of this process.
         unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) };
     }
+    #[cfg(windows)]
+    windows::harden();
+    #[cfg(target_os = "macos")]
+    macos::harden();
 }
 
 /// Ctrl+\ (SIGQUIT) and Ctrl+Z (SIGTSTP) interrupt the tool as Ctrl+C does, so that its handler
@@ -87,11 +100,9 @@ pub(crate) fn interrupt_on_quit_and_suspend() -> bool {
 }
 
 /// The identifier of [`CoreDumpCheck`] in a self-check report.
-pub(crate) const CORE_DUMPS_ID: &str = process::CORE_DUMPS.id;
+pub(crate) const CORE_DUMPS_ID: &str = process::CORE_DUMPS.id();
 
 /// How one protection reads back from the kernel.
-// Windows reads nothing back: there, only the tests construct every variant.
-#[cfg_attr(not(unix), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ReadBack {
     /// As [`harden_process`] set it.
@@ -106,10 +117,10 @@ enum ReadBack {
 /// setting.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CoreDumps {
-    /// RLIMIT_CORE, on Unix: both limits must be 0.
+    /// RLIMIT_CORE on Unix, or the process's Windows Error Reporting opt-out.
     limit: Option<ReadBack>,
-    /// PR_GET_DUMPABLE, on Linux: it must be 0. A pipe in core_pattern, as systemd-coredump and
-    /// apport use, ignores RLIMIT_CORE, so on Linux only this keeps a crash off the disk.
+    /// Memory access: Linux's non-dumpable flag, Windows's process DACL, or macOS's hardened
+    /// runtime. Linux core_pattern pipes ignore RLIMIT_CORE, so the flag also prevents those dumps.
     dumpable: Option<ReadBack>,
 }
 
@@ -127,7 +138,9 @@ impl CoreDumps {
     fn outcome(self) -> ComponentOutcome {
         let readings = [self.limit, self.dumpable];
         if readings.contains(&Some(ReadBack::Differs)) {
-            return ComponentOutcome::Failed("the kernel still allows them".to_owned());
+            return ComponentOutcome::Failed(
+                mhfe::self_check::FailureDetail::from(mhfe::self_check::KnownAnswerDifference::CrashDumpsOrProcessMemoryAccessAreStillAllowed),
+            );
         }
         let unknown = readings.iter().find_map(|reading| match reading {
             Some(ReadBack::Unknown(reason)) => Some(*reason),
@@ -143,12 +156,8 @@ impl CoreDumps {
     }
 }
 
-/// Why a system without RLIMIT_CORE gives no reading.
-const NO_CORE_DUMP_SETTING: &str = if cfg!(windows) {
-    "Windows Error Reporting decides whether a crash is saved"
-} else {
-    "this system has no core-dump limit"
-};
+/// The unsupported-platform result when neither native process policy is available.
+const NO_CORE_DUMP_SETTING: &str = "this system has no supported crash-dump setting";
 
 #[cfg(unix)]
 fn core_limit() -> Option<ReadBack> {
@@ -167,7 +176,12 @@ fn core_limit() -> Option<ReadBack> {
     })
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn core_limit() -> Option<ReadBack> {
+    Some(windows::crash_reporting())
+}
+
+#[cfg(not(any(unix, windows)))]
 fn core_limit() -> Option<ReadBack> {
     None
 }
@@ -185,7 +199,17 @@ fn dumpable() -> Option<ReadBack> {
     )
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
+fn dumpable() -> Option<ReadBack> {
+    Some(windows::memory_access())
+}
+
+#[cfg(target_os = "macos")]
+fn dumpable() -> Option<ReadBack> {
+    Some(macos::memory_access())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 fn dumpable() -> Option<ReadBack> {
     None
 }
@@ -200,7 +224,7 @@ impl ComponentCheck for CoreDumpCheck {
     }
 
     fn label(&self) -> &'static str {
-        process::CORE_DUMPS.label
+        process::CORE_DUMPS.label()
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
@@ -211,11 +235,15 @@ impl ComponentCheck for CoreDumpCheck {
 /// What a command needs that isolation would forbid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Needs {
-    pub(crate) network: bool,
-    pub(crate) writes: bool,
+    network: bool,
+    writes: bool,
 }
 
 impl Needs {
+    pub(crate) const fn new(network: bool, writes: bool) -> Self {
+        Self { network, writes }
+    }
+
     /// A command that handles secrets needs neither.
     pub(crate) const NOTHING: Self = Self {
         network: false,
@@ -226,13 +254,31 @@ impl Needs {
 /// What the kernel enforces for the thread that runs a command.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Isolation {
-    pub(crate) no_network: bool,
-    pub(crate) no_writes: bool,
+    no_network: bool,
+    no_writes: bool,
     /// The process runs in its own network namespace, with only an inactive loopback interface.
-    pub(crate) empty_network: bool,
+    empty_network: bool,
 }
 
 impl Isolation {
+    #[cfg(test)]
+    pub(crate) const fn fixture(empty_network: bool, no_network: bool, no_writes: bool) -> Self {
+        Self {
+            empty_network,
+            no_network,
+            no_writes,
+        }
+    }
+    pub(crate) const fn no_network(self) -> bool {
+        self.no_network
+    }
+    pub(crate) const fn no_writes(self) -> bool {
+        self.no_writes
+    }
+    pub(crate) const fn empty_network(self) -> bool {
+        self.empty_network
+    }
+
     const NONE: Self = Self {
         no_network: false,
         no_writes: false,
@@ -321,11 +367,11 @@ pub(crate) fn isolation_refuted() -> Isolation {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct IsolationProbe {
     /// The restrictions that hold: what the summary of a command states from now on.
-    pub(crate) confirmed: Isolation,
+    confirmed: Isolation,
     /// The restrictions the kernel reported but a probe got through.
-    pub(crate) refuted: Isolation,
+    refuted: Isolation,
     /// The restrictions no probe could confirm or refute, as without a /dev/null to open.
-    pub(crate) unverified: Isolation,
+    unverified: Isolation,
 }
 
 /// Probes, in the calling thread, every restriction [`isolate`] reported for it, and keeps only what
@@ -548,7 +594,7 @@ mod platform_probes {
 }
 
 /// The identifier of [`IsolationCheck`] in a self-check report.
-pub(crate) const ISOLATION_ID: &str = process::ISOLATION.id;
+pub(crate) const ISOLATION_ID: &str = process::ISOLATION.id();
 
 /// The `isolation` check: whether what [`isolate`] reported for the calling thread holds. It is not
 /// a failure when it does not: the summary of the command then states only what holds, with a
@@ -594,7 +640,7 @@ impl ComponentCheck for IsolationCheck {
     }
 
     fn label(&self) -> &'static str {
-        process::ISOLATION.label
+        process::ISOLATION.label()
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
@@ -690,13 +736,25 @@ pub(crate) use swap::unprotected_swap;
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct SwapArea {
     /// The device or file, as /proc/swaps names it.
-    pub(crate) name: String,
+    name: String,
     /// False when it is surely unencrypted, true when MHFE cannot tell, as for a swap file on a
     /// file system whose device it cannot see.
-    pub(crate) unknown: bool,
+    unknown: bool,
 }
 
-/// An inspected swap inventory, or an unavailable Linux inventory that must still warn.
+impl SwapArea {
+    pub(crate) fn new(name: String, unknown: bool) -> Self {
+        Self { name, unknown }
+    }
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+    pub(crate) fn unknown(&self) -> bool {
+        self.unknown
+    }
+}
+
+/// A swap inventory whose protection is known, or an unavailable inventory that must still warn.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum SwapInventory {
     Available(Vec<SwapArea>),
@@ -878,10 +936,7 @@ mod tests {
 
     #[test]
     fn a_command_that_needs_everything_is_not_isolated() {
-        let needs = Needs {
-            network: true,
-            writes: true,
-        };
+        let needs = Needs::new(true, true);
         let isolation = std::thread::scope(|scope| scope.spawn(|| isolate(needs)).join().unwrap());
         assert_eq!(isolation, Isolation::default());
     }
@@ -917,7 +972,7 @@ mod tests {
         use ReadBack::{Differs, Set, Unknown};
         let read = |limit, dumpable| CoreDumps { limit, dumpable }.outcome();
         assert_eq!(read(Some(Set), Some(Set)), ComponentOutcome::Passed);
-        // macOS reads back the limit only.
+        // Other Unix systems may expose only the core limit.
         assert_eq!(read(Some(Set), None), ComponentOutcome::Passed);
         for (limit, dumpable) in [
             (Some(Differs), Some(Set)),
@@ -1169,10 +1224,7 @@ mod tests {
         };
         assert!(refused_of(Needs::NOTHING, without_namespace).is_empty());
         // What a command needs is not refused: mhfe serve needs both.
-        let both = Needs {
-            network: true,
-            writes: true,
-        };
+        let both = Needs::new(true, true);
         assert!(refused_of(both, Isolation::NONE).is_empty());
     }
 
@@ -1221,10 +1273,7 @@ mod tests {
             // Probing again probes the same report, and a new isolate() starts afresh.
             verify_isolation_with(&FakeKernel::enforcing());
             assert_eq!(isolation(), EVERYTHING);
-            isolate(Needs {
-                network: true,
-                writes: true,
-            });
+            isolate(Needs::new(true, true));
             assert!(isolation().is_empty() && isolation_refuted().is_empty());
         })
         .join()

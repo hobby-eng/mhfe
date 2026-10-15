@@ -14,7 +14,7 @@ use crate::self_check::{
     damaged, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
-use crate::MhfeError;
+use crate::PasswordError;
 
 /// The password of the published vectors unicode-password and same-length-unicode-password: the
 /// ANGSTROM SIGN U+212B among other characters NFKD changes. The bytes after NFKD are the vectors'
@@ -40,7 +40,7 @@ impl PasswordUnicodeCheck {
     }
 
     /// One case of the fixture: the bytes after NFKD, or the refusal the fixture names.
-    fn case(case: &serde_json::Value) -> Result<(), String> {
+    fn case(case: &serde_json::Value) -> Result<(), crate::self_check::FailureDetail> {
         let input = match case.get("repeat_utf8_hex") {
             Some(_) => {
                 let count =
@@ -55,8 +55,11 @@ impl PasswordUnicodeCheck {
             if case.get("expected_nfkd_bytes").is_some() {
                 let length = usize::try_from(fixtures::number(case, "expected_nfkd_bytes")?)
                     .map_err(|_| damaged())?;
-                if let Err(MhfeError::PasswordTooLong(bytes)) = &result {
-                    expect(*bytes == length, "gives another length")?;
+                if let Err(PasswordError::PasswordTooLong(bytes)) = &result {
+                    expect(
+                        *bytes == length as u128,
+                        crate::self_check::KnownAnswerDifference::GivesAnotherLength,
+                    )?;
                 }
             }
             return expect_refusal(result, code);
@@ -65,21 +68,25 @@ impl PasswordUnicodeCheck {
         if case.get("expected_nfkd_utf8_hex").is_some() {
             expect(
                 password.as_bytes() == fixtures::bytes(case, "expected_nfkd_utf8_hex")?,
-                "gives other bytes",
+                crate::self_check::KnownAnswerDifference::GivesOtherBytes,
             )?;
         }
         if case.get("expected_nfkd_bytes").is_some() {
             expect(
                 password.as_bytes().len() as u64 == fixtures::number(case, "expected_nfkd_bytes")?,
-                "gives another length",
+                crate::self_check::KnownAnswerDifference::GivesAnotherLength,
             )?;
         }
         Ok(())
     }
 
-    fn cases(&self, findings: &mut Findings) -> Result<(), String> {
+    fn cases(&self, findings: &mut Findings) -> Result<(), crate::self_check::FailureDetail> {
         let fixture = Fixture::read(self.fixture)?;
-        findings.each("case", fixture.cases("passwords")?, Self::case);
+        findings.each(
+            crate::self_check::CaseKind::Case,
+            fixture.cases("passwords")?,
+            Self::case,
+        );
         Ok(())
     }
 }
@@ -103,14 +110,14 @@ impl ComponentCheck for PasswordUnicodeCheck {
         findings.one(|| {
             expect(
                 unicode_normalization::UNICODE_VERSION == (17, 0, 0),
-                "the normalization tables are not Unicode 17.0.0",
+                crate::self_check::KnownAnswerDifference::TheNormalizationTablesAreNotUnicode1700,
             )
         });
         findings.one(|| {
             let password = Password::new(UNICODE_PASSWORD).map_err(stopped)?;
             expect(
                 hex::encode(password.as_bytes()) == self.unicode_nfkd,
-                "the published password gives other bytes",
+                crate::self_check::KnownAnswerDifference::ThePublishedPasswordGivesOtherBytes,
             )
         });
         if let Err(damaged) = self.cases(&mut findings) {
@@ -123,7 +130,7 @@ impl ComponentCheck for PasswordUnicodeCheck {
                         .filter(|&character| is_forbidden_in_password(character))
                         .count()
                         == REFUSED_SCALARS,
-                    "another number of characters is refused",
+                    crate::self_check::KnownAnswerDifference::AnotherNumberOfCharactersIsRefused,
                 )
             });
             // The refused characters are checked before NFKD, which is right only if NFKD never
@@ -136,7 +143,10 @@ impl ComponentCheck for PasswordUnicodeCheck {
                             .nfkd()
                             .any(is_forbidden_in_password)
                     });
-                expect(!creates_refused, "NFKD makes a refused character")
+                expect(
+                    !creates_refused,
+                    crate::self_check::KnownAnswerDifference::NfkdMakesARefusedCharacter,
+                )
             });
         }
         findings.outcome()
@@ -170,9 +180,9 @@ mod tests {
             unicode_nfkd: "43616665cc81206669205041c3853120f09f949020d0b8cc86",
             ..PasswordUnicodeCheck::new()
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("the published password gives other bytes".to_owned())
+            "the published password gives other bytes".to_owned()
         );
         // The Hangul syllable decomposed otherwise.
         let changed = crate::validation_fixtures::SUITE_3_PASSWORDS
@@ -182,9 +192,9 @@ mod tests {
             fixture: changed,
             ..PasswordUnicodeCheck::new()
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("case 10 of 33 gives other bytes".to_owned())
+            "case 10 of 33 gives other bytes".to_owned()
         );
         // U+2028 expected to be refused as unassigned rather than as a separator.
         let separator = "\"input_utf8_hex\": \"61e280a862\",\n      \"expected_error\": ";
@@ -201,8 +211,18 @@ mod tests {
         let length = "\"count\": 1025,\n      \"expected_error\": ";
         changed_case_fails(
             &format!("{length}\"PASSWORD_TOO_LONG\""),
+            &format!("{length}\"EMPTY_PASSWORD\""),
+            "case 17 of 33 is refused with PASSWORD_TOO_LONG instead of EMPTY_PASSWORD",
+        );
+    }
+
+    #[test]
+    fn an_unknown_code_in_a_fixture_is_damaged_data() {
+        let length = "\"count\": 1025,\n      \"expected_error\": ";
+        changed_case_fails(
+            &format!("{length}\"PASSWORD_TOO_LONG\""),
             &format!("{length}\"INVALID_PASSWORD\""),
-            "case 17 of 33 is refused with PASSWORD_TOO_LONG instead of INVALID_PASSWORD",
+            "case 17 of 33 the built-in case names an unknown error code",
         );
     }
 
@@ -217,9 +237,6 @@ mod tests {
             fixture: changed,
             ..PasswordUnicodeCheck::new()
         };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed(detail.to_owned())
-        );
+        crate::self_check::assert_failed!(check.run(Tier::Startup), detail.to_owned());
     }
 }

@@ -5,6 +5,8 @@
 // gives at the same cost. The rekey's checks are in core-rekey.mjs.
 import assert from "node:assert/strict";
 
+import { browserSource } from "../browser-source.mjs";
+
 import {
   AMBIGUOUS_12_WORDS,
   FULL_SIZE_CONTAINER,
@@ -61,7 +63,8 @@ export function checkPackageFacts() {
   // The page's runtime and the worker keep two copies that a worker script, which imports nothing,
   // cannot avoid: the fields that hold secrets, and the advice of PACKAGE_MISMATCH.
   {
-    const source = (file) => read(`web/${file}`).toString();
+    const source = (file) =>
+      file === "runtime.js" ? browserSource("runtime") : read(`web/${file}`).toString();
     const owners = (text) =>
       text
         .split("// SECRET_OWNERS_BEGIN\n")[1]
@@ -282,7 +285,7 @@ function checkDecrypt({ reduced, steps, onRound, created }) {
     "a wrong password reads as 24 words, not verified",
   );
   assert.equal(typeof wrong.candidates[0].walletCheck, "boolean");
-  // Every 24-word reading gets the 16-bit source check with the passphrase given, or none: the
+  // Every 24-word reading gets the 16-bit wallet check with the passphrase given, or none: the
   // published wallet-check phrase ("abandon" 21 times, "above proof fatigue") passes with
   // "TREZOR" and fails without a passphrase.
   const checkedContainer = operations.encrypt(CHECKED_PHRASE, PASSWORD, reduced).container;

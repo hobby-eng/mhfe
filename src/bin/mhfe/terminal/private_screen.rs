@@ -228,7 +228,7 @@ mod tests {
             Err(Failure::internal("public synthetic write failure"))
         })
         .unwrap_err();
-        assert_eq!(failed.message, "public synthetic write failure");
+        assert_eq!(failed.message(), "public synthetic write failure");
         assert!(!active.load(Ordering::SeqCst));
         assert_eq!(controls, [ENTER_ALTERNATE_SCREEN, LEAVE_ALTERNATE_SCREEN]);
     }

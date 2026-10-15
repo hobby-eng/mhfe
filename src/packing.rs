@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::memory::LockedBytes;
-use crate::MhfeError;
+use crate::FormatError;
 
 pub(crate) const STATE_BYTES: usize = 32;
 pub(crate) type State = [u8; STATE_BYTES];
@@ -50,21 +50,19 @@ pub(crate) fn with_checksum(entropy: &State) -> [u8; STATE_BYTES + 1] {
 }
 
 /// Entropy size `ENT / 8` of a phrase with `words` words.
-pub(crate) fn entropy_bytes(words: usize) -> Result<usize, MhfeError> {
+pub(crate) fn entropy_bytes(words: usize) -> Result<usize, FormatError> {
     if !crate::phrase::WORD_COUNTS.contains(&words) {
-        return Err(MhfeError::InvalidWordCount(words));
+        return Err(FormatError::InvalidWordCount(words));
     }
     Ok(entropy_of_words(words))
 }
 
 /// Packs the entropy `E` of a phrase into `X`, which is the phrase in all but form: it is written
 /// into a buffer locked first, which the caller holds through the rounds.
-pub(crate) fn pack(entropy: &[u8]) -> Result<LockedBytes, MhfeError> {
+pub(crate) fn pack(entropy: &[u8]) -> Result<LockedBytes, FormatError> {
     let length = entropy.len();
     if entropy_bytes(words_of_entropy(length)) != Ok(length) {
-        return Err(MhfeError::Internal(format!(
-            "BIP39 entropy of {length} bytes cannot be packed"
-        )));
+        return Err(FormatError::PackedEntropyLength(length));
     }
     let Ok(state) = LockedBytes::build::<Infallible>(STATE_BYTES, |state| {
         state.extend_from_slice(entropy);
@@ -84,14 +82,14 @@ fn sha256(data: &[u8]) -> Zeroizing<[u8; 32]> {
 
 /// Reads `X` as the entropy of a phrase with `words` words: its first `ENT / 8` bytes, read in
 /// place, since a copy would lie outside the locked buffer that holds `X`. For a short phrase all
-/// `r` verifier bits must match, otherwise the result is [`MhfeError::VerifierMismatch`].
-pub(crate) fn unpack(state: &State, words: usize) -> Result<&[u8], MhfeError> {
+/// `r` verifier bits must match, otherwise the result is [`FormatError::VerifierMismatch`].
+pub(crate) fn unpack(state: &State, words: usize) -> Result<&[u8], FormatError> {
     let length = entropy_bytes(words)?;
     let (entropy, verifier) = state.split_at(length);
     if length < STATE_BYTES {
         let digest = sha256(entropy);
         if *verifier != digest[..STATE_BYTES - length] {
-            return Err(MhfeError::VerifierMismatch);
+            return Err(FormatError::VerifierMismatch);
         }
     }
     Ok(entropy)
@@ -182,7 +180,7 @@ pub(crate) mod tests {
                 corrupted[byte] ^= 1 << bit;
                 assert_eq!(
                     unpack(&corrupted, 21).unwrap_err(),
-                    MhfeError::VerifierMismatch
+                    FormatError::VerifierMismatch
                 );
             }
         }
@@ -190,7 +188,7 @@ pub(crate) mod tests {
 
     #[test]
     fn rejects_unknown_lengths() {
-        assert_eq!(entropy_bytes(13), Err(MhfeError::InvalidWordCount(13)));
+        assert_eq!(entropy_bytes(13), Err(FormatError::InvalidWordCount(13)));
         assert!(pack(&[0u8; 17]).is_err());
     }
 }

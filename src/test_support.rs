@@ -5,14 +5,11 @@
 use zeroize::Zeroizing;
 
 use crate::engine::{Argon2Cost, Argon2Engine, NativeEngine};
-use crate::{Mhfe, MhfeError, Password, Suite, WorkFactor};
+use crate::{Mhfe, Password, Suite, WorkFactor};
 
 /// 256 KiB and one pass: four Argon2 lanes need at least 32 KiB. The reduced-cost containers of
 /// src/mhfe.rs and of the browser tests are made at the same cost.
-pub(crate) const REDUCED_COST: Argon2Cost = Argon2Cost {
-    memory_kib: 256,
-    passes: 1,
-};
+pub(crate) const REDUCED_COST: Argon2Cost = Argon2Cost::new(256, 1);
 // The public phrases and password of the vectors, under the names the tests use.
 pub(crate) use crate::vectors::{
     AMBIGUOUS_12_21, NONZERO_12 as LEGAL_12, TEST_PASSWORD, ZERO_12 as ABANDON_12,
@@ -28,7 +25,12 @@ pub(crate) use crate::vectors::ZERO_12_FINGERPRINT as ABANDON_12_FINGERPRINT;
 pub(crate) struct NoArgon2Calls;
 
 impl Argon2Engine for NoArgon2Calls {
-    fn derive(&mut self, _: &[u8], _: &[u8; 16], _: &mut [u8; 32]) -> Result<(), MhfeError> {
+    fn derive(
+        &mut self,
+        _: &[u8],
+        _: &[u8; 16],
+        _: &mut [u8; 32],
+    ) -> Result<(), crate::engine::EngineError> {
         panic!("Argon2 ran where a refusal should have come first");
     }
 }

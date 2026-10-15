@@ -19,6 +19,12 @@
 //! and refuses a reference that more than one matches (`SEVERAL_CANDIDATES_MATCH`); an address
 //! tells them apart.
 
+mod error;
+pub use error::SearchError;
+
+#[cfg(test)]
+use crate::wallet::Fingerprint;
+
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -42,10 +48,12 @@ pub const MAX_MISSING_FOR_DECOY: usize = 2;
 pub const DECOY_SCAN_GAP: u32 = 20;
 
 /// Hears how far a search that compares candidates has come: `(done, count)`; an error stops it.
-pub type CandidateProgress<'a> = &'a mut dyn FnMut(usize, usize) -> Result<(), MhfeError>;
+pub type CandidateProgress<'a> =
+    &'a mut dyn FnMut(usize, usize) -> Result<(), crate::CancelledError>;
 /// Hears every round of a search that recovers each candidate: `(candidate, count, round,
 /// rounds)`; an error stops it.
-pub type RecoveryProgress<'a> = &'a mut dyn FnMut(usize, usize, u32, u32) -> Result<(), MhfeError>;
+pub type RecoveryProgress<'a> =
+    &'a mut dyn FnMut(usize, usize, u32, u32) -> Result<(), crate::CancelledError>;
 /// Compares candidate `index` with the reference, from any of the threads that share them; the
 /// second argument says when the search was stopped, which a long address search asks between its
 /// addresses.
@@ -103,35 +111,25 @@ impl ContainerSearch {
     /// Reads `written` as a repair reads it and lists the candidates. Words must be marked
     /// missing (`INVALID_REQUEST` otherwise), at most [`MAX_MISSING_FOR_DECOY`] of them
     /// (`TOO_MANY_MISSING_WORDS`).
-    pub fn new(written: &str) -> Result<Self, MhfeError> {
+    pub fn new(written: &str) -> Result<Self, SearchError> {
         // `?` or a word outside the BIP39 list marks a missing word, as for a repair
         // (AUD-024-API013).
         let unreadable = match ContainerReading::read(written) {
             ContainerReading::Marked { unreadable } => unreadable,
             ContainerReading::WrongLength(count) => {
-                return Err(crate::repair::wrong_container_length(count))
+                return Err(crate::repair::RepairError::ContainerLength(count).into())
             }
             ContainerReading::NotAContainer => {
                 let (_, outside) = phrase::word_numbers(written);
                 if outside.is_empty() {
-                    return Err(MhfeError::InvalidRequest(
-                        "every word is in the BIP39 list, but the container phrase's checksum \
-                         fails: a word is wrong, not missing; type ? in the place of a word that \
-                         cannot be read"
-                            .to_owned(),
-                    ));
+                    return Err(SearchError::WrongWord);
                 }
                 outside.iter().map(|position| position + 1).collect()
             }
-            ContainerReading::Container => {
-                return Err(MhfeError::InvalidRequest(
-                    "no word of the container phrase is marked missing: type ? in its place"
-                        .to_owned(),
-                ))
-            }
+            ContainerReading::Container => return Err(SearchError::NoMissingWord),
         };
         if unreadable.len() > MAX_MISSING_FOR_DECOY {
-            return Err(MhfeError::TooManyMissingWords {
+            return Err(SearchError::TooManyMissing {
                 missing: unreadable.len(),
                 limit: MAX_MISSING_FOR_DECOY,
             });
@@ -164,7 +162,10 @@ impl ContainerSearch {
     /// receiving and as many change addresses: [`DECOY_SCAN_GAP`] by default, the gap of unused
     /// addresses a wallet leaves, more for an address further on, at a cost that grows with it.
     /// One missing word keeps the usual search. A front end states the scope before the work.
-    pub fn decoy_address_limits(&self, scan_gap: u32) -> Result<SearchLimits, MhfeError> {
+    pub fn decoy_address_limits(
+        &self,
+        scan_gap: u32,
+    ) -> Result<SearchLimits, crate::wallet::WalletError> {
         if !self.offers_wallet_search() {
             SearchLimits::first_account(scan_gap)
         } else {
@@ -265,10 +266,10 @@ impl ContainerSearch {
 
     fn require_one_missing(&self) -> Result<(), MhfeError> {
         if !self.offers_wallet_search() {
-            return Err(MhfeError::TooManyMissingWords {
+            return Err(MhfeError::Search(SearchError::TooManyMissing {
                 missing: self.missing.len(),
                 limit: MAX_MISSING_FOR_WALLET,
-            });
+            }));
         }
         Ok(())
     }
@@ -400,7 +401,7 @@ fn compare_candidates(
                 continue;
             }
             if let Err(error) = on_progress(done.load(Ordering::Relaxed).min(count), count) {
-                abort_with(error);
+                abort_with(error.into());
             }
         }
         started
@@ -454,9 +455,9 @@ fn only_match(
     matched: Vec<(usize, CheckOutcome)>,
 ) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
     if matched.len() > 1 {
-        return Err(MhfeError::SeveralCandidatesMatch {
+        return Err(MhfeError::Search(SearchError::SeveralMatches {
             matches: matched.len(),
-        });
+        }));
     }
     Ok(matched.into_iter().next())
 }
@@ -503,9 +504,7 @@ fn decoy_reference<'a>(reference: &Reference<'a>, limits: SearchLimits) -> Refer
 /// wallet check say nothing of which container is the right one among several that pass them.
 fn require_wallet_reference(reference: &Reference<'_>) -> Result<(), MhfeError> {
     if !reference.identifies_wallet() {
-        return Err(MhfeError::InvalidRequest(
-            "a search compares with a receiving address or a master key fingerprint".to_owned(),
-        ));
+        return Err(MhfeError::Search(SearchError::WalletReferenceRequired));
     }
     Ok(())
 }
@@ -667,7 +666,7 @@ mod tests {
     #[test]
     fn the_decoy_fingerprint_finds_the_missing_word() {
         let container = zero_12_container();
-        let fingerprint = wallet::master_fingerprint(&container, "").unwrap();
+        let fingerprint = wallet::Fingerprint::of(&container, "").unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
             passphrase: "",
@@ -690,7 +689,7 @@ mod tests {
             .unwrap()
             .is_none());
         let other = Reference::Fingerprint {
-            fingerprint: [0, 0, 0, 0],
+            fingerprint: Fingerprint::from_bytes([0, 0, 0, 0]),
             passphrase: "",
         };
         assert!(one
@@ -706,7 +705,7 @@ mod tests {
     fn full_size_decoy_search_finds_two_missing_words() {
         let container = zero_12_container();
         let reference = Reference::Fingerprint {
-            fingerprint: wallet::master_fingerprint(&container, "").unwrap(),
+            fingerprint: wallet::Fingerprint::of(&container, "").unwrap(),
             passphrase: "",
         };
         let search = ContainerSearch::new(&with(&container, &[(15, "?"), (21, "?")])).unwrap();
@@ -747,9 +746,9 @@ mod tests {
         let abandon = "abandon ".repeat(10);
         let first = format!("{abandon}able ghost");
         let later = format!("{abandon}best student");
-        let fingerprint = wallet::master_fingerprint(&first, "").unwrap();
-        assert_eq!(fingerprint, [0xa3, 0x0a, 0x4e, 0x0f]);
-        assert_eq!(wallet::master_fingerprint(&later, "").unwrap(), fingerprint);
+        let fingerprint = wallet::Fingerprint::of(&first, "").unwrap();
+        assert_eq!(fingerprint.bytes(), [0xa3, 0x0a, 0x4e, 0x0f]);
+        assert_eq!(wallet::Fingerprint::of(&later, "").unwrap(), fingerprint);
         let search = ContainerSearch::new(&format!("{abandon}? ?")).unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
@@ -757,7 +756,9 @@ mod tests {
         };
         let refused = search.search_decoy(&reference, DECOY_SCAN_GAP, &mut |_, _| Ok(()));
         match refused {
-            Err(MhfeError::SeveralCandidatesMatch { matches }) => assert!(matches >= 2),
+            Err(MhfeError::Search(SearchError::SeveralMatches { matches })) => {
+                assert!(matches >= 2)
+            }
             other => panic!("not refused: {other:?}"),
         }
     }
@@ -797,7 +798,7 @@ mod tests {
         let indexes: Vec<usize> = in_turn.iter().map(|(index, _)| *index).collect();
         assert_eq!(indexes, [1, 3, 4]);
         // A progress error ends the comparison in turn too.
-        let stopped = compare_in_turn(6, &compare, &mut |_, _| Err(MhfeError::Cancelled));
+        let stopped = compare_in_turn(6, &compare, &mut |_, _| Err(crate::CancelledError));
         assert_eq!(stopped.err(), Some(MhfeError::Cancelled));
     }
 
@@ -817,7 +818,9 @@ mod tests {
         );
         assert_eq!(
             only_match(matched(&[2, 5])).err(),
-            Some(MhfeError::SeveralCandidatesMatch { matches: 2 })
+            Some(MhfeError::Search(SearchError::SeveralMatches {
+                matches: 2
+            }))
         );
         assert_eq!(
             only_match(matched(&[2, 5])).err().unwrap().code(),
@@ -869,7 +872,7 @@ mod tests {
     #[test]
     fn a_search_needs_marked_words_and_not_too_many() {
         let container = zero_12_container();
-        let code = |result: Result<ContainerSearch, MhfeError>| result.err().unwrap().code();
+        let code = |result: Result<ContainerSearch, SearchError>| result.err().unwrap().code();
         assert_eq!(code(ContainerSearch::new(&container)), "INVALID_REQUEST");
         assert_eq!(
             code(ContainerSearch::new(&with(
@@ -919,7 +922,7 @@ mod tests {
         let password = test_password();
         let mut mhfe = reduced();
         let container = container_of(&mut mhfe, original, Suite::TwentyFourWords);
-        let fingerprint = wallet::master_fingerprint(original, "").unwrap();
+        let fingerprint = wallet::Fingerprint::of(original, "").unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
             passphrase: "",
@@ -965,7 +968,7 @@ mod tests {
         let began = Instant::now();
         let result = compare_candidates(4, &compare, &mut |_, _| {
             asked += 1;
-            Err(MhfeError::Cancelled)
+            Err(crate::CancelledError)
         });
         assert_eq!(result.err(), Some(MhfeError::Cancelled));
         assert_eq!(asked, 1);

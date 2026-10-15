@@ -152,7 +152,7 @@ fn entries() -> Vec<Entry> {
         Ok(None) => {}
         Err(failure) => {
             eprintln!();
-            style::warn("The fast mode is not offered.", &failure.message);
+            style::warn("The fast mode is not offered.", failure.message());
         }
     }
     for name in ["new", "encrypt", "decrypt", "check", "rekey", "wallets"] {
@@ -300,12 +300,8 @@ fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
 /// screen, which is cleared when the person leaves; the generator wipes its own copy as soon as it
 /// has shown it, before a key is read.
 fn make_passwords() -> Result<(), Failure> {
-    let question = Question {
-        text: "What kind of password?",
-        explanation: &[],
-        more: Some(readme::PASSWORD),
-        record: None,
-    };
+    let question =
+        Question::with_details("What kind of password?", &[], Some(readme::PASSWORD), None);
     let answers = PasswordKind::MADE.map(PasswordKind::answer);
     // Escape here returns to the menu too.
     let Some(chosen) = choice::choose(&question, &answers, None)? else {
@@ -332,12 +328,12 @@ fn make_passwords() -> Result<(), Failure> {
 /// Asks whether to repair a container phrase or to make repair words for one; the arguments of the
 /// command, or `None` on Escape.
 fn repair_or_make_words() -> Result<Option<Vec<OsString>>, Failure> {
-    let question = Question {
-        text: "Repair a container phrase, or make repair words for one?",
-        explanation: &[],
-        more: Some(readme::REPAIR),
-        record: None,
-    };
+    let question = Question::with_details(
+        "Repair a container phrase, or make repair words for one?",
+        &[],
+        Some(readme::REPAIR),
+        None,
+    );
     let answers = [
         Answer::new(
             Operation::Repair.title(),
@@ -359,12 +355,7 @@ const SELF_TESTS: [&[&str]; 2] = [&["self-test"], &["self-test", "--vectors"]];
 /// Asks whether to test every part alone, in seconds, or with the published vectors, in minutes;
 /// the arguments of the command, or `None` on Escape.
 fn which_self_test() -> Result<Option<Vec<OsString>>, Failure> {
-    let question = Question {
-        text: "Which test?",
-        explanation: &[],
-        more: Some(readme::SELF_TEST),
-        record: None,
-    };
+    let question = Question::with_details("Which test?", &[], Some(readme::SELF_TEST), None);
     let answers = [
         Answer::new(self_test::EVERY_PART, "a few seconds"),
         Answer::new(self_test::WITH_VECTORS, self_test::vectors_cost()),

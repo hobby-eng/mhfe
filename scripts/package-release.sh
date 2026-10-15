@@ -10,7 +10,8 @@
 # remapped as packaging/remap-builder-paths.sh describes, the same flags as the Dockerfile's, so
 # that a program the Dockerfile built is up to date. Build the browser package first with
 # scripts/build-wasm.sh, which remaps the same way. A program or WebAssembly that still names a
-# directory of the builder is refused. Needs GNU tar, gzip, zip and sha256sum.
+# directory of the builder is refused. Needs GNU tar and gzip (Python 3 on macOS), zip and
+# sha256sum.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -78,6 +79,12 @@ add_common_files() {
     rustc --version --verbose
     wasm-bindgen --version 2>/dev/null || true
     echo "Argon2: vendor/phc-winner-argon2 at $argon2_commit"
+    if [[ "$(uname -s)" == Darwin ]]; then
+      echo "macOS packaging: Python tarfile/PAX and gzip (mtime 0)"
+      python3 -c 'import sys, zlib; print("Python:", sys.version); print("zlib:", zlib.ZLIB_RUNTIME_VERSION)'
+      echo "Apple SDK: $(xcrun --show-sdk-version)"
+      cc --version | sed -n '1p'
+    fi
   } > "$folder/BUILD-INFO.txt"
   node scripts/verify-packaged-readme.mjs "$folder"
 }
@@ -105,11 +112,17 @@ cli_package() {
     cargo build --locked --release
     binary="$target_dir/release/$program"
   fi
+  if [[ "$triple" == *-apple-darwin ]]; then
+    scripts/harden-macos.sh "$binary"
+  fi
   scripts/check-release-artifacts.sh --builder-paths "$binary"
   mkdir -p "$folder"
   cp "$binary" "$folder/"
   cp "$launcher" "$folder/"
   add_common_files "$folder"
+  if [[ "$name" == windows-* ]]; then
+    cp vendor/mingw-w64-runtime-COPYRIGHT "$folder/licenses/mingw-w64-COPYRIGHT"
+  fi
   local kind=tar.gz
   if [[ "$name" == windows-* ]]; then
     kind=zip

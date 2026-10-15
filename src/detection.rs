@@ -12,7 +12,7 @@
 
 use crate::packing::{self, State, STATE_WORDS};
 use crate::wallet_check;
-use crate::MhfeError;
+use crate::wallet_check::WalletCheckError;
 
 /// The readings the length rules of recovery give (specification: recovery, step 3 and the stated
 /// length after it), as word counts: a recovery reads them, and a check takes its outcome from
@@ -97,42 +97,46 @@ impl<'a> LengthDetection<'a> {
     /// may not be empty. The profile defines the check for that reading alone, whose entropy is
     /// `X` itself: a shorter reading would be a construction it does not define, and a match of
     /// its own about once in 65,536 (AUD-010).
-    pub(crate) fn passes_wallet_check(&self, passphrase: &str) -> Result<bool, MhfeError> {
-        wallet_check::verify_entropy(self.state, passphrase)
+    pub(crate) fn passes_wallet_check(&self, passphrase: &str) -> Result<bool, WalletCheckError> {
+        wallet_check::WalletCheck::new(passphrase).verify_entropy(self.state)
     }
 
-    /// Whether the 24-word reading passes the 16-bit source check with `passphrase`, which may be
+    /// Whether the 24-word reading passes the 16-bit wallet check with `passphrase`, which may be
     /// empty here: every recovery evaluates it on the 24-word reading with the passphrase given or
     /// the empty one, as the container does not show whether the phrase was made with the check
     /// (the specification's recovery rules). Only a pass means something to an owner who does not
     /// know.
-    pub(crate) fn source_check(&self, passphrase: &str) -> Result<bool, MhfeError> {
-        wallet_check::passes(self.state, passphrase)
+    pub(crate) fn source_check(&self, passphrase: &str) -> Result<bool, WalletCheckError> {
+        wallet_check::WalletCheck::new(passphrase).passes(self.state)
     }
 
     /// Whether a recovery would read the state as a phrase that passes a check: a short length's
     /// built-in check, or the 24-word reading's phrase + passphrase check with `passphrase`, which
     /// may be empty here, or without one, which `mhfe decrypt` reports whatever the passphrase. A
     /// hidden wallet must pass none of them (rule I29).
-    pub(crate) fn reads_as_checked(&self, passphrase: &str) -> Result<bool, MhfeError> {
-        if !self.short.is_empty() || wallet_check::passes(self.state, passphrase)? {
+    pub(crate) fn reads_as_checked(&self, passphrase: &str) -> Result<bool, WalletCheckError> {
+        if !self.short.is_empty()
+            || wallet_check::WalletCheck::new(passphrase).passes(self.state)?
+        {
             return Ok(true);
         }
-        Ok(!passphrase.is_empty() && self.passes_without_passphrase())
+        Ok(!passphrase.is_empty() && self.passes_without_passphrase()?)
     }
 
     /// Whether the 24-word reading passes the criterion of the phrase + passphrase check without
     /// a passphrase, as a phrase another program made in that form does, which `mhfe decrypt`
     /// reports. A failure says nothing: a phrase made without the check fails it.
-    pub(crate) fn passes_without_passphrase(&self) -> bool {
-        // A state always has the entropy of a 24-word phrase, so the test cannot fail.
-        wallet_check::passes(self.state, "").unwrap_or(false)
+    pub(crate) fn passes_without_passphrase(&self) -> Result<bool, WalletCheckError> {
+        wallet_check::WalletCheck::new("").passes(self.state)
     }
 
     /// Whether the phrase's own checks pass, its length detected: the built-in check of a short
     /// length, or else, with a `passphrase`, the 24-word reading's phrase + passphrase check.
     /// Several short lengths that pass by accident pass all the same.
-    pub(crate) fn passes_own_checks(&self, passphrase: Option<&str>) -> Result<bool, MhfeError> {
+    pub(crate) fn passes_own_checks(
+        &self,
+        passphrase: Option<&str>,
+    ) -> Result<bool, WalletCheckError> {
         if !self.short.is_empty() {
             return Ok(true);
         }
@@ -196,7 +200,7 @@ mod tests {
         assert!(!detection.passes_own_checks(None).unwrap());
         assert_eq!(
             detection.passes_own_checks(Some("")),
-            Err(MhfeError::WalletCheckNeedsPassphrase)
+            Err(WalletCheckError::NeedsPassphrase)
         );
     }
 

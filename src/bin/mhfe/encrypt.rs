@@ -429,7 +429,7 @@ fn report_check(checked: Result<(), &MhfeError>) {
             "{} the container turns back into your original seed phrase.",
             paint(style::GOOD, "Verified:")
         )),
-        Err(MhfeError::VerificationFailed) => {
+        Err(MhfeError::Cipher(mhfe::CipherError::VerificationFailed)) => {
             eprintln!();
             style::alarm(
                 "The container shown is WRONG: it did not turn back into your phrase.",
@@ -582,7 +582,7 @@ pub(crate) fn read_typed_password(
         };
         let repeated = input.password(repeat)?;
         // The first entry's rules were checked above, before the repetition was asked.
-        let same = mhfe::check_word::require_same(&text, &repeated);
+        let same = Password::require_same(&text, &repeated);
         drop(repeated);
         match same {
             Ok(()) => {}

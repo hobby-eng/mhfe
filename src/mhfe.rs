@@ -15,7 +15,7 @@ use crate::packing::{self, State, STATE_WORDS};
 use crate::phrase::{self, locked_phrase_from_entropy, phrase_from_entropy};
 use crate::suite::{Suite, ROUNDS};
 use crate::wallet_check;
-use crate::{MhfeError, Password, WorkFactor};
+use crate::{Password, WorkFactor};
 
 // The self-checks of the cipher and the published vectors they replay; see known_answers.rs.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
@@ -23,68 +23,18 @@ pub(crate) mod known_answers;
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 mod published_rounds;
 
+mod error;
+pub use error::CipherError;
+
 /// Called with the number of the round about to start and the number of rounds in the whole
 /// operation: 12 for a recovery or a check, 24 for an encryption, which recovers its result once
-/// more to check it. Returning an error, such as [`MhfeError::Cancelled`], stops before that round.
-pub type ProgressCallback<'a> = &'a mut dyn FnMut(u32, u32) -> Result<(), MhfeError>;
+/// more to check it. Returning an error, such as [`CipherError::Cancelled`], stops before that round.
+pub type ProgressCallback<'a> = &'a mut dyn FnMut(u32, u32) -> Result<(), crate::CancelledError>;
 
 /// Rounds of an encryption: twelve to encrypt and twelve to check the result.
 pub const ENCRYPTION_ROUNDS: u32 = 2 * ROUNDS;
 
-/// The length of an original phrase: 12, 15, 18, 21 or 24 words, the BIP39 lengths MHFE takes.
-///
-/// It is made only by [`WordCount::new`], so it never holds any other number.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct WordCount(usize);
-
-impl WordCount {
-    /// Refuses every other number with [`MhfeError::InvalidWordCount`].
-    pub fn new(words: usize) -> Result<Self, MhfeError> {
-        packing::entropy_bytes(words)?;
-        Ok(Self(words))
-    }
-
-    /// The number of words.
-    pub fn get(self) -> usize {
-        self.0
-    }
-
-    /// The bytes of entropy a BIP39 phrase of this length carries: 16 for 12 words, 32 for 24.
-    pub fn entropy_bytes(self) -> usize {
-        packing::entropy_of_words(self.0)
-    }
-}
-
-/// How recovery of a 24-word container learns the length of the original phrase. A same-length
-/// container keeps its original's length and takes only [`PhraseLength::Detect`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PhraseLength {
-    /// Tests the 12-, 15-, 18- and 21-word layouts and falls back to 24 words.
-    Detect,
-    /// The length the user states. The layouts are tested all the same, and a built-in check that
-    /// passes takes precedence over the stated length (the specification's recovery rules): a
-    /// person can misremember a length, while a check passes by chance at most once in 2^32.
-    Words(WordCount),
-}
-
-impl PhraseLength {
-    /// The word count a front end passes as a number, 0 standing for detection, as the browser
-    /// package and `--words auto` take it.
-    pub fn from_count(count: usize) -> Result<Self, MhfeError> {
-        match count {
-            0 => Ok(Self::Detect),
-            words => WordCount::new(words).map(Self::Words),
-        }
-    }
-
-    /// The stated word count; `None` for detection.
-    pub(crate) fn stated(self) -> Option<usize> {
-        match self {
-            Self::Detect => None,
-            Self::Words(words) => Some(words.get()),
-        }
-    }
-}
+pub(crate) use crate::suite::PhraseLength;
 
 /// One phrase produced by recovery, read-only: its text stays in the buffer that was locked
 /// before the words were written into it, which no caller can grow or replace (AUD-012-SEC002).
@@ -163,7 +113,7 @@ impl RecoveredPhrase {
             RecoveryStatus::NoBuiltInCheck
         } else if self.verified {
             RecoveryStatus::Verified
-        } else if length == PhraseLength::Words(WordCount(STATE_WORDS)) {
+        } else if length.stated() == Some(STATE_WORDS) {
             RecoveryStatus::ReadAs24Chosen
         } else {
             // Detected, or a short length stated whose check failed among others that pass.
@@ -171,21 +121,26 @@ impl RecoveredPhrase {
         }
     }
 
-    /// Whether a 24-word reading passes the 16-bit source check of `MHFE-WALLET-CHECK-SEED-1`
+    /// Whether a 24-word reading passes the 16-bit wallet check of `MHFE-WALLET-CHECK-SEED-1`
     /// with `passphrase`, the wallet's BIP39 passphrase or the empty one; `None` for another
     /// length, where it does not apply. Every recovery evaluates it on each 24-word reading, as
     /// the container does not show whether the phrase was made with the check (the
     /// specification's recovery rules). A pass makes a right password very likely; a phrase made
     /// without the check fails it, so a failure means something only to an owner who knows the
     /// wallet was made with it. One BIP39 seed: milliseconds.
-    pub fn passes_wallet_check(&self, passphrase: &str) -> Result<Option<bool>, MhfeError> {
+    pub fn passes_wallet_check(
+        &self,
+        passphrase: &str,
+    ) -> Result<Option<bool>, crate::wallet_check::WalletCheckError> {
         if !self.offers_wallet_check() {
             return Ok(None);
         }
-        wallet_check::phrase_passes(&self.phrase, passphrase).map(Some)
+        wallet_check::WalletCheck::new(passphrase)
+            .phrase_passes(&self.phrase)
+            .map(Some)
     }
 
-    /// Whether this is a 24-word reading of a 24-word container, which the 16-bit source check
+    /// Whether this is a 24-word reading of a 24-word container, which the 16-bit wallet check
     /// applies to: a front end asks for the wallet's BIP39 passphrase whenever one comes out.
     pub fn offers_wallet_check(&self) -> bool {
         self.words == STATE_WORDS && self.suite == Suite::TwentyFourWords
@@ -291,7 +246,7 @@ pub struct Mhfe<E: Argon2Engine> {
 impl Mhfe<NativeEngine> {
     /// Checks that the computer has the memory the settings need and reserves it once for all
     /// twelve rounds.
-    pub fn new(work: WorkFactor) -> Result<Self, MhfeError> {
+    pub fn new(work: WorkFactor) -> Result<Self, CipherError> {
         Ok(Self {
             work,
             engine: NativeEngine::new(work)?,
@@ -336,7 +291,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         password: &Password,
         suite: Suite,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<Zeroizing<String>, MhfeError> {
+    ) -> Result<Zeroizing<String>, CipherError> {
         let new = self.encrypt_unchecked(original, password, suite, on_progress)?;
         self.check_new_container(&new, password, on_progress)?;
         Ok(new.words)
@@ -350,11 +305,11 @@ impl<E: Argon2Engine> Mhfe<E> {
         password: &Password,
         suite: Suite,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<NewContainer, MhfeError> {
+    ) -> Result<NewContainer, CipherError> {
         // The entropy and the state are phrase in all but form: both are locked before they are
         // written, and stay locked through the twelve rounds, while the work area of Argon2 puts
         // the most pressure on memory.
-        let entropy = locked_entropy(&phrase::parse(original).map_err(MhfeError::InvalidPhrase)?);
+        let entropy = locked_entropy(&phrase::parse(original).map_err(CipherError::from)?);
         suite.require_original(packing::words_of_entropy(entropy.len()))?;
         let (geometry, x) = match suite {
             Suite::TwentyFourWords => (Geometry::SUITE_3, packing::pack(&entropy)?),
@@ -382,13 +337,13 @@ impl<E: Argon2Engine> Mhfe<E> {
         new: &NewContainer,
         password: &Password,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), CipherError> {
         // Starting from the words covers their encoding as well as the rounds.
         let container =
-            phrase::parse_container(&new.words).map_err(|_| MhfeError::VerificationFailed)?;
+            phrase::parse_container(&new.words).map_err(|_| CipherError::VerificationFailed)?;
         let (suite, y) = container_state(&container)?;
         if suite != new.suite {
-            return Err(MhfeError::VerificationFailed);
+            return Err(CipherError::VerificationFailed);
         }
         let recovered = self.permutation(password, geometry(suite, &y)?).inverse(
             &y,
@@ -398,7 +353,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         if recovered[..] == new.source[..] {
             Ok(())
         } else {
-            Err(MhfeError::VerificationFailed)
+            Err(CipherError::VerificationFailed)
         }
     }
 
@@ -411,7 +366,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         password: &Password,
         length: PhraseLength,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<Recovery, MhfeError> {
+    ) -> Result<Recovery, CipherError> {
         self.decrypt_as(container, password, None, length, on_progress)
     }
 
@@ -424,7 +379,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         selected: Option<Suite>,
         length: PhraseLength,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<Recovery, MhfeError> {
+    ) -> Result<Recovery, CipherError> {
         // Every input is checked before the first Argon2 call; a WordCount is valid already. A
         // suite selected against the container's words is refused as the container is read.
         if selected != Some(Suite::TwentyFourWords) {
@@ -446,21 +401,23 @@ impl<E: Argon2Engine> Mhfe<E> {
         password: &Password,
         selected: Option<Suite>,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<(Suite, LockedBytes), MhfeError> {
-        let container = phrase::parse_container(container).map_err(MhfeError::InvalidContainer)?;
+    ) -> Result<(Suite, LockedBytes), CipherError> {
+        let container = phrase::parse_container(container).map_err(CipherError::from)?;
         let (suite, y) = container_state(&container)?;
         match selected {
             Some(Suite::TwentyFourWords) if suite != Suite::TwentyFourWords => {
-                return Err(MhfeError::InvalidContainer(format!(
-                    "it has {} words, but a 24-word container always has 24",
-                    container.word_count()
-                )))
+                return Err((crate::FormatError::ContainerSuite {
+                    selected: Suite::TwentyFourWords,
+                    actual_words: container.word_count(),
+                })
+                .into())
             }
             Some(Suite::SameLength) if suite != Suite::SameLength => {
-                return Err(MhfeError::InvalidContainer(format!(
-                    "it has {STATE_WORDS} words, but a same-length container has {}",
-                    phrase::counts_text(&packing::SHORT_WORD_COUNTS)
-                )))
+                return Err((crate::FormatError::ContainerSuite {
+                    selected: Suite::SameLength,
+                    actual_words: container.word_count(),
+                })
+                .into())
             }
             _ => {}
         }
@@ -482,7 +439,7 @@ impl<E: Argon2Engine> Mhfe<E> {
 }
 
 /// The permutation of a suite for a state `y` of the container's size.
-fn geometry(suite: Suite, y: &[u8]) -> Result<Geometry, MhfeError> {
+fn geometry(suite: Suite, y: &[u8]) -> Result<Geometry, CipherError> {
     match suite {
         Suite::TwentyFourWords => Ok(Geometry::SUITE_3),
         Suite::SameLength => Geometry::same_length(y.len()),
@@ -491,25 +448,25 @@ fn geometry(suite: Suite, y: &[u8]) -> Result<Geometry, MhfeError> {
 
 /// A recovered suite 3 state as the fixed 256-bit array the packing works on, read in place: a
 /// copy would lie outside the locked buffer that holds it.
-pub(crate) fn suite_3_state(x: &[u8]) -> Result<&State, MhfeError> {
+pub(crate) fn suite_3_state(x: &[u8]) -> Result<&State, CipherError> {
     x.try_into()
-        .map_err(|_| MhfeError::Internal(format!("a suite 3 state has 32 bytes, not {}", x.len())))
+        .map_err(|_| CipherError::from(crate::FormatError::Suite3State(x.len())))
 }
 
 /// Reads the state `x` of a 24-word container as the specification's recovery does (step 3 and
 /// the stated length after it), under the length rules of [`LengthDetection::under_length_rules`].
-pub(crate) fn recover(x: &State, length: PhraseLength) -> Result<Recovery, MhfeError> {
+pub(crate) fn recover(x: &State, length: PhraseLength) -> Result<Recovery, CipherError> {
     let detection = LengthDetection::of(x);
     let stated = length.stated();
     let read = |words| Ok(read_as(x, words)?.compared_with(stated, detection.short_lengths()));
     match detection.under_length_rules(stated) {
-        Readings::NoReading => Err(MhfeError::VerifierMismatch),
+        Readings::NoReading => Err((crate::FormatError::VerifierMismatch).into()),
         Readings::One(words) => Ok(Recovery::Phrase(read(words)?)),
         Readings::Several(lengths) => Ok(Recovery::Ambiguous(
             lengths
                 .into_iter()
                 .map(read)
-                .collect::<Result<Vec<_>, MhfeError>>()?,
+                .collect::<Result<Vec<_>, CipherError>>()?,
         )),
     }
 }
@@ -521,7 +478,7 @@ pub(crate) fn recover(x: &State, length: PhraseLength) -> Result<Recovery, MhfeE
 pub(crate) fn every_reading(
     x: &State,
     length: PhraseLength,
-) -> Result<Vec<RecoveredPhrase>, MhfeError> {
+) -> Result<Vec<RecoveredPhrase>, CipherError> {
     let detection = LengthDetection::of(x);
     let stated = length.stated();
     detection
@@ -533,9 +490,9 @@ pub(crate) fn every_reading(
 /// Refuses a container equal to the original. A working implementation meets `Y = X` with
 /// probability 2^-256 (2^-ENT for a same-length container); the check stops a broken engine that
 /// returns its input from exposing the original phrase.
-pub(crate) fn reject_fixed_point(x: &[u8], y: &[u8]) -> Result<(), MhfeError> {
+pub(crate) fn reject_fixed_point(x: &[u8], y: &[u8]) -> Result<(), CipherError> {
     if x == y {
-        Err(MhfeError::FixedPoint)
+        Err(CipherError::FixedPoint)
     } else {
         Ok(())
     }
@@ -547,8 +504,8 @@ pub(crate) fn reject_fixed_point(x: &[u8], y: &[u8]) -> Result<(), MhfeError> {
 /// report a shorter reading or several candidates, so the owner should record the word count and
 /// select it during recovery. This matters most for a 24-word original, which detection would
 /// otherwise read as a verified shorter phrase.
-pub fn other_detected_lengths(original: &str) -> Result<Vec<usize>, MhfeError> {
-    let source = phrase::parse(original).map_err(MhfeError::InvalidPhrase)?;
+pub(crate) fn other_detected_lengths(original: &str) -> Result<Vec<usize>, CipherError> {
+    let source = phrase::parse(original).map_err(CipherError::from)?;
     let words = source.word_count();
     let x = packing::pack(&locked_entropy(&source))?;
     Ok(LengthDetection::of(suite_3_state(&x)?)
@@ -562,14 +519,14 @@ pub fn other_detected_lengths(original: &str) -> Result<Vec<usize>, MhfeError> {
 /// The suite and the encrypted state `Y` of a container: its entropy.
 pub(crate) fn container_state(
     container: &Mnemonic,
-) -> Result<(Suite, Zeroizing<Vec<u8>>), MhfeError> {
+) -> Result<(Suite, Zeroizing<Vec<u8>>), CipherError> {
     let suite = Suite::of_container(container.word_count())?;
     Ok((suite, Zeroizing::new(container.to_entropy())))
 }
 
 /// Reads the state `x` of a same-length container as its only reading, the phrase of its own
 /// length, which has no built-in check.
-pub(crate) fn read_same_length(x: &[u8]) -> Result<RecoveredPhrase, MhfeError> {
+pub(crate) fn read_same_length(x: &[u8]) -> Result<RecoveredPhrase, CipherError> {
     Ok(RecoveredPhrase::new(
         packing::words_of_entropy(x.len()),
         false,
@@ -579,7 +536,7 @@ pub(crate) fn read_same_length(x: &[u8]) -> Result<RecoveredPhrase, MhfeError> {
 }
 
 /// Reads `X` as a phrase of `words` words; a short length must pass its check.
-pub(crate) fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
+pub(crate) fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, CipherError> {
     Ok(RecoveredPhrase::new(
         words,
         // A short length carries a built-in check, which unpack has passed.
@@ -606,6 +563,7 @@ mod tests {
     use super::*;
     use crate::feistel::tests::HashEngine;
     use crate::test_support::{counted, reduced, test_password, wrong_password, TREZOR_COUNTER};
+    use crate::WordCount;
 
     const ZERO_12: &str = crate::test_support::ABANDON_12;
     use crate::test_support::LEGAL_24;
@@ -627,7 +585,7 @@ mod tests {
         }
     }
 
-    fn no_progress() -> impl FnMut(u32, u32) -> Result<(), MhfeError> {
+    fn no_progress() -> impl FnMut(u32, u32) -> Result<(), crate::CancelledError> {
         |_, _| Ok(())
     }
 
@@ -773,7 +731,9 @@ mod tests {
                 &mut no_progress()
             )
             .err(),
-            Some(MhfeError::VerifierMismatch)
+            Some(crate::CipherError::Format(
+                crate::FormatError::VerifierMismatch
+            ))
         );
     }
 
@@ -835,7 +795,9 @@ mod tests {
             .unwrap();
         assert_eq!(
             stated(&twenty_four, 12).err(),
-            Some(MhfeError::VerifierMismatch)
+            Some(crate::CipherError::Format(
+                crate::FormatError::VerifierMismatch
+            ))
         );
         let found = only_phrase(stated(&twenty_four, 24).unwrap());
         assert_eq!(
@@ -845,7 +807,7 @@ mod tests {
         assert_eq!(*found.phrase, *LEGAL_24);
     }
 
-    /// Every 24-word reading offers the 16-bit source check with any passphrase, the empty one
+    /// Every 24-word reading offers the 16-bit wallet check with any passphrase, the empty one
     /// included; a short reading does not. The phrase is the published wallet-check vector:
     /// "abandon" 21 times and "above proof fatigue", which passes with "TREZOR" and fails without
     /// a passphrase (vectors/profiles, src/wallet_check/known_answers.rs).
@@ -1020,19 +982,8 @@ mod tests {
 
     #[test]
     fn invalid_inputs_fail_before_any_argon2_call() {
-        struct NoCallsEngine;
-        impl Argon2Engine for NoCallsEngine {
-            fn derive(
-                &mut self,
-                _: &[u8],
-                _: &[u8; 16],
-                _: &mut [u8; 32],
-            ) -> Result<(), MhfeError> {
-                panic!("Argon2 was called for an invalid input");
-            }
-        }
         let password = test_password();
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoCallsEngine);
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), crate::test_support::NoArgon2Calls);
         let bad_checksum = LEGAL_24.replace("title", "thank");
 
         assert!(matches!(
@@ -1042,7 +993,7 @@ mod tests {
                 Suite::TwentyFourWords,
                 &mut no_progress()
             ),
-            Err(MhfeError::InvalidPhrase(_))
+            Err(CipherError::Phrase(crate::PhraseError::Original(_)))
         ));
         assert!(matches!(
             mhfe.decrypt(
@@ -1051,7 +1002,7 @@ mod tests {
                 PhraseLength::Detect,
                 &mut no_progress()
             ),
-            Err(MhfeError::InvalidContainer(_))
+            Err(error) if error.error_code() == crate::ErrorCode::InvalidContainer
         ));
         assert!(matches!(
             mhfe.decrypt(
@@ -1060,12 +1011,14 @@ mod tests {
                 PhraseLength::Detect,
                 &mut no_progress()
             ),
-            Err(MhfeError::InvalidContainer(_))
+            Err(error) if error.error_code() == crate::ErrorCode::InvalidContainer
         ));
         assert_eq!(
             mhfe.encrypt(LEGAL_24, &password, Suite::SameLength, &mut no_progress())
                 .err(),
-            Some(MhfeError::SameLengthNeedsShortPhrase)
+            Some(crate::CipherError::Format(
+                crate::FormatError::SameLengthNeedsShortPhrase
+            ))
         );
         assert_eq!(
             mhfe.decrypt(
@@ -1075,11 +1028,16 @@ mod tests {
                 &mut no_progress()
             )
             .err(),
-            Some(MhfeError::LengthChoiceNotApplicable {
-                container_words: 12
-            })
+            Some(crate::CipherError::Format(
+                crate::FormatError::LengthChoiceNotApplicable {
+                    container_words: 12
+                }
+            ))
         );
-        assert_eq!(WordCount::new(13), Err(MhfeError::InvalidWordCount(13)));
+        assert_eq!(
+            WordCount::new(13),
+            Err(crate::FormatError::InvalidWordCount(13))
+        );
 
         // A chosen length n accepts a container of exactly n words or of 24 words; any other
         // container, shorter or of another short length, is refused before any Argon2 work.
@@ -1098,7 +1056,9 @@ mod tests {
                         &mut no_progress()
                     )
                     .err(),
-                    Some(MhfeError::LengthChoiceNotApplicable { container_words }),
+                    Some(crate::CipherError::Format(
+                        crate::FormatError::LengthChoiceNotApplicable { container_words }
+                    )),
                     "{container_words}-word container with {chosen} chosen"
                 );
             }
@@ -1122,7 +1082,7 @@ mod tests {
                     PhraseLength::Detect,
                     &mut no_progress()
                 ),
-                Err(MhfeError::InvalidContainer(_))
+                Err(error) if error.error_code() == crate::ErrorCode::InvalidContainer
             ));
         }
     }
@@ -1132,7 +1092,7 @@ mod tests {
         let state = [7u8; packing::STATE_BYTES];
         assert_eq!(
             reject_fixed_point(&state, &state),
-            Err(MhfeError::FixedPoint)
+            Err(CipherError::FixedPoint)
         );
         let mut different = state;
         different[31] ^= 1;
@@ -1169,7 +1129,7 @@ mod tests {
                 password: &[u8],
                 salt: &[u8; 16],
                 key: &mut [u8; 32],
-            ) -> Result<(), MhfeError> {
+            ) -> Result<(), crate::engine::EngineError> {
                 HashEngine.derive(password, salt, key)?;
                 self.0 = self.0.wrapping_add(1);
                 key[0] ^= self.0;
@@ -1186,7 +1146,7 @@ mod tests {
                 &mut no_progress()
             )
             .err(),
-            Some(MhfeError::VerificationFailed)
+            Some(CipherError::VerificationFailed)
         );
     }
 
@@ -1224,11 +1184,11 @@ mod tests {
         let wrong_password = Password::new("another password").unwrap();
         assert_eq!(
             mhfe.check_new_container(&new, &wrong_password, &mut no_progress()),
-            Err(MhfeError::VerificationFailed)
+            Err(CipherError::VerificationFailed)
         );
         assert_eq!(
             mhfe.check_new_container(&changed, &password, &mut no_progress()),
-            Err(MhfeError::VerificationFailed)
+            Err(CipherError::VerificationFailed)
         );
     }
 
@@ -1242,13 +1202,13 @@ mod tests {
             Suite::TwentyFourWords,
             &mut |round, _| {
                 if round == 2 {
-                    Err(MhfeError::Cancelled)
+                    Err(crate::CancelledError)
                 } else {
                     Ok(())
                 }
             },
         );
-        assert_eq!(result.err(), Some(MhfeError::Cancelled));
+        assert_eq!(result.err(), Some(CipherError::Cancelled));
     }
 
     /// The same container must come out of every engine at this reduced cost, as

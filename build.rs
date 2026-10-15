@@ -49,10 +49,55 @@ fn write_password_cases(out_dir: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Retains exactly the reference implementation's fixed error vocabulary for native and WASM.
+///
+/// Browser exceptions can then carry a reference message without carrying arbitrary page text.
+fn write_argon2_messages(out_dir: &Path) -> Result<(), Box<dyn Error>> {
+    let path = Path::new(ARGON2_DIR).join("src/argon2.c");
+    let source = std::fs::read_to_string(&path)?;
+    let function = source
+        .split_once("const char *argon2_error_message(int error_code) {")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map(|(body, _)| body)
+        .ok_or("the Argon2 error-message function is missing")?;
+    let mut messages = Vec::new();
+    for line in function
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("return "))
+    {
+        let text = line
+            .strip_prefix("return \"")
+            .and_then(|text| text.strip_suffix("\";"))
+            .ok_or("an Argon2 error message is not a single string literal")?;
+        if text.contains(['\\', '\"']) || messages.contains(&text) {
+            return Err("an Argon2 error message needs an explicit parser update".into());
+        }
+        messages.push(text);
+    }
+    if messages.is_empty()
+        || !function
+            .trim_end()
+            .ends_with("return \"Unknown error code\";\n    }")
+    {
+        return Err("the Argon2 error-message fallback is missing".into());
+    }
+    let values = messages
+        .iter()
+        .map(|text| format!("{text:?},\n"))
+        .collect::<String>();
+    std::fs::write(
+        out_dir.join("argon2-messages.rs"),
+        format!("&[\n{values}]\n"),
+    )?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed=build.rs");
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo sets no OUT_DIR")?);
     write_password_cases(&out_dir)?;
+    write_argon2_messages(&out_dir)?;
     println!("cargo:rerun-if-changed={ARGON2_DIR}");
     println!("cargo:rerun-if-changed={SIMD_CHOICE}");
     println!("cargo:rerun-if-changed={PORTABLE_FILL}");

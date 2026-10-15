@@ -24,7 +24,7 @@ use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
 use crate::packing::{self, STATE_BYTES};
 use crate::suite::{DS_MASK, DS_SALT, ROUNDS, SAME_LENGTH_DS_MASK, SAME_LENGTH_DS_SALT};
-use crate::{MhfeError, Password, WorkFactor};
+use crate::{CipherError, Password, WorkFactor};
 
 type Blake2b256 = Blake2b<U32>;
 type HmacSha256 = Hmac<Sha256>;
@@ -38,8 +38,8 @@ const MESSAGE_SETTINGS_BYTES: usize = 16;
 type Halves = (LockedBytes, LockedBytes);
 
 /// Called with the number (1 to 12) of each round before it starts. Returning an error, such as
-/// [`MhfeError::Cancelled`], stops the permutation before that round.
-pub(crate) type RoundCallback<'a> = &'a mut dyn FnMut(u32) -> Result<(), MhfeError>;
+/// [`CipherError::Cancelled`], stops the permutation before that round.
+pub(crate) type RoundCallback<'a> = &'a mut dyn FnMut(u32) -> Result<(), crate::CancelledError>;
 
 /// The shape of one suite's permutation: its domain strings, the size of its halves and whether
 /// its round message carries the entropy size.
@@ -63,15 +63,13 @@ impl Geometry {
 
     /// Suite 4 for an original of `entropy_bytes` bytes (16, 20, 24 or 28): the entropy itself
     /// in two halves of `ENT/2` bits.
-    pub(crate) fn same_length(entropy_bytes: usize) -> Result<Self, MhfeError> {
+    pub(crate) fn same_length(entropy_bytes: usize) -> Result<Self, CipherError> {
         // The entropy of a 12- to 21-word phrase.
         let words = packing::words_of_entropy(entropy_bytes);
         if !packing::SHORT_WORD_COUNTS.contains(&words)
             || packing::entropy_of_words(words) != entropy_bytes
         {
-            return Err(MhfeError::Internal(format!(
-                "a same-length container cannot hold {entropy_bytes} bytes of entropy"
-            )));
+            return Err((crate::FormatError::SameLengthEntropy(entropy_bytes)).into());
         }
         Ok(Self {
             ds_salt: SAME_LENGTH_DS_SALT,
@@ -101,15 +99,52 @@ impl Geometry {
 /// All values of one round, for test vectors. States are `L || R` before and after the round.
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct RoundTrace {
-    pub(crate) round: u32,
-    pub(crate) state_before: Vec<u8>,
+    round: u32,
+    state_before: Vec<u8>,
     /// `BE32(MEM) || BE32(PIM) || [BE32(ENT)] || BE32(i) || R`, which follows DS_SALT in the
     /// salt input and DS_MASK in the mask message.
-    pub(crate) message: Vec<u8>,
-    pub(crate) salt: [u8; SALT_BYTES],
-    pub(crate) key: [u8; KEY_BYTES],
-    pub(crate) mask: Vec<u8>,
-    pub(crate) state_after: Vec<u8>,
+    message: Vec<u8>,
+    salt: [u8; SALT_BYTES],
+    key: [u8; KEY_BYTES],
+    mask: Vec<u8>,
+    state_after: Vec<u8>,
+}
+
+impl RoundTrace {
+    /// The recorded round, borrowed without copying its bytes.
+    pub(crate) fn round(&self) -> u32 {
+        self.round
+    }
+
+    /// The recorded state before, borrowed without copying its bytes.
+    pub(crate) fn state_before(&self) -> &[u8] {
+        &self.state_before
+    }
+
+    /// The recorded message, borrowed without copying its bytes.
+    pub(crate) fn message(&self) -> &[u8] {
+        &self.message
+    }
+
+    /// The recorded salt, borrowed without copying its bytes.
+    pub(crate) fn salt(&self) -> &[u8; SALT_BYTES] {
+        &self.salt
+    }
+
+    /// The recorded key, borrowed without copying its bytes.
+    pub(crate) fn key(&self) -> &[u8; KEY_BYTES] {
+        &self.key
+    }
+
+    /// The recorded mask, borrowed without copying its bytes.
+    pub(crate) fn mask(&self) -> &[u8] {
+        &self.mask
+    }
+
+    /// The recorded state after, borrowed without copying its bytes.
+    pub(crate) fn state_after(&self) -> &[u8] {
+        &self.state_after
+    }
 }
 
 /// The permutation for one password, one work factor and one suite's geometry.
@@ -141,7 +176,7 @@ impl<'a> Permutation<'a> {
         x: &[u8],
         on_round: RoundCallback<'_>,
         mut trace: Option<&mut Vec<RoundTrace>>,
-    ) -> Result<LockedBytes, MhfeError> {
+    ) -> Result<LockedBytes, CipherError> {
         let mut halves = self.split(x)?;
         for round in 0..ROUNDS {
             on_round(round + 1)?;
@@ -158,7 +193,7 @@ impl<'a> Permutation<'a> {
         y: &[u8],
         on_round: RoundCallback<'_>,
         mut trace: Option<&mut Vec<RoundTrace>>,
-    ) -> Result<LockedBytes, MhfeError> {
+    ) -> Result<LockedBytes, CipherError> {
         let mut halves = self.split(y)?;
         for (step, round) in (0..ROUNDS).rev().enumerate() {
             on_round(step as u32 + 1)?;
@@ -177,7 +212,7 @@ impl<'a> Permutation<'a> {
     }
 
     /// `RoundMask(i, R)` together with the salt and key it passes through.
-    fn round_values(&mut self, round: u32, right: &[u8]) -> Result<RoundValues, MhfeError> {
+    fn round_values(&mut self, round: u32, right: &[u8]) -> Result<RoundValues, CipherError> {
         let message = round_message(self.geometry, self.work, round, right);
         let mut values = RoundValues {
             salt: round_salt(self.geometry, &message),
@@ -192,13 +227,13 @@ impl<'a> Permutation<'a> {
     }
 
     /// `L_0` is the first half of the state and `R_0` the second.
-    fn split(&self, state: &[u8]) -> Result<Halves, MhfeError> {
+    fn split(&self, state: &[u8]) -> Result<Halves, CipherError> {
         if state.len() != self.geometry.state_bytes() {
-            return Err(MhfeError::Internal(format!(
-                "a state of {} bytes does not fit halves of {} bytes",
-                state.len(),
-                self.geometry.half_bytes
-            )));
+            return Err((crate::FormatError::StateGeometry {
+                state_bytes: state.len(),
+                half_bytes: self.geometry.half_bytes,
+            })
+            .into());
         }
         let (left, right) = state.split_at(self.geometry.half_bytes);
         Ok((LockedBytes::copy_of(left), LockedBytes::copy_of(right)))
@@ -358,13 +393,14 @@ pub(crate) mod tests {
     /// A stand-in for Argon2 in structural tests: a key that depends on password and salt.
     pub(crate) struct HashEngine;
 
+    // Deliberate copy: each independent test engine implements the same trait signature.
     impl Argon2Engine for HashEngine {
         fn derive(
             &mut self,
             password: &[u8],
             salt: &[u8; SALT_BYTES],
             key: &mut [u8; KEY_BYTES],
-        ) -> Result<(), MhfeError> {
+        ) -> Result<(), crate::engine::EngineError> {
             // sha2 implements an older `Digest` trait than blake2, so name it explicitly.
             let digest = <Sha256 as sha2::Digest>::digest([password, &salt[..]].concat());
             key.copy_from_slice(&digest);
@@ -463,14 +499,14 @@ pub(crate) mod tests {
             &mut |round| {
                 seen.push(round);
                 if round == 4 {
-                    Err(MhfeError::Cancelled)
+                    Err(crate::CancelledError)
                 } else {
                     Ok(())
                 }
             },
             None,
         );
-        assert_eq!(result.unwrap_err(), MhfeError::Cancelled);
+        assert_eq!(result.unwrap_err(), CipherError::Cancelled);
         assert_eq!(seen, vec![1, 2, 3, 4]);
     }
 

@@ -299,7 +299,7 @@ export async function checkMadePasswordRefusals(passwords) {
   await expectRefusal(
     passwords.make({ kind: "emoji" }),
     "INVALID_REQUEST",
-    "unknown password kind emoji",
+    "Invalid request: unknown password kind; choose words, checkWord or characters",
     "an unknown kind is refused",
   );
   await expectTypeError(

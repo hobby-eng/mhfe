@@ -5,7 +5,46 @@
 //! directly ([`NativeEngine`]); the WebAssembly build calls its Emscripten build through
 //! JavaScript.
 
-use crate::MhfeError;
+mod error;
+pub use error::{Argon2Failure, EngineError, ReferenceMessage};
+
+/// The selected native reference core, as its diagnostics identify it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArgonCore {
+    /// The x86-64 SSE2 core.
+    Sse2,
+    /// The x86-64 SSSE3 core.
+    Ssse3,
+    /// The portable reference core used by other native targets.
+    Portable,
+}
+impl ArgonCore {
+    /// The source and instruction set named in native diagnostics.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Sse2 => "opt.c with SSE2",
+            Self::Ssse3 => "opt.c with SSSE3",
+            Self::Portable => "ref.c",
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) const fn native(ssse3: bool) -> Self {
+        if cfg!(target_arch = "x86_64") {
+            if ssse3 {
+                Self::Ssse3
+            } else {
+                Self::Sse2
+            }
+        } else {
+            Self::Portable
+        }
+    }
+}
+impl std::fmt::Display for ArgonCore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
 
 /// Argon2id lanes, fixed by the specification. They run in parallel where threads exist.
 pub const LANES: u32 = 4;
@@ -14,32 +53,18 @@ pub const SALT_BYTES: usize = 16;
 /// Length of the Argon2id output `K_i`.
 pub const KEY_BYTES: usize = 32;
 
-/// Memory and passes of one Argon2id call.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Argon2Cost {
-    /// Memory in KiB, the unit Argon2 uses.
-    pub memory_kib: u32,
-    /// Passes over the memory, Argon2's `t`.
-    pub passes: u32,
-}
-
-impl Argon2Cost {
-    /// The memory in bytes.
-    pub fn memory_bytes(self) -> u64 {
-        u64::from(self.memory_kib) * 1024
-    }
-}
+pub use crate::suite::Argon2Cost;
 
 /// Computes `Argon2id(password, salt)` at the cost the engine was created for.
 pub trait Argon2Engine {
     /// Writes the 32-byte Argon2id tag of `password` and `salt` into `key`; an engine that cannot
-    /// compute it returns [`MhfeError::Argon2`] or the error of its memory.
+    /// compute it returns [`EngineError::Argon2`] or the error of its memory.
     fn derive(
         &mut self,
         password: &[u8],
         salt: &[u8; SALT_BYTES],
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError>;
+    ) -> Result<(), EngineError>;
 }
 
 /// What a key holds before an engine writes it. An engine that leaves it as it was, or gives only
@@ -55,14 +80,12 @@ pub(crate) fn mark_key_unwritten(key: &mut [u8; KEY_BYTES]) {
     *key = UNWRITTEN_KEY;
 }
 
-/// Refuses a key that the engine left unwritten or set to zeros, with [`MhfeError::Argon2`].
+/// Refuses a key that the engine left unwritten or set to zeros, with [`EngineError::Argon2`].
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
-pub(crate) fn check_key_written(key: &mut [u8; KEY_BYTES]) -> Result<(), MhfeError> {
+pub(crate) fn check_key_written(key: &mut [u8; KEY_BYTES]) -> Result<(), EngineError> {
     if *key == UNWRITTEN_KEY || key.iter().all(|&byte| byte == 0) {
         *key = [0; KEY_BYTES];
-        return Err(MhfeError::Argon2(
-            "the Argon2 engine returned without writing the key".to_owned(),
-        ));
+        return Err(EngineError::Argon2(Argon2Failure::UnwrittenKey));
     }
     Ok(())
 }
@@ -87,10 +110,7 @@ pub use known_answers::{BrowserArgon2Check, BrowserArgon2SizesCheck};
 #[cfg(not(target_arch = "wasm32"))]
 pub use known_answers::{NativeArgon2Check, NativeArgon2SizesCheck};
 #[cfg(not(target_arch = "wasm32"))]
-pub use native::{
-    available_memory_bytes, check_can_run, highest_available_level, NativeEngine,
-    HIGHEST_MEMORY_LEVEL,
-};
+pub use native::{NativeEngine, HIGHEST_MEMORY_LEVEL};
 
 #[cfg(test)]
 mod tests {

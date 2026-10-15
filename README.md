@@ -41,8 +41,8 @@ years later on an offline computer. It protects the stored phrase, not the walle
 address hashes; a break in those algorithms, including a quantum attack, can still put funds at risk.
 
 The phrase's entropy passes through twelve Feistel rounds. Each round derives its key from the
-password through Argon2id and depends on the previous round, so a password guess requires a full
-recovery. The result is encoded with an ordinary BIP39 checksum. No salt, version or settings are
+password through Argon2id and uses the previous round's state. A recovery runs all twelve calls
+in sequence. The result is encoded with an ordinary BIP39 checksum. No salt, version or settings are
 stored alongside it; retain the [settings](#settings-pim-and-memory-level) if you change them.
 
 ### 24 words or the same length
@@ -138,8 +138,9 @@ Windows, Windows PE is preferable to an everyday system, but MHFE has not been t
 
 Use encrypted swap or none. The operating system can otherwise write Argon2's work area to disk,
 leaving material that makes password guesses cheaper; it can remain there for years. MHFE warns
-about unencrypted swap on Linux and reports whether secrets could be locked out of swap. A live
-system usually has none; macOS encrypts swap, and Windows needs BitLocker or no page file. The
+about unencrypted or unverified swap and reports whether secrets could be locked out of swap. A live
+system usually has none; macOS encrypts swap, and Windows needs BitLocker or no page file. MHFE
+cannot verify the Windows pagefile's protection and warns about that uncertainty. The
 [security notes](https://github.com/hobby-eng/mhfe/blob/main/SECURITY.md#secrets) explain the
 protections and their limits.
 
@@ -381,7 +382,7 @@ application feature, outside the specification's uniform-source assumptions.
 Before drawing, MHFE reports the remaining entropy for someone who knows the wishes:
 
 - A fixed-position word costs 11 bits, one anywhere about 6.4 bits, and an excluded word about 0.02.
-- The source check alone leaves about 240 bits. A fixed word, an excluded word and that check leave
+- The wallet check alone leaves about 240 bits. A fixed word, an excluded word and that check leave
   at least 228.98 bits; without the check the minimum is 244.98.
 - Less than 240 bits is allowed but not recommended.
 
@@ -406,7 +407,7 @@ the same container, settings and password always give the same wallet.
 Run [`mhfe self-test --vectors`](#mhfe-self-test) on the computer before funding a hidden wallet.
 All wallets and their passwords share a private screen cleared at the end; no summary records the
 wallets or their count, and the command requires that screen. A password whose reading passes a
-short original's built-in check is refused, as is one passing the optional source check with the
+short original's built-in check is refused, as is one passing the optional wallet check with the
 main wallet's passphrase or with none, so a hidden wallet cannot be labelled verified.
 
 Keep each password strong and independent. Avoid transaction links to you or the main wallet;

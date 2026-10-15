@@ -13,8 +13,8 @@ use crate::engine::browser::JsArgon2;
 use crate::rekey::{ConfirmedPhrase, Rekey, ReplacementRehearsal};
 use crate::wasm_api::{js_error, json, secret_json, SecretText};
 use crate::{
-    refuse_unused_passphrase, Confirmation, MhfeError, PassphraseReferences, Password,
-    PhraseLength, RecoveredForRekey, Settings, WordCount, WorkFactor,
+    Confirmation, MhfeError, PassphraseReferences, Password, PhraseLength, RecoveredForRekey,
+    Settings, WordCount, WorkFactor,
 };
 
 /// Where a rekey stands, so that its calls come in their order only.
@@ -68,7 +68,7 @@ struct RecoveredJson<'a> {
     /// The phrase for the owner to compare with their backup, when the owner confirms it; null
     /// when the built-in check or the wallet confirmed it.
     owner_check: Option<PhraseJson<'a>>,
-    /// The 16-bit source check of a 24-word reading, with the reference's passphrase, or the empty
+    /// The 16-bit wallet check of a 24-word reading, with the reference's passphrase, or the empty
     /// one; null for other lengths. It never confirms a rekey: 16 bits are too few.
     wallet_check: Option<bool>,
     /// Whether the owner's yes must come with the wallet's BIP39 passphrase, for the fingerprint
@@ -119,18 +119,20 @@ fn with_rekey_confirmation<T>(
     passphrase: &SecretText,
     then: impl FnOnce(Confirmation<'_>, &str) -> T,
 ) -> Result<T, JsError> {
-    let text = passphrase.text(MhfeError::InvalidPassphrase)?;
+    let text = passphrase.passphrase()?;
     // The wallet check (16 bits) and a word count never confirm a phrase to seal again.
     let wallet = match kind {
         "builtInCheck" | "owner" => {
-            refuse_unused_passphrase(text, PassphraseReferences::Rekey).map_err(js_error)?;
+            PassphraseReferences::Rekey
+                .refuse_unused(text)
+                .map_err(js_error)?;
             None
         }
         "address" | "fingerprint" => Some(reference_target(kind, reference, coin, path)?),
-        other => {
-            return Err(js_error(MhfeError::InvalidRequest(format!(
-                "a rekey is not confirmed by {other}"
-            ))))
+        _ => {
+            return Err(js_error(MhfeError::Rekey(
+                crate::rekey::RekeyError::UnsupportedConfirmation,
+            )))
         }
     };
     let reference = wallet.as_ref().map(|wallet| wallet.with(text));
@@ -231,7 +233,7 @@ impl RekeySession {
     /// confirmation that cannot confirm a phrase of the rekey's length, come before the first
     /// round and before the Argon2 build's 1 MiB known answer. Returns JSON
     /// `{ ownerCheck, walletCheck }`: for "owner", the phrase to compare, and the rekey then waits
-    /// for `ownerAnswer`; `walletCheck` the 16-bit source check of a 24-word reading with the
+    /// for `ownerAnswer`; `walletCheck` the 16-bit wallet check of a 24-word reading with the
     /// reference's passphrase or the empty one, null for other lengths. A refusal after the
     /// rounds that allows another confirmation (AMBIGUOUS_LENGTH, LENGTH_DIFFERS) keeps the
     /// recovery for `confirmAgain`; `ownerLengths` then says whether the owner may give it.
@@ -361,7 +363,9 @@ impl RekeySession {
         // Only the value true is a yes: a bool of the ABI would take 1, "1" or [1] as one.
         if confirmed.as_bool() != Some(true) {
             self.end();
-            return Err(js_error(MhfeError::NotConfirmedByOwner));
+            return Err(js_error(MhfeError::Rekey(
+                crate::rekey::RekeyError::OwnerRejected,
+            )));
         }
         // The library seals an owner's phrase only once it has the yes.
         let confirmed = self
@@ -370,10 +374,10 @@ impl RekeySession {
             .map(ConfirmedPhrase::confirmed_by_owner);
         let rehearsal = match &confirmed {
             Some(confirmed) => passphrase
-                .text(MhfeError::InvalidPassphrase)
+                .passphrase()
                 .and_then(|text| confirmed.replacement_rehearsal(text).map_err(js_error)),
-            None => Err(js_error(MhfeError::Internal(
-                "an owner's answer without a phrase".to_owned(),
+            None => Err(js_error(MhfeError::Rekey(
+                crate::rekey::RekeyError::OwnerAnswerWithoutPhrase,
             ))),
         };
         self.confirmed = confirmed;
@@ -397,8 +401,8 @@ impl RekeySession {
             self.new_work,
             self.rehearsal.take(),
         ) else {
-            return Err(js_error(MhfeError::Internal(
-                "a confirmed rekey lacks its phrase or new password".to_owned(),
+            return Err(js_error(MhfeError::Rekey(
+                crate::rekey::RekeyError::MissingSealingInputs,
             )));
         };
         let (mut mhfe, _) = mhfe_with(work, self.argon2.clone().unchecked_into())?;
@@ -466,9 +470,9 @@ impl RekeySession {
         passphrase: &SecretText,
         on_round: &js_sys::Function,
     ) -> Result<(ConfirmedPhrase, js_sys::JsString), NotConfirmed> {
-        let recovered = self.recovered.as_ref().ok_or_else(|| {
-            MhfeError::Internal("a rekey confirms without its recovery".to_owned())
-        })?;
+        let recovered = self.recovered.as_ref().ok_or(MhfeError::Rekey(
+            crate::rekey::RekeyError::ConfirmationWithoutRecovery,
+        ))?;
         with_rekey_confirmation(
             input.kind,
             input.reference,
@@ -508,7 +512,10 @@ impl RekeySession {
                 };
                 // Every recovery evaluates it on a 24-word reading (the specification's recovery
                 // rules), with the passphrase given or the empty one.
-                let wallet_check = confirmed.phrase().passes_wallet_check(text)?;
+                let wallet_check = confirmed
+                    .phrase()
+                    .passes_wallet_check(text)
+                    .map_err(MhfeError::from)?;
                 let owner_check = confirmed
                     .awaits_owner()
                     .then(|| PhraseJson::of(confirmed.phrase()))
@@ -528,8 +535,8 @@ impl RekeySession {
             return Ok(());
         }
         self.end();
-        Err(js_error(MhfeError::InvalidRequest(
-            "a rekey step out of its order".to_owned(),
+        Err(js_error(MhfeError::Rekey(
+            crate::rekey::RekeyError::StepOutOfOrder,
         )))
     }
 

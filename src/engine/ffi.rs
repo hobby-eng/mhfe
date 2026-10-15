@@ -16,7 +16,7 @@ use zeroize::Zeroize;
 #[cfg(target_os = "linux")]
 use crate::memory::os::page_size;
 
-use crate::MhfeError;
+use super::{Argon2Failure, EngineError, ReferenceMessage};
 
 // Values from vendor/phc-winner-argon2/include/argon2.h.
 const ARGON2_OK: c_int = 0;
@@ -122,19 +122,88 @@ unsafe extern "C" {
 
 /// Inputs of one Argon2 call. MHFE leaves the secret and the associated data empty; the tests
 /// fill them to check this binding against the RFC 9106 test vector.
+#[derive(Clone, Copy)]
 pub(super) struct Argon2Inputs<'a> {
-    pub password: &'a [u8],
-    pub salt: &'a [u8],
-    pub secret: &'a [u8],
-    pub associated_data: &'a [u8],
-    pub passes: u32,
-    pub memory_kib: u32,
-    pub lanes: u32,
-    pub threads: u32,
-    pub version: u32,
+    password: &'a [u8],
+    salt: &'a [u8],
+    secret: &'a [u8],
+    associated_data: &'a [u8],
+    passes: u32,
+    memory_kib: u32,
+    lanes: u32,
+    threads: u32,
+    version: u32,
     /// Run the SSSE3 copy of the Argon2 core instead of the SSE2 one; only x86-64 has both, and
     /// only a processor with SSSE3 may get `true`.
-    pub ssse3: bool,
+    ssse3: bool,
+}
+
+impl<'a> Argon2Inputs<'a> {
+    /// Borrows MHFE's two inputs and owns their fixed native backend parameters.
+    pub(super) fn mhfe(
+        password: &'a [u8],
+        salt: &'a [u8; super::SALT_BYTES],
+        cost: super::Argon2Cost,
+        ssse3: bool,
+    ) -> Self {
+        Self {
+            password,
+            salt,
+            secret: &[],
+            associated_data: &[],
+            passes: cost.passes(),
+            memory_kib: cost.memory_kib(),
+            lanes: super::LANES,
+            threads: super::LANES,
+            version: ARGON2_VERSION_13,
+            ssse3,
+        }
+    }
+
+    /// The native self-check's RFC vector, including its secret and associated data.
+    pub(super) fn rfc_9106(ssse3: bool) -> Argon2Inputs<'static> {
+        use super::known_answers::rfc_9106 as vector;
+        Argon2Inputs {
+            password: &vector::PASSWORD,
+            salt: &vector::SALT,
+            secret: &vector::SECRET,
+            associated_data: &vector::ASSOCIATED_DATA,
+            passes: vector::PASSES,
+            memory_kib: vector::MEMORY_KIB,
+            lanes: vector::LANES,
+            threads: vector::LANES,
+            version: ARGON2_VERSION_13,
+            ssse3,
+        }
+    }
+
+    /// Runs the same lane layout on a selected number of native threads.
+    pub(super) fn with_threads(mut self, threads: u32) -> Self {
+        self.threads = threads;
+        self
+    }
+
+    #[cfg(test)]
+    pub(super) fn uses_ssse3(self) -> bool {
+        self.ssse3
+    }
+
+    #[cfg(test)]
+    pub(super) fn threads(self) -> u32 {
+        self.threads
+    }
+
+    #[cfg(test)]
+    pub(super) fn has_secret(self) -> bool {
+        !self.secret.is_empty()
+    }
+
+    /// Only fault-injection controls can change the profile's fixed lane count.
+    #[cfg(test)]
+    pub(super) fn with_lanes(mut self, lanes: u32) -> Self {
+        self.lanes = lanes;
+        self.with_threads(lanes)
+    }
 }
 
 /// Runs Argon2id in `work_area` and writes the tag into `output`.
@@ -142,7 +211,7 @@ pub(super) fn argon2id(
     inputs: &Argon2Inputs<'_>,
     work_area: &mut WorkArea,
     output: &mut [u8],
-) -> Result<(), MhfeError> {
+) -> Result<(), EngineError> {
     let mut context = Argon2Context {
         out: output.as_mut_ptr(),
         outlen: length_u32(output)?,
@@ -172,7 +241,7 @@ pub(super) fn argon2id(
     run(&mut context, work_area)
 }
 
-fn run(context: &mut Argon2Context, work_area: &mut WorkArea) -> Result<(), MhfeError> {
+fn run(context: &mut Argon2Context, work_area: &mut WorkArea) -> Result<(), EngineError> {
     CURRENT_WORK_AREA.with(|slot| slot.set(Some((work_area.start, work_area.layout.size()))));
     // SAFETY: every pointer in `context` is either NULL with length 0 or points to a live
     // buffer of the stated length that outlives this call: the inputs are shared borrows the C
@@ -191,22 +260,22 @@ fn run(context: &mut Argon2Context, work_area: &mut WorkArea) -> Result<(), Mhfe
         // created, argon2_ctx returns before finalize(), which is where the C code wipes the
         // work area. Blocks derived from the password may be left in it, so wipe it here.
         work_area.wipe();
-        Err(MhfeError::Argon2(error_message(code)))
+        Err(EngineError::Argon2(Argon2Failure::Reference(
+            error_message(code),
+        )))
     }
 }
 
-fn error_message(code: c_int) -> String {
+fn error_message(code: c_int) -> ReferenceMessage {
     let message = argon2_error_message(code);
     // SAFETY: argon2_error_message returns a pointer to a static NUL-terminated string
     // literal for every input, valid for the whole run of the program.
-    unsafe { CStr::from_ptr(message) }
-        .to_string_lossy()
-        .into_owned()
+    let text = unsafe { CStr::from_ptr(message) }.to_string_lossy();
+    ReferenceMessage::read(&text).unwrap_or_else(ReferenceMessage::unknown)
 }
 
-fn length_u32(buffer: &[u8]) -> Result<u32, MhfeError> {
-    u32::try_from(buffer.len())
-        .map_err(|_| MhfeError::Internal("an Argon2 input exceeds 4 GiB".to_owned()))
+fn length_u32(buffer: &[u8]) -> Result<u32, EngineError> {
+    u32::try_from(buffer.len()).map_err(|_| EngineError::InputTooLong)
 }
 
 /// The C code expects NULL for an empty secret or associated data.
@@ -226,11 +295,10 @@ pub(super) struct WorkArea {
 }
 
 impl WorkArea {
-    pub(super) fn allocate(bytes: u64) -> Result<Self, MhfeError> {
-        let refused = MhfeError::MemoryAllocation { bytes };
-        let size = usize::try_from(bytes).map_err(|_| refused.clone())?;
-        let layout =
-            Layout::from_size_align(size, WORK_AREA_ALIGNMENT).map_err(|_| refused.clone())?;
+    pub(super) fn allocate(bytes: u64) -> Result<Self, EngineError> {
+        let refused = EngineError::MemoryAllocation { bytes };
+        let size = usize::try_from(bytes).map_err(|_| refused)?;
+        let layout = Layout::from_size_align(size, WORK_AREA_ALIGNMENT).map_err(|_| refused)?;
         if layout.size() == 0 {
             return Err(refused);
         }
@@ -484,7 +552,7 @@ mod tests {
     }
 
     /// Runs the C engine with a fresh work area big enough for `inputs`.
-    fn c_tag(inputs: &Argon2Inputs<'_>, output_len: usize) -> Result<Vec<u8>, MhfeError> {
+    fn c_tag(inputs: &Argon2Inputs<'_>, output_len: usize) -> Result<Vec<u8>, EngineError> {
         let kib = inputs.memory_kib.max(minimum_memory_kib(inputs.lanes));
         let mut work_area = WorkArea::allocate(u64::from(kib) * 1024)?;
         let mut output = vec![0u8; output_len];
@@ -666,7 +734,9 @@ mod tests {
         let error = argon2id(&inputs(password, salt), &mut work_area, &mut output).unwrap_err();
         assert_eq!(
             error,
-            MhfeError::Argon2("Memory allocation error".to_owned())
+            EngineError::Argon2(Argon2Failure::Reference(
+                ReferenceMessage::read("Memory allocation error").unwrap()
+            ))
         );
     }
 
@@ -704,10 +774,12 @@ mod tests {
         short_salt.salt = b"1234567";
         assert_eq!(
             c_tag(&short_salt, 32).unwrap_err(),
-            MhfeError::Argon2("Salt is too short".to_owned())
+            EngineError::Argon2(Argon2Failure::Reference(
+                ReferenceMessage::read("Salt is too short").unwrap()
+            ))
         );
-        assert_eq!(error_message(-22), "Memory allocation error");
-        assert_eq!(error_message(-15), "Memory cost is too large");
+        assert_eq!(error_message(-22).to_string(), "Memory allocation error");
+        assert_eq!(error_message(-15).to_string(), "Memory cost is too large");
     }
 
     #[test]

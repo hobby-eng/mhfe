@@ -7,7 +7,8 @@ use std::sync::OnceLock;
 
 use zeroize::Zeroizing;
 
-use crate::MhfeError;
+mod error;
+pub use error::{EffError, ListIssue};
 
 /// The EFF large wordlist, unchanged: "11111<TAB>abacus" to "66666<TAB>zoom", one per line.
 ///
@@ -57,26 +58,23 @@ impl EffList {
         Self::try_get().expect("the vendored EFF list is complete")
     }
 
-    /// The list, read on first use, or [`MhfeError::Internal`] when the vendored file is damaged.
-    pub fn try_get() -> Result<&'static EffList, MhfeError> {
-        static LIST: OnceLock<Result<EffList, &'static str>> = OnceLock::new();
+    /// The list, read on first use, or [`EffError::DamagedList`] when the vendored file is damaged.
+    pub fn try_get() -> Result<&'static EffList, EffError> {
+        static LIST: OnceLock<Result<EffList, ListIssue>> = OnceLock::new();
         LIST.get_or_init(|| EffList::read(EFF_LIST))
             .as_ref()
-            .map_err(|reason| MhfeError::Internal((*reason).to_owned()))
+            .map_err(|reason| EffError::DamagedList(*reason))
     }
 
     /// Reads a list in the vendored file's form: dice digits, a tab and a word on every line.
-    fn read(text: &'static str) -> Result<Self, &'static str> {
+    fn read(text: &'static str) -> Result<Self, ListIssue> {
         let mut words = Vec::with_capacity(LIST_SIZE);
         for line in text.lines() {
-            let word = line
-                .split('\t')
-                .nth(1)
-                .ok_or("a line of the vendored EFF list holds no word")?;
+            let word = line.split('\t').nth(1).ok_or(ListIssue::MissingWord)?;
             words.push(word);
         }
         if words.len() != LIST_SIZE {
-            return Err("the vendored EFF list is incomplete");
+            return Err(ListIssue::Incomplete);
         }
         let index: HashMap<&'static str, usize> = words
             .iter()
@@ -84,7 +82,7 @@ impl EffList {
             .map(|(position, &word)| (word, position))
             .collect();
         if index.len() != LIST_SIZE {
-            return Err("the vendored EFF list holds a word twice");
+            return Err(ListIssue::Duplicate);
         }
         Ok(Self { words, index })
     }
@@ -125,20 +123,27 @@ impl EffList {
         found.dedup();
         found.len()
     }
-}
 
-/// The word index that five dice digits select, read as a number in base 6 in the order of the
-/// list; `None` unless the text is exactly five digits from 1 to 6, spaces around allowed.
-pub fn index_of_rolls(rolls: &str) -> Option<usize> {
-    let digits = rolls.trim().as_bytes();
-    if digits.len() != DICE_PER_WORD || !digits.iter().all(|digit| (b'1'..=b'6').contains(digit)) {
-        return None;
+    /// The word index that five dice digits select, read as a number in base 6 in the order of the
+    /// list; `None` unless the text is exactly five digits from 1 to 6, spaces around allowed.
+    pub fn index_of_rolls(rolls: &str) -> Option<usize> {
+        let digits = rolls.trim().as_bytes();
+        if digits.len() != DICE_PER_WORD
+            || !digits.iter().all(|digit| (b'1'..=b'6').contains(digit))
+        {
+            return None;
+        }
+        Some(
+            digits
+                .iter()
+                .fold(0, |index, digit| index * 6 + usize::from(digit - b'1')),
+        )
     }
-    Some(
-        digits
-            .iter()
-            .fold(0, |index, digit| index * 6 + usize::from(digit - b'1')),
-    )
+
+    /// The index of drawn word `number`, from 1, or `INVALID_DICE_ROLLS` naming that word.
+    pub fn word_index_of_rolls(number: usize, rolls: &str) -> Result<usize, EffError> {
+        Self::index_of_rolls(rolls).ok_or(EffError::InvalidDiceRolls(number))
+    }
 }
 
 #[cfg(test)]
@@ -161,17 +166,14 @@ mod tests {
     fn a_damaged_list_is_an_error_not_a_panic() {
         assert_eq!(
             EffList::read("11111\tabacus\n").err(),
-            Some("the vendored EFF list is incomplete")
+            Some(ListIssue::Incomplete)
         );
         assert_eq!(
             EffList::read("11111 abacus\n").err(),
-            Some("a line of the vendored EFF list holds no word")
+            Some(ListIssue::MissingWord)
         );
         let doubled: &'static str = EFF_LIST.replacen("\tzoom", "\tabacus", 1).leak();
-        assert_eq!(
-            EffList::read(doubled).err(),
-            Some("the vendored EFF list holds a word twice")
-        );
+        assert_eq!(EffList::read(doubled).err(), Some(ListIssue::Duplicate));
         assert!(EffList::try_get().is_ok());
     }
 
@@ -180,12 +182,12 @@ mod tests {
         let list = EffList::get();
         for line in EFF_LIST.lines().step_by(97) {
             let (rolls, word) = line.split_once('\t').unwrap();
-            assert_eq!(list.word(index_of_rolls(rolls).unwrap()), word);
+            assert_eq!(list.word(EffList::index_of_rolls(rolls).unwrap()), word);
         }
-        assert_eq!(index_of_rolls("11111"), Some(0));
-        assert_eq!(index_of_rolls(" 66666 "), Some(LIST_SIZE - 1));
+        assert_eq!(EffList::index_of_rolls("11111"), Some(0));
+        assert_eq!(EffList::index_of_rolls(" 66666 "), Some(LIST_SIZE - 1));
         for invalid in ["1111", "111111", "11117", "01111", "abcde"] {
-            assert_eq!(index_of_rolls(invalid), None, "{invalid}");
+            assert_eq!(EffList::index_of_rolls(invalid), None, "{invalid}");
         }
     }
 

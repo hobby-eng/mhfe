@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use mhfe::MhfeError;
+use mhfe::{ErrorCode, MhfeError};
 
 // Deliberate copy in the standalone Python launcher, compared by its parity tests.
 pub(crate) const SUCCESS: i32 = 0;
@@ -29,11 +29,32 @@ pub(crate) const CANCELLED: i32 = 130;
 /// A reason to stop, with the text to show and the exit code to return.
 #[derive(Debug)]
 pub(crate) struct Failure {
-    pub(crate) message: String,
-    pub(crate) exit_code: i32,
+    message: String,
+    exit_code: i32,
 }
 
 impl Failure {
+    /// The already rendered refusal, without granting mutable access to it.
+    pub(crate) fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub(crate) fn exit_code(&self) -> i32 {
+        self.exit_code
+    }
+
+    /// Takes the rendered text when a caller needs ownership, without copying it.
+    #[cfg(test)]
+    pub(crate) fn into_message(self) -> String {
+        self.message
+    }
+
+    /// Adds frontend advice to this refusal while keeping its exit classification.
+    pub(crate) fn with_advice(mut self, advice: &str) -> Self {
+        self.message.push_str(advice);
+        self
+    }
+
     pub(crate) fn invalid_input(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -65,61 +86,59 @@ impl fmt::Display for Failure {
 
 impl From<MhfeError> for Failure {
     fn from(error: MhfeError) -> Self {
-        let exit_code = match error {
-            MhfeError::InvalidPhrase(_)
-            | MhfeError::InvalidContainer(_)
-            | MhfeError::InvalidWordCount(_)
-            | MhfeError::SameLengthNeedsShortPhrase
-            | MhfeError::LengthChoiceNotApplicable { .. }
-            | MhfeError::NoBuiltInCheck { .. }
-            | MhfeError::NoWalletCheck { .. }
-            | MhfeError::NoHiddenWallets { .. }
-            | MhfeError::ReferenceRequired
-            | MhfeError::HiddenWalletPassesCheck
-            | MhfeError::InvalidRepairWords(_)
-            | MhfeError::RepairNotPossible { .. }
-            | MhfeError::TooManyMissingWords { .. }
-            | MhfeError::InvalidPim { .. }
-            | MhfeError::InvalidMemoryLevel { .. }
-            | MhfeError::EmptyPassword
-            | MhfeError::PasswordTooLong(_)
-            | MhfeError::InvalidPasswordUtf8
-            | MhfeError::ControlCharacterInPassword
-            | MhfeError::UnassignedCharacter
-            | MhfeError::InvalidAddress(_)
-            | MhfeError::InvalidDerivationPath(_)
-            | MhfeError::InvalidFingerprint(_)
-            | MhfeError::InvalidPassphrase
-            | MhfeError::PassphraseTooLong(_)
-            | MhfeError::InvalidRequest(_)
-            | MhfeError::InvalidPasswordSize(_)
-            | MhfeError::InvalidDiceRolls(_)
-            | MhfeError::PasswordRepairNotOffered
-            | MhfeError::WalletCheckNeedsPassphrase
-            | MhfeError::PasswordsDiffer
-            | MhfeError::PassphrasesDiffer
-            | MhfeError::NoBuiltInCheckAtLength(_)
-            | MhfeError::NoWalletCheckAtLength(_)
-            | MhfeError::InvalidWordWish(_)
-            | MhfeError::PasswordAlreadyUsed
-            | MhfeError::NewPasswordSameAsOld
-            | MhfeError::InvalidCoin => INVALID_INPUT,
-            MhfeError::VerifierMismatch
-            | MhfeError::AmbiguousLength { .. }
-            | MhfeError::SeveralCandidatesMatch { .. }
-            | MhfeError::LengthDiffers { .. }
-            | MhfeError::ReferenceMismatch
-            | MhfeError::NotConfirmedByOwner => NO_MATCH,
-            MhfeError::NotEnoughMemory { .. }
-            | MhfeError::MemoryAllocation { .. }
-            | MhfeError::MemoryLevelNotSupportedHere { .. } => NOT_ENOUGH_RESOURCES,
-            MhfeError::Cancelled => CANCELLED,
-            MhfeError::FixedPoint
-            | MhfeError::VerificationFailed
-            | MhfeError::Argon2(_)
-            | MhfeError::RandomFailed(_)
-            | MhfeError::SelfCheckFailed { .. }
-            | MhfeError::Internal(_) => INTERNAL_ERROR,
+        let exit_code = match error.error_code() {
+            ErrorCode::InvalidPhrase
+            | ErrorCode::InvalidContainer
+            | ErrorCode::InvalidWordCount
+            | ErrorCode::SameLengthNeedsShortPhrase
+            | ErrorCode::LengthChoiceNotApplicable
+            | ErrorCode::NoBuiltInCheck
+            | ErrorCode::NoWalletCheck
+            | ErrorCode::NoHiddenWallets
+            | ErrorCode::ReferenceRequired
+            | ErrorCode::HiddenWalletPassesCheck
+            | ErrorCode::InvalidRepairWords
+            | ErrorCode::InvalidWordWish
+            | ErrorCode::RepairNotPossible
+            | ErrorCode::TooManyMissingWords
+            | ErrorCode::InvalidPim
+            | ErrorCode::InvalidMemoryLevel
+            | ErrorCode::EmptyPassword
+            | ErrorCode::PasswordTooLong
+            | ErrorCode::InvalidPasswordUtf8
+            | ErrorCode::ControlCharacterInPassword
+            | ErrorCode::UnassignedCharacter
+            | ErrorCode::InvalidAddress
+            | ErrorCode::InvalidDerivationPath
+            | ErrorCode::InvalidFingerprint
+            | ErrorCode::InvalidPassphrase
+            | ErrorCode::PassphraseTooLong
+            | ErrorCode::InvalidRequest
+            | ErrorCode::InvalidPasswordSize
+            | ErrorCode::InvalidDiceRolls
+            | ErrorCode::PasswordRepairNotOffered
+            | ErrorCode::WalletCheckNeedsPassphrase
+            | ErrorCode::PasswordsDiffer
+            | ErrorCode::PassphrasesDiffer
+            | ErrorCode::PasswordAlreadyUsed
+            | ErrorCode::NewPasswordSameAsOld
+            | ErrorCode::InvalidCoin => INVALID_INPUT,
+            ErrorCode::VerifierMismatch
+            | ErrorCode::AmbiguousLength
+            | ErrorCode::SeveralCandidatesMatch
+            | ErrorCode::LengthDiffers
+            | ErrorCode::ReferenceMismatch
+            | ErrorCode::NotConfirmedByOwner => NO_MATCH,
+            ErrorCode::NotEnoughMemory
+            | ErrorCode::MemoryAllocationFailed
+            | ErrorCode::MemoryLevelNotSupportedHere => NOT_ENOUGH_RESOURCES,
+            ErrorCode::Cancelled => CANCELLED,
+            ErrorCode::FixedPoint
+            | ErrorCode::VerificationFailed
+            | ErrorCode::Argon2Failed
+            | ErrorCode::RandomFailed
+            | ErrorCode::SelfCheckFailed
+            | ErrorCode::InternalError => INTERNAL_ERROR,
         };
         Self {
             message: capitalize(&error.to_string()),
@@ -150,5 +169,128 @@ pub(crate) fn capitalize(text: &str) -> String {
     match characters.next() {
         Some(first) => first.to_uppercase().chain(characters).collect(),
         None => String::new(),
+    }
+}
+
+// Each leaf keeps its own errors; only this command-line boundary converts them to exit status.
+impl From<mhfe::PasswordError> for Failure {
+    fn from(error: mhfe::PasswordError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+impl From<mhfe::check_word::ReviewError> for Failure {
+    fn from(error: mhfe::check_word::ReviewError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+impl From<mhfe::new_password::NewPasswordError> for Failure {
+    fn from(error: mhfe::new_password::NewPasswordError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::PhraseError> for Failure {
+    fn from(error: mhfe::PhraseError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::repair::RepairError> for Failure {
+    fn from(error: mhfe::repair::RepairError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::wallet::WalletError> for Failure {
+    fn from(error: mhfe::wallet::WalletError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::word_wishes::WishError> for Failure {
+    fn from(error: mhfe::word_wishes::WishError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::wallet_check::WalletCheckError> for Failure {
+    fn from(error: mhfe::wallet_check::WalletCheckError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::SettingsError> for Failure {
+    fn from(error: mhfe::SettingsError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::engine::EngineError> for Failure {
+    fn from(error: mhfe::engine::EngineError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::CipherError> for Failure {
+    fn from(error: mhfe::CipherError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::HiddenError> for Failure {
+    fn from(error: mhfe::HiddenError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::RehearsalError> for Failure {
+    fn from(error: mhfe::RehearsalError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::search::SearchError> for Failure {
+    fn from(error: mhfe::search::SearchError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::self_test::SelfTestError> for Failure {
+    fn from(error: mhfe::self_test::SelfTestError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::self_check::SelfCheckError> for Failure {
+    fn from(error: mhfe::self_check::SelfCheckError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+impl From<mhfe::FormatError> for Failure {
+    fn from(error: mhfe::FormatError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mhfe::random::RandomError;
+
+    #[test]
+    fn module_owned_random_errors_keep_input_and_environment_exit_categories() {
+        assert_eq!(
+            Failure::from(MhfeError::from(RandomError::Cancelled)).exit_code,
+            CANCELLED
+        );
+        assert_eq!(
+            Failure::from(MhfeError::from(RandomError::InvalidBound(1))).exit_code,
+            INVALID_INPUT
+        );
+        assert_eq!(
+            Failure::from(MhfeError::from(RandomError::Page)).exit_code,
+            INTERNAL_ERROR
+        );
     }
 }

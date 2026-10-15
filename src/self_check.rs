@@ -15,7 +15,15 @@
 //! also holds the shared public zero-12 container fixture used by repair and search checks. It
 //! measures no time, since a clock is not available everywhere the library runs.
 
-use crate::MhfeError;
+use std::borrow::Cow;
+
+mod detail;
+mod error;
+pub use detail::{
+    ArgonVector, CaseKind, CheckContext, DigestAlgorithm, FailureDetail, KnownAnswerDifference,
+    LengthEvidence, LengthReference, RefusedSource,
+};
+pub use error::SelfCheckError;
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -46,21 +54,18 @@ impl Tier {
         }
     }
 
-    /// The tier of a name the browser API uses; another name is [`MhfeError::InvalidRequest`].
-    pub fn from_name(name: &str) -> Result<Self, MhfeError> {
+    /// The tier of a name the browser API uses; another name is [`SelfCheckError::UnknownTier`].
+    pub fn from_name(name: &str) -> Result<Self, SelfCheckError> {
         match name {
             "startup" => Ok(Self::Startup),
             "full" => Ok(Self::Full),
-            other => Err(MhfeError::InvalidRequest(format!(
-                "a self-check tier is \"startup\" or \"full\", not {}",
-                crate::error::quoted(other)
-            ))),
+            _ => Err(SelfCheckError::UnknownTier),
         }
     }
 }
 
 /// What a check found. A detail never holds a secret, a coin's name, a vector's text or the text
-/// of an [`MhfeError`]: it names a case by its number and what differed.
+/// of a library error: it names a case by its number and what differed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ComponentOutcome {
     /// Every case gave its known answer.
@@ -72,12 +77,12 @@ pub enum ComponentOutcome {
     /// The part was not checked in this run, for the reason given.
     NotRun(String),
     /// A case gave another answer, or the part could not compute it: do not use the program.
-    Failed(String),
+    Failed(FailureDetail),
 }
 
-impl From<Result<(), String>> for ComponentOutcome {
+impl From<Result<(), FailureDetail>> for ComponentOutcome {
     /// A part that passed, or failed with the detail it gives.
-    fn from(result: Result<(), String>) -> Self {
+    fn from(result: Result<(), FailureDetail>) -> Self {
         match result {
             Ok(()) => Self::Passed,
             Err(detail) => Self::Failed(detail),
@@ -98,13 +103,21 @@ impl ComponentOutcome {
     }
 
     /// The reason or the case that differed; none for a pass.
-    pub fn detail(&self) -> Option<&str> {
+    pub fn detail(&self) -> Option<Cow<'_, str>> {
         match self {
             Self::Passed => None,
-            Self::Warning(detail)
-            | Self::NotAvailable(detail)
-            | Self::NotRun(detail)
-            | Self::Failed(detail) => Some(detail),
+            Self::Warning(detail) | Self::NotAvailable(detail) | Self::NotRun(detail) => {
+                Some(Cow::Borrowed(detail))
+            }
+            Self::Failed(detail) => Some(Cow::Owned(detail.to_string())),
+        }
+    }
+
+    /// Typed failure metadata; unavailable, skipped and warning outcomes remain distinct.
+    pub fn failure(&self) -> Option<&FailureDetail> {
+        match self {
+            Self::Failed(detail) => Some(detail),
+            Self::Passed | Self::Warning(_) | Self::NotAvailable(_) | Self::NotRun(_) => None,
         }
     }
 
@@ -214,25 +227,22 @@ impl SelfCheckReport {
             .filter(|result| matches!(result.outcome, ComponentOutcome::Warning(_)))
     }
 
-    /// `Ok` when no part failed, else [`MhfeError::SelfCheckFailed`] for the first that did: what
+    /// `Ok` when no part failed, else [`SelfCheckError::Failed`] for the first that did: what
     /// a front end returns before it asks for anything secret.
-    pub fn require_passed(&self) -> Result<(), MhfeError> {
-        match self.first_failure() {
-            None => Ok(()),
-            Some(failed) => Err(MhfeError::SelfCheckFailed {
-                component: failed.label.to_owned(),
-                detail: failed.outcome.detail().unwrap_or_default().to_owned(),
-            }),
-        }
+    pub fn require_passed(&self) -> Result<(), SelfCheckError> {
+        self.results
+            .iter()
+            .find_map(|result| {
+                result
+                    .outcome
+                    .failure()
+                    .map(|detail| SelfCheckError::Failed {
+                        component: result.label,
+                        detail: detail.clone(),
+                    })
+            })
+            .map_or(Ok(()), Err)
     }
-}
-
-/// The message of a part that failed, as every front end says it: what failed (such as "the
-/// self-test failed"), the part's label and the detail, and the advice to stop. A detail that ends
-/// a sentence of its own, as a browser's error text may, keeps one period (AUD-015-UI005).
-pub fn failure_message(what: &str, label: &str, detail: &str) -> String {
-    let detail = detail.trim_end_matches('.');
-    format!("{what}: {label}: {detail}. Do not use this program on this computer")
 }
 
 /// Called with the identifier and the label of each check just before it runs, so that a front
@@ -331,7 +341,7 @@ impl<'a> SelfCheck<'a> {
 /// container". Once a case differs, the later ones are not run.
 #[derive(Default)]
 pub(crate) struct Findings {
-    failure: Option<String>,
+    failure: Option<FailureDetail>,
 }
 
 impl Findings {
@@ -342,22 +352,27 @@ impl Findings {
     /// Runs `check` on every item of a list whose items a person would call `noun`s.
     pub(crate) fn each<T>(
         &mut self,
-        noun: &str,
+        noun: CaseKind,
         items: &[T],
-        mut check: impl FnMut(&T) -> Result<(), String>,
+        mut check: impl FnMut(&T) -> Result<(), FailureDetail>,
     ) {
         for (index, item) in items.iter().enumerate() {
             if self.failure.is_some() {
                 return;
             }
             if let Err(what) = check(item) {
-                self.failure = Some(format!("{noun} {} of {} {what}", index + 1, items.len()));
+                self.failure = Some(FailureDetail::Case {
+                    kind: noun,
+                    number: index + 1,
+                    total: items.len(),
+                    cause: Box::new(what),
+                });
             }
         }
     }
 
     /// Records one check that is not part of a list, such as a digest of a whole table.
-    pub(crate) fn one(&mut self, check: impl FnOnce() -> Result<(), String>) {
+    pub(crate) fn one(&mut self, check: impl FnOnce() -> Result<(), FailureDetail>) {
         if self.failure.is_none() {
             if let Err(what) = check() {
                 self.failure = Some(what);
@@ -374,39 +389,43 @@ impl Findings {
 }
 
 /// What a damaged built-in table gives as the detail of a failure.
-pub(crate) const DAMAGED: &str = "the built-in cases are damaged";
+pub(crate) const DAMAGED: KnownAnswerDifference = KnownAnswerDifference::TheBuiltInCasesAreDamaged;
 
 /// [`DAMAGED`] as the detail of a failure.
-pub(crate) fn damaged() -> String {
-    DAMAGED.to_owned()
+pub(crate) fn damaged() -> FailureDetail {
+    DAMAGED.into()
 }
 
 /// `Ok` when `same`, else `Err(what)`: one comparison of a case.
-pub(crate) fn expect(same: bool, what: &str) -> Result<(), String> {
+pub(crate) fn expect(same: bool, what: impl Into<FailureDetail>) -> Result<(), FailureDetail> {
     if same {
         Ok(())
     } else {
-        Err(what.to_owned())
+        Err(what.into())
     }
 }
 
 /// `Ok` when `result` is the refusal with the error code `code`, as a verifier must give for a
 /// case it must refuse; else what it gave instead, by error code only.
-pub(crate) fn expect_refusal<T>(result: Result<T, MhfeError>, code: &str) -> Result<(), String> {
+pub(crate) fn expect_refusal<T, E: crate::ErrorIdentity>(
+    result: Result<T, E>,
+    code: &str,
+) -> Result<(), FailureDetail> {
+    let expected = crate::ErrorCode::from_name(code).ok_or(FailureDetail::UnknownExpectedCode)?;
     match result {
-        Err(error) if error.code() == code => Ok(()),
-        Err(error) => Err(format!(
-            "is refused with {} instead of {code}",
-            error.code()
-        )),
-        Ok(_) => Err(format!("is accepted instead of refused with {code}")),
+        Err(error) if error.error_code() == expected => Ok(()),
+        Err(error) => Err(FailureDetail::RefusalCode {
+            actual: error.error_code(),
+            expected,
+        }),
+        Ok(_) => Err(FailureDetail::Accepted { expected }),
     }
 }
 
 /// What a case that should have worked gave instead: its error code only, since an error's text
 /// may hold a vector's words.
-pub(crate) fn stopped(error: MhfeError) -> String {
-    format!("stops with {}", error.code())
+pub(crate) fn stopped(error: impl crate::ErrorIdentity) -> FailureDetail {
+    FailureDetail::Stopped(error.error_code())
 }
 
 /// A digest or message authentication code compared with its published value. The function is
@@ -420,13 +439,13 @@ pub(crate) fn stopped(error: MhfeError) -> String {
 #[derive(Clone, Copy)]
 pub(crate) struct DigestCase {
     /// The algorithm's name, which the detail of a failure gives.
-    pub(crate) algorithm: &'static str,
+    algorithm: DigestAlgorithm,
     /// The function under test, given the key (empty for a plain hash) and the message.
-    pub(crate) function: fn(&[u8], &[u8]) -> Vec<u8>,
-    pub(crate) key: &'static [u8],
-    pub(crate) message: &'static [u8],
+    function: fn(&[u8], &[u8]) -> Vec<u8>,
+    key: &'static [u8],
+    message: &'static [u8],
     /// The published value, in hexadecimal.
-    pub(crate) expected: &'static str,
+    expected: &'static str,
 }
 
 /// Runs digest cases: a failure names the algorithm, as "SHA-256 gives another digest".
@@ -436,19 +455,65 @@ pub(crate) struct DigestCase {
     feature = "browser-repair",
     feature = "browser-wallet"
 ))]
-pub(crate) fn digest_outcome(cases: &[DigestCase]) -> ComponentOutcome {
-    let mut findings = Findings::new();
-    for case in cases {
-        findings.one(|| {
-            let digest = (case.function)(case.key, case.message);
-            expect(
-                hex::encode(digest) == case.expected,
-                &format!("{} gives another digest", case.algorithm),
-            )
-        });
+impl DigestCase {
+    pub(crate) const fn new(
+        algorithm: DigestAlgorithm,
+        function: fn(&[u8], &[u8]) -> Vec<u8>,
+        key: &'static [u8],
+        message: &'static [u8],
+        expected: &'static str,
+    ) -> Self {
+        Self {
+            algorithm,
+            function,
+            key,
+            message,
+            expected,
+        }
     }
-    findings.outcome()
+
+    fn check(&self) -> Result<(), FailureDetail> {
+        expect(
+            hex::encode((self.function)(self.key, self.message)) == self.expected,
+            FailureDetail::Digest(self.algorithm),
+        )
+    }
+
+    pub(crate) fn outcome(cases: &[Self]) -> ComponentOutcome {
+        let mut findings = Findings::new();
+        for case in cases {
+            findings.one(|| case.check());
+        }
+        findings.outcome()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_function(mut self, function: fn(&[u8], &[u8]) -> Vec<u8>) -> Self {
+        self.function = function;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_expected(mut self, expected: &'static str) -> Self {
+        self.expected = expected;
+        self
+    }
 }
+
+// The old checks compared Failed plus exact detail text. Keep that same contract while the
+// program now retains structured failure data. Additional typed-field controls cover that data.
+#[cfg(test)]
+macro_rules! assert_failed {
+    ($actual:expr, $expected:expr $(, $($context:tt)+)?) => {{
+        let outcome = $actual;
+        assert!(outcome.is_failure(), "expected a failed outcome, got {outcome:?}");
+        let expected = $expected.to_string();
+        let rendered = outcome.detail();
+        assert_eq!(rendered.as_deref(), Some(expected.as_str()) $(, $($context)+)?);
+    }};
+}
+#[cfg(test)]
+pub(crate) use assert_failed;
 
 /// Test data that lives as long as the test binary, as the checks hold their vectors.
 #[cfg(test)]
@@ -459,10 +524,7 @@ pub(crate) fn leak<T>(value: T) -> &'static T {
 /// Asserts that `check`, made with a damaged vector, fails at startup with `detail`.
 #[cfg(test)]
 pub(crate) fn fails_with(mut check: impl ComponentCheck, detail: &str) {
-    assert_eq!(
-        check.run(Tier::Startup),
-        ComponentOutcome::Failed(detail.to_owned())
-    );
+    crate::self_check::assert_failed!(check.run(Tier::Startup), detail.to_owned());
 }
 
 /// The container phrase of the suite 3 vector zero-12 (vectors/suite3/zero-12.json), the public
@@ -510,6 +572,7 @@ const fn nibble(digit: u8) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::MhfeError;
 
     /// A check that gives a fixed outcome and counts its runs.
     struct Fixed {
@@ -572,13 +635,17 @@ mod tests {
             .with(Fixed::new("b", ComponentOutcome::Passed))
             .with(Fixed::new(
                 "a",
-                ComponentOutcome::Failed("second a".to_owned()),
+                ComponentOutcome::Failed(crate::self_check::FailureDetail::from(
+                    "second a".to_owned(),
+                )),
             ));
         let second = SelfCheck::new()
             .with(Fixed::new("c", ComponentOutcome::Passed))
             .with(Fixed::new(
                 "b",
-                ComponentOutcome::Failed("second b".to_owned()),
+                ComponentOutcome::Failed(crate::self_check::FailureDetail::from(
+                    "second b".to_owned(),
+                )),
             ));
         let mut set = first.merge(second);
         assert_eq!(set.ids(), ["a", "b", "c"]);
@@ -622,11 +689,13 @@ mod tests {
             .with(Fixed::new("first", ComponentOutcome::Passed))
             .with(Fixed::new(
                 "broken",
-                ComponentOutcome::Failed("case 2 of 3 differs".to_owned()),
+                ComponentOutcome::Failed(crate::self_check::FailureDetail::from(
+                    "case 2 of 3 differs".to_owned(),
+                )),
             ))
             .with(Fixed::new(
                 "later",
-                ComponentOutcome::Failed("x".to_owned()),
+                ComponentOutcome::Failed(crate::self_check::FailureDetail::from("x".to_owned())),
             ));
         let report = failing.run_quietly(Tier::Startup);
         assert!(!report.passed());
@@ -638,9 +707,9 @@ mod tests {
         assert_eq!(error.code(), "SELF_CHECK_FAILED");
         assert_eq!(
             error,
-            MhfeError::SelfCheckFailed {
-                component: "Fixed".to_owned(),
-                detail: "case 2 of 3 differs".to_owned(),
+            SelfCheckError::Failed {
+                component: "Fixed",
+                detail: FailureDetail::from("case 2 of 3 differs".to_owned()),
             }
         );
     }
@@ -649,7 +718,10 @@ mod tests {
     fn every_check_is_reported_as_it_starts_and_ends() {
         let mut set = SelfCheck::new()
             .with(Fixed::new("a", ComponentOutcome::Passed))
-            .with(Fixed::new("b", ComponentOutcome::Failed("x".to_owned())));
+            .with(Fixed::new(
+                "b",
+                ComponentOutcome::Failed(crate::self_check::FailureDetail::from("x".to_owned())),
+            ));
         let mut events = Vec::new();
         let events_cell = std::cell::RefCell::new(&mut events);
         set.run(
@@ -689,30 +761,39 @@ mod tests {
     fn findings_name_the_first_difference_by_its_place() {
         let mut findings = Findings::new();
         let mut checked = Vec::new();
-        findings.each("vector", &[1, 2, 3], |&number| {
+        findings.each(crate::self_check::CaseKind::Vector, &[1, 2, 3], |&number| {
             checked.push(number);
-            expect(number != 2, "gives another container")
+            expect(
+                number != 2,
+                crate::self_check::KnownAnswerDifference::GivesAnotherContainer,
+            )
         });
-        findings.one(|| Err("never reached".to_owned()));
+        findings.one(|| Err(FailureDetail::from("never reached".to_owned())));
         assert_eq!(checked, [1, 2], "nothing runs after the first difference");
-        assert_eq!(
+        crate::self_check::assert_failed!(
             findings.outcome(),
-            ComponentOutcome::Failed("vector 2 of 3 gives another container".to_owned())
+            "vector 2 of 3 gives another container".to_owned()
         );
         assert_eq!(Findings::new().outcome(), ComponentOutcome::Passed);
     }
 
     #[test]
     fn a_refusal_must_be_the_expected_one() {
-        let refused: Result<(), MhfeError> = Err(MhfeError::VerifierMismatch);
+        let refused: Result<(), MhfeError> =
+            Err(MhfeError::Format(crate::FormatError::VerifierMismatch));
         assert_eq!(expect_refusal(refused.clone(), "VERIFIER_MISMATCH"), Ok(()));
         assert_eq!(
             expect_refusal(refused, "VERIFICATION_FAILED"),
-            Err("is refused with VERIFIER_MISMATCH instead of VERIFICATION_FAILED".to_owned())
+            Err(FailureDetail::RefusalCode {
+                actual: crate::ErrorCode::VerifierMismatch,
+                expected: crate::ErrorCode::VerificationFailed
+            })
         );
         assert_eq!(
-            expect_refusal(Ok(()), "VERIFIER_MISMATCH"),
-            Err("is accepted instead of refused with VERIFIER_MISMATCH".to_owned())
+            expect_refusal(Ok::<(), MhfeError>(()), "VERIFIER_MISMATCH"),
+            Err(FailureDetail::Accepted {
+                expected: crate::ErrorCode::VerifierMismatch
+            })
         );
     }
 
@@ -722,20 +803,20 @@ mod tests {
             Vec::new()
         }
         let case = DigestCase {
-            algorithm: "Nothing",
+            algorithm: crate::self_check::DigestAlgorithm::Nothing,
             function: empty,
             key: b"",
             message: b"abc",
             expected: "",
         };
-        assert_eq!(digest_outcome(&[case]), ComponentOutcome::Passed);
+        assert_eq!(DigestCase::outcome(&[case]), ComponentOutcome::Passed);
         let wrong = DigestCase {
             expected: "00",
             ..case
         };
-        assert_eq!(
-            digest_outcome(&[case, wrong]),
-            ComponentOutcome::Failed("Nothing gives another digest".to_owned())
+        crate::self_check::assert_failed!(
+            DigestCase::outcome(&[case, wrong]),
+            "Nothing gives another digest".to_owned()
         );
     }
 

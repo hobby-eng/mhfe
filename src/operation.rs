@@ -5,8 +5,9 @@
 
 use crate::engine::Argon2Engine;
 use crate::mhfe::{Mhfe, NewContainer};
-use crate::repair::{self, repair_words};
-use crate::{check_phrase, MhfeError, OriginalFacts, Password, Suite, WorkFactor};
+use crate::phrase::check_phrase;
+use crate::repair::RepairWordCount;
+use crate::{MhfeError, OriginalFacts, Password, Suite, WorkFactor};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -27,6 +28,18 @@ pub enum Stage {
 }
 
 impl Stage {
+    /// Every round-bearing stage, in the order used by protocol metadata.
+    pub const ALL: [Self; 4] = [Self::Recover, Self::Encrypt, Self::Check, Self::Compare];
+
+    /// Round totals of recovery, checked encryption and rekey, derived from their owners.
+    pub const fn round_totals() -> [u32; 3] {
+        [
+            crate::ROUNDS,
+            crate::ENCRYPTION_ROUNDS,
+            crate::rekey::Rekey::ROUNDS,
+        ]
+    }
+
     /// The stage's name in the browser API: "recover", "encrypt", "check" or "compare".
     pub fn name(self) -> &'static str {
         match self {
@@ -43,9 +56,10 @@ impl Stage {
 /// recovery and 24 for an encryption with its check, while an operation of several such calls
 /// counts all their rounds, such as 36 for a recovery followed by an encryption.
 /// [`Stage::Compare`] follows the last round of a recovery and repeats that round's number.
-/// Returning an error, such as [`MhfeError::Cancelled`], stops the operation before that round or
+/// Returning [`crate::CancelledError`] stops the operation before that round or
 /// comparison, as a [`ProgressCallback`](crate::ProgressCallback) does.
-pub type StageCallback<'a> = &'a mut dyn FnMut(Stage, u32, u32) -> Result<(), MhfeError>;
+pub type StageCallback<'a> =
+    &'a mut dyn FnMut(Stage, u32, u32) -> Result<(), crate::CancelledError>;
 
 /// Numbers the rounds that one `Mhfe` call reports as rounds of the whole operation it is a part
 /// of. A call counts its own rounds from 1: of 12, or of 24 for an encryption with its check. A
@@ -68,7 +82,7 @@ impl RoundCounter {
         stage: Stage,
         round: u32,
         on_progress: StageCallback<'_>,
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), crate::CancelledError> {
         on_progress(stage, self.done + round, self.total)
     }
 }
@@ -208,7 +222,7 @@ impl Keep {
 /// any Argon2 work.
 pub struct Encryption {
     suite: Suite,
-    repair_word_count: Option<usize>,
+    repair_word_count: Option<RepairWordCount>,
 }
 
 impl Encryption {
@@ -221,9 +235,7 @@ impl Encryption {
     ) -> Result<Self, MhfeError> {
         let words = check_phrase(original)?;
         suite.require_original(words)?;
-        if let Some(count) = repair_word_count {
-            repair::require_count(count)?;
-        }
+        let repair_word_count = repair_word_count.map(RepairWordCount::new).transpose()?;
         Ok(Self {
             suite,
             repair_word_count,
@@ -252,7 +264,7 @@ impl Encryption {
             })?;
         let repair_words = self
             .repair_word_count
-            .map(|count| repair_words(container.words(), count))
+            .map(|count| count.words_of(container.words()))
             .transpose()?;
         on_unverified(container.words())?;
         mhfe.check_new_container(&container, password, &mut |round, rounds| {
@@ -350,9 +362,9 @@ mod tests {
 
     #[test]
     fn stages_have_the_names_of_the_browser_api() {
-        let stages = [Stage::Recover, Stage::Encrypt, Stage::Check, Stage::Compare];
-        let names: Vec<&str> = stages.into_iter().map(Stage::name).collect();
+        let names = Stage::ALL.map(Stage::name);
         assert_eq!(names, ["recover", "encrypt", "check", "compare"]);
+        assert_eq!(Stage::round_totals(), [12, 24, 36]);
     }
 
     /// A recovery, rounds 1 to 12 of 36 and its comparison, then an encryption with its check,
@@ -360,10 +372,11 @@ mod tests {
     #[test]
     fn the_calls_of_an_operation_are_numbered_as_one_sequence() {
         let mut reports = Vec::new();
-        let mut on_progress = |stage: Stage, round: u32, rounds: u32| -> Result<(), MhfeError> {
-            reports.push((stage, round, rounds));
-            Ok(())
-        };
+        let mut on_progress =
+            |stage: Stage, round: u32, rounds: u32| -> Result<(), crate::CancelledError> {
+                reports.push((stage, round, rounds));
+                Ok(())
+            };
         let recovery = RoundCounter::starting_after(0, 36);
         recovery
             .report(Stage::Recover, 1, &mut on_progress)
@@ -463,10 +476,10 @@ mod tests {
     #[test]
     fn an_error_from_the_callback_is_passed_on() {
         let counter = RoundCounter::starting_after(0, 12);
-        let mut stop = |_: Stage, _: u32, _: u32| Err(MhfeError::Cancelled);
+        let mut stop = |_: Stage, _: u32, _: u32| Err(crate::CancelledError);
         assert_eq!(
             counter.report(Stage::Recover, 1, &mut stop),
-            Err(MhfeError::Cancelled)
+            Err(crate::CancelledError)
         );
     }
 }

@@ -12,14 +12,15 @@ use crate::style;
 use crate::terminal::{Input, PrivateScreen};
 
 /// The BIP39 passphrase for the phrase + passphrase check, which the library offers only with one
-/// (`wallet_check::require_passphrase`, the rule the browser package follows too): an empty one
+/// (`WalletCheck::require_passphrase`, the rule the browser package follows too): an empty one
 /// is refused and asked again.
 pub(super) fn read_check_passphrase(
     input: &mut Input,
     operation: Operation,
 ) -> Result<LockedText, Failure> {
     let passphrase = read_passphrase_until(input, operation, "the wallet", |passphrase| {
-        wallet_check::require_passphrase(passphrase)
+        wallet_check::WalletCheck::new(passphrase)
+            .require_passphrase()
             .map_err(|_| "Type the passphrase: the phrase + passphrase check needs one.".to_owned())
     })?;
     choice::record("Passphrase", "typed");
@@ -109,7 +110,7 @@ pub(crate) fn ask_passphrase(
     ask_passphrase_explained(input, operation, whose, &[], None, None)
 }
 
-/// Why a recovery asks for the passphrase of a 24-word reading: the 16-bit source check, which
+/// Why a recovery asks for the passphrase of a 24-word reading: the 16-bit wallet check, which
 /// every recovery evaluates (the specification's recovery rules). Longer than the usual link, as
 /// the owner asked (2026-10-09): nothing else on the screen says why a tool that only decrypts
 /// wants a passphrase.
@@ -142,12 +143,7 @@ pub(crate) fn ask_passphrase_explained(
     }
     let text = format!("Is a BIP39 passphrase used with {whose}?");
     let answers = passphrase_answers(whose);
-    let question = Question {
-        text: &text,
-        explanation,
-        more,
-        record: None,
-    };
+    let question = Question::with_details(&text, explanation, more, None);
     // A step of its own, headed by what comes before it, before any work starts.
     if input.choose(&question, &answers)? == 0 {
         return Ok(LockedText::copy_of(""));

@@ -12,12 +12,14 @@
 //! operation uses.
 
 #[cfg(not(target_arch = "wasm32"))]
-use super::ffi::{self, Argon2Inputs, WorkArea, ARGON2_VERSION_13};
+use super::ffi::{self, Argon2Inputs, WorkArea};
 #[cfg(not(target_arch = "wasm32"))]
 use super::native::{guarded_call, Call};
+use super::EngineError;
 use super::{Argon2Cost, KEY_BYTES, SALT_BYTES};
+#[cfg(test)]
+use super::{Argon2Failure, ReferenceMessage};
 use crate::self_check::{hex, ComponentCheck, ComponentOutcome, Tier};
-use crate::MhfeError;
 
 /// The public password and salt of the known answers below, the inputs that
 /// scripts/verify-argon2-wasm.mjs gives both Emscripten builds too.
@@ -33,34 +35,47 @@ pub(super) struct KnownTag {
 
 impl KnownTag {
     fn mebibytes(self) -> u32 {
-        self.cost.memory_kib / 1024
+        self.cost.memory_kib() / 1024
+    }
+
+    fn could_not_run(self, error: EngineError, core: Option<super::ArgonCore>) -> ComponentOutcome {
+        match error {
+            EngineError::MemoryAllocation { .. } => {
+                let place = if core.is_some() {
+                    "the computer could not reserve"
+                } else {
+                    "the browser could not give"
+                };
+                ComponentOutcome::NotAvailable(format!("{place} {} MiB", self.mebibytes()))
+            }
+            other => ComponentOutcome::Failed(could_not_run(&other)),
+        }
+    }
+
+    fn wrong_tag(self, core: Option<super::ArgonCore>, one_thread: bool) -> ComponentOutcome {
+        ComponentOutcome::Failed(crate::self_check::FailureDetail::TagAtSize {
+            core,
+            mebibytes: u64::from(self.mebibytes()),
+            one_thread,
+        })
     }
 }
 
 /// The tags were computed with OpenSSL through Python cryptography 46.0.5, an implementation
 /// independent of the reference C code (`expectedTags` in scripts/verify-argon2-wasm.mjs).
 pub(super) const SMALL: KnownTag = KnownTag {
-    cost: Argon2Cost {
-        memory_kib: 1024,
-        passes: 1,
-    },
+    cost: Argon2Cost::new(1024, 1),
     tag: hex("e0e8eba33f1404a83c911a324d9b49db83dae755f2bdfb4b63043ca5b7125df2"),
 };
 
 /// Larger memory, for the full self-test: many segments, and in a browser a heap that grows.
 const SIZES: [KnownTag; 2] = [
     KnownTag {
-        cost: Argon2Cost {
-            memory_kib: 64 * 1024,
-            passes: 3,
-        },
+        cost: Argon2Cost::new(64 * 1024, 3),
         tag: hex("a3931f5728b235c605c02522f3302a8e90d0509a0c3db63ab4d2fcf75f345b5b"),
     },
     KnownTag {
-        cost: Argon2Cost {
-            memory_kib: 256 * 1024,
-            passes: 2,
-        },
+        cost: Argon2Cost::new(256 * 1024, 2),
         tag: hex("4a4a094750f2c17fc6507d38825ec9eac65e10fb2de9e9bf5e801d2af53f1efe"),
     },
 ];
@@ -76,10 +91,10 @@ pub(crate) const PART_IDS: [&str; 2] = [ID, SIZES_ID];
 
 /// What a call that returned an error tells: the reference code's own message for an Argon2
 /// failure, which names no input, else the error code.
-fn could_not_run(error: &MhfeError) -> String {
+fn could_not_run(error: &EngineError) -> crate::self_check::FailureDetail {
     match error {
-        MhfeError::Argon2(message) => format!("Argon2id could not run: {message}"),
-        other => format!("Argon2id could not run: {}", other.code()),
+        EngineError::Argon2(failure) => crate::self_check::FailureDetail::Argon2(*failure),
+        other => crate::self_check::FailureDetail::Argon2Stopped(other.error_code()),
     }
 }
 
@@ -88,7 +103,7 @@ fn could_not_run(error: &MhfeError) -> String {
 /// it, so that both builds report under the same ids, labels and tiers.
 trait Argon2Answers {
     /// The known answer at 1 MiB: `Err` names what went wrong.
-    fn small(&self) -> Result<(), String>;
+    fn small(&self) -> Result<(), crate::self_check::FailureDetail>;
     /// The known answers at 64 and 256 MiB, with a size the computer cannot give told apart.
     fn sizes(&self) -> ComponentOutcome;
 }
@@ -152,15 +167,15 @@ pub(in crate::engine) mod rfc_9106 {
 /// The copies of the Argon2 core this processor runs, by name: on x86-64 the SSE2 copy, and the
 /// SSSE3 copy where the processor has SSSE3; elsewhere the one core of the build.
 #[cfg(not(target_arch = "wasm32"))]
-fn cores() -> Vec<(bool, &'static str)> {
+fn cores() -> Vec<(bool, super::ArgonCore)> {
     if cfg!(target_arch = "x86_64") {
-        let mut cores = vec![(false, super::native::core_name(false))];
+        let mut cores = vec![(false, super::ArgonCore::native(false))];
         if super::native::processor_has_ssse3() {
-            cores.push((true, super::native::core_name(true)));
+            cores.push((true, super::ArgonCore::native(true)));
         }
         cores
     } else {
-        vec![(false, super::native::core_name(false))]
+        vec![(false, super::ArgonCore::native(false))]
     }
 }
 
@@ -211,41 +226,37 @@ pub type NativeArgon2SizesCheck = Argon2SizesCheck<NativeArgon2>;
 impl NativeArgon2 {
     /// The RFC 9106 call, on the SSSE3 copy of the core if `ssse3`.
     pub(in crate::engine) fn rfc_inputs(ssse3: bool) -> Argon2Inputs<'static> {
-        Argon2Inputs {
-            password: &rfc_9106::PASSWORD,
-            salt: &rfc_9106::SALT,
-            secret: &rfc_9106::SECRET,
-            associated_data: &rfc_9106::ASSOCIATED_DATA,
-            passes: rfc_9106::PASSES,
-            memory_kib: rfc_9106::MEMORY_KIB,
-            lanes: rfc_9106::LANES,
-            threads: rfc_9106::LANES,
-            version: ARGON2_VERSION_13,
-            ssse3,
-        }
+        Argon2Inputs::rfc_9106(ssse3)
     }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Argon2Answers for NativeArgon2 {
-    fn small(&self) -> Result<(), String> {
+    fn small(&self) -> Result<(), crate::self_check::FailureDetail> {
         let mut work_area = WorkArea::allocate(self.small.cost.memory_bytes())
             .map_err(|error| could_not_run(&error))?;
         for (ssse3, core) in cores() {
             let rfc = Self::rfc_inputs(ssse3);
-            let mhfe = super::native::mhfe_inputs(PASSWORD, SALT, self.small.cost, ssse3);
+            let mhfe = Argon2Inputs::mhfe(PASSWORD, SALT, self.small.cost, ssse3);
             for (inputs, expected, vector) in [
-                (&rfc, &self.rfc_tag, "the RFC 9106 vector"),
-                (&mhfe, &self.small.tag, "the 1 MiB vector"),
+                (&rfc, &self.rfc_tag, crate::self_check::ArgonVector::Rfc9106),
+                (
+                    &mhfe,
+                    &self.small.tag,
+                    crate::self_check::ArgonVector::OneMib,
+                ),
             ] {
                 let mut tag = [0u8; KEY_BYTES];
                 guarded_call(self.call, inputs, &mut work_area, &mut tag)
                     .map_err(|error| could_not_run(&error))?;
                 if tag != *expected {
-                    return Err(format!("{core} gives another tag for {vector}"));
+                    return Err(crate::self_check::FailureDetail::NativeTag { core, vector });
                 }
                 if !work_area.is_wiped() {
-                    return Err(format!("{core} leaves its memory unwiped"));
+                    return Err(crate::self_check::FailureDetail::Unwiped {
+                        core,
+                        mebibytes: None,
+                    });
                 }
             }
         }
@@ -274,29 +285,17 @@ impl Argon2Answers for NativeArgon2 {
             }
         }
         for (ssse3, core, size, threads) in runs {
-            let mut inputs = super::native::mhfe_inputs(PASSWORD, SALT, size.cost, ssse3);
-            inputs.threads = threads;
+            let inputs = Argon2Inputs::mhfe(PASSWORD, SALT, size.cost, ssse3);
+            let inputs = inputs.with_threads(threads);
             let mut tag = [0u8; KEY_BYTES];
             match guarded_call(self.call, &inputs, &mut work_area, &mut tag) {
-                Err(MhfeError::MemoryAllocation { .. }) => {
-                    return ComponentOutcome::NotAvailable(format!(
-                        "the computer could not reserve {} MiB",
-                        size.mebibytes()
-                    ))
-                }
-                Err(error) => return ComponentOutcome::Failed(could_not_run(&error)),
-                Ok(()) if tag != size.tag => {
-                    let threads = if threads == 1 { " on one thread" } else { "" };
-                    return ComponentOutcome::Failed(format!(
-                        "{core} gives another tag at {} MiB{threads}",
-                        size.mebibytes()
-                    ));
-                }
+                Err(error) => return size.could_not_run(error, Some(core)),
+                Ok(()) if tag != size.tag => return size.wrong_tag(Some(core), threads == 1),
                 Ok(()) if !work_area.is_wiped() => {
-                    return ComponentOutcome::Failed(format!(
-                        "{core} leaves its memory unwiped at {} MiB",
-                        size.mebibytes()
-                    ))
+                    return ComponentOutcome::Failed(crate::self_check::FailureDetail::Unwiped {
+                        core,
+                        mebibytes: Some(u64::from(size.mebibytes())),
+                    })
                 }
                 Ok(()) => {}
             }
@@ -340,12 +339,14 @@ impl<'a> Argon2Check<PageArgon2<'a>> {
         Self(PageArgon2 { argon2 })
     }
 
-    /// The known answer once: `Ok`, or [`MhfeError::SelfCheckFailed`] naming what went wrong.
-    pub fn verify(&self) -> Result<(), MhfeError> {
-        self.0.small().map_err(|detail| MhfeError::SelfCheckFailed {
-            component: LABEL.to_owned(),
-            detail,
-        })
+    /// The known answer once: `Ok`, or [`crate::self_check::SelfCheckError::Failed`] naming what went wrong.
+    pub fn verify(&self) -> Result<(), crate::self_check::SelfCheckError> {
+        self.0
+            .small()
+            .map_err(|detail| crate::self_check::SelfCheckError::Failed {
+                component: LABEL,
+                detail,
+            })
     }
 }
 
@@ -358,14 +359,16 @@ impl<'a> Argon2SizesCheck<PageArgon2<'a>> {
 
 #[cfg(all(feature = "browser-core", target_arch = "wasm32"))]
 impl Argon2Answers for PageArgon2<'_> {
-    fn small(&self) -> Result<(), String> {
+    fn small(&self) -> Result<(), crate::self_check::FailureDetail> {
         let mut tag = [0u8; KEY_BYTES];
         derive_with(self.argon2, PASSWORD, SALT, SMALL.cost, &mut tag)
             .map_err(|error| could_not_run(&error))?;
         if tag == SMALL.tag {
             Ok(())
         } else {
-            Err("the page's Argon2 build gives another tag".to_owned())
+            Err(crate::self_check::FailureDetail::from(
+                crate::self_check::KnownAnswerDifference::ThePageSArgon2BuildGivesAnotherTag,
+            ))
         }
     }
 
@@ -373,19 +376,8 @@ impl Argon2Answers for PageArgon2<'_> {
         for size in SIZES {
             let mut tag = [0u8; KEY_BYTES];
             match derive_with(self.argon2, PASSWORD, SALT, size.cost, &mut tag) {
-                Err(MhfeError::MemoryAllocation { .. }) => {
-                    return ComponentOutcome::NotAvailable(format!(
-                        "the browser could not give {} MiB",
-                        size.mebibytes()
-                    ))
-                }
-                Err(error) => return ComponentOutcome::Failed(could_not_run(&error)),
-                Ok(()) if tag != size.tag => {
-                    return ComponentOutcome::Failed(format!(
-                        "the page's Argon2 build gives another tag at {} MiB",
-                        size.mebibytes()
-                    ))
-                }
+                Err(error) => return size.could_not_run(error, None),
+                Ok(()) if tag != size.tag => return size.wrong_tag(None, false),
                 Ok(()) => {}
             }
         }
@@ -409,18 +401,15 @@ mod tests {
     fn a_corrupted_tag_fails() {
         let mut small = NativeArgon2Check::default();
         small.0.small.tag[31] ^= 1;
-        assert_eq!(
+        crate::self_check::assert_failed!(
             small.run(Tier::Startup),
-            ComponentOutcome::Failed(format!(
-                "{} gives another tag for the 1 MiB vector",
-                cores()[0].1
-            ))
+            format!("{} gives another tag for the 1 MiB vector", cores()[0].1)
         );
         let mut rfc = NativeArgon2Check::default();
         rfc.0.rfc_tag[0] ^= 0x80;
         assert!(matches!(
             rfc.run(Tier::Startup),
-            ComponentOutcome::Failed(detail) if detail.ends_with("for the RFC 9106 vector")
+            ComponentOutcome::Failed(detail) if detail.to_string().ends_with("for the RFC 9106 vector")
         ));
     }
 
@@ -432,36 +421,38 @@ mod tests {
             inputs: &Argon2Inputs<'_>,
             work_area: &mut WorkArea,
             tag: &mut [u8],
-        ) -> Result<(), MhfeError> {
-            let mut changed = Argon2Inputs { ..*inputs };
+        ) -> Result<(), EngineError> {
+            let mut changed = *inputs;
             // Only the MHFE-shaped call is damaged; the RFC vector must still pass.
-            if inputs.secret.is_empty() {
-                changed.lanes = 2;
-                changed.threads = 2;
+            if !inputs.has_secret() {
+                changed = changed.with_lanes(2);
             }
             ffi::argon2id(&changed, work_area, tag)
         }
         let mut check = NativeArgon2Check::default();
         check.0.call = two_lanes;
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(format!(
-                "{} gives another tag for the 1 MiB vector",
-                cores()[0].1
-            ))
+            format!("{} gives another tag for the 1 MiB vector", cores()[0].1)
         );
     }
 
     #[test]
     fn a_failing_call_is_told_apart_from_a_wrong_tag() {
-        fn refused(_: &Argon2Inputs<'_>, _: &mut WorkArea, _: &mut [u8]) -> Result<(), MhfeError> {
-            Err(MhfeError::Argon2("Threading failure".to_owned()))
+        fn refused(
+            _: &Argon2Inputs<'_>,
+            _: &mut WorkArea,
+            _: &mut [u8],
+        ) -> Result<(), EngineError> {
+            Err(EngineError::Argon2(Argon2Failure::Reference(
+                ReferenceMessage::read("Threading failure").unwrap(),
+            )))
         }
         let mut check = NativeArgon2Check::default();
         check.0.call = refused;
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("Argon2id could not run: Threading failure".to_owned())
+            "Argon2id could not run: Threading failure".to_owned()
         );
     }
 
@@ -473,20 +464,20 @@ mod tests {
             _: &Argon2Inputs<'_>,
             _: &mut WorkArea,
             _: &mut [u8],
-        ) -> Result<(), MhfeError> {
+        ) -> Result<(), EngineError> {
             Ok(())
         }
         fn writes_zeros(
             _: &Argon2Inputs<'_>,
             _: &mut WorkArea,
             tag: &mut [u8],
-        ) -> Result<(), MhfeError> {
+        ) -> Result<(), EngineError> {
             tag.fill(0);
             Ok(())
         }
-        let refused = ComponentOutcome::Failed(
-            "Argon2id could not run: the Argon2 engine returned without writing the key".to_owned(),
-        );
+        let refused = ComponentOutcome::Failed(crate::self_check::FailureDetail::Argon2(
+            crate::engine::Argon2Failure::UnwrittenKey,
+        ));
         for call in [writes_nothing as Call, writes_zeros] {
             let mut check = NativeArgon2Check::default();
             check.0.call = call;
@@ -503,7 +494,7 @@ mod tests {
             inputs: &Argon2Inputs<'_>,
             work_area: &mut WorkArea,
             tag: &mut [u8],
-        ) -> Result<(), MhfeError> {
+        ) -> Result<(), EngineError> {
             ffi::argon2id(inputs, work_area, tag)?;
             work_area.fill_for_tests(0x5a);
             Ok(())
@@ -512,7 +503,7 @@ mod tests {
         check.0.call = leaves_blocks;
         assert!(matches!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(detail) if detail.ends_with("leaves its memory unwiped")
+            ComponentOutcome::Failed(detail) if detail.to_string().ends_with("leaves its memory unwiped")
         ));
     }
 
@@ -525,7 +516,7 @@ mod tests {
         check.0.sizes[1].tag[5] ^= 4;
         assert!(matches!(
             check.run(Tier::Full),
-            ComponentOutcome::Failed(detail) if detail.ends_with("gives another tag at 256 MiB")
+            ComponentOutcome::Failed(detail) if detail.to_string().ends_with("gives another tag at 256 MiB")
         ));
     }
 

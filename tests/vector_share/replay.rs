@@ -99,7 +99,7 @@ impl Suite {
             listed.insert(name.to_owned());
         }
         for input in self.inputs {
-            let name = vectors::file_name(input.name());
+            let name = vectors::Vector::file_name(input.name());
             assert!(listed.contains(&name), "{name} is missing");
             let vector = self.recorded(&name);
             let work = input.work().unwrap();
@@ -112,7 +112,7 @@ impl Suite {
                 "{name}"
             );
         }
-        let negative = self.recorded(&vectors::file_name(NEGATIVE_CASES_STEM));
+        let negative = self.recorded(&vectors::Vector::file_name(NEGATIVE_CASES_STEM));
         let negative = negative.as_array().unwrap();
         assert_eq!(negative.len(), self.negative_inputs.len());
         for case in negative {
@@ -148,7 +148,7 @@ impl Suite {
         let salt_label = format!("{}/ROUND-SALT", self.suite_id);
         let mask_label = format!("{}/ROUND-MASK", self.suite_id);
         for input in self.inputs {
-            let name = vectors::file_name(input.name());
+            let name = vectors::Vector::file_name(input.name());
             let vector = self.recorded(&name);
             assert_eq!(vector["schema"], self.schema, "{name}");
             for direction in ["encryption", "decryption"] {
@@ -179,7 +179,7 @@ impl Suite {
     /// A vector written by a later release matches the recorded one, while any change of what the
     /// vector fixes, such as its container or the program's name, still does not.
     pub(crate) fn check_writer_version(&self) {
-        let recorded = self.recorded(&vectors::file_name(self.inputs[0].name()));
+        let recorded = self.recorded(&vectors::Vector::file_name(self.inputs[0].name()));
         let mut later = recorded.clone();
         later["generator"]["version"] = Value::from("9.9.9");
         assert_eq!(with_recorded_writer(later.clone(), &recorded), recorded);
@@ -200,13 +200,13 @@ impl Suite {
                 continue;
             }
             let mut mhfe = Mhfe::new(input.work().unwrap()).unwrap();
-            let expected = self.recorded(&vectors::file_name(input.name()));
+            let expected = self.recorded(&vectors::Vector::file_name(input.name()));
             let written = with_recorded_writer((self.generate)(&mut mhfe, input), &expected);
             assert_eq!(written, expected, "{}", input.name());
             println!("{}: reproduced", input.name());
         }
 
-        let expected = self.recorded(&vectors::file_name(NEGATIVE_CASES_STEM));
+        let expected = self.recorded(&vectors::Vector::file_name(NEGATIVE_CASES_STEM));
         let expected = expected.as_array().unwrap();
         assert_eq!(
             expected.len(),
@@ -217,7 +217,8 @@ impl Suite {
             if !mine(self.inputs.len() + offset) {
                 continue;
             }
-            let container = self.recorded(&vectors::file_name(input.container_of()))["container"]
+            let container = self.recorded(&vectors::Vector::file_name(input.container_of()))
+                ["container"]
                 .as_str()
                 .unwrap()
                 .to_owned();

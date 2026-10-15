@@ -10,11 +10,12 @@
 use bip39::{Language, Mnemonic};
 use bitcoin_hashes::{hash160, Hash};
 
-use super::{bip39_seed, master_fingerprint, parse_fingerprint, ExtendedKey, HARDENED};
+use super::{ExtendedKey, Fingerprint, HARDENED};
+use crate::bip39_seed::derive as bip39_seed;
 use crate::phrase::known_answers::TREZOR_ENGLISH;
 use crate::self_check::{
-    damaged, digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome,
-    DigestCase, Findings, Tier, DAMAGED,
+    damaged, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, DigestCase,
+    Findings, Tier, DAMAGED,
 };
 
 use crate::self_check::digests::{digest, hmac};
@@ -41,67 +42,67 @@ const LONG_KEY: [u8; 131] = [0xaa; 131];
 
 const WALLET_DIGESTS: [DigestCase; 7] = [
     // FIPS 180-4, example "abc".
-    DigestCase {
-        algorithm: "SHA-512",
-        function: digest::<sha2::Sha512>,
-        key: b"",
-        message: b"abc",
-        expected: "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a\
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::Sha512,
+        digest::<sha2::Sha512>,
+        b"",
+        b"abc",
+        "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a\
                    2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f",
-    },
+    ),
     // FIPS 180-4, the 896-bit message, which needs a second block.
-    DigestCase {
-        algorithm: "SHA-512",
-        function: digest::<sha2::Sha512>,
-        key: b"",
-        message: b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno\
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::Sha512,
+        digest::<sha2::Sha512>,
+        b"",
+        b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno\
                    ijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
-        expected: "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018\
+        "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018\
                    501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909",
-    },
+    ),
     // RFC 4231, test case 2.
-    DigestCase {
-        algorithm: "HMAC-SHA-512",
-        function: hmac::<sha2::Sha512>,
-        key: b"Jefe",
-        message: b"what do ya want for nothing?",
-        expected: "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea250554\
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::HmacSha512,
+        hmac::<sha2::Sha512>,
+        b"Jefe",
+        b"what do ya want for nothing?",
+        "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea250554\
                    9758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737",
-    },
+    ),
     // RFC 4231, test case 6.
-    DigestCase {
-        algorithm: "HMAC-SHA-512",
-        function: hmac::<sha2::Sha512>,
-        key: &LONG_KEY,
-        message: b"Test Using Larger Than Block-Size Key - Hash Key First",
-        expected: "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f352\
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::HmacSha512,
+        hmac::<sha2::Sha512>,
+        &LONG_KEY,
+        b"Test Using Larger Than Block-Size Key - Hash Key First",
+        "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f352\
                    6b56d037e05f2598bd0fd2215d6a1e5295e64f73f63f0aec8b915a985d786598",
-    },
+    ),
     // The RIPEMD-160 authors' test vector "abc".
-    DigestCase {
-        algorithm: "RIPEMD-160",
-        function: ripemd160,
-        key: b"",
-        message: b"abc",
-        expected: "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc",
-    },
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::Ripemd160,
+        ripemd160,
+        b"",
+        b"abc",
+        "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc",
+    ),
     // FIPS 180-4's SHA-256("abc") through bitcoin_hashes, which HASH160 uses.
-    DigestCase {
-        algorithm: "SHA-256",
-        function: bitcoin_sha256,
-        key: b"",
-        message: b"abc",
-        expected: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-    },
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::Sha256,
+        bitcoin_sha256,
+        b"",
+        b"abc",
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    ),
     // Keccak-256 of the empty string, the Keccak team's value, which @noble/hashes 2.4.0 gives
     // too; it differs from SHA3-256 (a7ffc6f8...) in its padding.
-    DigestCase {
-        algorithm: "Keccak-256",
-        function: keccak256,
-        key: b"",
-        message: b"",
-        expected: "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-    },
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::Keccak256,
+        keccak256,
+        b"",
+        b"",
+        "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    ),
 ];
 
 /// The `wallet-hashes` check: SHA-512, HMAC-SHA-512, RIPEMD-160, the SHA-256 of bitcoin_hashes
@@ -128,7 +129,7 @@ impl ComponentCheck for WalletHashesCheck {
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
-        digest_outcome(self.cases)
+        DigestCase::outcome(self.cases)
     }
 }
 
@@ -212,10 +213,17 @@ impl SeedCheck {
         }
     }
 
-    fn seed(phrase: &str, passphrase: &str, expected: &str) -> Result<(), String> {
+    fn seed(
+        phrase: &str,
+        passphrase: &str,
+        expected: &str,
+    ) -> Result<(), crate::self_check::FailureDetail> {
         let mnemonic = Mnemonic::parse_in(Language::English, phrase).map_err(|_| damaged())?;
         let seed = bip39_seed(&mnemonic, passphrase).map_err(|_| damaged())?;
-        expect(hex::encode(&seed[..]) == expected, "differs")
+        expect(
+            hex::encode(&seed[..]) == expected,
+            crate::self_check::KnownAnswerDifference::Differs,
+        )
     }
 }
 
@@ -230,14 +238,14 @@ impl ComponentCheck for SeedCheck {
 
     fn run(&mut self, tier: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("seed", self.seeds, |case| {
+        findings.each(crate::self_check::CaseKind::Seed, self.seeds, |case| {
             Self::seed(case.phrase, case.passphrase, case.seed)
         });
         findings.one(|| {
-            let fingerprint = master_fingerprint(ABANDON, "TREZOR").map_err(stopped)?;
+            let fingerprint = Fingerprint::of(ABANDON, "TREZOR").map_err(stopped)?;
             expect(
-                fingerprint == TREZOR_FINGERPRINT,
-                "a master key fingerprint differs",
+                fingerprint.bytes() == TREZOR_FINGERPRINT,
+                crate::self_check::KnownAnswerDifference::AMasterKeyFingerprintDiffers,
             )
         });
         if tier == Tier::Full {
@@ -247,9 +255,11 @@ impl ComponentCheck for SeedCheck {
                 .zip(self.trezor_seeds.iter().copied())
                 .collect();
             findings.one(|| expect(cases.len() == TREZOR_ENGLISH.len(), DAMAGED));
-            findings.each("test vector seed", &cases, |&(phrase, seed)| {
-                Self::seed(phrase, "TREZOR", seed)
-            });
+            findings.each(
+                crate::self_check::CaseKind::TestVectorSeed,
+                &cases,
+                |&(phrase, seed)| Self::seed(phrase, "TREZOR", seed),
+            );
         }
         findings.outcome()
     }
@@ -309,32 +319,30 @@ impl Bip32Check {
         Self { cases: &BIP32 }
     }
 
-    fn vector(case: &Bip32Case) -> Result<(), String> {
+    fn vector(case: &Bip32Case) -> Result<(), crate::self_check::FailureDetail> {
         let seed = hex::decode(case.seed).map_err(|_| damaged())?;
         let master = ExtendedKey::from_hmac(b"Bitcoin seed", &[&seed]).map_err(stopped)?;
         expect(
-            hex::encode(&master.key[..]) == case.master_key
-                && hex::encode(&master.chain_code[..]) == case.master_chain_code,
-            "gives another master key",
+            master.matches_known_answer(case.master_key, case.master_chain_code),
+            crate::self_check::KnownAnswerDifference::GivesAnotherMasterKey,
         )?;
         if !case.master_fingerprint.is_empty() {
             let public_key = master.public_key().map_err(stopped)?;
             let fingerprint = &hash160::Hash::hash(&public_key).to_byte_array()[..4];
             expect(
                 hex::encode(fingerprint) == case.master_fingerprint,
-                "gives another fingerprint",
+                crate::self_check::KnownAnswerDifference::GivesAnotherFingerprint,
             )?;
         }
         let key = master.derive(case.path).map_err(stopped)?;
         expect(
-            hex::encode(&key.key[..]) == case.key
-                && hex::encode(&key.chain_code[..]) == case.chain_code,
-            "gives another key",
+            key.matches_known_answer(case.key, case.chain_code),
+            crate::self_check::KnownAnswerDifference::GivesAnotherKey,
         )?;
         if !case.public_key.is_empty() {
             expect(
                 hex::encode(key.public_key().map_err(stopped)?) == case.public_key,
-                "gives another public key",
+                crate::self_check::KnownAnswerDifference::GivesAnotherPublicKey,
             )?;
         }
         Ok(())
@@ -352,10 +360,18 @@ impl ComponentCheck for Bip32Check {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("test vector", self.cases, Self::vector);
+        findings.each(
+            crate::self_check::CaseKind::TestVector,
+            self.cases,
+            Self::vector,
+        );
         findings.one(|| {
-            expect_refusal(parse_fingerprint("73c5da0g"), "INVALID_FINGERPRINT")
-                .map_err(|what| format!("a fingerprint that is not hexadecimal {what}"))
+            expect_refusal(Fingerprint::parse("73c5da0g"), "INVALID_FINGERPRINT").map_err(|what| {
+                crate::self_check::FailureDetail::Context {
+                    context: crate::self_check::CheckContext::AFingerprintThatIsNotHexadecimal,
+                    cause: Box::new(what),
+                }
+            })
         });
         findings.outcome()
     }
@@ -629,7 +645,7 @@ mod address_search {
             }
         }
 
-        fn stated(case: &SearchCase) -> Result<(), String> {
+        fn stated(case: &SearchCase) -> Result<(), crate::self_check::FailureDetail> {
             let search = AddressSearch::describe(case.coin.id(), case.address, case.path)
                 .map_err(stopped)?;
             expect(
@@ -637,7 +653,7 @@ mod address_search {
                     && search.pattern() == case.pattern
                     && search.addresses() == case.addresses
                     && search.only_path() == case.only_path,
-                "is stated otherwise",
+                crate::self_check::KnownAnswerDifference::IsStatedOtherwise,
             )
         }
     }
@@ -653,13 +669,21 @@ mod address_search {
 
         fn run(&mut self, _: Tier) -> ComponentOutcome {
             let mut findings = Findings::new();
-            findings.each("search", self.stated, Self::stated);
-            findings.each("wrong search", self.refused, |case| {
-                expect_refusal(
-                    AddressSearch::describe(case.coin, case.address, case.path),
-                    case.code,
-                )
-            });
+            findings.each(
+                crate::self_check::CaseKind::Search,
+                self.stated,
+                Self::stated,
+            );
+            findings.each(
+                crate::self_check::CaseKind::WrongSearch,
+                self.refused,
+                |case| {
+                    expect_refusal(
+                        AddressSearch::describe(case.coin, case.address, case.path),
+                        case.code,
+                    )
+                },
+            );
             findings.outcome()
         }
     }
@@ -749,13 +773,11 @@ mod address_search {
                 refused: Box::leak(Box::new(refused)),
                 ..AddressSearchCheck::new()
             };
-            assert_eq!(
+            crate::self_check::assert_failed!(
                 check.run(Tier::Startup),
-                ComponentOutcome::Failed(
-                    "wrong search 1 of 4 is accepted instead of refused with \
+                "wrong search 1 of 4 is accepted instead of refused with \
                      INVALID_DERIVATION_PATH"
-                        .to_owned()
-                )
+                    .to_owned()
             );
         }
     }
@@ -782,13 +804,13 @@ mod tests {
             sha3::Sha3_256::digest(message).to_vec()
         }
         let mut cases = WALLET_DIGESTS;
-        cases[6].function = sha3_256;
+        cases[6] = cases[6].with_function(sha3_256);
         let mut check = WalletHashesCheck {
             cases: Box::leak(Box::new(cases)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("Keccak-256 gives another digest".to_owned())
+            "Keccak-256 gives another digest".to_owned()
         );
     }
 
@@ -818,9 +840,9 @@ mod tests {
             ..SeedCheck::new()
         };
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Full),
-            ComponentOutcome::Failed("test vector seed 24 of 24 differs".to_owned())
+            "test vector seed 24 of 24 differs".to_owned()
         );
 
         let mut cases = BIP32;
@@ -828,18 +850,18 @@ mod tests {
         let mut check = Bip32Check {
             cases: Box::leak(Box::new(cases)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("test vector 2 of 2 gives another master key".to_owned())
+            "test vector 2 of 2 gives another master key".to_owned()
         );
         let mut cases = BIP32;
         cases[0].path = &[HARDENED, 1, 2 | HARDENED, 2, 1_000_000_001];
         let mut check = Bip32Check {
             cases: Box::leak(Box::new(cases)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("test vector 1 of 2 gives another key".to_owned())
+            "test vector 1 of 2 gives another key".to_owned()
         );
     }
 }

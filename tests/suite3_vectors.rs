@@ -29,9 +29,9 @@ const SUITE: replay::Suite = replay::Suite {
     negative_inputs: &NEGATIVE_INPUTS,
     schema: vectors::SCHEMA,
     negative_schema: vectors::NEGATIVE_SCHEMA,
-    generate: |mhfe, input| replay::value(vectors::generate(mhfe, input)),
+    generate: |mhfe, input| replay::value(vectors::Vector::generate(mhfe, input)),
     negative_case: |mhfe, input, container| {
-        replay::value(vectors::negative_case(mhfe, input, container))
+        replay::value(vectors::NegativeCase::generate(mhfe, input, container))
     },
 };
 

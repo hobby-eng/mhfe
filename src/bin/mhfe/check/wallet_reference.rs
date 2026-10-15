@@ -3,9 +3,7 @@
 
 use clap::Args;
 use mhfe::memory::LockedText;
-use mhfe::wallet::{
-    fingerprint_text, parse_fingerprint, Address, AddressSearch, Coin, DerivationPath, SearchLimits,
-};
+use mhfe::wallet::{Address, AddressSearch, Coin, DerivationPath, Fingerprint, SearchLimits};
 use mhfe::{MhfeError, Reference, ReferenceTarget};
 use zeroize::Zeroizing;
 
@@ -57,11 +55,9 @@ impl AddressOptions {
     }
 
     /// Refuses metadata alongside a fingerprint or another non-address reference.
-    pub(crate) fn require_address(&self, address: bool) -> Result<(), MhfeError> {
+    pub(crate) fn require_address(&self, address: bool) -> Result<(), mhfe::RehearsalError> {
         if !address && !self.given_names().is_empty() {
-            return Err(MhfeError::InvalidRequest(
-                "--coin and --path belong to an address reference".into(),
-            ));
+            return Err(mhfe::RehearsalError::AddressMetadata);
         }
         Ok(())
     }
@@ -98,7 +94,7 @@ pub(crate) struct WalletReference {
 
 /// What was typed for a search's reference, before an address's coin is known.
 enum Typed {
-    Fingerprint([u8; 4]),
+    Fingerprint(Fingerprint),
     /// Not yet read as an address: wiped when dropped, as it may be anything typed.
     Address(Zeroizing<String>),
 }
@@ -139,16 +135,18 @@ impl WalletReference {
         let typed = read_public(input, "Address or master key fingerprint: ", None, |text| {
             let text = text.trim();
             if text.is_empty() {
-                return Err(MhfeError::InvalidAddress("nothing was typed".to_owned()));
+                return Err(MhfeError::from(mhfe::wallet::WalletError::from(
+                    mhfe::wallet::AddressIssue::Empty,
+                )));
             }
             // An address and a fingerprint are one word; several words read as a seed phrase.
             if text.split_whitespace().nth(1).is_some() {
-                return Err(MhfeError::InvalidAddress(
-                    "an address or a fingerprint is one word, without spaces".to_owned(),
-                ));
+                return Err(MhfeError::from(mhfe::wallet::WalletError::from(
+                    mhfe::wallet::AddressIssue::SeveralWords,
+                )));
             }
             // No address of any coin has eight hex digits alone.
-            Ok(match parse_fingerprint(text) {
+            Ok(match Fingerprint::parse(text) {
                 Ok(fingerprint) => {
                     options.require_address(false)?;
                     Typed::Fingerprint(fingerprint)
@@ -159,7 +157,7 @@ impl WalletReference {
         let (target, shown) = match typed {
             Typed::Fingerprint(fingerprint) => (
                 ReferenceTarget::Fingerprint(fingerprint),
-                format!("master key fingerprint {}", fingerprint_text(fingerprint)),
+                format!("master key fingerprint {fingerprint}"),
             ),
             Typed::Address(text) => {
                 let coin = match options.coin() {
@@ -176,7 +174,10 @@ impl WalletReference {
                         input,
                         &format!("Receiving or change address ({}): ", coin.address_forms()),
                         None,
-                        |text| Ok((Address::parse(coin, text)?, text.trim().to_owned())),
+                        |text| {
+                            Address::parse(coin, text)
+                                .map(|address| (address, text.trim().to_owned()))
+                        },
                     )?,
                 };
                 let target = ReferenceTarget::Address {
@@ -241,7 +242,7 @@ impl WalletReference {
                 input,
                 "Master key fingerprint, eight hex digits: ",
                 Some(("Master key", "fingerprint ")),
-                parse_fingerprint,
+                Fingerprint::parse,
             )?)
         } else {
             let (coin, assumed) = match coin {
@@ -267,13 +268,7 @@ impl WalletReference {
                 Some(("Address", "")),
                 |text| match Address::parse(coin, text) {
                     // The coin assumed comes first, where the refusal starts.
-                    Err(MhfeError::InvalidAddress(reason)) if assumed => {
-                        Err(MhfeError::InvalidAddress(format!(
-                            "without --coin a script compares with a {} address, and {reason}; \
-                             name the address's coin with --coin, such as --coin ethereum",
-                            coin.name()
-                        )))
-                    }
+                    Err(error) if assumed => Err(error.with_assumed_coin(coin)),
                     parsed => parsed,
                 },
             )?;
@@ -325,12 +320,12 @@ fn ask_for_coin(input: &mut Input) -> Result<Coin, Failure> {
         .iter()
         .map(|coin| Answer::new(coin.name(), coin.address_forms()))
         .collect();
-    let question = Question {
-        text: "Which coin is the address for?",
-        explanation: COIN_EXPLANATION,
-        more: None,
-        record: Some("Coin"),
-    };
+    let question = Question::with_details(
+        "Which coin is the address for?",
+        COIN_EXPLANATION,
+        None,
+        Some("Coin"),
+    );
     Ok(Coin::ALL[input.choose(&question, &answers)?])
 }
 
@@ -347,7 +342,7 @@ fn show_search(address: &Address, path: Option<&DerivationPath>, limits: SearchL
         format!(
             "{}, {} addresses",
             search.pattern(),
-            mhfe::grouped(search.addresses())
+            mhfe::GroupedCount::new(search.addresses())
         )
     };
     style::fact_before_work("Search", text);
@@ -356,16 +351,16 @@ fn show_search(address: &Address, path: Option<&DerivationPath>, limits: SearchL
 /// Reads a public answer, such as an address, as one step, again until `parse` accepts it; the
 /// summary then records it as `record`, if given: a label, and words to put before the answer.
 /// A caller whose `parse` accepts more than the answer it asks for records it itself, once read.
-fn read_public<T>(
+fn read_public<T, E: Into<MhfeError>>(
     input: &mut Input,
     prompt: &str,
     record: Option<(&str, &str)>,
-    parse: impl Fn(&str) -> Result<T, MhfeError>,
+    parse: impl Fn(&str) -> Result<T, E>,
 ) -> Result<T, Failure> {
     let mut step = Step::start(input)?;
     loop {
         let text = step.visible(input, prompt)?;
-        match parse(&text) {
+        match parse(&text).map_err(Into::into) {
             Ok(value) => {
                 step.finish()?;
                 if let Some((label, before)) = record {

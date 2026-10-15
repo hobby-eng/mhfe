@@ -109,7 +109,7 @@ export async function rekeyHelpers(client, made) {
 
 /**
  * What a rekey resolves to: what encrypt gives for the confirmed phrase, with `walletCheck`,
- * the 16-bit source check of a recovered 24-word reading with the reference's passphrase or
+ * the 16-bit wallet check of a recovered 24-word reading with the reference's passphrase or
  * none, null for every other length, and `rehearsal`, what the new container is rehearsed
  * with: the built-in check of a short phrase unless said otherwise (AUD-023-ARC010).
  */

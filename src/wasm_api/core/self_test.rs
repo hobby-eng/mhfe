@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 use super::{mhfe_with, report, verified};
 use crate::engine::browser::JsArgon2;
 use crate::engine::{BrowserArgon2Check, BrowserArgon2SizesCheck};
-use crate::self_check::{sets, ComponentCheck, SelfCheck};
+use crate::self_check::{ComponentCheck, SelfCheck};
 use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wasm_api::{js_error, json, run_self_check};
 
@@ -101,7 +101,7 @@ pub fn self_check_core(
         .as_ref()
         .map(|argon2| Box::new(BrowserArgon2Check::new(argon2)) as Box<dyn ComponentCheck + '_>);
     run_self_check(
-        sets::core(argon2_check),
+        SelfCheck::core(argon2_check),
         tier,
         &skip_ids,
         on_start,
@@ -121,7 +121,7 @@ pub fn self_check_process(
     on_result: &js_sys::Function,
 ) -> Result<String, JsError> {
     run_self_check(
-        sets::browser_process(),
+        SelfCheck::browser_process(),
         tier,
         &skip_ids,
         on_start,

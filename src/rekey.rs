@@ -3,22 +3,22 @@
 //! end: the length of the phrase, the confirmation that the recovered phrase is the wallet's (rule
 //! I14), and a new password or settings that actually change the container.
 
+mod error;
+pub use error::RekeyError;
+
+use crate::wallet::Fingerprint;
+
 use std::cell::RefCell;
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
-use crate::rehearsal::{
-    refuse_unused_passphrase, Confirmation, PassphraseReferences, RecoveredForRekey,
-};
+use crate::rehearsal::{Confirmation, PassphraseReferences, RecoveredForRekey};
 use crate::{Mhfe, MhfeError, Password, PhraseLength, WordCount, WorkFactor, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
-
-/// Rounds of a whole rekey: a recovery of 12, then an encryption with its check of 24.
-const REKEY_ROUNDS: u32 = 3 * ROUNDS;
 
 /// A phrase recovered for a rekey and confirmed, with whether its wallet has a BIP39 passphrase,
 /// which the new container's keep list names. One confirmed by [`Confirmation::Owner`] awaits the
@@ -43,7 +43,7 @@ pub enum ReplacementRehearsal {
     ConfirmingReference,
     /// The master key fingerprint of the phrase that the owner confirmed alone, with the wallet's
     /// BIP39 passphrase if it has one.
-    Fingerprint([u8; 4]),
+    Fingerprint(Fingerprint),
 }
 
 impl ConfirmedPhrase {
@@ -91,7 +91,7 @@ impl ConfirmedPhrase {
         // Only the fingerprint of an owner's confirmation takes a passphrase; beside the built-in
         // check or a confirming reference it would be dropped without a word (AUD-024-API017).
         if !self.rehearsed_by_fingerprint() {
-            refuse_unused_passphrase(passphrase, PassphraseReferences::Rekey)?;
+            PassphraseReferences::Rekey.refuse_unused(passphrase)?;
         }
         if self.phrase.verified() {
             return Ok(ReplacementRehearsal::BuiltInCheck);
@@ -100,14 +100,14 @@ impl ConfirmedPhrase {
             return Ok(ReplacementRehearsal::ConfirmingReference);
         }
         match (self.wallet_has_passphrase, passphrase.is_empty()) {
-            (true, true) => Err(MhfeError::InvalidRequest(
-                "the rehearsal's fingerprint needs the wallet's BIP39 passphrase".to_owned(),
+            (true, true) => Err(MhfeError::Rekey(
+                crate::rekey::RekeyError::RehearsalNeedsPassphrase,
             )),
-            (false, false) => Err(MhfeError::InvalidRequest(
-                "the wallet is stated to have no BIP39 passphrase".to_owned(),
+            (false, false) => Err(MhfeError::Rekey(
+                crate::rekey::RekeyError::WalletHasNoPassphrase,
             )),
             _ => Ok(ReplacementRehearsal::Fingerprint(
-                crate::wallet::master_fingerprint(self.phrase.phrase(), passphrase)?,
+                crate::wallet::Fingerprint::of(self.phrase.phrase(), passphrase)?,
             )),
         }
     }
@@ -126,6 +126,9 @@ pub struct Rekey {
 }
 
 impl Rekey {
+    /// A recovery followed by an encryption with its readback check.
+    pub const ROUNDS: u32 = ROUNDS + crate::ENCRYPTION_ROUNDS;
+
     /// A rekey of `container`, whose phrase has the given `length`: a stated word count, or
     /// [`PhraseLength::Detect`] to detect it after the recovery (`detection`). A
     /// same-length container has its own length only. Nothing is destroyed: the old container
@@ -178,8 +181,8 @@ impl Rekey {
     /// the owner may then compare the phrase shown with their backup. `None` for a refusal that
     /// ends the rekey; otherwise those lengths, empty where only a receiving address or the
     /// fingerprint tells the readings apart, and a front end offers the owner only when there are
-    /// some. After [`MhfeError::AmbiguousLength`] the owner states one of them
-    /// ([`Rekey::owner_states`]); after [`MhfeError::LengthDiffers`] it is the stated length, at
+    /// some. After [`crate::CipherError::AmbiguousLength`] the owner states one of them
+    /// ([`Rekey::owner_states`]); after [`crate::CipherError::LengthDiffers`] it is the stated length, at
     /// which the owner is shown the reading the built-in check found.
     pub fn owner_lengths_after(
         &self,
@@ -187,8 +190,10 @@ impl Rekey {
         refusal: &MhfeError,
     ) -> Result<Option<Vec<usize>>, MhfeError> {
         Ok(match refusal {
-            MhfeError::AmbiguousLength { .. } => Some(recovered.lengths_the_owner_can_confirm()?),
-            MhfeError::LengthDiffers { stated, .. } => {
+            MhfeError::Cipher(crate::CipherError::AmbiguousLength { .. }) => {
+                Some(recovered.lengths_the_owner_can_confirm()?)
+            }
+            MhfeError::Cipher(crate::CipherError::LengthDiffers { stated, .. }) => {
                 Some(if recovered.owner_can_confirm(self.length)? {
                     vec![*stated]
                 } else {
@@ -210,15 +215,12 @@ impl Rekey {
     ) -> Result<WordCount, MhfeError> {
         let lengths = self
             .owner_lengths_after(recovered, refusal)?
-            .ok_or_else(|| {
-                MhfeError::InvalidRequest(
-                    "this refusal does not allow another confirmation".to_owned(),
-                )
-            })?;
+            .ok_or(MhfeError::Rekey(
+                crate::rekey::RekeyError::NoFurtherConfirmation,
+            ))?;
         if lengths.is_empty() {
-            return Err(MhfeError::InvalidRequest(
-                "the owner cannot confirm this phrase: an address or the fingerprint does"
-                    .to_owned(),
+            return Err(MhfeError::Rekey(
+                crate::rekey::RekeyError::OwnerCannotConfirm,
             ));
         }
         let selected = words.map(WordCount::get).or_else(|| match lengths[..] {
@@ -226,10 +228,10 @@ impl Rekey {
             _ => None,
         });
         let Some(selected) = selected.filter(|words| lengths.contains(words)) else {
-            return Err(MhfeError::InvalidRequest(format!(
-                "the owner confirms a reading of {lengths:?} words here, not {}",
-                selected.unwrap_or(0)
-            )));
+            return Err(MhfeError::Rekey(crate::rekey::RekeyError::OwnerLength {
+                offered: lengths,
+                selected,
+            }));
         };
         let words = WordCount::new(selected)?;
         self.set_length(PhraseLength::Words(words))?;
@@ -249,15 +251,15 @@ impl Rekey {
         progress: StageCallback<'_>,
     ) -> Result<ConfirmedPhrase, MhfeError> {
         if self.owner_lengths_after(recovered, refusal)?.is_none() {
-            return Err(MhfeError::InvalidRequest(
-                "this refusal does not allow another confirmation".to_owned(),
+            return Err(MhfeError::Rekey(
+                crate::rekey::RekeyError::NoFurtherConfirmation,
             ));
         }
         if matches!(confirmation, Confirmation::Owner) {
             self.owner_states(recovered, refusal, words)?;
         } else if words.is_some() {
-            return Err(MhfeError::InvalidRequest(
-                "only the owner's confirmation states a length".to_owned(),
+            return Err(MhfeError::Rekey(
+                crate::rekey::RekeyError::OnlyOwnerStatesLength,
             ));
         }
         self.confirm(recovered, confirmation, wallet_has_passphrase, progress)
@@ -271,7 +273,7 @@ impl Rekey {
         new_work: WorkFactor,
     ) -> Result<(), MhfeError> {
         if new_work == self.old_work && new_password.as_bytes() == self.old_password.as_bytes() {
-            return Err(MhfeError::NewPasswordSameAsOld);
+            return Err(MhfeError::Rekey(crate::rekey::RekeyError::Unchanged));
         }
         Ok(())
     }
@@ -326,11 +328,11 @@ impl Rekey {
         progress: StageCallback<'_>,
     ) -> Result<RecoveredForRekey, MhfeError> {
         if mhfe.work_factor() != self.old_work {
-            return Err(MhfeError::InvalidRequest(
-                "the recovery must run at the old container's settings".to_owned(),
+            return Err(MhfeError::Rekey(
+                crate::rekey::RekeyError::OldSettingsRequired,
             ));
         }
-        let rounds = RoundCounter::starting_after(0, REKEY_ROUNDS);
+        let rounds = RoundCounter::starting_after(0, Self::ROUNDS);
         mhfe.recover_for_rekey(
             self.container.words(),
             &self.old_password,
@@ -343,7 +345,7 @@ impl Rekey {
     /// The phrase of the rekey's length from `recovered`, once `confirmation` confirms it
     /// ([`RecoveredForRekey::confirm`]). The built-in check confirms a short phrase at the length
     /// it finds only when that length was stated; else the rekey is refused with
-    /// [`MhfeError::LengthDiffers`], and a receiving address or the fingerprint must confirm it,
+    /// [`crate::CipherError::LengthDiffers`], and a receiving address or the fingerprint must confirm it,
     /// which tells every reading apart (AUD-015-FUN001). With the length detected the built-in
     /// check alone is refused (AUD-017-FUN001). [`Confirmation::Owner`] returns the phrase for the
     /// owner to compare with their backup, awaiting the owner ([`ConfirmedPhrase::awaits_owner`]):
@@ -364,9 +366,11 @@ impl Rekey {
         progress: StageCallback<'_>,
     ) -> Result<ConfirmedPhrase, MhfeError> {
         let wallet_has_passphrase = wallet_passphrase(&confirmation, wallet_has_passphrase)?;
-        let rounds = RoundCounter::starting_after(0, REKEY_ROUNDS);
+        let rounds = RoundCounter::starting_after(0, Self::ROUNDS);
         let phrase = recovered.confirm(self.length, confirmation, &mut || {
-            rounds.report(Stage::Compare, ROUNDS, progress)
+            rounds
+                .report(Stage::Compare, ROUNDS, progress)
+                .map_err(Into::into)
         })?;
         let by_owner = matches!(confirmation, Confirmation::Owner);
         Ok(ConfirmedPhrase {
@@ -385,7 +389,7 @@ impl Rekey {
     ///
     /// A phrase confirmed by [`Confirmation::Owner`] is sealed only after the owner's explicit
     /// yes, [`ConfirmedPhrase::confirmed_by_owner`]; before it, [`ConfirmedPhrase::awaits_owner`],
-    /// the seal is refused with [`MhfeError::InvalidRequest`], not with the owner's no,
+    /// the seal is refused with `INVALID_REQUEST`, not with the owner's no,
     /// `NOT_CONFIRMED_BY_OWNER` (AUD-024-API012).
     pub fn seal<E: Argon2Engine>(
         &self,
@@ -398,16 +402,14 @@ impl Rekey {
     ) -> Result<Sealed, MhfeError> {
         // The owner's comparison is a confirmation only once the owner has said yes.
         if confirmed.awaits_owner {
-            return Err(MhfeError::InvalidRequest(
-                "the owner has not confirmed the recovered phrase yet; seal it only after their \
-                 explicit yes (ConfirmedPhrase::confirmed_by_owner)"
-                    .to_owned(),
+            return Err(MhfeError::Rekey(
+                crate::rekey::RekeyError::OwnerHasNotConfirmed,
             ));
         }
         self.check_new(new_password, mhfe.work_factor())?;
         // A container of the old one's kind: 24 words, or the same length as the phrase.
         let suite = self.container.suite();
-        let rounds = RoundCounter::starting_after(ROUNDS, REKEY_ROUNDS);
+        let rounds = RoundCounter::starting_after(ROUNDS, Self::ROUNDS);
         let phrase = &confirmed.phrase.phrase();
         Encryption::new(phrase, suite, repair_word_count)?.run(
             mhfe,
@@ -435,20 +437,19 @@ fn wallet_passphrase(
         Confirmation::Wallet(reference) if reference.given_passphrase().is_none()
     );
     match (shown, stated) {
-        (true, Some(false)) => Err(MhfeError::InvalidRequest(
-            "the wallet's BIP39 passphrase is stated otherwise than the reference shows".to_owned(),
+        (true, Some(false)) => Err(MhfeError::Rekey(
+            crate::rekey::RekeyError::PassphraseContradiction,
         )),
         // A reference is compared with the wallet's passphrase when it has one (the
         // specification's re-encryption rules): without it, it would match the phrase's wallet
         // without one, which says nothing about the funds under the passphrase.
-        (false, Some(true)) if reference_without_passphrase => Err(MhfeError::InvalidRequest(
-            "the reference must be compared with the wallet's BIP39 passphrase, which it has"
-                .to_owned(),
+        (false, Some(true)) if reference_without_passphrase => Err(MhfeError::Rekey(
+            crate::rekey::RekeyError::ReferenceNeedsPassphrase,
         )),
         (true, _) => Ok(true),
         (false, Some(stated)) => Ok(stated),
-        (false, None) => Err(MhfeError::InvalidRequest(
-            "say whether the wallet has a BIP39 passphrase".to_owned(),
+        (false, None) => Err(MhfeError::Rekey(
+            crate::rekey::RekeyError::PassphraseStatementRequired,
         )),
     }
 }
@@ -505,7 +506,7 @@ mod tests {
         .unwrap();
         assert!(matches!(
             rekey.check_new(&password("old password"), WorkFactor::default()),
-            Err(MhfeError::NewPasswordSameAsOld)
+            Err(MhfeError::Rekey(crate::rekey::RekeyError::Unchanged))
         ));
         assert!(rekey
             .check_new(&password("new password"), WorkFactor::default())
@@ -544,7 +545,7 @@ mod tests {
                 Some(false),
                 &mut |_, _, _| { Ok(()) }
             ),
-            Err(MhfeError::InvalidRequest(_))
+            Err(error) if error.error_code() == crate::ErrorCode::InvalidRequest
         ));
         let phrase = rekey
             .recover(
@@ -566,7 +567,10 @@ mod tests {
             &mut |_, _, _| Ok(()),
             &mut |_| Ok(()),
         );
-        assert!(matches!(unchanged, Err(MhfeError::NewPasswordSameAsOld)));
+        assert!(matches!(
+            unchanged,
+            Err(MhfeError::Rekey(crate::rekey::RekeyError::Unchanged))
+        ));
         let sealed = rekey
             .seal(
                 &mut reduced(other_work),
@@ -587,13 +591,13 @@ mod tests {
     #[test]
     fn the_wallet_passphrase_is_shown_or_stated() {
         let fingerprint = |passphrase| Reference::Fingerprint {
-            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT,
+            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT.into(),
             passphrase,
         };
         let without = fingerprint("");
         let with = fingerprint("TREZOR");
-        let unstated = |result: Result<bool, MhfeError>| matches!(result, Err(MhfeError::InvalidRequest(text)) if text.contains("say whether"));
-        let contradicted = |result: Result<bool, MhfeError>| matches!(result, Err(MhfeError::InvalidRequest(text)) if text.contains("stated otherwise"));
+        let unstated = |result: Result<bool, MhfeError>| matches!(result, Err(MhfeError::Rekey(text)) if text.to_string().contains("say whether"));
+        let contradicted = |result: Result<bool, MhfeError>| matches!(result, Err(MhfeError::Rekey(text)) if text.to_string().contains("stated otherwise"));
         // A reference without a passphrase shows nothing: the answer must be stated.
         assert!(unstated(wallet_passphrase(
             &Confirmation::Wallet(&without),
@@ -603,7 +607,7 @@ mod tests {
         // A wallet said to have a passphrase is compared with it, never without.
         assert!(matches!(
             wallet_passphrase(&Confirmation::Wallet(&without), Some(true)),
-            Err(MhfeError::InvalidRequest(text)) if text.contains("compared with the wallet's")
+            Err(MhfeError::Rekey(text)) if text.to_string().contains("compared with the wallet's")
         ));
         // A reference with one shows it; a statement that says otherwise is refused.
         for stated in [None, Some(true)] {
@@ -636,7 +640,9 @@ mod tests {
             None,
             &mut |_, _, _| Ok(()),
         );
-        assert!(matches!(refused, Err(MhfeError::InvalidRequest(_))));
+        assert!(
+            matches!(refused, Err(error) if error.error_code() == crate::ErrorCode::InvalidRequest)
+        );
         let same_length = Rekey::new(
             crate::test_support::ABANDON_12,
             PhraseLength::Detect,
@@ -645,7 +651,7 @@ mod tests {
         )
         .unwrap();
         let without = Reference::Fingerprint {
-            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT,
+            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT.into(),
             passphrase: "",
         };
         let unstated = same_length.recover(
@@ -655,10 +661,10 @@ mod tests {
             &mut |_, _, _| Ok(()),
         );
         assert!(
-            matches!(unstated, Err(MhfeError::InvalidRequest(text)) if text.contains("say whether"))
+            matches!(unstated, Err(MhfeError::Rekey(text)) if text.to_string().contains("say whether"))
         );
         let with = Reference::Fingerprint {
-            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT,
+            fingerprint: crate::test_support::ABANDON_12_FINGERPRINT.into(),
             passphrase: "TREZOR",
         };
         let contradicted = same_length.recover(
@@ -669,7 +675,7 @@ mod tests {
         );
         assert!(matches!(
             contradicted,
-            Err(MhfeError::InvalidRequest(text)) if text.contains("stated otherwise")
+            Err(MhfeError::Rekey(text)) if text.to_string().contains("stated otherwise")
         ));
         // A length without a built-in check refuses the built-in check first.
         let no_check = same_length.recover(
@@ -678,7 +684,12 @@ mod tests {
             None,
             &mut |_, _, _| Ok(()),
         );
-        assert!(matches!(no_check, Err(MhfeError::ReferenceRequired)));
+        assert!(matches!(
+            no_check,
+            Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceRequired
+            ))
+        ));
     }
 
     /// A rekey confirmed by the fingerprint of a wallet with a passphrase lists the passphrase
@@ -694,7 +705,7 @@ mod tests {
             })
             .unwrap();
         let rekey = Rekey::new(&container, PhraseLength::Detect, old, work).unwrap();
-        let fingerprint = crate::wallet::master_fingerprint(ABANDON_12, "TREZOR").unwrap();
+        let fingerprint = crate::wallet::Fingerprint::of(ABANDON_12, "TREZOR").unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
             passphrase: "TREZOR",
@@ -768,10 +779,10 @@ mod tests {
             Ok(ReplacementRehearsal::BuiltInCheck)
         );
 
-        let drawn = crate::phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
+        let drawn = crate::phrase::phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
         let full = stated(&drawn, 24);
         let reference = Reference::Fingerprint {
-            fingerprint: crate::wallet::master_fingerprint(&drawn, "").unwrap(),
+            fingerprint: crate::wallet::Fingerprint::of(&drawn, "").unwrap(),
             passphrase: "",
         };
         let by_reference = recover(&full, Confirmation::Wallet(&reference), false);
@@ -784,7 +795,7 @@ mod tests {
         for confirmed in [&short, &by_reference] {
             assert!(matches!(
                 confirmed.replacement_rehearsal("TREZOR"),
-                Err(MhfeError::InvalidRequest(_))
+                Err(error) if error.error_code() == crate::ErrorCode::InvalidRequest
             ));
         }
 
@@ -793,24 +804,24 @@ mod tests {
         assert_eq!(
             without.replacement_rehearsal(""),
             Ok(ReplacementRehearsal::Fingerprint(
-                crate::wallet::master_fingerprint(&drawn, "").unwrap()
+                crate::wallet::Fingerprint::of(&drawn, "").unwrap()
             ))
         );
         assert!(matches!(
             without.replacement_rehearsal("TREZOR"),
-            Err(MhfeError::InvalidRequest(_))
+            Err(error) if error.error_code() == crate::ErrorCode::InvalidRequest
         ));
         let with = recover(&full, Confirmation::Owner, true);
         assert!(with.rehearsal_needs_passphrase());
         assert_eq!(
             with.replacement_rehearsal("TREZOR"),
             Ok(ReplacementRehearsal::Fingerprint(
-                crate::wallet::master_fingerprint(&drawn, "TREZOR").unwrap()
+                crate::wallet::Fingerprint::of(&drawn, "TREZOR").unwrap()
             ))
         );
         assert!(matches!(
             with.replacement_rehearsal(""),
-            Err(MhfeError::InvalidRequest(_))
+            Err(error) if error.error_code() == crate::ErrorCode::InvalidRequest
         ));
     }
 
@@ -840,16 +851,16 @@ mod tests {
     #[test]
     fn a_stated_length_the_check_contradicts_needs_the_wallet() {
         let fingerprint = Reference::Fingerprint {
-            fingerprint: crate::wallet::master_fingerprint(ABANDON_12, "").unwrap(),
+            fingerprint: crate::wallet::Fingerprint::of(ABANDON_12, "").unwrap(),
             passphrase: "",
         };
         let rekey = stated(ABANDON_12, 15);
         assert_eq!(
             recover_detected(&rekey, Confirmation::BuiltInCheck).err(),
-            Some(MhfeError::LengthDiffers {
+            Some(MhfeError::Cipher(crate::CipherError::LengthDiffers {
                 stated: 15,
                 found: 12
-            })
+            }))
         );
         let confirmed = recover_detected(&rekey, Confirmation::Wallet(&fingerprint)).unwrap();
         assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
@@ -864,14 +875,16 @@ mod tests {
         let rekey = stated(ABANDON_12, 24);
         assert!(matches!(
             recover_detected(&rekey, Confirmation::BuiltInCheck),
-            Err(MhfeError::ReferenceRequired)
+            Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceRequired
+            ))
         ));
         assert_eq!(
             recover_detected(&rekey, Confirmation::Owner).err(),
-            Some(MhfeError::LengthDiffers {
+            Some(MhfeError::Cipher(crate::CipherError::LengthDiffers {
                 stated: 24,
                 found: 12
-            })
+            }))
         );
         let confirmed = recover_detected(&rekey, Confirmation::Wallet(&fingerprint)).unwrap();
         assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
@@ -897,20 +910,24 @@ mod tests {
                 Some(false),
                 &mut |_, _, _| Ok(())
             ),
-            Err(MhfeError::ReferenceRequired)
+            Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceRequired
+            ))
         ));
         let fingerprint = |fingerprint| Reference::Fingerprint {
             fingerprint,
             passphrase: "",
         };
-        let right = fingerprint(crate::wallet::master_fingerprint(ABANDON_12, "").unwrap());
+        let right = fingerprint(crate::wallet::Fingerprint::of(ABANDON_12, "").unwrap());
         let confirmed = recover_detected(&rekey, Confirmation::Wallet(&right)).unwrap();
         assert_eq!(confirmed.phrase().words(), 12);
         assert!(confirmed.phrase().verified());
-        let other = fingerprint([0, 0, 0, 0]);
+        let other = fingerprint(Fingerprint::from_bytes([0, 0, 0, 0]));
         assert!(matches!(
             recover_detected(&rekey, Confirmation::Wallet(&other)),
-            Err(MhfeError::ReferenceMismatch)
+            Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceMismatch
+            ))
         ));
     }
 
@@ -923,7 +940,7 @@ mod tests {
             .to_string();
         let rekey = detected(&phrase);
         let reference = Reference::Fingerprint {
-            fingerprint: crate::wallet::master_fingerprint(&phrase, "").unwrap(),
+            fingerprint: crate::wallet::Fingerprint::of(&phrase, "").unwrap(),
             passphrase: "",
         };
         let confirmed = recover_detected(&rekey, Confirmation::Wallet(&reference)).unwrap();
@@ -944,7 +961,9 @@ mod tests {
                 &mut |_| Ok(()),
             )
         };
-        assert!(matches!(seal(&shown), Err(MhfeError::InvalidRequest(_))));
+        assert!(
+            matches!(seal(&shown), Err(error) if error.error_code() == crate::ErrorCode::InvalidRequest)
+        );
         let yes = shown.confirmed_by_owner();
         assert!(!yes.awaits_owner());
         assert!(seal(&yes).is_ok());
@@ -973,7 +992,12 @@ mod tests {
                 Some(true),
                 &mut |_, _, _| Ok(()),
             );
-            assert!(matches!(refused, Err(MhfeError::ReferenceRequired)));
+            assert!(matches!(
+                refused,
+                Err(MhfeError::Rehearsal(
+                    crate::RehearsalError::ReferenceRequired
+                ))
+            ));
         }
     }
 
@@ -983,12 +1007,12 @@ mod tests {
     #[test]
     fn an_ambiguous_detection_needs_the_wallet() {
         let fingerprint = Reference::Fingerprint {
-            fingerprint: crate::wallet::master_fingerprint(AMBIGUOUS, "").unwrap(),
+            fingerprint: crate::wallet::Fingerprint::of(AMBIGUOUS, "").unwrap(),
             passphrase: "",
         };
-        let ambiguous = Some(MhfeError::AmbiguousLength {
+        let ambiguous = Some(MhfeError::Cipher(crate::CipherError::AmbiguousLength {
             readings: vec![12, 21, 24],
-        });
+        }));
         let rekey = detected(AMBIGUOUS);
         let confirmed = recover_detected(&rekey, Confirmation::Wallet(&fingerprint)).unwrap();
         assert_eq!(confirmed.phrase().phrase(), AMBIGUOUS);
@@ -1019,7 +1043,9 @@ mod tests {
         assert!(rekey.set_length(words(12)).is_ok());
         assert!(matches!(
             rekey.set_length(words(15)),
-            Err(MhfeError::LengthChoiceNotApplicable { .. })
+            Err(MhfeError::Format(
+                crate::FormatError::LengthChoiceNotApplicable { .. }
+            ))
         ));
     }
 
@@ -1043,7 +1069,10 @@ mod tests {
         let refusal = confirm(&rekey, &state, Confirmation::BuiltInCheck)
             .err()
             .unwrap();
-        assert!(matches!(refusal, MhfeError::AmbiguousLength { .. }));
+        assert!(matches!(
+            refusal,
+            MhfeError::Cipher(crate::CipherError::AmbiguousLength { .. })
+        ));
         assert_eq!(
             rekey.owner_lengths_after(&state, &refusal).unwrap(),
             Some(vec![12, 21])
@@ -1051,7 +1080,7 @@ mod tests {
         for choice in [None, Some(crate::WordCount::new(18).unwrap())] {
             assert!(matches!(
                 rekey.owner_states(&state, &refusal, choice),
-                Err(MhfeError::InvalidRequest(_))
+                Err(error) if error.error_code() == crate::ErrorCode::InvalidRequest
             ));
         }
         // The owner states the 21-word reading and is shown it; then the 12-word one.
@@ -1081,10 +1110,10 @@ mod tests {
             .unwrap();
         assert_eq!(
             refusal,
-            MhfeError::LengthDiffers {
+            MhfeError::Cipher(crate::CipherError::LengthDiffers {
                 stated: 15,
                 found: 12
-            }
+            })
         );
         assert_eq!(
             rekey.owner_lengths_after(&state, &refusal).unwrap(),
@@ -1104,13 +1133,14 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 refusal_of_owner,
-                MhfeError::InvalidRequest(format!(
-                    "the owner confirms a reading of [15] words here, not {other}"
-                ))
+                MhfeError::Rekey(crate::rekey::RekeyError::OwnerLength {
+                    offered: vec![15],
+                    selected: Some(other)
+                })
             );
         }
         let fingerprint = Reference::Fingerprint {
-            fingerprint: crate::wallet::master_fingerprint(ABANDON_12, "").unwrap(),
+            fingerprint: crate::wallet::Fingerprint::of(ABANDON_12, "").unwrap(),
             passphrase: "",
         };
         assert_eq!(
@@ -1125,17 +1155,17 @@ mod tests {
                 )
                 .err()
                 .unwrap(),
-            MhfeError::InvalidRequest("only the owner's confirmation states a length".to_owned())
+            MhfeError::Rekey(crate::rekey::RekeyError::OnlyOwnerStatesLength)
         );
         assert_eq!(
             rekey.owner_states(&state, &refusal, None).unwrap().get(),
             15
         );
         let as_24 = stated(ABANDON_12, 24);
-        let beside_24 = MhfeError::LengthDiffers {
+        let beside_24 = MhfeError::Cipher(crate::CipherError::LengthDiffers {
             stated: 24,
             found: 12,
-        };
+        });
         assert_eq!(
             as_24.owner_lengths_after(&state, &beside_24).unwrap(),
             Some(Vec::new())
@@ -1145,17 +1175,20 @@ mod tests {
             fingerprint,
             passphrase: "",
         };
-        let wrong = fingerprint([0, 0, 0, 0]);
+        let wrong = fingerprint(Fingerprint::from_bytes([0, 0, 0, 0]));
         let mismatch = confirm(&rekey, &state, Confirmation::Wallet(&wrong))
             .err()
             .unwrap();
-        assert_eq!(mismatch, MhfeError::ReferenceMismatch);
+        assert_eq!(
+            mismatch,
+            MhfeError::Rehearsal(crate::RehearsalError::ReferenceMismatch)
+        );
         assert_eq!(rekey.owner_lengths_after(&state, &mismatch).unwrap(), None);
         assert!(matches!(
             rekey.owner_states(&state, &mismatch, None),
-            Err(MhfeError::InvalidRequest(_))
+            Err(error) if error.error_code() == crate::ErrorCode::InvalidRequest
         ));
-        let right = fingerprint(crate::wallet::master_fingerprint(ABANDON_12, "").unwrap());
+        let right = fingerprint(crate::wallet::Fingerprint::of(ABANDON_12, "").unwrap());
         let confirmed = confirm(&rekey, &state, Confirmation::Wallet(&right)).unwrap();
         assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
     }

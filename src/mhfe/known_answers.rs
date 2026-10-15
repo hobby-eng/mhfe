@@ -19,8 +19,8 @@ use crate::feistel::{round_mask, round_message, round_salt, Geometry};
 use crate::operation::Encryption;
 use crate::packing::{self, STATE_WORDS};
 use crate::self_check::{
-    damaged, digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome,
-    DigestCase, Findings, Tier, DAMAGED,
+    damaged, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, DigestCase,
+    Findings, Tier, DAMAGED,
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
 use crate::vectors::inputs::TEST_PASSWORD;
@@ -29,7 +29,8 @@ use crate::{
     SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
 
-const ANOTHER_SUITE: &str = "the built-in cases are of another suite";
+const ANOTHER_SUITE: crate::self_check::KnownAnswerDifference =
+    crate::self_check::KnownAnswerDifference::TheBuiltInCasesAreOfAnotherSuite;
 
 mod published;
 
@@ -47,47 +48,47 @@ const LONG_KEY: [u8; 131] = [0xaa; 131];
 /// HMAC-SHA-256 for the masks and BLAKE2b with a 32-byte output for the salts.
 const CIPHER_DIGESTS: [DigestCase; 5] = [
     // FIPS 180-4, example "abc" (one block).
-    DigestCase {
-        algorithm: "SHA-256",
-        function: digest::<sha2::Sha256>,
-        key: b"",
-        message: b"abc",
-        expected: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-    },
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::Sha256,
+        digest::<sha2::Sha256>,
+        b"",
+        b"abc",
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    ),
     // FIPS 180-4, the 448-bit message, which needs a second block for its padding.
-    DigestCase {
-        algorithm: "SHA-256",
-        function: digest::<sha2::Sha256>,
-        key: b"",
-        message: b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
-        expected: "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
-    },
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::Sha256,
+        digest::<sha2::Sha256>,
+        b"",
+        b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+        "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+    ),
     // RFC 4231, test case 2.
-    DigestCase {
-        algorithm: "HMAC-SHA-256",
-        function: hmac::<sha2::Sha256>,
-        key: b"Jefe",
-        message: b"what do ya want for nothing?",
-        expected: "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
-    },
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::HmacSha256,
+        hmac::<sha2::Sha256>,
+        b"Jefe",
+        b"what do ya want for nothing?",
+        "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+    ),
     // RFC 4231, test case 6.
-    DigestCase {
-        algorithm: "HMAC-SHA-256",
-        function: hmac::<sha2::Sha256>,
-        key: &LONG_KEY,
-        message: b"Test Using Larger Than Block-Size Key - Hash Key First",
-        expected: "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54",
-    },
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::HmacSha256,
+        hmac::<sha2::Sha256>,
+        &LONG_KEY,
+        b"Test Using Larger Than Block-Size Key - Hash Key First",
+        "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54",
+    ),
     // BLAKE2b with the output length 32 in its parameter block (RFC 7693), computed with Python's
     // hashlib.blake2b(digest_size=32), whose reference code first gave RFC 7693 Appendix A's
     // BLAKE2b-512("abc"). A BLAKE2b-512 cut to 32 bytes would give ba80a53f... instead.
-    DigestCase {
-        algorithm: "BLAKE2b-256",
-        function: digest::<blake2::Blake2b<blake2::digest::consts::U32>>,
-        key: b"",
-        message: b"abc",
-        expected: "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319",
-    },
+    DigestCase::new(
+        crate::self_check::DigestAlgorithm::Blake2b256,
+        digest::<blake2::Blake2b<blake2::digest::consts::U32>>,
+        b"",
+        b"abc",
+        "bddd813c634239723171ef3fee98579b94964e3bb1cb3e427262c8c068d52319",
+    ),
 ];
 
 /// The `cipher-hashes` check: the CPU-dispatched SHA-256, HMAC-SHA-256 and BLAKE2b-256 against
@@ -114,7 +115,7 @@ impl ComponentCheck for CipherHashesCheck {
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
-        digest_outcome(self.cases)
+        DigestCase::outcome(self.cases)
     }
 }
 
@@ -143,7 +144,7 @@ impl CipherRoundsCheck {
     }
 
     /// Encrypts `vector` and recovers it, and compares each result with the published one.
-    fn replay(&self, vector: &PublishedVector) -> Result<(), String> {
+    fn replay(&self, vector: &PublishedVector) -> Result<(), crate::self_check::FailureDetail> {
         let password = vector.password()?;
         let mut mhfe = vector.mhfe(self.vectors)?;
         let suite = vector.suite();
@@ -169,17 +170,20 @@ impl CipherRoundsCheck {
             .map_err(stopped)?;
         expect(
             sealed.container() == vector.container,
-            "gives another container",
+            crate::self_check::KnownAnswerDifference::GivesAnotherContainer,
         )?;
-        expect(shown, "shows another container before its check")?;
+        expect(
+            shown,
+            crate::self_check::KnownAnswerDifference::ShowsAnotherContainerBeforeItsCheck,
+        )?;
         expect(
             sealed.suite() == suite,
-            "gives a container of another suite",
+            crate::self_check::KnownAnswerDifference::GivesAContainerOfAnotherSuite,
         )?;
         if let Some((_, _, words)) = repair_words {
             expect(
                 sealed.repair_words() == Some(words),
-                "gives other repair words",
+                crate::self_check::KnownAnswerDifference::GivesOtherRepairWords,
             )?;
         }
 
@@ -193,7 +197,7 @@ impl CipherRoundsCheck {
             .map_err(stopped)?;
         expect(
             same_readings(&detected, vector.recovery),
-            "recovers another phrase",
+            crate::self_check::KnownAnswerDifference::RecoversAnotherPhrase,
         )?;
         let selected = mhfe
             .decrypt_as(
@@ -206,7 +210,7 @@ impl CipherRoundsCheck {
             .map_err(stopped)?;
         expect(
             same_readings(&selected, vector.recovery),
-            "recovers another phrase with its suite selected",
+            crate::self_check::KnownAnswerDifference::RecoversAnotherPhraseWithItsSuiteSelected,
         )?;
         // A 24-word container read at a stated length gives that reading alone where its check
         // passes; 24 words stated beside a check that passes give every reading, the checked ones
@@ -229,7 +233,7 @@ impl CipherRoundsCheck {
                     .map_err(stopped)?;
                 expect(
                     same_readings(&chosen, expected),
-                    "recovers another phrase at a stated length",
+                    crate::self_check::KnownAnswerDifference::RecoversAnotherPhraseAtAStatedLength,
                 )?;
             }
         }
@@ -240,7 +244,7 @@ impl CipherRoundsCheck {
     /// check that passes takes precedence over the length stated.
     fn length_rules(&self, findings: &mut Findings) {
         /// One case, given the table of round keys to replay with.
-        type Case = fn(&'static [PublishedVector]) -> Result<(), String>;
+        type Case = fn(&'static [PublishedVector]) -> Result<(), crate::self_check::FailureDetail>;
         let cases: [Case; 2] = [
             // zero-12's container with 15 words stated: the 12-word check passes and gives the
             // published reading, which says that 15 were stated.
@@ -248,11 +252,10 @@ impl CipherRoundsCheck {
                 let vector = published_in(table, "zero-12")?;
                 let recovery = vector.recovery_at(table, 15)?.map_err(stopped)?;
                 let Recovery::Phrase(reading) = &recovery else {
-                    return Err("gives several readings where its check found one".to_owned());
+                    return Err(crate::self_check::FailureDetail::from(crate::self_check::KnownAnswerDifference::GivesSeveralReadingsWhereItsCheckFoundOne));
                 };
                 expect(
-                    same_readings(&recovery, vector.recovery) && reading.stated_words() == Some(15),
-                    "does not take the length its check finds over a stated one",
+                    same_readings(&recovery, vector.recovery) && reading.stated_words() == Some(15), crate::self_check::KnownAnswerDifference::DoesNotTakeTheLengthItsCheckFindsOverAStatedOne,
                 )
             },
             // zero-12's container with 24 words stated: the 12-word reading first, which says
@@ -263,11 +266,11 @@ impl CipherRoundsCheck {
                     vector.recovery_at(table, STATE_WORDS)?.map_err(stopped)?
                 else {
                     return Err(
-                        "does not offer the 24-word reading beside the checked one".to_owned()
+                        crate::self_check::FailureDetail::from(crate::self_check::KnownAnswerDifference::DoesNotOfferThe24WordReadingBesideTheCheckedOne)
                     );
                 };
                 let [checked, read_as_24] = &readings[..] else {
-                    return Err("offers other readings beside 24 stated words".to_owned());
+                    return Err(crate::self_check::FailureDetail::from(crate::self_check::KnownAnswerDifference::OffersOtherReadingsBeside24StatedWords));
                 };
                 let [published] = vector.recovery else {
                     return Err(damaged());
@@ -275,20 +278,25 @@ impl CipherRoundsCheck {
                 expect(
                     same_reading(checked, published)
                         && checked.stated_words() == Some(STATE_WORDS)
-                        && (read_as_24.words, read_as_24.verified) == (STATE_WORDS, false),
-                    "reads 24 stated words otherwise than the length rules say",
+                        && (read_as_24.words, read_as_24.verified) == (STATE_WORDS, false), crate::self_check::KnownAnswerDifference::Reads24StatedWordsOtherwiseThanTheLengthRulesSay,
                 )
             },
         ];
         let table = self.vectors;
-        findings.each("length rule", &cases, |case| case(table));
+        findings.each(crate::self_check::CaseKind::LengthRule, &cases, |case| {
+            case(table)
+        });
     }
 
     /// Refusals the cipher must give: a short length whose verifier does not match, a container
     /// changed before its check, and a round at settings no vector has.
     fn refusals(&self, findings: &mut Findings) {
         let table = self.vectors;
-        findings.each("refusal", self.refusals, |refusal| refusal.run(table));
+        findings.each(
+            crate::self_check::CaseKind::Refusal,
+            self.refusals,
+            |refusal| refusal.run(table),
+        );
     }
 }
 
@@ -343,7 +351,10 @@ const REFUSALS: [Refusal; 3] = [
 
 impl Refusal {
     /// `Ok` when the case is refused with its code, its rounds answered by `table`.
-    fn run(&self, table: &'static [PublishedVector]) -> Result<(), String> {
+    fn run(
+        &self,
+        table: &'static [PublishedVector],
+    ) -> Result<(), crate::self_check::FailureDetail> {
         match *self {
             Self::ReadAs {
                 vector,
@@ -414,7 +425,7 @@ fn entropy_separation(fixture: &Fixture, findings: &mut Findings) {
         Ok(cases) => cases,
         Err(damaged) => return findings.one(|| Err(damaged)),
     };
-    findings.each("entropy size", cases, |case| {
+    findings.each(crate::self_check::CaseKind::EntropySize, cases, |case| {
         let entropy_bytes =
             usize::try_from(fixtures::number(case, "entropy_bits")? / 8).map_err(|_| damaged())?;
         let geometry = Geometry::same_length(entropy_bytes).map_err(stopped)?;
@@ -427,22 +438,22 @@ fn entropy_separation(fixture: &Fixture, findings: &mut Findings) {
         let message = round_message(geometry, work, fixtures::number_u32(case, "round")?, &half);
         expect(
             [geometry.ds_salt(), &message].concat() == fixtures::bytes(case, "salt_input_hex")?,
-            "gives another salt input",
+            crate::self_check::KnownAnswerDifference::GivesAnotherSaltInput,
         )?;
         expect(
             round_salt(geometry, &message)[..] == fixtures::bytes(case, "salt_hex")?[..],
-            "gives another salt",
+            crate::self_check::KnownAnswerDifference::GivesAnotherSalt,
         )?;
         expect(
             [geometry.ds_mask(), &message].concat() == fixtures::bytes(case, "mask_input_hex")?,
-            "gives another mask input",
+            crate::self_check::KnownAnswerDifference::GivesAnotherMaskInput,
         )?;
         let key: [u8; KEY_BYTES] = fixtures::bytes(case, "key_hex")?
             .try_into()
             .map_err(|_| damaged())?;
         expect(
             round_mask(geometry, &key, &message) == fixtures::bytes(case, "mask_hex")?,
-            "gives another mask",
+            crate::self_check::KnownAnswerDifference::GivesAnotherMask,
         )
     });
 }
@@ -463,7 +474,9 @@ impl ComponentCheck for CipherRoundsCheck {
             .filter(|vector| tier == Tier::Full || vector.startup)
             .collect();
         let mut findings = Findings::new();
-        findings.each("vector", &vectors, |vector| self.replay(vector));
+        findings.each(crate::self_check::CaseKind::Vector, &vectors, |vector| {
+            self.replay(vector)
+        });
         self.length_rules(&mut findings);
         self.refusals(&mut findings);
         match Fixture::read(crate::validation_fixtures::SUITE_4) {
@@ -501,30 +514,38 @@ impl FormatsCheck {
     }
 
     /// The suite 3 fixture; the phrase cases run with `engine`, which must not be reached.
-    fn suite_3(&self, findings: &mut Findings, engine: impl Argon2Engine) -> Result<(), String> {
+    fn suite_3(
+        &self,
+        findings: &mut Findings,
+        engine: impl Argon2Engine,
+    ) -> Result<(), crate::self_check::FailureDetail> {
         let fixture = Fixture::read(self.suite_3)?;
         expect(fixture.text("suite_id")? == SUITE_ID, ANOTHER_SUITE)?;
-        findings.each("settings case", fixture.cases("settings")?, |case| {
-            let result = WorkFactor::new(
-                fixtures::number_u32(case, "pim")?,
-                fixtures::number_u32(case, "memory_level")?,
-            );
-            match case.get("expected_error") {
-                Some(_) => expect_refusal(result, fixtures::text(case, "expected_error")?),
-                None => {
-                    let work = result.map_err(stopped)?;
-                    expect(
-                        u64::from(work.memory_kib())
-                            == fixtures::number(case, "expected_memory_kib")?
-                            && u64::from(work.passes())
-                                == fixtures::number(case, "expected_passes")?,
-                        "gives other memory or passes",
-                    )
-                }
-            }
-        });
         findings.each(
-            "length detection case",
+            crate::self_check::CaseKind::SettingsCase,
+            fixture.cases("settings")?,
+            |case| {
+                let result = WorkFactor::new(
+                    fixtures::number_u32(case, "pim")?,
+                    fixtures::number_u32(case, "memory_level")?,
+                );
+                match case.get("expected_error") {
+                    Some(_) => expect_refusal(result, fixtures::text(case, "expected_error")?),
+                    None => {
+                        let work = result.map_err(stopped)?;
+                        expect(
+                            u64::from(work.memory_kib())
+                                == fixtures::number(case, "expected_memory_kib")?
+                                && u64::from(work.passes())
+                                    == fixtures::number(case, "expected_passes")?,
+                            crate::self_check::KnownAnswerDifference::GivesOtherMemoryOrPasses,
+                        )
+                    }
+                }
+            },
+        );
+        findings.each(
+            crate::self_check::CaseKind::LengthDetectionCase,
             fixture.cases("length_detection")?,
             |case| {
                 let state: packing::State = fixtures::bytes(case, "state_hex")?
@@ -533,12 +554,15 @@ impl FormatsCheck {
                 if case.get("entropy_hex").is_some() {
                     let packed =
                         packing::pack(&fixtures::bytes(case, "entropy_hex")?).map_err(stopped)?;
-                    expect(*packed == state, "packs another state")?;
+                    expect(
+                        *packed == state,
+                        crate::self_check::KnownAnswerDifference::PacksAnotherState,
+                    )?;
                 }
                 expect(
                     LengthDetection::of(&state).short_lengths()
                         == fixtures::numbers(case, "matching_short_lengths")?,
-                    "differs",
+                    crate::self_check::KnownAnswerDifference::Differs,
                 )
             },
         );
@@ -550,92 +574,116 @@ impl FormatsCheck {
             expect(
                 state[..] == fixtures::bytes(case, "state_hex")?[..]
                     && state[entropy.len()..] == fixtures::bytes(case, "verifier_hex")?[..],
-                "the verifier is written in another byte order",
+                crate::self_check::KnownAnswerDifference::TheVerifierIsWrittenInAnotherByteOrder,
             )
         });
-        let password = Password::new(TEST_PASSWORD).map_err(stopped)?;
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
-        findings.each("phrase case", fixture.cases("phrases")?, |case| {
-            let expected = fixtures::text(case, "expected_error")?;
-            let result = match fixtures::text(case, "operation")? {
-                "encrypt" => mhfe
-                    .encrypt(
-                        fixtures::text(case, "phrase")?,
-                        &password,
-                        Suite::TwentyFourWords,
-                        &mut |_, _| Ok(()),
-                    )
-                    .map(|_| ()),
-                "decrypt" => {
-                    let length = match case.get("words") {
-                        Some(_) => usize::try_from(fixtures::number(case, "words")?)
-                            .map_err(|_| damaged())
-                            .map(WordCount::new)?
-                            .map(PhraseLength::Words),
-                        None => Ok(PhraseLength::Detect),
-                    };
-                    let container = fixtures::text(case, "container")?;
-                    length
-                        .and_then(|length| {
-                            mhfe.decrypt_as(
-                                container,
-                                &password,
-                                Some(Suite::TwentyFourWords),
-                                length,
-                                &mut |_, _| Ok(()),
-                            )
-                        })
-                        .map(|_| ())
-                }
-                _ => return Err(damaged()),
-            };
-            expect_refusal(result, expected)
-        });
+        let (password, mut mhfe) = Self::with_public_password(engine)?;
+        findings.each(
+            crate::self_check::CaseKind::PhraseCase,
+            fixture.cases("phrases")?,
+            |case| {
+                let expected = fixtures::text(case, "expected_error")?;
+                let result = match fixtures::text(case, "operation")? {
+                    "encrypt" => mhfe
+                        .encrypt(
+                            fixtures::text(case, "phrase")?,
+                            &password,
+                            Suite::TwentyFourWords,
+                            &mut |_, _| Ok(()),
+                        )
+                        .map(|_| ()),
+                    "decrypt" => {
+                        let length = match case.get("words") {
+                            Some(_) => usize::try_from(fixtures::number(case, "words")?)
+                                .map_err(|_| damaged())
+                                .map(WordCount::new)?
+                                .map(PhraseLength::Words),
+                            None => Ok(PhraseLength::Detect),
+                        };
+                        let container = fixtures::text(case, "container")?;
+                        length
+                            .map_err(crate::CipherError::from)
+                            .and_then(|length| {
+                                mhfe.decrypt_as(
+                                    container,
+                                    &password,
+                                    Some(Suite::TwentyFourWords),
+                                    length,
+                                    &mut |_, _| Ok(()),
+                                )
+                            })
+                            .map(|_| ())
+                    }
+                    _ => return Err(damaged()),
+                };
+                expect_refusal(result, expected)
+            },
+        );
         Ok(())
     }
 
+    fn with_public_password<T: Argon2Engine>(
+        engine: T,
+    ) -> Result<(Password, Mhfe<T>), crate::self_check::FailureDetail> {
+        Ok((
+            Password::new(TEST_PASSWORD).map_err(stopped)?,
+            Mhfe::with_engine(WorkFactor::default(), engine),
+        ))
+    }
+
     /// The refusals of the suite 4 fixture, with `engine`, which must not be reached.
-    fn suite_4(&self, findings: &mut Findings, engine: impl Argon2Engine) -> Result<(), String> {
+    fn suite_4(
+        &self,
+        findings: &mut Findings,
+        engine: impl Argon2Engine,
+    ) -> Result<(), crate::self_check::FailureDetail> {
         let fixture = Fixture::read(self.suite_4)?;
-        let password = Password::new(TEST_PASSWORD).map_err(stopped)?;
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), engine);
-        findings.each("suite 4 refusal", fixture.cases("refusals")?, |case| {
-            expect(fixtures::text(case, "expected")? == "rejected", DAMAGED)?;
-            let text = fixtures::text(case, "text")?;
-            let result = match fixtures::text(case, "operation")? {
-                "encrypt-same-length" => mhfe
-                    .encrypt(text, &password, Suite::SameLength, &mut |_, _| Ok(()))
-                    .map(|_| ()),
-                "decrypt" => {
-                    // A container that does not read would be refused with the same error code as
-                    // one of a length the suite does not have: only a readable one can count.
-                    ContainerFacts::read(text).map_err(|_| damaged())?;
-                    let length = match case.get("words") {
-                        Some(_) => {
-                            let words = usize::try_from(fixtures::number(case, "words")?)
-                                .map_err(|_| damaged())?;
-                            PhraseLength::Words(WordCount::new(words).map_err(stopped)?)
-                        }
-                        None => PhraseLength::Detect,
-                    };
-                    let suite = match case.get("suite") {
-                        None => None,
-                        Some(_) => Some(
-                            Suite::of_number(fixtures::number(case, "suite")?)
-                                .ok_or_else(damaged)?,
-                        ),
-                    };
-                    mhfe.decrypt_as(text, &password, suite, length, &mut |_, _| Ok(()))
-                        .map(|_| ())
+        let (password, mut mhfe) = Self::with_public_password(engine)?;
+        findings.each(
+            crate::self_check::CaseKind::Suite4Refusal,
+            fixture.cases("refusals")?,
+            |case| {
+                expect(fixtures::text(case, "expected")? == "rejected", DAMAGED)?;
+                let text = fixtures::text(case, "text")?;
+                let result = match fixtures::text(case, "operation")? {
+                    "encrypt-same-length" => mhfe
+                        .encrypt(text, &password, Suite::SameLength, &mut |_, _| Ok(()))
+                        .map(|_| ()),
+                    "decrypt" => {
+                        // A container that does not read would be refused with the same error code as
+                        // one of a length the suite does not have: only a readable one can count.
+                        ContainerFacts::read(text).map_err(|_| damaged())?;
+                        let length = match case.get("words") {
+                            Some(_) => {
+                                let words = usize::try_from(fixtures::number(case, "words")?)
+                                    .map_err(|_| damaged())?;
+                                PhraseLength::Words(WordCount::new(words).map_err(stopped)?)
+                            }
+                            None => PhraseLength::Detect,
+                        };
+                        let suite = match case.get("suite") {
+                            None => None,
+                            Some(_) => Some(
+                                Suite::of_number(fixtures::number(case, "suite")?)
+                                    .ok_or_else(damaged)?,
+                            ),
+                        };
+                        mhfe.decrypt_as(text, &password, suite, length, &mut |_, _| Ok(()))
+                            .map(|_| ())
+                    }
+                    _ => return Err(damaged()),
+                };
+                match result {
+                    Err(error) if crate::CipherError::is_length_refusal(&error) => Ok(()),
+                    Err(error) => Err(crate::self_check::FailureDetail::Refused(
+                        error.error_code(),
+                    )),
+                    Ok(()) => Err(crate::self_check::FailureDetail::from(
+                        crate::self_check::KnownAnswerDifference::IsAccepted,
+                    )),
                 }
-                _ => return Err(damaged()),
-            };
-            match result {
-                Err(error) if Suite::is_length_refusal(&error) => Ok(()),
-                Err(error) => Err(format!("is refused with {}", error.code())),
-                Ok(()) => Err("is accepted".to_owned()),
-            }
-        });
+            },
+        );
         Ok(())
     }
 }
@@ -689,22 +737,23 @@ mod tests {
             sha2::Sha512::digest(message)[..32].to_vec()
         }
         let mut cases = CIPHER_DIGESTS;
-        cases[4].function = sha512_cut;
+        cases[4] = cases[4].with_function(sha512_cut);
         let mut check = CipherHashesCheck {
             cases: Box::leak(Box::new(cases)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("BLAKE2b-256 gives another digest".to_owned())
+            "BLAKE2b-256 gives another digest".to_owned()
         );
         let mut cases = CIPHER_DIGESTS;
-        cases[3].expected = "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f55";
+        cases[3] = cases[3]
+            .with_expected("60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f55");
         let mut check = CipherHashesCheck {
             cases: Box::leak(Box::new(cases)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("HMAC-SHA-256 gives another digest".to_owned())
+            "HMAC-SHA-256 gives another digest".to_owned()
         );
     }
 
@@ -727,12 +776,12 @@ mod tests {
             vectors: leaked(vectors),
             refusals: &REFUSALS,
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(format!(
+            format!(
                 "vector {} of 10 gives another container",
                 startup_place("nonzero-15")
-            ))
+            )
         );
 
         // A wrong key in the last round is a wrong Argon2 output that changes only the
@@ -752,12 +801,12 @@ mod tests {
                 vectors: leaked(vectors),
                 refusals: &REFUSALS,
             };
-            assert_eq!(
+            crate::self_check::assert_failed!(
                 check.run(Tier::Startup),
-                ComponentOutcome::Failed(format!(
+                format!(
                     "vector {} of 10 {what}",
                     startup_place("same-length-zero-18")
-                ))
+                )
             );
         }
     }
@@ -776,12 +825,12 @@ mod tests {
             vectors: leaked(vectors),
             refusals: &REFUSALS,
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(format!(
+            format!(
                 "vector {} of 10 stops with INTERNAL_ERROR",
                 startup_place("unicode-password")
-            ))
+            )
         );
 
         // The ambiguous vector must list both short readings and the 24-word one.
@@ -796,12 +845,12 @@ mod tests {
             vectors: leaked(vectors),
             refusals: &REFUSALS,
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(format!(
+            format!(
                 "vector {} of 10 recovers another phrase",
                 startup_place("ambiguous-12-21")
-            ))
+            )
         );
     }
 
@@ -816,12 +865,9 @@ mod tests {
             refusals: &REFUSALS,
         };
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Full),
-            ComponentOutcome::Failed(format!(
-                "vector {} of 27 gives another container",
-                index + 1
-            ))
+            format!("vector {} of 27 gives another container", index + 1)
         );
     }
 
@@ -889,9 +935,19 @@ mod tests {
     #[test]
     fn a_refusal_that_is_accepted_fails() {
         let accepted = |code: &str| {
-            ComponentOutcome::Failed(format!(
-                "refusal 1 of 1 is accepted instead of refused with {code}"
-            ))
+            let detail = crate::self_check::FailureDetail::Case {
+                kind: crate::self_check::CaseKind::Refusal,
+                number: 1,
+                total: 1,
+                cause: Box::new(crate::self_check::FailureDetail::Accepted {
+                    expected: crate::ErrorCode::from_name(code).unwrap(),
+                }),
+            };
+            assert_eq!(
+                detail.to_string(),
+                format!("refusal 1 of 1 is accepted instead of refused with {code}")
+            );
+            ComponentOutcome::Failed(detail)
         };
         // zero-12's own container at its own length, its own container in place of another, and
         // its own PIM: each is accepted, so each refusal must fail.
@@ -959,11 +1015,9 @@ mod tests {
                     code,
                 ),
             };
-            assert_eq!(
+            crate::self_check::assert_failed!(
                 refusal_alone(changed),
-                ComponentOutcome::Failed(format!(
-                    "refusal 1 of 1 is refused with {code} instead of LENGTH_DIFFERS"
-                )),
+                format!("refusal 1 of 1 is refused with {code} instead of LENGTH_DIFFERS"),
                 "refusal {}",
                 index + 1
             );
@@ -981,9 +1035,9 @@ mod tests {
             vectors: leaked(vectors),
             refusals: &REFUSALS,
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("refusal 1 of 3 a built-in vector is missing".to_owned())
+            "refusal 1 of 3 a built-in vector is missing".to_owned()
         );
     }
 
@@ -996,10 +1050,7 @@ mod tests {
             suite_3: changed.leak(),
             suite_4: crate::validation_fixtures::SUITE_4,
         };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed(detail.to_owned())
-        );
+        crate::self_check::assert_failed!(check.run(Tier::Startup), detail.to_owned());
     }
 
     #[test]
@@ -1008,10 +1059,7 @@ mod tests {
             suite_3: "{",
             suite_4: crate::validation_fixtures::SUITE_4,
         };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed(damaged())
-        );
+        crate::self_check::assert_failed!(check.run(Tier::Startup), damaged());
         suite_3_changed_fails(
             "        15\n      ]",
             "        15,\n        21\n      ]",
@@ -1027,12 +1075,10 @@ mod tests {
             suite_3: changed.leak(),
             suite_4: crate::validation_fixtures::SUITE_4,
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(
-                "settings case 4 of 5 is refused with INVALID_PIM instead of INVALID_MEMORY_LEVEL"
-                    .to_owned()
-            )
+            "settings case 4 of 5 is refused with INVALID_PIM instead of INVALID_MEMORY_LEVEL"
+                .to_owned()
         );
     }
 
@@ -1053,11 +1099,9 @@ mod tests {
             suite_4: changed.leak(),
         };
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Full),
-            ComponentOutcome::Failed(
-                "suite 4 refusal 2 of 63 is refused with INTERNAL_ERROR".to_owned()
-            )
+            "suite 4 refusal 2 of 63 is refused with INTERNAL_ERROR".to_owned()
         );
     }
 
@@ -1097,9 +1141,9 @@ mod tests {
         assert_ne!(changed, crate::validation_fixtures::SUITE_4);
         let mut findings = Findings::new();
         entropy_separation(&Fixture::read(&changed).unwrap(), &mut findings);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             findings.outcome(),
-            ComponentOutcome::Failed("entropy size 2 of 4 gives another mask input".to_owned())
+            "entropy size 2 of 4 gives another mask input".to_owned()
         );
     }
 }

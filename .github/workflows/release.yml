@@ -73,7 +73,6 @@ jobs:
         run: |
           rustup show
           rustup target add ${{ matrix.target }}
-          brew install gnu-tar
       - name: Run the fast tests
         if: matrix.target == 'aarch64-apple-darwin'
         run: cargo test --locked

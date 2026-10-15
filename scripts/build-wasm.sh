@@ -59,12 +59,13 @@ printf '\nconst ARGON2_SINGLE_THREADED_BUILD_ID = "development";\n' >> dist/core
 
 # wasm-bindgen names the WebAssembly mhfe_bg.wasm; nothing loads it by name, so it ships as
 # mhfe.wasm.
-cp web/runtime.js web/runtime.d.ts dist/runtime/
+cp web/runtime.d.ts dist/runtime/
 cp "$bindgen_dir/mhfe_bg.wasm" dist/runtime/mhfe.wasm
 cat "$bindgen_dir/mhfe.js" web/argon2-engine.js web/worker-runtime.js web/core-worker.js \
   web/repair-worker.js web/passwords-worker.js web/wallet-worker.js web/worker-start.js \
   > dist/runtime/worker.js
-cp web/client.js web/client.d.ts packaging/mhfe-fast-mode.py dist/core/
+cp web/client.d.ts packaging/mhfe-fast-mode.py dist/core/
+node scripts/build-browser-sources.mjs dist
 for class in repair passwords wallet; do
   cp "web/$class.js" "web/$class.d.ts" "dist/$class/"
 done

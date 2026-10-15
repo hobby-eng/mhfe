@@ -1,7 +1,7 @@
 //! Keeps the memory of a secret out of swap while it lives. An operating system may write any page
 //! of a program to its swap space on disk, where it can outlast the program by years; a locked
-//! page stays in memory (mlock on Unix). Locking is best effort: a refusal, such as a low
-//! RLIMIT_MEMLOCK, leaves the secret as it was, and the browser and Windows builds lock nothing.
+//! page stays in memory (mlock on Unix, VirtualLock on Windows). Locking is best effort: a refusal,
+//! such as a low RLIMIT_MEMLOCK, leaves the secret as it was. The browser locks nothing.
 //! Argon2's work area is far too large to lock; the program warns instead when swap is not
 //! encrypted.
 
@@ -238,7 +238,7 @@ impl crate::self_check::ComponentCheck for LockProbe {
                 "a web page cannot keep its memory out of swap".to_owned(),
             );
         }
-        if !cfg!(unix) {
+        if !cfg!(any(unix, windows)) {
             return ComponentOutcome::NotAvailable(
                 "this build locks no memory on this system".to_owned(),
             );
@@ -309,7 +309,7 @@ impl Drop for LockedPages {
     }
 }
 
-/// mlock and munlock act on whole pages and do not count: one munlock unlocks a page for every
+/// Native page locks act on whole pages and do not count: one munlock unlocks a page for every
 /// buffer on it. Two small secrets often share a page, so a page is unlocked only once the last
 /// guard that holds it is dropped.
 #[cfg(not(target_arch = "wasm32"))]
@@ -378,9 +378,9 @@ mod pages {
 
     /// How many guards hold the page at `address`; only the Unix tests ask.
     #[cfg(test)]
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     pub(super) fn holders_of(address: usize) -> usize {
-        let size = page_size().expect("a Unix system reports its page size");
+        let size = page_size().expect("a native system reports its page size");
         let holders = HOLDERS.lock().unwrap_or_else(PoisonError::into_inner);
         holders.get(&(address / size)).copied().unwrap_or(0)
     }
@@ -448,7 +448,7 @@ mod tests {
         let outcome = LockProbe::default().run(Tier::Startup);
         let Ok(buffer) = LockedBytes::build::<Infallible>(TYPED_LINE_BYTES, |_| Ok(()));
         let locked = buffer.is_locked();
-        let expected = match (cfg!(unix), locked) {
+        let expected = match (cfg!(any(unix, windows)), locked) {
             (true, true) => "passed",
             (true, false) => "warning",
             (false, _) => "notAvailable",
@@ -459,10 +459,10 @@ mod tests {
 
     /// A small buffer fits any usual RLIMIT_MEMLOCK (64 KiB or more) on Unix.
     #[test]
-    fn a_small_buffer_is_locked_on_unix() {
+    fn a_small_buffer_is_locked_natively() {
         let buffer: Vec<u8> = Vec::with_capacity(1024);
         let pages = LockedPages::of_vec(&buffer);
-        assert_eq!(pages.is_locked(), cfg!(unix));
+        assert_eq!(pages.is_locked(), cfg!(any(unix, windows)));
         drop(pages);
         // An empty capacity locks nothing and unlocks nothing.
         assert!(!LockedPages::of_vec(&Vec::new()).is_locked());
@@ -475,7 +475,7 @@ mod tests {
         let copy = LockedText::copy_of(text);
         assert_eq!(&*copy, text);
         assert_eq!(copy.capacity(), text.len(), "the buffer never grew");
-        assert_eq!(copy.is_locked(), cfg!(unix));
+        assert_eq!(copy.is_locked(), cfg!(any(unix, windows)));
         // Empty text has no buffer: nothing to lock.
         let empty = LockedText::copy_of("");
         assert_eq!(&*empty, "");
@@ -488,17 +488,17 @@ mod tests {
     fn locked_bytes_keep_their_buffer_and_lock() {
         let mut bytes = LockedBytes::copy_of(b"public test bytes");
         assert_eq!(&*bytes, b"public test bytes");
-        assert_eq!(bytes.is_locked(), cfg!(unix));
+        assert_eq!(bytes.is_locked(), cfg!(any(unix, windows)));
         bytes[0] = b'P';
         let address = bytes.as_ptr();
         let text = bytes.into_text().ok().unwrap();
         assert_eq!(&*text, "Public test bytes");
         assert_eq!(text.as_ptr(), address, "the text kept the buffer");
-        assert_eq!(text.is_locked(), cfg!(unix));
+        assert_eq!(text.is_locked(), cfg!(any(unix, windows)));
         let not_utf8 = LockedBytes::copy_of(&[0xff, 0xfe]);
         let back = not_utf8.into_text().err().unwrap();
         assert_eq!(&*back, [0xff, 0xfe]);
-        assert_eq!(back.is_locked(), cfg!(unix));
+        assert_eq!(back.is_locked(), cfg!(any(unix, windows)));
     }
 
     /// A `fill` that fails, as on a password that is too long or a line that is too long, gets a
@@ -506,10 +506,10 @@ mod tests {
     /// and their pages released. The wipe comes first by the order of the fields, which Rust
     /// drops in their declared order; reading freed memory to see it would need unsafe code.
     /// The buffer spans whole pages of its own, so that no other test's guard can hold them.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn a_failed_fill_releases_its_pages() {
-        let size = os::page_size().expect("a Unix system reports its page size");
+        let size = os::page_size().expect("a native system reports its page size");
         let mut page = 0;
         let mut was_locked = false;
         let refused = LockedBytes::build(3 * size, |bytes| {
@@ -528,9 +528,9 @@ mod tests {
 
     /// A whole page inside a buffer of the calling test alone, so that no other test's guard can
     /// hold it: the buffer, which must outlive the page's use, the page's address and its size.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     fn page_of_this_test() -> (Vec<u8>, usize, usize) {
-        let size = os::page_size().expect("a Unix system reports its page size");
+        let size = os::page_size().expect("a native system reports its page size");
         let area: Vec<u8> = Vec::with_capacity(3 * size);
         let page = (area.as_ptr() as usize).next_multiple_of(size);
         (area, page, size)
@@ -539,7 +539,7 @@ mod tests {
     /// Two secrets on one page, as the allocator often places small buffers: dropping the guard
     /// of one, in either order, must not unlock the other (AUD-007-SEC002). The page lies inside
     /// a buffer of this test alone, so no other test's guard can hold it too.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn a_shared_page_stays_locked_until_its_last_guard_is_dropped() {
         let (area, page, size) = page_of_this_test();
@@ -584,7 +584,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn a_refused_lock_holds_nothing() {
-        let size = os::page_size().expect("a Unix system reports its page size");
+        let size = os::page_size().expect("a native system reports its page size");
         // The first page above address zero, which no process maps.
         let unmapped = size;
         let refused = LockedPages::lock(unmapped as *const u8, 64);
@@ -596,7 +596,7 @@ mod tests {
 
     /// Guards on one page taken and dropped from several threads at once leave the counts exact:
     /// the page is held while any guard lives and unlocked once the last is gone.
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn guards_on_one_page_from_several_threads_keep_exact_counts() {
         const THREADS: usize = 8;

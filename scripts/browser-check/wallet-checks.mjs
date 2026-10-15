@@ -54,7 +54,7 @@ export async function checkWalletParameters(wallet) {
         coin("bitcoin", "Bitcoin", "1…, 3…, bc1q… or bc1p…"),
         coin("bitcoin-cash", "Bitcoin Cash", "bitcoincash:q… or 1…"),
         coin("cosmos", "Cosmos", "cosmos1…"),
-        coin("dash", "Dash", "X… or dash1k…"),
+        coin("dash", "Dash", "X…, dash1k… or tdash1k…"),
         coin("dogecoin", "Dogecoin", "D…"),
         coin("ethereum", "Ethereum and EVM networks", "0x…"),
         coin("ethereum-classic", "Ethereum Classic", "0x…"),

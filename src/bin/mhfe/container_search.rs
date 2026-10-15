@@ -117,12 +117,12 @@ fn ask_what_is_known(input: &mut Input, search: &ContainerSearch) -> Result<Know
         explanation.push(NO_OWN_CHECK_EXPLAINED);
     }
     let (kinds, answers) = what_is_known_answers(Offered::of(search));
-    let question = Question {
-        text: "No repair words: what do you know?",
-        explanation: &explanation,
-        more: Some(readme::REPAIR),
-        record: None,
-    };
+    let question = Question::with_details(
+        "No repair words: what do you know?",
+        &explanation,
+        Some(readme::REPAIR),
+        None,
+    );
     Ok(kinds[input.choose_here(&question, &answers)?])
 }
 
@@ -197,12 +197,12 @@ fn compare_with_decoy(
 /// Asks how far to search an address of the container's own wallet for two missing words.
 fn ask_scan_gap(input: &mut Input) -> Result<u32, Failure> {
     let answers = gap_answers();
-    let question = Question {
-        text: "How far does the wallet go?",
-        explanation: &GAP_EXPLAINED,
-        more: Some(readme::REPAIR),
-        record: None,
-    };
+    let question = Question::with_details(
+        "How far does the wallet go?",
+        &GAP_EXPLAINED,
+        Some(readme::REPAIR),
+        None,
+    );
     let chosen = input.choose_here(&question, &answers)?;
     let gap = match SCAN_GAPS.get(chosen) {
         Some(&gap) => gap,
@@ -287,11 +287,11 @@ fn with_container_wallet(
     search: &ContainerSearch,
     context: &SearchContext,
 ) -> Result<Next, Failure> {
-    let reference = WalletReference::read_address_or_fingerprint(input, &context.address)?;
+    let reference = WalletReference::read_address_or_fingerprint(input, context.address())?;
     // How far an address is searched for two missing words: as given, or as asked; a fingerprint
     // or one missing word needs no gap.
     let two_missing = !search.offers_wallet_search();
-    let scan_gap = match context.scan_gap {
+    let scan_gap = match context.scan_gap() {
         Some(gap) => gap,
         None if two_missing && reference.is_address() => ask_scan_gap(input)?,
         None => DECOY_SCAN_GAP,
@@ -311,13 +311,13 @@ fn with_container_wallet(
             search.count()
         ));
     }
-    let passphrase = check::ask_passphrase(input, context.operation, CONTAINER_PHRASE)?;
+    let passphrase = check::ask_passphrase(input, context.operation(), CONTAINER_PHRASE)?;
     eprintln!();
     let found = match compare_with_decoy(search, &reference.reference_with(&passphrase), scan_gap) {
         Ok(found) => found,
         // Two candidates share the reference: the person may give an address instead
         // (AUD-024-FUN001).
-        Err(error @ MhfeError::SeveralCandidatesMatch { .. }) => {
+        Err(error @ MhfeError::Search(mhfe::search::SearchError::SeveralMatches { .. })) => {
             style::retry(refused(&error, ""));
             return Ok(Next::AskAgain);
         }
@@ -353,9 +353,9 @@ fn with_original_wallet(
     search: &ContainerSearch,
     context: &SearchContext,
 ) -> Result<Next, Failure> {
-    let reference = WalletReference::read_address_or_fingerprint(input, &context.address)?;
+    let reference = WalletReference::read_address_or_fingerprint(input, context.address())?;
     reference.show_search(SearchLimits::default());
-    let passphrase = check::ask_passphrase(input, context.operation, ORIGINAL_SEED_PHRASE)?;
+    let passphrase = check::ask_passphrase(input, context.operation(), ORIGINAL_SEED_PHRASE)?;
     let reference = reference.reference_with(&passphrase);
     search_by_recoveries(input, search, context, &reference, SearchWords::WITH_WALLET)
 }
@@ -369,7 +369,7 @@ fn with_own_checks(
     with_passphrase: bool,
 ) -> Result<Next, Failure> {
     let passphrase = if with_passphrase {
-        check::read_passphrase_named(input, context.operation, ORIGINAL_SEED_PHRASE)?
+        check::read_passphrase_named(input, context.operation(), ORIGINAL_SEED_PHRASE)?
     } else {
         LockedText::copy_of("")
     };
@@ -408,7 +408,7 @@ fn search_by_recoveries(
     if !starts_long_search(input, search, work)? {
         return Ok(Next::AskAgain);
     }
-    let password = terminal::read_password(input, context.operation)?;
+    let password = terminal::read_password(input, context.operation())?;
     let found = run_long(search, work, |mhfe, progress| {
         search.search_wallet(mhfe, &password, reference, progress)
     })?;
@@ -454,12 +454,7 @@ fn starts_long_search(
     eprintln!();
     style::warn_here(&took, "");
     let answers = start_answers();
-    let question = Question {
-        text: "Start the search?",
-        explanation: &[],
-        more: None,
-        record: None,
-    };
+    let question = Question::with_details("Start the search?", &[], None, None);
     Ok(input.choose_here(&question, &answers)? == 0)
 }
 
@@ -469,7 +464,7 @@ fn run_long(
     work: WorkFactor,
     run: impl FnOnce(
         &mut mhfe::Mhfe<NativeEngine>,
-        &mut dyn FnMut(usize, usize, u32, u32) -> Result<(), MhfeError>,
+        &mut dyn FnMut(usize, usize, u32, u32) -> Result<(), mhfe::CancelledError>,
     ) -> Result<Option<Found>, MhfeError>,
 ) -> Result<Option<Found>, Failure> {
     let mut mhfe = settings::reserve_memory(work)?;
@@ -547,12 +542,7 @@ fn use_found(
     // stay on this private screen.
     eprintln!("{} Found {}, {how}.", paint(GOOD, style::TICK), *places);
     let answers = found_answers();
-    let question = Question {
-        text: "Use the found container phrase?",
-        explanation: &[],
-        more: None,
-        record: None,
-    };
+    let question = Question::with_details("Use the found container phrase?", &[], None, None);
     if input.choose_here(&question, &answers)? != 0 {
         return Ok(Next::TypeAgain);
     }
@@ -569,14 +559,14 @@ fn use_found(
         "Search",
         how.trim_start_matches("with ").trim_start_matches("by "),
     );
-    Ok(Next::Use(Reviewed {
-        words: LockedText::copy_of(found.container()),
-        repaired: Some(format!(
+    Ok(Next::Use(Reviewed::new(
+        LockedText::copy_of(found.container()),
+        Some(format!(
             "{which} of the container phrase, found by a search"
         )),
         password,
         found_by,
-    }))
+    )))
 }
 
 #[cfg(test)]

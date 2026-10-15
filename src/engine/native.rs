@@ -1,8 +1,9 @@
 //! Argon2id on the vendored reference C code, with one work area for all twelve rounds.
 
-use super::ffi::{self, Argon2Inputs, WorkArea, ARGON2_VERSION_13};
+use super::ffi::{self, Argon2Inputs, WorkArea};
+use super::EngineError;
 use super::{Argon2Cost, Argon2Engine, KEY_BYTES, LANES, SALT_BYTES};
-use crate::{MhfeError, WorkFactor};
+use crate::WorkFactor;
 
 // A native 32-bit build cannot run even level 0: Rust refuses an allocation of 2 GiB or more
 // there (a layout may not exceed isize::MAX), and the reference C code would stop at 2 GiB anyway.
@@ -14,11 +15,13 @@ compile_error!("the native MHFE engine needs a 64-bit target: suite 3 needs at l
 /// The highest memory level this build supports: every level, since native builds are 64-bit.
 pub const HIGHEST_MEMORY_LEVEL: u32 = crate::MAX_MEMORY_LEVEL;
 
-/// Free memory as the operating system reports it, or `None` where it gives no figure. On Linux
-/// this is the lower of the computer's figure and the room left in the process's control group,
-/// such as a container's memory limit.
-pub fn available_memory_bytes() -> Option<u64> {
-    ffi::available_memory_bytes()
+impl NativeEngine {
+    /// Free memory as the operating system reports it, or `None` where it gives no figure. On Linux
+    /// this is the lower of the computer's figure and the room left in the process's control group,
+    /// such as a container's memory limit.
+    pub fn available_memory_bytes() -> Option<u64> {
+        ffi::available_memory_bytes()
+    }
 }
 
 /// Argon2id on the reference C code with its four lanes in parallel threads.
@@ -40,34 +43,30 @@ pub(super) fn processor_has_ssse3() -> bool {
 
 /// The compiled core selected by the same flag passed to the reference implementation.
 pub(super) fn core_name(ssse3: bool) -> &'static str {
-    if cfg!(target_arch = "x86_64") {
-        if ssse3 {
-            "opt.c with SSSE3"
-        } else {
-            "opt.c with SSE2"
-        }
-    } else {
-        "ref.c"
+    super::ArgonCore::native(ssse3).name()
+}
+
+impl NativeEngine {
+    /// Checks, without allocating anything, that this build and computer can run `work`: the memory
+    /// level is supported and the memory is free.
+    /// A program calls it before asking for secrets and reserves the memory after the password is
+    /// encoded, the order the specification gives for creating a container.
+    pub fn check_can_run(work: WorkFactor) -> Result<(), EngineError> {
+        work.require_level(HIGHEST_MEMORY_LEVEL)?;
+        check_free_memory(work.memory_bytes())
     }
 }
 
-/// Checks, without allocating anything, that this build and computer can run `work`: the memory
-/// level is supported and the memory is free.
-/// A program calls it before asking for secrets and reserves the memory after the password is
-/// encoded, the order the specification gives for creating a container.
-pub fn check_can_run(work: WorkFactor) -> Result<(), MhfeError> {
-    work.require_level(HIGHEST_MEMORY_LEVEL)?;
-    check_free_memory(work.memory_bytes())
-}
-
-/// The highest memory level whose memory the computer reports as free, if it reports any.
-pub fn highest_available_level() -> Option<u32> {
-    let available = available_memory_bytes()?;
-    (0..=HIGHEST_MEMORY_LEVEL)
-        .rev()
-        .filter_map(|level| WorkFactor::new(0, level).ok())
-        .find(|work| work.memory_bytes() <= available)
-        .map(WorkFactor::memory_level)
+impl NativeEngine {
+    /// The highest memory level whose memory the computer reports as free, if it reports any.
+    pub fn highest_available_level() -> Option<u32> {
+        let available = NativeEngine::available_memory_bytes()?;
+        (0..=HIGHEST_MEMORY_LEVEL)
+            .rev()
+            .filter_map(|level| WorkFactor::new(0, level).ok())
+            .find(|work| work.memory_bytes() <= available)
+            .map(WorkFactor::memory_level)
+    }
 }
 
 impl NativeEngine {
@@ -79,21 +78,21 @@ impl NativeEngine {
 
     /// Checks that the computer can run `work` and reserves its memory once; every round of the
     /// operation then reuses it.
-    pub fn new(work: WorkFactor) -> Result<Self, MhfeError> {
-        check_can_run(work)?;
+    pub fn new(work: WorkFactor) -> Result<Self, EngineError> {
+        NativeEngine::check_can_run(work)?;
         Self::allocate(work.argon2_cost())
     }
 
     /// A much cheaper engine for fast unit tests. It exists only in test builds; the release
     /// check `scripts/check-release-artifacts.sh` looks for [`REDUCED_COST_MARKER`] to prove it.
     #[cfg(test)]
-    pub(crate) fn reduced_for_tests(cost: Argon2Cost) -> Result<Self, MhfeError> {
+    pub(crate) fn reduced_for_tests(cost: Argon2Cost) -> Result<Self, EngineError> {
         assert!(!REDUCED_COST_MARKER.is_empty());
         check_free_memory(cost.memory_bytes())?;
         Self::allocate(cost)
     }
 
-    fn allocate(cost: Argon2Cost) -> Result<Self, MhfeError> {
+    fn allocate(cost: Argon2Cost) -> Result<Self, EngineError> {
         let work_area = WorkArea::allocate(cost.memory_bytes())?;
         Ok(Self {
             cost,
@@ -103,10 +102,10 @@ impl NativeEngine {
     }
 }
 
-fn check_free_memory(needed_bytes: u64) -> Result<(), MhfeError> {
-    match available_memory_bytes() {
+fn check_free_memory(needed_bytes: u64) -> Result<(), EngineError> {
+    match NativeEngine::available_memory_bytes() {
         Some(available_bytes) if available_bytes < needed_bytes => {
-            Err(MhfeError::NotEnoughMemory {
+            Err(EngineError::NotEnoughMemory {
                 needed_bytes,
                 available_bytes,
             })
@@ -121,15 +120,15 @@ impl Argon2Engine for NativeEngine {
         password: &[u8],
         salt: &[u8; SALT_BYTES],
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
-        let inputs = mhfe_inputs(password, salt, self.cost, self.ssse3);
+    ) -> Result<(), EngineError> {
+        let inputs = Argon2Inputs::mhfe(password, salt, self.cost, self.ssse3);
         guarded_call(ffi::argon2id, &inputs, &mut self.work_area, key)
     }
 }
 
 /// One Argon2 call of the C code into a work area: [`ffi::argon2id`], or a stand-in in the tests
 /// of the known-answer checks.
-pub(super) type Call = fn(&Argon2Inputs<'_>, &mut WorkArea, &mut [u8]) -> Result<(), MhfeError>;
+pub(super) type Call = fn(&Argon2Inputs<'_>, &mut WorkArea, &mut [u8]) -> Result<(), EngineError>;
 
 /// Runs `call` into `key` behind the guard every engine puts around its Argon2 call: the key is
 /// marked unwritten first, and a call that leaves it so or gives only zeros is refused
@@ -140,33 +139,10 @@ pub(super) fn guarded_call(
     inputs: &Argon2Inputs<'_>,
     work_area: &mut WorkArea,
     key: &mut [u8; KEY_BYTES],
-) -> Result<(), MhfeError> {
+) -> Result<(), EngineError> {
     super::mark_key_unwritten(key);
     call(inputs, work_area, key)?;
     super::check_key_written(key)
-}
-
-/// The inputs of one Argon2id call as MHFE makes it: version 1.3, four lanes on four threads, an
-/// empty secret and empty associated data, at `cost`. The engine and its known-answer check
-/// (known_answers.rs) both build their calls here, so the check runs the call the engine runs.
-pub(super) fn mhfe_inputs<'a>(
-    password: &'a [u8],
-    salt: &'a [u8; SALT_BYTES],
-    cost: Argon2Cost,
-    ssse3: bool,
-) -> Argon2Inputs<'a> {
-    Argon2Inputs {
-        password,
-        salt,
-        secret: &[],
-        associated_data: &[],
-        passes: cost.passes,
-        memory_kib: cost.memory_kib,
-        lanes: LANES,
-        threads: LANES,
-        version: ARGON2_VERSION_13,
-        ssse3,
-    }
 }
 
 /// Present only in test builds. A release binary or WebAssembly module that contains this text
@@ -181,15 +157,11 @@ mod tests {
 
     #[test]
     fn the_description_names_the_core_and_threads_of_the_derivation_inputs() {
-        let engine = NativeEngine::reduced_for_tests(Argon2Cost {
-            memory_kib: 1024,
-            passes: 1,
-        })
-        .unwrap();
-        let inputs = mhfe_inputs(b"public", b"0123456789abcdef", engine.cost, engine.ssse3);
-        assert_eq!(inputs.ssse3, processor_has_ssse3());
+        let engine = NativeEngine::reduced_for_tests(Argon2Cost::new(1024, 1)).unwrap();
+        let inputs = Argon2Inputs::mhfe(b"public", b"0123456789abcdef", engine.cost, engine.ssse3);
+        assert_eq!(inputs.uses_ssse3(), processor_has_ssse3());
         let core = if cfg!(target_arch = "x86_64") {
-            if inputs.ssse3 {
+            if inputs.uses_ssse3() {
                 "opt.c with SSSE3"
             } else {
                 "opt.c with SSE2"
@@ -200,7 +172,7 @@ mod tests {
         // Deliberate copy: the independent assertion binds the label to actual C-call inputs.
         assert_eq!(
             engine.description(),
-            format!("reference C, {core}, {} threads", inputs.threads)
+            format!("reference C, {core}, {} threads", inputs.threads())
         );
     }
 
@@ -215,16 +187,15 @@ mod tests {
 
     #[test]
     fn refuses_more_memory_than_the_computer_reports() {
-        let Some(available) = available_memory_bytes() else {
+        let Some(available) = NativeEngine::available_memory_bytes() else {
             return; // This platform reports no figure; nothing to check.
         };
-        let too_much = Argon2Cost {
-            memory_kib: u32::try_from((available / 1024).saturating_add(1024 * 1024))
-                .unwrap_or(u32::MAX),
-            passes: 1,
-        };
+        let too_much = Argon2Cost::new(
+            u32::try_from((available / 1024).saturating_add(1024 * 1024)).unwrap_or(u32::MAX),
+            1,
+        );
         match NativeEngine::reduced_for_tests(too_much) {
-            Err(MhfeError::NotEnoughMemory { .. }) => {}
+            Err(EngineError::NotEnoughMemory { .. }) => {}
             Err(other) => panic!("unexpected error: {other}"),
             Ok(_) => panic!("more memory than available was accepted"),
         }

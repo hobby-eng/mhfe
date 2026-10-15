@@ -21,6 +21,11 @@ The package is a set of independent module classes over one WebAssembly. A page 
 takes only the classes it needs; each needs nothing but the shared runtime, and only the core needs
 the Argon2 builds.
 
+The reviewed sources split the core into operation classes and the runtime into modules for
+worker jobs, secret ownership, validation and self-checks. The build joins these plain JavaScript
+parts into the same `core/client.js` and `runtime/runtime.js` paths, without transpilation or
+minification. Their build stamps and `modules.json` hashes cover the complete joined files.
+
 | Folder       | Class           | What it does                                                                             |
 | ------------ | --------------- | ---------------------------------------------------------------------------------------- |
 | `runtime/`   |                 | The WebAssembly, the worker, errors and the handling of secrets, shared by all           |
@@ -105,7 +110,7 @@ const sealed = await client.encrypt({
 const recovery = await client.decrypt({
   container,
   password,
-  passphrase, // the wallet's BIP39 passphrase for the 16-bit source check; "" (the default): none
+  passphrase, // the wallet's BIP39 passphrase for the 16-bit wallet check; "" (the default): none
 });
 // recovery.kind is "phrase" or, very rarely, "ambiguous"; show every candidate then. Each
 // candidate: { words, verified, status, phrase, suiteId, fingerprintWithoutPassphrase,
@@ -148,7 +153,7 @@ container phrase, as the specification advises: say so where it is shown.
 `passphrase`, the wallet's BIP39 passphrase, "" (the default) for none. Each candidate says what
 the page shows with the phrase:
 
-- `walletCheck` says whether a 24-word reading passes the 16-bit source check with `passphrase`,
+- `walletCheck` says whether a 24-word reading passes the 16-bit wallet check with `passphrase`,
   and is null for every other length. Every recovery evaluates it: the container does not show
   whether the phrase was made with the check, so a page asks for the passphrase when a 24-word
   reading comes out and decrypts again with it, or asks before. A pass makes a right password very
@@ -163,7 +168,11 @@ the page shows with the phrase:
 back written out, with what the page needs to know about them: the containers a phrase can go into
 and what each means, and for a container the lengths its phrase can have, what confirms a recovery
 of each, and whether hidden wallets and the wallet check apply. `parameters()` gives the fixed
-values, such as the repair word counts and what each repairs.
+values, such as the repair word counts and what each repairs. The core also reports
+`progressStages` (`recover`, `encrypt`, `check`, `compare`), `progressRoundTotals` (12, 24, 36)
+and `openedWordCount` (24). A round update uses a whole number from 1 through its total; the initial
+search counter may be 0. The runtime rejects malformed updates before a page callback runs.
+`MhfeError.code` and `.report` are readonly getters; the attached report and `cause` keep their identity.
 
 `check()` takes exactly one reference: `{ address, coin, path? }`, `{ fingerprint }`, `{ words }`,
 the built-in check of a 12- to 21-word original seed phrase, or `{ walletCheck: true }`, the phrase
@@ -247,7 +256,7 @@ const resealed = await client.rekey({
 `rekey()` encrypts a container again with a new password or settings, in 36 rounds. It recovers the
 phrase with the old password, confirms it and seals it again in a container of the same kind. The
 result is that of `encrypt()` with `walletCheck`: whether the recovered 24-word reading passes the
-16-bit source check with the reference's `passphrase` or none, null for other lengths. Every
+16-bit wallet check with the reference's `passphrase` or none, null for other lengths. Every
 recovery reports it, and it never confirms a rekey.
 
 - `words` is the phrase's word count, or 0, the default, to detect it. For a same-length container
@@ -611,10 +620,12 @@ random source is checked with scripted bytes only; the browser's generator is no
 
 An Argon2 build that does not start, as when the browser refuses its memory or its lane workers,
 gave no wrong answer, so it closes nothing. When no build starts, the Argon2 parts are
-"notAvailable" with the cause, such as "Argon2id could not run: the single-threaded Argon2 build
-did not start: …". In fast mode the check also loads the single-threaded build of the standard
+"notAvailable", such as "Argon2id could not run: the single-threaded Argon2 build did not start".
+A page without cross-origin isolation adds that known reason. Other factory exceptions are
+discarded without copying their text into errors or reports. A package mismatch stays
+`PACKAGE_MISMATCH` and never falls back. In fast mode the check also loads the single-threaded build of the standard
 mode: when only the threaded build does not start, `argon2` is checked with the single-threaded
-one and passes as a "warning", "the threaded Argon2 build did not start: …; the check ran the
+one and passes as a "warning", "the threaded Argon2 build did not start; the check ran the
 single-threaded build of the standard mode instead". A wrong answer of that build still fails,
 with the same note before its detail. An operation still uses its mode's build and, when it does
 not start, rejects with its own error.
@@ -927,7 +938,7 @@ do for them:
   wallet; "readAs24" is not verified, and for a shorter original seed phrase the password or a
   setting is wrong; "readAs24Chosen" is not verified, so compare it with the wallet. For
   "ambiguous", ask the user to compare each candidate with the wallet. Every 24-word reading gets
-  the 16-bit source check (`walletCheck`) with the `passphrase` given to `decrypt()`, "" for none:
+  the 16-bit wallet check (`walletCheck`) with the `passphrase` given to `decrypt()`, "" for none:
   the container does not show whether the phrase was made with the check. When a 24-word reading
   comes out, ask whether a BIP39 passphrase is used with the phrase, and say why in a few
   sentences, not only a link; ask before the recovery or decrypt again with the answer. Say
@@ -994,7 +1005,7 @@ do for them:
 - warn in standard mode that the operation takes longer, because the four Argon2 lanes then run one
   after another;
 - ask the user to rehearse the recovery with the container typed from the finished backup, not from
-  the screen: the check at creation covers the words the page produced, not the copy, and a wrongly
+  the screen: the creation check covers the words the page produced, not the copy, and a wrongly
   copied word still passes the BIP39 checksum in about one case in 256, and in a same-length
   container as often as one case in 16. Ask the user to keep the original seed phrase's backup
   until that rehearsal matches a receiving address of the wallet, and not to store an address or

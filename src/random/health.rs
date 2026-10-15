@@ -2,16 +2,16 @@
 //! self-test.
 //!
 //! At startup only scripted sources run, with no call to the operating system or the page: the
-//! source check ([`super::check_source`]) must refuse a stuck source and accept a working one, so
+//! source check ([`RandomSampler::check_source`]) must refuse a stuck source and accept a working one, so
 //! that the guard before every draw is known to work. The full self-test adds the live source:
 //! two probes, and the spread of 1,024 of its bytes. No test can see a source that is
 //! deterministic but looks random; only its design can rule that out.
 
 use zeroize::Zeroizing;
 
-use super::{check_source, RandomSource};
+use super::RandomError;
+use super::{RandomSampler, RandomSource};
 use crate::self_check::{expect, ComponentCheck, ComponentOutcome, Findings, Tier};
-use crate::MhfeError;
 
 /// Bytes the spread test draws.
 const SPREAD_BYTES: usize = 1024;
@@ -24,7 +24,7 @@ const MOST_REPEATS: usize = 40;
 /// Refuses a source whose bytes are not spread as random bytes are: 1,024 bytes with fewer than
 /// 200 different values, or one value more than 40 times. It catches a source stuck on a few
 /// values, a counter or a narrow generator, before it is trusted. The bytes are wiped.
-pub fn check_spread(source: &mut dyn RandomSource) -> Result<(), MhfeError> {
+fn check_spread(source: &mut dyn RandomSource) -> Result<(), RandomError> {
     let mut bytes = Zeroizing::new([0u8; SPREAD_BYTES]);
     source.fill(&mut bytes[..])?;
     let mut counts = Zeroizing::new([0usize; 256]);
@@ -34,9 +34,7 @@ pub fn check_spread(source: &mut dyn RandomSource) -> Result<(), MhfeError> {
     let different = counts.iter().filter(|&&count| count > 0).count();
     let most = counts.iter().copied().max().unwrap_or(0);
     if different < LEAST_DIFFERENT_VALUES || most > MOST_REPEATS {
-        return Err(MhfeError::RandomFailed(
-            "its bytes are not spread as random bytes are".to_owned(),
-        ));
+        return Err(RandomError::UnusableSpread);
     }
     Ok(())
 }
@@ -53,7 +51,7 @@ impl ScriptedSource {
         Self { bytes, position: 0 }
     }
 
-    /// Two different, non-zero blocks that [`check_source`] accepts, followed by `bytes`: what a
+    /// Two different, non-zero blocks that [`RandomSampler::check_source`] accepts, followed by `bytes`: what a
     /// draw that checks its source first takes.
     pub(crate) fn after_probes(bytes: &[u8]) -> Self {
         let mut script: Vec<u8> = (1..=2 * super::PROBE_BYTES as u8).collect();
@@ -63,12 +61,12 @@ impl ScriptedSource {
 }
 
 impl RandomSource for ScriptedSource {
-    fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {
+    fn fill(&mut self, bytes: &mut [u8]) -> Result<(), RandomError> {
         let end = self.position + bytes.len();
         let script = self
             .bytes
             .get(self.position..end)
-            .ok_or_else(|| MhfeError::RandomFailed("the script ran out".to_owned()))?;
+            .ok_or(RandomError::ScriptExhausted)?;
         bytes.copy_from_slice(script);
         self.position = end;
         Ok(())
@@ -76,7 +74,7 @@ impl RandomSource for ScriptedSource {
 }
 
 /// A stuck source: the same byte every time.
-fn constant_source(byte: u8) -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
+fn constant_source(byte: u8) -> impl FnMut(&mut [u8]) -> Result<(), RandomError> {
     move |bytes: &mut [u8]| {
         bytes.fill(byte);
         Ok(())
@@ -84,20 +82,20 @@ fn constant_source(byte: u8) -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
 }
 
 /// A source that fills nothing, as a host that writes into a copy of the buffer does.
-fn untouched_source() -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
+fn untouched_source() -> impl FnMut(&mut [u8]) -> Result<(), RandomError> {
     |_: &mut [u8]| Ok(())
 }
 
 /// A linear congruential generator: deterministic, but spread like random bytes, which the
 /// checks must accept.
-fn counter_source() -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
+fn counter_source() -> impl FnMut(&mut [u8]) -> Result<(), RandomError> {
     lcg_source(0x2545_f491)
 }
 
 /// The bytes of a linear congruential generator that starts at `state`: deterministic, but spread
 /// like random bytes. Numerical Recipes' constants for a 32-bit LCG, whose top byte is spread
 /// evenly.
-pub(super) fn lcg_source(mut state: u32) -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
+pub(super) fn lcg_source(mut state: u32) -> impl FnMut(&mut [u8]) -> Result<(), RandomError> {
     move |bytes: &mut [u8]| {
         for byte in bytes.iter_mut() {
             state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
@@ -109,7 +107,7 @@ pub(super) fn lcg_source(mut state: u32) -> impl FnMut(&mut [u8]) -> Result<(), 
 
 /// A source that gives only 16 different values, which passes the source check but not the
 /// spread.
-fn narrow_source() -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
+fn narrow_source() -> impl FnMut(&mut [u8]) -> Result<(), RandomError> {
     let mut counter = counter_source();
     move |bytes: &mut [u8]| {
         counter(bytes)?;
@@ -132,36 +130,43 @@ impl<'a> RandomSourceCheck<'a> {
     }
 
     fn scripted(findings: &mut Findings) {
-        type Source = Box<dyn FnMut(&mut [u8]) -> Result<(), MhfeError>>;
+        type Source = Box<dyn FnMut(&mut [u8]) -> Result<(), RandomError>>;
         /// A source the source check must refuse, by what a failure calls it.
-        type Refused = (&'static str, fn() -> Source);
+        type Refused = (crate::self_check::RefusedSource, fn() -> Source);
         let refused: [Refused; 2] = [
-            ("a source that fills nothing", || {
+            (crate::self_check::RefusedSource::Untouched, || {
                 Box::new(untouched_source())
             }),
-            ("a stuck source", || Box::new(constant_source(7))),
+            (crate::self_check::RefusedSource::Stuck, || {
+                Box::new(constant_source(7))
+            }),
         ];
         for (name, make) in refused {
             findings.one(|| {
                 let mut source = make();
                 expect(
-                    matches!(check_source(&mut source), Err(MhfeError::RandomFailed(_))),
-                    &format!("the source check accepts {name}"),
+                    matches!(
+                        RandomSampler::new(&mut source).check_source(),
+                        Err(RandomError::UnusableProbes)
+                    ),
+                    crate::self_check::FailureDetail::AcceptedSource(name),
                 )
             });
         }
         findings.one(|| {
             expect(
-                check_source(&mut counter_source()).is_ok()
+                RandomSampler::new(&mut counter_source())
+                    .check_source()
+                    .is_ok()
                     && check_spread(&mut counter_source()).is_ok(),
-                "the source check refuses a working source",
+                crate::self_check::KnownAnswerDifference::TheSourceCheckRefusesAWorkingSource,
             )
         });
         findings.one(|| {
             expect(
                 check_spread(&mut narrow_source()).is_err()
                     && check_spread(&mut constant_source(0)).is_err(),
-                "the spread test accepts a narrow source",
+                crate::self_check::KnownAnswerDifference::TheSpreadTestAcceptsANarrowSource,
             )
         });
     }
@@ -191,12 +196,15 @@ impl ComponentCheck for RandomSourceCheck<'_> {
             };
         };
         findings.one(|| {
-            check_source(live)
-                .map_err(|_| "the source gives bytes that cannot be random".to_owned())
+            RandomSampler::new(live).check_source().map_err(|_| {
+                crate::self_check::FailureDetail::from(
+                    crate::self_check::KnownAnswerDifference::TheSourceGivesBytesThatCannotBeRandom,
+                )
+            })
         });
         findings.one(|| {
             check_spread(live)
-                .map_err(|_| "the source's bytes are not spread as random bytes are".to_owned())
+                .map_err(|_| crate::self_check::FailureDetail::from(crate::self_check::KnownAnswerDifference::TheSourceSBytesAreNotSpreadAsRandomBytesAre))
         });
         findings.outcome()
     }
@@ -226,18 +234,16 @@ mod tests {
     #[test]
     fn a_stuck_or_narrow_live_source_fails() {
         let mut stuck = constant_source(0x5a);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             RandomSourceCheck::new(Some(&mut stuck)).run(Tier::Full),
-            ComponentOutcome::Failed("the source gives bytes that cannot be random".to_owned())
+            "the source gives bytes that cannot be random".to_owned()
         );
         let mut narrow = narrow_source();
-        assert_eq!(
+        crate::self_check::assert_failed!(
             RandomSourceCheck::new(Some(&mut narrow)).run(Tier::Full),
-            ComponentOutcome::Failed(
-                "the source's bytes are not spread as random bytes are".to_owned()
-            )
+            "the source's bytes are not spread as random bytes are".to_owned()
         );
-        let mut failing = |_: &mut [u8]| Err(MhfeError::RandomFailed("no source".to_owned()));
+        let mut failing = |_: &mut [u8]| Err(RandomError::ScriptExhausted);
         assert!(RandomSourceCheck::new(Some(&mut failing))
             .run(Tier::Full)
             .is_failure());
@@ -308,13 +314,13 @@ mod tests {
     #[test]
     fn a_script_gives_its_bytes_and_then_fails() {
         let mut script = ScriptedSource::after_probes(&[9, 8]);
-        assert!(check_source(&mut script).is_ok());
+        assert!(RandomSampler::new(&mut script).check_source().is_ok());
         let mut two = [0u8; 2];
         script.fill(&mut two).unwrap();
         assert_eq!(two, [9, 8]);
         assert!(matches!(
             script.fill(&mut two),
-            Err(MhfeError::RandomFailed(_))
+            Err(RandomError::ScriptExhausted)
         ));
     }
 }

@@ -381,6 +381,7 @@ export async function knownAnswersOnly() {
 export async function checkLibraryMessages() {
   checkRekeyRefusalOrder();
   const noArgon2 = await knownAnswersOnly();
+  checkArgon2ExceptionRedaction(noArgon2);
   /**
    * The library's refusal, with `code`, of the new settings `newPim` and `newMemoryLevel` of a
    * rekey.
@@ -445,6 +446,51 @@ export async function checkLibraryMessages() {
   return LIBRARY_MESSAGES;
 }
 
+/** An unrecognized page exception cannot inject a secret into engine or self-check diagnostics. */
+function checkArgon2ExceptionRedaction(knownAnswers) {
+  const marker = "public synthetic secret must not enter an Argon2 diagnostic";
+  for (const message of [
+    marker,
+    `ARGON2_FAILED: ${marker}`,
+    `ARGON2_FAILED: Threading failure ${marker}`,
+  ]) {
+    const failing = {
+      derive: () => {
+        throw new Error(message);
+      },
+    };
+    assert.throws(
+      () => operations.encrypt(PHRASE, encode("p"), failing),
+      (error) => {
+        assert.match(error.message, /^SELF_CHECK_FAILED: /u);
+        assert.match(error.message, /the browser Argon2 engine failed at 1024 KiB and 1 pass\b/u);
+        assert.equal(error.message.includes(marker), false);
+        return true;
+      },
+    );
+    let rounds = 0;
+    const afterKnownAnswer = {
+      derive: (password, salt, memoryKib, passes, key) => {
+        if (KNOWN_ANSWER_COSTS.includes(`${memoryKib}/${passes}`)) {
+          knownAnswers.derive(password, salt, memoryKib, passes, key);
+        } else {
+          rounds += 1;
+          throw new Error(message);
+        }
+      },
+    };
+    expectMessage(
+      "ARGON2_FAILED: Argon2 failed: the browser Argon2 engine failed at 2097152 KiB and 36 passes",
+      () => operations.encrypt(PHRASE, encode("p"), afterKnownAnswer, { pim: 2 }),
+    );
+    assert.equal(
+      rounds,
+      1,
+      "only the first real-cost round was attempted; no large work area was allocated",
+    );
+  }
+}
+
 /** Binding confirmation refusals precede even an Argon2 engine whose known answer would fail. */
 function checkRekeyRefusalOrder() {
   let derives = 0;
@@ -468,7 +514,8 @@ function checkRekeyRefusalOrder() {
 
 /**
  * Each draw probes the page's source itself, before anything is drawn: two blocks of 32 bytes,
- * which must differ and not be zero (src/random.rs), and the browser's own error is kept.
+ * which must differ and not be zero (src/random.rs). Arbitrary text of a page's thrown error
+ * never becomes a library diagnostic: it could hold a secret.
  */
 export function checkRandomSourceProbes() {
   expectMessage(
@@ -477,7 +524,7 @@ export function checkRandomSourceProbes() {
   );
   const refusingSource = {
     fill: () => {
-      throw new Error("QuotaExceededError: the browser refused");
+      throw new Error("public synthetic secret must not enter a diagnostic");
     },
   };
   for (const draw of [
@@ -485,8 +532,7 @@ export function checkRandomSourceProbes() {
     () => drawWithoutWishes(wallet, noBytes(), noBytes(), false, refusingSource),
   ]) {
     expectMessage(
-      "RANDOM_FAILED: the random generator failed: the page's random source failed: " +
-        "QuotaExceededError: the browser refused",
+      "RANDOM_FAILED: the random generator failed: the page's random source failed",
       draw,
     );
   }

@@ -7,7 +7,59 @@ use zeroize::Zeroizing;
 
 use crate::memory::LockedText;
 use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
-use crate::MhfeError;
+pub(crate) use crate::text::counts_text;
+mod error;
+pub use error::{PhraseError, PhraseIssue};
+
+/// A validated English BIP39 phrase whose full words are locked before being written and wiped
+/// when dropped. Its input spelling is never included in a refusal or diagnostic.
+pub struct Phrase {
+    words: LockedText,
+    word_count: usize,
+}
+
+impl Phrase {
+    /// Reads full words or unique prefixes of at least four letters, ignoring case and spacing.
+    ///
+    /// Invalid length, words or checksum return [`PhraseError::Original`].
+    pub fn read(input: &str) -> Result<Self, PhraseError> {
+        parse(input).map(Self::of)
+    }
+
+    /// Encodes 16 to 32 entropy bytes in steps of four. Other lengths are refused before the
+    /// dependency is called; the caller retains ownership of the entropy.
+    pub fn from_entropy(entropy: &[u8]) -> Result<Self, PhraseError> {
+        mnemonic_of(entropy).map(Self::of)
+    }
+
+    fn of(mnemonic: Mnemonic) -> Self {
+        Self {
+            words: locked_phrase_text(&mnemonic),
+            word_count: mnemonic.word_count(),
+        }
+    }
+
+    /// Full lower-case words with one space between them, borrowed without a copy.
+    pub fn words(&self) -> &str {
+        &self.words
+    }
+
+    /// The phrase's BIP39 length in words.
+    pub fn word_count(&self) -> usize {
+        self.word_count
+    }
+
+    /// Transfers the locked, wiping text owner without copying its secret buffer.
+    pub fn into_words(self) -> LockedText {
+        self.words
+    }
+}
+
+impl std::fmt::Debug for Phrase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Phrase { .. }")
+    }
+}
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -37,58 +89,42 @@ const PREFIX_LETTERS: usize = 4;
 /// Parses an English BIP39 phrase. Any spacing and letter case is accepted, and so are the
 /// first four or more letters of a word, because many metal backups keep only four letters.
 /// The checksum must be valid. Error messages give word positions, never the words.
-pub(crate) fn parse(input: &str) -> Result<Mnemonic, String> {
+pub(crate) fn parse(input: &str) -> Result<Mnemonic, PhraseError> {
     let word_count = input.split_whitespace().count();
     if !WORD_COUNTS.contains(&word_count) {
-        return Err(format!(
-            "it has {word_count} words, but a phrase has {}",
-            word_counts_text()
-        ));
+        return Err(PhraseError::Original(PhraseIssue::WordCount(word_count)));
     }
 
     // Reserved at full size up front, so the phrase is never copied by a reallocation.
     let mut normalized = Zeroizing::new(String::with_capacity(word_count * (LONGEST_WORD + 1)));
     for (position, typed) in input.split_whitespace().enumerate() {
-        let word = typed_word(typed).ok_or_else(|| {
-            format!(
-                "word {} is not in the English BIP39 word list",
-                position + 1
-            )
-        })?;
+        let word = typed_word(typed).ok_or(PhraseError::Original(PhraseIssue::UnknownWord(
+            position + 1,
+        )))?;
         if position > 0 {
             normalized.push(' ');
         }
         normalized.push_str(word);
     }
 
-    Mnemonic::parse_in_normalized(Language::English, &normalized).map_err(|error| match error {
-        bip39::Error::InvalidChecksum => {
-            "its checksum does not match, so a word is wrong or words are out of order".to_owned()
-        }
-        other => other.to_string(),
+    Mnemonic::parse_in_normalized(Language::English, &normalized).map_err(|error| {
+        PhraseError::Original(match error {
+            bip39::Error::InvalidChecksum => PhraseIssue::Checksum,
+            _ => PhraseIssue::UnexpectedEncoding,
+        })
     })
 }
 
 /// Parses a container: a valid phrase of 24 words (suite 3) or of 12, 15, 18 or 21 words
 /// (suite 4, the same-length containers), which [`crate::Suite::of_container`] tells apart.
-pub(crate) fn parse_container(input: &str) -> Result<Mnemonic, String> {
-    parse(input)
+pub(crate) fn parse_container(input: &str) -> Result<Mnemonic, PhraseError> {
+    parse(input).map_err(PhraseError::as_container)
 }
 
 /// Checks an original phrase before anything is computed and returns its word count, so that
 /// a tool can ask again at once instead of after a long operation.
-pub fn check_phrase(input: &str) -> Result<usize, MhfeError> {
-    parse(input)
-        .map(|phrase| phrase.word_count())
-        .map_err(MhfeError::InvalidPhrase)
-}
-
-/// Checks an original phrase and returns it as read: every word written out in full and in lower
-/// case, one space apart, so that an application can show the user what it understood.
-pub fn read_phrase(input: &str) -> Result<Zeroizing<String>, MhfeError> {
-    parse(input)
-        .map(|phrase| phrase_text(&phrase))
-        .map_err(MhfeError::InvalidPhrase)
+pub(crate) fn check_phrase(input: &str) -> Result<usize, PhraseError> {
+    parse(input).map(|phrase| phrase.word_count())
 }
 
 /// The words of a phrase, one space apart, in a buffer that is wiped when dropped. It is reserved
@@ -110,9 +146,10 @@ pub(crate) fn locked_phrase_text(phrase: &Mnemonic) -> LockedText {
     text
 }
 
-/// The final size of the text of `phrase`: each word with at most eight letters and a space.
+/// Count the canonical text before allocating it: the owner can transfer this exact buffer
+/// instead of making a second, shorter secret copy in `OriginalFacts`.
 fn text_capacity(phrase: &Mnemonic) -> usize {
-    phrase.word_count() * (LONGEST_WORD + 1)
+    phrase.words().map(str::len).sum::<usize>() + phrase.word_count() - 1
 }
 
 fn write_words(phrase: &Mnemonic, text: &mut String) {
@@ -127,19 +164,32 @@ fn write_words(phrase: &Mnemonic, text: &mut String) {
 /// The English BIP39 phrase of `entropy`, 16 to 32 bytes in steps of four, written into a buffer
 /// that is reserved at its final size and wiped when dropped, so that no growing copy of the words
 /// is left in freed memory (AUD-005-SEC001, AUD-008-SEC002). For a program that draws its own
-/// entropy, as `mhfe new` does. Another length is a programming error: `MhfeError::Internal`.
-pub fn phrase_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>, MhfeError> {
+/// entropy, as `mhfe new` does. Another length is refused with `INTERNAL_ERROR` before entering the BIP39 dependency.
+pub(crate) fn phrase_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>, PhraseError> {
     Ok(phrase_text(&mnemonic_of(entropy)?))
 }
 
 /// [`phrase_from_entropy`] in a buffer that is locked before the words are written into it.
-pub(crate) fn locked_phrase_from_entropy(entropy: &[u8]) -> Result<LockedText, MhfeError> {
+pub(crate) fn locked_phrase_from_entropy(entropy: &[u8]) -> Result<LockedText, PhraseError> {
     Ok(locked_phrase_text(&mnemonic_of(entropy)?))
 }
 
-fn mnemonic_of(entropy: &[u8]) -> Result<Mnemonic, MhfeError> {
-    Mnemonic::from_entropy_in(Language::English, entropy)
-        .map_err(|error| MhfeError::Internal(error.to_string()))
+/// Guards a byte count before any multiplication or dependency call. The public raw-entropy
+/// entry and the wallet criterion share it, including on 32-bit WebAssembly.
+pub(crate) fn require_entropy_length(bytes: usize) -> Result<(), PhraseError> {
+    if WORD_COUNTS
+        .into_iter()
+        .any(|words| crate::packing::entropy_of_words(words) == bytes)
+    {
+        Ok(())
+    } else {
+        Err(PhraseError::EntropyLength(bytes))
+    }
+}
+
+pub(crate) fn mnemonic_of(entropy: &[u8]) -> Result<Mnemonic, PhraseError> {
+    require_entropy_length(entropy.len())?;
+    Mnemonic::from_entropy_in(Language::English, entropy).map_err(|_| PhraseError::EntropyEncoding)
 }
 
 /// A word of the English list, or the only word that starts with the typed letters when at
@@ -164,35 +214,16 @@ pub(crate) fn word_counts_text() -> String {
     counts_text(&WORD_COUNTS)
 }
 
-/// A count with its thousands grouped, as messages write it: "65,536". The one formatter of the
-/// library and the command-line tool.
-pub fn grouped(count: impl Into<u128>) -> String {
-    let digits = count.into().to_string();
-    let mut text = String::new();
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            text.push(',');
-        }
-        text.push(digit);
-    }
-    text
-}
-
-/// Word counts as a message lists them, the last after "or": "12, 15, 18 or 21".
-pub(crate) fn counts_text(counts: &[usize]) -> String {
-    let counts: Vec<String> = counts.iter().map(ToString::to_string).collect();
-    match counts.split_last() {
-        Some((last, rest)) if !rest.is_empty() => format!("{} or {last}", rest.join(", ")),
-        Some((last, _)) => last.clone(),
-        None => String::new(),
-    }
-}
-
 /// The list word that one word as typed stands for: in any case of ASCII letters, four letters of
 /// it enough. The lower-case copy, part of a secret phrase, is wiped. Unicode case is not folded:
 /// a sign such as U+212A KELVIN SIGN is no letter of the list, in a phrase or in a wish
 /// (AUD-024-FUN012).
 pub(crate) fn typed_word(typed: &str) -> Option<&'static str> {
+    // Every accepted full word or prefix fits the longest ASCII list word. Refuse before
+    // allocating a lower-case secret copy, including for an enormous token from a caller.
+    if typed.len() > LONGEST_WORD {
+        return None;
+    }
     complete_word(&Zeroizing::new(typed.to_ascii_lowercase()))
 }
 
@@ -263,20 +294,67 @@ mod tests {
     const ZERO_12: &str = crate::test_support::ABANDON_12;
 
     #[test]
-    fn counts_are_grouped_by_thousands() {
-        assert_eq!(grouped(0u32), "0");
-        assert_eq!(grouped(999u32), "999");
-        assert_eq!(grouped(1_000u32), "1,000");
-        assert_eq!(grouped(65_536u32), "65,536");
-        assert_eq!(grouped(1_234_567u32), "1,234,567");
-        assert_eq!(grouped(1u128 << 64), "18,446,744,073,709,551,616");
-    }
-
-    #[test]
     fn accepts_spacing_case_and_four_letter_prefixes() {
         let typed = "  ABANDON aban\tAband abandon abandon abandon abandon abandon abandon abandon abandon abou ";
         assert_eq!(parse(typed).unwrap().to_string(), ZERO_12);
-        assert_eq!(*read_phrase(typed).unwrap(), ZERO_12);
+        let phrase = Phrase::read(typed).unwrap();
+        assert_eq!(phrase.words(), ZERO_12);
+        assert_eq!(phrase.word_count(), 12);
+    }
+
+    #[test]
+    fn a_phrase_transfers_its_locked_buffer_without_exposing_it_in_debug() {
+        // Trezor's BIP39 all-zero 128-bit vector is an independent literal answer.
+        let phrase = Phrase::from_entropy(&[0; 16]).unwrap();
+        assert_eq!(phrase.words(), ZERO_12);
+        assert_eq!(phrase.word_count(), 12);
+        assert_eq!(format!("{phrase:?}"), "Phrase { .. }");
+        let address = phrase.words().as_ptr();
+        let words = phrase.into_words();
+        assert_eq!(
+            words.as_ptr(),
+            address,
+            "transferring ownership makes no secret copy"
+        );
+        assert_eq!(&*words, ZERO_12);
+    }
+
+    #[test]
+    fn the_phrase_owner_refuses_invalid_input_without_repeating_it() {
+        for (input, issue) in [
+            (
+                "synthetic-private-marker".to_owned(),
+                PhraseIssue::WordCount(1),
+            ),
+            (
+                ZERO_12.replacen("about", "synthetic-private-marker", 1),
+                PhraseIssue::UnknownWord(12),
+            ),
+            (ZERO_12.replace("about", "abandon"), PhraseIssue::Checksum),
+        ] {
+            let error = Phrase::read(&input).unwrap_err();
+            assert_eq!(error, PhraseError::Original(issue));
+            assert_eq!(error.code(), "INVALID_PHRASE");
+            assert!(!error.to_string().contains("synthetic-private-marker"));
+        }
+        for bytes in [0, 15, 17, 31, 33] {
+            assert_eq!(
+                Phrase::from_entropy(&vec![0; bytes]).unwrap_err(),
+                PhraseError::EntropyLength(bytes)
+            );
+        }
+    }
+
+    #[test]
+    fn an_overlong_word_is_refused_at_its_position_without_echoing_it() {
+        for length in [LONGEST_WORD + 1, 100_000] {
+            let token = "X".repeat(length);
+            let input = ZERO_12.replacen("about", &token, 1);
+            let error = Phrase::read(&input).unwrap_err();
+            assert_eq!(error, PhraseError::Original(PhraseIssue::UnknownWord(12)));
+            assert_eq!(error.code(), "INVALID_PHRASE");
+            assert!(!error.to_string().contains(&token));
+        }
     }
 
     /// AUD-005-SEC001: the text of a phrase is written into its reserved buffer without a
@@ -297,20 +375,20 @@ mod tests {
                 let phrase = Mnemonic::from_entropy_in(Language::English, &entropy).unwrap();
                 let text = phrase_text(&phrase);
                 assert_eq!(*text, phrase.to_string());
-                assert_eq!(text.capacity(), words * (LONGEST_WORD + 1), "{words} words");
+                assert_eq!(text.capacity(), text.len(), "{words} words");
             }
         }
-        let read = read_phrase(ZERO_12).unwrap();
-        assert_eq!(read.capacity(), 12 * (LONGEST_WORD + 1));
+        let read = Phrase::read(ZERO_12).unwrap().into_words();
+        assert_eq!(read.capacity(), ZERO_12.len());
         // AUD-008-SEC002: the public formatter, with the BIP39 vector 7f…7f.
         let new = phrase_from_entropy(&[0x7f; 32]).unwrap();
         assert!(new.starts_with("legal winner thank year"));
-        assert_eq!(new.capacity(), 24 * (LONGEST_WORD + 1));
+        assert_eq!(new.capacity(), new.len());
         // The locked form that a new or recovered phrase is written into: the same words, in a
         // buffer of the same size that was locked first.
         let locked = locked_phrase_from_entropy(&[0x7f; 32]).unwrap();
         assert_eq!(&*locked, &*new);
-        assert_eq!(locked.capacity(), 24 * (LONGEST_WORD + 1));
+        assert_eq!(locked.capacity(), new.len());
         assert_eq!(locked.is_locked(), cfg!(unix));
     }
 
@@ -353,16 +431,31 @@ mod tests {
     }
 
     #[test]
+    fn entropy_lengths_are_checked_without_multiplication_or_allocating_the_input() {
+        for bytes in [0, 1, 15, 17, 31, 33, usize::MAX / 8 + 1, usize::MAX] {
+            assert_eq!(
+                require_entropy_length(bytes),
+                Err(PhraseError::EntropyLength(bytes))
+            );
+        }
+        for words in WORD_COUNTS {
+            let bytes = crate::packing::entropy_of_words(words);
+            assert_eq!(require_entropy_length(bytes), Ok(()));
+            assert_eq!(mnemonic_of(&vec![0; bytes]).unwrap().word_count(), words);
+        }
+    }
+
+    #[test]
     fn rejects_short_or_ambiguous_prefixes_and_unknown_words() {
         let with_short_prefix = ZERO_12.replacen("abandon", "aba", 1);
         assert_eq!(
             parse(&with_short_prefix).unwrap_err(),
-            "word 1 is not in the English BIP39 word list"
+            PhraseError::Original(PhraseIssue::UnknownWord(1))
         );
         let with_unknown_word = ZERO_12.replacen("about", "aboutx", 1);
         assert_eq!(
             parse(&with_unknown_word).unwrap_err(),
-            "word 12 is not in the English BIP39 word list"
+            PhraseError::Original(PhraseIssue::UnknownWord(12))
         );
     }
 
@@ -370,12 +463,12 @@ mod tests {
     fn reports_word_count_and_checksum_problems_without_words() {
         assert_eq!(
             parse("abandon abandon").unwrap_err(),
-            "it has 2 words, but a phrase has 12, 15, 18, 21 or 24"
+            PhraseError::Original(PhraseIssue::WordCount(2))
         );
         let bad_checksum = ZERO_12.replace("about", "abandon");
         assert_eq!(
             parse(&bad_checksum).unwrap_err(),
-            "its checksum does not match, so a word is wrong or words are out of order"
+            PhraseError::Original(PhraseIssue::Checksum)
         );
         // A 12-word phrase is a same-length container; which suite applies is decided later.
         assert_eq!(parse_container(ZERO_12).unwrap().word_count(), 12);

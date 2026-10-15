@@ -21,6 +21,44 @@ are cancelled.
 
 ## Changed
 
+- Rust result records have private fields and read accessors. `Phrase::read` and `from_entropy`
+  own normalized BIP39 text in a locked, wiping buffer; `into_words` transfers it without a copy.
+  Native memory probes, self-check set constructors, password check indexes and vector generation
+  are methods of their owners; [the API migration](../API.md) lists the replacements.
+- Core browser parameters add `progressStages`, `progressRoundTotals` and `openedWordCount`.
+  Error codes and attached self-check reports are readonly properties.
+- Coin address rules have one definition per coin. The Rust `Coin::address_forms()` method now
+  returns `String`; browser parameter fields, coin order and existing address examples stay the same.
+- Rust repair operations are owned by `repair::RepairWordCount`: validate a size with `new`,
+  then call `capacity` or `words_of`; `RepairWordCount::repair` reads a damaged card. Random-source
+  probes and bounded draws are methods of `random::RandomSampler`. Browser method names and
+  payloads are unchanged.
+- Rust fingerprints use `wallet::Fingerprint` for parsing, derivation, references and display;
+  `ContainerFacts::fingerprint()` is the entry for a container's own fingerprint. Password review
+  choices belong to `PasswordReview`, typed-password validation to `Password`, dice parsing to
+  `EffList`, and exact random strengths to `new_password::Millibits`. `Address` owns `find` and
+  `find_until`; `WordCount` owns built-in-check applicability and `PassphraseReferences` the
+  unused-passphrase refusal. Browser payloads are unchanged.
+- `wallet_check::WalletCheck::new(passphrase)` borrows the passphrase for criterion, verification
+  and repetition checks; its methods replace the free functions. Raw criterion checks still allow
+  an empty passphrase; profile verification still requires a nonempty one and 24 words.
+- Random providers and sampling return `random::RandomError`, converted into `MhfeError::Random`
+  at composed operations. Stable `ErrorCode` values can be read without constructing an error.
+  OS failures keep a numeric system code; page-source failures retain the source's identity and
+  omit arbitrary thrown text that might contain secrets. Existing error codes are unchanged.
+- Independent Rust modules return their own typed errors, with `From` conversions into composed
+  `MhfeError` operations and a shared `ErrorIdentity` interface. Error reasons carry typed fields;
+  the 52 stable codes and browser result schemas remain. Native callers matching flat error
+  variants must use the owning error. Progress callbacks return `CancelledError` with their
+  existing arguments/order. Self-check failures retain typed reasons and case metadata while
+  their browser `detail` remains a string.
+- Browser Argon2 startup failures report the affected build and known isolation context without
+  retaining factory exception text. Package mismatches remain fatal; only self-checks can fall
+  back to the single-threaded build.
+- Word counts, format refusals and scalar work-factor data live below cipher execution; their
+  root/engine type names remain available. `FormatError` owns format failures and converts to
+  the aggregate `MhfeError::Format`. Wallet checks and wallet derivation share the same locked,
+  wiping BIP39 seed implementation and `PassphraseError`, independently of address/key code.
 - The rehearsal check reports one of the specification's three results: "matches", "does not
   match" or "not verified". "Not verified" is a 24-word reading without an address or fingerprint,
   which a wrong password gives too, or several lengths that pass their built-in checks with none of
@@ -47,7 +85,25 @@ are cancelled.
 
 ## Fixed
 
-- Warn when the Linux swap inventory cannot be read, instead of treating it as confirmed empty.
+- An outside EFF word index, including an integer that would overflow the weighted sum, is refused
+  as `INVALID_REQUEST` before arithmetic. A quick startup refusal guards the same boundary.
+- Browser progress refuses negative, fractional and over-total rounds before calling page code.
+- Historical audit report assembly retains valid Python around local-only procedure references.
+  The audit-record gate parses retained Python harnesses without rerunning their historical work.
+- Windows secret buffers use `VirtualLock` with shared-page holder counts. The CLI opts out of
+  Windows Error Reporting and restricts process memory access with an `OWNER RIGHTS` DACL;
+  startup checks read both policies back. macOS requests `PT_DENY_ATTACH`, and release binaries
+  carry the hardened runtime, inspected through `csops`. Unsigned macOS builds report when this
+  policy cannot be verified.
+- Windows archives carry the pinned MinGW runtime's complete copyright and licence texts, with
+  binary/archive checks that reject missing notices.
+- macOS release jobs use the runner's existing Python tar/gzip writer rather than installing
+  Homebrew packages during an attested build, and record packing/compiler/SDK versions.
+- Windows standard input bypasses the standard library's persistent read-ahead buffer, as Unix
+  input already does; the owned pending buffer is wiped as it is consumed, including UTF-16
+  surrogate pairs converted from console input.
+- Warn when the swap inventory cannot be read or its protection cannot be verified, including the
+  Windows pagefile, instead of treating it as confirmed empty.
 - Refuse generated container-password output when a private screen cannot be established, including
   failed Windows VT activation; check the acquired screen again immediately before display.
 - A zram swap device with a writeback device is judged by that device, so that an unencrypted one
@@ -123,8 +179,8 @@ are cancelled.
 - `repair::CardWords` owns normalized as-typed card text in locked memory, exposes its words and
   count, and wipes it when dropped; the internal card parser is private.
 - `CheckOutcome::NotVerified` adds an outcome, a breaking change for exhaustive matches.
-- New or newly exported APIs include `container_fingerprint`, `grouped`,
-  `refuse_unused_passphrase`, `PassedCheck`, `PassphraseReferences`, `Settings`,
+- New or newly exported APIs include `ContainerFacts::fingerprint`, `grouped`,
+  `PassphraseReferences::refuse_unused`, `PassedCheck`, `PassphraseReferences`, `Settings`,
   `ReplacementRehearsal`, `ConfirmedPhrase`'s rehearsal methods, `Keep::old_container` and
   `self_check::process`. `ContainerFacts::require_wallet_check` offers the same applicability
   refusal to each front end.
@@ -136,6 +192,10 @@ are cancelled.
   result. A replacement allocation of the same capacity and a failed fill cannot bypass the guard.
 
 ## Build, tests and release
+
+- Browser source files are split by operation and runtime responsibility. A checked source join
+  preserves the package's existing file paths and public exports; no file-length lint exceptions
+  remain in the browser sources.
 
 - Update the pinned Rust dependencies `cc` to 1.8.0 and `serde_json` to 1.0.154.
 - Fast gates check Python widths and the inventory of CLI questions and scoped options. Terminal

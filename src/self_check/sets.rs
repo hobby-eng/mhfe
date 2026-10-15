@@ -2,18 +2,18 @@
 //! computes, and each is built only with its feature: a browser module's WebAssembly carries the
 //! checks and vectors of its own parts and no others.
 //!
-//! - [`hashes`]: the cipher's hashes alone.
-//! - [`core()`]: everything the encryption, recovery, rehearsal, rekey and hidden-wallet operations
+//! - [`SelfCheck::hashes()`]: the cipher's hashes alone.
+//! - [`SelfCheck::core()`]: everything the encryption, recovery, rehearsal, rekey and hidden-wallet operations
 //!   compute, with Argon2 added by the caller: [`crate::engine::NativeArgon2Check`] natively, the
 //!   page's `BrowserArgon2Check` in a browser, or none for a quick check without Argon2.
-//! - [`repair`]: the repair words, the BIP39 word list they are written in, and the wallet hashes,
+//! - [`SelfCheck::repair()`]: the repair words, the BIP39 word list they are written in, and the wallet hashes,
 //!   seeds and BIP32 keys of the master key fingerprint a repair gives.
-//! - [`passwords`]: the password encoding, the check word, the generator, the strength estimate,
+//! - [`SelfCheck::passwords()`]: the password encoding, the check word, the generator, the strength estimate,
 //!   the word hints and the random source.
-//! - [`wallet`]: the word list, the wallet hashes, seeds, keys and addresses, the address search
+//! - [`SelfCheck::wallet()`]: the word list, the wallet hashes, seeds, keys and addresses, the address search
 //!   an address check states, the wallet check, the chosen word, the word hints and the random
 //!   source.
-//! - [`native`]: everything the command-line tool computes.
+//! - [`SelfCheck::native()`]: everything the command-line tool computes.
 //!
 //! The parts of several sets are checked once when the sets are merged ([`SelfCheck::merge`]).
 
@@ -72,35 +72,37 @@ impl ComponentCheck for NotChecked {
     }
 }
 
-/// The parts of encryption, recovery, the rehearsal check, rekey and hidden wallets. `argon2` is
-/// the check of the Argon2 engine the operations will use; without one, the report lists Argon2
-/// as not run.
-#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
-pub fn core<'a>(argon2: Option<Box<dyn ComponentCheck + 'a>>) -> SelfCheck<'a> {
-    let argon2 = argon2.unwrap_or_else(|| {
-        Box::new(NotChecked::new(
-            "argon2",
-            "Argon2id",
-            "this check leaves Argon2 out",
-        ))
-    });
-    SelfCheck::new()
-        .with(crate::mhfe::known_answers::CipherHashesCheck::new())
-        .with(argon2)
-        .with(crate::mhfe::known_answers::CipherRoundsCheck::new())
-        .with(crate::mhfe::known_answers::FormatsCheck::new())
-        .with(crate::container::known_answers::ContainerFactsCheck::new())
-        .with(crate::operation::known_answers::KeepCheck::new())
-        .with(crate::password::known_answers::PasswordUnicodeCheck::new())
-        .with(crate::phrase::known_answers::WordListCheck::new())
-        .with(crate::repair::known_answers::RepairWordsCheck::new())
-        .with(crate::search::known_answers::ContainerSearchCheck::new())
-        .with(crate::check_word::known_answers::CheckWordCheck::new())
-        .merge(wallet_keys())
-        .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
-        .with(crate::hidden::known_answers::HiddenWalletsCheck::new())
-        .with(crate::rekey::known_answers::RekeyCheck::new())
-        .with(crate::rehearsal::known_answers::RehearsalCheck::new())
+impl<'a> SelfCheck<'a> {
+    /// The parts of encryption, recovery, the rehearsal check, rekey and hidden wallets. `argon2` is
+    /// the check of the Argon2 engine the operations will use; without one, the report lists Argon2
+    /// as not run.
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+    pub fn core(argon2: Option<Box<dyn ComponentCheck + 'a>>) -> SelfCheck<'a> {
+        let argon2 = argon2.unwrap_or_else(|| {
+            Box::new(NotChecked::new(
+                "argon2",
+                "Argon2id",
+                "this check leaves Argon2 out",
+            ))
+        });
+        SelfCheck::new()
+            .with(crate::mhfe::known_answers::CipherHashesCheck::new())
+            .with(argon2)
+            .with(crate::mhfe::known_answers::CipherRoundsCheck::new())
+            .with(crate::mhfe::known_answers::FormatsCheck::new())
+            .with(crate::container::known_answers::ContainerFactsCheck::new())
+            .with(crate::operation::known_answers::KeepCheck::new())
+            .with(crate::password::known_answers::PasswordUnicodeCheck::new())
+            .with(crate::phrase::known_answers::WordListCheck::new())
+            .with(crate::repair::known_answers::RepairWordsCheck::new())
+            .with(crate::search::known_answers::ContainerSearchCheck::new())
+            .with(crate::check_word::known_answers::CheckWordCheck::new())
+            .merge(wallet_keys())
+            .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
+            .with(crate::hidden::known_answers::HiddenWalletsCheck::new())
+            .with(crate::rekey::known_answers::RekeyCheck::new())
+            .with(crate::rehearsal::known_answers::RehearsalCheck::new())
+    }
 }
 
 /// The parts of a wallet's keys, which the core compares with and the wallet tools give: the master
@@ -129,46 +131,54 @@ fn master_key<'a>() -> SelfCheck<'a> {
         .with(crate::wallet::known_answers::Bip32Check::new())
 }
 
-/// The hashes of the cipher alone, SHA-256, HMAC-SHA-256 and BLAKE2b-256: for a program that only
-/// hashes, such as one that checks a page's SHA-256 before serving it.
-#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
-pub fn hashes<'a>() -> SelfCheck<'a> {
-    SelfCheck::new().with(crate::mhfe::known_answers::CipherHashesCheck::new())
+impl<'a> SelfCheck<'a> {
+    /// The hashes of the cipher alone, SHA-256, HMAC-SHA-256 and BLAKE2b-256: for a program that only
+    /// hashes, such as one that checks a page's SHA-256 before serving it.
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+    pub fn hashes() -> SelfCheck<'a> {
+        SelfCheck::new().with(crate::mhfe::known_answers::CipherHashesCheck::new())
+    }
 }
 
-/// The parts of the repair words: MHFE-REPAIR-1 and the BIP39 word list, with the parts of the
-/// master key fingerprint that a repair gives to tell the container from another.
-#[cfg(any(not(target_arch = "wasm32"), feature = "browser-repair"))]
-pub fn repair<'a>() -> SelfCheck<'a> {
-    SelfCheck::new()
-        .with(crate::phrase::known_answers::WordListCheck::new())
-        .with(crate::repair::known_answers::RepairWordsCheck::new())
-        .merge(master_key())
+impl<'a> SelfCheck<'a> {
+    /// The parts of the repair words: MHFE-REPAIR-1 and the BIP39 word list, with the parts of the
+    /// master key fingerprint that a repair gives to tell the container from another.
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-repair"))]
+    pub fn repair() -> SelfCheck<'a> {
+        SelfCheck::new()
+            .with(crate::phrase::known_answers::WordListCheck::new())
+            .with(crate::repair::known_answers::RepairWordsCheck::new())
+            .merge(master_key())
+    }
 }
 
-/// The parts of the password tools. `random` is the source new passwords are drawn from, which
-/// the full self-test tries; the startup checks use scripted sources only.
-#[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
-pub fn passwords<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
-    SelfCheck::new()
-        .with(crate::password::known_answers::PasswordUnicodeCheck::new())
-        .with(crate::check_word::known_answers::CheckWordCheck::new())
-        .with(crate::new_password::known_answers::GeneratorCheck::new())
-        .with(crate::strength::known_answers::StrengthCheck::new())
-        .merge(typed_and_drawn(random))
+impl<'a> SelfCheck<'a> {
+    /// The parts of the password tools. `random` is the source new passwords are drawn from, which
+    /// the full self-test tries; the startup checks use scripted sources only.
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
+    pub fn passwords(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
+        SelfCheck::new()
+            .with(crate::password::known_answers::PasswordUnicodeCheck::new())
+            .with(crate::check_word::known_answers::CheckWordCheck::new())
+            .with(crate::new_password::known_answers::GeneratorCheck::new())
+            .with(crate::strength::known_answers::StrengthCheck::new())
+            .merge(typed_and_drawn(random))
+    }
 }
 
-/// The parts of the wallet tools. `random` is the source new phrases are drawn from, which the
-/// full self-test tries; the startup checks use scripted sources only.
-#[cfg(any(not(target_arch = "wasm32"), feature = "browser-wallet"))]
-pub fn wallet<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
-    SelfCheck::new()
-        .with(crate::phrase::known_answers::WordListCheck::new())
-        .merge(wallet_keys())
-        .with(crate::wallet::known_answers::AddressSearchCheck::new())
-        .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
-        .with(crate::word_wishes::known_answers::WordWishesCheck::new())
-        .merge(typed_and_drawn(random))
+impl<'a> SelfCheck<'a> {
+    /// The parts of the wallet tools. `random` is the source new phrases are drawn from, which the
+    /// full self-test tries; the startup checks use scripted sources only.
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-wallet"))]
+    pub fn wallet(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
+        SelfCheck::new()
+            .with(crate::phrase::known_answers::WordListCheck::new())
+            .merge(wallet_keys())
+            .with(crate::wallet::known_answers::AddressSearchCheck::new())
+            .with(crate::wallet_check::known_answers::WalletCheckProfile::new())
+            .with(crate::word_wishes::known_answers::WordWishesCheck::new())
+            .merge(typed_and_drawn(random))
+    }
 }
 
 /// The parts that the password and the wallet tools share last: the word hints of what is typed
@@ -184,36 +194,40 @@ fn typed_and_drawn<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a
         .with(RandomSourceCheck::new(random))
 }
 
-/// What a web page reports of the process parts of the command-line tool: the memory lock, which
-/// [`crate::memory::LockProbe`] finds not available in WebAssembly, and core dumps, isolation and
-/// hidden input, which a page cannot check ([`super::process`]). The browser package's full
-/// self-check runs it.
-#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
-pub fn browser_process<'a>() -> SelfCheck<'a> {
-    super::process::PROCESS_PARTS.into_iter().fold(
-        SelfCheck::new().with(crate::memory::LockProbe::default()),
-        |set, part| {
-            set.with(NotChecked::not_available(
-                part.id,
-                part.label,
-                part.in_browser,
-            ))
-        },
-    )
+impl<'a> SelfCheck<'a> {
+    /// What a web page reports of the process parts of the command-line tool: the memory lock, which
+    /// [`crate::memory::LockProbe`] finds not available in WebAssembly, and core dumps, isolation and
+    /// hidden input, which a page cannot check ([`super::process`]). The browser package's full
+    /// self-check runs it.
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+    pub fn browser_process() -> SelfCheck<'a> {
+        super::process::PROCESS_PARTS.into_iter().fold(
+            SelfCheck::new().with(crate::memory::LockProbe::default()),
+            |set, part| {
+                set.with(NotChecked::not_available(
+                    part.id(),
+                    part.label(),
+                    part.in_browser(),
+                ))
+            },
+        )
+    }
 }
 
-/// Everything the command-line tool computes: the core with the native Argon2 engine and its
-/// check at 64 and 256 MiB for the full self-test, the password and wallet tools with `random`,
-/// the operating system's generator, for the full self-test, and the memory lock. The tool adds
-/// the checks of its own process: core dumps, isolation and hidden input.
-#[cfg(not(target_arch = "wasm32"))]
-pub fn native<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
-    core(Some(Box::new(crate::engine::NativeArgon2Check::default())))
-        .with(crate::engine::NativeArgon2SizesCheck::default())
-        .merge(passwords(random))
-        .merge(wallet(None))
-        .merge(repair())
-        .with(crate::memory::LockProbe::default())
+impl<'a> SelfCheck<'a> {
+    /// Everything the command-line tool computes: the core with the native Argon2 engine and its
+    /// check at 64 and 256 MiB for the full self-test, the password and wallet tools with `random`,
+    /// the operating system's generator, for the full self-test, and the memory lock. The tool adds
+    /// the checks of its own process: core dumps, isolation and hidden input.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn native(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
+        SelfCheck::core(Some(Box::new(crate::engine::NativeArgon2Check::default())))
+            .with(crate::engine::NativeArgon2SizesCheck::default())
+            .merge(SelfCheck::passwords(random))
+            .merge(SelfCheck::wallet(None))
+            .merge(SelfCheck::repair())
+            .with(crate::memory::LockProbe::default())
+    }
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -253,15 +267,15 @@ mod tests {
 
     #[test]
     fn the_native_set_has_every_check_once() {
-        let set = native(None);
+        let set = SelfCheck::native(None);
         assert_eq!(set.ids(), NATIVE_IDS);
     }
 
     #[test]
     fn the_browser_sets_hold_their_own_parts() {
-        assert_eq!(hashes().ids(), ["cipher-hashes"]);
+        assert_eq!(SelfCheck::hashes().ids(), ["cipher-hashes"]);
         assert_eq!(
-            repair().ids(),
+            SelfCheck::repair().ids(),
             [
                 "bip39-words",
                 "repair-words",
@@ -271,7 +285,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            passwords(None).ids(),
+            SelfCheck::passwords(None).ids(),
             [
                 "password-unicode",
                 "password-check-word",
@@ -282,7 +296,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            wallet(None).ids(),
+            SelfCheck::wallet(None).ids(),
             [
                 "bip39-words",
                 "wallet-hashes",
@@ -297,7 +311,7 @@ mod tests {
             ]
         );
         // Without an Argon2 check, the core says Argon2 was not run.
-        let mut core = core(None);
+        let mut core = SelfCheck::core(None);
         assert_eq!(core.ids()[1], "argon2");
         let report = core.run_quietly(Tier::Startup);
         assert!(report.passed(), "{:?}", report.first_failure());
@@ -306,7 +320,7 @@ mod tests {
 
     #[test]
     fn the_browser_process_set_reports_each_process_part_as_not_available() {
-        let mut set = browser_process();
+        let mut set = SelfCheck::browser_process();
         assert_eq!(
             set.ids(),
             ["memory-locking", "core-dumps", "isolation", "hidden-input"]
@@ -323,10 +337,10 @@ mod tests {
     #[test]
     fn every_set_passes_at_startup() {
         for (name, mut set) in [
-            ("repair", repair()),
-            ("passwords", passwords(None)),
-            ("wallet", wallet(None)),
-            ("native", native(None)),
+            ("repair", SelfCheck::repair()),
+            ("passwords", SelfCheck::passwords(None)),
+            ("wallet", SelfCheck::wallet(None)),
+            ("native", SelfCheck::native(None)),
         ] {
             let report = set.run_quietly(Tier::Startup);
             assert!(report.passed(), "{name}: {:?}", report.first_failure());
@@ -370,7 +384,7 @@ mod tests {
         } else {
             Duration::from_millis(250)
         };
-        let (report, total) = timed(native(None), Tier::Startup, "startup set");
+        let (report, total) = timed(SelfCheck::native(None), Tier::Startup, "startup set");
         assert!(report.passed(), "{:?}", report.first_failure());
         assert!(total < budget, "the startup set took {total:?}");
     }
@@ -383,9 +397,9 @@ mod tests {
     fn the_full_set_passes_with_the_system_generator() {
         let mut system = |bytes: &mut [u8]| {
             getrandom::fill(bytes)
-                .map_err(|_| crate::MhfeError::RandomFailed("getrandom failed".to_owned()))
+                .map_err(|error| crate::random::RandomError::OperatingSystem(error.raw_os_error()))
         };
-        let (report, _) = timed(native(Some(&mut system)), Tier::Full, "full set");
+        let (report, _) = timed(SelfCheck::native(Some(&mut system)), Tier::Full, "full set");
         assert!(report.passed(), "{:?}", report.first_failure());
         assert!(report
             .results()
@@ -396,7 +410,7 @@ mod tests {
     /// The labels and details a page shows name no coin, at either tier.
     #[test]
     fn labels_name_no_coin() {
-        let set = native(None);
+        let set = SelfCheck::native(None);
         let report_labels: Vec<&str> = set.checks.iter().map(|check| check.label()).collect();
         for label in report_labels {
             for coin in crate::wallet::Coin::ALL {

@@ -32,17 +32,44 @@ const TEXT_INDENT: &str = "  ";
 
 /// A question with what explains it.
 pub(crate) struct Question<'a> {
-    pub(crate) text: &'a str,
+    text: &'a str,
     /// Short lines, each written to fit style::TEXT_WIDTH with its indent; "" separates two topics.
-    pub(crate) explanation: &'a [&'a str],
+    explanation: &'a [&'a str],
     /// The README section that explains the question, linked on one grey line.
-    pub(crate) more: Option<&'a str>,
+    more: Option<&'a str>,
     /// The grey label of the line that records the answer, at most 10 characters; `None` when
     /// what the program shows next states the answer anyway.
-    pub(crate) record: Option<&'a str>,
+    record: Option<&'a str>,
 }
 
 impl<'a> Question<'a> {
+    pub(crate) const fn with_details(
+        text: &'a str,
+        explanation: &'a [&'a str],
+        more: Option<&'a str>,
+        record: Option<&'a str>,
+    ) -> Self {
+        Self {
+            text,
+            explanation,
+            more,
+            record,
+        }
+    }
+
+    pub(crate) fn text(&self) -> &str {
+        self.text
+    }
+    pub(crate) fn explanation(&self) -> &[&str] {
+        self.explanation
+    }
+    pub(crate) fn more(&self) -> Option<&str> {
+        self.more
+    }
+    pub(crate) fn record(&self) -> Option<&str> {
+        self.record
+    }
+
     /// A question without an explanation.
     pub(crate) fn new(text: &'a str, record: &'a str) -> Self {
         Self {
@@ -58,11 +85,18 @@ impl<'a> Question<'a> {
 pub(crate) struct Answer {
     /// Wiped when dropped: a label may hold words of a password, as the check word's offer to
     /// replace one does (AUD-015-SEC006).
-    pub(crate) label: Zeroizing<String>,
-    pub(crate) note: String,
+    label: Zeroizing<String>,
+    note: String,
 }
 
 impl Answer {
+    pub(crate) fn label(&self) -> &str {
+        &self.label
+    }
+    pub(crate) fn note(&self) -> &str {
+        &self.note
+    }
+
     pub(crate) fn new(label: impl Into<String>, note: impl Into<String>) -> Self {
         Self {
             label: Zeroizing::new(label.into()),
@@ -74,8 +108,20 @@ impl Answer {
 /// An explanation shown when the person presses ?, and the words that offer it in the hint
 /// line, such as "? explains both".
 pub(crate) struct Help<'a> {
-    pub(crate) hint: &'a str,
-    pub(crate) show: &'a dyn Fn(),
+    hint: &'a str,
+    show: &'a dyn Fn(),
+}
+
+impl<'a> Help<'a> {
+    pub(crate) fn new(hint: &'a str, show: &'a dyn Fn()) -> Self {
+        Self { hint, show }
+    }
+    pub(crate) fn hint(&self) -> &str {
+        self.hint
+    }
+    pub(crate) fn show(&self) {
+        (self.show)();
+    }
 }
 
 /// The value of an option that answers a yes-or-no question of a menu: yes or no.
@@ -139,7 +185,7 @@ fn run_list(
     help: Option<Help>,
     start: Option<usize>,
 ) -> Result<Option<usize>, Failure> {
-    let help_hint = help.as_ref().map(|help| help.hint);
+    let help_hint = help.as_ref().map(|help| help.hint());
     let last = answers.len() - 1;
     // The terminal reads single keys before the list appears, as a hidden prompt does, so that a
     // key pressed as soon as the list shows is read as a key and never echoed.
@@ -164,7 +210,7 @@ fn run_list(
                     // The explanation takes the place of the block, which is drawn again below it.
                     write_control(&redraw_from(drawn.rows()))?;
                     eprintln!();
-                    (help.show)();
+                    help.show();
                     drawn = draw(question, answers, selected, help_hint);
                     continue;
                 }
@@ -178,7 +224,7 @@ fn run_list(
             drawn = draw(question, answers, selected, help_hint);
         };
         write_control(&redraw_from(drawn.rows()))?;
-        if let Some(label) = question.record {
+        if let Some(label) = question.record() {
             record(label, &answers[selected].label);
         }
         Ok(Some(selected))
@@ -272,10 +318,10 @@ pub(crate) fn draw_question(question: &Question) -> usize {
 
 fn draw_question_rows(question: &Question) -> DrawnRows {
     let mut lines = DrawnRows::new();
-    let text = paint(STRONG, question.text);
+    let text = paint(STRONG, question.text());
     lines.line("");
     lines.line(&text);
-    for line in question.explanation {
+    for line in question.explanation() {
         if line.is_empty() {
             lines.line("");
         } else {
@@ -283,14 +329,14 @@ fn draw_question_rows(question: &Question) -> DrawnRows {
             lines.line(&line);
         }
     }
-    if let Some(place) = question.more {
+    if let Some(place) = question.more() {
         // Without an explanation the link follows the question directly, as part of it.
-        if !question.explanation.is_empty() {
+        if !question.explanation().is_empty() {
             lines.line("");
         }
         lines.line(&style::more_line(place));
     }
-    if !question.explanation.is_empty() || question.more.is_some() {
+    if !question.explanation().is_empty() || question.more().is_some() {
         lines.line("");
     }
     lines

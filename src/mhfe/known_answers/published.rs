@@ -4,7 +4,7 @@
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::mhfe::published_rounds::PUBLISHED;
 use crate::self_check::stopped;
-use crate::{Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WordCount, WorkFactor};
+use crate::{CipherError, Mhfe, Password, PhraseLength, Recovery, Suite, WordCount, WorkFactor};
 
 /// One published vector as the checks replay it.
 #[derive(Clone, Copy)]
@@ -50,13 +50,13 @@ impl PublishedVector {
         }
     }
 
-    pub(crate) fn work(&self) -> Result<WorkFactor, String> {
+    pub(crate) fn work(&self) -> Result<WorkFactor, crate::self_check::FailureDetail> {
         WorkFactor::new(self.pim, self.memory_level).map_err(stopped)
     }
 
     /// The password through the library's own encoding, which must give the recorded bytes for
     /// the round keys to be found.
-    pub(crate) fn password(&self) -> Result<Password, String> {
+    pub(crate) fn password(&self) -> Result<Password, crate::self_check::FailureDetail> {
         Password::new(self.password).map_err(stopped)
     }
 
@@ -66,7 +66,7 @@ impl PublishedVector {
         &self,
         table: &'static [PublishedVector],
         words: usize,
-    ) -> Result<Result<Recovery, MhfeError>, String> {
+    ) -> Result<Result<Recovery, CipherError>, crate::self_check::FailureDetail> {
         let words = WordCount::new(words).map_err(stopped)?;
         Ok(self.mhfe(table)?.decrypt(
             self.container,
@@ -80,7 +80,7 @@ impl PublishedVector {
     pub(crate) fn mhfe(
         &self,
         table: &'static [PublishedVector],
-    ) -> Result<Mhfe<PublishedRoundKeys>, String> {
+    ) -> Result<Mhfe<PublishedRoundKeys>, crate::self_check::FailureDetail> {
         Ok(Mhfe::with_engine(
             self.work()?,
             PublishedRoundKeys::of(table),
@@ -89,7 +89,9 @@ impl PublishedVector {
 }
 
 /// The published vector named `name`.
-pub(crate) fn published(name: &str) -> Result<&'static PublishedVector, String> {
+pub(crate) fn published(
+    name: &str,
+) -> Result<&'static PublishedVector, crate::self_check::FailureDetail> {
     published_in(&PUBLISHED, name)
 }
 
@@ -97,11 +99,15 @@ pub(crate) fn published(name: &str) -> Result<&'static PublishedVector, String> 
 pub(crate) fn published_in<'a>(
     table: &'a [PublishedVector],
     name: &str,
-) -> Result<&'a PublishedVector, String> {
+) -> Result<&'a PublishedVector, crate::self_check::FailureDetail> {
     table
         .iter()
         .find(|vector| vector.name == name)
-        .ok_or_else(|| "a built-in vector is missing".to_owned())
+        .ok_or_else(|| {
+            crate::self_check::FailureDetail::from(
+                crate::self_check::KnownAnswerDifference::ABuiltInVectorIsMissing,
+            )
+        })
 }
 
 /// The whole table of published vectors.
@@ -111,7 +117,7 @@ pub(crate) fn published_table() -> &'static [PublishedVector] {
 
 /// An engine that answers only the rounds of published vectors, with the keys they record. It
 /// computes no Argon2: the salt and the password after NFKD must be a recorded pair, and anything
-/// else is refused with [`MhfeError::Internal`].
+/// else is refused with `INTERNAL_ERROR`.
 pub(crate) struct PublishedRoundKeys {
     vectors: &'static [PublishedVector],
 }
@@ -129,21 +135,20 @@ impl PublishedRoundKeys {
 }
 
 impl Argon2Engine for PublishedRoundKeys {
+    // Deliberate copy: independent engines implement this one trait signature.
     fn derive(
         &mut self,
         password: &[u8],
         salt: &[u8; SALT_BYTES],
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), crate::engine::EngineError> {
         let round = self
             .vectors
             .iter()
             .filter(|vector| vector.password_nfkd == password)
             .flat_map(|vector| vector.rounds.iter())
             .find(|round| round.salt == *salt)
-            .ok_or_else(|| {
-                MhfeError::Internal("no published round has this password and salt".to_owned())
-            })?;
+            .ok_or(crate::engine::EngineError::NoPublishedRound)?;
         key.copy_from_slice(&round.key);
         Ok(())
     }

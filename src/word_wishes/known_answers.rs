@@ -15,11 +15,11 @@
 use super::{Place, WordWishes};
 use crate::packing::{STATE_BYTES, STATE_WORDS};
 use crate::phrase;
+use crate::random::RandomError;
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
 use crate::wallet_check::PhraseDraw;
-use crate::MhfeError;
 
 /// The start of the byte stream; any non-zero value works.
 const SEED: u32 = 0x2545_f491;
@@ -94,7 +94,7 @@ const CASES: [WishCase; 6] = [
 ];
 
 /// The byte stream of the cases.
-fn xorshift32() -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
+fn xorshift32() -> impl FnMut(&mut [u8]) -> Result<(), RandomError> {
     let mut state = SEED;
     move |bytes: &mut [u8]| {
         for byte in bytes.iter_mut() {
@@ -117,7 +117,7 @@ impl WordWishesCheck {
         Self { cases: &CASES }
     }
 
-    fn case(case: &WishCase) -> Result<(), String> {
+    fn case(case: &WishCase) -> Result<(), crate::self_check::FailureDetail> {
         let wishes = WordWishes::new(case.chosen, case.never_use).map_err(stopped)?;
         let draw = PhraseDraw::unchecked().with_wishes(wishes);
         // The draw's own loop, as a new phrase takes it; each draw fills the entropy once.
@@ -130,10 +130,20 @@ impl WordWishesCheck {
         let entropy = draw
             .try_draws(&mut counted, MOST_DRAWS)
             .map_err(stopped)?
-            .ok_or_else(|| "finds no phrase".to_owned())?;
+            .ok_or_else(|| {
+                crate::self_check::FailureDetail::from(
+                    crate::self_check::KnownAnswerDifference::FindsNoPhrase,
+                )
+            })?;
         let phrase = crate::phrase::phrase_from_entropy(&entropy[..]).map_err(stopped)?;
-        expect(*phrase == *case.phrase, "gives another phrase")?;
-        expect(draws == case.draw, "takes another draw")
+        expect(
+            *phrase == *case.phrase,
+            crate::self_check::KnownAnswerDifference::GivesAnotherPhrase,
+        )?;
+        expect(
+            draws == case.draw,
+            crate::self_check::KnownAnswerDifference::TakesAnotherDraw,
+        )
     }
 
     // Independent BIP39 oracle: a 24-bit window replaces the full field at once, unlike
@@ -165,22 +175,29 @@ impl WordWishesCheck {
         position: usize,
         number: u16,
         expected: &[u8; STATE_BYTES],
-    ) -> Result<(), String> {
+    ) -> Result<(), crate::self_check::FailureDetail> {
         let wishes = WordWishes::new(&[(Place::At(position), phrase::word(number))], &[])
             .map_err(stopped)?;
         let mut actual = *before;
         wishes.apply(&mut actual);
-        expect(actual == *expected, "sets different entropy bits")
-    }
-
-    fn read_case(bits: &[u8], position: usize, number: u16) -> Result<(), String> {
         expect(
-            phrase::number_at(bits, position - 1) == number,
-            "reads different word bits",
+            actual == *expected,
+            crate::self_check::KnownAnswerDifference::SetsDifferentEntropyBits,
         )
     }
 
-    fn fixed_word_bits() -> Result<(), String> {
+    fn read_case(
+        bits: &[u8],
+        position: usize,
+        number: u16,
+    ) -> Result<(), crate::self_check::FailureDetail> {
+        expect(
+            phrase::number_at(bits, position - 1) == number,
+            crate::self_check::KnownAnswerDifference::ReadsDifferentWordBits,
+        )
+    }
+
+    fn fixed_word_bits() -> Result<(), crate::self_check::FailureDetail> {
         expect(
             (
                 STATE_BYTES,
@@ -188,19 +205,27 @@ impl WordWishesCheck {
                 phrase::WORD_BITS,
                 super::CHECKSUM_BITS,
             ) == (32, 24, 11, 8),
-            "has different BIP39 word geometry",
+            crate::self_check::KnownAnswerDifference::HasDifferentBip39WordGeometry,
         )?;
         for position in 1..=STATE_WORDS {
             for number in BIT_INDICES {
                 for before in [[0; STATE_BYTES], [0xff; STATE_BYTES]] {
                     let expected = Self::expected_bits(&before, position, number);
                     Self::bit_case(&before, position, number, &expected).map_err(|what| {
-                        format!("position {position}, public index {number} {what}")
+                        crate::self_check::FailureDetail::Position {
+                            position,
+                            public_index: Some(number),
+                            cause: Box::new(what),
+                        }
                     })?;
                     let reference =
                         Self::expected_bits(&[before[0]; STATE_BYTES + 1], position, number);
                     Self::read_case(&reference, position, number).map_err(|what| {
-                        format!("position {position}, public index {number} {what}")
+                        crate::self_check::FailureDetail::Position {
+                            position,
+                            public_index: Some(number),
+                            cause: Box::new(what),
+                        }
                     })?;
                 }
             }
@@ -212,7 +237,7 @@ impl WordWishesCheck {
     /// each found wherever they stand, and nowhere else. In the entropy of ones every word but the
     /// last reads "zoo"; the oracle puts "abandon" at each position in turn. The last position is
     /// filtered through its checksum in [`WordWishesCheck::filter_cases`].
-    fn filters_at_every_position() -> Result<(), String> {
+    fn filters_at_every_position() -> Result<(), crate::self_check::FailureDetail> {
         let ones = [0xff; STATE_BYTES];
         let wishes =
             |chosen: &[(Place, &str)], never_use: &[&str]| WordWishes::new(chosen, never_use);
@@ -220,7 +245,7 @@ impl WordWishesCheck {
         let anywhere = wishes(&[(Place::Anywhere, "abandon")], &[]).map_err(stopped)?;
         expect(
             never.met_by(&ones) && !anywhere.met_by(&ones),
-            "finds a word that is not there",
+            crate::self_check::KnownAnswerDifference::FindsAWordThatIsNotThere,
         )?;
         for position in 1..STATE_WORDS {
             let entropy = Self::expected_bits(&ones, position, 0);
@@ -236,14 +261,18 @@ impl WordWishesCheck {
             );
             expect(
                 outcomes == (false, true, true, false),
-                "filters a word at this position wrongly",
+                crate::self_check::KnownAnswerDifference::FiltersAWordAtThisPositionWrongly,
             )
-            .map_err(|what| format!("position {position} {what}"))?;
+            .map_err(|what| crate::self_check::FailureDetail::Position {
+                position,
+                public_index: None,
+                cause: Box::new(what),
+            })?;
         }
         Ok(())
     }
 
-    fn filter_cases() -> Result<(), String> {
+    fn filter_cases() -> Result<(), crate::self_check::FailureDetail> {
         // Published BIP39 256-bit zero-entropy vector: 23 abandon words, then art. These
         // direct predicates deliberately bypass try_draws' separate raw-zero source refusal.
         let entropy = [0; STATE_BYTES];
@@ -251,48 +280,61 @@ impl WordWishesCheck {
             let wishes = WordWishes::new(chosen, never_use).map_err(stopped)?;
             expect(
                 wishes.met_by(&entropy) == expected,
-                "has another filter outcome",
+                crate::self_check::KnownAnswerDifference::HasAnotherFilterOutcome,
             )
-            .map_err(|what| format!("{label} {what}"))
+            .map_err(|what| crate::self_check::FailureDetail::Context {
+                context: label,
+                cause: Box::new(what),
+            })
         };
-        case(&[], &["abandon"], false, "an excluded entropy word")?;
-        case(&[], &["art"], false, "an excluded checksum word")?;
+        case(
+            &[],
+            &["abandon"],
+            false,
+            crate::self_check::CheckContext::AnExcludedEntropyWord,
+        )?;
+        case(
+            &[],
+            &["art"],
+            false,
+            crate::self_check::CheckContext::AnExcludedChecksumWord,
+        )?;
         case(
             &[(Place::Anywhere, "zoo")],
             &[],
             false,
-            "an absent anywhere word",
+            crate::self_check::CheckContext::AnAbsentAnywhereWord,
         )?;
         case(
             &[(Place::Anywhere, "abandon")],
             &[],
             true,
-            "a repeated anywhere word",
+            crate::self_check::CheckContext::ARepeatedAnywhereWord,
         )?;
         // "art" stands only last: an anywhere word is looked for there too.
         case(
             &[(Place::Anywhere, "art")],
             &[],
             true,
-            "an anywhere word at the last position",
+            crate::self_check::CheckContext::AnAnywhereWordAtTheLastPosition,
         )?;
         case(
             &[(Place::At(24), "abandon")],
             &[],
             false,
-            "a wrong final word",
+            crate::self_check::CheckContext::AWrongFinalWord,
         )?;
         case(
             &[(Place::At(24), "art")],
             &[],
             true,
-            "the correct final word",
+            crate::self_check::CheckContext::TheCorrectFinalWord,
         )?;
         case(
             &[(Place::At(2), "zoo")],
             &[],
             false,
-            "a wrong interior word",
+            crate::self_check::CheckContext::AWrongInteriorWord,
         )
     }
 }
@@ -308,7 +350,7 @@ impl ComponentCheck for WordWishesCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("case", self.cases, Self::case);
+        findings.each(crate::self_check::CaseKind::Case, self.cases, Self::case);
         findings.one(Self::fixed_word_bits);
         findings.one(Self::filter_cases);
         findings.one(Self::filters_at_every_position);
@@ -320,22 +362,32 @@ impl ComponentCheck for WordWishesCheck {
                 Ok(())
             };
             // A chosen nonzero word must not hide a host that provided no random entropy.
-            expect_refusal(draw.try_draws(&mut zero_source, 1), "RANDOM_FAILED")
-                .map_err(|what| format!("a zero source with a chosen word {what}"))
+            expect_refusal(draw.try_draws(&mut zero_source, 1), "RANDOM_FAILED").map_err(|what| {
+                crate::self_check::FailureDetail::Context {
+                    context: crate::self_check::CheckContext::AZeroSourceWithAChosenWord,
+                    cause: Box::new(what),
+                }
+            })
         });
         findings.one(|| {
             expect_refusal(
                 WordWishes::new(&[(Place::At(1), "happy"), (Place::At(5), "zoo")], &[]),
                 "INVALID_WORD_WISH",
             )
-            .map_err(|what| format!("a second chosen word {what}"))
+            .map_err(|what| crate::self_check::FailureDetail::Context {
+                context: crate::self_check::CheckContext::ASecondChosenWord,
+                cause: Box::new(what),
+            })
         });
         findings.one(|| {
             expect_refusal(
                 WordWishes::new(&[], &["abandon", "zoo"]),
                 "INVALID_WORD_WISH",
             )
-            .map_err(|what| format!("a second word never to use {what}"))
+            .map_err(|what| crate::self_check::FailureDetail::Context {
+                context: crate::self_check::CheckContext::ASecondWordNeverToUse,
+                cause: Box::new(what),
+            })
         });
         findings.outcome()
     }
@@ -393,13 +445,13 @@ mod tests {
         expected[0] ^= 1;
         assert_eq!(
             WordWishesCheck::bit_case(&before, position, number, &expected),
-            Err("sets different entropy bits".to_owned())
+            Err(crate::self_check::KnownAnswerDifference::SetsDifferentEntropyBits.into())
         );
         expected[0] ^= 1;
         expected[1] ^= 0x08;
         assert_eq!(
             WordWishesCheck::bit_case(&before, position, number, &expected),
-            Err("sets different entropy bits".to_owned())
+            Err(crate::self_check::KnownAnswerDifference::SetsDifferentEntropyBits.into())
         );
     }
 
@@ -413,7 +465,7 @@ mod tests {
         reference[1] ^= 0x08;
         assert_eq!(
             WordWishesCheck::read_case(&reference, position, number),
-            Err("reads different word bits".to_owned())
+            Err(crate::self_check::KnownAnswerDifference::ReadsDifferentWordBits.into())
         );
     }
 }

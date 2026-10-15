@@ -1,6 +1,9 @@
 //! The re-encryption guard: a phrase recovered to be encrypted again comes out only once it is
 //! confirmed, by its built-in check, by the wallet, or by its owner.
 
+#[cfg(test)]
+use crate::wallet::Fingerprint;
+
 use super::{compare, Reference};
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
@@ -58,7 +61,9 @@ impl<'a> Confirmation<'a> {
             }
         };
         if refused {
-            return Err(MhfeError::ReferenceRequired);
+            return Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceRequired,
+            ));
         }
         Ok(())
     }
@@ -152,8 +157,8 @@ impl RecoveredForRekey {
     /// or the owner. A reference given is compared with every reading, whatever length is stated,
     /// as the rehearsal check compares it (AUD-024-FUN008); `before_compare` is called before it
     /// is. The reading it matches says when its length is not the stated one. Several short lengths that pass by accident are refused with
-    /// [`MhfeError::AmbiguousLength`], as one phrase is sealed, and a stated length the built-in
-    /// check contradicts with [`MhfeError::LengthDiffers`].
+    /// [`crate::CipherError::AmbiguousLength`], as one phrase is sealed, and a stated length the built-in
+    /// check contradicts with [`crate::CipherError::LengthDiffers`].
     pub fn confirm(
         &self,
         length: PhraseLength,
@@ -171,7 +176,9 @@ impl RecoveredForRekey {
                     return Ok(reading);
                 }
             }
-            return Err(MhfeError::ReferenceMismatch);
+            return Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceMismatch,
+            ));
         }
         let reading = one_reading(self.readings(length)?)?;
         let by_owner = matches!(confirmation, Confirmation::Owner);
@@ -179,15 +186,15 @@ impl RecoveredForRekey {
         // phrase only once the wallet confirms it: the owner, who compares the phrase shown with
         // their backup, or a reference, asked for after this refusal.
         if let (Some(stated), false) = (reading.stated_words(), by_owner) {
-            return Err(MhfeError::LengthDiffers {
+            return Err(MhfeError::Cipher(crate::CipherError::LengthDiffers {
                 stated,
                 found: reading.words(),
-            });
+            }));
         }
         // The built-in check confirms only a short reading that passed it; a 24-word reading has
         // none and is confirmed by a reference or the owner alone.
         if !by_owner && !reading.verified() {
-            return Err(MhfeError::VerifierMismatch);
+            return Err(MhfeError::Format(crate::FormatError::VerifierMismatch));
         }
         // A stated length that selected this reading among several that pass: the built-in check
         // alone does not tell them apart, so a reference or the owner confirms it (the
@@ -197,7 +204,9 @@ impl RecoveredForRekey {
             readings.push(reading.words());
             readings.sort_unstable();
             readings.push(STATE_WORDS);
-            return Err(MhfeError::AmbiguousLength { readings });
+            return Err(MhfeError::Cipher(crate::CipherError::AmbiguousLength {
+                readings,
+            }));
         }
         Ok(reading)
     }
@@ -224,12 +233,15 @@ impl RecoveredForRekey {
         }
         // A stated short length whose check fails gives no reading to compare.
         let readings = match self.readings(length) {
-            Err(MhfeError::VerifierMismatch) => return Ok(false),
+            Err(MhfeError::Format(crate::FormatError::VerifierMismatch)) => return Ok(false),
             readings => readings?,
         };
         Ok(match one_reading(readings) {
             Ok(_) => true,
-            Err(MhfeError::LengthDiffers { .. } | MhfeError::AmbiguousLength { .. }) => false,
+            Err(
+                MhfeError::Cipher(crate::CipherError::LengthDiffers { .. })
+                | MhfeError::Cipher(crate::CipherError::AmbiguousLength { .. }),
+            ) => false,
             Err(other) => return Err(other),
         })
     }
@@ -240,7 +252,9 @@ impl RecoveredForRekey {
     fn every_reading(&self, length: PhraseLength) -> Result<Vec<RecoveredPhrase>, MhfeError> {
         self.facts.require_length(length)?;
         match self.suite {
-            Suite::TwentyFourWords => every_reading(suite_3_state(&self.state)?, length),
+            Suite::TwentyFourWords => {
+                every_reading(suite_3_state(&self.state)?, length).map_err(Into::into)
+            }
             Suite::SameLength => Ok(vec![read_same_length(&self.state)?]),
         }
     }
@@ -274,15 +288,15 @@ fn one_reading(mut readings: Vec<RecoveredPhrase>) -> Result<RecoveredPhrase, Mh
         .collect();
     if let [only] = checked[..] {
         if let Some(stated) = only.stated_words() {
-            return Err(MhfeError::LengthDiffers {
+            return Err(MhfeError::Cipher(crate::CipherError::LengthDiffers {
                 stated,
                 found: only.words(),
-            });
+            }));
         }
     }
-    Err(MhfeError::AmbiguousLength {
+    Err(MhfeError::Cipher(crate::CipherError::AmbiguousLength {
         readings: readings.iter().map(RecoveredPhrase::words).collect(),
-    })
+    }))
 }
 
 #[cfg(test)]
@@ -318,7 +332,7 @@ mod tests {
         assert_eq!(phrase.phrase(), ABANDON);
         assert!(matches!(
             mhfe.recover_confirmed(&container, &wrong, twelve, Confirmation::BuiltInCheck, none),
-            Err(MhfeError::VerifierMismatch)
+            Err(MhfeError::Format(crate::FormatError::VerifierMismatch))
         ));
     }
 
@@ -349,10 +363,12 @@ mod tests {
                     Ok(())
                 }
             ),
-            Err(MhfeError::ReferenceRequired)
+            Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceRequired
+            ))
         ));
         assert_eq!(rounds, 0);
-        let fingerprint = wallet::master_fingerprint(ART, "").unwrap();
+        let fingerprint = wallet::Fingerprint::of(ART, "").unwrap();
         let right = Reference::Fingerprint {
             fingerprint,
             passphrase: "",
@@ -376,7 +392,9 @@ mod tests {
                 Confirmation::Wallet(&right),
                 none
             ),
-            Err(MhfeError::ReferenceMismatch)
+            Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceMismatch
+            ))
         ));
         let other_passphrase = Reference::Fingerprint {
             fingerprint,
@@ -390,7 +408,9 @@ mod tests {
                 Confirmation::Wallet(&other_passphrase),
                 none
             ),
-            Err(MhfeError::ReferenceMismatch)
+            Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceMismatch
+            ))
         ));
 
         // The owner may confirm a 24-word original instead: the phrase comes out for showing.
@@ -418,7 +438,7 @@ mod tests {
         let mut mhfe = reduced();
         let words = |count| PhraseLength::Words(WordCount::new(count).unwrap());
         let fingerprint_of = |phrase: &str| Reference::Fingerprint {
-            fingerprint: wallet::master_fingerprint(phrase, "").unwrap(),
+            fingerprint: wallet::Fingerprint::of(phrase, "").unwrap(),
             passphrase: "",
         };
         // The state of the 24-word phrase of entropy 0^16 || SHA-256(0^16)[..16] is that of the
@@ -458,7 +478,9 @@ mod tests {
             .unwrap();
         assert!(matches!(
             recovered.confirm(words(21), Confirmation::BuiltInCheck, &mut || Ok(())),
-            Err(MhfeError::AmbiguousLength { .. })
+            Err(MhfeError::Cipher(
+                crate::CipherError::AmbiguousLength { .. }
+            ))
         ));
         let own = fingerprint_of(AMBIGUOUS_12_21);
         let reading = recovered
@@ -479,7 +501,7 @@ mod tests {
         let twelve = WordCount::new(12).unwrap();
         let twenty_four = WordCount::new(24).unwrap();
         let right = Reference::Fingerprint {
-            fingerprint: wallet::master_fingerprint(ABANDON_24, "").unwrap(),
+            fingerprint: wallet::Fingerprint::of(ABANDON_24, "").unwrap(),
             passphrase: "",
         };
         let container = mhfe
@@ -493,7 +515,9 @@ mod tests {
                 Confirmation::BuiltInCheck,
                 none
             ),
-            Err(MhfeError::ReferenceRequired)
+            Err(MhfeError::Rehearsal(
+                crate::RehearsalError::ReferenceRequired
+            ))
         ));
         assert!(matches!(
             mhfe.recover_confirmed(
@@ -503,12 +527,14 @@ mod tests {
                 Confirmation::Wallet(&right),
                 none
             ),
-            Err(MhfeError::LengthChoiceNotApplicable {
-                container_words: 12
-            })
+            Err(MhfeError::Format(
+                crate::FormatError::LengthChoiceNotApplicable {
+                    container_words: 12
+                }
+            ))
         ));
         let abandon = Reference::Fingerprint {
-            fingerprint: ABANDON_12_FINGERPRINT,
+            fingerprint: Fingerprint::from_bytes(ABANDON_12_FINGERPRINT),
             passphrase: "",
         };
         let phrase = mhfe

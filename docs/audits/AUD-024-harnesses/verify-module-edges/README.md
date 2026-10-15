@@ -39,3 +39,33 @@ smallest set of candidate edges whose removal frees every part: ('phrase->contai
 It exits 0 once `phrase` no longer imports `container` (src/phrase.rs:149) and `memory` no longer
 takes its page locking from `engine` (src/memory.rs:283), or once any other change leaves no part
 reaching the core.
+
+## Current source graph
+
+The remediated tree delegates to `scripts/verify-module-boundaries.mjs`; the cycle-only trace
+remains available for the baseline tree, which has no such script. The current gate reads all
+production library edges, including acyclic paths, grouped imports and root reexports. It refuses
+missing repository inputs and wildcard crate imports. This corrects two limits of the original
+trace: an edge outside a strongly connected component was absent from its output, and a grouped
+root module import could be missed. The historical zero count alone did not establish that every
+source edge was independent.
+
+The criterion remains that independent parts cannot reach executable encryption, engine, wallet,
+rehearsal or container code, and the engine cannot reach the WASM front end. Typed error references
+and known-answer/self-check hooks are excluded, as they were in the audited criterion. Error files
+are not ignored wholesale: a control proves that a real engine call inside one is rejected.
+Negative controls also cover a direct core import, an acyclic transitive path, grouped imports,
+engine-to-frontend and memory-to-engine edges, wildcard imports and missing inputs. Allowed controls
+cover low-level word-count data, typed error causes and test/known-answer code.
+
+Run the controls independently with:
+
+```sh
+node scripts/verify-module-boundaries.mjs --self-test
+```
+
+The source correction puts word counts, format refusals and scalar work-factor data below the
+cipher, and gives the wallet check a shared BIP39 seed implementation without address/key modules.
+The existing type names and Argon2 cost values are preserved at their documented root/engine
+paths. Passing this static graph is complemented by standalone WASM module compilation and package
+isolation checks; it is not a complete Rust name resolver or a security proof.

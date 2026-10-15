@@ -130,14 +130,14 @@ pub(crate) fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
         show_vector_estimate(input.name(), work, ENCRYPTION_ROUNDS);
         let mut mhfe = settings::reserve_memory(work)?;
         let started = Instant::now();
-        let file = vectors::file_name(input.name());
+        let file = vectors::Vector::file_name(input.name());
         if options.same_length {
-            let vector = vectors::generate_same_length(&mut mhfe, input)?;
-            containers.insert(input.name(), vector.container.clone());
+            let vector = vectors::SameLengthVector::generate(&mut mhfe, input)?;
+            containers.insert(input.name(), vector.container().to_owned());
             write_json(&options.output, &file, &vector)?;
         } else {
-            let vector = vectors::generate(&mut mhfe, input)?;
-            containers.insert(input.name(), vector.container.clone());
+            let vector = vectors::Vector::generate(&mut mhfe, input)?;
+            containers.insert(input.name(), vector.container().to_owned());
             write_json(&options.output, &file, &vector)?;
         }
         written += 1;
@@ -162,9 +162,9 @@ pub(crate) fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
             let mut mhfe = settings::reserve_memory(work)?;
             let started = Instant::now();
             negative_cases.push(if options.same_length {
-                vectors::same_length_negative_case(&mut mhfe, input, &container)?
+                vectors::NegativeCase::generate_same_length(&mut mhfe, input, &container)?
             } else {
-                vectors::negative_case(&mut mhfe, input, &container)?
+                vectors::NegativeCase::generate(&mut mhfe, input, &container)?
             });
             style::ok(format!(
                 "{} {}",
@@ -174,7 +174,7 @@ pub(crate) fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
         }
         write_json(
             &options.output,
-            &vectors::file_name(NEGATIVE_CASES_STEM),
+            &vectors::Vector::file_name(NEGATIVE_CASES_STEM),
             &negative_cases,
         )?;
         written += 1;
@@ -219,7 +219,7 @@ const MAX_VECTOR_FILE: u64 = 1024 * 1024;
 /// be written first; one that cannot be read, or is not that vector, is refused with the cause
 /// (AUD-024-API011).
 fn recorded_container(folder: &Path, name: &str, schema: &str) -> Result<String, Failure> {
-    let path = folder.join(vectors::file_name(name));
+    let path = folder.join(vectors::Vector::file_name(name));
     let shown = style::shown_path(&path);
     let unreadable = |error: &dyn std::fmt::Display| {
         Failure::internal(format!("Could not read {shown}: {error}"))
@@ -274,7 +274,7 @@ fn write_checksums(folder: &Path, set: &VectorSet) -> Result<(), Failure> {
         .iter()
         .map(|input| input.name())
         .chain([NEGATIVE_CASES_STEM])
-        .map(vectors::file_name);
+        .map(vectors::Vector::file_name);
     let mut sums = String::new();
     for name in names {
         match fs::read(folder.join(&name)) {
@@ -421,11 +421,11 @@ mod tests {
             assert!(check_selection(set, Some(set.inputs[0].name())).is_ok());
             for nothing in ["", "no-such-vector"] {
                 let refused = check_selection(set, Some(nothing)).unwrap_err();
-                assert_eq!(refused.exit_code, crate::exit::INVALID_INPUT);
+                assert_eq!(refused.exit_code(), crate::exit::INVALID_INPUT);
                 assert!(
-                    refused.message.contains("selects none"),
+                    refused.message().contains("selects none"),
                     "{}",
-                    refused.message
+                    refused.message()
                 );
             }
         }
@@ -441,10 +441,10 @@ mod tests {
         let refusal = |schema| {
             recorded_container(&folder, name, schema)
                 .unwrap_err()
-                .message
+                .into_message()
         };
         assert!(refusal(vectors::SCHEMA).contains("write that vector first"));
-        let file = folder.join(vectors::file_name(name));
+        let file = folder.join(vectors::Vector::file_name(name));
         fs::write(&file, "{ not json").unwrap();
         assert!(refusal(vectors::SCHEMA).contains("is not a valid vector file"));
         let other = serde_json::json!({ "schema": "x", "name": name, "container": "c" });

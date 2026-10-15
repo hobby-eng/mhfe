@@ -56,15 +56,15 @@ pub(crate) struct CapacityJson {
     wrong: usize,
 }
 
-/// What every card repairs, by the library's [`crate::repair::capacity`].
+/// What every card repairs, by the library's [`crate::repair::RepairWordCount::capacity`].
 #[cfg(any(feature = "browser-core", feature = "browser-repair"))]
 pub(crate) fn repair_capacities() -> Vec<CapacityJson> {
-    crate::repair::REPAIR_WORD_COUNTS
-        .iter()
-        .map(|&count| {
-            let (unreadable, wrong) = crate::repair::capacity(count);
+    crate::repair::RepairWordCount::offered()
+        .into_iter()
+        .map(|count| {
+            let (unreadable, wrong) = count.capacity();
             CapacityJson {
-                count,
+                count: count.get(),
                 unreadable,
                 wrong,
             }
@@ -78,29 +78,32 @@ pub(crate) fn repair_capacities() -> Vec<CapacityJson> {
 pub(crate) fn call_page(
     callback: &js_sys::Function,
     arguments: &[JsValue],
-) -> Result<(), MhfeError> {
+) -> Result<(), crate::CancelledError> {
     let arguments: js_sys::Array = arguments.iter().collect();
     callback
         .apply(&JsValue::UNDEFINED, &arguments)
         .map(|_| ())
-        .map_err(|_| MhfeError::Cancelled)
+        .map_err(|_| crate::CancelledError)
 }
 
 /// "CODE: message", the form the workers and the clients parse.
-pub(crate) fn js_error(error: MhfeError) -> JsError {
+pub(crate) fn js_error(error: impl Into<MhfeError>) -> JsError {
+    let error = error.into();
     JsError::new(&format!("{}: {error}", error.code()))
 }
 
-/// A container's own fingerprint as a page shows it, eight hex digits ([`crate::container_fingerprint`]).
+/// A container's own fingerprint as a page shows it, eight hex digits ([`crate::ContainerFacts::fingerprint`]).
 #[cfg(any(feature = "browser-core", feature = "browser-repair"))]
 pub(crate) fn container_fingerprint_text(container: &str) -> Result<String, JsError> {
-    crate::container_fingerprint(container)
-        .map(crate::wallet::fingerprint_text)
+    crate::ContainerFacts::read(container)
+        .map_err(MhfeError::from)
+        .and_then(|facts| facts.fingerprint())
+        .map(|fingerprint| fingerprint.to_string())
         .map_err(js_error)
 }
 
-pub(crate) fn serialization_error(error: serde_json::Error) -> JsError {
-    JsError::new(&format!("INTERNAL_ERROR: {error}"))
+pub(crate) fn serialization_error(_: serde_json::Error) -> JsError {
+    js_error(crate::output::OutputError::Json)
 }
 
 /// A result without secrets as JSON text.
@@ -117,7 +120,7 @@ struct ComponentJson<'a> {
     /// "passed", "warning", "notAvailable", "notRun" or "failed".
     outcome: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    detail: Option<&'a str>,
+    detail: Option<std::borrow::Cow<'a, str>>,
 }
 
 impl<'a> ComponentJson<'a> {
@@ -198,8 +201,8 @@ pub(crate) fn secret_json(value: &impl Serialize) -> Result<js_sys::JsString, Js
     serde_json::to_writer(&mut counter, value).map_err(serialization_error)?;
     let mut buffer = zeroize::Zeroizing::new(Vec::with_capacity(counter.0));
     serde_json::to_writer(&mut *buffer, value).map_err(serialization_error)?;
-    let text = std::str::from_utf8(&buffer)
-        .map_err(|_| JsError::new("INTERNAL_ERROR: the result is not UTF-8"))?;
+    let text =
+        std::str::from_utf8(&buffer).map_err(|_| js_error(crate::output::OutputError::Utf8))?;
     Ok(js_sys::JsString::from(text))
 }
 
@@ -255,48 +258,39 @@ impl SecretText {
         std::str::from_utf8(&self.0).map_err(|_| js_error(error))
     }
 
+    /// The wallet's BIP39 passphrase, or INVALID_PASSPHRASE for invalid UTF-8.
+    #[cfg(any(feature = "browser-core", feature = "browser-wallet"))]
+    pub(crate) fn passphrase(&self) -> Result<&str, JsError> {
+        self.text(crate::wallet::WalletError::InvalidPassphrase.into())
+    }
+
     /// The text of a seed phrase, or INVALID_PHRASE when the bytes are not UTF-8.
     #[cfg(any(feature = "browser-core", feature = "browser-wallet"))]
     pub(crate) fn phrase(&self) -> Result<&str, JsError> {
-        self.text(MhfeError::InvalidPhrase("it is not UTF-8 text".to_owned()))
+        self.text(crate::PhraseError::Original(crate::PhraseIssue::Utf8).into())
     }
 }
 
-/// A setting or count as JavaScript passed it. wasm-bindgen would turn a `u32` parameter into the
-/// number modulo 2^32, so that 2^32 became 0 and -1 became 4294967295; taking the number as it is
-/// lets anything but a whole number from 0 be refused with the error code `code`, and a larger
-/// whole number reach the rule that owns the parameter.
-pub(crate) fn whole_number(value: f64, code: &str, name: &str) -> Result<u32, JsError> {
-    // NaN and the infinities have a NaN fractional part, so they fail the first test. A whole
-    // number too large for 32 bits goes on as the largest, which the rule that owns the parameter
-    // refuses in its own words (AUD-024-API021).
-    if value.fract() == 0.0 && value >= 0.0 {
-        Ok(if value > f64::from(u32::MAX) {
-            u32::MAX
-        } else {
-            value as u32
-        })
-    } else {
-        Err(JsError::new(&format!(
-            "{code}: {name} must be a whole number, not {value}"
-        )))
-    }
+/// A number as JavaScript passed it, read by the shared field rule before narrowing its type.
+pub(crate) fn whole_number(value: f64, field: crate::request::NumberField) -> Result<u32, JsError> {
+    field.read(value).map_err(js_error)
 }
 
 /// A yes or no the page passed: true or false only. A bool of the WebAssembly binding would take
-/// any value, "true" as false and 2^32 as false (AUD-024-API022); `name` names it in the refusal
+/// any value, "true" as false and 2^32 as false (AUD-024-API022); `field` names it in the refusal
 /// (INVALID_REQUEST).
 #[cfg(any(
     feature = "browser-core",
     feature = "browser-passwords",
     feature = "browser-wallet"
 ))]
-pub(crate) fn yes_or_no(value: &JsValue, name: &str) -> Result<bool, JsError> {
-    value.as_bool().ok_or_else(|| {
-        js_error(MhfeError::InvalidRequest(format!(
-            "{name} must be true or false"
-        )))
-    })
+pub(crate) fn yes_or_no(
+    value: &JsValue,
+    field: crate::request::BooleanField,
+) -> Result<bool, JsError> {
+    value
+        .as_bool()
+        .ok_or_else(|| js_error(crate::request::RequestError::NotBoolean(field)))
 }
 
 /// The page's random source, `{ fill(bytes) }`, which calls `crypto.getRandomValues`. The bytes
@@ -312,14 +306,9 @@ extern "C" {
 
 #[cfg(any(feature = "browser-passwords", feature = "browser-wallet"))]
 impl crate::random::RandomSource for JsRandom {
-    fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {
-        self.fill_bytes(bytes).map_err(|error| {
-            MhfeError::RandomFailed(format!(
-                "the page's random source failed: {}",
-                crate::js_error::message(&error)
-                    .unwrap_or_else(|| "it threw something other than an Error".to_owned())
-            ))
-        })
+    fn fill(&mut self, bytes: &mut [u8]) -> Result<(), crate::random::RandomError> {
+        self.fill_bytes(bytes)
+            .map_err(|_| crate::random::RandomError::Page)
     }
 }
 
@@ -335,15 +324,9 @@ pub(crate) fn review_choice(
         "" | "asTyped" => Ok(None),
         "corrected" => Ok(Some(ReviewChoice::Corrected)),
         "repair" => {
-            let position = whole_number(
-                position,
-                MhfeError::InvalidRequest(String::new()).code(),
-                "the repair position",
-            )?;
+            let position = whole_number(position, crate::request::NumberField::RepairPosition)?;
             Ok(Some(ReviewChoice::Repair(position as usize)))
         }
-        other => Err(js_error(MhfeError::InvalidRequest(format!(
-            "unknown password choice {other}"
-        )))),
+        _ => Err(js_error(crate::check_word::ReviewError::UnknownChoice)),
     }
 }

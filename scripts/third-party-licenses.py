@@ -69,6 +69,8 @@ import tempfile
 import tomllib
 import zipfile
 
+import mingw_notices
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = REPO_ROOT / "THIRD_PARTY_NOTICES.md"
 # The written notices for material that is not a crate come first, by
@@ -330,7 +332,7 @@ def render(resolved):
         "The `mhfe` command-line tools and the browser package of a release are compiled from",
         "the Rust crates below. Each crate is listed with its licence expression, the licence",
         "MHFE uses it under and the text of that licence. The other third-party material, the",
-        "Argon2 reference code, the EFF wordlist and the JavaScript code of the browser package,",
+        "Argon2 reference code, the EFF wordlist, the MinGW runtime and the browser JavaScript,",
         "is described above.",
         "",
         "### How the licence is chosen",
@@ -550,14 +552,17 @@ def unlisted_std_crates(paths, notices):
     named = 0
     for path in paths:
         if path.endswith((".zip", ".tar.gz")):
-            files = {f"{path}: {name}": data for name, data in archive_files(path).items()}
+            carried_files = archive_files(path)
+            files = {f"{path}: {name}": data for name, data in carried_files.items()}
             carried = files.get(f"{path}: {OUTPUT.name}", b"").decode("utf-8")
             source = f"{path}: {OUTPUT.name}"
         else:
+            carried_files = None
             files = {path: Path(path).read_bytes()}
             carried, source = notices, OUTPUT.name
         missing, count = unlisted_file_crates(files, carried, source)
         found.extend(missing)
+        found.extend(mingw_notices.problems(files, carried, source, carried_files))
         named += count
     return found, named
 
@@ -594,6 +599,7 @@ def check_archives(paths):
             {f"{path}: {name}": data for name, data in files.items()}, notices,
             f"{path}: {OUTPUT.name}")
         found.extend(missing)
+        found.extend(mingw_notices.problems(files, notices, str(path), files))
         named += count
     for line in found:
         print(line, file=sys.stderr)
@@ -611,6 +617,7 @@ def self_test():
     """The standard library checks against made-up notices, programs and
     archives.
     """
+    mingw_notices.self_test()
     notices = "\n".join(
         [
             "# Notices",
@@ -733,6 +740,9 @@ def check_toolchain(notices):
 
 
 def main(arguments):
+    if problems := mingw_notices.source_problems():
+        print("\n".join(problems), file=sys.stderr)
+        return 1
     if arguments == ["--self-test"]:
         return self_test()
     if arguments[:1] == ["--binaries"] and len(arguments) > 1:

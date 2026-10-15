@@ -6,7 +6,7 @@
 //! here, as it takes minutes.
 
 use clap::Args;
-use mhfe::{ContainerFacts, HiddenWallets, MhfeError, Password};
+use mhfe::{HiddenWallets, Password};
 
 use crate::check;
 use crate::choice::{Answer, Question};
@@ -77,9 +77,9 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
         &mut input,
         Operation::Wallets.title(),
         options.repair.card(Operation::Wallets, work),
-        ContainerFacts::require_hidden_wallets,
+        |container| container.require_hidden_wallets().map_err(Into::into),
     )?;
-    let container = read.facts;
+    let (container, _, _, _) = read.into_parts();
     // A hidden wallet that passes the main wallet's check with its passphrase is refused too; the
     // question comes every time, so that it tells nothing about the main wallet.
     let passphrase = check::read_passphrase_of(&mut input, Operation::Wallets, "the main wallet")?;
@@ -99,7 +99,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
         progress.finish();
         let wallet = match derived {
             Ok(wallet) => wallet,
-            Err(MhfeError::HiddenWalletPassesCheck) => {
+            Err(mhfe::HiddenError::PassesCheck) => {
                 // Rule I29: the container's own password of a short phrase, or a rare chance.
                 style::retry_next(
                     "This password opens a phrase that passes a check. Choose another.",

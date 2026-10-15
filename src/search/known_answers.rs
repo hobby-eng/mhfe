@@ -6,6 +6,8 @@
 //! secp256k1 arithmetic) that first reproduced the published container of zero-12; the search
 //! with the owner's wallet adds only full recoveries, which the cipher's checks cover.
 
+use crate::wallet::Fingerprint;
+
 use super::ContainerSearch;
 use crate::rehearsal::Reference;
 use crate::self_check::{
@@ -47,14 +49,14 @@ const CANDIDATES: [CandidatesCase; 2] = [
 /// The `container-search` check.
 pub(crate) struct ContainerSearchCheck {
     candidates: &'static [CandidatesCase],
-    fingerprint: [u8; 4],
+    fingerprint: Fingerprint,
 }
 
 impl ContainerSearchCheck {
     pub(crate) fn new() -> Self {
         Self {
             candidates: &CANDIDATES,
-            fingerprint: ZERO_12_DECOY_FINGERPRINT,
+            fingerprint: Fingerprint::from_bytes(ZERO_12_DECOY_FINGERPRINT),
         }
     }
 
@@ -73,9 +75,12 @@ impl ContainerSearchCheck {
             .join(" ")
     }
 
-    fn candidates(case: &CandidatesCase) -> Result<(), String> {
+    fn candidates(case: &CandidatesCase) -> Result<(), crate::self_check::FailureDetail> {
         let search = ContainerSearch::new(&Self::typed(&[case.missing])).map_err(stopped)?;
-        expect(search.count() == case.count, "leaves another number")?;
+        expect(
+            search.count() == case.count,
+            crate::self_check::KnownAnswerDifference::LeavesAnotherNumber,
+        )?;
         let words: Vec<String> = search
             .candidates
             .iter()
@@ -92,13 +97,13 @@ impl ContainerSearchCheck {
         expect(
             words.first().map(String::as_str) == Some(case.first)
                 && words.get(case.real_at - 1).map(String::as_str) == Some(real),
-            "lists other words",
+            crate::self_check::KnownAnswerDifference::ListsOtherWords,
         )
     }
 
     /// The decoy fingerprint finds the last word; another fingerprint finds nothing, and three
     /// missing words are refused before any work.
-    fn decoy(&self) -> Result<(), String> {
+    fn decoy(&self) -> Result<(), crate::self_check::FailureDetail> {
         let search = ContainerSearch::new(&Self::typed(&[24])).map_err(stopped)?;
         let reference = Reference::Fingerprint {
             fingerprint: self.fingerprint,
@@ -110,16 +115,19 @@ impl ContainerSearchCheck {
         let real = ZERO_12.split(' ').nth(23).unwrap_or("");
         expect(
             found.is_some_and(|found| found.words == [(24, real)] && *found.container == ZERO_12),
-            "finds another container",
+            crate::self_check::KnownAnswerDifference::FindsAnotherContainer,
         )?;
         let other = Reference::Fingerprint {
-            fingerprint: [!self.fingerprint[0], 0, 0, 0],
+            fingerprint: Fingerprint::from_bytes([!self.fingerprint.bytes()[0], 0, 0, 0]),
             passphrase: "",
         };
         let none = search
             .search_decoy(&other, super::DECOY_SCAN_GAP, &mut |_, _| Ok(()))
             .map_err(stopped)?;
-        expect(none.is_none(), "takes another wallet's fingerprint")?;
+        expect(
+            none.is_none(),
+            crate::self_check::KnownAnswerDifference::TakesAnotherWalletSFingerprint,
+        )?;
         expect_refusal(
             ContainerSearch::new(&Self::typed(&[1, 2, 3])),
             "TOO_MANY_MISSING_WORDS",
@@ -138,8 +146,14 @@ impl ComponentCheck for ContainerSearchCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("candidates", self.candidates, Self::candidates);
-        findings.each("decoy search", &[()], |_| self.decoy());
+        findings.each(
+            crate::self_check::CaseKind::Candidates,
+            self.candidates,
+            Self::candidates,
+        );
+        findings.each(crate::self_check::CaseKind::DecoySearch, &[()], |_| {
+            self.decoy()
+        });
         findings.outcome()
     }
 }
@@ -169,12 +183,12 @@ mod tests {
             "candidates 2 of 2 leaves another number",
         );
         let mut check = ContainerSearchCheck {
-            fingerprint: [0x48, 0x7a, 0x15, 0x6f],
+            fingerprint: Fingerprint::from_bytes([0x48, 0x7a, 0x15, 0x6f]),
             ..ContainerSearchCheck::new()
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("decoy search 1 of 1 finds another container".to_owned())
+            "decoy search 1 of 1 finds another container".to_owned()
         );
     }
 }

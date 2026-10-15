@@ -61,6 +61,8 @@ mod system_random;
 mod terminal;
 #[cfg(test)]
 mod test_allocator;
+#[cfg(test)]
+mod test_support;
 mod test_tools;
 mod time_text;
 mod typed_line;
@@ -305,7 +307,7 @@ fn main() {
         Ok(code) => code,
         Err(failure) => {
             show_failure(&failure);
-            failure.exit_code
+            failure.exit_code()
         }
     };
     std::process::exit(final_exit_code(exit_code, style::message_failed()));
@@ -324,11 +326,11 @@ fn final_exit_code(code: i32, message_failed: bool) -> i32 {
 
 /// Shows why a command stopped. An empty message means that the command has already shown it.
 fn show_failure(failure: &Failure) {
-    if failure.exit_code == exit::CANCELLED {
+    if failure.exit_code() == exit::CANCELLED {
         // q in a list: the person stopped on purpose, as with Ctrl+C, which is not an error.
         eprintln!();
         terminal::show_cancelled();
-    } else if !failure.message.is_empty() {
+    } else if !failure.message().is_empty() {
         eprintln!();
         style::error_wrapped(&failure.to_string());
     }
@@ -453,15 +455,9 @@ fn needs_of(command: &Command) -> protect::Needs {
     match command {
         // The fast mode serves a page to a browser it may start, which must write its profile; it
         // handles no secret itself.
-        Command::Serve(_) => protect::Needs {
-            network: true,
-            writes: true,
-        },
+        Command::Serve(_) => protect::Needs::new(true, true),
         // Writes the vector files into the folder it is given.
-        Command::TestVectors(_) => protect::Needs {
-            network: false,
-            writes: true,
-        },
+        Command::TestVectors(_) => protect::Needs::new(false, true),
         _ => protect::Needs::NOTHING,
     }
 }

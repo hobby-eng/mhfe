@@ -8,6 +8,7 @@ import { PHRASE, REDUCED_COST_CONTAINER } from "../public-test-data.mjs";
 import { nextTurn } from "./expect.mjs";
 import { BUILD_ID, VERSION, builds, packageWasm, parameters, read } from "./package.mjs";
 import { checkWorkerProtocol } from "./protocol-values.mjs";
+import { checkArgon2StartupPrivacy } from "./worker-startup-privacy.mjs";
 import { CORE_PARTS, LABELS, PASSWORD_PARTS, REPAIR_PARTS, part, reports } from "./self-checks.mjs";
 import {
   CHECKED_PHRASE,
@@ -94,8 +95,8 @@ const singleThreadedBuild = {
 /** The threaded Argon2 build in front of the worker, with its stamped build. */
 const threadedBuild = { createArgon2Mt: builds.threaded, ARGON2_THREADED_BUILD_ID: BUILD_ID };
 /** A threaded build whose lane workers do not start, and what the check says of it. */
-const noLanes = () => Promise.reject(new Error("the lane workers did not start"));
-const lanesFailed = "the threaded Argon2 build did not start: the lane workers did not start";
+const noLanes = () => Promise.reject(new Error("synthetic private lane-start marker"));
+const lanesFailed = "the threaded Argon2 build did not start";
 /** What the worker posts for the core's self-check whose Argon2 part is `argon2`. */
 function coreCheckMessages(argon2) {
   const components = CORE_PARTS.map((id) => (id === "argon2" ? argon2 : part(id)));
@@ -124,6 +125,12 @@ export async function checkWorkerInProcess() {
   await checkWalletSearchProgress();
   await checkRepairAndCoreChecks();
   await checkArgon2BuildsNotStarted();
+  await checkArgon2StartupPrivacy((globals, request) =>
+    inProcessWorker(workerScript, globals, { isolated: true })({
+      ...request,
+      compiled: compiledPackage,
+    }),
+  );
   await checkSizesAndMissingBuild();
   const workerRefusals = await checkOtherArgon2Builds();
   await checkPasswordsFullTier();
@@ -234,16 +241,15 @@ async function checkRepairAndCoreChecks() {
 /** Argon2 builds that do not start: Argon2 not available, or the single-threaded build instead. */
 async function checkArgon2BuildsNotStarted() {
   // An Argon2 build that does not start gave no wrong answer: Argon2 is not available, with the
-  // cause, and the report passes. A wrong answer of a build that started still fails it.
-  const refusedStart = () => Promise.reject(new Error("the browser refused its memory"));
+  // known backend, and the report passes. A wrong answer of a build that started still fails it.
+  const refusedStart = () => Promise.reject(new Error("synthetic private memory-start marker"));
   assert.deepEqual(
     await coreCheckWith({ ...singleThreadedBuild, createArgon2St: refusedStart }),
     coreCheckMessages(
       part(
         "argon2",
         "notAvailable",
-        "Argon2id could not run: the single-threaded Argon2 build did not start: the browser " +
-          "refused its memory",
+        "Argon2id could not run: the single-threaded Argon2 build did not start",
       ),
     ),
   );
@@ -307,8 +313,7 @@ async function checkArgon2BuildsNotStarted() {
       part(
         "argon2",
         "notAvailable",
-        `Argon2id could not run: ${lanesFailed}; the single-threaded Argon2 build did not start: ` +
-          "the browser refused its memory",
+        `Argon2id could not run: ${lanesFailed}; the single-threaded Argon2 build did not start`,
       ),
     ),
   );

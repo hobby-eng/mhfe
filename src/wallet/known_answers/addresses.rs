@@ -5,8 +5,7 @@
 use super::{damaged, expect, expect_refusal, stopped, ABANDON};
 use crate::self_check::{ComponentCheck, ComponentOutcome, Findings, Tier};
 use crate::wallet::{
-    find_address, master_fingerprint, program_for, Address, Coin, DerivationPath, ExtendedKey,
-    SearchLimits,
+    program_for, Address, Coin, DerivationPath, ExtendedKey, Fingerprint, SearchLimits,
 };
 
 /// A receiving address of the test phrase [`ABANDON`] at its path.
@@ -360,7 +359,10 @@ impl AddressesCheck {
         }
     }
 
-    fn address(case: &AddressCase, masters: &[(&str, ExtendedKey)]) -> Result<(), String> {
+    fn address(
+        case: &AddressCase,
+        masters: &[(&str, ExtendedKey)],
+    ) -> Result<(), crate::self_check::FailureDetail> {
         let address = Address::parse(case.coin, case.address).map_err(stopped)?;
         let path: DerivationPath = case.path.parse().map_err(|_| damaged())?;
         let master = masters
@@ -370,7 +372,10 @@ impl AddressesCheck {
             .ok_or_else(damaged)?;
         let key = master.derive(&path.0).map_err(stopped)?;
         let program = program_for(&key, address.address_type).map_err(stopped)?;
-        expect(program == address.program, "differs")
+        expect(
+            program == address.program,
+            crate::self_check::KnownAnswerDifference::Differs,
+        )
     }
 }
 
@@ -387,10 +392,10 @@ impl ComponentCheck for AddressesCheck {
         let full = tier == Tier::Full;
         let mut findings = Findings::new();
         findings.one(|| {
-            let fingerprint = master_fingerprint(ABANDON, "").map_err(stopped)?;
+            let fingerprint = Fingerprint::of(ABANDON, "").map_err(stopped)?;
             expect(
-                fingerprint == ABANDON_FINGERPRINT,
-                "the master key fingerprint differs",
+                fingerprint.bytes() == ABANDON_FINGERPRINT,
+                crate::self_check::KnownAnswerDifference::TheMasterKeyFingerprintDiffers,
             )
         });
         let cases: Vec<AddressCase> = self
@@ -412,19 +417,24 @@ impl ComponentCheck for AddressesCheck {
                 }
             }
         }
-        findings.each("address", &cases, |case| Self::address(case, &masters));
-        findings.each("damaged address", self.damaged, |&(coin, text)| {
-            expect_refusal(Address::parse(coin, text), "INVALID_ADDRESS")
+        findings.each(crate::self_check::CaseKind::Address, &cases, |case| {
+            Self::address(case, &masters)
         });
+        findings.each(
+            crate::self_check::CaseKind::DamagedAddress,
+            self.damaged,
+            |&(coin, text)| expect_refusal(Address::parse(coin, text), "INVALID_ADDRESS"),
+        );
         if full {
-            findings.each("search", self.searches, |case| {
+            findings.each(crate::self_check::CaseKind::Search, self.searches, |case| {
                 let address = Address::parse(case.coin, case.address).map_err(stopped)?;
                 let limits = SearchLimits::new(SEARCH_ACCOUNTS, SEARCH_INDEXES).map_err(stopped)?;
-                let found = find_address(ABANDON, case.passphrase, &address, None, limits)
+                let found = address
+                    .find(ABANDON, case.passphrase, None, limits)
                     .map_err(stopped)?;
                 expect(
                     found.map(|path| path.to_string()).as_deref() == Some(case.path),
-                    "finds the address elsewhere",
+                    crate::self_check::KnownAnswerDifference::FindsTheAddressElsewhere,
                 )
             });
         }
@@ -490,9 +500,9 @@ mod tests {
                 ..AddressesCheck::new()
             };
             let outcome = check.run(Tier::Full);
-            assert_eq!(
+            crate::self_check::assert_failed!(
                 outcome,
-                ComponentOutcome::Failed("search 1 of 1 finds the address elsewhere".to_owned()),
+                "search 1 of 1 finds the address elsewhere".to_owned(),
                 "{}",
                 vector.path
             );

@@ -15,11 +15,11 @@
 //!
 //! The check is defined for a 24-word phrase, whose entropy has 256 bits, and this library offers
 //! it only with a BIP39 passphrase that is not empty, as the specification allows: one rule for
-//! every front end, owned by [`require_passphrase`] and [`verify_entropy`]. A new phrase is drawn
+//! every front end, owned by [`WalletCheck::require_passphrase`] and [`WalletCheck::verify_entropy`]. A new phrase is drawn
 //! with it only with a passphrase ([`PhraseDraw::with_check`]), and a recovery is checked against
-//! it only as 24 words and with a passphrase ([`verify`], and the rehearsal's
+//! it only as 24 words and with a passphrase ([`WalletCheck::verify`], and the rehearsal's
 //! `Reference::WalletCheck`), never as a shorter reading. Without a passphrase the seed would be a
-//! function of the phrase alone, and anyone who saw the phrase could test the check. [`passes`]
+//! function of the phrase alone, and anyone who saw the phrase could test the check. [`WalletCheck::passes`]
 //! computes the criterion itself for any passphrase, the empty one included: a recovery reports a
 //! pass without a passphrase for a phrase that another program made in that form, and a hidden
 //! wallet may pass neither form.
@@ -36,13 +36,12 @@
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
-use bip39::{Language, Mnemonic};
-
 use crate::memory::LockedText;
 use crate::phrase::{self, locked_phrase_from_entropy};
-use crate::random::{check_source, RandomSource};
+use crate::random::{RandomError, RandomSampler, RandomSource};
 use crate::word_wishes::{WishOdds, WordWishes};
-use crate::{wallet, MhfeError};
+mod error;
+pub use error::{DrawReadback, WalletCheckError};
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -67,28 +66,90 @@ pub const NEW_ENTROPY_BYTES: usize = crate::packing::STATE_BYTES;
 /// [`NEW_ENTROPY_BYTES`] in bits.
 pub const NEW_ENTROPY_BITS: usize = NEW_ENTROPY_BYTES * u8::BITS as usize;
 
-/// Whether `entropy` passes the criterion of the wallet check with `passphrase`, which may be empty
-/// here; of any length BIP39 takes. A program that checks a recovery uses [`verify`] or
-/// [`verify_entropy`], which hold the profile's rule.
-pub fn passes(entropy: &[u8], passphrase: &str) -> Result<bool, MhfeError> {
-    Ok(digest_passes(&*digest(entropy, passphrase)?))
+/// The wallet-check criterion with one BIP39 passphrase, borrowed without another secret copy.
+///
+/// Constructing it does no work. Criterion methods accept an empty passphrase and any BIP39
+/// length; verification methods first require a nonempty passphrase and a 24-word phrase.
+/// Every seed derivation checks the library's passphrase-size bound.
+pub struct WalletCheck<'a> {
+    passphrase: &'a str,
+}
+
+impl<'a> WalletCheck<'a> {
+    /// Chooses the passphrase of this check; an empty string means the wallet without one.
+    pub const fn new(passphrase: &'a str) -> Self {
+        Self { passphrase }
+    }
+
+    /// Whether `entropy` passes the criterion of the wallet check with `passphrase`, which may be empty
+    /// here; of any length BIP39 takes. A program that checks a recovery uses [`WalletCheck::verify`] or
+    /// [`WalletCheck::verify_entropy`], which hold the profile's rule.
+    pub fn passes(&self, entropy: &[u8]) -> Result<bool, WalletCheckError> {
+        Ok(digest_passes(&*digest(entropy, self.passphrase)?))
+    }
+
+    /// Whether a seed phrase passes the criterion of the wallet check with `passphrase`, as
+    /// [`WalletCheck::passes`] does: of any length and with any passphrase.
+    pub fn phrase_passes(&self, text: &str) -> Result<bool, WalletCheckError> {
+        let mnemonic = phrase::parse(text).map_err(WalletCheckError::from)?;
+        let entropy = Zeroizing::new(mnemonic.to_entropy());
+        self.passes(&entropy)
+    }
+
+    /// The rule of the passphrase, for every front end: the wallet check is offered only with a BIP39
+    /// passphrase that is not empty (`WALLET_CHECK_NEEDS_PASSPHRASE` otherwise), for a new phrase as
+    /// for a recovery. A front end can ask this before anything else, as the rehearsal does before any
+    /// Argon2 work.
+    pub fn require_passphrase(&self) -> Result<(), WalletCheckError> {
+        if self.passphrase.is_empty() {
+            return Err(WalletCheckError::NeedsPassphrase);
+        }
+        Ok(())
+    }
+
+    /// The rule of a new wallet's passphrase, typed twice: the repetition must be exactly the same text
+    /// (`PASSPHRASES_DIFFER` otherwise). An empty passphrase, none, is typed once and needs none.
+    pub fn require_same_passphrase(&self, repeat: &str) -> Result<(), WalletCheckError> {
+        if !self.passphrase.is_empty() && repeat != self.passphrase {
+            return Err(WalletCheckError::PassphrasesDiffer);
+        }
+        Ok(())
+    }
+
+    /// Whether a recovered 24-word phrase passes the wallet check with the passphrase the owner gives.
+    ///
+    /// An empty passphrase is refused ([`WalletCheck::require_passphrase`]), and so is a phrase of another length.
+    pub fn verify(&self, text: &str) -> Result<bool, WalletCheckError> {
+        self.require_passphrase()?;
+        let mnemonic = phrase::parse(text).map_err(WalletCheckError::from)?;
+        if mnemonic.word_count() != crate::packing::STATE_WORDS {
+            return Err(WalletCheckError::WordCount(mnemonic.word_count()));
+        }
+        let entropy = Zeroizing::new(mnemonic.to_entropy());
+        self.verify_entropy(&entropy)
+    }
+
+    /// [`WalletCheck::verify`] for the entropy of the 24-word phrase, 256 bits, as the rehearsal reads it from a
+    /// recovered state: the profile's `BE32(256)` and nothing shorter. An empty passphrase is refused
+    /// ([`WalletCheck::require_passphrase`]), and so is entropy of another length, by the words it would have.
+    pub fn verify_entropy(&self, entropy: &[u8]) -> Result<bool, WalletCheckError> {
+        self.require_passphrase()?;
+        if entropy.len() != NEW_ENTROPY_BYTES {
+            return Err(WalletCheckError::WordCount(
+                crate::packing::words_of_entropy(entropy.len()),
+            ));
+        }
+        self.passes(entropy)
+    }
 }
 
 /// The digest `T` of `entropy` with `passphrase`: the tagged SHA-256 of its BIP39 seed.
-fn digest(entropy: &[u8], passphrase: &str) -> Result<Zeroizing<[u8; 32]>, MhfeError> {
-    let bits = u32::try_from(entropy.len() * 8).unwrap_or(u32::MAX);
-    let mnemonic = Mnemonic::from_entropy_in(Language::English, entropy)
-        .map_err(|error| MhfeError::Internal(error.to_string()))?;
-    let seed = wallet::bip39_seed(&mnemonic, passphrase)?;
+fn digest(entropy: &[u8], passphrase: &str) -> Result<Zeroizing<[u8; 32]>, WalletCheckError> {
+    let mnemonic = phrase::mnemonic_of(entropy)?;
+    // The shared guard bounds this multiplication to a valid BIP39 entropy.
+    let bits = (entropy.len() * u8::BITS as usize) as u32;
+    let seed = crate::bip39_seed::derive(&mnemonic, passphrase)?;
     Ok(tagged_digest(bits, &seed[..]))
-}
-
-/// Whether a seed phrase passes the criterion of the wallet check with `passphrase`, as
-/// [`passes`] does: of any length and with any passphrase.
-pub fn phrase_passes(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
-    let mnemonic = phrase::parse(text).map_err(MhfeError::InvalidPhrase)?;
-    let entropy = Zeroizing::new(mnemonic.to_entropy());
-    passes(&entropy, passphrase)
 }
 
 /// Whether a digest `T` starts with [`WALLET_CHECK_BITS`] zero bits: the criterion of the check.
@@ -115,53 +176,7 @@ pub const DRAW_REPORT_INTERVAL: u64 = 1024;
 /// Hears the number of draws so far, from whichever thread reaches the next report; an error it
 /// returns stops the draw.
 #[cfg(not(target_arch = "wasm32"))]
-pub type SharedDrawReport<'a> = &'a mut (dyn FnMut(u64) -> Result<(), MhfeError> + Send);
-
-/// The rule of the passphrase, for every front end: the wallet check is offered only with a BIP39
-/// passphrase that is not empty (`WALLET_CHECK_NEEDS_PASSPHRASE` otherwise), for a new phrase as
-/// for a recovery. A front end can ask this before anything else, as the rehearsal does before any
-/// Argon2 work.
-pub fn require_passphrase(passphrase: &str) -> Result<(), MhfeError> {
-    if passphrase.is_empty() {
-        return Err(MhfeError::WalletCheckNeedsPassphrase);
-    }
-    Ok(())
-}
-
-/// The rule of a new wallet's passphrase, typed twice: the repetition must be exactly the same text
-/// (`PASSPHRASES_DIFFER` otherwise). An empty passphrase, none, is typed once and needs none.
-pub fn require_same_passphrase(passphrase: &str, repeat: &str) -> Result<(), MhfeError> {
-    if !passphrase.is_empty() && repeat != passphrase {
-        return Err(MhfeError::PassphrasesDiffer);
-    }
-    Ok(())
-}
-
-/// Whether a recovered 24-word phrase passes the wallet check with the passphrase the owner gives.
-///
-/// An empty passphrase is refused ([`require_passphrase`]), and so is a phrase of another length.
-pub fn verify(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
-    require_passphrase(passphrase)?;
-    let mnemonic = phrase::parse(text).map_err(MhfeError::InvalidPhrase)?;
-    if mnemonic.word_count() != crate::packing::STATE_WORDS {
-        return Err(MhfeError::NoWalletCheckAtLength(mnemonic.word_count()));
-    }
-    let entropy = Zeroizing::new(mnemonic.to_entropy());
-    verify_entropy(&entropy, passphrase)
-}
-
-/// [`verify`] for the entropy of the 24-word phrase, 256 bits, as the rehearsal reads it from a
-/// recovered state: the profile's `BE32(256)` and nothing shorter. An empty passphrase is refused
-/// ([`require_passphrase`]), and so is entropy of another length, by the words it would have.
-pub fn verify_entropy(entropy: &[u8], passphrase: &str) -> Result<bool, MhfeError> {
-    require_passphrase(passphrase)?;
-    if entropy.len() != NEW_ENTROPY_BYTES {
-        return Err(MhfeError::NoWalletCheckAtLength(
-            crate::packing::words_of_entropy(entropy.len()),
-        ));
-    }
-    passes(entropy, passphrase)
-}
+pub type SharedDrawReport<'a> = &'a mut (dyn FnMut(u64) -> Result<(), WalletCheckError> + Send);
 
 /// How a new 24-word phrase is drawn: at random, or with the wallet check until it passes with a
 /// BIP39 passphrase.
@@ -181,11 +196,11 @@ impl PhraseDraw {
     }
 
     /// Phrases drawn until one passes the wallet check with `passphrase`, about 65,536 BIP39
-    /// seeds. The check needs a passphrase ([`require_passphrase`]): without one, anyone who sees
+    /// seeds. The check needs a passphrase ([`WalletCheck::require_passphrase`]): without one, anyone who sees
     /// the phrase could test it.
-    pub fn with_check(passphrase: &str) -> Result<Self, MhfeError> {
-        require_passphrase(passphrase)?;
-        wallet::require_passphrase_size(passphrase)?;
+    pub fn with_check(passphrase: &str) -> Result<Self, WalletCheckError> {
+        WalletCheck::new(passphrase).require_passphrase()?;
+        crate::bip39_seed::require_size(passphrase)?;
         Ok(Self {
             passphrase: Some(LockedText::copy_of(passphrase)),
             wishes: WordWishes::none(),
@@ -227,7 +242,7 @@ impl PhraseDraw {
         &self,
         source: &mut dyn RandomSource,
         count: u64,
-    ) -> Result<Option<Zeroizing<[u8; NEW_ENTROPY_BYTES]>>, MhfeError> {
+    ) -> Result<Option<Zeroizing<[u8; NEW_ENTROPY_BYTES]>>, WalletCheckError> {
         self.draws_after(source, count, &mut Zeroizing::new([0u8; NEW_ENTROPY_BYTES]))
     }
 
@@ -238,14 +253,12 @@ impl PhraseDraw {
         source: &mut dyn RandomSource,
         count: u64,
         previous: &mut [u8; NEW_ENTROPY_BYTES],
-    ) -> Result<Option<Zeroizing<[u8; NEW_ENTROPY_BYTES]>>, MhfeError> {
+    ) -> Result<Option<Zeroizing<[u8; NEW_ENTROPY_BYTES]>>, WalletCheckError> {
         let mut entropy = Zeroizing::new([0u8; NEW_ENTROPY_BYTES]);
         for _ in 0..count {
             source.fill(&mut entropy[..])?;
             if entropy.iter().all(|&byte| byte == entropy[0]) || *entropy == *previous {
-                return Err(MhfeError::RandomFailed(
-                    "it gave an entropy that cannot be random".to_owned(),
-                ));
+                return Err(RandomError::UnusableEntropy.into());
             }
             previous.copy_from_slice(&entropy[..]);
             // The chosen words' bits are set after the source's bytes are judged, and a phrase
@@ -256,7 +269,7 @@ impl PhraseDraw {
             }
             let found = match &self.passphrase {
                 None => true,
-                Some(passphrase) => passes(&entropy[..], passphrase)?,
+                Some(passphrase) => WalletCheck::new(passphrase).passes(&entropy[..])?,
             };
             if found {
                 return Ok(Some(entropy));
@@ -265,16 +278,16 @@ impl PhraseDraw {
         Ok(None)
     }
 
-    /// Draws until a phrase is found. The source is probed first ([`check_source`]), so that a
+    /// Draws until a phrase is found. The source is probed first ([`RandomSampler::check_source`]), so that a
     /// source that fills nothing or repeats itself is refused before anything is drawn. `on_draws`
     /// hears the number of draws so far every [`DRAW_REPORT_INTERVAL`] draws; an error it returns
     /// stops the draw. The phrase found is read back before it is given out.
     pub fn draw(
         &self,
         source: &mut dyn RandomSource,
-        on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
-    ) -> Result<NewPhrase, MhfeError> {
-        check_source(source)?;
+        on_draws: &mut dyn FnMut(u64) -> Result<(), WalletCheckError>,
+    ) -> Result<NewPhrase, WalletCheckError> {
+        RandomSampler::new(source).check_source()?;
         let mut draws = 0;
         loop {
             if let Some(entropy) = self.try_draws(source, DRAW_REPORT_INTERVAL)? {
@@ -286,7 +299,7 @@ impl PhraseDraw {
     }
 
     /// [`PhraseDraw::draw`] on every processor core at once, natively: one thread per core, each
-    /// with its own source from `new_source`, which it probes ([`check_source`]) before its first
+    /// with its own source from `new_source`, which it probes ([`RandomSampler::check_source`]) before its first
     /// draw. The first passing entropy any thread finds is taken, which leaves every passing
     /// entropy equally likely, and the others stop at their next draw. An error of any thread, a
     /// source that cannot be random among them, ends the draw with that error. `on_draws` hears
@@ -299,7 +312,7 @@ impl PhraseDraw {
         &self,
         new_source: F,
         on_draws: SharedDrawReport<'_>,
-    ) -> Result<NewPhrase, MhfeError>
+    ) -> Result<NewPhrase, WalletCheckError>
     where
         S: RandomSource,
         F: Fn() -> S + Sync,
@@ -315,7 +328,7 @@ impl PhraseDraw {
         threads: usize,
         new_source: &F,
         on_draws: SharedDrawReport<'_>,
-    ) -> Result<NewPhrase, MhfeError>
+    ) -> Result<NewPhrase, WalletCheckError>
     where
         S: RandomSource,
         F: Fn() -> S + Sync,
@@ -328,7 +341,7 @@ impl PhraseDraw {
     }
 
     /// The phrase of a drawn `entropy`, read back before it is given out.
-    fn give_out(&self, entropy: &[u8; NEW_ENTROPY_BYTES]) -> Result<NewPhrase, MhfeError> {
+    fn give_out(&self, entropy: &[u8; NEW_ENTROPY_BYTES]) -> Result<NewPhrase, WalletCheckError> {
         // Written at its final size into a buffer locked first: Mnemonic::to_string would leave
         // growing copies of the first words in freed memory (AUD-008-SEC002).
         let phrase = locked_phrase_from_entropy(&entropy[..])?;
@@ -343,28 +356,22 @@ impl PhraseDraw {
     /// was written from and, when drawn with the check, pass the check again. A fault between the
     /// drawing and the writing would otherwise give a phrase that is not the one drawn, or one
     /// whose check fails at the first recovery.
-    fn read_back(&self, phrase: &str, entropy: &[u8]) -> Result<(), MhfeError> {
+    fn read_back(&self, phrase: &str, entropy: &[u8]) -> Result<(), WalletCheckError> {
         let read = phrase::parse(phrase)
-            .map_err(|_| MhfeError::Internal("a new phrase does not read back".to_owned()))?;
+            .map_err(|_| WalletCheckError::Readback(DrawReadback::Unreadable))?;
         let read = Zeroizing::new(read.to_entropy());
         if *read != entropy {
-            return Err(MhfeError::Internal(
-                "a new phrase reads back as another entropy".to_owned(),
-            ));
+            return Err(WalletCheckError::Readback(DrawReadback::Entropy));
         }
         let words: &[u8; NEW_ENTROPY_BYTES] = (&read[..])
             .try_into()
-            .map_err(|_| MhfeError::Internal("a new phrase is not 24 words".to_owned()))?;
+            .map_err(|_| WalletCheckError::Readback(DrawReadback::Length))?;
         if !self.wishes.met_by(words) {
-            return Err(MhfeError::Internal(
-                "a new phrase does not meet its wishes when read back".to_owned(),
-            ));
+            return Err(WalletCheckError::Readback(DrawReadback::Wishes));
         }
         if let Some(passphrase) = &self.passphrase {
-            if !passes(&read, passphrase)? {
-                return Err(MhfeError::Internal(
-                    "a new phrase does not pass its wallet check when read back".to_owned(),
-                ));
+            if !WalletCheck::new(passphrase).passes(&read)? {
+                return Err(WalletCheckError::Readback(DrawReadback::WalletCheck));
             }
         }
         Ok(())
@@ -412,23 +419,23 @@ mod tests {
     #[test]
     fn the_check_binds_the_passphrase() {
         let entropy = counted(TREZOR_COUNTER);
-        assert!(passes(&entropy, "TREZOR").unwrap());
-        assert!(!passes(&entropy, "trezor").unwrap());
+        assert!(WalletCheck::new("TREZOR").passes(&entropy).unwrap());
+        assert!(!WalletCheck::new("trezor").passes(&entropy).unwrap());
         // Without the passphrase it is another seed, which fails: 0 leading zero bits.
-        assert!(!passes(&entropy, "").unwrap());
+        assert!(!WalletCheck::new("").passes(&entropy).unwrap());
         let phrase = crate::phrase::phrase_from_entropy(&entropy).unwrap();
         assert!(phrase.ends_with("abandon above proof fatigue"));
-        assert!(phrase_passes(&phrase, "TREZOR").unwrap());
+        assert!(WalletCheck::new("TREZOR").phrase_passes(&phrase).unwrap());
     }
 
     #[test]
     fn a_wallet_without_a_passphrase_has_its_check_too() {
         let entropy = counted(EMPTY_COUNTER);
-        assert!(passes(&entropy, "").unwrap());
-        assert!(!passes(&entropy, "TREZOR").unwrap());
+        assert!(WalletCheck::new("").passes(&entropy).unwrap());
+        assert!(!WalletCheck::new("TREZOR").passes(&entropy).unwrap());
         let phrase = crate::phrase::phrase_from_entropy(&entropy).unwrap();
         assert!(phrase.ends_with("abandon absorb another spoil"));
-        assert!(phrase_passes(&phrase, "").unwrap());
+        assert!(WalletCheck::new("").phrase_passes(&phrase).unwrap());
     }
 
     #[test]
@@ -445,7 +452,7 @@ mod tests {
         let checked = draw.draw(&mut fill, &mut |_| Ok(())).unwrap();
         assert_eq!(counter.get(), TREZOR_COUNTER);
         assert!(checked.checked());
-        assert!(verify(checked.phrase(), "TREZOR").unwrap());
+        assert!(WalletCheck::new("TREZOR").verify(checked.phrase()).unwrap());
         // Written into a buffer locked first, as a recovered phrase is.
         assert_eq!(checked.phrase.is_locked(), cfg!(unix));
         let unchecked = PhraseDraw::unchecked()
@@ -461,54 +468,63 @@ mod tests {
     fn the_check_needs_a_passphrase_and_24_words() {
         assert!(matches!(
             PhraseDraw::with_check(""),
-            Err(MhfeError::WalletCheckNeedsPassphrase)
+            Err(WalletCheckError::NeedsPassphrase)
         ));
         let twelve = crate::test_support::ABANDON_12;
         assert!(matches!(
-            verify(twelve, "TREZOR"),
-            Err(MhfeError::NoWalletCheckAtLength(12))
+            WalletCheck::new("TREZOR").verify(twelve),
+            Err(WalletCheckError::WordCount(12))
         ));
         let phrase = crate::phrase::phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
         assert!(matches!(
-            verify(&phrase, ""),
-            Err(MhfeError::WalletCheckNeedsPassphrase)
+            WalletCheck::new("").verify(&phrase),
+            Err(WalletCheckError::NeedsPassphrase)
         ));
         // The same rule for the entropy a recovery reads, which the rehearsal checks.
         let entropy = counted(TREZOR_COUNTER);
-        assert_eq!(verify_entropy(&entropy, "TREZOR"), Ok(true));
-        assert_eq!(verify_entropy(&entropy, "trezor"), Ok(false));
         assert_eq!(
-            verify_entropy(&entropy, ""),
-            Err(MhfeError::WalletCheckNeedsPassphrase)
+            WalletCheck::new("TREZOR").verify_entropy(&entropy),
+            Ok(true)
         );
         assert_eq!(
-            verify_entropy(&entropy[..16], "TREZOR"),
-            Err(MhfeError::NoWalletCheckAtLength(12))
+            WalletCheck::new("trezor").verify_entropy(&entropy),
+            Ok(false)
         );
         assert_eq!(
-            require_passphrase(""),
-            Err(MhfeError::WalletCheckNeedsPassphrase)
+            WalletCheck::new("").verify_entropy(&entropy),
+            Err(WalletCheckError::NeedsPassphrase)
         );
-        assert_eq!(require_passphrase("TREZOR"), Ok(()));
+        assert_eq!(
+            WalletCheck::new("TREZOR").verify_entropy(&entropy[..16]),
+            Err(WalletCheckError::WordCount(12))
+        );
+        assert_eq!(
+            WalletCheck::new("").require_passphrase(),
+            Err(WalletCheckError::NeedsPassphrase)
+        );
+        assert_eq!(WalletCheck::new("TREZOR").require_passphrase(), Ok(()));
     }
 
     /// The library's messages write the odds out, as "65,536"; they must stay the check's.
     #[test]
     fn messages_give_the_odds_of_the_check() {
         assert_eq!(WALLET_CHECK_ODDS, 65_536);
-        assert!(MhfeError::HiddenWalletPassesCheck
+        assert!(crate::MhfeError::Hidden(crate::HiddenError::PassesCheck)
             .to_string()
             .contains("once in 65,536"));
     }
 
     #[test]
     fn a_new_passphrase_must_be_repeated_exactly() {
-        assert_eq!(require_same_passphrase("TREZOR", "TREZOR"), Ok(()));
-        assert_eq!(require_same_passphrase("", ""), Ok(()));
+        assert_eq!(
+            WalletCheck::new("TREZOR").require_same_passphrase("TREZOR"),
+            Ok(())
+        );
+        assert_eq!(WalletCheck::new("").require_same_passphrase(""), Ok(()));
         for repeat in ["trezor", "TREZOR ", ""] {
             assert_eq!(
-                require_same_passphrase("TREZOR", repeat),
-                Err(MhfeError::PassphrasesDiffer)
+                WalletCheck::new("TREZOR").require_same_passphrase(repeat),
+                Err(WalletCheckError::PassphrasesDiffer)
             );
         }
     }
@@ -520,10 +536,10 @@ mod tests {
     fn only_the_criterion_takes_a_short_phrase() {
         let twelve = crate::test_support::ABANDON_12;
         let passphrase = "aud010 public probe 11656";
-        assert_eq!(phrase_passes(twelve, passphrase), Ok(true));
+        assert_eq!(WalletCheck::new(passphrase).phrase_passes(twelve), Ok(true));
         assert_eq!(
-            verify(twelve, passphrase),
-            Err(MhfeError::NoWalletCheckAtLength(12))
+            WalletCheck::new(passphrase).verify(twelve),
+            Err(WalletCheckError::WordCount(12))
         );
     }
 
@@ -539,13 +555,13 @@ mod tests {
         let draw = PhraseDraw::with_check("TREZOR").unwrap();
         let stopped = draw.draw(&mut never, &mut |draws| {
             assert_eq!(draws, DRAW_REPORT_INTERVAL);
-            Err(MhfeError::Cancelled)
+            Err(WalletCheckError::Cancelled)
         });
-        assert!(matches!(stopped, Err(MhfeError::Cancelled)));
+        assert!(matches!(stopped, Err(WalletCheckError::Cancelled)));
         let mut zeros = |_: &mut [u8]| Ok(());
         assert!(matches!(
             PhraseDraw::unchecked().try_draws(&mut zeros, 1),
-            Err(MhfeError::RandomFailed(_))
+            Err(WalletCheckError::Random(_))
         ));
         // draw probes the source first: a stuck one is refused before any draw.
         let mut stuck = |bytes: &mut [u8]| {
@@ -554,7 +570,7 @@ mod tests {
         };
         assert!(matches!(
             PhraseDraw::unchecked().draw(&mut stuck, &mut |_| Ok(())),
-            Err(MhfeError::RandomFailed(_))
+            Err(WalletCheckError::Random(_))
         ));
     }
 
@@ -588,7 +604,7 @@ mod tests {
                     continue;
                 }
                 assert!(
-                    matches!(drawn, Err(MhfeError::RandomFailed(_))),
+                    matches!(drawn, Err(WalletCheckError::Random(_))),
                     "{stuck:?}"
                 );
                 #[cfg(not(target_arch = "wasm32"))]
@@ -596,7 +612,7 @@ mod tests {
                     let threaded =
                         draw.draw_on_threads(4, &|| stuck_after_probes(stuck), &mut |_| Ok(()));
                     assert!(
-                        matches!(threaded, Err(MhfeError::RandomFailed(_))),
+                        matches!(threaded, Err(WalletCheckError::Random(_))),
                         "{stuck:?}"
                     );
                 }
@@ -613,7 +629,7 @@ mod tests {
 
     #[cfg(not(target_arch = "wasm32"))]
     impl RandomSource for Counting {
-        fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {
+        fn fill(&mut self, bytes: &mut [u8]) -> Result<(), RandomError> {
             self.next += 1;
             bytes.copy_from_slice(&counted(self.next));
             Ok(())
@@ -653,7 +669,7 @@ mod tests {
             .draw_on_threads(4, &thread_sources(first), &mut |_| Ok(()))
             .unwrap();
         assert_eq!(found.phrase(), &*expected);
-        assert!(verify(found.phrase(), "TREZOR").unwrap());
+        assert!(WalletCheck::new("TREZOR").verify(found.phrase()).unwrap());
         // A draw without the check takes one entropy on the calling thread, after the probes.
         let unchecked = PhraseDraw::unchecked()
             .draw_on_threads(4, &thread_sources(10), &mut |_| Ok(()))
@@ -674,7 +690,7 @@ mod tests {
             Counting(Counting),
         }
         impl RandomSource for OneBad {
-            fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {
+            fn fill(&mut self, bytes: &mut [u8]) -> Result<(), RandomError> {
                 match self {
                     Self::Zeros => {
                         bytes.fill(0);
@@ -695,14 +711,14 @@ mod tests {
         };
         assert!(matches!(
             draw.draw_on_threads(4, &one_bad, &mut |_| Ok(())),
-            Err(MhfeError::RandomFailed(_))
+            Err(WalletCheckError::Random(_))
         ));
         let mut heard = Vec::new();
         let stopped = draw.draw_on_threads(4, &thread_sources(0), &mut |draws| {
             heard.push(draws);
-            Err(MhfeError::Cancelled)
+            Err(WalletCheckError::Cancelled)
         });
-        assert!(matches!(stopped, Err(MhfeError::Cancelled)));
+        assert!(matches!(stopped, Err(WalletCheckError::Cancelled)));
         assert_eq!(heard, [DRAW_REPORT_INTERVAL]);
     }
 

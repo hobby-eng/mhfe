@@ -17,8 +17,8 @@
 use super::{Place, WordWishes, CHECKSUM_BITS};
 use crate::packing::{self, STATE_BYTES, STATE_WORDS};
 use crate::phrase::{self, LIST_SIZE, WORD_BITS};
+use crate::random::RandomError;
 use crate::wallet_check::PhraseDraw;
-use crate::MhfeError;
 
 /// Phrases drawn for each set of wishes.
 const DRAWS: usize = 20_000;
@@ -150,7 +150,7 @@ fn draw(chosen: &[(Place, &str)], never_use: &[&str], seed: u64) -> Drawn {
     let wishes = WordWishes::new(chosen, never_use).unwrap();
     let draw = PhraseDraw::unchecked().with_wishes(wishes);
     let mut random = SplitMix64(seed);
-    let mut source = |bytes: &mut [u8]| -> Result<(), MhfeError> {
+    let mut source = |bytes: &mut [u8]| -> Result<(), RandomError> {
         random.fill(bytes);
         Ok(())
     };

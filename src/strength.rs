@@ -8,8 +8,8 @@
 use std::sync::OnceLock;
 
 use crate::check_word::{PasswordReview, Reading, DRAWN_WORDS};
-use crate::eff::{EffList, MILLIBITS_PER_WORD};
-use crate::new_password::bits_of;
+use crate::eff::EffList;
+use crate::new_password::Millibits;
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 pub(crate) mod known_answers;
@@ -133,7 +133,7 @@ fn estimated_bits(password: &str) -> f64 {
     };
     let dice_words = EffList::get().different_dice_words(drawn);
     if dice_words > 0 {
-        return bits_of(dice_words * MILLIBITS_PER_WORD);
+        return Millibits::words(dice_words).bits();
     }
     let end = password
         .char_indices()

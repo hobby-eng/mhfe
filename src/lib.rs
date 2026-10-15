@@ -33,27 +33,25 @@
 // each foreign-function interface states its reason and each block its safety conditions.
 #![deny(unsafe_code)]
 
+mod bip39_seed;
+mod cancelled;
+mod check_state;
 pub mod check_word;
 mod container;
 mod detection;
 pub mod eff;
 pub mod engine;
 mod error;
+mod error_code;
 mod feistel;
 mod hidden;
-#[cfg(all(
-    target_arch = "wasm32",
-    any(
-        feature = "browser-core",
-        feature = "browser-passwords",
-        feature = "browser-wallet"
-    )
-))]
+#[cfg(all(target_arch = "wasm32", feature = "browser-core"))]
 mod js_error;
 pub mod memory;
 mod mhfe;
 pub mod new_password;
 pub mod operation;
+pub mod output;
 mod packing;
 mod password;
 mod phrase;
@@ -61,6 +59,7 @@ pub mod random;
 mod rehearsal;
 pub mod rekey;
 pub mod repair;
+pub mod request;
 pub mod search;
 pub mod self_check;
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
@@ -69,6 +68,7 @@ pub mod strength;
 mod suite;
 #[cfg(test)]
 mod test_support;
+mod text;
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",
@@ -89,24 +89,27 @@ pub mod word_wishes;
 #[cfg(not(target_arch = "wasm32"))]
 mod workers;
 
+pub use bip39_seed::PassphraseError;
+pub use cancelled::CancelledError;
+pub use check_state::CheckState;
 pub use container::{
-    check_container, container_fingerprint, ConfirmationNeeded, ContainerChoice, ContainerFacts,
-    OriginalFacts, BUILT_IN_CHECK_WORD_COUNTS,
+    ConfirmationNeeded, ContainerChoice, ContainerFacts, OriginalFacts, BUILT_IN_CHECK_WORD_COUNTS,
 };
 pub use error::MhfeError;
-pub use hidden::HiddenWallets;
+pub use error_code::{ErrorCode, ErrorIdentity};
+pub use hidden::{HiddenError, HiddenWallets};
 pub use mhfe::{
-    other_detected_lengths, Mhfe, NewContainer, PhraseLength, ProgressCallback, RecoveredPhrase,
-    Recovery, RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
+    CipherError, Mhfe, NewContainer, ProgressCallback, RecoveredPhrase, Recovery, RecoveryStatus,
+    ENCRYPTION_ROUNDS,
 };
-pub use password::{Password, MAX_PASSWORD_BYTES};
-pub use phrase::{check_phrase, grouped, phrase_from_entropy, read_phrase, WORD_COUNTS};
+pub use password::{Password, PasswordError, MAX_PASSWORD_BYTES};
+pub use phrase::{Phrase, PhraseError, PhraseIssue, WORD_COUNTS};
 pub use rehearsal::{
-    refuse_unused_passphrase, require_built_in_check_length, CheckEvidence, CheckOutcome,
-    Confirmation, PassedCheck, PassphraseReferences, RecoveredForCheck, RecoveredForRekey,
-    Reference, ReferenceTarget,
+    CheckEvidence, CheckOutcome, Confirmation, PassedCheck, PassphraseReferences,
+    RecoveredForCheck, RecoveredForRekey, Reference, ReferenceTarget, RehearsalError,
 };
 pub use suite::{
-    memory_text, Settings, Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS,
-    SAME_LENGTH_SUITE_ID, SUITE_ID,
+    FormatError, PhraseLength, Settings, SettingsError, Suite, WordCount, WorkFactor,
+    MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
 };
+pub use text::GroupedCount;

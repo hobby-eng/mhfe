@@ -2,7 +2,7 @@
 //! terminal who gives neither is asked: the defaults are chosen unless they pick their own.
 
 use clap::Args;
-use mhfe::engine::{check_can_run, highest_available_level, NativeEngine};
+use mhfe::engine::NativeEngine;
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
 use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, MAX_MEMORY_LEVEL, ROUNDS};
 
@@ -19,7 +19,7 @@ use crate::time_text;
 pub(crate) struct Settings {
     // Options rather than defaults, so that a command can tell whether the person gave them.
     #[arg(long, value_name = "N", help = pim_short_help(), long_help = pim_help())]
-    pub(crate) pim: Option<u32>,
+    pim: Option<u32>,
 
     #[arg(
         long = "mem",
@@ -27,7 +27,14 @@ pub(crate) struct Settings {
         help = memory_level_short_help(),
         long_help = memory_level_help()
     )]
-    pub(crate) memory_level: Option<u32>,
+    memory_level: Option<u32>,
+}
+
+impl Settings {
+    /// Options as supplied; work_factor_for applies the library's validation and defaults.
+    pub(crate) const fn new(pim: Option<u32>, memory_level: Option<u32>) -> Self {
+        Self { pim, memory_level }
+    }
 }
 
 /// The short helps, built from the limits and the default (AUD-023-ARC007).
@@ -177,7 +184,8 @@ fn warn_about_swap() {
 fn swap_warning(inventory: &crate::protect::SwapInventory) -> Option<String> {
     let crate::protect::SwapInventory::Available(areas) = inventory else {
         return Some(
-            "MHFE cannot read the Linux swap inventory, so its encryption is unknown.".into(),
+            "MHFE cannot verify swap protection on this system, so its encryption is unknown."
+                .into(),
         );
     };
     if areas.is_empty() {
@@ -186,9 +194,9 @@ fn swap_warning(inventory: &crate::protect::SwapInventory) -> Option<String> {
     // A device name is the system's text: shown escaped, as every path is.
     let names: Vec<String> = areas
         .iter()
-        .map(|area| style::escaped(&area.name))
+        .map(|area| style::escaped(area.name()))
         .collect();
-    let headline = if areas.iter().all(|area| area.unknown) {
+    let headline = if areas.iter().all(|area| area.unknown()) {
         format!(
             "MHFE cannot tell whether swap is encrypted: {}.",
             names.join(", ")
@@ -233,13 +241,7 @@ fn ask_for_own(
             ],
         ),
     };
-    let question = Question {
-        text,
-        explanation: &[],
-        // What the settings mean is documentation, not text to read during the work.
-        more: Some(readme::SETTINGS),
-        record: None,
-    };
+    let question = Question::with_details(text, &[], Some(readme::SETTINGS), None);
     Ok(input.choose(&question, &answers)? == 1)
 }
 
@@ -251,52 +253,41 @@ fn ask_own(input: &mut Input, operation: Operation) -> Result<WorkFactor, Failur
     let mut drawn_lines = 0;
     let pim = ask_number(
         input,
-        &Question {
-            text: &format!("PIM, {}", pim_range()),
-            explanation: &["Each step adds the default work again: 1 doubles the time."],
-            more: None,
-            record: None,
-        },
+        &Question::with_details(
+            &format!("PIM, {}", pim_range()),
+            &["Each step adds the default work again: 1 doubles the time."],
+            None,
+            None,
+        ),
         "PIM: ",
         &mut drawn_lines,
         |pim| {
-            Settings {
-                pim: Some(pim),
-                memory_level: Some(0),
-            }
-            .work_factor_for(operation)
-            .map(|_| ())
+            Settings::new(Some(pim), Some(0))
+                .work_factor_for(operation)
+                .map(|_| ())
         },
     )?;
     let sizes = format!("{}.", memory_levels());
-    let available = highest_available_level()
+    let available = NativeEngine::highest_available_level()
         .map(|highest| format!("This computer has the memory for level {highest} at most now."));
     let mut explanation = vec![sizes.as_str()];
     explanation.extend(available.as_deref());
     let level = ask_number(
         input,
-        &Question {
-            text: &format!("Memory level, {}", level_range()),
-            explanation: &explanation,
-            more: None,
-            record: None,
-        },
+        &Question::with_details(
+            &format!("Memory level, {}", level_range()),
+            &explanation,
+            None,
+            None,
+        ),
         "Memory level: ",
         &mut drawn_lines,
         |level| {
-            let work = Settings {
-                pim: Some(pim),
-                memory_level: Some(level),
-            }
-            .work_factor_for(operation)?;
+            let work = Settings::new(Some(pim), Some(level)).work_factor_for(operation)?;
             check_resources(work)
         },
     )?;
-    let work = Settings {
-        pim: Some(pim),
-        memory_level: Some(level),
-    }
-    .work_factor_for(operation)?;
+    let work = Settings::new(Some(pim), Some(level)).work_factor_for(operation)?;
     if hidden_input::can_redraw() && !flow::is_active() {
         crate::terminal::write_control(&choice::redraw_from(drawn_lines))?;
     }
@@ -322,7 +313,7 @@ fn ask_number(
                 Err(failure) => {
                     *drawn_lines += style::retry(format!(
                         "{}. Please choose again.",
-                        failure.message.trim_end_matches('.')
+                        failure.message().trim_end_matches('.')
                     ))
                 }
             },
@@ -437,8 +428,8 @@ fn isolation_warnings(
         ));
     }
     let allowed: Vec<&str> = [
-        (refused.no_network, "new sockets"),
-        (refused.no_writes, "new file writes"),
+        (refused.no_network(), "new sockets"),
+        (refused.no_writes(), "new file writes"),
     ]
     .into_iter()
     .filter_map(|(set, name)| set.then_some(name))
@@ -458,9 +449,9 @@ fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
     // "New": neither restriction revokes descriptors opened before, such as a redirected standard
     // output. Each text keeps the summary line within 78 columns, its label included.
     let forbidden = match (
-        isolation.empty_network,
-        isolation.no_network,
-        isolation.no_writes,
+        isolation.empty_network(),
+        isolation.no_network(),
+        isolation.no_writes(),
     ) {
         (true, true, true) => "isolated network, no new sockets or file writes",
         (true, true, false) => "isolated network, no new sockets",
@@ -508,7 +499,7 @@ fn byte_size(bytes: u64) -> String {
 /// Refuses at once, before any secret is asked for, a memory level that this build or computer
 /// cannot run. Nothing is allocated yet.
 fn check_resources(work: WorkFactor) -> Result<(), Failure> {
-    check_can_run(work).map_err(with_level_hint)
+    NativeEngine::check_can_run(work).map_err(with_level_hint)
 }
 
 /// Reserves the Argon2 memory, after the inputs have been read and checked.
@@ -521,11 +512,12 @@ pub(crate) fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeEngine>, Fai
 /// Only that refusal rests on the reported free memory. After a failed reservation that figure has
 /// just proved too high, and a level above the highest this build runs is refused whatever memory
 /// is free, so neither gets a level to try (AUD-005-UI001).
-fn with_level_hint(error: mhfe::MhfeError) -> Failure {
-    let lower_level_helps = matches!(error, mhfe::MhfeError::NotEnoughMemory { .. });
+fn with_level_hint(error: impl Into<mhfe::MhfeError>) -> Failure {
+    let error = error.into();
+    let lower_level_helps = error.error_code() == mhfe::ErrorCode::NotEnoughMemory;
     let mut failure = Failure::from(error);
-    if let Some(highest) = highest_available_level().filter(|_| lower_level_helps) {
-        failure.message.push_str(&format!(
+    if let Some(highest) = NativeEngine::highest_available_level().filter(|_| lower_level_helps) {
+        failure = failure.with_advice(&format!(
             ". The highest memory level this computer can use now is {highest}."
         ));
     }
@@ -567,7 +559,9 @@ mod tests {
 
         assert_eq!(
             swap_warning(&SwapInventory::Unavailable).as_deref(),
-            Some("MHFE cannot read the Linux swap inventory, so its encryption is unknown.")
+            Some(
+                "MHFE cannot verify swap protection on this system, so its encryption is unknown."
+            )
         );
         assert_eq!(swap_warning(&SwapInventory::Available(Vec::new())), None);
     }
@@ -577,10 +571,7 @@ mod tests {
         use crate::protect::{SwapArea, SwapInventory};
 
         let areas = |unknown| {
-            SwapInventory::Available(vec![SwapArea {
-                name: "/swap\u{1b}file".into(),
-                unknown,
-            }])
+            SwapInventory::Available(vec![SwapArea::new("/swap\u{1b}file".into(), unknown)])
         };
         assert_eq!(
             swap_warning(&areas(true)).as_deref(),
@@ -591,16 +582,12 @@ mod tests {
             Some("Swap on this computer is not encrypted: /swap\\u{1b}file.")
         );
         // zram that writes back to a plaintext device is named like any other (AUD-023-SEC002).
-        let zram = SwapInventory::Available(vec![SwapArea {
-            name: "/dev/zram0".into(),
-            unknown: false,
-        }]);
+        let zram = SwapInventory::Available(vec![SwapArea::new("/dev/zram0".into(), false)]);
         assert_eq!(
             swap_warning(&zram).as_deref(),
             Some("Swap on this computer is not encrypted: /dev/zram0.")
         );
     }
-    use mhfe::MhfeError;
 
     const GIB: u64 = 1 << 30;
 
@@ -609,11 +596,8 @@ mod tests {
     fn the_isolation_line_fits_the_summary() {
         const LABEL: usize = "  Isolation  ".len();
         for bits in 0..8u8 {
-            let isolation = crate::protect::Isolation {
-                empty_network: bits & 1 != 0,
-                no_network: bits & 2 != 0,
-                no_writes: bits & 4 != 0,
-            };
+            let isolation =
+                crate::protect::Isolation::fixture(bits & 1 != 0, bits & 2 != 0, bits & 4 != 0);
             if let Some(text) = isolation_text(isolation) {
                 assert!(
                     LABEL + style::visible_width(&text) <= style::TEXT_WIDTH,
@@ -630,14 +614,8 @@ mod tests {
         use crate::protect::Isolation;
         let none = Isolation::default();
         assert!(isolation_warnings(none, none).is_empty());
-        let writes = Isolation {
-            no_writes: true,
-            ..none
-        };
-        let sockets = Isolation {
-            no_network: true,
-            ..none
-        };
+        let writes = Isolation::fixture(false, false, true);
+        let sockets = Isolation::fixture(false, true, false);
         assert_eq!(
             isolation_warnings(none, writes),
             [
@@ -653,11 +631,7 @@ mod tests {
                  writes."
             ]
         );
-        let both = Isolation {
-            no_network: true,
-            no_writes: true,
-            ..none
-        };
+        let both = Isolation::fixture(false, true, true);
         assert!(isolation_warnings(none, both)[0].ends_with("new sockets or new file writes."));
     }
 
@@ -693,17 +667,18 @@ mod tests {
     /// AUD-005-UI001: only a refusal for lack of reported free memory suggests a level.
     #[test]
     fn only_a_free_memory_refusal_suggests_a_level() {
-        let no_reservation = with_level_hint(MhfeError::MemoryAllocation { bytes: 2 * GIB });
-        assert!(!no_reservation.message.contains(LEVEL_HINT));
+        let no_reservation =
+            with_level_hint(mhfe::engine::EngineError::MemoryAllocation { bytes: 2 * GIB });
+        assert!(!no_reservation.message().contains(LEVEL_HINT));
 
-        let not_enough = with_level_hint(MhfeError::NotEnoughMemory {
+        let not_enough = with_level_hint(mhfe::engine::EngineError::NotEnoughMemory {
             needed_bytes: 2 * GIB,
             available_bytes: GIB,
         });
         // The hint depends on what this computer reports now; it appears exactly when a level fits.
         assert_eq!(
-            not_enough.message.contains(LEVEL_HINT),
-            highest_available_level().is_some()
+            not_enough.message().contains(LEVEL_HINT),
+            NativeEngine::highest_available_level().is_some()
         );
     }
 }

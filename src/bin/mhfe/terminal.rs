@@ -132,12 +132,12 @@ impl Input {
 
     /// An answer as `read` took it: `Some` when it was accepted. A refusal is shown at a terminal,
     /// which asks again (`None`), with `then` saying what to do, and ends a script, which cannot.
-    pub(crate) fn accepted<T>(
+    pub(crate) fn accepted<T, E: Into<MhfeError>>(
         &self,
-        read: Result<T, MhfeError>,
+        read: Result<T, E>,
         then: &str,
     ) -> Result<Option<T>, Failure> {
-        match read {
+        match read.map_err(Into::into) {
             Ok(value) => Ok(Some(value)),
             Err(error) if self.can_ask_again() => {
                 style::retry(exit::refused(&error, then));
@@ -278,15 +278,15 @@ impl Input {
     ) -> Result<usize, Failure> {
         choice::draw_question(question);
         for (number, answer) in answers.iter().enumerate() {
-            let note = if answer.note.is_empty() {
+            let note = if answer.note().is_empty() {
                 String::new()
             } else {
-                format!(" {}", paint(MUTED, format!("({})", answer.note)))
+                format!(" {}", paint(MUTED, format!("({})", answer.note())))
             };
             eprintln!(
                 "  {} {}{note}",
                 paint(ACCENT, format!("{}.", number + 1)),
-                *answer.label
+                answer.label()
             );
         }
         let prompt = if first_default {
@@ -601,12 +601,14 @@ fn print_fingerprint(phrase: &str, wallet: Wallet) {
     };
     // A container's own fingerprint comes from the library's one rule for it.
     let fingerprint = match wallet {
-        Wallet::Container => mhfe::container_fingerprint(phrase),
-        _ => mhfe::wallet::master_fingerprint(phrase, passphrase),
+        Wallet::Container => mhfe::ContainerFacts::read(phrase)
+            .map_err(MhfeError::from)
+            .and_then(|facts| facts.fingerprint()),
+        _ => mhfe::wallet::Fingerprint::of(phrase, passphrase).map_err(MhfeError::from),
     };
     // Every phrase shown is a valid BIP39 phrase. Should the fingerprint fail all the same, the
     // phrase above is what matters, so it stands without one.
-    let Ok(fingerprint) = fingerprint.map(mhfe::wallet::fingerprint_text) else {
+    let Ok(fingerprint) = fingerprint.map(|fingerprint| fingerprint.to_string()) else {
         return;
     };
     eprintln!(
@@ -705,10 +707,12 @@ pub(crate) fn read_container_for(
         let Some(reviewed) = container_repair::review(input, typed, card.clone())? else {
             continue;
         };
-        let read = ContainerFacts::read(&reviewed.words).and_then(|container| {
-            require(&container)?;
-            Ok(container)
-        });
+        let read = ContainerFacts::read(reviewed.words())
+            .map_err(MhfeError::from)
+            .and_then(|container| {
+                require(&container)?;
+                Ok(container)
+            });
         if let Some(container) = input.accepted(read, TYPE_AGAIN)? {
             read_back(input, &spelling, container.words(), false)?;
             break (container, reviewed);
@@ -717,7 +721,7 @@ pub(crate) fn read_container_for(
     drop(screen);
     let words = container.word_count();
     choice::record("Container", &format!("{words} words, valid"));
-    if let Some(repaired) = &reviewed.repaired {
+    if let Some(repaired) = reviewed.repaired() {
         choice::record("Repaired", repaired);
     }
     // A same-length container gives another valid phrase for a wrong password instead of an
@@ -728,22 +732,43 @@ pub(crate) fn read_container_for(
         Suite::TwentyFourWords => "",
     };
     style::fact("Format", paint(MUTED, format!("{}{note}", suite.id())));
+    let (_, repaired, password, found_by) = reviewed.into_parts();
     Ok(ReadContainer {
         facts: container,
-        password: reviewed.password,
-        found_by: reviewed.found_by,
-        repaired: reviewed.repaired,
+        password,
+        found_by,
+        repaired,
     })
 }
 
 /// A container read, with what a search for its missing words brought: the password it asked for,
 /// so that the command does not ask again, and what it matched.
 pub(crate) struct ReadContainer {
-    pub(crate) facts: ContainerFacts,
-    pub(crate) password: Option<Password>,
-    pub(crate) found_by: Option<String>,
+    facts: ContainerFacts,
+    password: Option<Password>,
+    found_by: Option<String>,
     /// What was repaired, by the repair words or a search, as the summary records it.
-    pub(crate) repaired: Option<String>,
+    repaired: Option<String>,
+}
+
+impl ReadContainer {
+    pub(crate) fn facts(&self) -> &ContainerFacts {
+        &self.facts
+    }
+    pub(crate) fn repaired(&self) -> Option<&str> {
+        self.repaired.as_deref()
+    }
+    /// Move owners into the command that consumes them; no secret text is copied.
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        ContainerFacts,
+        Option<Password>,
+        Option<String>,
+        Option<String>,
+    ) {
+        (self.facts, self.password, self.found_by, self.repaired)
+    }
 }
 
 #[cfg(test)]
@@ -803,7 +828,7 @@ mod tests {
         let Err(failure) = read_bounded_line(&mut io::Cursor::new(too_long)) else {
             panic!("a longer line was accepted");
         };
-        assert_eq!(failure.message, too_long_answer().message);
+        assert_eq!(failure.message(), too_long_answer().message());
     }
 
     #[test]
@@ -811,7 +836,7 @@ mod tests {
         let Err(failure) = read_bounded_line(&mut io::Cursor::new(b"\xff\n")) else {
             panic!("invalid UTF-8 was accepted");
         };
-        assert_eq!(failure.exit_code, crate::exit::INVALID_INPUT);
-        assert_eq!(failure.message, "The answer is not valid UTF-8 text.");
+        assert_eq!(failure.exit_code(), crate::exit::INVALID_INPUT);
+        assert_eq!(failure.message(), "The answer is not valid UTF-8 text.");
     }
 }

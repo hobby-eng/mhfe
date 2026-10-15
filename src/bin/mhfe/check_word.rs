@@ -140,12 +140,12 @@ fn decide(
         explanation.push(format!("Each repair below also has its {change}."));
     }
     let explanation: Vec<&str> = explanation.iter().map(String::as_str).collect();
-    let question = Question {
-        text: "Repair the password with its check word?",
-        explanation: &explanation,
-        more: Some(readme::CHECK_WORD),
-        record: None,
-    };
+    let question = Question::with_details(
+        "Repair the password with its check word?",
+        &explanation,
+        Some(readme::CHECK_WORD),
+        None,
+    );
     let mut actions = vec![Action::AsTyped, Action::TypeAgain];
     let position = if review.repairs_first() {
         0

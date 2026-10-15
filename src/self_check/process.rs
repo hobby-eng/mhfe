@@ -7,11 +7,28 @@
 #[derive(Clone, Copy, Debug)]
 pub struct ProcessPart {
     /// The stable id of the part in a self-check report.
-    pub id: &'static str,
+    id: &'static str,
     /// The name the report shows for the part.
-    pub label: &'static str,
+    label: &'static str,
     /// Why a web page cannot check it: the detail of its outcome there, not available.
-    pub in_browser: &'static str,
+    in_browser: &'static str,
+}
+
+impl ProcessPart {
+    /// The stable identifier used in a self-check report.
+    pub const fn id(self) -> &'static str {
+        self.id
+    }
+
+    /// The label shown in a self-check report.
+    pub const fn label(self) -> &'static str {
+        self.label
+    }
+
+    /// Why a browser cannot check this native process protection.
+    pub const fn in_browser(self) -> &'static str {
+        self.in_browser
+    }
 }
 
 /// No core dumps, and on Linux no reading of the process's memory by other programs.

@@ -169,12 +169,12 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
         &mut input,
         Operation::Decrypt.title(),
         options.repair.card(Operation::Decrypt, work),
-        |container| container.require_length(length),
+        |container| container.require_length(length).map_err(Into::into),
     )?;
-    let container = read.facts;
+    let (container, password, _, _) = read.into_parts();
     // Refused before the password is asked, as the recovery would refuse it.
     // A search for missing words asked for the password already.
-    let password = match read.password {
+    let password = match password {
         Some(password) => password,
         None => terminal::read_password(&mut input, Operation::Decrypt)?,
     };
@@ -227,7 +227,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
 }
 
 impl Options {
-    /// The BIP39 passphrase for the 16-bit source check, which every recovery evaluates on each
+    /// The BIP39 passphrase for the 16-bit wallet check, which every recovery evaluates on each
     /// 24-word reading (the specification's recovery rules): asked, with why, only when such a
     /// reading came out, unless `--passphrase-used` answered it (`used`). A script gives it on a line
     /// of its own with `--passphrase-used yes`, and otherwise the check runs with no passphrase.
@@ -255,7 +255,7 @@ impl Options {
     }
 }
 
-/// The outcome of the 16-bit source check of a 24-word reading with `passphrase`; nothing for
+/// The outcome of the 16-bit wallet check of a 24-word reading with `passphrase`; nothing for
 /// another length.
 fn tell_source_check(phrase: &RecoveredPhrase, passphrase: &str) -> Result<(), Failure> {
     let with = if passphrase.is_empty() {

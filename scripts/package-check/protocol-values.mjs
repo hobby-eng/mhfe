@@ -11,6 +11,14 @@ export async function checkPageProtocol(runtime) {
     ["progress", { stage: "search", candidate: "one", candidates: 2 }, false],
     ["progress", { stage: "decrypt", round: 1 }, false],
     ["progress", { stage: "undeclared", round: 1, rounds: 12 }, false],
+    ...[-1.5, -1, 0, 0.5, 13].map(
+      (round) =>
+        /** @type {[string, unknown, boolean]} */ ([
+          "progress",
+          { stage: "recover", round, rounds: 12 },
+          false,
+        ]),
+    ),
     ["unverified", { container: "c" }, false],
     ["componentStart", { id: "part" }, false],
     ["component", { id: "part", label: "Part", outcome: "unknown" }, false],

@@ -32,7 +32,8 @@ use bip39::{Language, Mnemonic};
 
 use crate::memory::LockedText;
 use crate::phrase::{self, WORD_COUNTS};
-use crate::MhfeError;
+mod error;
+pub use error::RepairError;
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -48,10 +49,130 @@ pub const REPAIR_WORD_COUNTS: [usize; 4] = [2, 4, 6, 8];
 /// of a container phrase at a card of four words.
 pub const RECOMMENDED_REPAIR_WORDS: usize = 4;
 
-/// What a card of `count` repair words repairs: as many unreadable words, or half as many wrong
-/// ones.
-pub fn capacity(count: usize) -> (usize, usize) {
-    (count, count / 2)
+/// A supported repair-card size. Construction validates it once; capacity and parity generation
+/// then use this value rather than accepting arbitrary counts. It owns the MHFE-REPAIR-1 entry
+/// points, including repair from a card whose size is read from its words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RepairWordCount(usize);
+
+impl RepairWordCount {
+    /// Refuses a number of repair words that no card has (`INVALID_REPAIR_WORDS`): 2, 4, 6 or 8
+    /// ([`REPAIR_WORD_COUNTS`]).
+    pub fn new(count: usize) -> Result<Self, RepairError> {
+        if !REPAIR_WORD_COUNTS.contains(&count) {
+            return Err(RepairError::WordCount {
+                count,
+                unreadable_hint: false,
+            });
+        }
+        Ok(Self(count))
+    }
+
+    /// Every supported count, in the profile's order, without repeating their values.
+    pub fn offered() -> [Self; REPAIR_WORD_COUNTS.len()] {
+        REPAIR_WORD_COUNTS.map(Self)
+    }
+
+    /// The count as a number of words.
+    pub const fn get(self) -> usize {
+        self.0
+    }
+
+    /// The unreadable and wrong words this card can repair, respectively.
+    pub const fn capacity(self) -> (usize, usize) {
+        (self.0, self.0 / 2)
+    }
+
+    /// The repair words of `container`, a valid container of 12 to 24 words: this many English
+    /// BIP39 words, one space apart.
+    ///
+    /// # Panics
+    ///
+    /// Never: every word of a parsed container is in the list.
+    #[expect(
+        clippy::expect_used,
+        reason = "every word of a parsed container is in the BIP39 list"
+    )]
+    pub fn words_of(self, container: &str) -> Result<String, RepairError> {
+        let count = self.0;
+        let mnemonic = phrase::parse_container(container)?;
+        let data: Vec<u16> = mnemonic
+            .words()
+            .map(|word| phrase::word_number(word).expect("a parsed word is in the list"))
+            .collect();
+        let field = Field::new();
+        let parity = field.parity(&data, count);
+        check_card(&field, &data, &parity)?;
+        Ok(phrase::words_of(&parity))
+    }
+
+    /// Repairs a container from its words as read from the container phrase and its repair words as
+    /// read from the card. A word that cannot be read is typed as `?`; a word that is not in the
+    /// English BIP39 list counts as unreadable too, and the first four letters of a word are enough, as
+    /// for a container. Fails when no repair within the code's bound gives a container that passes its
+    /// BIP39 checksum. Damage beyond the bound, or a card of another container phrase, usually fails
+    /// so, but can also give another container that passes the checksum: a repair does not show that
+    /// the card belongs to the container phrase or that the container is the original, which only a
+    /// rehearsal against the wallet does (AUD-008-DOC001).
+    pub fn repair(written: &str, card: &str) -> Result<Repaired, RepairError> {
+        let (container_words, container_unreadable) = phrase::word_numbers(written);
+        if !WORD_COUNTS.contains(&container_words.len()) {
+            return Err(RepairError::ContainerLength(container_words.len()));
+        }
+        let typed_card = CardWords::read(card);
+        let (card_words, card_unreadable) = phrase::word_numbers(typed_card.words());
+        let count = card_words.len();
+        Self::new(count).map_err(RepairError::with_unreadable_hint)?;
+        let received: Vec<u16> = container_words.iter().chain(&card_words).copied().collect();
+        let unreadable: Vec<usize> = container_unreadable
+            .iter()
+            .copied()
+            .chain(card_unreadable.iter().map(|&i| i + container_words.len()))
+            .collect();
+        let field = Field::new();
+        let corrected =
+            field
+                .repair(&received, &unreadable, count)
+                .ok_or(RepairError::NotPossible {
+                    repair_words: count,
+                })?;
+        let (data, parity) = corrected.split_at(container_words.len());
+        let container = phrase::words_of(data);
+        // Damage beyond the code's reach can end in another codeword; the BIP39 checksum of the
+        // container still catches most of those.
+        Mnemonic::parse_in_normalized(Language::English, &container).map_err(|_| {
+            RepairError::NotPossible {
+                repair_words: count,
+            }
+        })?;
+        let changed =
+            |on_card: bool, was: &[u16], now: &[u16], unreadable: &[usize]| -> Vec<Change> {
+                (0..was.len())
+                    .filter(|&i| was[i] != now[i] || unreadable.contains(&i))
+                    .map(|i| Change {
+                        on_card,
+                        position: i + 1,
+                        read: (!unreadable.contains(&i)).then(|| phrase::word(was[i]).to_owned()),
+                        word: phrase::word(now[i]).to_owned(),
+                    })
+                    .collect()
+            };
+        let mut changes = changed(false, &container_words, data, &container_unreadable);
+        changes.extend(changed(true, &card_words, parity, &card_unreadable));
+        let positions = |on_card: bool| -> Vec<usize> {
+            changes
+                .iter()
+                .filter(|change| change.on_card == on_card)
+                .map(|change| change.position)
+                .collect()
+        };
+        Ok(Repaired {
+            container,
+            container_words: positions(false),
+            card_words: positions(true),
+            changes,
+        })
+    }
 }
 
 /// Elements of GF(2^11): 2,048, as many as the words of the BIP39 list, which [`POLYNOMIAL`]
@@ -264,47 +385,12 @@ fn for_each_subset(items: &[usize], size: usize, visit: &mut dyn FnMut(&[usize])
     walk(items, size, 0, &mut Vec::with_capacity(size), visit);
 }
 
-/// Refuses a number of repair words that no card has (`INVALID_REPAIR_WORDS`): 2, 4, 6 or 8
-/// ([`REPAIR_WORD_COUNTS`]).
-pub fn require_count(count: usize) -> Result<(), MhfeError> {
-    if !REPAIR_WORD_COUNTS.contains(&count) {
-        return Err(MhfeError::InvalidRepairWords(format!(
-            "a card has {} repair words, not {count}",
-            phrase::counts_text(&REPAIR_WORD_COUNTS)
-        )));
-    }
-    Ok(())
-}
-
-/// The repair words of `container`, a valid container of 12 to 24 words: `count` English BIP39
-/// words, one space apart.
-///
-/// # Panics
-///
-/// Never: every word of a parsed container is in the list.
-#[expect(
-    clippy::expect_used,
-    reason = "every word of a parsed container is in the BIP39 list"
-)]
-pub fn repair_words(container: &str, count: usize) -> Result<String, MhfeError> {
-    require_count(count)?;
-    let mnemonic = phrase::parse_container(container).map_err(MhfeError::InvalidContainer)?;
-    let data: Vec<u16> = mnemonic
-        .words()
-        .map(|word| phrase::word_number(word).expect("a parsed word is in the list"))
-        .collect();
-    let field = Field::new();
-    let parity = field.parity(&data, count);
-    check_card(&field, &data, &parity)?;
-    Ok(phrase::words_of(&parity))
-}
-
 /// Reads a new card back before it is given out: the container phrase and its repair words must
 /// form a codeword, and the card must restore the container phrase's first words when they are
 /// unreadable, as many as it has words. A fault in the field's tables or in the division would
 /// otherwise give a card that repairs nothing, which nobody notices until the container phrase is
 /// damaged.
-fn check_card(field: &Field, data: &[u16], parity: &[u16]) -> Result<(), MhfeError> {
+fn check_card(field: &Field, data: &[u16], parity: &[u16]) -> Result<(), RepairError> {
     let count = parity.len();
     let codeword: Vec<u16> = data.iter().chain(parity).copied().collect();
     let is_codeword = field
@@ -318,9 +404,7 @@ fn check_card(field: &Field, data: &[u16], parity: &[u16]) -> Result<(), MhfeErr
     if is_codeword && restores {
         Ok(())
     } else {
-        Err(MhfeError::Internal(
-            "the new repair words do not repair their container phrase".to_owned(),
-        ))
+        Err(RepairError::ParityReadback)
     }
 }
 
@@ -328,27 +412,71 @@ fn check_card(field: &Field, data: &[u16], parity: &[u16]) -> Result<(), MhfeErr
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Repaired {
     /// The container, every word in full and in lower case, one space apart.
-    pub container: String,
+    container: String,
     /// The positions of the container's words that were repaired, from 1, in order.
-    pub container_words: Vec<usize>,
+    container_words: Vec<usize>,
     /// The positions of the repair words that were wrong or unreadable, from 1, in order.
-    pub card_words: Vec<usize>,
+    card_words: Vec<usize>,
     /// Every repaired word with what was read there, container phrase first: a repair is never
     /// silent.
-    pub changes: Vec<Change>,
+    changes: Vec<Change>,
+}
+
+impl Repaired {
+    /// The repaired container, with full lower-case words separated by one space.
+    pub fn container(&self) -> &str {
+        &self.container
+    }
+
+    /// Repaired container-word positions, counted from one and ordered.
+    pub fn container_words(&self) -> &[usize] {
+        &self.container_words
+    }
+
+    /// Wrong or unreadable card-word positions, counted from one and ordered.
+    pub fn card_words(&self) -> &[usize] {
+        &self.card_words
+    }
+
+    /// Every reported correction, container first; the original result cannot be altered.
+    pub fn changes(&self) -> &[Change] {
+        &self.changes
+    }
 }
 
 /// One repaired word.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Change {
     /// A word of the card rather than of the container phrase.
-    pub on_card: bool,
+    on_card: bool,
     /// Its position on the container phrase or the card, from 1.
-    pub position: usize,
+    position: usize,
     /// The word that was read there, or `None` when it could not be read.
-    pub read: Option<String>,
+    read: Option<String>,
     /// The word it is now.
-    pub word: String,
+    word: String,
+}
+
+impl Change {
+    /// Whether the corrected word belongs to the card instead of the container.
+    pub fn on_card(&self) -> bool {
+        self.on_card
+    }
+
+    /// The corrected word's position, counted from one.
+    pub fn position(&self) -> usize {
+        self.position
+    }
+
+    /// The word read there, or none when it was unreadable.
+    pub fn read(&self) -> Option<&str> {
+        self.read.as_deref()
+    }
+
+    /// The corrected word.
+    pub fn word(&self) -> &str {
+        &self.word
+    }
 }
 
 /// What a container phrase as typed is, before anything is computed with it: a container as it
@@ -373,7 +501,7 @@ pub enum ContainerReading {
 }
 
 impl ContainerReading {
-    /// Reads `written` as [`repair`] reads a container phrase: `?` for a word that cannot be read,
+    /// Reads `written` as [`RepairWordCount::repair`] reads a container phrase: `?` for a word that cannot be read,
     /// any spacing and letter case, and the first four letters of a word.
     pub fn read(written: &str) -> Self {
         let typed: Vec<&str> = written.split_whitespace().collect();
@@ -399,99 +527,11 @@ impl ContainerReading {
     }
 }
 
-/// The refusal of a container phrase of `count` words, `?` included, which no container has; the
-/// repair and the search for missing words give it alike (AUD-024-API013).
-pub(crate) fn wrong_container_length(count: usize) -> MhfeError {
-    MhfeError::InvalidContainer(format!(
-        "it has {count} words, but a container has {}; {}",
-        phrase::word_counts_text(),
-        unreadable_hint()
-    ))
-}
-
 /// What stands for a word that cannot be read, on the container phrase and on the card.
 pub const UNREADABLE: &str = "?";
 
-/// The shared explanation of an unreadable word in a refusal.
-fn unreadable_hint() -> String {
-    format!("type {UNREADABLE} for a word that cannot be read")
-}
-
 /// The name of the profile, which the card carries; a reader of a card skips it.
 pub const PROFILE: &str = "MHFE-REPAIR-1";
-
-/// Repairs a container from its words as read from the container phrase and its repair words as
-/// read from the card. A word that cannot be read is typed as `?`; a word that is not in the
-/// English BIP39 list counts as unreadable too, and the first four letters of a word are enough, as
-/// for a container. Fails when no repair within the code's bound gives a container that passes its
-/// BIP39 checksum. Damage beyond the bound, or a card of another container phrase, usually fails
-/// so, but can also give another container that passes the checksum: a repair does not show that
-/// the card belongs to the container phrase or that the container is the original, which only a
-/// rehearsal against the wallet does (AUD-008-DOC001).
-pub fn repair(written: &str, card: &str) -> Result<Repaired, MhfeError> {
-    let (container_words, container_unreadable) = phrase::word_numbers(written);
-    if !WORD_COUNTS.contains(&container_words.len()) {
-        return Err(wrong_container_length(container_words.len()));
-    }
-    let typed_card = CardWords::read(card);
-    let (card_words, card_unreadable) = phrase::word_numbers(typed_card.words());
-    let count = card_words.len();
-    require_count(count).map_err(|refused| match refused {
-        // A card being typed: say how to mark a word that cannot be read.
-        MhfeError::InvalidRepairWords(reason) => {
-            MhfeError::InvalidRepairWords(format!("{reason}; {}", unreadable_hint()))
-        }
-        other => other,
-    })?;
-    let received: Vec<u16> = container_words.iter().chain(&card_words).copied().collect();
-    let unreadable: Vec<usize> = container_unreadable
-        .iter()
-        .copied()
-        .chain(card_unreadable.iter().map(|&i| i + container_words.len()))
-        .collect();
-    let field = Field::new();
-    let corrected =
-        field
-            .repair(&received, &unreadable, count)
-            .ok_or(MhfeError::RepairNotPossible {
-                repair_words: count,
-            })?;
-    let (data, parity) = corrected.split_at(container_words.len());
-    let container = phrase::words_of(data);
-    // Damage beyond the code's reach can end in another codeword; the BIP39 checksum of the
-    // container still catches most of those.
-    Mnemonic::parse_in_normalized(Language::English, &container).map_err(|_| {
-        MhfeError::RepairNotPossible {
-            repair_words: count,
-        }
-    })?;
-    let changed = |on_card: bool, was: &[u16], now: &[u16], unreadable: &[usize]| -> Vec<Change> {
-        (0..was.len())
-            .filter(|&i| was[i] != now[i] || unreadable.contains(&i))
-            .map(|i| Change {
-                on_card,
-                position: i + 1,
-                read: (!unreadable.contains(&i)).then(|| phrase::word(was[i]).to_owned()),
-                word: phrase::word(now[i]).to_owned(),
-            })
-            .collect()
-    };
-    let mut changes = changed(false, &container_words, data, &container_unreadable);
-    changes.extend(changed(true, &card_words, parity, &card_unreadable));
-    let positions = |on_card: bool| -> Vec<usize> {
-        changes
-            .iter()
-            .filter(|change| change.on_card == on_card)
-            .map(|change| change.position)
-            .collect()
-    };
-    Ok(Repaired {
-        container,
-        container_words: positions(false),
-        card_words: positions(true),
-        changes,
-    })
-}
 
 /// The words as written on a repair card, without its profile and numbered labels. Unknown words
 /// stay as typed for the repair operation to validate. The text is locked and wiped by its owner.
@@ -546,6 +586,22 @@ fn card_text(card: &str) -> LockedText {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_typed_card_count_has_only_the_profiles_supported_capacities() {
+        let offered = RepairWordCount::offered();
+        assert_eq!(offered.map(RepairWordCount::get), REPAIR_WORD_COUNTS);
+        assert_eq!(
+            offered.map(RepairWordCount::capacity),
+            [(2, 1), (4, 2), (6, 3), (8, 4)]
+        );
+        for count in [0, 1, 3, 5, 7, 9, usize::MAX] {
+            assert!(matches!(
+                RepairWordCount::new(count),
+                Err(RepairError::WordCount { .. })
+            ));
+        }
+    }
     use crate::test_support::zero_12_container;
 
     #[test]
@@ -567,14 +623,16 @@ mod tests {
         let field = Field::new();
         let container = zero_12_container();
         for count in REPAIR_WORD_COUNTS {
-            let card = repair_words(&container, count).unwrap();
+            let card = RepairWordCount::new(count)
+                .and_then(|count| count.words_of(&container))
+                .unwrap();
             let (words, _) = phrase::word_numbers(&container);
             let (parity, _) = phrase::word_numbers(&card);
             let codeword: Vec<u16> = words.iter().chain(&parity).copied().collect();
             assert!(field.syndromes(&codeword, count).iter().all(|&s| s == 0));
-            let repaired = repair(&container, &card).unwrap();
-            assert_eq!(repaired.container, container);
-            assert!(repaired.container_words.is_empty() && repaired.card_words.is_empty());
+            let repaired = RepairWordCount::repair(&container, &card).unwrap();
+            assert_eq!(repaired.container(), container);
+            assert!(repaired.container_words().is_empty() && repaired.card_words().is_empty());
         }
     }
 
@@ -635,7 +693,9 @@ mod tests {
         for row in known_answers::CARDS {
             for (count, card) in REPAIR_WORD_COUNTS.into_iter().zip(row.cards) {
                 assert_eq!(
-                    repair_words(row.container, count).unwrap(),
+                    RepairWordCount::new(count)
+                        .and_then(|count| count.words_of(row.container))
+                        .unwrap(),
                     card,
                     "{count} words"
                 );
@@ -660,14 +720,14 @@ mod tests {
         let mut words: Vec<&str> = container.split(' ').collect();
         words[0] = "?";
         words[8] = "legal";
-        let repaired = repair(
+        let repaired = RepairWordCount::repair(
             &words.join(" "),
             "MHFE-REPAIR-1 1/4 shaft 2/4 ? 3/4 patient 4/4 jewel",
         )
         .unwrap();
-        assert_eq!(repaired.container, container);
+        assert_eq!(repaired.container(), container);
         let shown: Vec<(bool, usize, Option<&str>, &str)> = repaired
-            .changes
+            .changes()
             .iter()
             .map(|c| (c.on_card, c.position, c.read.as_deref(), c.word.as_str()))
             .collect();
@@ -684,13 +744,15 @@ mod tests {
     #[test]
     fn unreadable_and_unknown_words_are_marked_and_repaired() {
         let container = zero_12_container();
-        let card = repair_words(&container, 4).unwrap();
+        let card = RepairWordCount::new(4)
+            .and_then(|count| count.words_of(&container))
+            .unwrap();
         let mut words: Vec<&str> = container.split(' ').collect();
         words[2] = "?";
         words[16] = "notaword";
-        let repaired = repair(&words.join(" "), &card).unwrap();
-        assert_eq!(repaired.container, container);
-        assert_eq!(repaired.container_words, vec![3, 17]);
+        let repaired = RepairWordCount::repair(&words.join(" "), &card).unwrap();
+        assert_eq!(repaired.container(), container);
+        assert_eq!(repaired.container_words(), vec![3, 17]);
     }
 
     /// A card is read back before it is given out: one with a changed word is refused.
@@ -712,22 +774,24 @@ mod tests {
     #[test]
     fn too_much_damage_or_a_wrong_card_is_refused() {
         let container = zero_12_container();
-        let card = repair_words(&container, 2).unwrap();
+        let card = RepairWordCount::new(2)
+            .and_then(|count| count.words_of(&container))
+            .unwrap();
         let mut words: Vec<&str> = container.split(' ').collect();
         words[0] = "?";
         words[1] = "?";
         words[2] = "?";
         assert_eq!(
-            repair(&words.join(" "), &card),
-            Err(MhfeError::RepairNotPossible { repair_words: 2 })
+            RepairWordCount::repair(&words.join(" "), &card),
+            Err(RepairError::NotPossible { repair_words: 2 })
         );
         assert!(matches!(
-            repair(&container, "abandon abandon abandon"),
-            Err(MhfeError::InvalidRepairWords(_))
+            RepairWordCount::repair(&container, "abandon abandon abandon"),
+            Err(RepairError::WordCount { .. })
         ));
         assert!(matches!(
-            repair_words(&container, 3),
-            Err(MhfeError::InvalidRepairWords(_))
+            RepairWordCount::new(3).and_then(|count| count.words_of(&container)),
+            Err(RepairError::WordCount { .. })
         ));
     }
 
@@ -740,10 +804,12 @@ mod tests {
     fn a_card_of_another_container_phrase_can_give_another_valid_container() {
         let container = [vec!["abandon"; 23], vec!["art"]].concat().join(" ");
         let other = [vec!["abandon"; 23], vec!["diesel"]].concat().join(" ");
-        let card = repair_words(&other, 2).unwrap();
-        let repaired = repair(&container, &card).unwrap();
-        assert_eq!(repaired.container, other);
-        assert_eq!(repaired.container_words, [24]);
+        let card = RepairWordCount::new(2)
+            .and_then(|count| count.words_of(&other))
+            .unwrap();
+        let repaired = RepairWordCount::repair(&container, &card).unwrap();
+        assert_eq!(repaired.container(), other);
+        assert_eq!(repaired.container_words(), [24]);
     }
 
     /// A container phrase as typed is read as a container, as words marked with `?`, as words
@@ -791,8 +857,9 @@ mod tests {
                 ContainerReading::NotAContainer
             );
             assert!(ContainerReading::read(&unmarked).can_be_repaired());
-            let repaired = repair(&unmarked, known_answers::ZERO_12_CARD.1).unwrap();
-            assert_eq!(repaired.container, container);
+            let repaired =
+                RepairWordCount::repair(&unmarked, known_answers::ZERO_12_CARD.1).unwrap();
+            assert_eq!(repaired.container(), container);
         }
         let shorter: Vec<&str> = container.split(' ').take(23).collect();
         assert_eq!(

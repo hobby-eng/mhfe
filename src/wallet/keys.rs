@@ -1,9 +1,6 @@
 //! BIP32 keys of a BIP39 phrase, and what an address commits to for a key. The private keys of
 //! the wallet module live here, each wiped when dropped.
 
-use std::convert::Infallible;
-
-use bip39::Mnemonic;
 use bitcoin_hashes::{hash160, Hash};
 use hmac::{Hmac, KeyInit, Mac};
 use k256::elliptic_curve::group::Group;
@@ -13,12 +10,11 @@ use k256::elliptic_curve::PrimeField;
 use k256::{FieldBytes, ProjectivePoint, Scalar};
 use sha2::{Digest, Sha256, Sha512};
 use sha3::Keccak256;
-use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
 use super::{AddressType, HARDENED};
-use crate::memory::LockedText;
-use crate::{phrase, MhfeError};
+use super::{KeyIssue, WalletError};
+use crate::phrase;
 
 type HmacSha512 = Hmac<Sha512>;
 
@@ -28,7 +24,7 @@ type HmacSha512 = Hmac<Sha512>;
 pub(super) fn program_for(
     key: &ExtendedKey,
     address_type: AddressType,
-) -> Result<Vec<u8>, MhfeError> {
+) -> Result<Vec<u8>, WalletError> {
     let public_key = key.public_key()?;
     Ok(match address_type {
         AddressType::P2pkh | AddressType::P2wpkh | AddressType::DashPlatform => {
@@ -36,7 +32,7 @@ pub(super) fn program_for(
         }
         AddressType::P2shP2wpkh => {
             // The redeem script is OP_0 PUSH20 <HASH160(public key)>.
-            let mut script = vec![0x00, 0x14];
+            let mut script = vec![0x00, AddressType::P2wpkh.program_bytes() as u8];
             script.extend_from_slice(&hash160::Hash::hash(&public_key).to_byte_array());
             hash160::Hash::hash(&script).to_byte_array().to_vec()
         }
@@ -44,14 +40,15 @@ pub(super) fn program_for(
         AddressType::Keccak => {
             // The 64 bytes of the uncompressed key without its 0x04 prefix (Ethereum yellow paper).
             let uncompressed = key.uncompressed_public_key()?;
-            Keccak256::digest(&uncompressed[1..])[12..].to_vec()
+            let digest = Keccak256::digest(&uncompressed[1..]);
+            digest[digest.len() - AddressType::Keccak.program_bytes()..].to_vec()
         }
     })
 }
 
 /// BIP86: the key-path-only Taproot output key `Q = P + t*G`, where `P` is the public key with
 /// an even Y coordinate and `t = TaggedHash("TapTweak", x(P))` (BIP341).
-fn taproot_output_key(key: &ExtendedKey) -> Result<[u8; 32], MhfeError> {
+fn taproot_output_key(key: &ExtendedKey) -> Result<[u8; 32], WalletError> {
     let point = key.public_point()?;
     let internal = if bool::from(point.to_affine().y_is_odd()) {
         -point
@@ -61,13 +58,11 @@ fn taproot_output_key(key: &ExtendedKey) -> Result<[u8; 32], MhfeError> {
     let x_only = internal.to_affine().x();
     let tweak_bytes = tagged_hash("TapTweak", &x_only);
     let tweak = Option::<Scalar>::from(Scalar::from_repr(FieldBytes::from(tweak_bytes)))
-        .ok_or_else(|| MhfeError::Internal("Taproot tweak out of range".to_owned()))?;
+        .ok_or(WalletError::Key(KeyIssue::TaprootTweak))?;
     let output = internal + ProjectivePoint::GENERATOR * tweak;
     // BIP341 fails when Q is the point at infinity, which needs t = -p: probability about 2^-256.
     if bool::from(output.is_identity()) {
-        return Err(MhfeError::Internal(
-            "BIP341 gives no Taproot output key for this key".to_owned(),
-        ));
+        return Err(WalletError::Key(KeyIssue::TaprootInfinity));
     }
     Ok(output.to_affine().x().into())
 }
@@ -83,62 +78,48 @@ fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
         .into()
 }
 
-/// The largest growth of UTF-8 text under NFKD: U+FDFA, 3 bytes, decomposes into 33 bytes.
-const NFKD_MAX_GROWTH: usize = 11;
-
-/// The BIP39 seed of a phrase and a passphrase: PBKDF2-HMAC-SHA512, 2,048 iterations, with the
-/// salt "mnemonic" and the passphrase in NFKD. A passphrase longer than
-/// [`super::MAX_PASSPHRASE_BYTES`] is refused first, so that no seed is derived from one
-/// (AUD-024-API019).
-pub(crate) fn bip39_seed(
-    mnemonic: &Mnemonic,
-    passphrase: &str,
-) -> Result<Zeroizing<[u8; 64]>, MhfeError> {
-    super::require_passphrase_size(passphrase)?;
-    let normalized = normalized_passphrase(passphrase);
-    Ok(Zeroizing::new(mnemonic.to_seed_normalized(&normalized)))
-}
-
-/// The passphrase in NFKD, as BIP39 requires, in a buffer that is wiped when dropped. It is
-/// reserved at the largest size NFKD can produce, so it never grows and leaves no unwiped copy;
-/// `Mnemonic::to_seed` would normalize into an ordinary string instead. Locked before the
-/// passphrase is written into it, as the passphrase it is made from is.
-fn normalized_passphrase(passphrase: &str) -> LockedText {
-    let Ok(normalized) =
-        LockedText::build::<Infallible>(passphrase.len() * NFKD_MAX_GROWTH, |normalized| {
-            normalized.extend(passphrase.nfkd());
-            Ok(())
-        });
-    normalized
-}
-
 /// A BIP32 extended private key. Both halves are wiped when dropped.
 pub(super) struct ExtendedKey {
-    pub(super) key: Zeroizing<[u8; 32]>,
-    pub(super) chain_code: Zeroizing<[u8; 32]>,
+    key: Zeroizing<[u8; 32]>,
+    chain_code: Zeroizing<[u8; 32]>,
 }
 
 impl ExtendedKey {
+    /// Compares a public known-answer vector without exporting either private-key half or
+    /// formatting actual key material into an unwiped temporary string.
+    #[cfg(any(
+        not(target_arch = "wasm32"),
+        feature = "browser-core",
+        feature = "browser-repair",
+        feature = "browser-wallet"
+    ))]
+    pub(super) fn matches_known_answer(&self, key_hex: &str, chain_code_hex: &str) -> bool {
+        let mut key = [0; 32];
+        let mut chain_code = [0; 32];
+        hex::decode_to_slice(key_hex, &mut key).is_ok()
+            && hex::decode_to_slice(chain_code_hex, &mut chain_code).is_ok()
+            && self.key[..] == key
+            && self.chain_code[..] == chain_code
+    }
+
     /// The master key of a BIP39 phrase and passphrase: `HMAC-SHA512("Bitcoin seed", seed)`.
     ///
     /// The phrase is read by the library's one reader of phrases (AUD-010): any spacing and
     /// letter case, and four letters of a word, as every other phrase input takes it.
-    pub(super) fn master(phrase: &str, passphrase: &str) -> Result<Self, MhfeError> {
-        let mnemonic = phrase::parse(phrase).map_err(MhfeError::InvalidPhrase)?;
-        let seed = bip39_seed(&mnemonic, passphrase)?;
+    pub(super) fn master(phrase: &str, passphrase: &str) -> Result<Self, WalletError> {
+        let mnemonic = phrase::parse(phrase).map_err(WalletError::from)?;
+        let seed = crate::bip39_seed::derive(&mnemonic, passphrase).map_err(WalletError::from)?;
         let master = Self::from_hmac(b"Bitcoin seed", &[&seed[..]])?;
         // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
         if bool::from(master.scalar()?.is_zero()) {
-            return Err(MhfeError::Internal(
-                "BIP32 gives no valid master key for this seed".to_owned(),
-            ));
+            return Err(WalletError::Key(KeyIssue::Master));
         }
         Ok(master)
     }
 
     /// Splits `HMAC-SHA512(key, parts)` into a private key and a chain code (BIP32).
     #[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
-    pub(super) fn from_hmac(key: &[u8], parts: &[&[u8]]) -> Result<Self, MhfeError> {
+    pub(super) fn from_hmac(key: &[u8], parts: &[&[u8]]) -> Result<Self, WalletError> {
         let mut mac = <HmacSha512 as KeyInit>::new_from_slice(key).expect("HMAC takes any key");
         for part in parts {
             mac.update(part);
@@ -154,7 +135,7 @@ impl ExtendedKey {
         Ok(extended)
     }
 
-    pub(super) fn derive(&self, path: &[u32]) -> Result<Self, MhfeError> {
+    pub(super) fn derive(&self, path: &[u32]) -> Result<Self, WalletError> {
         let mut key = self.clone_key();
         for &index in path {
             key = key.child(index)?;
@@ -163,7 +144,7 @@ impl ExtendedKey {
     }
 
     /// Private child key derivation, CKDpriv of BIP32.
-    pub(super) fn child(&self, index: u32) -> Result<Self, MhfeError> {
+    pub(super) fn child(&self, index: u32) -> Result<Self, WalletError> {
         let index_bytes = index.to_be_bytes();
         let mut child = if index >= HARDENED {
             Self::from_hmac(&self.chain_code[..], &[&[0u8], &self.key[..], &index_bytes])?
@@ -177,9 +158,7 @@ impl ExtendedKey {
         let tweak = parse_scalar(&child.key)?;
         let sum = Zeroizing::new(*tweak + *self.scalar()?);
         if bool::from(sum.is_zero()) {
-            return Err(MhfeError::Internal(format!(
-                "BIP32 has no valid key at index {index} of this path; wallets use the next index"
-            )));
+            return Err(WalletError::Key(KeyIssue::Child(index)));
         }
         child
             .key
@@ -188,33 +167,33 @@ impl ExtendedKey {
     }
 
     /// The private key as a scalar, wiped when dropped like every scalar binding here.
-    fn scalar(&self) -> Result<Zeroizing<Scalar>, MhfeError> {
+    fn scalar(&self) -> Result<Zeroizing<Scalar>, WalletError> {
         parse_scalar(&self.key)
     }
 
     /// The public point `k*G` of the private key `k`.
-    fn public_point(&self) -> Result<ProjectivePoint, MhfeError> {
+    fn public_point(&self) -> Result<ProjectivePoint, WalletError> {
         Ok(ProjectivePoint::GENERATOR * *self.scalar()?)
     }
 
     /// The compressed SEC1 public key, 33 bytes.
-    pub(super) fn public_key(&self) -> Result<[u8; 33], MhfeError> {
+    pub(super) fn public_key(&self) -> Result<[u8; 33], WalletError> {
         let point = self.public_point()?.to_affine();
         let encoded = point.to_sec1_point(true);
         encoded
             .as_bytes()
             .try_into()
-            .map_err(|_| MhfeError::Internal("a public key is not 33 bytes".to_owned()))
+            .map_err(|_| WalletError::Key(KeyIssue::CompressedLength))
     }
 
     /// The public key in SEC1 uncompressed form: 0x04 and both coordinates.
-    fn uncompressed_public_key(&self) -> Result<[u8; 65], MhfeError> {
+    fn uncompressed_public_key(&self) -> Result<[u8; 65], WalletError> {
         let point = self.public_point()?.to_affine();
         let encoded = point.to_sec1_point(false);
         encoded
             .as_bytes()
             .try_into()
-            .map_err(|_| MhfeError::Internal("a public key is not 65 bytes".to_owned()))
+            .map_err(|_| WalletError::Key(KeyIssue::UncompressedLength))
     }
 
     fn clone_key(&self) -> Self {
@@ -225,32 +204,16 @@ impl ExtendedKey {
     }
 }
 
-fn parse_scalar(bytes: &[u8; 32]) -> Result<Zeroizing<Scalar>, MhfeError> {
+fn parse_scalar(bytes: &[u8; 32]) -> Result<Zeroizing<Scalar>, WalletError> {
     let mut repr = FieldBytes::from(*bytes);
     let scalar = Option::<Scalar>::from(Scalar::from_repr(repr)).map(Zeroizing::new);
     repr.zeroize();
-    scalar.ok_or_else(|| MhfeError::Internal("BIP32 produced a key out of range".to_owned()))
+    scalar.ok_or(WalletError::Key(KeyIssue::Scalar))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::ABANDON_12 as ABANDON;
-
-    /// The wiping normalization gives the seed that bip39 itself computes, also for a passphrase
-    /// that NFKD changes, including one that grows the most.
-    #[test]
-    fn the_passphrase_is_normalized_as_bip39_does() {
-        let mnemonic = phrase::parse(ABANDON).unwrap();
-        for passphrase in ["", "TREZOR", "Caf\u{E9} \u{FB01}", "\u{FDFA}\u{FDFA}"] {
-            let normalized = normalized_passphrase(passphrase);
-            assert_eq!(
-                mnemonic.to_seed_normalized(&normalized),
-                mnemonic.to_seed(passphrase),
-                "{passphrase:?}"
-            );
-        }
-    }
 
     /// Keys that BIP32 calls invalid give an error, never a panic. They cannot come from a real
     /// phrase in practice, so they are made up here: zero, and the group order n.

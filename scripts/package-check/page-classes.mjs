@@ -100,6 +100,31 @@ export function checkClientLimits() {
     [clientConstant("ARGON2_PART"), clientConstant("ARGON2_SIZES_PART")],
     parameters.argon2Parts,
   );
+  const runtimeText = read("dist/runtime/runtime.js").toString();
+  checkProtocolConstants(runtimeText);
+  /** @type {[string, unknown][]} */
+  const protocolControls = [
+    ["ROUND_PROGRESS_STAGES", []],
+    ["ROUND_PROGRESS_TOTALS", []],
+    ["OPENED_WORD_COUNT", 0],
+  ];
+  for (const [name, wrong] of protocolControls) {
+    const changed = runtimeText.replace(
+      new RegExp(`^const ${name} = .+;$`, "mu"),
+      `const ${name} = ${JSON.stringify(wrong)};`,
+    );
+    assert.notEqual(changed, runtimeText, `${name}: the control changes the actual copy`);
+    assert.throws(() => checkProtocolConstants(changed), assert.AssertionError);
+  }
+}
+
+/** Each independently loaded protocol copy must equal the Rust owners' binding metadata. */
+function checkProtocolConstants(runtimeText) {
+  const runtimeConstant = (name) =>
+    JSON.parse(new RegExp(`^const ${name} = (.+);$`, "mu").exec(runtimeText)[1]);
+  assert.deepEqual(runtimeConstant("ROUND_PROGRESS_STAGES"), parameters.progressStages);
+  assert.deepEqual(runtimeConstant("ROUND_PROGRESS_TOTALS"), parameters.progressRoundTotals);
+  assert.equal(runtimeConstant("OPENED_WORD_COUNT"), parameters.openedWordCount);
 }
 
 /** A real compiled module, so that the classes' compilation succeeds; the stand-in ignores it. */

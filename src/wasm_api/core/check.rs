@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 use super::{mhfe_for, password_from, reference_target, report, verified};
 use crate::engine::browser::JsArgon2;
 use crate::wasm_api::{js_error, json, SecretText};
-use crate::{MhfeError, PassedCheck, RecoveredForCheck};
+use crate::{PassedCheck, RecoveredForCheck};
 
 #[derive(Serialize)]
 struct CheckJson {
@@ -97,7 +97,7 @@ impl CheckSession {
         // return drops either of them unwiped. The passphrase is read in place, without a copy.
         let passphrase = SecretText::new(passphrase_utf8);
         let password = password_from(password_utf8, choice, position)?;
-        let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
+        let passphrase = passphrase.passphrase()?;
         let wallet = reference_target(reference_kind, reference, coin, path)?;
         wallet.refuse_unused(passphrase).map_err(js_error)?;
         // The library refuses a check that cannot be, an empty passphrase of the wallet check
@@ -130,7 +130,7 @@ impl CheckSession {
         passphrase_utf8: Vec<u8>,
     ) -> Result<String, JsError> {
         let passphrase = SecretText::new(passphrase_utf8);
-        let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
+        let passphrase = passphrase.passphrase()?;
         let wallet = reference_target(reference_kind, reference, coin, path)?;
         wallet.refuse_unused(passphrase).map_err(js_error)?;
         let reference = wallet.with(passphrase);

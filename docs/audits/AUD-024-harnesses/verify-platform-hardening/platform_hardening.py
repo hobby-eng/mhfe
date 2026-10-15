@@ -68,7 +68,8 @@ def main():
     show("src/memory.rs", r"if !cfg!\(unix\)", after=4)
     print("\nharden_process, the whole of its body (src/bin/mhfe/protect.rs):")
     text = lines_of("src/bin/mhfe/protect.rs")
-    start = next(i for i, line in enumerate(text) if line.startswith("pub fn harden_process"))
+    start = next(i for i, line in enumerate(text)
+                 if re.match(r"pub(?:\([^)]*\))? fn harden_process\b", line))
     end = next(i for i in range(start, len(text)) if text[i] == "}")
     for number in range(start, end + 1):
         print(f"  src/bin/mhfe/protect.rs:{number + 1}: {text[number]}")
@@ -82,7 +83,8 @@ def main():
         ("RUST-13", "Windows: secret pages locked with VirtualLock",
          r"\bVirtualLock\b"),
         ("RUST-09", "Windows: crash dumps of the process or its secrets excluded from Windows "
-         "Error Reporting", r"\bWer(RegisterExcludedMemoryBlock|AddExcludedApplication|SetFlags)\b"),
+         "Error Reporting", r"\bWer(RegisterExcludedMemoryBlock|AddExcludedApplication)\b"
+         r"|SetErrorMode\([^\n]*SEM_NOGPFAULTERRORBOX"),
         ("RUST-09", "Windows: other processes of the user denied reading the process memory "
          "(process DACL)", r"\b(SetSecurityInfo|SetKernelObjectSecurity)\b"),
         ("RUST-09", "macOS: debugger attachment denied (ptrace PT_DENY_ATTACH, or the hardened "

@@ -1,85 +1,61 @@
-//! Standard input, the one reader of the tool. On Unix it reads its descriptor one byte at a
-//! time, so that no read-ahead of a typed or piped secret stays in a buffer the program cannot
-//! wipe, as the standard library's buffer of standard input keeps one (AUD-024-SEC007). Taking
-//! nothing beyond what it is asked for also lets each reader start where the last one stopped,
-//! with no buffer to share between them. On Windows the standard library's reader still turns the
-//! console's UTF-16 characters into UTF-8 bytes, and keeps its buffer.
+//! The tool's sole standard-input reader. Unix descriptors and Windows pipes read one byte at a
+//! time; the Windows console reads one Unicode scalar, including a split UTF-16 surrogate pair.
+//! Pending UTF-8 bytes stay in an owned, locked buffer and are wiped as they are consumed. No
+//! standard-library read-ahead buffer retains a typed or piped secret (AUD-024-SEC007).
 
 use std::io::{self, BufRead, Read};
 
-#[cfg(unix)]
-use zeroize::{Zeroize, Zeroizing};
+use mhfe::memory::LockedBytes;
+use zeroize::Zeroize;
+
+#[cfg(any(windows, test))]
+mod utf16;
+#[cfg(windows)]
+mod windows;
 
 /// Standard input, as [`StandardInput::new`] describes it.
 pub(crate) struct StandardInput {
-    /// The byte [`BufRead::fill_buf`] read and nothing has consumed yet; wiped once it is.
-    #[cfg(unix)]
-    byte: Zeroizing<[u8; 1]>,
-    #[cfg(unix)]
-    filled: bool,
-    #[cfg(not(unix))]
-    lock: io::StdinLock<'static>,
+    /// At most one UTF-8 scalar; the allocation never moves and is wiped before it is unlocked.
+    bytes: LockedBytes,
+    pending: std::ops::Range<usize>,
 }
 
 impl StandardInput {
     /// A reader of standard input. Bytes it read and that were not consumed are lost when it is
-    /// dropped: at most one on Unix.
+    /// dropped: at most one byte from a descriptor or one scalar from a Windows console.
     pub(crate) fn new() -> Self {
         Self {
-            #[cfg(unix)]
-            byte: Zeroizing::new([0]),
-            #[cfg(unix)]
-            filled: false,
-            #[cfg(not(unix))]
-            lock: io::stdin().lock(),
+            bytes: LockedBytes::copy_of(&[0; 4]),
+            pending: 0..0,
         }
     }
 }
 
 impl Read for StandardInput {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        #[cfg(unix)]
-        {
-            let Some(first) = buffer.first_mut() else {
-                return Ok(0);
-            };
-            if self.filled {
-                *first = self.byte[0];
-                self.consume(1);
-                return Ok(1);
-            }
-            read_byte(first)
+        if buffer.is_empty() {
+            return Ok(0);
         }
-        #[cfg(not(unix))]
-        {
-            self.lock.read(buffer)
-        }
+        let available = self.fill_buf()?;
+        let taken = buffer.len().min(available.len());
+        buffer[..taken].copy_from_slice(&available[..taken]);
+        self.consume(taken);
+        Ok(taken)
     }
 }
 
 impl BufRead for StandardInput {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        #[cfg(unix)]
-        {
-            if !self.filled {
-                self.filled = read_byte(&mut self.byte[0])? == 1;
-            }
-            Ok(&self.byte[..usize::from(self.filled)])
+        if self.pending.is_empty() {
+            self.pending = 0..read_input(&mut self.bytes)?;
         }
-        #[cfg(not(unix))]
-        {
-            self.lock.fill_buf()
-        }
+        Ok(&self.bytes[self.pending.clone()])
     }
 
     fn consume(&mut self, amount: usize) {
-        #[cfg(unix)]
-        if amount > 0 && self.filled {
-            self.byte.zeroize();
-            self.filled = false;
-        }
-        #[cfg(not(unix))]
-        self.lock.consume(amount);
+        let end = self.pending.start + amount.min(self.pending.len());
+        self.bytes[self.pending.start..end].zeroize();
+        self.pending.start = end;
     }
 }
 
@@ -91,10 +67,10 @@ impl BufRead for StandardInput {
     reason = "read(2) of the descriptor is an operating-system call that Rust offers only through \
               an unsafe foreign function"
 )]
-fn read_byte(into: &mut u8) -> io::Result<usize> {
+fn read_input(into: &mut [u8]) -> io::Result<usize> {
     loop {
         // SAFETY: reads at most one byte into `into`, which is valid for one byte's write.
-        let read = unsafe { libc::read(libc::STDIN_FILENO, std::ptr::from_mut(into).cast(), 1) };
+        let read = unsafe { libc::read(libc::STDIN_FILENO, into.as_mut_ptr().cast(), 1) };
         if read >= 0 {
             return Ok(read.unsigned_abs());
         }
@@ -105,9 +81,18 @@ fn read_byte(into: &mut u8) -> io::Result<usize> {
     }
 }
 
+#[cfg(windows)]
+fn read_input(into: &mut [u8]) -> io::Result<usize> {
+    windows::read(into)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn read_input(_: &mut [u8]) -> io::Result<usize> {
+    Err(io::ErrorKind::Unsupported.into())
+}
+
 #[cfg(test)]
 mod tests {
-    #[cfg(unix)]
     use super::*;
 
     /// Every reader of the tool goes through [`StandardInput`]: no other code of the binary reads
@@ -118,7 +103,8 @@ mod tests {
         let mut readers = Vec::new();
         for entry in walk(&folder) {
             let text = std::fs::read_to_string(&entry).unwrap();
-            for (number, line) in text.lines().enumerate() {
+            let production = text.split("\n#[cfg(test)]").next().unwrap();
+            for (number, line) in production.lines().enumerate() {
                 let code = line.split("//").next().unwrap_or_default();
                 if code.contains("stdin().lock()")
                     || code.contains("stdin().read")
@@ -128,8 +114,6 @@ mod tests {
                 }
             }
         }
-        let this = folder.join("standard_input.rs");
-        readers.retain(|reader| !reader.starts_with(&this.display().to_string()));
         assert!(readers.is_empty(), "{readers:?}");
     }
 
@@ -148,17 +132,32 @@ mod tests {
     }
 
     /// A consumed byte is wiped from the reader, and an empty buffer reads nothing.
-    #[cfg(unix)]
     #[test]
     fn a_consumed_byte_is_wiped() {
         let mut input = StandardInput {
-            byte: Zeroizing::new(*b"x"),
-            filled: true,
+            bytes: LockedBytes::copy_of(b"x\0\0\0"),
+            pending: 0..1,
         };
         assert_eq!(input.read(&mut []).unwrap(), 0);
         let mut taken = [0u8; 4];
         assert_eq!(input.read(&mut taken).unwrap(), 1);
         assert_eq!(taken[0], b'x');
-        assert_eq!((input.byte[0], input.filled), (0, false));
+        assert_eq!(&*input.bytes, [0; 4]);
+        assert!(input.pending.is_empty());
+    }
+
+    #[test]
+    fn a_partly_consumed_scalar_keeps_only_its_unread_bytes() {
+        let mut input = StandardInput {
+            bytes: LockedBytes::copy_of("\u{1d400}".as_bytes()),
+            pending: 0..4,
+        };
+        let mut bytes = [0; 2];
+        assert_eq!(input.read(&mut bytes).unwrap(), 2);
+        assert_eq!(bytes, [0xf0, 0x9d]);
+        assert_eq!(&*input.bytes, [0, 0, 0x90, 0x80]);
+        assert_eq!(input.fill_buf().unwrap(), [0x90, 0x80]);
+        input.consume(2);
+        assert_eq!(&*input.bytes, [0; 4]);
     }
 }

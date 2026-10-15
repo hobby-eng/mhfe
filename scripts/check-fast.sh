@@ -25,6 +25,8 @@ node scripts/verify-no-copies.mjs
 # package's exports and reasons on lint exceptions.
 node scripts/verify-code-rules.mjs --self-test
 node scripts/verify-code-rules.mjs
+node scripts/verify-error-contracts.mjs --self-test
+node scripts/verify-error-contracts.mjs
 node scripts/verify-cli-questions.mjs --self-test
 node scripts/verify-cli-questions.mjs
 python3 scripts/verify-audit-records.py --self-test
@@ -32,12 +34,14 @@ python3 scripts/verify-audit-records.py --metadata-only
 node scripts/verify-python-checks.mjs
 # The retained module graph's low-level boundary criterion (AUD-024-ARC022), excluding the
 # separately tracked error and self-check dependencies.
+node scripts/verify-module-boundaries.mjs --self-test
 python3 docs/audits/AUD-024-harnesses/verify-module-edges/decisive_edges.py
 node scripts/verify-blame-revs.mjs --self-test
 node scripts/verify-blame-revs.mjs --syntax-only
 node scripts/verify-release-checksums.mjs --self-test
 node scripts/verify-packaged-readme.mjs --self-test
 node scripts/verify-browser-wait.mjs
+node scripts/verify-browser-source.mjs
 node scripts/verify-network-code.mjs --self-test
 node scripts/verify-network-code.mjs
 node scripts/verify-single-modules.mjs --self-test

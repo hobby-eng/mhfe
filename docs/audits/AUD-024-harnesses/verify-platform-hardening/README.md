@@ -38,3 +38,16 @@ equivalent(s) of RUST-09/RUST-13 missing in the Windows or macOS build`, exit 1.
 A fix passes it (exit 0) once each equivalent is present. The search proves only that the call
 exists, not that it works. A fix still needs the Windows and macOS CI runs that read each
 protection back (RUST-11).
+
+## Remediation trace
+
+The trace accepts both `pub fn` and `pub(crate) fn` for the startup entry. It also recognizes
+process-local `SetErrorMode(... SEM_NOGPFAULTERRORBOX)`: Microsoft's
+[SetErrorMode contract](https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-seterrormode)
+says this bypasses normal WER invocation. `WerSetFlags` alone is insufficient evidence: its
+`WER_FAULT_REPORTING_NO_UI` flag only suppresses UI. The implementation reads its process flag
+back with `GetErrorMode`; it does not edit a user's or machine's WER registry policy.
+
+This is a static presence trace. Passing it or Windows cross-compilation does not establish
+native enforcement, dump contents or release reproducibility; the platform tests and artifact
+checks named in AUD-024 remain separate evidence.

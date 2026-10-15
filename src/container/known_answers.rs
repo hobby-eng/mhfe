@@ -130,7 +130,7 @@ impl ContainerFactsCheck {
         }
     }
 
-    fn container(case: &ContainerCase) -> Result<(), String> {
+    fn container(case: &ContainerCase) -> Result<(), crate::self_check::FailureDetail> {
         let vector = published(case.vector)?;
         // Read as typed from a written container phrase: capitals and the first four letters of
         // each word.
@@ -140,38 +140,44 @@ impl ContainerFactsCheck {
             .map(|word| word[..word.len().min(4)].to_ascii_uppercase())
             .collect();
         let facts = ContainerFacts::read(&typed.join("  ")).map_err(stopped)?;
-        expect(facts.words() == vector.container, "is read as other words")?;
+        expect(
+            facts.words() == vector.container,
+            crate::self_check::KnownAnswerDifference::IsReadAsOtherWords,
+        )?;
         expect(
             facts.word_count() == vector.container.split(' ').count()
                 && facts.suite() == case.suite,
-            "gives another suite",
+            crate::self_check::KnownAnswerDifference::GivesAnotherSuite,
         )?;
         expect(
             facts.phrase_lengths() == case.phrase_lengths
                 && facts.built_in_check_lengths() == case.built_in_check_lengths,
-            "gives other lengths",
+            crate::self_check::KnownAnswerDifference::GivesOtherLengths,
         )?;
         for &(words, expected) in case.confirmations {
             let words = WordCount::new(words).map_err(stopped)?;
             let result = facts.confirmation_needed(PhraseLength::Words(words));
             match expected {
-                Ok(needed) => expect(result == Ok(needed), "needs another confirmation")?,
+                Ok(needed) => expect(
+                    result == Ok(needed),
+                    crate::self_check::KnownAnswerDifference::NeedsAnotherConfirmation,
+                )?,
                 Err(code) => expect_refusal(result, code)?,
             }
         }
         expect(
             facts.opens_hidden_wallets() == case.opens_hidden_wallets
                 && facts.offers_wallet_check() == case.offers_wallet_check,
-            "offers other wallets",
+            crate::self_check::KnownAnswerDifference::OffersOtherWallets,
         )
     }
 
-    fn original(case: &OriginalCase) -> Result<(), String> {
+    fn original(case: &OriginalCase) -> Result<(), crate::self_check::FailureDetail> {
         let vector = published(case.vector)?;
         let facts = OriginalFacts::read(vector.phrase).map_err(stopped)?;
         expect(
             facts.word_count() == case.word_count && facts.other_lengths() == case.other_lengths,
-            "gives other lengths",
+            crate::self_check::KnownAnswerDifference::GivesOtherLengths,
         )?;
         let choices: Vec<(Suite, usize, u32)> = facts
             .container_choices()
@@ -184,7 +190,10 @@ impl ContainerFactsCheck {
                 )
             })
             .collect();
-        expect(choices == case.choices, "offers other containers")
+        expect(
+            choices == case.choices,
+            crate::self_check::KnownAnswerDifference::OffersOtherContainers,
+        )
     }
 }
 
@@ -199,11 +208,21 @@ impl ComponentCheck for ContainerFactsCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("container", self.containers, Self::container);
-        findings.each("original", self.originals, Self::original);
-        findings.each("refused text", &REFUSED, |&(text, code)| {
-            expect_refusal(ContainerFacts::read(text), code)
-        });
+        findings.each(
+            crate::self_check::CaseKind::Container,
+            self.containers,
+            Self::container,
+        );
+        findings.each(
+            crate::self_check::CaseKind::Original,
+            self.originals,
+            Self::original,
+        );
+        findings.each(
+            crate::self_check::CaseKind::RefusedText,
+            &REFUSED,
+            |&(text, code)| expect_refusal(ContainerFacts::read(text), code),
+        );
         findings.outcome()
     }
 }

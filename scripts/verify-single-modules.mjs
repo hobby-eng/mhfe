@@ -77,6 +77,7 @@ function sharedVectors() {
 
 /** Texts that a module holds for its own reason, which a foreign part's vector happens to be. */
 const COINCIDENCES = new Map([
+  ["Argon2id", "the shared algorithm name in self-check labels and typed failure diagnostics"],
   ["0123456789abcdef", "the common hexadecimal alphabet"],
   ["0102030405060708", "the common ascending-byte table"],
   [
@@ -225,6 +226,15 @@ function selfTest() {
       );
   }
   assert.deepEqual(carriedVectors("passwords", Buffer.from("0123456789abcdef")), []);
+  assert.deepEqual(carriedVectors("repair", Buffer.from("Argon2id")), []);
+  const tags = compiledHexes(read("src/engine/known_answers.rs").toString());
+  assert.ok(tags.length > 0, "the engine declares actual Argon2 known-answer tags");
+  for (const tag of tags) {
+    assert.ok(
+      carriedVectors("repair", Buffer.from(tag, "hex")).includes(tag),
+      "an actual Argon2 known-answer tag stays foreign to repair",
+    );
+  }
   console.log("The vector ownership and foreign text/byte controls pass.");
 }
 

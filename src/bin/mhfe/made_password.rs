@@ -6,10 +6,8 @@
 
 use clap::{Args, ValueEnum};
 use mhfe::memory::LockedText;
-use mhfe::new_password::{
-    character_bits, word_bits, PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS,
-};
-use mhfe::{MhfeError, Password};
+use mhfe::new_password::{Millibits, PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS};
+use mhfe::Password;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
@@ -45,7 +43,10 @@ impl PasswordKind {
             // Labels from the counts the kinds make (AUD-023-ARC007).
             Self::Words => Answer::new(
                 format!("{} dice words", style::number_word(DEFAULT_WORDS, true)),
-                format!("about {} bits, easy to type", word_bits(DEFAULT_WORDS)),
+                format!(
+                    "about {} bits, easy to type",
+                    Millibits::words(DEFAULT_WORDS)
+                ),
             ),
             Self::CheckWord => Answer::new(
                 format!(
@@ -59,7 +60,7 @@ impl PasswordKind {
                     "{} random characters",
                     style::number_word(DEFAULT_CHARACTERS, true)
                 ),
-                format!("about {} bits", character_bits(DEFAULT_CHARACTERS)),
+                format!("about {} bits", Millibits::characters(DEFAULT_CHARACTERS)),
             ),
         }
     }
@@ -129,10 +130,10 @@ fn option_help() -> String {
              written down and typed back. Asked at a terminal that can show a list when not \
              given; elsewhere the password is typed.",
             style::number_word(DEFAULT_WORDS, false),
-            word_bits(DEFAULT_WORDS),
+            Millibits::words(DEFAULT_WORDS),
             style::number_word(mhfe::check_word::DRAWN_WORDS, false),
             style::number_word(DEFAULT_CHARACTERS, false),
-            character_bits(DEFAULT_CHARACTERS)
+            Millibits::characters(DEFAULT_CHARACTERS)
         ),
     ])
 }
@@ -151,12 +152,7 @@ pub(crate) fn ask_kind(input: &mut Input, operation: Operation) -> Result<Passwo
         _ => "The container password: type your own, or let MHFE make one?",
     };
     let answers = PasswordKind::ALL.map(PasswordKind::answer);
-    let question = Question {
-        text,
-        explanation: &[],
-        more: Some(readme::PASSWORD),
-        record: None,
-    };
+    let question = Question::with_details(text, &[], Some(readme::PASSWORD), None);
     let chosen = input.choose(&question, &answers)?;
     Ok(PasswordKind::ALL[chosen])
 }
@@ -173,7 +169,7 @@ pub(crate) fn read_made(
         PasswordKind::CheckWord => PasswordRecipe::check_word(),
         PasswordKind::Chars => PasswordRecipe::characters(DEFAULT_CHARACTERS)?,
         PasswordKind::Own => {
-            return Err(MhfeError::InvalidRequest("own passwords are typed".to_owned()).into())
+            return Err(mhfe::new_password::NewPasswordError::TypedInputRequired.into())
         }
     };
     let made = recipe.make(&mut SystemRandom)?;
@@ -296,7 +292,7 @@ mod tests {
         let Err(failure) = result else {
             panic!("a generated password was shown without a private screen");
         };
-        assert!(!failure.message.contains(PUBLIC_DISPLAY_SENTINEL));
+        assert!(!failure.message().contains(PUBLIC_DISPLAY_SENTINEL));
         println!("{CHILD_REFUSED}");
     }
 

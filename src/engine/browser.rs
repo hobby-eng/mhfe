@@ -4,7 +4,8 @@
 use wasm_bindgen::prelude::*;
 
 use super::{Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
-use crate::{MhfeError, WorkFactor};
+use super::{Argon2Failure, EngineError};
+use crate::WorkFactor;
 
 /// WebAssembly addresses at most 4 GiB, and the reference code limits a 32-bit build to 2 GiB of
 /// Argon2 memory, so a browser supports memory level 0 only.
@@ -44,7 +45,7 @@ pub struct BrowserEngine {
 
 impl BrowserEngine {
     /// Refuses memory levels a browser cannot provide before any memory is used.
-    pub fn new(argon2: JsArgon2, work: WorkFactor) -> Result<Self, MhfeError> {
+    pub fn new(argon2: JsArgon2, work: WorkFactor) -> Result<Self, EngineError> {
         work.require_level(HIGHEST_BROWSER_MEMORY_LEVEL)?;
         Ok(Self {
             argon2,
@@ -54,9 +55,9 @@ impl BrowserEngine {
 
     /// Reserves the Argon2 work area now rather than at the first round: a session of several
     /// operations then fails at once, before anything is asked, when the browser cannot give it.
-    pub fn reserve(&self) -> Result<(), MhfeError> {
+    pub fn reserve(&self) -> Result<(), EngineError> {
         self.argon2
-            .reserve(self.cost.memory_kib)
+            .reserve(self.cost.memory_kib())
             .map_err(|error| error_of(error, self.cost))
     }
 
@@ -66,7 +67,7 @@ impl BrowserEngine {
     /// trusted with the result.
     ///
     /// [`BrowserArgon2Check::verify`]: super::BrowserArgon2Check::verify
-    pub fn verify_known_answer(&self) -> Result<(), MhfeError> {
+    pub fn verify_known_answer(&self) -> Result<(), crate::self_check::SelfCheckError> {
         super::BrowserArgon2Check::new(&self.argon2).verify()
     }
 }
@@ -79,10 +80,10 @@ pub(super) fn derive_with(
     salt: &[u8; SALT_BYTES],
     cost: Argon2Cost,
     key: &mut [u8; KEY_BYTES],
-) -> Result<(), MhfeError> {
+) -> Result<(), EngineError> {
     super::mark_key_unwritten(key);
     argon2
-        .derive(password, salt, cost.memory_kib, cost.passes, key)
+        .derive(password, salt, cost.memory_kib(), cost.passes(), key)
         .map_err(|error| error_of(error, cost))?;
     // A bridge that wrote into a stale view of this module's memory, or not at all, leaves the
     // key as it was.
@@ -90,21 +91,18 @@ pub(super) fn derive_with(
 }
 
 /// The error of a failed call of the Argon2 build: "MEMORY_ALLOCATION_FAILED: …" becomes
-/// [`MhfeError::MemoryAllocation`], anything else [`MhfeError::Argon2`].
-fn error_of(error: JsValue, cost: Argon2Cost) -> MhfeError {
-    let message = crate::js_error::message(&error)
-        .unwrap_or_else(|| "the browser Argon2 engine failed".to_owned());
-    if message.starts_with("MEMORY_ALLOCATION_FAILED") {
-        MhfeError::MemoryAllocation {
+/// [`EngineError::MemoryAllocation`], anything else [`EngineError::Argon2`].
+fn error_of(error: JsValue, cost: Argon2Cost) -> EngineError {
+    let message = crate::js_error::message(&error);
+    match message.as_deref().and_then(|text| text.split_once(": ")) {
+        Some(("MEMORY_ALLOCATION_FAILED", _)) => EngineError::MemoryAllocation {
             bytes: cost.memory_bytes(),
-        }
-    } else {
-        MhfeError::Argon2(
-            message
-                .strip_prefix("ARGON2_FAILED: ")
-                .unwrap_or(&message)
-                .to_owned(),
-        )
+        },
+        Some(("ARGON2_FAILED", text)) => super::ReferenceMessage::read(text)
+            .map_or(EngineError::Argon2(Argon2Failure::Page(cost)), |message| {
+                EngineError::Argon2(Argon2Failure::Reference(message))
+            }),
+        _ => EngineError::Argon2(Argon2Failure::Page(cost)),
     }
 }
 
@@ -114,7 +112,7 @@ impl Argon2Engine for BrowserEngine {
         password: &[u8],
         salt: &[u8; SALT_BYTES],
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), EngineError> {
         derive_with(&self.argon2, password, salt, self.cost, key)
     }
 }

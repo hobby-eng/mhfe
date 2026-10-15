@@ -52,12 +52,16 @@ impl ComponentCheck for HiddenWalletsCheck {
                 wallet.words() == 24
                     && !wallet.verified()
                     && *wallet.phrase() == expected.join(" "),
-                "the published container gives another wallet",
+                crate::self_check::KnownAnswerDifference::ThePublishedContainerGivesAnotherWallet,
             )?;
             // The same password again is refused before any round.
             let again = session.open(&mut mhfe, vector.password()?, &mut |_, _| Ok(()));
-            expect_refusal(again.map(|_| ()), "PASSWORD_ALREADY_USED")
-                .map_err(|what| format!("a password used twice {what}"))
+            expect_refusal(again.map(|_| ()), "PASSWORD_ALREADY_USED").map_err(|what| {
+                crate::self_check::FailureDetail::Context {
+                    context: crate::self_check::CheckContext::APasswordUsedTwice,
+                    cause: Box::new(what),
+                }
+            })
         });
         // zero-12's own password reads its container as a 12-word phrase that passes its check.
         findings.one(|| {
@@ -65,8 +69,12 @@ impl ComponentCheck for HiddenWalletsCheck {
             let mut mhfe = vector.mhfe(published_table())?;
             let password: Password = vector.password()?;
             let result = mhfe.derive_wallet(vector.container, &password, "", &mut |_, _| Ok(()));
-            expect_refusal(result.map(|_| ()), "HIDDEN_WALLET_PASSES_CHECK")
-                .map_err(|what| format!("a reading that passes a check {what}"))
+            expect_refusal(result.map(|_| ()), "HIDDEN_WALLET_PASSES_CHECK").map_err(|what| {
+                crate::self_check::FailureDetail::Context {
+                    context: crate::self_check::CheckContext::AReadingThatPassesACheck,
+                    cause: Box::new(what),
+                }
+            })
         });
         findings.outcome()
     }
@@ -91,9 +99,9 @@ mod tests {
                      abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                      abandon abandon abandon abandon abandon diesel",
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("the published container gives another wallet".to_owned())
+            "the published container gives another wallet".to_owned()
         );
     }
 }

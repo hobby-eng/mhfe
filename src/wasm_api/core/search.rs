@@ -11,7 +11,7 @@ use crate::search::{ContainerSearch, Found};
 use crate::wasm_api::{
     call_page, container_fingerprint_text, js_error, json, whole_number, SecretText,
 };
-use crate::{refuse_unused_passphrase, MhfeError, PassphraseReferences, ReferenceTarget};
+use crate::{PassphraseReferences, ReferenceTarget};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -115,12 +115,8 @@ pub fn search_decoy(
     on_candidates: &js_sys::Function,
 ) -> Result<String, JsError> {
     let passphrase = SecretText::new(passphrase_utf8);
-    let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
-    let scan_gap = whole_number(
-        scan_gap,
-        MhfeError::InvalidRequest(String::new()).code(),
-        "the scan gap",
-    )?;
+    let passphrase = passphrase.passphrase()?;
+    let scan_gap = whole_number(scan_gap, crate::request::NumberField::ScanGap)?;
     let wallet = reference_target(reference_kind, reference, coin, path)?;
     let search = ContainerSearch::new(written).map_err(js_error)?;
     let found = search
@@ -168,7 +164,7 @@ pub fn search_wallet(
     // Both secrets are put under a wiping owner before anything can fail.
     let passphrase = SecretText::new(passphrase_utf8);
     let password = password_from(password_utf8, choice, position)?;
-    let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
+    let passphrase = passphrase.passphrase()?;
     // The original seed phrase's own checks need no reference: the built-in check, and with the
     // passphrase of "walletCheck" the phrase + passphrase check too.
     enum Compared<'a> {
@@ -177,7 +173,9 @@ pub fn search_wallet(
     }
     let compared = match reference_kind {
         "builtInCheck" => {
-            refuse_unused_passphrase(passphrase, PassphraseReferences::Check).map_err(js_error)?;
+            PassphraseReferences::Check
+                .refuse_unused(passphrase)
+                .map_err(js_error)?;
             Compared::OwnChecks(None)
         }
         "walletCheck" => Compared::OwnChecks(Some(passphrase)),
@@ -213,7 +211,7 @@ fn report_candidates(
     on_candidates: &js_sys::Function,
     candidate: usize,
     count: usize,
-) -> Result<(), MhfeError> {
+) -> Result<(), crate::CancelledError> {
     call_page(
         on_candidates,
         &[JsValue::from(candidate as u32), JsValue::from(count as u32)],

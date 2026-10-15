@@ -53,10 +53,16 @@ pub(crate) struct LineScreen<'a> {
 /// The hints a line gets.
 #[derive(Clone, Copy)]
 pub(crate) struct Hints {
-    pub(crate) list: WordList,
+    list: WordList,
     /// Whether a word that the list does not have is said: in a line of words, not in a password,
     /// which may hold any text.
-    pub(crate) says_no_word: bool,
+    says_no_word: bool,
+}
+
+impl Hints {
+    pub(crate) const fn new(list: WordList, says_no_word: bool) -> Self {
+        Self { list, says_no_word }
+    }
 }
 
 impl<'a> LineScreen<'a> {
@@ -297,10 +303,7 @@ mod tests {
         format!("{}|{plain}", String::from_utf8(written).unwrap())
     }
 
-    const BIP39: Option<Hints> = Some(Hints {
-        list: WordList::Bip39,
-        says_no_word: true,
-    });
+    const BIP39: Option<Hints> = Some(Hints::new(WordList::Bip39, true));
 
     /// A wide character takes two cells: removing it goes back two columns, and one that does not
     /// fit in the last column is written on the next row (AUD-016-UI001).
@@ -442,10 +445,7 @@ mod tests {
         let mut written = Vec::new();
         let mut text = Vec::new();
         let screen = LineScreen::new(&mut written, &mut text, 0, 80, None);
-        let password = Hints {
-            list: WordList::Eff,
-            says_no_word: false,
-        };
+        let password = Hints::new(WordList::Eff, false);
         assert!(screen.rows_of(password, Hint::NoWord).is_empty());
     }
 
@@ -501,10 +501,7 @@ mod tests {
         let mut written = Vec::new();
         let mut text = Vec::new();
         let screen = LineScreen::new(&mut written, &mut text, 0, 80, BIP39);
-        let eff = Hints {
-            list: WordList::Eff,
-            says_no_word: false,
-        };
+        let eff = Hints::new(WordList::Eff, false);
         let words = Hint::Words(&["zoning", "zookeeper", "zoologist"]);
         let unwiped = crate::test_allocator::unwiped_blocks(|| {
             for hints in [BIP39.unwrap(), eff] {

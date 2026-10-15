@@ -641,11 +641,9 @@ async function checkCoreFullCheck({ MhfeClient }, processParts, notRunHere) {
 // the single-threaded build. Such a report is not kept and closes nothing: the next call checks
 // again, and an operation goes to its worker and gets its own error.
 const ARGON2_NOT_STARTED = {
-  notAvailable:
-    "Argon2id could not run: the single-threaded Argon2 build did not start: the browser " +
-    "refused its memory",
+  notAvailable: "Argon2id could not run: the single-threaded Argon2 build did not start",
   warning:
-    "the threaded Argon2 build did not start: the lane workers did not start; the check ran " +
+    "the threaded Argon2 build did not start; the check ran " +
     "the single-threaded build of the standard mode instead",
 };
 /** Serves the self-checks, the Argon2 part of the core's as `argon2` when it runs Argon2. */
@@ -692,11 +690,11 @@ async function checkArgon2NotStarted({ MhfeClient }) {
     worker = await started(({ operation }) => operation === "decrypt");
     worker.reply({
       type: "error",
-      error: { code: "INTERNAL_ERROR", message: "the browser refused its memory" },
+      error: { code: "INTERNAL_ERROR", message: "the single-threaded Argon2 build did not start" },
     });
     await assert.rejects(decryption, {
       code: "INTERNAL_ERROR",
-      message: "The browser refused its memory",
+      message: "The single-threaded Argon2 build did not start",
     });
   }
 }
@@ -704,8 +702,7 @@ async function checkArgon2NotStarted({ MhfeClient }) {
 /** The threaded build's sizes in the full self-check, when that build does not start. */
 async function checkThreadedSizesNotStarted({ MhfeClient }, notRunHere) {
   globalThis.crossOriginIsolated = true;
-  const threadedSizesNotStarted =
-    "Argon2id could not run: the threaded Argon2 build did not start: the lane workers did not start";
+  const threadedSizesNotStarted = "Argon2id could not run: the threaded Argon2 build did not start";
   StandInWorker.serveCheck = (message, worker) => {
     const report = servedByTheWebAssembly(message, worker);
     const threaded = message.operation === "selfCheckArgon2" && message.argon2Script !== null;

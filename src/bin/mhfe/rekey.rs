@@ -9,7 +9,6 @@ use clap::{Args, ValueEnum};
 use mhfe::memory::LockedText;
 use mhfe::operation::{Keep, Sealed, Stage};
 use mhfe::rekey::{ConfirmedPhrase, Rekey, ReplacementRehearsal};
-use mhfe::wallet::fingerprint_text;
 use mhfe::wallet_check::WALLET_CHECK_BITS;
 use mhfe::{
     Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, Password,
@@ -152,10 +151,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Rekey.title())?;
     let old_work = settings::choose(options.old, &mut input, Operation::Rekey)?;
-    let new_settings = Settings {
-        pim: options.new_pim,
-        memory_level: options.new_memory_level,
-    };
+    let new_settings = Settings::new(options.new_pim, options.new_memory_level);
     new_settings.check_given(Operation::RekeyNew)?;
     if let Some(needed) = options.words.and_then(ConfirmationNeeded::of_any_container) {
         refuse_confirm(options.confirm, needed)?;
@@ -231,16 +227,16 @@ fn read_old_container(
         Operation::Rekey.title(),
         options.repair.card(Operation::Rekey, old_work),
         |container| {
-            options
-                .words
-                .map_or(Ok(()), |length| container.require_length(length))
+            options.words.map_or(Ok(()), |length| {
+                container.require_length(length).map_err(Into::into)
+            })
         },
     )?;
-    let container = read.facts;
+    let (container, password, _, _) = read.into_parts();
     let length = phrase_length(input, options.words, &container)?;
     refuse_confirm(options.confirm, container.confirmation_needed(length)?)?;
     // A search for missing words asked for the old password already.
-    let password = match read.password {
+    let password = match password {
         Some(password) => password,
         None => terminal::read_password(input, Operation::Rekey)?,
     };
@@ -349,7 +345,7 @@ fn confirm(
         style::retry_next(match refusal {
             // The built-in check finds another length than the one stated: it takes precedence,
             // and the wallet confirms the phrase (AUD-015-FUN001).
-            MhfeError::LengthDiffers { stated, found } => format!(
+            MhfeError::Cipher(mhfe::CipherError::LengthDiffers { stated, found }) => format!(
                 "{} {}, but the wallet must confirm the phrase.",
                 phrase_length::check_finds(found, stated),
                 phrase_length::MORE_RELIABLE
@@ -388,7 +384,7 @@ fn record_recovery(
     how: &How,
 ) -> Result<ConfirmedPhrase, Failure> {
     let phrase = recovered.phrase();
-    // The 16-bit source check of a 24-word reading, which every recovery evaluates, with the
+    // The 16-bit wallet check of a 24-word reading, which every recovery evaluates, with the
     // passphrase typed for the reference or the empty one; only a pass is said. It never
     // confirms a phrase to seal again: 16 bits are too few.
     // Borrowed from its locked buffer, not copied (AUD-024-SEC013).
@@ -498,7 +494,7 @@ fn next_rehearsal(rehearsal: &ReplacementRehearsal) -> String {
         ReplacementRehearsal::Fingerprint(fingerprint) => format!(
             "rehearse the new container phrase with {} and fingerprint {}",
             paint(ACCENT, "mhfe check --fingerprint"),
-            paint(ACCENT, fingerprint_text(*fingerprint))
+            paint(ACCENT, (*fingerprint).to_string())
         ),
         ReplacementRehearsal::BuiltInCheck | ReplacementRehearsal::ConfirmingReference => format!(
             "rehearse the new container phrase with {}",
@@ -620,12 +616,12 @@ fn ask_wallet_passphrase(input: &mut Input) -> Result<bool, Failure> {
             "keep it too: MHFE does not store it",
         ),
     ];
-    let question = Question {
-        text: "Does the wallet of this phrase have a BIP39 passphrase?",
-        explanation: ASKS_WHY,
-        more: Some(readme::REKEY),
-        record: Some("Passphrase"),
-    };
+    let question = Question::with_details(
+        "Does the wallet of this phrase have a BIP39 passphrase?",
+        ASKS_WHY,
+        Some(readme::REKEY),
+        Some("Passphrase"),
+    );
     // No answer is the default: a hurried Enter must not leave the passphrase out of what to keep.
     Ok(input.choose_without_default(&question, &answers)? == 1)
 }
@@ -651,12 +647,12 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
     eprintln!();
     eprintln!("{}", paint(HEADING, "Recovered seed phrase"));
     terminal::print_phrase(phrase, Wallet::NoPassphrase, input)?;
-    let question = Question {
-        text: "Does it match your written record, word for word?",
-        explanation: OWNER_CHECKS,
-        more: None,
-        record: None,
-    };
+    let question = Question::with_details(
+        "Does it match your written record, word for word?",
+        OWNER_CHECKS,
+        None,
+        None,
+    );
     let answers = [
         Answer::new("Yes, every word", ""),
         Answer::new("No, stop", "nothing is encrypted again"),
@@ -669,7 +665,7 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
     if mine {
         Ok(())
     } else {
-        Err(MhfeError::NotConfirmedByOwner.into())
+        Err(MhfeError::Rekey(mhfe::rekey::RekeyError::OwnerRejected).into())
     }
 }
 
@@ -718,7 +714,7 @@ fn read_different_password(
         let new = encrypt::read_new_password(input, Operation::Rekey, kind)?;
         match rekey.check_new(&new, new_work) {
             Ok(()) => return Ok(new),
-            Err(MhfeError::NewPasswordSameAsOld) => {
+            Err(MhfeError::Rekey(mhfe::rekey::RekeyError::Unchanged)) => {
                 // Said where the new password is typed again.
                 style::retry_next(
                     "This is the old password, which gives the old container. Choose another.",
@@ -774,7 +770,7 @@ mod tests {
         // A container of `words` words: a valid phrase of all-zero entropy, as in BIP39's vectors.
         let container = |words: usize| {
             let entropy = vec![0; WordCount::new(words).unwrap().entropy_bytes()];
-            let phrase = mhfe::phrase_from_entropy(&entropy).unwrap();
+            let phrase = mhfe::Phrase::from_entropy(&entropy).unwrap().into_words();
             ContainerFacts::read(&phrase).unwrap()
         };
         let stated = |count| PhraseLength::Words(WordCount::new(count).unwrap());
@@ -790,9 +786,9 @@ mod tests {
                 let refused =
                     phrase_length(&mut input, Some(stated(other)), &container(words)).unwrap_err();
                 assert!(
-                    refused.message.contains("keeps the length"),
+                    refused.message().contains("keeps the length"),
                     "{}",
-                    refused.message
+                    refused.message()
                 );
             }
         }

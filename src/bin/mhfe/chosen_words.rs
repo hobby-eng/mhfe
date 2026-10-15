@@ -146,12 +146,12 @@ fn ask_whether(input: &mut Input) -> Result<bool, Failure> {
         ),
         Answer::new("Choose one word", "not recommended: see More"),
     ];
-    let question = Question {
-        text: "Do you want to choose a word of the new phrase?",
-        explanation: &[],
-        more: Some(readme::NEW),
-        record: None,
-    };
+    let question = Question::with_details(
+        "Do you want to choose a word of the new phrase?",
+        &[],
+        Some(readme::NEW),
+        None,
+    );
     Ok(input.choose(&question, &answers)? == 1)
 }
 
@@ -244,7 +244,7 @@ fn read_never_use(
 /// Says what the wishes leave of the phrase's randomness, as the library rates it, and what chosen
 /// words give away.
 pub(crate) fn tell(odds: WishOdds) {
-    if odds.recognisable {
+    if odds.recognisable() {
         style::warn(
             "If someone learns or guesses your chosen word, it lets them rule out almost every \
              wrong password and tell this wallet from a decoy.",
@@ -252,8 +252,8 @@ pub(crate) fn tell(odds: WishOdds) {
              a decoy.",
         );
     }
-    let bits = odds.random_bits.floor();
-    match odds.randomness {
+    let bits = odds.random_bits().floor();
+    match odds.randomness() {
         Randomness::Full => {}
         Randomness::Ample => style::warn(
             &format!(
@@ -267,7 +267,7 @@ pub(crate) fn tell(odds: WishOdds) {
                  {RECOMMENDED_RANDOM_BITS}."
             ),
             // Only where it helps: a word anywhere already keeps the most (AUD-015-UI003).
-            if odds.fixed_position {
+            if odds.fixed_position() {
                 "A word anywhere in the phrase keeps more than one at a fixed position."
             } else {
                 ""
@@ -286,7 +286,7 @@ fn record(chosen: usize, never_use: usize, odds: WishOdds) {
         RECORD,
         &format!(
             "{chosen} {words}, {never_use} never to use; about {} random bits",
-            odds.random_bits.floor()
+            odds.random_bits().floor()
         ),
     );
 }

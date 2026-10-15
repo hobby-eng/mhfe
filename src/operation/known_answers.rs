@@ -140,7 +140,7 @@ impl KeepCheck {
         }
     }
 
-    fn case(case: &KeepCase) -> Result<(), String> {
+    fn case(case: &KeepCase) -> Result<(), crate::self_check::FailureDetail> {
         let vector = published(case.vector)?;
         let mut mhfe = vector.mhfe(published_table())?;
         let sealed = Encryption::new(vector.phrase, vector.suite(), case.repair_words)
@@ -155,15 +155,18 @@ impl KeepCheck {
             .map_err(stopped)?;
         expect(
             sealed.container() == vector.container,
-            "seals another container",
+            crate::self_check::KnownAnswerDifference::SealsAnotherContainer,
         )?;
         expect(
             sealed.built_in_check() == case.built_in_check
                 && sealed.other_lengths() == case.other_lengths,
-            "tells other checks",
+            crate::self_check::KnownAnswerDifference::TellsOtherChecks,
         )?;
         let keep = sealed.keep(vector.work()?, case.passphrase);
-        expect(keep.items() == case.expected, "differs")
+        expect(
+            keep.items() == case.expected,
+            crate::self_check::KnownAnswerDifference::Differs,
+        )
     }
 }
 
@@ -176,16 +179,21 @@ impl ComponentCheck for KeepCheck {
         "Keep advice"
     }
 
+    // Deliberate copy: independent component checks implement the same runner trait.
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("case", self.cases, Self::case);
-        findings.each("old container", self.old_cases, |case| {
-            let work = published(case.vector)?.work()?;
-            expect(
-                Keep::old_container(work).items() == case.expected,
-                "differs",
-            )
-        });
+        findings.each(crate::self_check::CaseKind::Case, self.cases, Self::case);
+        findings.each(
+            crate::self_check::CaseKind::OldContainer,
+            self.old_cases,
+            |case| {
+                let work = published(case.vector)?.work()?;
+                expect(
+                    Keep::old_container(work).items() == case.expected,
+                    crate::self_check::KnownAnswerDifference::Differs,
+                )
+            },
+        );
         findings.outcome()
     }
 }
@@ -207,10 +215,7 @@ mod tests {
             cases: Box::leak(Box::new(cases)),
             ..KeepCheck::new()
         };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed(detail.to_owned())
-        );
+        crate::self_check::assert_failed!(check.run(Tier::Startup), detail.to_owned());
     }
 
     #[test]
@@ -238,9 +243,9 @@ mod tests {
                 old_cases: crate::self_check::leak([wrong]),
                 ..KeepCheck::new()
             };
-            assert_eq!(
+            crate::self_check::assert_failed!(
                 check.run(Tier::Startup),
-                ComponentOutcome::Failed("old container 1 of 1 differs".to_owned())
+                "old container 1 of 1 differs".to_owned()
             );
         }
     }

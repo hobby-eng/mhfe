@@ -16,7 +16,6 @@ use super::{
     call_page, container_fingerprint_text, js_error, json, repair_capacities, review_choice,
     secret_json, whole_number, yes_or_no, CapacityJson, SecretText,
 };
-use crate::check_word;
 use crate::engine::browser::{BrowserEngine, JsArgon2, HIGHEST_BROWSER_MEMORY_LEVEL};
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{
@@ -25,11 +24,11 @@ use crate::operation::{
 use crate::rekey::ReplacementRehearsal;
 use crate::repair::{PROFILE as REPAIR_PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS};
 use crate::search::DECOY_SCAN_GAP;
-use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
+use crate::wallet::{Address, Coin, Fingerprint};
 use crate::{
-    container_fingerprint, ConfirmationNeeded, ContainerFacts, HiddenWallets, Mhfe, MhfeError,
-    OriginalFacts, Password, PhraseLength, Recovery, RecoveryStatus, ReferenceTarget, Settings,
-    Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS,
+    ConfirmationNeeded, ContainerFacts, HiddenWallets, Mhfe, MhfeError, OriginalFacts, Password,
+    PhraseLength, Recovery, RecoveryStatus, ReferenceTarget, Settings, Suite, WordCount,
+    WorkFactor, BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS,
     SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
 };
 
@@ -46,6 +45,9 @@ struct SuiteParameters {
     suite_id: &'static str,
     same_length_suite_id: &'static str,
     rounds: u32,
+    progress_stages: [&'static str; 4],
+    progress_round_totals: [u32; 3],
+    opened_word_count: usize,
     max_pim: u32,
     max_memory_level: u32,
     highest_browser_memory_level: u32,
@@ -71,6 +73,9 @@ pub fn suite_parameters() -> Result<String, JsError> {
         suite_id: SUITE_ID,
         same_length_suite_id: SAME_LENGTH_SUITE_ID,
         rounds: ROUNDS,
+        progress_stages: Stage::ALL.map(Stage::name),
+        progress_round_totals: Stage::round_totals(),
+        opened_word_count: crate::packing::STATE_WORDS,
         max_pim: MAX_PIM,
         max_memory_level: MAX_MEMORY_LEVEL,
         highest_browser_memory_level: HIGHEST_BROWSER_MEMORY_LEVEL,
@@ -177,7 +182,7 @@ pub fn describe_container(container: &str) -> Result<String, JsError> {
         confirmation_for,
         hidden_wallets: facts.opens_hidden_wallets(),
         offers_wallet_check: facts.offers_wallet_check(),
-        container_fingerprint: fingerprint_text(facts.fingerprint().map_err(js_error)?),
+        container_fingerprint: (facts.fingerprint().map_err(js_error)?).to_string(),
     })
 }
 
@@ -270,7 +275,7 @@ impl From<&ReplacementRehearsal> for RehearsalJson {
             ReplacementRehearsal::BuiltInCheck => Self::BuiltInCheck,
             ReplacementRehearsal::ConfirmingReference => Self::ConfirmingReference,
             ReplacementRehearsal::Fingerprint(fingerprint) => Self::Fingerprint {
-                fingerprint: fingerprint_text(*fingerprint),
+                fingerprint: (*fingerprint).to_string(),
             },
         }
     }
@@ -367,7 +372,7 @@ pub fn encrypt(
     let password = new_password_from(&typed, &repeat, choice, position)?;
     let wallet_passphrase = WalletPassphrase::from(passphrase_answer(&wallet_has_passphrase)?);
     let phrase = phrase.phrase()?;
-    let suite = if yes_or_no(&same_length, "sameLength")? {
+    let suite = if yes_or_no(&same_length, crate::request::BooleanField::SameLength)? {
         Suite::SameLength
     } else {
         Suite::TwentyFourWords
@@ -395,7 +400,7 @@ struct CandidateJson<'a> {
     /// The suite of the container, which its word count selected.
     suite_id: &'static str,
     fingerprint_without_passphrase: String,
-    /// Whether a 24-word reading passes the 16-bit source check with the passphrase given, or the
+    /// Whether a 24-word reading passes the 16-bit wallet check with the passphrase given, or the
     /// empty one; null for every other length, where it does not apply.
     wallet_check: Option<bool>,
     /// The length stated, where the built-in checks gave this reading another; null otherwise.
@@ -442,7 +447,7 @@ pub fn decrypt(
     let passphrase = SecretText::new(passphrase_utf8);
     let password = password_from(password_utf8, choice, position)?;
     let length = word_count(words)?;
-    let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
+    let passphrase = passphrase.passphrase()?;
     let (mut mhfe, _) = mhfe_for(pim, memory_level, argon2)?;
     let recovery = mhfe.decrypt(container, &password, length, &mut |round, rounds| {
         report(on_round, Stage::Recover, round, rounds)
@@ -475,7 +480,8 @@ fn candidate_json<'a>(
         },
         phrase: candidate.phrase(),
         suite_id: candidate.suite().id(),
-        fingerprint_without_passphrase: master_fingerprint_text(candidate.phrase(), "")
+        fingerprint_without_passphrase: Fingerprint::of(candidate.phrase(), "")
+            .map(|fingerprint| fingerprint.to_string())
             .map_err(js_error)?,
         wallet_check: candidate
             .passes_wallet_check(passphrase)
@@ -507,22 +513,16 @@ fn reference_target(
             }
         }
         "fingerprint" => {
-            ReferenceTarget::Fingerprint(parse_fingerprint(reference).map_err(js_error)?)
+            ReferenceTarget::Fingerprint(Fingerprint::parse(reference).map_err(js_error)?)
         }
         "words" => {
-            let words = reference.parse().map_err(|_| {
-                js_error(MhfeError::InvalidRequest(
-                    "the word count must be a whole number".to_owned(),
-                ))
-            })?;
+            let words = reference
+                .parse()
+                .map_err(|_| js_error(crate::request::RequestError::ReferenceWordCount))?;
             ReferenceTarget::Length(PhraseLength::from_count(words).map_err(js_error)?)
         }
         "walletCheck" => ReferenceTarget::WalletCheck,
-        other => {
-            return Err(js_error(MhfeError::InvalidRequest(format!(
-                "unknown reference kind {other}"
-            ))))
-        }
+        _ => return Err(js_error(crate::request::RequestError::UnknownReferenceKind)),
     })
 }
 
@@ -546,7 +546,8 @@ impl<'a> PhraseJson<'a> {
             phrase: recovered.phrase(),
             words: recovered.words(),
             stated_words: recovered.stated_words(),
-            fingerprint_without_passphrase: master_fingerprint_text(recovered.phrase(), "")
+            fingerprint_without_passphrase: Fingerprint::of(recovered.phrase(), "")
+                .map(|fingerprint| fingerprint.to_string())
                 .map_err(js_error)?,
         })
     }
@@ -560,9 +561,8 @@ fn passphrase_answer(value: &JsValue) -> Result<Option<bool>, JsError> {
         return Ok(None);
     }
     value.as_bool().map(Some).ok_or_else(|| {
-        js_error(MhfeError::InvalidRequest(
-            "walletHasPassphrase must be true or false: whether the wallet has a BIP39 passphrase"
-                .to_owned(),
+        js_error(crate::request::RequestError::NotBoolean(
+            crate::request::BooleanField::WalletHasPassphrase,
         ))
     })
 }
@@ -574,41 +574,32 @@ fn password_from(password_utf8: Vec<u8>, choice: &str, position: f64) -> Result<
     if choice.is_none() {
         return Password::from_utf8(typed.bytes()).map_err(js_error);
     }
-    let text = typed.text(MhfeError::InvalidPasswordUtf8)?;
-    check_word::typed_password(text, None, choice).map_err(js_error)
+    let text = typed.text(crate::PasswordError::InvalidPasswordUtf8.into())?;
+    Password::from_typed(text, None, choice).map_err(js_error)
 }
 
 /// A new password typed twice, with the review choice of its check word: the password's own rules
-/// first, then the two entries compared exactly as typed (check_word::check_typed_twice).
+/// first, then the two entries compared exactly as typed (Password::check_typed_twice).
 fn new_password_from(
     typed: &SecretText,
     repeat: &SecretText,
     choice: &str,
     position: f64,
 ) -> Result<Password, JsError> {
-    let text = typed.text(MhfeError::InvalidPasswordUtf8)?;
-    let repeat = repeat.text(MhfeError::InvalidPasswordUtf8)?;
-    check_word::typed_password(text, Some(repeat), review_choice(choice, position)?)
-        .map_err(js_error)
+    let text = typed.text(crate::PasswordError::InvalidPasswordUtf8.into())?;
+    let repeat = repeat.text(crate::PasswordError::InvalidPasswordUtf8.into())?;
+    Password::from_typed(text, Some(repeat), review_choice(choice, position)?).map_err(js_error)
 }
 
 /// The length of the original seed phrase as the page passes it: a word count, or 0 to detect it.
 fn word_count(words: f64) -> Result<PhraseLength, JsError> {
-    let words = whole_number(
-        words,
-        MhfeError::InvalidWordCount(0).code(),
-        "the word count",
-    )?;
+    let words = whole_number(words, crate::request::NumberField::WordCount)?;
     PhraseLength::from_count(words as usize).map_err(js_error)
 }
 
 /// 0 for no repair words, else 2, 4, 6 or 8, which the encryption checks.
 fn repair_count(count: f64) -> Result<Option<usize>, JsError> {
-    match whole_number(
-        count,
-        MhfeError::InvalidRepairWords(String::new()).code(),
-        "the repair word count",
-    )? {
+    match whole_number(count, crate::request::NumberField::RepairWordCount)? {
         0 => Ok(None),
         count => Ok(Some(count as usize)),
     }
@@ -620,15 +611,10 @@ fn work_from(pim: f64, memory_level: f64) -> Result<WorkFactor, JsError> {
 
 /// The settings `settings` from `pim` and `memory_level`, which a refusal names.
 fn settings_from(pim: f64, memory_level: f64, settings: Settings) -> Result<WorkFactor, JsError> {
-    let pim = whole_number(
-        pim,
-        MhfeError::InvalidPim { pim: 0, settings }.code(),
-        &format!("{settings} PIM"),
-    )?;
+    let pim = whole_number(pim, crate::request::NumberField::Pim(settings))?;
     let memory_level = whole_number(
         memory_level,
-        MhfeError::InvalidMemoryLevel { level: 0, settings }.code(),
-        &format!("{settings} memory level"),
+        crate::request::NumberField::MemoryLevel(settings),
     )?;
     WorkFactor::of(settings, pim, memory_level).map_err(js_error)
 }
@@ -678,7 +664,10 @@ fn sealed_for_page(
 /// browser made of it, fails here with SELF_CHECK_FAILED, and the result is dropped instead of
 /// returned. The answer is checked after a failed operation too, since a fault of the build is the
 /// more fundamental cause.
-fn verified<T>(mhfe: &Mhfe<BrowserEngine>, outcome: Result<T, MhfeError>) -> Result<T, JsError> {
+fn verified<T, E: Into<MhfeError>>(
+    mhfe: &Mhfe<BrowserEngine>,
+    outcome: Result<T, E>,
+) -> Result<T, JsError> {
     mhfe.engine().verify_known_answer().map_err(js_error)?;
     outcome.map_err(js_error)
 }
@@ -690,7 +679,7 @@ fn report(
     stage: Stage,
     round: u32,
     rounds: u32,
-) -> Result<(), MhfeError> {
+) -> Result<(), crate::CancelledError> {
     call_page(
         on_round,
         &[
@@ -703,11 +692,14 @@ fn report(
 
 /// Gives the page the container before its check, with its own fingerprint.
 fn unverified(on_unverified: &js_sys::Function, container: &str) -> Result<(), MhfeError> {
-    let fingerprint = fingerprint_text(container_fingerprint(container)?);
+    let fingerprint = (ContainerFacts::read(container)
+        .map_err(MhfeError::from)
+        .and_then(|facts| facts.fingerprint())?)
+    .to_string();
     let text = serde_json::to_string(&UnverifiedJson {
         container,
         container_fingerprint: fingerprint,
     })
-    .map_err(|error| MhfeError::Internal(error.to_string()))?;
-    call_page(on_unverified, &[JsValue::from_str(&text)])
+    .map_err(|_| MhfeError::from(crate::output::OutputError::Json))?;
+    call_page(on_unverified, &[JsValue::from_str(&text)]).map_err(Into::into)
 }

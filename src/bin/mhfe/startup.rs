@@ -9,7 +9,7 @@
 use std::sync::{Mutex, MutexGuard, Once, PoisonError};
 
 use mhfe::random::RandomSource;
-use mhfe::self_check::{sets, ComponentResult, SelfCheck, SelfCheckReport, Tier};
+use mhfe::self_check::{ComponentResult, SelfCheck, SelfCheckReport, Tier};
 
 use crate::exit::{Failure, INTERNAL_ERROR};
 use crate::hidden_input::{self, HiddenInputCheck};
@@ -33,7 +33,7 @@ pub(crate) enum Checks {
 /// phrases are drawn from, which only the full self-test tries; at start only scripted sources are
 /// used, so that no draw can wait for the system's generator.
 pub(crate) fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
-    sets::native(random)
+    SelfCheck::native(random)
         .with(CoreDumpCheck)
         .with(IsolationCheck)
         .with(HiddenInputCheck)
@@ -45,7 +45,7 @@ pub(crate) fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCh
 pub(crate) fn check(checks: Checks) -> Result<(), Failure> {
     let mut set = match checks {
         Checks::EveryPart => every_part(None),
-        Checks::Hashes => sets::hashes(),
+        Checks::Hashes => SelfCheck::hashes(),
         Checks::Nothing => return Ok(()),
     };
     let report = run_named(&mut set, Tier::Startup, AT_START, &mut |_| {}, &mut |_| {});
@@ -68,10 +68,13 @@ fn failure_text(failed: &ComponentResult) -> String {
     if failed.id() == protect::CORE_DUMPS_ID {
         return "Core dumps could not be turned off.".to_owned();
     }
-    let detail = failed.outcome().detail().unwrap_or("it failed");
+    let detail = failed
+        .outcome()
+        .detail()
+        .unwrap_or(std::borrow::Cow::Borrowed("it failed"));
     format!(
         "{}.",
-        mhfe::self_check::failure_message(AT_START, failed.label(), detail)
+        mhfe::self_check::SelfCheckError::failure_message(AT_START, failed.label(), &detail)
     )
 }
 
@@ -200,7 +203,7 @@ mod tests {
     /// The tool's set holds every part of the library's native set, and its own three, once.
     #[test]
     fn every_part_adds_the_process_checks_to_the_library_set() {
-        let library = sets::native(None).ids();
+        let library = SelfCheck::native(None).ids();
         let ids = every_part(None).ids();
         assert_eq!(ids[..library.len()], library[..]);
         assert_eq!(
@@ -253,7 +256,7 @@ mod tests {
             .with(Fixed("passing", ComponentOutcome::Passed))
             .with(Fixed(
                 "cipher-rounds",
-                ComponentOutcome::Failed("vector 4 of 10 gives another container".to_owned()),
+                crate::test_support::failed_cipher_case(),
             ));
         let report = run_named(&mut set, Tier::Startup, AT_START, &mut |_| {}, &mut |_| {});
         let failed = report.first_failure().unwrap();
@@ -264,7 +267,7 @@ mod tests {
         );
         let mut core_dumps = SelfCheck::new().with(Fixed(
             protect::CORE_DUMPS_ID,
-            ComponentOutcome::Failed("the kernel still allows them".to_owned()),
+            ComponentOutcome::Failed(mhfe::self_check::KnownAnswerDifference::CrashDumpsOrProcessMemoryAccessAreStillAllowed.into()),
         ));
         let report = core_dumps.run_quietly(Tier::Startup);
         assert_eq!(
@@ -290,7 +293,9 @@ mod tests {
             fn run(&mut self, _: Tier) -> ComponentOutcome {
                 match *running() {
                     Some(part) if part.label == "Watching part" => ComponentOutcome::Passed,
-                    other => ComponentOutcome::Failed(format!("{other:?}")),
+                    _ => ComponentOutcome::Failed(
+                        mhfe::self_check::KnownAnswerDifference::TheRunningPartIsNotNamed.into(),
+                    ),
                 }
             }
         }

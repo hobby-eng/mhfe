@@ -7,7 +7,7 @@
 //! specification's first public vector of MHFE-PASSWORD-CHECK-1.
 
 use super::PasswordRecipe;
-use crate::random::{uniform_below, ScriptedSource};
+use crate::random::{RandomSampler, ScriptedSource};
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
@@ -89,7 +89,7 @@ impl GeneratorCheck {
         Self { draws: &DRAWS }
     }
 
-    fn draw(case: &DrawCase) -> Result<(), String> {
+    fn draw(case: &DrawCase) -> Result<(), crate::self_check::FailureDetail> {
         let recipe = match case.recipe {
             Recipe::Words(count) => PasswordRecipe::words(count),
             Recipe::CheckWord => Ok(PasswordRecipe::check_word()),
@@ -98,7 +98,10 @@ impl GeneratorCheck {
         .map_err(stopped)?;
         let mut source = ScriptedSource::after_probes(case.bytes);
         let password = recipe.make(&mut source).map_err(stopped)?;
-        expect(password.text() == case.expected, "gives another password")
+        expect(
+            password.text() == case.expected,
+            crate::self_check::KnownAnswerDifference::GivesAnotherPassword,
+        )
     }
 }
 
@@ -117,12 +120,12 @@ impl ComponentCheck for GeneratorCheck {
             findings.one(|| {
                 let mut source = ScriptedSource::new(bytes.to_vec());
                 expect(
-                    uniform_below(&mut source, bound) == Ok(expected),
-                    "a draw is biased",
+                    RandomSampler::new(&mut source).uniform_below(bound) == Ok(expected),
+                    crate::self_check::KnownAnswerDifference::ADrawIsBiased,
                 )
             });
         }
-        findings.each("draw", self.draws, Self::draw);
+        findings.each(crate::self_check::CaseKind::Draw, self.draws, Self::draw);
         // A stuck source is refused before anything is drawn from it.
         findings.one(|| {
             let mut stuck = ScriptedSource::new(vec![0; 256]);
@@ -130,7 +133,10 @@ impl ComponentCheck for GeneratorCheck {
                 PasswordRecipe::characters(16).and_then(|recipe| recipe.make(&mut stuck)),
                 "RANDOM_FAILED",
             )
-            .map_err(|what| format!("a stuck source {what}"))
+            .map_err(|what| crate::self_check::FailureDetail::Context {
+                context: crate::self_check::CheckContext::AStuckSource,
+                cause: Box::new(what),
+            })
         });
         findings.outcome()
     }
@@ -155,9 +161,9 @@ mod tests {
         let mut check = GeneratorCheck {
             draws: Box::leak(Box::new(draws)),
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("draw 3 of 4 gives another password".to_owned())
+            "draw 3 of 4 gives another password".to_owned()
         );
     }
 }

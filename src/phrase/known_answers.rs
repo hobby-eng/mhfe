@@ -152,12 +152,23 @@ impl WordListCheck {
         }
     }
 
-    fn vector(vector: &TrezorVector) -> Result<(), String> {
+    fn vector(vector: &TrezorVector) -> Result<(), crate::self_check::FailureDetail> {
         let entropy = hex::decode(vector.entropy).map_err(|_| damaged())?;
-        let phrase = crate::phrase_from_entropy(&entropy).map_err(stopped)?;
-        expect(*phrase == *vector.phrase, "gives other words")?;
-        let parsed = super::parse(vector.phrase).map_err(|_| "is refused".to_owned())?;
-        expect(parsed.to_entropy() == entropy, "gives another entropy")
+        let phrase = crate::Phrase::from_entropy(&entropy).map_err(stopped)?;
+        expect(
+            phrase.words() == vector.phrase,
+            crate::self_check::KnownAnswerDifference::GivesOtherWords,
+        )?;
+        let read = crate::Phrase::read(vector.phrase).map_err(|_| {
+            crate::self_check::FailureDetail::from(
+                crate::self_check::KnownAnswerDifference::IsRefused,
+            )
+        })?;
+        let parsed = super::parse(read.words()).map_err(stopped)?;
+        expect(
+            parsed.to_entropy() == entropy,
+            crate::self_check::KnownAnswerDifference::GivesAnotherEntropy,
+        )
     }
 }
 
@@ -181,7 +192,7 @@ impl ComponentCheck for WordListCheck {
             }
             expect(
                 hex::encode(sha2::Sha256::digest(text.as_bytes())) == self.list_sha256,
-                "the English list differs from english.txt",
+                crate::self_check::KnownAnswerDifference::TheEnglishListDiffersFromEnglishTxt,
             )
         });
         // bitcoin_hashes computes the BIP39 checksum; FIPS 180-4's SHA-256("abc").
@@ -190,7 +201,7 @@ impl ComponentCheck for WordListCheck {
             expect(
                 hex::encode(sha256::Hash::hash(b"abc").to_byte_array())
                     == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-                "the checksum's SHA-256 gives another digest",
+                crate::self_check::KnownAnswerDifference::TheChecksumSSha256GivesAnotherDigest,
             )
         });
         let vectors: Vec<TrezorVector> = match tier {
@@ -200,16 +211,31 @@ impl ComponentCheck for WordListCheck {
                 .collect(),
             Tier::Full => self.vectors.to_vec(),
         };
-        findings.each("test vector", &vectors, Self::vector);
+        findings.each(
+            crate::self_check::CaseKind::TestVector,
+            &vectors,
+            Self::vector,
+        );
         // The first vector with its last word changed fails its checksum: "abandon" 12 times.
         findings.one(|| {
             let wrong = ["abandon"; 12].join(" ");
-            expect_refusal(crate::check_phrase(&wrong), "INVALID_PHRASE")
-                .map_err(|what| format!("a wrong checksum {what}"))
+            expect_refusal(crate::Phrase::read(&wrong), "INVALID_PHRASE").map_err(|what| {
+                crate::self_check::FailureDetail::Context {
+                    context: crate::self_check::CheckContext::AWrongChecksum,
+                    cause: Box::new(what),
+                }
+            })
         });
-        findings.each("completion", &COMPLETIONS, |&(typed, expected)| {
-            expect(super::complete_word(typed) == expected, "differs")
-        });
+        findings.each(
+            crate::self_check::CaseKind::Completion,
+            &COMPLETIONS,
+            |&(typed, expected)| {
+                expect(
+                    super::complete_word(typed) == expected,
+                    crate::self_check::KnownAnswerDifference::Differs,
+                )
+            },
+        );
         findings.outcome()
     }
 }
@@ -236,9 +262,9 @@ mod tests {
     fn a_corrupted_list_digest_or_vector_fails() {
         let mut check = WordListCheck::new();
         check.list_sha256 = "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbdb";
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("the English list differs from english.txt".to_owned())
+            "the English list differs from english.txt".to_owned()
         );
         let mut vectors = TREZOR_ENGLISH;
         // The ff pattern of 24 words with its last word changed.
@@ -260,9 +286,9 @@ mod tests {
             ..WordListCheck::new()
         };
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Full),
-            ComponentOutcome::Failed("test vector 24 of 24 gives other words".to_owned())
+            "test vector 24 of 24 gives other words".to_owned()
         );
     }
 }

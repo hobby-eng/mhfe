@@ -7,7 +7,7 @@
 
 use sha2::Digest;
 
-use super::{check_index, PasswordReview, Reading, DRAWN_WORDS};
+use super::{PasswordReview, Reading, DRAWN_WORDS};
 use crate::eff::{EffList, EFF_LIST, LIST_SIZE};
 use crate::new_password::PasswordRecipe;
 use crate::self_check::{
@@ -67,29 +67,35 @@ impl CheckWordCheck {
         }
     }
 
-    fn vector(vector: &CheckWordVector) -> Result<(), String> {
+    fn vector(vector: &CheckWordVector) -> Result<(), crate::self_check::FailureDetail> {
         let made = PasswordRecipe::check_word()
             .make_from_rolls(vector.rolls)
             .map_err(stopped)?;
-        expect(made.text() == vector.password, "gives other words")?;
+        expect(
+            made.text() == vector.password,
+            crate::self_check::KnownAnswerDifference::GivesOtherWords,
+        )?;
         let list = EffList::try_get().map_err(stopped)?;
         let drawn: Vec<usize> = vector
             .password
             .split(' ')
             .take(DRAWN_WORDS)
             .map(|word| {
-                list.index_of(word)
-                    .ok_or_else(|| "a built-in word is not in the list".to_owned())
+                list.index_of(word).ok_or_else(|| {
+                    crate::self_check::FailureDetail::from(
+                        crate::self_check::KnownAnswerDifference::ABuiltInWordIsNotInTheList,
+                    )
+                })
             })
             .collect::<Result<_, _>>()?;
         let drawn: [usize; DRAWN_WORDS] = drawn.try_into().map_err(|_| damaged())?;
         expect(
-            check_index(&drawn) == vector.check_index,
-            "gives another check index",
+            PasswordReview::check_index(&drawn).map_err(stopped)? == vector.check_index,
+            crate::self_check::KnownAnswerDifference::GivesAnotherCheckIndex,
         )?;
         expect(
             PasswordReview::of(vector.password).reading() == Reading::Fits,
-            "does not fit its check word",
+            crate::self_check::KnownAnswerDifference::DoesNotFitItsCheckWord,
         )
     }
 }
@@ -108,7 +114,7 @@ impl ComponentCheck for CheckWordCheck {
         findings.one(|| {
             expect(
                 hex::encode(sha2::Sha256::digest(EFF_LIST.as_bytes())) == self.list_sha256,
-                "the EFF list differs from the vendored file",
+                crate::self_check::KnownAnswerDifference::TheEffListDiffersFromTheVendoredFile,
             )
         });
         findings.one(|| {
@@ -117,10 +123,21 @@ impl ComponentCheck for CheckWordCheck {
                 list.words().len() == LIST_SIZE
                     && list.word(0) == "abacus"
                     && list.word(LIST_SIZE - 1) == "zoom",
-                "the EFF list is read wrongly",
+                crate::self_check::KnownAnswerDifference::TheEffListIsReadWrongly,
             )
         });
-        findings.each("vector", self.vectors, Self::vector);
+        findings.each(
+            crate::self_check::CaseKind::Vector,
+            self.vectors,
+            Self::vector,
+        );
+        // One fast five-index refusal guards the public boundary without any Argon2 work.
+        findings.one(|| {
+            crate::self_check::expect_refusal(
+                PasswordReview::check_index(&[0, 0, 0, 0, usize::MAX]),
+                "INVALID_REQUEST",
+            )
+        });
         findings.one(|| {
             let (typed, position, word) = ERASED;
             let review = PasswordReview::of(typed);
@@ -128,13 +145,16 @@ impl ComponentCheck for CheckWordCheck {
                 |repair: &super::Repair| repair.position() == position && repair.word() == word;
             let restored = review.reading() == Reading::Restorable
                 && matches!(review.repairs(), [repair] if repaired(repair));
-            expect(restored, "a word left out is not restored")
+            expect(
+                restored,
+                crate::self_check::KnownAnswerDifference::AWordLeftOutIsNotRestored,
+            )
         });
         findings.one(|| {
             let review = PasswordReview::of(MISMATCH);
             expect(
                 review.reading() == Reading::Mismatch && review.repairs().len() == DRAWN_WORDS + 1,
-                "six words that do not fit are accepted",
+                crate::self_check::KnownAnswerDifference::SixWordsThatDoNotFitAreAccepted,
             )
         });
         findings.outcome()
@@ -164,9 +184,9 @@ mod tests {
             list_sha256: "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903f",
             ..CheckWordCheck::new()
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed("the EFF list differs from the vendored file".to_owned())
+            "the EFF list differs from the vendored file".to_owned()
         );
         let mut vectors = VECTORS;
         vectors[2].check_index = 4151;

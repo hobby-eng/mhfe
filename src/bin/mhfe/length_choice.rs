@@ -21,21 +21,17 @@ pub(crate) fn choose(input: &mut Input, original: &OriginalFacts) -> Result<Suit
         .map(|&choice| Answer::new(label(choice), ""))
         .collect();
     let text = format!("Your phrase has {words} words. How long should the encrypted phrase be?");
-    let question = Question {
-        text: &text,
-        explanation: &[],
-        // The README explains the choice; ? compares both answers on request ([`explain`]).
-        more: Some(readme::CONTAINER_LENGTH),
-        record: Some("Container"),
-    };
+    let question = Question::with_details(
+        &text,
+        &[],
+        Some(readme::CONTAINER_LENGTH),
+        Some("Container"),
+    );
     let chosen = if crate::hidden_input::can_redraw() {
         choice::choose(
             &question,
             &answers,
-            Some(Help {
-                hint: "? explains both",
-                show: &|| explain(&choices),
-            }),
+            Some(Help::new("? explains both", &|| explain(&choices))),
         )?
         .ok_or(mhfe::MhfeError::Cancelled)?
     } else {

@@ -10,16 +10,16 @@
 //! this control.
 //!
 //! ```
-//! use mhfe::wallet::{find_address, master_fingerprint, Address, Coin, SearchLimits};
+//! use mhfe::wallet::{Fingerprint, Address, Coin, SearchLimits};
 //!
 //! // The public test phrase of BIP84, without a BIP39 passphrase.
 //! let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
 //!               abandon about";
 //! let address = Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu")?;
-//! let found = find_address(phrase, "", &address, None, SearchLimits::default())?;
+//! let found = address.find(phrase, "", None, SearchLimits::default())?;
 //! assert_eq!(found.map(|path| path.to_string()).as_deref(), Some("m/84'/0'/0'/0/0"));
-//! assert_eq!(master_fingerprint(phrase, "")?, [0x73, 0xc5, 0xda, 0x0a]);
-//! # Ok::<(), mhfe::MhfeError>(())
+//! assert_eq!(Fingerprint::of(phrase, "")?.to_string(), "73c5da0a");
+//! # Ok::<(), mhfe::wallet::WalletError>(())
 //! ```
 
 use std::fmt;
@@ -27,12 +27,17 @@ use std::str::FromStr;
 
 use bitcoin_hashes::{hash160, Hash};
 
-use crate::MhfeError;
+mod error;
+pub use error::{AddressIssue, KeyIssue, PathIssue, WalletError};
 
+mod coins;
 mod encodings;
+mod fingerprint;
+
+pub use coins::Coin;
+pub use fingerprint::Fingerprint;
 mod keys;
 
-pub(crate) use keys::bip39_seed;
 use keys::{program_for, ExtendedKey};
 
 #[cfg(any(
@@ -52,15 +57,13 @@ pub const MAX_ADDRESS_BYTES: usize = 128;
 
 /// The longest BIP39 passphrase taken, in bytes as typed: as long as a password may be, and far
 /// beyond any passphrase a wallet asks for (AUD-024-API019).
-pub const MAX_PASSPHRASE_BYTES: usize = crate::MAX_PASSWORD_BYTES;
+pub use crate::bip39_seed::MAX_PASSPHRASE_BYTES;
 
 /// Refuses a BIP39 passphrase longer than [`MAX_PASSPHRASE_BYTES`] (`PASSPHRASE_TOO_LONG`): every
 /// seed of the library is derived after it, and a front end may ask it before any work.
-pub fn require_passphrase_size(passphrase: &str) -> Result<(), MhfeError> {
-    if passphrase.len() > MAX_PASSPHRASE_BYTES {
-        return Err(MhfeError::PassphraseTooLong(passphrase.len()));
-    }
-    Ok(())
+/// The shared internal guard rejects a large secret before any wallet operation allocates.
+pub(crate) fn require_passphrase_size(passphrase: &str) -> Result<(), WalletError> {
+    crate::bip39_seed::require_size(passphrase).map_err(WalletError::from)
 }
 
 /// The most steps a derivation path may have: a BIP32 node keeps its depth in one byte
@@ -74,138 +77,16 @@ const CHAINS: [u32; 2] = [0, 1];
 const DIP9_PURPOSE: u32 = 9;
 const DIP17_FEATURE: u32 = 17;
 
-/// A coin whose single-key receiving addresses the rehearsal can look for. All of them use
-/// secp256k1 keys on BIP44-style paths `m/purpose'/coin'/account'/chain/index`, or for Dash
-/// Platform on DIP17 paths; they differ only in how a public key becomes an address.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Coin {
-    /// Bitcoin: "1...", "3...", "bc1q..." and "bc1p..." addresses.
-    Bitcoin,
-    /// Ethereum and every EVM network, which share its addresses.
-    Ethereum,
-    /// XRP: "r..." addresses.
-    Xrp,
-    /// Tron: "T..." addresses.
-    Tron,
-    /// Zcash transparent addresses; shielded ones are out of reach without its own cryptography.
-    Zcash,
-    /// Dogecoin: "D..." addresses.
-    Dogecoin,
-    /// Bitcoin Cash: "bitcoincash:q..." and "1..." addresses.
-    BitcoinCash,
-    /// Litecoin: "L...", "M...", "3..." and "ltc1q..." addresses.
-    Litecoin,
-    /// Ethereum Classic: "0x..." addresses.
-    EthereumClassic,
-    /// Cosmos: "cosmos1..." addresses.
-    Cosmos,
-    /// Injective: "inj1..." addresses.
-    Injective,
-    /// Dash and Dash Platform: "X..." and "dash1k..." addresses.
-    Dash,
-}
-
-impl Coin {
-    /// Every coin, in the alphabetical order of their names, which is the order the program
-    /// offers them in.
-    pub const ALL: [Self; 12] = [
-        Self::Bitcoin,
-        Self::BitcoinCash,
-        Self::Cosmos,
-        Self::Dash,
-        Self::Dogecoin,
-        Self::Ethereum,
-        Self::EthereumClassic,
-        Self::Injective,
-        Self::Litecoin,
-        Self::Tron,
-        Self::Xrp,
-        Self::Zcash,
-    ];
-
-    /// The name a person knows it by.
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::Bitcoin => "Bitcoin",
-            Self::Ethereum => "Ethereum and EVM networks",
-            Self::Xrp => "XRP",
-            Self::Tron => "Tron",
-            Self::Zcash => "Zcash",
-            Self::Dogecoin => "Dogecoin",
-            Self::BitcoinCash => "Bitcoin Cash",
-            Self::Litecoin => "Litecoin",
-            Self::EthereumClassic => "Ethereum Classic",
-            Self::Cosmos => "Cosmos",
-            Self::Injective => "Injective",
-            Self::Dash => "Dash",
-        }
-    }
-
-    /// The identifier of the command line and the browser package, such as "bitcoin-cash".
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::Bitcoin => "bitcoin",
-            Self::Ethereum => "ethereum",
-            Self::Xrp => "xrp",
-            Self::Tron => "tron",
-            Self::Zcash => "zcash",
-            Self::Dogecoin => "dogecoin",
-            Self::BitcoinCash => "bitcoin-cash",
-            Self::Litecoin => "litecoin",
-            Self::EthereumClassic => "ethereum-classic",
-            Self::Cosmos => "cosmos",
-            Self::Injective => "injective",
-            Self::Dash => "dash",
-        }
-    }
-
-    /// How the supported addresses begin, such as "1…, 3…, bc1q… or bc1p…".
-    pub fn address_forms(self) -> &'static str {
-        match self {
-            Self::Bitcoin => "1…, 3…, bc1q… or bc1p…",
-            Self::Ethereum | Self::EthereumClassic => "0x…",
-            Self::Xrp => "r…",
-            Self::Tron => "T…",
-            Self::Zcash => "t1…",
-            Self::Dogecoin => "D…",
-            Self::BitcoinCash => "bitcoincash:q… or 1…",
-            Self::Litecoin => "L…, M…, 3… or ltc1q…",
-            Self::Cosmos => "cosmos1…",
-            Self::Injective => "inj1…",
-            Self::Dash => "X…, dash1k… or tdash1k…",
-        }
-    }
-
-    /// The coin types (SLIP-44) of the paths searched on its main network. Bitcoin Cash forked
-    /// from Bitcoin and Ethereum Classic from Ethereum, and wallets made for them use either their
-    /// own coin type or the one of the chain they came from, so both are searched.
-    fn coin_types(self) -> &'static [u32] {
-        match self {
-            Self::Bitcoin => &[0],
-            Self::Ethereum | Self::Injective => &[60],
-            Self::Xrp => &[144],
-            Self::Tron => &[195],
-            Self::Zcash => &[133],
-            Self::Dogecoin => &[3],
-            Self::BitcoinCash => &[145, 0],
-            Self::Litecoin => &[2],
-            Self::EthereumClassic => &[61, 60],
-            Self::Cosmos => &[118],
-            Self::Dash => &[5],
-        }
-    }
-}
-
 impl FromStr for Coin {
-    type Err = MhfeError;
+    type Err = WalletError;
 
     /// Reads an exact lower-case identifier such as "bitcoin" or "bitcoin-cash". Other case or
-    /// surrounding white space is refused with [`MhfeError::InvalidCoin`].
-    fn from_str(text: &str) -> Result<Self, MhfeError> {
+    /// surrounding white space is refused with [`WalletError::InvalidCoin`].
+    fn from_str(text: &str) -> Result<Self, WalletError> {
         Self::ALL
             .into_iter()
             .find(|coin| coin.id() == text)
-            .ok_or(MhfeError::InvalidCoin)
+            .ok_or(WalletError::InvalidCoin)
     }
 }
 
@@ -242,6 +123,16 @@ impl AddressType {
         }
     }
 
+    /// The committed address program's byte length: a 160-bit hash or a Taproot output key.
+    const fn program_bytes(self) -> usize {
+        match self {
+            Self::P2tr => bitcoin_hashes::sha256::Hash::LEN,
+            Self::P2pkh | Self::P2shP2wpkh | Self::P2wpkh | Self::Keccak | Self::DashPlatform => {
+                hash160::Hash::LEN
+            }
+        }
+    }
+
     /// The first step of its standard paths: 44, 49, 84 or 86, as in the BIP of the same number,
     /// or 9 for Dash's feature paths (DIP9).
     pub fn purpose(self) -> u32 {
@@ -270,19 +161,76 @@ pub struct Address {
 }
 
 impl Address {
+    /// Looks for this address on the standard paths of its type, within `limits`, or only at `path` when
+    /// one is given. Returns the path where it was found. The phrase is read as for
+    /// [`Fingerprint::of`].
+    pub fn find(
+        &self,
+        phrase: &str,
+        passphrase: &str,
+        path: Option<&DerivationPath>,
+        limits: SearchLimits,
+    ) -> Result<Option<DerivationPath>, WalletError> {
+        self.find_until(phrase, passphrase, path, limits, &|| false)
+    }
+
+    /// [`Address::find`] that asks `stopped` before each address it derives and ends with
+    /// [`WalletError::Cancelled`] once it says so: a search over many addresses takes seconds, and a
+    /// cancel must not wait for it (AUD-016-API001).
+    pub fn find_until(
+        &self,
+        phrase: &str,
+        passphrase: &str,
+        path: Option<&DerivationPath>,
+        limits: SearchLimits,
+        stopped: &dyn Fn() -> bool,
+    ) -> Result<Option<DerivationPath>, WalletError> {
+        let master = ExtendedKey::master(phrase, passphrase)?;
+        if let Some(path) = path {
+            let key = master.derive(&path.0)?;
+            return Ok(
+                (program_for(&key, self.address_type)? == self.program).then(|| path.clone())
+            );
+        }
+
+        let chains = if self.hardened_chains() {
+            CHAINS.map(|chain| chain | HARDENED)
+        } else {
+            CHAINS
+        };
+        for root in self.search_roots() {
+            let root: Vec<u32> = root.iter().map(|step| step | HARDENED).collect();
+            for account in 0..limits.accounts {
+                let account_path = [root.as_slice(), &[account | HARDENED]].concat();
+                let account_key = master.derive(&account_path)?;
+                for chain in chains {
+                    let chain_key = account_key.child(chain)?;
+                    for index in 0..limits.indexes {
+                        if stopped() {
+                            return Err(WalletError::Cancelled);
+                        }
+                        let key = chain_key.child(index)?;
+                        if program_for(&key, self.address_type)? == self.program {
+                            let found = [account_path.as_slice(), &[chain, index]].concat();
+                            return Ok(Some(DerivationPath(found)));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
     /// Reads `text` as a supported receiving address of `coin`. Bitcoin and Litecoin P2SH
     /// addresses ("3…", "M…" or Bitcoin testnet "2…") are interpreted as nested SegWit
     /// (P2SH-P2WPKH, BIP49): a script hash does not reveal its script. Multisignature or other
     /// P2SH script addresses are read too, but the search derives only single-key nested SegWit
     /// and normally finds no match. P2WSH and other unsupported witness programs, CashAddr P2SH,
-    /// shielded or TEX Zcash and unsupported coin/network forms give [`MhfeError::InvalidAddress`].
-    pub fn parse(coin: Coin, text: &str) -> Result<Self, MhfeError> {
+    /// shielded or TEX Zcash and unsupported coin/network forms give `INVALID_ADDRESS`.
+    pub fn parse(coin: Coin, text: &str) -> Result<Self, WalletError> {
         let text = text.trim();
         if text.len() > MAX_ADDRESS_BYTES {
-            return Err(MhfeError::InvalidAddress(format!(
-                "it has {} bytes, more than any address ({MAX_ADDRESS_BYTES})",
-                text.len()
-            )));
+            return Err(AddressIssue::TooLong(text.len()).into());
         }
         encodings::parse(coin, text)
     }
@@ -301,20 +249,7 @@ impl Address {
     /// Taproot (BIP86)", "Platform payment (DIP17)" or, for Zcash, "transparent". `None` for a
     /// coin with one kind of address.
     pub fn type_description(&self) -> Option<String> {
-        let network = if self.testnet { "testnet, " } else { "" };
-        match self.coin {
-            Coin::Bitcoin | Coin::Litecoin => Some(format!(
-                "{network}{} (BIP{})",
-                self.address_type.name(),
-                self.address_type.purpose()
-            )),
-            Coin::Dash => Some(match self.address_type {
-                AddressType::DashPlatform => format!("{network}Platform payment (DIP17)"),
-                _ => "Core (BIP44)".to_owned(),
-            }),
-            Coin::Zcash => Some("transparent".to_owned()),
-            _ => None,
-        }
+        self.coin.type_description(self.address_type, self.testnet)
     }
 
     /// The roots of the paths searched for it, every step hardened: `[44, 5]` for `m/44'/5'`, or
@@ -349,18 +284,15 @@ impl Address {
 pub struct DerivationPath(Vec<u32>);
 
 impl FromStr for DerivationPath {
-    type Err = MhfeError;
+    type Err = WalletError;
 
     /// Strict: starts with `m`, steps separated by `/`, each a decimal number below 2^31 with an
     /// optional hardened mark; no spaces, signs or empty steps; at most [`MAX_PATH_DEPTH`] steps,
     /// counted before any is read.
-    fn from_str(text: &str) -> Result<Self, MhfeError> {
-        let invalid =
-            || MhfeError::InvalidDerivationPath("it is not a path like m/84'/0'/0'/0/5".to_owned());
+    fn from_str(text: &str) -> Result<Self, WalletError> {
+        let invalid = || WalletError::Path(PathIssue::Malformed);
         if text.split('/').count() > MAX_PATH_DEPTH + 1 {
-            return Err(MhfeError::InvalidDerivationPath(format!(
-                "it has more than {MAX_PATH_DEPTH} steps, the deepest a BIP32 key can be"
-            )));
+            return Err(PathIssue::TooDeep.into());
         }
         let mut steps = text.split('/');
         if steps.next() != Some("m") {
@@ -415,24 +347,21 @@ impl SearchLimits {
     pub const MOST: u32 = HARDENED;
 
     /// Limits for the first `accounts` accounts and the first `indexes` addresses of each chain.
-    pub fn new(accounts: u32, indexes: u32) -> Result<Self, MhfeError> {
+    pub fn new(accounts: u32, indexes: u32) -> Result<Self, WalletError> {
         let possible = |count: u32| (1..=Self::MOST).contains(&count);
         if possible(accounts) && possible(indexes) {
             Ok(Self { accounts, indexes })
         } else {
             // The limits stand for the paths the search derives, so a count out of range is
             // reported as the invalid path it would lead to.
-            Err(MhfeError::InvalidDerivationPath(format!(
-                "a search covers 1 to {} accounts and indexes, not {accounts} and {indexes}",
-                Self::MOST
-            )))
+            Err(PathIssue::SearchLimits { accounts, indexes }.into())
         }
     }
 
     /// The first account's first `gap` receiving and as many change addresses: where the decoy
     /// search of two missing words looks for an address ([`crate::search::DECOY_SCAN_GAP`] by
     /// default).
-    pub fn first_account(gap: u32) -> Result<Self, MhfeError> {
+    pub fn first_account(gap: u32) -> Result<Self, WalletError> {
         Self::new(1, gap)
     }
 
@@ -511,7 +440,7 @@ impl AddressSearch {
     /// coin (INVALID_COIN), an address that is not one of the coin's (INVALID_ADDRESS) and a path
     /// that is not a valid one (INVALID_DERIVATION_PATH). The browser package's `describeAddress`
     /// gives this, and the self-check `address-search` compares it with known answers.
-    pub fn describe(coin: &str, address: &str, path: &str) -> Result<Self, MhfeError> {
+    pub fn describe(coin: &str, address: &str, path: &str) -> Result<Self, WalletError> {
         Self::describe_within(coin, address, path, SearchLimits::default())
     }
 
@@ -522,7 +451,7 @@ impl AddressSearch {
         address: &str,
         path: &str,
         limits: SearchLimits,
-    ) -> Result<Self, MhfeError> {
+    ) -> Result<Self, WalletError> {
         let coin: Coin = coin.parse()?;
         let address = Address::parse(coin, address)?;
         let path = match path {
@@ -575,100 +504,9 @@ fn root_pattern(roots: &[Vec<u32>]) -> String {
         .join("/")
 }
 
-/// Reads a master key fingerprint written as eight hexadecimal digits, as wallets show it.
-pub fn parse_fingerprint(text: &str) -> Result<[u8; 4], MhfeError> {
-    let text = text.trim();
-    let bytes = hex::decode(text).ok().filter(|bytes| bytes.len() == 4);
-    bytes
-        .and_then(|bytes| bytes.try_into().ok())
-        .ok_or_else(|| {
-            MhfeError::InvalidFingerprint("it is not eight hexadecimal digits".to_owned())
-        })
-}
-
-/// A master key fingerprint as wallets show it and [`parse_fingerprint`] reads it: eight lower
-/// case hexadecimal digits.
-pub fn fingerprint_text(fingerprint: [u8; 4]) -> String {
-    hex::encode(fingerprint)
-}
-
-/// [`master_fingerprint`] as [`fingerprint_text`] writes it.
-pub fn master_fingerprint_text(phrase: &str, passphrase: &str) -> Result<String, MhfeError> {
-    master_fingerprint(phrase, passphrase).map(fingerprint_text)
-}
-
-/// The first four bytes of HASH160 of the master public key (BIP32), for `phrase` and the
-/// BIP39 `passphrase` (empty when the wallet uses none). The phrase is read as every phrase input
-/// of this library reads it: any spacing and letter case, and four letters of a word are enough.
-pub fn master_fingerprint(phrase: &str, passphrase: &str) -> Result<[u8; 4], MhfeError> {
-    let master = ExtendedKey::master(phrase, passphrase)?;
-    let digest = hash160::Hash::hash(&master.public_key()?).to_byte_array();
-    Ok([digest[0], digest[1], digest[2], digest[3]])
-}
-
-/// Looks for `address` on the standard paths of its type, within `limits`, or only at `path` when
-/// one is given. Returns the path where it was found. The phrase is read as for
-/// [`master_fingerprint`].
-pub fn find_address(
-    phrase: &str,
-    passphrase: &str,
-    address: &Address,
-    path: Option<&DerivationPath>,
-    limits: SearchLimits,
-) -> Result<Option<DerivationPath>, MhfeError> {
-    find_address_until(phrase, passphrase, address, path, limits, &|| false)
-}
-
-/// [`find_address`] that asks `stopped` before each address it derives and ends with
-/// [`MhfeError::Cancelled`] once it says so: a search over many addresses takes seconds, and a
-/// cancel must not wait for it (AUD-016-API001).
-pub fn find_address_until(
-    phrase: &str,
-    passphrase: &str,
-    address: &Address,
-    path: Option<&DerivationPath>,
-    limits: SearchLimits,
-    stopped: &dyn Fn() -> bool,
-) -> Result<Option<DerivationPath>, MhfeError> {
-    let master = ExtendedKey::master(phrase, passphrase)?;
-    if let Some(path) = path {
-        let key = master.derive(&path.0)?;
-        return Ok(
-            (program_for(&key, address.address_type)? == address.program).then(|| path.clone()),
-        );
-    }
-
-    let chains = if address.hardened_chains() {
-        CHAINS.map(|chain| chain | HARDENED)
-    } else {
-        CHAINS
-    };
-    for root in address.search_roots() {
-        let root: Vec<u32> = root.iter().map(|step| step | HARDENED).collect();
-        for account in 0..limits.accounts {
-            let account_path = [root.as_slice(), &[account | HARDENED]].concat();
-            let account_key = master.derive(&account_path)?;
-            for chain in chains {
-                let chain_key = account_key.child(chain)?;
-                for index in 0..limits.indexes {
-                    if stopped() {
-                        return Err(MhfeError::Cancelled);
-                    }
-                    let key = chain_key.child(index)?;
-                    if program_for(&key, address.address_type)? == address.program {
-                        let found = [account_path.as_slice(), &[chain, index]].concat();
-                        return Ok(Some(DerivationPath(found)));
-                    }
-                }
-            }
-        }
-    }
-    Ok(None)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::encodings::DASH_PLATFORM_P2PKH;
+    use super::coins::DASH_PLATFORM_P2PKH;
     use super::*;
 
     #[test]
@@ -735,11 +573,11 @@ mod tests {
         // 73c5da0a is derived from the root key BIP-0084 publishes; b4e3f5ed was computed
         // independently with Python's hashlib from the BIP32 and BIP39 specifications.
         assert_eq!(
-            hex::encode(master_fingerprint(ABANDON, "").unwrap()),
+            Fingerprint::of(ABANDON, "").unwrap().to_string(),
             "73c5da0a"
         );
         assert_eq!(
-            hex::encode(master_fingerprint(ABANDON, "TREZOR").unwrap()),
+            Fingerprint::of(ABANDON, "TREZOR").unwrap().to_string(),
             "b4e3f5ed"
         );
     }
@@ -755,12 +593,16 @@ mod tests {
             let address = Address::parse(coin, text).unwrap();
             let expected = path(path_text);
             assert_eq!(
-                find_address(ABANDON, passphrase, &address, Some(&expected), one).unwrap(),
+                address
+                    .find(ABANDON, passphrase, Some(&expected), one)
+                    .unwrap(),
                 Some(expected.clone()),
                 "{text} at its path"
             );
             assert_eq!(
-                find_address(ABANDON, passphrase, &address, None, SearchLimits::default()).unwrap(),
+                address
+                    .find(ABANDON, passphrase, None, SearchLimits::default())
+                    .unwrap(),
                 Some(expected),
                 "{text} by the search"
             );
@@ -916,7 +758,9 @@ mod tests {
                 address.type_description().as_deref(),
                 Some("testnet, Platform payment (DIP17)")
             );
-            let found = find_address(PHRASE, "", &address, None, SearchLimits::default()).unwrap();
+            let found = address
+                .find(PHRASE, "", None, SearchLimits::default())
+                .unwrap();
             assert_eq!(
                 found.map(|path| path.to_string()),
                 Some(format!("m/9'/1'/17'/0'/0'/{index}")),
@@ -1006,12 +850,37 @@ mod tests {
     }
 
     #[test]
+    fn address_examples_keep_the_public_browser_text() {
+        let examples = [
+            "1…, 3…, bc1q… or bc1p…",
+            "bitcoincash:q… or 1…",
+            "cosmos1…",
+            "X…, dash1k… or tdash1k…",
+            "D…",
+            "0x…",
+            "0x…",
+            "inj1…",
+            "L…, M…, 3… or ltc1q…",
+            "T…",
+            "r…",
+            "t1…",
+        ];
+        assert_eq!(Coin::ALL.map(Coin::address_forms), examples);
+        // Public discriminants existed before the policy declarations were placed in display
+        // order. Retain them for Rust callers too.
+        assert_eq!(
+            Coin::ALL.map(|coin| coin as u8),
+            [0, 6, 9, 11, 5, 1, 8, 10, 7, 3, 2, 4]
+        );
+    }
+
+    #[test]
     fn every_coin_reads_its_identifier() {
         for coin in Coin::ALL {
             assert_eq!(coin.id().parse::<Coin>().unwrap(), coin);
         }
         for refused in ["Bitcoin-Cash", "BITCOIN", " bitcoin", "bitcoin "] {
-            assert_eq!(refused.parse::<Coin>(), Err(MhfeError::InvalidCoin));
+            assert_eq!(refused.parse::<Coin>(), Err(WalletError::InvalidCoin));
         }
         assert!("solana".parse::<Coin>().is_err());
     }
@@ -1022,7 +891,9 @@ mod tests {
         let target = Address::parse(Coin::Bitcoin, "39kh1g5VzX7eEEzAnbNZsG2w1WCYNQVu3G").unwrap();
         assert_eq!(target.address_type(), AddressType::P2shP2wpkh);
         assert_eq!(
-            find_address(ABANDON, "", &target, None, SearchLimits::new(1, 1).unwrap()).unwrap(),
+            target
+                .find(ABANDON, "", None, SearchLimits::new(1, 1).unwrap())
+                .unwrap(),
             None
         );
     }
@@ -1038,7 +909,7 @@ mod tests {
             (Coin::Dash, "yRd4FhXfVGHXpsuZXPNkMrfD9GVj46pnjt",
                 "Dash Core testnet addresses (y…) are not supported; give a mainnet X… address"),
         ] {
-            assert_eq!(Address::parse(coin, text), Err(MhfeError::InvalidAddress(reason.into())));
+            assert_eq!(Address::parse(coin, text).unwrap_err().to_string(), format!("the address cannot be used for the check: {reason}"));
         }
         // A valid Bech32m testnet TEX address of a synthetic zero hash.
         let textest =
@@ -1046,15 +917,13 @@ mod tests {
                 .unwrap();
         assert_eq!(
             Address::parse(Coin::Zcash, &textest),
-            Err(MhfeError::InvalidAddress(
-                "the TEX address form is not supported; give its transparent t1… form on mainnet"
-                    .into()
-            ))
+            Err(AddressIssue::ZcashTex.into())
         );
         let p2sh = bs58::encode([0x13; 21]).with_check().into_string();
-        assert_eq!(Address::parse(Coin::Dash, &p2sh), Err(MhfeError::InvalidAddress(
-            "Dash Core testnet P2SH addresses are not supported; give a single-key mainnet X… address".into()
-        )));
+        assert_eq!(
+            Address::parse(Coin::Dash, &p2sh),
+            Err(AddressIssue::DashTestnetScript.into())
+        );
         assert!(
             Address::parse(Coin::Dash, "tdash1kr0xt5wj85ht5u464rfysjrq75rewz9mysjwf59p").is_ok()
         );
@@ -1068,7 +937,7 @@ mod tests {
             assert!(
                 matches!(
                     SearchLimits::new(accounts, indexes),
-                    Err(MhfeError::InvalidDerivationPath(_))
+                    Err(WalletError::Path(_))
                 ),
                 "{accounts} accounts, {indexes} indexes"
             );
@@ -1087,8 +956,8 @@ mod tests {
         };
         let limits = SearchLimits::default();
         assert_eq!(
-            find_address_until(ABANDON, "", &target, None, limits, &stopped),
-            Err(MhfeError::Cancelled)
+            target.find_until(ABANDON, "", None, limits, &stopped),
+            Err(WalletError::Cancelled)
         );
         assert_eq!(derived.get(), 4);
     }
@@ -1098,22 +967,24 @@ mod tests {
         // Account 2, change chain, index 19: computed independently (Python, hashlib).
         let target =
             Address::parse(Coin::Bitcoin, "bc1q4du7e3vw34vsflf76xf9h8gktms9wzqcl7vlh5").unwrap();
-        let found = find_address(ABANDON, "", &target, None, SearchLimits::default()).unwrap();
+        let found = target
+            .find(ABANDON, "", None, SearchLimits::default())
+            .unwrap();
         assert_eq!(found, Some(path("m/84'/0'/2'/1/19")));
 
         let small = SearchLimits::new(2, 20).unwrap();
-        assert_eq!(
-            find_address(ABANDON, "", &target, None, small).unwrap(),
-            None
-        );
+        assert_eq!(target.find(ABANDON, "", None, small).unwrap(), None);
         // A different passphrase gives a different wallet.
         assert_eq!(
-            find_address(ABANDON, "TREZOR", &target, None, SearchLimits::default()).unwrap(),
+            target
+                .find(ABANDON, "TREZOR", None, SearchLimits::default())
+                .unwrap(),
             None
         );
         // An explicit path is checked alone.
         let explicit = path("m/84'/0'/2'/1/19");
-        assert!(find_address(ABANDON, "", &target, Some(&explicit), small)
+        assert!(target
+            .find(ABANDON, "", Some(&explicit), small)
             .unwrap()
             .is_some());
     }
@@ -1131,21 +1002,25 @@ mod tests {
             four_letters,
             format!("  {}\t", ABANDON.replace(' ', "  ")),
         ] {
-            assert_eq!(*crate::read_phrase(&typed).unwrap(), ABANDON, "{typed}");
             assert_eq!(
-                hex::encode(master_fingerprint(&typed, "").unwrap()),
+                crate::Phrase::read(&typed).unwrap().words(),
+                ABANDON,
+                "{typed}"
+            );
+            assert_eq!(
+                Fingerprint::of(&typed, "").unwrap().to_string(),
                 "73c5da0a",
                 "{typed}"
             );
             let first = path("m/84'/0'/0'/0/0");
-            let found = find_address(&typed, "", &address, None, SearchLimits::new(1, 1).unwrap());
+            let found = address.find(&typed, "", None, SearchLimits::new(1, 1).unwrap());
             assert_eq!(found.unwrap(), Some(first), "{typed}");
         }
         // A word of three letters that is not a word of the list stays refused, as everywhere.
         let short = ABANDON.replacen("abandon", "aba", 1);
         assert!(matches!(
-            master_fingerprint(&short, ""),
-            Err(MhfeError::InvalidPhrase(_))
+            Fingerprint::of(&short, ""),
+            Err(WalletError::Phrase(crate::PhraseError::Original(_)))
         ));
     }
 
@@ -1266,17 +1141,24 @@ mod tests {
         let phrase = crate::test_support::ABANDON_12;
         let at_limit = "a".repeat(MAX_PASSPHRASE_BYTES);
         let over = "a".repeat(MAX_PASSPHRASE_BYTES + 1);
-        assert!(master_fingerprint(phrase, &at_limit).is_ok());
-        let too_long = |result: Result<(), MhfeError>| {
-            assert_eq!(result.unwrap_err().code(), "PASSPHRASE_TOO_LONG");
-        };
-        too_long(master_fingerprint(phrase, &over).map(|_| ()));
-        too_long(crate::wallet_check::phrase_passes(phrase, &over).map(|_| ()));
+        assert!(Fingerprint::of(phrase, &at_limit).is_ok());
+        fn too_long<E: Into<crate::MhfeError>>(result: Result<(), E>) {
+            assert_eq!(
+                result.map_err(Into::into).unwrap_err().code(),
+                "PASSPHRASE_TOO_LONG"
+            );
+        }
+        too_long(Fingerprint::of(phrase, &over).map(|_| ()));
+        too_long(
+            crate::wallet_check::WalletCheck::new(&over)
+                .phrase_passes(phrase)
+                .map(|_| ()),
+        );
         too_long(crate::wallet_check::PhraseDraw::with_check(&over).map(|_| ()));
         let container = crate::test_support::zero_12_container();
         too_long(crate::HiddenWallets::new(&container, &over).map(|_| ()));
         let reference = crate::Reference::Fingerprint {
-            fingerprint: [0; 4],
+            fingerprint: Fingerprint::from_bytes([0; 4]),
             passphrase: &over,
         };
         too_long(crate::rehearsal::refuse_impossible(24, &reference));
@@ -1319,11 +1201,11 @@ mod tests {
     #[test]
     fn fingerprints_are_eight_hex_digits() {
         assert_eq!(
-            parse_fingerprint(" 73C5DA0A ").unwrap(),
+            Fingerprint::parse(" 73C5DA0A ").unwrap().bytes(),
             crate::test_support::ABANDON_12_FINGERPRINT
         );
         for invalid in ["73c5da0", "73c5da0a0", "zzzzzzzz", ""] {
-            assert!(parse_fingerprint(invalid).is_err(), "{invalid:?}");
+            assert!(Fingerprint::parse(invalid).is_err(), "{invalid:?}");
         }
     }
 }

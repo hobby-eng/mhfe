@@ -22,7 +22,8 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::packing::{self, STATE_BYTES, STATE_WORDS};
 use crate::phrase::{self, LIST_SIZE, WORD_BITS};
-use crate::MhfeError;
+mod error;
+pub use error::{WishError, WishWord};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-wallet"))]
 pub(crate) mod known_answers;
@@ -68,18 +69,45 @@ pub enum Randomness {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WishOdds {
     /// The random bits it keeps, about.
-    pub random_bits: f64,
+    random_bits: f64,
     /// How that compares with the recommendation, as a front end says it.
-    pub randomness: Randomness,
+    randomness: Randomness,
     /// The draws it is expected to take, the wallet check's included.
-    pub expected_draws: f64,
+    expected_draws: f64,
     /// Whether a chosen word makes the phrase recognisable: someone who learns or guesses it can
     /// rule out almost every wrong MHFE password with it, before any BIP39 passphrase, and tell the
     /// wallet from a decoy, whose phrase is random (mhfe_spec review, 2026-10-08). The random bits
     /// do not count this. Words never to use alone filter too little to matter.
-    pub recognisable: bool,
+    recognisable: bool,
     /// Whether the chosen word has a fixed position, where it costs more than anywhere.
-    pub fixed_position: bool,
+    fixed_position: bool,
+}
+
+impl WishOdds {
+    /// Approximate random bits retained by a phrase with these wishes and checks.
+    pub const fn random_bits(self) -> f64 {
+        self.random_bits
+    }
+
+    /// How the retained bits compare with the recommendation.
+    pub const fn randomness(self) -> Randomness {
+        self.randomness
+    }
+
+    /// Expected draws, including the wallet check.
+    pub const fn expected_draws(self) -> f64 {
+        self.expected_draws
+    }
+
+    /// Whether a chosen word lets someone distinguish the intended wallet from almost all decoys.
+    pub const fn recognisable(self) -> bool {
+        self.recognisable
+    }
+
+    /// Whether the chosen word has a fixed position.
+    pub const fn fixed_position(self) -> bool {
+        self.fixed_position
+    }
 }
 
 /// The words a person wishes for in a new 24-word phrase, checked: valid English BIP39 words, at
@@ -108,41 +136,26 @@ impl WordWishes {
 
     /// The wishes `chosen`, each a word typed as a person writes it (any letter case, four
     /// letters of a word enough) with its place, and `never_use`, words the phrase must not hold.
-    pub fn new(chosen: &[(Place, &str)], never_use: &[&str]) -> Result<Self, MhfeError> {
+    pub fn new(chosen: &[(Place, &str)], never_use: &[&str]) -> Result<Self, WishError> {
         if chosen.len() > MAX_CHOSEN_WORDS {
-            return Err(wish(format!(
-                "choose at most {}",
-                words_text(MAX_CHOSEN_WORDS)
-            )));
+            return Err(WishError::TooManyChosen);
         }
         if never_use.len() > MAX_NEVER_USE_WORDS {
-            return Err(wish(format!(
-                "name at most {} never to use",
-                words_text(MAX_NEVER_USE_WORDS)
-            )));
+            return Err(WishError::TooManyExcluded);
         }
         let mut wishes = Self::none();
         for typed in never_use {
-            wishes
-                .never_use
-                .push(number_of(typed, "the word never to use")?);
+            wishes.never_use.push(number_of(typed, WishWord::NeverUse)?);
         }
         for (index, &(place, typed)) in chosen.iter().enumerate() {
-            let label = if MAX_CHOSEN_WORDS == 1 {
-                "the chosen word".to_owned()
-            } else {
-                format!("chosen word {}", index + 1)
-            };
-            let number = number_of(typed, &label)?;
+            let number = number_of(typed, WishWord::Chosen(index + 1))?;
             if wishes.never_use.contains(&number) {
-                return Err(wish(format!("{label} is also a word never to use")));
+                return Err(WishError::ExcludedChosen(index + 1));
             }
             match place {
                 Place::Anywhere => wishes.anywhere.push(number),
                 Place::At(position) if !(1..=STATE_WORDS).contains(&position) => {
-                    return Err(wish(format!(
-                        "{label} needs a position from 1 to {STATE_WORDS}"
-                    )));
+                    return Err(WishError::Position(index + 1));
                 }
                 Place::At(position) => wishes.fixed.push((position - 1, number)),
             }
@@ -250,23 +263,13 @@ impl WordWishes {
     }
 }
 
-/// The number of a word as typed, `label` naming it in a refusal.
-fn number_of(typed: &str, label: &str) -> Result<u16, MhfeError> {
+/// The number of a word as typed, `role` naming it in a refusal.
+fn number_of(typed: &str, role: WishWord) -> Result<u16, WishError> {
     // Read as a phrase's word is (phrase::typed_word).
     phrase::typed_word(typed.trim())
         .and_then(phrase::word_number)
         // The word itself is not repeated: it is about to become part of a secret phrase.
-        .ok_or_else(|| wish(format!("{label} is not an English BIP39 word")))
-}
-
-fn wish(reason: String) -> MhfeError {
-    MhfeError::InvalidWordWish(reason)
-}
-
-/// "1 word" or "2 words".
-fn words_text(count: usize) -> String {
-    let words = if count == 1 { "word" } else { "words" };
-    format!("{count} {words}")
+        .ok_or(WishError::UnknownWord(role))
 }
 
 #[cfg(test)]
@@ -337,19 +340,19 @@ mod tests {
         // 256 - 11 - 23 x log2(2048 / 2047) - 16 = 228.98 bits, allowed but not recommended.
         let worst = WordWishes::new(&[at(1, "happy")], &["abandon"]).unwrap();
         let odds = worst.odds(16);
-        assert!((228.98..228.99).contains(&odds.random_bits), "{odds:?}");
-        assert_eq!(odds.randomness, Randomness::NotRecommended);
+        assert!((228.98..228.99).contains(&odds.random_bits()), "{odds:?}");
+        assert_eq!(odds.randomness(), Randomness::NotRecommended);
         // Without the check 244.98: ample. The check alone keeps 240, nothing at all 256.
-        assert!((244.98..244.99).contains(&worst.odds(0).random_bits));
-        assert_eq!(worst.odds(0).randomness, Randomness::Ample);
-        assert_eq!(WordWishes::none().odds(16).randomness, Randomness::Ample);
-        assert_eq!(WordWishes::none().odds(16).random_bits, 240.0);
-        assert_eq!(WordWishes::none().odds(0).randomness, Randomness::Full);
+        assert!((244.98..244.99).contains(&worst.odds(0).random_bits()));
+        assert_eq!(worst.odds(0).randomness(), Randomness::Ample);
+        assert_eq!(WordWishes::none().odds(16).randomness(), Randomness::Ample);
+        assert_eq!(WordWishes::none().odds(16).random_bits(), 240.0);
+        assert_eq!(WordWishes::none().odds(0).randomness(), Randomness::Full);
         // A word anywhere instead keeps 233.56 with the check and 249.56 without.
         let anywhere = WordWishes::new(&[(Place::Anywhere, "happy")], &["abandon"]).unwrap();
-        assert!((233.55..233.57).contains(&anywhere.odds(16).random_bits));
-        assert!((249.55..249.57).contains(&anywhere.odds(0).random_bits));
-        assert!(worst.odds(16).fixed_position && !anywhere.odds(16).fixed_position);
+        assert!((233.55..233.57).contains(&anywhere.odds(16).random_bits()));
+        assert!((249.55..249.57).contains(&anywhere.odds(0).random_bits()));
+        assert!(worst.odds(16).fixed_position() && !anywhere.odds(16).fixed_position());
     }
 
     /// A word never to use costs about 0.016 bits, which the rating leaves out: with the wallet
@@ -360,12 +363,12 @@ mod tests {
         let never = WordWishes::new(&[], &["abandon"]).unwrap();
         let checked = never.odds(16);
         assert!(
-            (239.98..239.99).contains(&checked.random_bits),
+            (239.98..239.99).contains(&checked.random_bits()),
             "{checked:?}"
         );
-        assert_eq!(checked.randomness, Randomness::Ample);
-        assert!(!checked.fixed_position && !checked.recognisable);
-        assert_eq!(never.odds(0).randomness, Randomness::Ample);
+        assert_eq!(checked.randomness(), Randomness::Ample);
+        assert!(!checked.fixed_position() && !checked.recognisable());
+        assert_eq!(never.odds(0).randomness(), Randomness::Ample);
     }
 
     /// The wishes name no word in `Debug` and are wiped by `zeroize`, as on drop
@@ -380,27 +383,27 @@ mod tests {
 
     #[test]
     fn chosen_words_make_a_phrase_recognisable() {
-        assert!(!WordWishes::none().odds(16).recognisable);
+        assert!(!WordWishes::none().odds(16).recognisable());
         let never = WordWishes::new(&[], &["abandon"]).unwrap();
-        assert!(!never.odds(0).recognisable);
+        assert!(!never.odds(0).recognisable());
         let fixed = WordWishes::new(&[at(3, "happy")], &[]).unwrap();
-        assert!(fixed.odds(0).recognisable);
+        assert!(fixed.odds(0).recognisable());
         let anywhere = WordWishes::new(&[(Place::Anywhere, "happy")], &[]).unwrap();
-        assert!(anywhere.odds(16).recognisable);
+        assert!(anywhere.odds(16).recognisable());
     }
 
     #[test]
     fn every_wish_is_quick_to_draw() {
         // A fixed last word: its 8 checksum bits must come out of the hash, 256 draws.
         let last = WordWishes::new(&[at(24, "zoo")], &[]).unwrap();
-        assert_eq!(last.odds(0).expected_draws, 256.0);
-        assert_eq!(last.odds(0).random_bits, 245.0);
+        assert_eq!(last.odds(0).expected_draws(), 256.0);
+        assert_eq!(last.odds(0).random_bits(), 245.0);
         // A word anywhere: about 85 draws; with a word never to use a little more.
         let anywhere = WordWishes::new(&[(Place::Anywhere, "happy")], &["abandon"]).unwrap();
         let odds = anywhere.odds(0);
-        assert!((80.0..90.0).contains(&odds.expected_draws), "{odds:?}");
+        assert!((80.0..90.0).contains(&odds.expected_draws()), "{odds:?}");
         // The wallet check multiplies them by 65,536.
-        assert_eq!(last.odds(16).expected_draws, 256.0 * 65_536.0);
+        assert_eq!(last.odds(16).expected_draws(), 256.0 * 65_536.0);
     }
 
     #[test]
@@ -542,7 +545,7 @@ mod tests {
         for position in [0, usize::MAX] {
             assert!(matches!(
                 WordWishes::new(&[at(position, "happy")], &[]),
-                Err(MhfeError::InvalidWordWish(_))
+                Err(WishError::Position(1))
             ));
         }
     }

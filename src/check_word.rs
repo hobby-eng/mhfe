@@ -16,7 +16,9 @@ use zeroize::Zeroizing;
 
 use crate::eff::{EffList, LIST_SIZE};
 use crate::memory::LockedText;
-use crate::{MhfeError, Password};
+
+#[cfg(test)]
+use crate::Password;
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -24,6 +26,40 @@ use crate::{MhfeError, Password};
     feature = "browser-passwords"
 ))]
 pub(crate) mod known_answers;
+
+/// An explicit correction or repair that this review did not offer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReviewError {
+    /// The explicit choice was absent from this review.
+    NotOffered,
+    /// The caller supplied a review-choice name the profile does not offer.
+    UnknownChoice,
+    /// A drawn word's index is outside the EFF list.
+    InvalidIndex,
+}
+impl ReviewError {
+    /// The stable typed refusal code.
+    pub const fn error_code(&self) -> crate::ErrorCode {
+        match self {
+            Self::NotOffered => crate::ErrorCode::PasswordRepairNotOffered,
+            Self::UnknownChoice | Self::InvalidIndex => crate::ErrorCode::InvalidRequest,
+        }
+    }
+    /// The machine-readable refusal code.
+    pub const fn code(&self) -> &'static str {
+        self.error_code().as_str()
+    }
+}
+impl std::fmt::Display for ReviewError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::NotOffered => "the review of this password did not offer that choice",
+            Self::UnknownChoice => "invalid request: unknown password choice",
+            Self::InvalidIndex => "invalid request: password word index is outside the EFF list",
+        })
+    }
+}
+impl std::error::Error for ReviewError {}
 
 /// The profile's name in the specification.
 pub const PROFILE: &str = "MHFE-PASSWORD-CHECK-1";
@@ -36,9 +72,22 @@ const WEIGHTS: [usize; DRAWN_WORDS] = [1, 5, 7, 11, 13];
 /// same, but this one says it on purpose.
 pub const UNREADABLE: &str = "?";
 
-/// The index of the check word for the indexes of the five drawn words:
-/// (d1 + 5 d2 + 7 d3 + 11 d4 + 13 d5) mod 7776.
-pub fn check_index(drawn: &[usize; DRAWN_WORDS]) -> usize {
+impl PasswordReview {
+    /// The index of the check word for the indexes of the five drawn words:
+    /// (d1 + 5 d2 + 7 d3 + 11 d4 + 13 d5) mod 7776.
+    ///
+    /// Every index must be below 7,776; otherwise [`ReviewError::InvalidIndex`] is returned
+    /// before arithmetic. This method needs no textual review or password copy.
+    pub fn check_index(drawn: &[usize; DRAWN_WORDS]) -> Result<usize, ReviewError> {
+        if drawn.iter().any(|&index| index >= LIST_SIZE) {
+            return Err(ReviewError::InvalidIndex);
+        }
+        Ok(weighted_index(drawn))
+    }
+}
+
+/// Only validated EFF indexes enter this arithmetic: at most 7,775 * 13 per product.
+fn weighted_index(drawn: &[usize; DRAWN_WORDS]) -> usize {
     drawn
         .iter()
         .zip(WEIGHTS)
@@ -209,7 +258,7 @@ impl PasswordReview {
     }
 
     /// The password for `choice`, built at its final size and locked.
-    pub fn apply(&self, choice: ReviewChoice) -> Result<LockedText, MhfeError> {
+    pub fn apply(&self, choice: ReviewChoice) -> Result<LockedText, ReviewError> {
         match choice {
             ReviewChoice::AsTyped => Ok(LockedText::copy_of(&self.typed)),
             ReviewChoice::Corrected if self.offers_correction() => {
@@ -220,8 +269,17 @@ impl PasswordReview {
                 .iter()
                 .find(|repair| repair.position == position)
                 .map(|repair| repaired(self.reviewed(), repair))
-                .ok_or(MhfeError::PasswordRepairNotOffered),
-            ReviewChoice::Corrected => Err(MhfeError::PasswordRepairNotOffered),
+                .ok_or(ReviewError::NotOffered),
+            ReviewChoice::Corrected => Err(ReviewError::NotOffered),
+        }
+    }
+
+    /// The password a person typed for a new container or wallet, after the review choice they made:
+    /// `choice` applies a correction or repair the review offered, and `None` keeps the text as typed.
+    pub fn choose(typed: &str, choice: Option<ReviewChoice>) -> Result<LockedText, ReviewError> {
+        match choice {
+            None | Some(ReviewChoice::AsTyped) => Ok(LockedText::copy_of(typed)),
+            Some(choice) => PasswordReview::of(typed).apply(choice),
         }
     }
 
@@ -229,46 +287,6 @@ impl PasswordReview {
     fn reviewed(&self) -> &str {
         self.written.as_ref().map_or(&*self.typed, |(form, _)| form)
     }
-}
-
-/// Checks a new password as every front end does, in this order: the password's own rules first
-/// ([`Password::new`]), then that `repeat`, where it is typed twice, is exactly the same text
-/// (`PASSWORDS_DIFFER`), compared before any review.
-pub fn check_typed_twice(typed: &str, repeat: Option<&str>) -> Result<(), MhfeError> {
-    Password::new(typed)?;
-    match repeat {
-        Some(repeat) => require_same(typed, repeat),
-        None => Ok(()),
-    }
-}
-
-/// Refuses a repetition that is not exactly the password typed first (`PASSWORDS_DIFFER`): for a
-/// front end that checks the first entry's rules before it asks for the repetition.
-pub fn require_same(typed: &str, repeat: &str) -> Result<(), MhfeError> {
-    if repeat != typed {
-        return Err(MhfeError::PasswordsDiffer);
-    }
-    Ok(())
-}
-
-/// The password a person typed for a new container or wallet, after the review choice they made:
-/// `choice` applies a correction or repair the review offered, and `None` keeps the text as typed.
-pub fn chosen_password(typed: &str, choice: Option<ReviewChoice>) -> Result<LockedText, MhfeError> {
-    match choice {
-        None | Some(ReviewChoice::AsTyped) => Ok(LockedText::copy_of(typed)),
-        Some(choice) => PasswordReview::of(typed).apply(choice),
-    }
-}
-
-/// The password a person typed, twice for a new one, checked as [`check_typed_twice`], then with
-/// the review `choice` applied and the text that gives checked as a password again.
-pub fn typed_password(
-    typed: &str,
-    repeat: Option<&str>,
-    choice: Option<ReviewChoice>,
-) -> Result<Password, MhfeError> {
-    check_typed_twice(typed, repeat)?;
-    Password::new(&chosen_password(typed, choice)?)
 }
 
 /// Reads a password. It is split at single spaces and each word is compared with the list exactly
@@ -323,11 +341,11 @@ fn restored_index(indexes: &[usize], position: usize) -> usize {
     let mut drawn = Zeroizing::new([0usize; DRAWN_WORDS]);
     drawn.copy_from_slice(&indexes[..DRAWN_WORDS]);
     if position == DRAWN_WORDS {
-        return check_index(&drawn);
+        return weighted_index(&drawn);
     }
     // weight * d = check - (the weighted sum of the others): d is that times the weight's inverse.
     drawn[position] = 0;
-    let wanted = (indexes[DRAWN_WORDS] + LIST_SIZE - check_index(&drawn)) % LIST_SIZE;
+    let wanted = (indexes[DRAWN_WORDS] + LIST_SIZE - weighted_index(&drawn)) % LIST_SIZE;
     wanted * inverse(WEIGHTS[position]) % LIST_SIZE
 }
 
@@ -380,15 +398,20 @@ fn written_form(typed: &str) -> Option<(LockedText, Correction)> {
     Some((text, correction))
 }
 
+impl crate::ErrorIdentity for ReviewError {
+    fn error_code(&self) -> crate::ErrorCode {
+        self.error_code()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eff::index_of_rolls;
 
     fn drawn(rolls: &str) -> [usize; DRAWN_WORDS] {
         let indexes: Vec<usize> = rolls
             .split(' ')
-            .map(|roll| index_of_rolls(roll).unwrap())
+            .map(|roll| EffList::index_of_rolls(roll).unwrap())
             .collect();
         indexes.try_into().unwrap()
     }
@@ -398,7 +421,9 @@ mod tests {
         let list = EffList::get();
         drawn
             .iter()
-            .chain(std::iter::once(&check_index(drawn)))
+            .chain(std::iter::once(
+                &PasswordReview::check_index(drawn).unwrap(),
+            ))
             .map(|&index| list.word(index))
             .collect::<Vec<_>>()
             .join(" ")
@@ -408,9 +433,32 @@ mod tests {
     fn the_public_vectors_are_reproduced() {
         for case in known_answers::VECTORS {
             let (rolls, check, expected) = (case.rolls, case.check_index, case.password);
-            assert_eq!(check_index(&drawn(rolls)), check, "{rolls}");
+            assert_eq!(
+                PasswordReview::check_index(&drawn(rolls)),
+                Ok(check),
+                "{rolls}"
+            );
             assert_eq!(password(&drawn(rolls)), expected);
             assert_eq!(PasswordReview::of(expected).reading(), Reading::Fits);
+        }
+    }
+
+    #[test]
+    fn an_outside_list_index_is_refused_without_overflow() {
+        for indexes in [[7776, 0, 0, 0, 0], [0, 0, 0, 0, usize::MAX]] {
+            let error = PasswordReview::check_index(&indexes).unwrap_err();
+            assert_eq!(error, ReviewError::InvalidIndex);
+            assert_eq!(error.code(), "INVALID_REQUEST");
+            assert!(!error.to_string().contains(&usize::MAX.to_string()));
+        }
+    }
+
+    #[test]
+    fn check_indexes_match_literal_boundary_answers() {
+        // The profile's weighted sum, with weights adding to 37; no runtime computation of
+        // the expected answer (CORE-28).
+        for (indexes, expected) in [([0; 5], 0), ([1, 2, 3, 4, 5], 141), ([7775; 5], 7739)] {
+            assert_eq!(PasswordReview::check_index(&indexes), Ok(expected));
         }
     }
 
@@ -533,26 +581,28 @@ mod tests {
     fn a_typed_password_needs_its_rules_then_the_same_repetition() {
         let typed = "jovial trailing ? pavilion cresting ninth";
         assert!(matches!(
-            typed_password(typed, Some("jovial"), None),
-            Err(MhfeError::PasswordsDiffer)
+            Password::from_typed(typed, Some("jovial"), None),
+            Err(crate::PasswordError::PasswordsDiffer)
         ));
         // The password's own rules come before the repetition.
         assert!(matches!(
-            typed_password("", Some("jovial"), None),
-            Err(MhfeError::EmptyPassword)
+            Password::from_typed("", Some("jovial"), None),
+            Err(crate::PasswordError::EmptyPassword)
         ));
         assert_eq!(
-            typed_password(typed, Some(typed), None).unwrap().as_bytes(),
+            Password::from_typed(typed, Some(typed), None)
+                .unwrap()
+                .as_bytes(),
             typed.as_bytes()
         );
         assert_eq!(
-            typed_password(typed, Some(typed), Some(ReviewChoice::Repair(3)))
+            Password::from_typed(typed, Some(typed), Some(ReviewChoice::Repair(3)))
                 .unwrap()
                 .as_bytes(),
             b"jovial trailing chokehold pavilion cresting ninth"
         );
         assert_eq!(
-            &*chosen_password(typed, Some(ReviewChoice::Repair(3))).unwrap(),
+            &*PasswordReview::choose(typed, Some(ReviewChoice::Repair(3))).unwrap(),
             "jovial trailing chokehold pavilion cresting ninth"
         );
     }
@@ -563,11 +613,11 @@ mod tests {
         let review = PasswordReview::of(erased);
         assert!(matches!(
             review.apply(ReviewChoice::Repair(2)),
-            Err(MhfeError::PasswordRepairNotOffered)
+            Err(ReviewError::NotOffered)
         ));
         assert!(matches!(
             review.apply(ReviewChoice::Corrected),
-            Err(MhfeError::PasswordRepairNotOffered)
+            Err(ReviewError::NotOffered)
         ));
     }
 

@@ -6,7 +6,7 @@ use super::{new_password_from, report, verified, work_from, PhraseJson};
 use crate::engine::browser::{BrowserEngine, JsArgon2};
 use crate::operation::Stage;
 use crate::wasm_api::{js_error, secret_json, SecretText};
-use crate::{HiddenWallets, Mhfe, MhfeError};
+use crate::{HiddenWallets, Mhfe};
 
 /// A session of hidden wallets in one worker: one container, the main wallet's passphrase, and a
 /// wallet for each new password. Nothing is listed or counted. The session ends on `close` or when
@@ -32,7 +32,7 @@ impl HiddenWalletSession {
         argon2: JsArgon2,
     ) -> Result<HiddenWalletSession, JsError> {
         let passphrase = SecretText::new(main_passphrase_utf8);
-        let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
+        let passphrase = passphrase.passphrase()?;
         let wallets = HiddenWallets::new(container, passphrase).map_err(js_error)?;
         let work = work_from(pim, memory_level)?;
         let engine = BrowserEngine::new(argon2, work).map_err(js_error)?;

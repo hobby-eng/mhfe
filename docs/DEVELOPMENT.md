@@ -73,8 +73,11 @@ pnpm exec playwright install chromium firefox
 
 On Linux use `pnpm exec playwright install --with-deps chromium firefox` to install their
 system dependencies too. Both `pnpm run check:browsers` and `node scripts/verify-browsers.mjs`
-need these browsers. The complete `scripts/check.sh` also needs Python 3.11 or later, GNU tar (`gtar` on
-macOS), gzip and zip.
+need these browsers. The complete `scripts/check.sh` also needs Python 3.11 or later, gzip and zip;
+GNU tar is needed outside macOS. macOS packaging uses Python's standard-library tar/gzip writer
+and the runner's existing tools, without installing Homebrew packages. Its `BUILD-INFO.txt` records
+the Python/zlib, compiler and Apple SDK versions. Release macOS binaries are ad-hoc signed with
+the hardened runtime; this requires no private signing key and does not provide Apple notarization.
 
 After `scripts/check.sh` has built the browser package, check it in Chromium and Firefox:
 

@@ -6,6 +6,8 @@
 //! built-in check. A fingerprint that differs in one bit must not match. The length rules give each
 //! outcome on the published containers that carry it ([`LENGTH_CASES`]).
 
+use crate::wallet::Fingerprint;
+
 use crate::mhfe::known_answers::{published, published_table};
 use crate::rehearsal::{CheckEvidence, CheckOutcome, PassedCheck, Reference};
 use crate::self_check::{
@@ -33,7 +35,7 @@ enum OwnReference {
 }
 
 impl OwnReference {
-    fn reference(self) -> Result<Reference<'static>, String> {
+    fn reference(self) -> Result<Reference<'static>, crate::self_check::FailureDetail> {
         Ok(match self {
             Self::BuiltInCheck(words) => Reference::BuiltInCheck {
                 words: WordCount::new(words).map_err(stopped)?,
@@ -43,11 +45,12 @@ impl OwnReference {
         })
     }
 
-    fn name(self) -> String {
+    fn diagnostic(self) -> crate::self_check::LengthReference {
+        use crate::self_check::LengthReference;
         match self {
-            Self::BuiltInCheck(words) => format!("the built-in check of {words} words"),
-            Self::Detected => "the length detected".to_owned(),
-            Self::WalletCheck(_) => "the wallet check".to_owned(),
+            Self::BuiltInCheck(words) => LengthReference::BuiltInCheck(words),
+            Self::Detected => LengthReference::Detected,
+            Self::WalletCheck(_) => LengthReference::WalletCheck,
         }
     }
 }
@@ -139,21 +142,20 @@ const LENGTH_CASES: &[LengthCase] = &[
 ];
 
 impl LengthCase {
-    fn run(&self) -> Result<(), String> {
+    fn run(&self) -> Result<(), crate::self_check::FailureDetail> {
         let reference = self.reference.reference()?;
         let evidence = RehearsalCheck::evidence(self.vector, &reference)?;
         let expected = self.expected();
         if evidence == expected && evidence.own_checks_passed() == (self.passed)() {
             return Ok(());
         }
-        Err(format!(
-            "{} with {} gives \"{}\", not \"{}\"",
-            self.vector,
-            self.reference.name(),
-            describe(&evidence),
-            describe_expected(self),
-        ))
+        Err(crate::self_check::FailureDetail::LengthRule {
+            reference: self.reference.diagnostic(),
+            actual: Box::new(diagnostic(&evidence, evidence.own_checks_passed())),
+            expected: Box::new(diagnostic(&expected, (self.passed)())),
+        })
     }
+
     fn expected(&self) -> CheckEvidence {
         CheckEvidence {
             outcome: self.outcome.clone(),
@@ -165,44 +167,38 @@ impl LengthCase {
     }
 }
 
-/// An outcome with the lengths beside it, as a failure names it.
-fn described(evidence: &CheckEvidence, passed: &[PassedCheck]) -> String {
-    let built_in = evidence
-        .built_in_check
-        .map_or("none".to_owned(), |words| words.to_string());
-    format!("{}, verified length {built_in}, lengths {:?}, wallet check {:?}, passed {passed:?}, asks length {}",
-        evidence.outcome.text(), evidence.matching_lengths, evidence.wallet_check, evidence.asks_length)
-}
-
-fn describe(evidence: &CheckEvidence) -> String {
-    described(evidence, &evidence.own_checks_passed())
-}
-
-fn describe_expected(case: &LengthCase) -> String {
-    described(&case.expected(), &(case.passed)())
+/// Only public comparison metadata, with every compared field retained for diagnostics.
+fn diagnostic(
+    evidence: &CheckEvidence,
+    passed: Vec<PassedCheck>,
+) -> crate::self_check::LengthEvidence {
+    crate::self_check::LengthEvidence::from_check(evidence, passed)
 }
 
 /// The `rehearsal` check.
 pub(crate) struct RehearsalCheck {
-    fingerprint: [u8; 4],
+    fingerprint: Fingerprint,
     length_cases: &'static [LengthCase],
 }
 
 impl RehearsalCheck {
     pub(crate) fn new() -> Self {
         Self {
-            fingerprint: FINGERPRINT,
+            fingerprint: Fingerprint::from_bytes(FINGERPRINT),
             length_cases: LENGTH_CASES,
         }
     }
 
     /// Runs the rehearsal of zero-12 against `reference`.
-    fn check(reference: &Reference<'_>) -> Result<CheckOutcome, String> {
+    fn check(reference: &Reference<'_>) -> Result<CheckOutcome, crate::self_check::FailureDetail> {
         Ok(Self::evidence("zero-12", reference)?.outcome)
     }
 
     /// Runs the rehearsal of the published container `name` against `reference`.
-    fn evidence(name: &str, reference: &Reference<'_>) -> Result<CheckEvidence, String> {
+    fn evidence(
+        name: &str,
+        reference: &Reference<'_>,
+    ) -> Result<CheckEvidence, crate::self_check::FailureDetail> {
         let vector = published(name)?;
         vector
             .mhfe(published_table())?
@@ -235,8 +231,7 @@ impl ComponentCheck for RehearsalCheck {
                 passphrase: "",
             })?;
             expect(
-                outcome.matches(),
-                "a matching fingerprint is reported as not matching",
+                outcome.matches(), crate::self_check::KnownAnswerDifference::AMatchingFingerprintIsReportedAsNotMatching,
             )
         });
         findings.one(|| {
@@ -250,7 +245,7 @@ impl ComponentCheck for RehearsalCheck {
             })?;
             expect(
                 outcome.path() == Some(&path),
-                "a matching address is reported as not matching",
+                crate::self_check::KnownAnswerDifference::AMatchingAddressIsReportedAsNotMatching,
             )
         });
         findings.one(|| {
@@ -258,22 +253,23 @@ impl ComponentCheck for RehearsalCheck {
             let outcome = Self::check(&Reference::BuiltInCheck { words })?;
             expect(
                 outcome.matches(),
-                "the built-in check is reported as not matching",
+                crate::self_check::KnownAnswerDifference::TheBuiltInCheckIsReportedAsNotMatching,
             )
         });
         findings.one(|| {
             let outcome = Self::check(&Reference::Fingerprint {
-                fingerprint: WRONG_FINGERPRINT,
+                fingerprint: Fingerprint::from_bytes(WRONG_FINGERPRINT),
                 passphrase: "",
             })?;
             expect(
-                outcome == CheckOutcome::DoesNotMatch,
-                "a fingerprint that differs is reported as matching",
+                outcome == CheckOutcome::DoesNotMatch, crate::self_check::KnownAnswerDifference::AFingerprintThatDiffersIsReportedAsMatching,
             )
         });
-        for case in self.length_cases {
-            findings.one(|| case.run());
-        }
+        findings.each(
+            crate::self_check::CaseKind::LengthRule,
+            self.length_cases,
+            LengthCase::run,
+        );
         findings.outcome()
     }
 }
@@ -293,14 +289,12 @@ mod tests {
     #[test]
     fn a_wrong_fingerprint_fails() {
         let mut check = RehearsalCheck {
-            fingerprint: [0x73, 0xc5, 0xda, 0x0c],
+            fingerprint: Fingerprint::from_bytes([0x73, 0xc5, 0xda, 0x0c]),
             length_cases: LENGTH_CASES,
         };
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Startup),
-            ComponentOutcome::Failed(
-                "a matching fingerprint is reported as not matching".to_owned()
-            )
+            "a matching fingerprint is reported as not matching".to_owned()
         );
     }
 
@@ -319,17 +313,12 @@ mod tests {
             asks_length: true,
         }];
         let mut check = RehearsalCheck {
-            fingerprint: FINGERPRINT,
+            fingerprint: Fingerprint::from_bytes(FINGERPRINT),
             length_cases: DAMAGED,
         };
-        assert_eq!(
-            check.run(Tier::Startup),
-            ComponentOutcome::Failed(
-                "zero-24 with the length detected gives \"not verified, verified length none, \
+        crate::self_check::assert_failed!(check.run(Tier::Startup), "length rule 1 of 1 with the length detected gives \"not verified, verified length none, \
                  lengths [], wallet check Some(false), passed [], asks length true\", not \"does not match, verified length none, lengths [], wallet check Some(false), passed [], asks length true\""
-                    .to_owned()
-            )
-        );
+                    .to_owned());
     }
     #[test]
     fn wallet_evidence_passed_checks_and_follow_up_decisions_are_checked() {
@@ -337,13 +326,17 @@ mod tests {
             assert!(original.run().is_ok());
             let mut wrong = original.clone();
             wrong.wallet_check = Some(!original.wallet_check.unwrap_or(false));
-            assert!(wrong.run().unwrap_err().contains("wallet check"));
+            assert!(wrong
+                .run()
+                .unwrap_err()
+                .to_string()
+                .contains("wallet check"));
             let mut wrong = original.clone();
             wrong.passed = || vec![PassedCheck::WalletCheck];
-            assert!(wrong.run().unwrap_err().contains("passed"));
+            assert!(wrong.run().unwrap_err().to_string().contains("passed"));
             let mut wrong = original.clone();
             wrong.asks_length = !original.asks_length;
-            assert!(wrong.run().unwrap_err().contains("asks length"));
+            assert!(wrong.run().unwrap_err().to_string().contains("asks length"));
         }
     }
 }

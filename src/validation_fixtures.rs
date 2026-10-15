@@ -27,71 +27,84 @@ pub(crate) const SUITE_3_PASSWORDS: &str =
 pub(crate) const SUITE_4: &str =
     include_str!("../tests/fixtures/suite4-vectors/validation-cases.json");
 
-use crate::self_check::DAMAGED;
+use crate::self_check::damaged;
 
 /// A fixture as read.
 pub(crate) struct Fixture(Value);
 
 impl Fixture {
-    pub(crate) fn read(json: &str) -> Result<Self, String> {
-        serde_json::from_str(json)
-            .map(Self)
-            .map_err(|_| DAMAGED.to_owned())
+    pub(crate) fn read(json: &str) -> Result<Self, crate::self_check::FailureDetail> {
+        serde_json::from_str(json).map(Self).map_err(|_| damaged())
     }
 
     /// The cases of `section`.
-    pub(crate) fn cases(&self, section: &str) -> Result<&[Value], String> {
+    pub(crate) fn cases(
+        &self,
+        section: &str,
+    ) -> Result<&[Value], crate::self_check::FailureDetail> {
         self.0[section]
             .as_array()
             .map(Vec::as_slice)
-            .ok_or_else(|| DAMAGED.to_owned())
+            .ok_or_else(damaged)
     }
 
     /// The single case of `section`, which is an object rather than a list.
-    pub(crate) fn case(&self, section: &str) -> Result<&Value, String> {
+    pub(crate) fn case(&self, section: &str) -> Result<&Value, crate::self_check::FailureDetail> {
         let case = &self.0[section];
         if case.is_object() {
             Ok(case)
         } else {
-            Err(DAMAGED.to_owned())
+            Err(damaged())
         }
     }
 
     /// A text field of the fixture itself.
-    pub(crate) fn text(&self, field: &str) -> Result<&str, String> {
+    pub(crate) fn text(&self, field: &str) -> Result<&str, crate::self_check::FailureDetail> {
         text(&self.0, field)
     }
 }
 
-pub(crate) fn text<'a>(case: &'a Value, field: &str) -> Result<&'a str, String> {
-    case[field].as_str().ok_or_else(|| DAMAGED.to_owned())
+pub(crate) fn text<'a>(
+    case: &'a Value,
+    field: &str,
+) -> Result<&'a str, crate::self_check::FailureDetail> {
+    case[field].as_str().ok_or_else(damaged)
 }
 
-pub(crate) fn number(case: &Value, field: &str) -> Result<u64, String> {
-    case[field].as_u64().ok_or_else(|| DAMAGED.to_owned())
+pub(crate) fn number(case: &Value, field: &str) -> Result<u64, crate::self_check::FailureDetail> {
+    case[field].as_u64().ok_or_else(damaged)
 }
 
 /// A number field that fits a `u32`, such as a PIM or a round.
-pub(crate) fn number_u32(case: &Value, field: &str) -> Result<u32, String> {
-    u32::try_from(number(case, field)?).map_err(|_| DAMAGED.to_owned())
+pub(crate) fn number_u32(
+    case: &Value,
+    field: &str,
+) -> Result<u32, crate::self_check::FailureDetail> {
+    u32::try_from(number(case, field)?).map_err(|_| damaged())
 }
 
 /// The bytes of a hexadecimal field.
-pub(crate) fn bytes(case: &Value, field: &str) -> Result<Vec<u8>, String> {
-    hex::decode(text(case, field)?).map_err(|_| DAMAGED.to_owned())
+pub(crate) fn bytes(
+    case: &Value,
+    field: &str,
+) -> Result<Vec<u8>, crate::self_check::FailureDetail> {
+    hex::decode(text(case, field)?).map_err(|_| damaged())
 }
 
 /// A list of numbers, such as the matching lengths of a state.
-pub(crate) fn numbers(case: &Value, field: &str) -> Result<Vec<usize>, String> {
+pub(crate) fn numbers(
+    case: &Value,
+    field: &str,
+) -> Result<Vec<usize>, crate::self_check::FailureDetail> {
     case[field]
         .as_array()
-        .ok_or_else(|| DAMAGED.to_owned())?
+        .ok_or_else(damaged)?
         .iter()
         .map(|value| {
             value
                 .as_u64()
                 .and_then(|number| usize::try_from(number).ok())
-                .ok_or_else(|| DAMAGED.to_owned())
+                .ok_or_else(damaged)
         })
         .collect()
 }

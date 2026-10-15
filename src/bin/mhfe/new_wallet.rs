@@ -205,19 +205,17 @@ fn ask_for_check() -> Result<bool, Failure> {
         "A check takes {WALLET_CHECK_BITS} of the {NEW_ENTROPY_BITS} bits of entropy; \
          {BITS_LEFT_WITH_CHECK} remain, still plenty."
     );
-    let question = Question {
-        text: "Do you want a check that confirms the password at recovery?",
-        explanation: &[&cost],
-        more: Some(readme::NEW),
-        record: Some("Check"),
-    };
+    let explanation = [cost.as_str()];
+    let question = Question::with_details(
+        "Do you want a check that confirms the password at recovery?",
+        &explanation,
+        Some(readme::NEW),
+        Some("Check"),
+    );
     let chosen = choice::choose_without_default(
         &question,
         &answers,
-        Some(Help {
-            hint: "? explains both",
-            show: &explain,
-        }),
+        Some(Help::new("? explains both", &explain)),
     )?;
     match chosen {
         Some(choice) => Ok(choice == 1),
@@ -227,7 +225,7 @@ fn ask_for_check() -> Result<bool, Failure> {
 
 /// What each choice gives and costs, shown when the person presses ?.
 fn explain() {
-    let odds = mhfe::grouped(WALLET_CHECK_ODDS);
+    let odds = mhfe::GroupedCount::new(WALLET_CHECK_ODDS).to_string();
     eprintln!("{}", paint(STRONG, "No check"));
     style::gives("Every password gives an equally valid wallet; decoys work.");
     style::costs("A recovery cannot tell a wrong password.");
@@ -258,7 +256,7 @@ fn read_new_passphrase(input: &mut Input, checked: bool) -> Result<LockedText, F
     let passphrase = loop {
         let passphrase = input.secret("BIP39 passphrase of the new wallet, or Enter for none")?;
         if passphrase.is_empty() {
-            match wallet_check::require_passphrase(&passphrase) {
+            match wallet_check::WalletCheck::new(&passphrase).require_passphrase() {
                 // The check, which --wallet-check yes asked for, needs a passphrase.
                 Err(error) if checked => {
                     style::retry(exit::refused(&error, "Please type one."));
@@ -268,7 +266,7 @@ fn read_new_passphrase(input: &mut Input, checked: bool) -> Result<LockedText, F
             }
         }
         let repeated = input.secret("Repeat the passphrase")?;
-        match wallet_check::require_same_passphrase(&passphrase, &repeated) {
+        match wallet_check::WalletCheck::new(&passphrase).require_same_passphrase(&repeated) {
             Ok(()) => break passphrase,
             Err(error) => {
                 style::retry(exit::refused(&error, "Please type them again."));
@@ -290,7 +288,7 @@ fn read_new_passphrase(input: &mut Input, checked: bool) -> Result<LockedText, F
 /// with chosen words. The library probes the generator first and reads the new phrase back.
 fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
     let started = Instant::now();
-    let expected = draw.odds().expected_draws.round() as u128;
+    let expected = draw.odds().expected_draws().round() as u128;
     if expected > 1 {
         flow::step()?;
         eprintln!();
@@ -301,7 +299,7 @@ fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
         };
         style::hint(&format!(
             "Drawing {what}, about {} draws.",
-            mhfe::grouped(expected)
+            mhfe::GroupedCount::new(expected)
         ));
     }
     let drawn = draw.draw_on_every_core(|| SystemRandom, &mut |_| Ok(()))?;

@@ -278,9 +278,7 @@ export async function checkArgon2Start() {
   // check fall back to the single-threaded build, with a warning. The stand-in builds are the
   // package's own, whose start is replaced by one that fails.
   const fast = globalThis.crossOriginIsolated === true;
-  const cause = fast
-    ? "the stand-in threaded build does not start"
-    : "the stand-in build does not start";
+  const cause = "synthetic private Argon2 factory marker";
   const failingStart = (name) =>
     `\n${name} = () => Promise.reject(new Error(${JSON.stringify(cause)}));\n`;
   const client = new MhfeClient({
@@ -291,7 +289,7 @@ export async function checkArgon2Start() {
       ? ARGON2_SINGLE_THREADED
       : ARGON2_SINGLE_THREADED + failingStart("createArgon2St"),
   });
-  const notStarted = `the ${fast ? "threaded" : "single-threaded"} Argon2 build did not start: ${cause}`;
+  const notStarted = `the ${fast ? "threaded" : "single-threaded"} Argon2 build did not start`;
   const argon2Line = fast
     ? `argon2 warning: ${notStarted}; the check ran the single-threaded build of the standard mode instead`
     : `argon2 notAvailable: Argon2id could not run: ${notStarted}`;
@@ -299,6 +297,7 @@ export async function checkArgon2Start() {
     id === "argon2" ? argon2Line : `${id} passed`,
   );
   const first = await client.startupCheck();
+  expect(!JSON.stringify(first).includes(cause), "startup report omits the factory's exception");
   expectEqual(
     partLines(first),
     startupLines,
@@ -321,10 +320,11 @@ export async function checkArgon2Start() {
       walletHasPassphrase: false,
     }),
     "INTERNAL_ERROR",
-    cause.charAt(0).toUpperCase() + cause.slice(1),
+    notStarted.charAt(0).toUpperCase() + notStarted.slice(1),
     "the client stays open, and an encryption gets its own error",
   );
   const full = await client.fullCheck();
+  expect(!JSON.stringify(full).includes(cause), "full report omits the factory's exception");
   expectEqual(
     partLines(full).filter((line) => line.startsWith("argon2")),
     [

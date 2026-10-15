@@ -69,7 +69,10 @@ pub(super) const CARDS: [CardRow; 4] = [
 /// The four-word card column of the public zero-12 container row.
 pub(crate) const ZERO_12_CARD: (usize, &str) = (super::REPAIR_WORD_COUNTS[1], CARDS[0].cards[1]);
 
-fn damaged_words<'a>(source: &'a str, changes: &[(usize, &'a str)]) -> Result<String, String> {
+fn damaged_words<'a>(
+    source: &'a str,
+    changes: &[(usize, &'a str)],
+) -> Result<String, crate::self_check::FailureDetail> {
     let mut words: Vec<&str> = source.split_whitespace().collect();
     for &(position, word) in changes {
         let slot = words
@@ -279,17 +282,22 @@ impl RepairWordsCheck {
         }
     }
 
-    fn cards(row: &CardRow) -> Result<(), String> {
+    fn cards(row: &CardRow) -> Result<(), crate::self_check::FailureDetail> {
         for (count, card) in super::REPAIR_WORD_COUNTS.into_iter().zip(row.cards) {
-            let words = super::repair_words(row.container, count).map_err(stopped)?;
-            expect(words == card, "gives other words")?;
+            let words = super::RepairWordCount::new(count)
+                .and_then(|count| count.words_of(row.container))
+                .map_err(stopped)?;
+            expect(
+                words == card,
+                crate::self_check::KnownAnswerDifference::GivesOtherWords,
+            )?;
         }
         Ok(())
     }
 
-    fn repair(case: &RepairCase) -> Result<(), String> {
+    fn repair(case: &RepairCase) -> Result<(), crate::self_check::FailureDetail> {
         let words = damaged_words(case.container, case.damage)?;
-        let result = super::repair(&words, case.card);
+        let result = super::RepairWordCount::repair(&words, case.card);
         match case.expected {
             Expected::Refused(code) => expect_refusal(result, code),
             Expected::Repaired {
@@ -299,19 +307,19 @@ impl RepairWordsCheck {
                 let repaired = result.map_err(stopped)?;
                 let expected: Vec<&str> = case.container.split_whitespace().collect();
                 expect(
-                    repaired.container == expected.join(" "),
-                    "gives another container phrase",
+                    repaired.container() == expected.join(" "),
+                    crate::self_check::KnownAnswerDifference::GivesAnotherContainerPhrase,
                 )?;
                 expect(
-                    repaired.container_words == container_words
-                        && repaired.card_words == card_words,
-                    "repairs other words",
+                    repaired.container_words() == container_words
+                        && repaired.card_words() == card_words,
+                    crate::self_check::KnownAnswerDifference::RepairsOtherWords,
                 )
             }
         }
     }
 
-    fn reading(case: &ReadingCase) -> Result<(), String> {
+    fn reading(case: &ReadingCase) -> Result<(), crate::self_check::FailureDetail> {
         let words = damaged_words(ZERO_12, case.changes)?;
         let read = super::ContainerReading::read(&words);
         let expected = match case.expected {
@@ -322,7 +330,10 @@ impl RepairWordsCheck {
             ExpectedReading::NotAContainer => super::ContainerReading::NotAContainer,
             ExpectedReading::WrongLength(words) => super::ContainerReading::WrongLength(words),
         };
-        expect(read == expected, "is read as another kind")
+        expect(
+            read == expected,
+            crate::self_check::KnownAnswerDifference::IsReadAsAnotherKind,
+        )
     }
 }
 
@@ -345,9 +356,13 @@ impl ComponentCheck for RepairWordsCheck {
             .copied()
             .collect();
         let mut findings = Findings::new();
-        findings.each("card", cards, Self::cards);
-        findings.each("repair", &repairs, Self::repair);
-        findings.each("reading", self.readings, Self::reading);
+        findings.each(crate::self_check::CaseKind::Card, cards, Self::cards);
+        findings.each(crate::self_check::CaseKind::Repair, &repairs, Self::repair);
+        findings.each(
+            crate::self_check::CaseKind::Reading,
+            self.readings,
+            Self::reading,
+        );
         findings.outcome()
     }
 }
@@ -412,9 +427,9 @@ mod tests {
             ..RepairWordsCheck::new()
         };
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
-        assert_eq!(
+        crate::self_check::assert_failed!(
             check.run(Tier::Full),
-            ComponentOutcome::Failed("card 4 of 4 gives other words".to_owned())
+            "card 4 of 4 gives other words".to_owned()
         );
     }
 }

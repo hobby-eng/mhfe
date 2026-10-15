@@ -94,14 +94,17 @@ impl ComponentCheck for WordHintsCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
-        findings.each("case", self.cases, |case| {
-            expect(case.list.hint(case.line) == case.hint, "gives another hint")
+        findings.each(crate::self_check::CaseKind::Case, self.cases, |case| {
+            expect(
+                case.list.hint(case.line) == case.hint,
+                crate::self_check::KnownAnswerDifference::GivesAnotherHint,
+            )
         });
         findings.one(|| {
             let completion = WordList::Bip39.completion("abou");
             expect(
-                completion.letters == "t" && completion.word_ends,
-                "Tab completes another word",
+                completion.letters() == "t" && completion.word_ends(),
+                crate::self_check::KnownAnswerDifference::TabCompletesAnotherWord,
             )
         });
         findings.outcome()

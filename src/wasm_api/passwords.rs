@@ -2,6 +2,7 @@
 //! (MHFE-PASSWORD-CHECK-1), the strength estimate, the password generator and its self-check. No
 //! Argon2.
 
+use crate::self_check::SelfCheck;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -9,14 +10,13 @@ use super::{
     js_error, json, review_choice, run_self_check, secret_json, whole_number, yes_or_no, JsRandom,
     SecretText,
 };
-use crate::check_word::{self, Correction, PasswordReview, Reading, PROFILE};
+use crate::check_word::{Correction, PasswordReview, Reading, PROFILE};
 use crate::new_password::{
     PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS,
     RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
 };
-use crate::self_check::sets;
 use crate::strength::{Strength, WEAK_BELOW_BITS};
-use crate::MhfeError;
+use crate::Password;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,10 +84,10 @@ pub fn review_password(
 ) -> Result<js_sys::JsString, JsError> {
     let password = SecretText::new(password_utf8);
     let repeat = SecretText::new(repeat_utf8);
-    let typed = password.text(MhfeError::InvalidPasswordUtf8)?;
-    let repeat = repeat.text(MhfeError::InvalidPasswordUtf8)?;
-    let repeated = yes_or_no(&repeated, "repeated")?;
-    check_word::check_typed_twice(typed, repeated.then_some(repeat)).map_err(js_error)?;
+    let typed = password.text(crate::PasswordError::InvalidPasswordUtf8.into())?;
+    let repeat = repeat.text(crate::PasswordError::InvalidPasswordUtf8.into())?;
+    let repeated = yes_or_no(&repeated, crate::request::BooleanField::Repeated)?;
+    Password::check_typed_twice(typed, repeated.then_some(repeat)).map_err(js_error)?;
     let review = PasswordReview::of(typed);
     let restorable = review.reading() == Reading::Restorable;
     secret_json(&ReviewJson {
@@ -135,9 +135,9 @@ pub fn password_strength(
     position: f64,
 ) -> Result<String, JsError> {
     let password = SecretText::new(password_utf8);
-    let typed = password.text(MhfeError::InvalidPasswordUtf8)?;
+    let typed = password.text(crate::PasswordError::InvalidPasswordUtf8.into())?;
     let chosen =
-        check_word::chosen_password(typed, review_choice(choice, position)?).map_err(js_error)?;
+        PasswordReview::choose(typed, review_choice(choice, position)?).map_err(js_error)?;
     let strength = Strength::of(&chosen);
     json(&StrengthJson {
         bits: strength.bits(),
@@ -172,30 +172,23 @@ pub fn make_password(
     let rolls = SecretText::new(rolls_utf8);
     let size = |default: usize| match count {
         None => Ok(default),
-        Some(count) => whole_number(
-            count,
-            MhfeError::InvalidPasswordSize(String::new()).code(),
-            "the size",
-        )
-        .map(|n| n as usize),
+        Some(count) => {
+            whole_number(count, crate::request::NumberField::PasswordSize).map(|n| n as usize)
+        }
     };
     let recipe = match kind {
         "words" => PasswordRecipe::words(size(DEFAULT_WORDS)?),
         // The class's TypeError (web/passwords.js) is a deliberate copy of this refusal, made
         // before a worker starts; scripts/verify-browser-package.mjs keeps both equal.
-        "checkWord" if count.is_some() => Err(MhfeError::InvalidRequest(format!(
-            "count belongs only to the kinds \"words\" and \"characters\": \"checkWord\" always \
-             gives {} words and their check word",
-            check_word::DRAWN_WORDS
-        ))),
+        "checkWord" if count.is_some() => {
+            Err(crate::new_password::NewPasswordError::CheckWordCount)
+        }
         "checkWord" => Ok(PasswordRecipe::check_word()),
         "characters" => PasswordRecipe::characters(size(DEFAULT_CHARACTERS)?),
-        other => Err(MhfeError::InvalidRequest(format!(
-            "unknown password kind {other}"
-        ))),
+        _ => Err(crate::new_password::NewPasswordError::UnknownKind),
     }
     .map_err(js_error)?;
-    let rolls = rolls.text(MhfeError::InvalidDiceRolls(1))?;
+    let rolls = rolls.text(crate::eff::EffError::InvalidDiceRolls(1).into())?;
     let password = if rolls.is_empty() {
         recipe.make(&mut random)
     } else {
@@ -224,7 +217,7 @@ pub fn self_check_passwords(
     on_result: &js_sys::Function,
 ) -> Result<String, JsError> {
     run_self_check(
-        sets::passwords(Some(&mut random)),
+        SelfCheck::passwords(Some(&mut random)),
         tier,
         &skip_ids,
         on_start,

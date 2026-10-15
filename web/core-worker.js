@@ -120,7 +120,7 @@ const CORE_FIELDS = /** @type {const} */ ({
 
 /**
  * A rekey's recovery once it is confirmed, as RekeySession.recover() and confirmAgain() give it:
- * what the owner compares, if the owner confirms, and the 16-bit source check.
+ * what the owner compares, if the owner confirms, and the 16-bit wallet check.
  * @typedef {{ ownerCheck: Record<string, unknown> | null, rehearsalNeedsPassphrase: boolean,
  *   walletCheck: boolean | null }} ConfirmedRecovery
  */
@@ -128,7 +128,8 @@ const CORE_FIELDS = /** @type {const} */ ({
 /**
  * An Emscripten build of the reference Argon2 code that may be in front of this file
  * (argon2Builds).
- * @typedef {{ name: string, file: string, create: Argon2Factory | undefined, buildId: string }}
+ * @typedef {{ name: "threaded" | "single-threaded", file: string,
+ *   create: Argon2Factory | undefined, buildId: string }}
  *   Argon2Build
  */
 
@@ -145,6 +146,43 @@ const CORE_FIELDS = /** @type {const} */ ({
 const argon2Parts = () => JSON.parse(mhfe.suiteParameters()).argon2Parts;
 /** What an Argon2 part of a self-check adds when the threaded build did not start. */
 const FALLBACK_NOTE = "the check ran the single-threaded build of the standard mode instead";
+
+/** A startup refusal retains known backend/context fields, never a factory's exception text. */
+class Argon2StartError extends Error {
+  /** @type {Argon2Build["name"]} */
+  #build;
+  /** @type {"notIsolated" | "startFailed"} */
+  #issue;
+
+  /** @param {Argon2Build["name"]} build
+   * @param {"notIsolated" | "startFailed"} issue */
+  constructor(build, issue) {
+    super();
+    this.#build = build;
+    this.#issue = issue;
+    this.name = "Argon2StartError";
+    this.message = `${this.code}: ${this.detail}`;
+  }
+
+  /** The readonly code of this sanitized backend-startup refusal.
+   * @returns {"INTERNAL_ERROR"} */
+  get code() {
+    return "INTERNAL_ERROR";
+  }
+
+  /** The safe context the self-check can render even when Rust could not start Argon2. */
+  get detail() {
+    const build = `the ${this.#build} Argon2 build did not start`;
+    return this.#issue === "notIsolated"
+      ? `${build}: the page is not cross-origin isolated, so the build cannot share its memory with its lane workers`
+      : build;
+  }
+
+  /** @param {Argon2StartError[]} failures */
+  static describeAll(failures) {
+    return failures.map((error) => error.detail).join("; ");
+  }
+}
 
 /**
  * The core's operations by name, which web/worker-start.js serves.
@@ -383,7 +421,7 @@ const CORE_OPERATIONS = operationsWithFields(CORE_FIELDS, {
       const sealed = JSON.parse(
         session.seal(host.progress, (json) => host.post("unverified", JSON.parse(json))),
       );
-      // The 16-bit source check of the recovered 24-word reading, reported beside the result.
+      // The 16-bit wallet check of the recovered 24-word reading, reported beside the result.
       return { ...sealed, walletCheck: recovered.walletCheck };
     });
   },
@@ -520,26 +558,29 @@ async function argon2ForCheck(request) {
   const builds = argon2Builds();
   const tried = [builds.threaded, builds.singleThreaded].filter(({ create }) => create);
   if (tried.length === 0) throw noArgon2Build();
-  /** @type {string[]} */
+  /** @type {Argon2StartError[]} */
   const failures = [];
   for (const build of tried) {
     try {
       const argon2 = argon2Engine(await startArgon2(build, request.argon2Script ?? null));
       return { argon2, outcomeOf: (result) => afterFallback(result, failures) };
     } catch (error) {
-      const { code, message } = describeError(error);
-      if (code === "PACKAGE_MISMATCH") throw error;
-      failures.push(`the ${build.name} Argon2 build did not start: ${message}`);
+      if (!(error instanceof Argon2StartError)) throw error;
+      failures.push(error);
     }
   }
   const refuse = () => {
-    throw new Error(failures.join("; "));
+    throw new Error(Argon2StartError.describeAll(failures));
   };
   return {
     argon2: { derive: refuse, reserve: refuse },
     outcomeOf: (result) =>
       argon2Parts().includes(result.id) && result.outcome === "failed"
-        ? { ...result, outcome: "notAvailable" }
+        ? {
+            ...result,
+            outcome: "notAvailable",
+            detail: `Argon2id could not run: ${Argon2StartError.describeAll(failures)}`,
+          }
         : result,
   };
 }
@@ -548,12 +589,12 @@ async function argon2ForCheck(request) {
  * A part of a self-check whose Argon2 build started after the threaded one did not, `failures`
  * naming why: it passes with a warning that says so, and its failure, a wrong answer, says so too.
  * @param {ComponentResult} result
- * @param {string[]} failures
+ * @param {Argon2StartError[]} failures
  * @returns {ComponentResult}
  */
 function afterFallback(result, failures) {
   if (failures.length === 0 || !argon2Parts().includes(result.id)) return result;
-  const note = `${failures.join("; ")}; ${FALLBACK_NOTE}`;
+  const note = `${Argon2StartError.describeAll(failures)}; ${FALLBACK_NOTE}`;
   if (result.outcome === "passed") return { ...result, outcome: "warning", detail: note };
   return { ...result, detail: `${note}; ${result.detail}` };
 }
@@ -592,7 +633,7 @@ function argon2Builds() {
  * @param {Blob | null} threadedScript
  * @returns {Promise<Argon2Module>}
  */
-function startArgon2(build, threadedScript) {
+async function startArgon2(build, threadedScript) {
   if (build.create === undefined) throw noArgon2Build();
   if (build.buildId !== WORKER_BUILD_ID) {
     throw packageMismatch(
@@ -600,19 +641,26 @@ function startArgon2(build, threadedScript) {
         WORKER_BUILD_ID,
     );
   }
-  if (build.name === "threaded") {
+  if (build.name === "threaded" && self.crossOriginIsolated !== true) {
     // Without cross-origin isolation the threaded build cannot share its memory with its lane
     // workers, and its start-up would wait forever instead of failing, so refuse it here.
-    if (self.crossOriginIsolated !== true) {
-      throw new Error(
-        "INTERNAL_ERROR: the page is not cross-origin isolated, so the build cannot share its " +
-          "memory with its lane workers",
-      );
-    }
-    // The lane workers run this same Argon2 script, which the CSP allows only from a Blob.
-    return build.create({ mainScriptUrlOrBlob: threadedScript });
+    throw new Argon2StartError(build.name, "notIsolated");
   }
-  return build.create();
+  try {
+    // The lane workers run this same Argon2 script, which the CSP allows only from a Blob.
+    return await (build.name === "threaded"
+      ? build.create({ mainScriptUrlOrBlob: threadedScript })
+      : build.create());
+  } catch (error) {
+    let mismatch = false;
+    try {
+      mismatch = describeError(error).code === "PACKAGE_MISMATCH";
+    } catch {
+      // A malformed page exception is still a failure, with the same safe startup reason.
+    }
+    if (mismatch) throw packageMismatch("the Argon2 build reported a package mismatch");
+    throw new Argon2StartError(build.name, "startFailed");
+  }
 }
 
 /** The error of an operation that needs Argon2 when no Argon2 build is in front of the worker. */

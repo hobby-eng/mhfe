@@ -6,6 +6,8 @@
 //            the first line (after a #! line) exempts a file. TypeScript and JavaScript are left
 //            to the lint gate (oxlint's max-lines).
 //   CORE-25  every dependency pinned exactly: "1.2.3" in package.json, "=1.2.3" in Cargo.toml.
+//   CORE-02/03 externally public library records have private fields and operations belong to
+//            owner types; wasm-bindgen exports and executable front ends are adapters.
 //   RUST-05  no assert!, assert_eq!, assert_ne!, unreachable!, todo! or unimplemented! in Rust code
 //            outside its tests and const blocks, which clippy's panic lints do not see: a
 //            refusal, or the documented exception of an expect (AUD-024-API016).
@@ -37,7 +39,79 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { reported, runGate } from "./gate-command-line.mjs";
-import { rustRunTimeLines } from "./rust-code.mjs";
+import { rustProductionLines, rustRunTimeLines } from "./rust-code.mjs";
+
+/** Public Rust library ownership, including inline modules and multiline impl headers. */
+function libraryOwners(path, source) {
+  if (
+    !path.startsWith("src/") ||
+    !path.endsWith(".rs") ||
+    path.startsWith("src/bin/") ||
+    path.startsWith("src/wasm_api")
+  )
+    return [];
+  const findings = [];
+  const scopes = [];
+  let pending = null;
+  // Rust permits visibility on items and record fields only. Recognize item/modifier keywords
+  // instead of parsing tuple fields through generic bounds, function arrows and const expressions.
+  const itemStarts = new Set([
+    "fn",
+    "const",
+    "async",
+    "unsafe",
+    "safe",
+    "extern",
+    "struct",
+    "enum",
+    "union",
+    "type",
+    "trait",
+    "mod",
+    "use",
+    "static",
+    "macro",
+    "default",
+  ]);
+  const lines = rustProductionLines(source.split("\n"));
+  const joined = lines.map(([, code]) => code).join("\n");
+  let offset = 0;
+  for (const [line, code] of lines) {
+    for (const token of code.matchAll(/[A-Za-z_]\w*|[{}();<>,]/gu)) {
+      const word = token[0];
+      if (word === "pub") {
+        const after = joined.slice(offset + token.index + word.length).trimStart();
+        const nextWord = /^[A-Za-z_]\w*/u.exec(after)?.[0];
+        const restricted = /^\(\s*(?:(?:crate|self|super)\s*\)|in\b)/u.test(after);
+        const macroOperand = after.startsWith(",");
+        const inRecord = pending === "struct" || scopes.at(-1) === "struct";
+        if (!restricted && !macroOperand && (inRecord || !itemStarts.has(nextWord))) {
+          findings.push(`CORE-02 ${path}:${line}: a public record exposes writable fields`);
+        }
+      }
+      if (
+        word === "pub" &&
+        /^pub\s+(?:(?:const|async|unsafe|extern)\s+)*fn\s+[A-Za-z_]/u.test(
+          code.slice(token.index),
+        ) &&
+        !scopes.includes("impl") &&
+        !scopes.includes("trait")
+      )
+        findings.push(`CORE-03 ${path}:${line}: a public operation has no owner type`);
+      if (["impl", "trait", "fn", "struct", "enum", "mod"].includes(word) && pending === null) {
+        pending = word;
+      } else if (word === "{") {
+        scopes.push(pending);
+        pending = null;
+      } else if (word === "}") {
+        scopes.pop();
+        pending = null;
+      } else if (word === ";") pending = null;
+    }
+    offset += code.length + 1;
+  }
+  return findings;
+}
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 /** CORE-15's limit for a file. */
@@ -168,7 +242,11 @@ function scriptFindings(path, lines) {
         finding("TS-06", path, index + 1, `the error class ${errorClass[1]} ends in Error`),
       );
     }
-    const exception = /(?:oxlint|eslint)-(?:disable|enable)(?:-next-line|-line)?\b(.*)/u.exec(line);
+    // A diagnostic string mentioning a directive is not an actual lint exception.
+    const exception =
+      /(?:\/\/|\/\*|^\s*\*)\s*(?:oxlint|eslint)-(?:disable|enable)(?:-next-line|-line)?\b(.*)/u.exec(
+        line,
+      );
     if (exception !== null && !/\s--\s+\S/u.test(exception[1])) {
       found.push(finding("TS-12", path, index + 1, 'a lint exception without "-- <reason>"'));
     }
@@ -410,7 +488,10 @@ function repositoryFindings() {
   const texts = new Map(repositoryFiles().map((path) => [path, read(path)]));
   const testModules = testModuleFiles(texts);
   return [
-    ...[...texts].flatMap(([path, text]) => fileFindings(path, text, testModules)),
+    ...[...texts].flatMap(([path, text]) => [
+      ...fileFindings(path, text, testModules),
+      ...(testModules.has(path) ? [] : libraryOwners(path, text)),
+    ]),
     ...pythonFindings(texts),
     ...packageFindings(read("package.json")),
     ...cargoFindings(read("Cargo.toml")),
@@ -445,6 +526,9 @@ function fileControls() {
     ["scripts/b.mjs", "class RefusalError extends MhfeError {}\n", null],
     ["scripts/c.mjs", "// oxlint-" + "disable-next-line max-lines-per-function\n", "TS-12"],
     ["scripts/d.mjs", "// oxlint-disable-next-line max-lines-per-function -- a table\n", null],
+    ["scripts/directive-text.mjs", 'const text = "oxlint-disable max-lines";\n', null],
+    ["scripts/inline.mjs", "f(); // oxlint-" + "disable-line no-alert\n", "TS-12"],
+    ["scripts/block.mjs", "/*\n * oxlint-" + "disable no-alert\n */\n", "TS-12"],
     ["web/a.d.ts", "/** Kinds. */\nexport enum Kind { A }\n", "TS-08"],
     ["web/b.d.ts", "/** A class. */\nexport class A {\n  private b: number;\n}\n", "TS-05"],
     ["web/c.js", "export function f() {}\n", "TS-11"],
@@ -504,6 +588,47 @@ function fileControls() {
 
 /** The checks against controls they must decide right, and a refused command line. */
 function selfTest() {
+  const ownerControls = [
+    ["pub fn raw() {}", 1],
+    ["pub const fn raw() -> u8 { 0 }", 1],
+    ["pub struct Owner {\n pub value: u8,\n}", 1],
+    ["pub struct Owner(pub u8);", 1],
+    ["pub struct Owner(\n pub u8,\n);", 1],
+    ["pub struct Owner { pub value: u8 }", 1],
+    ['pub extern "C" fn raw() {}', 1],
+    ['impl Owner { pub extern "C" fn owned() {} }', 0],
+    ["pub struct Owner(\n u8,\n);", 0],
+    ["pub struct Owner<T: Fn()>(pub T);", 1],
+    ["pub struct Owner<T: Fn()>(T);", 0],
+    ["pub struct Owner<T: Fn() -> (u8, u8)>(pub T);", 1],
+    ["pub struct Owner<T: Fn() -> (u8, u8)>(T);", 0],
+    ["pub struct Owner<const N: usize = { 1 }>(pub [u8; N]);", 1],
+    ["pub struct Owner<const N: usize = { 1 }>([u8; N]);", 0],
+    ["pub struct Owner(\n pub\n u8,\n);", 1],
+    ["pub struct Owner(pub(crate) u8);", 0],
+    ["define_coins! { pub, Bitcoin = 0 => Rules::new() }", 0],
+    ["pub struct Owner(pub (u8, u8));", 1],
+    ["pub struct Owner((u8, u8));", 0],
+    ["pub struct Owner(pub *const u8);", 1],
+    ["pub struct Owner(*const u8);", 0],
+    ["pub struct Owner(pub fn());", 1],
+    ["pub struct Owner(fn());", 0],
+    ["pub struct Owner(u8);\nimpl Owner { pub fn get(&self) -> u8 { self.0 } }", 0],
+    ["impl<T>\n Owner<T> { pub fn get(&self) {} }\npub fn raw() {}", 1],
+    ["pub mod nested { pub fn raw() {} }", 1],
+    ["#[cfg(test)]\nmod tests { pub fn fixture() {} }", 0],
+    ['const TEXT: &str = "pub fn fake() {}";\nfn private() {}', 0],
+    ["pub struct Owner { value: u8 }\nimpl Owner { pub fn read(&self) {} }", 0],
+  ];
+  for (const [source, count] of ownerControls) {
+    const found = libraryOwners("src/control.rs", source);
+    if (found.length !== count) throw new Error(`owner control: ${JSON.stringify(found)}`);
+  }
+  for (const path of ["src/bin/mhfe/main.rs", "src/wasm_api/core.rs", "tests/control.rs"]) {
+    if (libraryOwners(path, "pub fn adapter() {}").length !== 0) {
+      throw new Error(`owner control: adapter scope ${path}`);
+    }
+  }
   for (const [index, [text, expected]] of pythonControls().entries()) {
     const found = pythonFindings(new Map([[`control-${index}.py`, text]]));
     if (found.length !== expected || found.some((issue) => !issue.startsWith("TOOL-04 "))) {

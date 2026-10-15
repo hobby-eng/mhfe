@@ -16,6 +16,7 @@ Exit status: 0 when every check holds, 1 when any check fails.
 import collections
 import pathlib
 import re
+import subprocess
 import sys
 
 FREE = ["InvalidPhrase", "InvalidContainer", "InvalidRepairWords", "InvalidWordWish",
@@ -69,6 +70,17 @@ def test_only_files(root):
 
 def main():
     root = pathlib.Path("src")
+    if (root / "error_code.rs").is_file():
+        # The remediated model has independently owned errors. Check their
+        # payload types, including renamed variants, rather than exempting
+        # old variant names whose payloads are now typed nested causes.
+        gate = "scripts/verify-error-contracts.mjs"
+        for arguments in (["--self-test"], []):
+            result = subprocess.run(["node", gate, *arguments], check=False)
+            if result.returncode:
+                return result.returncode
+        print("result: PASS (module-owned typed errors and binding messages)")
+        return 0
     failed = False
 
     # 1. Display arms that write only the caller's text.

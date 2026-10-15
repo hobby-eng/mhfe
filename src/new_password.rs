@@ -4,11 +4,15 @@
 
 use zeroize::Zeroizing;
 
-use crate::check_word::{check_index, PasswordReview, Reading, DRAWN_WORDS};
-use crate::eff::{index_of_rolls, EffList, LIST_SIZE, LONGEST_WORD, MILLIBITS_PER_WORD};
+use crate::check_word::{PasswordReview, Reading, DRAWN_WORDS};
+use crate::eff::{EffList, LIST_SIZE, LONGEST_WORD};
 use crate::memory::LockedText;
-use crate::random::{check_source, uniform_below, RandomSource};
-use crate::MhfeError;
+use crate::random::{RandomSampler, RandomSource};
+mod error;
+pub use error::{NewPasswordError, PasswordKind};
+
+mod bits;
+pub use bits::Millibits;
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 pub(crate) mod known_answers;
@@ -50,11 +54,12 @@ pub struct PasswordRecipe {
 
 impl PasswordRecipe {
     /// `count` random words, 1 to 32.
-    pub fn words(count: usize) -> Result<Self, MhfeError> {
+    pub fn words(count: usize) -> Result<Self, NewPasswordError> {
         if !(1..=MOST_WORDS).contains(&count) {
-            return Err(MhfeError::InvalidPasswordSize(format!(
-                "choose between 1 and {MOST_WORDS} words"
-            )));
+            return Err(NewPasswordError::Size {
+                kind: PasswordKind::Words,
+                count,
+            });
         }
         Ok(Self {
             kind: Kind::Words(count),
@@ -69,11 +74,12 @@ impl PasswordRecipe {
     }
 
     /// `count` random characters, 1 to 64.
-    pub fn characters(count: usize) -> Result<Self, MhfeError> {
+    pub fn characters(count: usize) -> Result<Self, NewPasswordError> {
         if !(1..=MOST_CHARACTERS).contains(&count) {
-            return Err(MhfeError::InvalidPasswordSize(format!(
-                "choose between 1 and {MOST_CHARACTERS} characters"
-            )));
+            return Err(NewPasswordError::Size {
+                kind: PasswordKind::Characters,
+                count,
+            });
         }
         Ok(Self {
             kind: Kind::Characters(count),
@@ -99,16 +105,16 @@ impl PasswordRecipe {
         matches!(self.kind, Kind::Characters(_))
     }
 
-    /// The strength in bits ([`bits_of`] of [`PasswordRecipe::millibits`]).
+    /// The strength in bits of the recipe's independent random draws.
     pub fn bits(&self) -> f64 {
-        bits_of(self.millibits())
+        Millibits::new(self.millibits()).bits()
     }
 
     /// The strength in thousandths of a bit; the check word adds none.
     pub fn millibits(&self) -> usize {
         match self.kind {
-            Kind::Characters(count) => count * MILLIBITS_PER_CHARACTER,
-            _ => self.drawn_words() * MILLIBITS_PER_WORD,
+            Kind::Characters(count) => Millibits::characters(count).get(),
+            _ => Millibits::words(self.drawn_words()).get(),
         }
     }
 
@@ -121,7 +127,7 @@ impl PasswordRecipe {
             Kind::CheckWord => format!("{DRAWN_WORDS} words from the EFF list and a check word"),
             Kind::Characters(count) => format!("{count} random characters"),
         };
-        format!("{made}, about {} bits", bits_text(self.millibits()))
+        format!("{made}, about {} bits", Millibits::new(self.millibits()))
     }
 
     /// Whether the password is shorter than recommended.
@@ -133,40 +139,38 @@ impl PasswordRecipe {
         }
     }
 
-    /// Makes the password from a random source, which is probed first ([`check_source`]): a
+    /// Makes the password from a random source, which is probed first ([`RandomSampler::check_source`]): a
     /// source that fills nothing or repeats itself is refused before anything is drawn.
-    pub fn make(&self, source: &mut dyn RandomSource) -> Result<NewPassword, MhfeError> {
-        check_source(source)?;
+    pub fn make(&self, source: &mut dyn RandomSource) -> Result<NewPassword, NewPasswordError> {
+        let mut source = RandomSampler::new(source);
+        source.check_source()?;
         match self.kind {
-            Kind::Characters(count) => self.characters_from(source, count),
-            _ => self.make_from_indexes(&mut |_| uniform_below(source, LIST_SIZE)),
+            Kind::Characters(count) => self.characters_from(&mut source, count),
+            _ => {
+                self.make_from_indexes(&mut |_| source.uniform_below(LIST_SIZE).map_err(Into::into))
+            }
         }
     }
 
     /// Makes a word password from dice: `rolls` holds five digits from 1 to 6 per drawn word,
     /// groups separated by spaces. Characters cannot come from dice.
-    pub fn make_from_rolls(&self, rolls: &str) -> Result<NewPassword, MhfeError> {
+    pub fn make_from_rolls(&self, rolls: &str) -> Result<NewPassword, NewPasswordError> {
         if self.is_characters() {
-            return Err(MhfeError::InvalidRequest(
-                "a character password cannot come from dice".to_owned(),
-            ));
+            return Err(NewPasswordError::CharactersFromDice);
         }
         let groups: Vec<&str> = rolls.split_whitespace().collect();
         // A count of groups that is not the recipe's is said as such, apart from the digits of a
         // word (AUD-024-API015).
         if groups.len() != self.drawn_words() {
-            let computed = if self.has_check_word() {
-                "; the check word is computed, not rolled"
-            } else {
-                ""
-            };
-            return Err(MhfeError::InvalidRequest(format!(
-                "the dice give {} groups of digits, but this password draws {} words{computed}",
-                groups.len(),
-                self.drawn_words()
-            )));
+            return Err(NewPasswordError::DiceGroups {
+                actual: groups.len(),
+                expected: self.drawn_words(),
+                check_word: self.has_check_word(),
+            });
         }
-        self.make_from_indexes(&mut |number| word_index_of_rolls(number, groups[number - 1]))
+        self.make_from_indexes(&mut |number| {
+            EffList::word_index_of_rolls(number, groups[number - 1]).map_err(Into::into)
+        })
     }
 
     /// Makes a word password, asking `next_index` for the list index of each drawn word, from 1;
@@ -174,12 +178,10 @@ impl PasswordRecipe {
     /// words and is refused.
     pub fn make_from_indexes(
         &self,
-        next_index: &mut dyn FnMut(usize) -> Result<usize, MhfeError>,
-    ) -> Result<NewPassword, MhfeError> {
+        next_index: &mut dyn FnMut(usize) -> Result<usize, NewPasswordError>,
+    ) -> Result<NewPassword, NewPasswordError> {
         if self.is_characters() {
-            return Err(MhfeError::InvalidRequest(
-                "a character password is not made of words".to_owned(),
-            ));
+            return Err(NewPasswordError::CharactersFromIndexes);
         }
         let list = EffList::get();
         let drawn_words = self.drawn_words();
@@ -191,9 +193,7 @@ impl PasswordRecipe {
             for number in 1..=drawn_words {
                 let index = next_index(number)?;
                 if index >= LIST_SIZE {
-                    return Err(MhfeError::Internal(
-                        "a word index outside the list".to_owned(),
-                    ));
+                    return Err(NewPasswordError::WordIndexOutsideList);
                 }
                 if number > 1 {
                     text.push(' ');
@@ -205,16 +205,16 @@ impl PasswordRecipe {
             }
             if self.has_check_word() {
                 text.push(' ');
-                text.push_str(list.word(check_index(&drawn)));
+                let index = PasswordReview::check_index(&drawn)
+                    .map_err(|_| NewPasswordError::WordIndexOutsideList)?;
+                text.push_str(list.word(index));
             }
             Ok(())
         })?;
         // The six words are read back as a person's program will read them: a fault between the
         // drawing and the writing would otherwise give a password whose check word does not fit.
         if self.has_check_word() && PasswordReview::of(&text).reading() != Reading::Fits {
-            return Err(MhfeError::Internal(
-                "a new password does not fit its check word".to_owned(),
-            ));
+            return Err(NewPasswordError::CheckWordMismatch);
         }
         Ok(NewPassword {
             text,
@@ -224,12 +224,12 @@ impl PasswordRecipe {
 
     fn characters_from(
         &self,
-        source: &mut dyn RandomSource,
+        source: &mut RandomSampler<'_>,
         count: usize,
-    ) -> Result<NewPassword, MhfeError> {
-        let text = LockedText::build(count, |text| {
+    ) -> Result<NewPassword, NewPasswordError> {
+        let text = LockedText::build::<NewPasswordError>(count, |text| {
             for _ in 0..count {
-                let index = uniform_below(source, CHARACTERS.len())?;
+                let index = source.uniform_below(CHARACTERS.len())?;
                 text.push(char::from(CHARACTERS[index]));
             }
             Ok(())
@@ -259,35 +259,6 @@ impl NewPassword {
     }
 }
 
-/// The strength of `count` dice words as [`bits_text`] writes it: "64.6" for five.
-pub fn word_bits(count: usize) -> String {
-    bits_text(count * MILLIBITS_PER_WORD)
-}
-
-/// The strength of `count` random characters as [`bits_text`] writes it: "93.3" for sixteen.
-pub fn character_bits(count: usize) -> String {
-    bits_text(count * MILLIBITS_PER_CHARACTER)
-}
-
-/// A strength of `millibits` in bits.
-pub fn bits_of(millibits: usize) -> f64 {
-    millibits as f64 / f64::from(MILLIBITS_PER_BIT)
-}
-
-/// "64.6" for 64,625 millibits: a strength in bits, rounded half up to one decimal.
-pub fn bits_text(millibits: usize) -> String {
-    const TENTHS_PER_BIT: usize = 10;
-    let per_tenth = MILLIBITS_PER_BIT as usize / TENTHS_PER_BIT;
-    let tenths = (millibits + per_tenth / 2) / per_tenth;
-    format!("{}.{}", tenths / TENTHS_PER_BIT, tenths % TENTHS_PER_BIT)
-}
-
-/// The list index of drawn word `number`, from 1, from its five dice digits as typed
-/// (`INVALID_DICE_ROLLS` for that word unless they are five digits from 1 to 6).
-pub fn word_index_of_rolls(number: usize, rolls: &str) -> Result<usize, MhfeError> {
-    index_of_rolls(rolls).ok_or(MhfeError::InvalidDiceRolls(number))
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -295,11 +266,12 @@ mod tests {
         let recipe = PasswordRecipe::characters(16).unwrap();
         assert!(matches!(
             recipe.make_from_indexes(&mut |_| Ok(0)),
-            Err(MhfeError::InvalidRequest(_))
+            Err(NewPasswordError::CharactersFromIndexes)
         ));
     }
 
     use super::*;
+    use crate::eff::MILLIBITS_PER_WORD;
     use crate::random::tests::counter_source;
 
     #[test]
@@ -343,7 +315,10 @@ mod tests {
         let list = EffList::get();
         let words: Vec<&str> = password.text().split(' ').collect();
         assert_eq!(words.len(), 6);
-        assert_eq!(words[5], list.word(check_index(&[0, 1, 2, 3, 4])));
+        assert_eq!(
+            words[5],
+            list.word(PasswordReview::check_index(&[0, 1, 2, 3, 4]).unwrap())
+        );
     }
 
     #[test]
@@ -355,18 +330,18 @@ mod tests {
         );
         assert!(matches!(
             recipe.make_from_rolls("11111 66667"),
-            Err(MhfeError::InvalidDiceRolls(2))
+            Err(NewPasswordError::Eff(
+                crate::eff::EffError::InvalidDiceRolls(2)
+            ))
         ));
         // Too few or too many groups are said as such (AUD-024-API015).
-        for (rolls, given) in [("11111", 1), ("11111 22222 33333", 3)] {
+        for (rolls, message) in [
+            ("11111", "invalid request: the dice give 1 group of digits, but this password draws 2 words"),
+            ("11111 22222 33333", "invalid request: the dice give 3 groups of digits, but this password draws 2 words"),
+        ] {
             let refused = recipe.make_from_rolls(rolls).err().unwrap();
             assert_eq!(refused.code(), "INVALID_REQUEST");
-            assert!(
-                refused.to_string().contains(&format!(
-                    "{given} groups of digits, but this password draws 2 words"
-                )),
-                "{refused}"
-            );
+            assert_eq!(refused.to_string(), message);
         }
         let refused = PasswordRecipe::check_word()
             .make_from_rolls("11111 11112 11113 11114 11115 11116")
@@ -386,9 +361,9 @@ mod tests {
 
     #[test]
     fn strength_is_about_12_9_bits_per_word_and_5_8_per_character() {
-        assert_eq!(bits_text(4 * MILLIBITS_PER_WORD), "51.7");
-        assert_eq!(word_bits(5), "64.6");
-        assert_eq!(character_bits(16), "93.3");
+        assert_eq!(Millibits::new(4 * MILLIBITS_PER_WORD).to_string(), "51.7");
+        assert_eq!(Millibits::words(5).to_string(), "64.6");
+        assert_eq!(Millibits::characters(16).to_string(), "93.3");
         assert_eq!(
             PasswordRecipe::check_word().summary(),
             "5 words from the EFF list and a check word, about 64.6 bits"
@@ -397,12 +372,31 @@ mod tests {
             PasswordRecipe::characters(16).unwrap().summary(),
             "16 random characters, about 93.3 bits"
         );
-        assert_eq!(bits_text(5 * MILLIBITS_PER_WORD), "64.6");
-        assert_eq!(bits_text(12 * MILLIBITS_PER_CHARACTER), "70.0");
-        assert_eq!(bits_text(16 * MILLIBITS_PER_CHARACTER), "93.3");
+        assert_eq!(Millibits::new(5 * MILLIBITS_PER_WORD).to_string(), "64.6");
+        assert_eq!(
+            Millibits::new(12 * MILLIBITS_PER_CHARACTER).to_string(),
+            "70.0"
+        );
+        assert_eq!(
+            Millibits::new(16 * MILLIBITS_PER_CHARACTER).to_string(),
+            "93.3"
+        );
         assert!(PasswordRecipe::words(3).unwrap().is_weak());
         assert!(!PasswordRecipe::words(4).unwrap().is_weak());
         assert!(PasswordRecipe::characters(11).unwrap().is_weak());
+    }
+
+    #[test]
+    fn displayed_strength_rounds_half_up_at_decimal_boundaries() {
+        for (millibits, text) in [
+            (0, "0.0"),
+            (49, "0.0"),
+            (50, "0.1"),
+            (149, "0.1"),
+            (150, "0.2"),
+        ] {
+            assert_eq!(Millibits::new(millibits).to_string(), text);
+        }
     }
 
     #[test]

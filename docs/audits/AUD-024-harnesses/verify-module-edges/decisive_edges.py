@@ -8,6 +8,15 @@ engine, wallet, rehearsal or container, and which of the six candidate edges are
 Exits 1 while a part reaches the core. Run from the repository root."""
 import collections, itertools, pathlib, re, subprocess, sys
 
+if not pathlib.Path('src/lib.rs').is_file():
+    sys.exit('Run this harness from the mhfe repository root (src/lib.rs is required).')
+
+modern = pathlib.Path('scripts/verify-module-boundaries.mjs')
+if modern.is_file():
+    # The current gate reads every edge, including acyclic paths and grouped
+    # root imports. The legacy cycle-only trace below is kept for b6fca69.
+    sys.exit(subprocess.run(['node', str(modern)], check=False).returncode)
+
 here = pathlib.Path(__file__).resolve().parent
 log = subprocess.run([sys.executable, str(here.parent / 'guide-lib-core' / 'module_cycles.py')],
                      capture_output=True, text=True).stdout

@@ -12,7 +12,8 @@ use zeroize::Zeroizing;
 
 use crate::eff::{self, EffList};
 use crate::phrase;
-use crate::MhfeError;
+mod error;
+pub use error::WordHintError;
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -57,12 +58,22 @@ pub enum Hint {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Completion {
     /// The letters every word that begins with the typed ones has next; empty when they differ.
-    pub letters: &'static str,
+    letters: &'static str,
     /// Whether one word is left, so that the word ends and a space follows.
-    pub word_ends: bool,
+    word_ends: bool,
 }
 
 impl Completion {
+    /// The next letters shared by every matching word, empty when they differ.
+    pub const fn letters(self) -> &'static str {
+        self.letters
+    }
+
+    /// Whether only one word remains, so a space may follow it.
+    pub const fn word_ends(self) -> bool {
+        self.word_ends
+    }
+
     const NONE: Self = Self {
         letters: "",
         word_ends: false,
@@ -78,15 +89,20 @@ impl WordList {
         }
     }
 
-    /// The list a page names: "bip39" or "eff"; any other name is `INVALID_REQUEST`.
-    pub fn from_name(name: &str) -> Result<Self, MhfeError> {
-        match name {
-            "bip39" => Ok(Self::Bip39),
-            "eff" => Ok(Self::Eff),
-            _ => Err(MhfeError::InvalidRequest(
-                "the word list is \"bip39\" or \"eff\"".to_owned(),
-            )),
+    /// The machine identifier a page uses, distinct from the display name.
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Bip39 => "bip39",
+            Self::Eff => "eff",
         }
+    }
+
+    /// The list a page names; an unknown identifier is refused without repeating it.
+    pub fn from_name(name: &str) -> Result<Self, WordHintError> {
+        [Self::Bip39, Self::Eff]
+            .into_iter()
+            .find(|list| list.id() == name)
+            .ok_or(WordHintError::UnknownList)
     }
 
     /// The words of the list. Both are in alphabetical order, which the search relies on; a test
@@ -239,7 +255,7 @@ mod tests {
         let missing = &known_answers::CASES[7];
         assert_eq!(missing.list.hint(missing.line), missing.hint);
         assert_eq!(WordList::Eff.hint("zookeeper"), Hint::Nothing);
-        assert_eq!(missing.list.completion(missing.line).letters, "");
+        assert_eq!(missing.list.completion(missing.line).letters(), "");
         // A space after a word, a "?" for an unreadable word, a digit or a control character: no
         // word is being typed.
         for line in ["", "abandon ", "abandon ?", "ab1", "a\tb\u{1}"] {
@@ -251,7 +267,7 @@ mod tests {
     fn tab_completes_as_far_as_the_words_agree() {
         let completion = |list: WordList, line| {
             let found = list.completion(line);
-            (found.letters, found.word_ends)
+            (found.letters(), found.word_ends())
         };
         assert_eq!(completion(WordList::Bip39, "abou"), ("t", true));
         assert_eq!(completion(WordList::Bip39, "ABOU"), ("t", true));

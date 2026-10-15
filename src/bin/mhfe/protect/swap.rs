@@ -10,11 +10,18 @@ use super::{SwapArea, SwapInventory};
 /// area in memory (zram) is safe only without a writeback device, or with an encrypted one. A
 /// readable empty inventory is distinct from a failed read.
 pub(crate) fn unprotected_swap() -> SwapInventory {
-    if cfg!(target_os = "linux") {
+    inventory_on(std::env::consts::OS)
+}
+
+/// The platform policy is testable without pretending that a Linux probe read a Windows host.
+fn inventory_on(os: &str) -> SwapInventory {
+    if os == "linux" {
         unprotected_swap_under(Path::new("/"))
-    } else {
-        // macOS encrypts its swap; Windows keeps its page file without telling.
+    } else if os == "macos" {
+        // macOS encrypts swap. No pagefile protection is inspected on other systems.
         SwapInventory::Available(Vec::new())
+    } else {
+        SwapInventory::Unavailable
     }
 }
 
@@ -46,14 +53,8 @@ fn swap_inventory(read: std::io::Result<String>, root: &Path) -> SwapInventory {
             };
             match device.map(|device| protected(root, &device, 0)) {
                 Some(Some(true)) => None,
-                Some(Some(false)) => Some(SwapArea {
-                    name,
-                    unknown: false,
-                }),
-                Some(None) | None => Some(SwapArea {
-                    name,
-                    unknown: true,
-                }),
+                Some(Some(false)) => Some(SwapArea::new(name, false)),
+                Some(None) | None => Some(SwapArea::new(name, true)),
             }
         })
         .collect();
@@ -147,6 +148,12 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    #[test]
+    fn an_uninspected_windows_pagefile_is_unknown() {
+        assert_eq!(inventory_on("windows"), SwapInventory::Unavailable);
+        assert_eq!(inventory_on("unknown-os"), SwapInventory::Unavailable);
+    }
+
     /// A made-up /proc and /sys in a fresh temporary folder.
     struct FakeSystem(PathBuf);
 
@@ -202,10 +209,7 @@ mod tests {
         system.device("sda2", None, &[]);
         assert_eq!(
             system.unprotected(),
-            [SwapArea {
-                name: "/dev/sda2".into(),
-                unknown: false
-            }]
+            [SwapArea::new("/dev/sda2".into(), false,)]
         );
     }
 
@@ -236,12 +240,7 @@ mod tests {
             }
             system.unprotected()
         };
-        let area = |unknown| {
-            vec![SwapArea {
-                name: "/dev/zram0".into(),
-                unknown,
-            }]
-        };
+        let area = |unknown| vec![SwapArea::new("/dev/zram0".into(), unknown)];
         assert_eq!(zram(None), []);
         assert_eq!(zram(Some("none\n")), []);
         assert_eq!(zram(Some("/dev/sdb2\n")), area(false));
@@ -267,10 +266,7 @@ mod tests {
             }
             assert_eq!(
                 system.unprotected(),
-                [SwapArea {
-                    name: format!("/dev/{name}"),
-                    unknown: true
-                }],
+                [SwapArea::new(format!("/dev/{name}"), true,)],
                 "{name}, with another device: {other:?}"
             );
         }
@@ -289,10 +285,7 @@ mod tests {
         let system = FakeSystem::new("/swap\\040file file 1024 0 -2\n");
         assert_eq!(
             system.unprotected(),
-            [SwapArea {
-                name: "/swap file".into(),
-                unknown: true
-            }]
+            [SwapArea::new("/swap file".into(), true,)]
         );
     }
 

@@ -8,7 +8,7 @@ use crate::memory::LockedText;
 use crate::packing;
 use crate::phrase::{self, WORD_COUNTS};
 use crate::suite::Suite;
-use crate::{other_detected_lengths, read_phrase, wallet, MhfeError, PhraseLength};
+use crate::{wallet, MhfeError, Phrase, PhraseLength};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -16,12 +16,6 @@ pub(crate) mod known_answers;
 /// The lengths of an original that has a built-in check in a 24-word container: 12, 15, 18 and
 /// 21 words. A 24-word original fills the container's state and leaves no room for one.
 pub const BUILT_IN_CHECK_WORD_COUNTS: [usize; 4] = packing::SHORT_WORD_COUNTS;
-
-/// Checks a container before anything is computed and returns it as read: every word written
-/// out in full and in lower case, one space apart, so a person can compare it with the backup.
-pub fn check_container(input: &str) -> Result<String, MhfeError> {
-    ContainerFacts::read(input).map(|facts| facts.words().to_owned())
-}
 
 /// A container as read, with what its words alone tell: its suite, the lengths its original may
 /// have and the checks a recovery of it can be compared with.
@@ -61,10 +55,10 @@ impl ConfirmationNeeded {
 
 impl ContainerFacts {
     /// Reads a container, refusing anything but a valid English BIP39 phrase of 12, 15, 18, 21
-    /// or 24 words with [`MhfeError::InvalidContainer`]. Any spacing and letter case and the first
+    /// or 24 words with `INVALID_CONTAINER`. Any spacing and letter case and the first
     /// four letters of a word are accepted, as for an original phrase.
-    pub fn read(text: &str) -> Result<Self, MhfeError> {
-        let container = phrase::parse_container(text).map_err(MhfeError::InvalidContainer)?;
+    pub fn read(text: &str) -> Result<Self, crate::CipherError> {
+        let container = phrase::parse_container(text)?;
         let word_count = container.word_count();
         Ok(Self {
             words: phrase::phrase_text(&container),
@@ -112,12 +106,13 @@ impl ContainerFacts {
 
     /// Refuses a `length` the phrase of this container cannot have: a same-length container keeps
     /// the length of its original (`LENGTH_CHOICE_NOT_APPLICABLE`), which detection gives.
-    pub fn require_length(&self, length: PhraseLength) -> Result<(), MhfeError> {
+    pub fn require_length(&self, length: PhraseLength) -> Result<(), crate::CipherError> {
         match length {
             PhraseLength::Words(words) if !self.phrase_lengths().contains(&words.get()) => {
-                Err(MhfeError::LengthChoiceNotApplicable {
+                Err((crate::FormatError::LengthChoiceNotApplicable {
                     container_words: self.word_count,
                 })
+                .into())
             }
             _ => Ok(()),
         }
@@ -132,11 +127,12 @@ impl ContainerFacts {
     }
 
     /// Refuses hidden wallets on a container that opens none, before any Argon2 work.
-    pub fn require_hidden_wallets(&self) -> Result<(), MhfeError> {
+    pub fn require_hidden_wallets(&self) -> Result<(), crate::CipherError> {
         if !self.opens_hidden_wallets() {
-            return Err(MhfeError::NoHiddenWallets {
+            return Err((crate::FormatError::NoHiddenWallets {
                 container_words: self.word_count,
-            });
+            })
+            .into());
         }
         Ok(())
     }
@@ -156,12 +152,12 @@ impl ContainerFacts {
 
     /// How a phrase of the given `length` recovered from this container is confirmed before it is
     /// encrypted again. A same-length container keeps the length of its original, so another
-    /// length is refused with [`MhfeError::LengthChoiceNotApplicable`], and detection gives that
+    /// length is refused with [`crate::FormatError::LengthChoiceNotApplicable`], and detection gives that
     /// length.
     pub fn confirmation_needed(
         &self,
         length: PhraseLength,
-    ) -> Result<ConfirmationNeeded, MhfeError> {
+    ) -> Result<ConfirmationNeeded, crate::CipherError> {
         self.require_length(length)?;
         // What the length alone decides holds on every container; only a 12- to 21-word length
         // asks the container whether it has the built-in check.
@@ -176,18 +172,11 @@ impl ContainerFacts {
         }
     }
 
-    /// The container's fingerprint ([`container_fingerprint`]).
-    pub fn fingerprint(&self) -> Result<[u8; 4], MhfeError> {
-        container_fingerprint(&self.words)
+    /// The fingerprint of the container's own wallet without a BIP39 passphrase. This public
+    /// decoy-wallet identifier does not identify the original wallet. It costs one BIP39 seed.
+    pub fn fingerprint(&self) -> Result<wallet::Fingerprint, MhfeError> {
+        wallet::Fingerprint::of(&self.words, "").map_err(Into::into)
     }
-}
-
-/// The master key fingerprint of the wallet that a container's own words open without a BIP39
-/// passphrase, shown under every container so that the decoy wallet can be found again. A
-/// container is a valid phrase too, but that wallet is not the owner's. It costs one
-/// PBKDF2-HMAC-SHA512 of 2,048 iterations, as BIP39 seeds do. Every front end takes it from here.
-pub fn container_fingerprint(container: &str) -> Result<[u8; 4], MhfeError> {
-    wallet::master_fingerprint(container, "")
 }
 
 /// An original seed phrase as read, with what it tells before it is encrypted: its length, the
@@ -211,13 +200,15 @@ pub struct ContainerChoice {
 
 impl OriginalFacts {
     /// Reads an original phrase, refusing anything but a valid English BIP39 phrase of 12, 15,
-    /// 18, 21 or 24 words with [`MhfeError::InvalidPhrase`]. Any spacing and letter case and the
+    /// 18, 21 or 24 words with `INVALID_PHRASE`. Any spacing and letter case and the
     /// first four letters of a word are accepted.
-    pub fn read(phrase: &str) -> Result<Self, MhfeError> {
-        let words = LockedText::copy_of(&read_phrase(phrase)?);
+    pub fn read(phrase: &str) -> Result<Self, crate::CipherError> {
+        let phrase = Phrase::read(phrase)?;
+        let word_count = phrase.word_count();
+        let words = phrase.into_words();
         Ok(Self {
-            word_count: words.split(' ').count(),
-            other_lengths: other_detected_lengths(&words)?,
+            word_count,
+            other_lengths: crate::mhfe::other_detected_lengths(&words)?,
             words,
         })
     }
@@ -235,7 +226,7 @@ impl OriginalFacts {
 
     /// The lengths other than the phrase's own that a recovery with automatic detection would
     /// also accept from a 24-word container: empty for almost every phrase
-    /// ([`crate::other_detected_lengths`]). When not, the owner keeps the word count and states it
+    /// When not, the owner keeps the word count and states it
     /// during recovery.
     pub fn other_lengths(&self) -> &[usize] {
         &self.other_lengths
@@ -304,10 +295,13 @@ mod tests {
     fn a_containers_fingerprint_has_one_rule() {
         let container = crate::test_support::zero_12_container();
         let expected = crate::search::known_answers::ZERO_12_DECOY_FINGERPRINT;
-        assert_eq!(container_fingerprint(&container), Ok(expected));
         assert_eq!(
-            ContainerFacts::read(&container).unwrap().fingerprint(),
-            Ok(expected)
+            ContainerFacts::read(&container)
+                .unwrap()
+                .fingerprint()
+                .unwrap()
+                .bytes(),
+            expected
         );
     }
 
@@ -317,7 +311,7 @@ mod tests {
     /// A valid phrase of `words` words: all-zero entropy, as in the BIP39 test vectors.
     fn zero_phrase(words: usize) -> Zeroizing<String> {
         let bytes = packing::entropy_bytes(words).unwrap();
-        crate::phrase_from_entropy(&vec![0; bytes]).unwrap()
+        crate::phrase::phrase_from_entropy(&vec![0; bytes]).unwrap()
     }
 
     fn words(count: usize) -> PhraseLength {
@@ -373,7 +367,7 @@ mod tests {
             assert!(!container.offers_wallet_check());
             assert!(matches!(
                 container.require_wallet_check(),
-                Err(MhfeError::NoWalletCheck { .. })
+                Err(MhfeError::Format(crate::FormatError::NoWalletCheck { .. }))
             ));
             for length in [words(count), PhraseLength::Detect] {
                 assert_eq!(
@@ -384,9 +378,11 @@ mod tests {
             for other in WORD_COUNTS.into_iter().filter(|&other| other != count) {
                 assert_eq!(
                     container.confirmation_needed(words(other)),
-                    Err(MhfeError::LengthChoiceNotApplicable {
-                        container_words: count
-                    })
+                    Err(crate::CipherError::Format(
+                        crate::FormatError::LengthChoiceNotApplicable {
+                            container_words: count
+                        }
+                    ))
                 );
             }
         }
@@ -418,7 +414,7 @@ mod tests {
     fn a_container_has_the_fingerprint_of_its_own_words() {
         let container = ContainerFacts::read(ZERO_12).unwrap();
         assert_eq!(
-            container.fingerprint(),
+            container.fingerprint().map(wallet::Fingerprint::bytes),
             Ok(crate::test_support::ABANDON_12_FINGERPRINT)
         );
     }
@@ -469,7 +465,7 @@ mod tests {
         for (text, [short, long]) in AMBIGUOUS_STATES {
             let state = state_from_hex(text);
             let bytes = packing::entropy_bytes(short).unwrap();
-            let phrase = crate::phrase_from_entropy(&state[..bytes]).unwrap();
+            let phrase = crate::phrase::phrase_from_entropy(&state[..bytes]).unwrap();
             assert_eq!(
                 OriginalFacts::read(&phrase).unwrap().other_lengths(),
                 [long]

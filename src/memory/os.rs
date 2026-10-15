@@ -3,7 +3,7 @@
 //! together and count overlapping page locks.
 #![allow(
     unsafe_code,
-    reason = "page-size, mlock and munlock use operating-system foreign functions (RUST-07)"
+    reason = "native page-size and memory-lock calls use operating-system foreign functions (RUST-07)"
 )]
 
 /// The size of a memory page, a power of two, or `None` when the system does not say.
@@ -16,8 +16,16 @@ pub(crate) fn page_size() -> Option<usize> {
     }
 }
 
-/// Nothing is locked where there is no mlock, so no page size is needed.
-#[cfg(not(unix))]
+#[cfg(windows)]
+mod windows;
+
+#[cfg(windows)]
+pub(crate) use windows::page_size;
+#[cfg(windows)]
+pub(super) use windows::{lock_pages, unlock_pages};
+
+/// No page size is needed where neither native locking implementation is available.
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn page_size() -> Option<usize> {
     None
 }
@@ -39,10 +47,10 @@ pub(super) fn unlock_pages(start: *const u8, bytes: usize) {
     unsafe { libc::munlock(start.cast(), bytes) };
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(super) fn lock_pages(_start: *const u8, _bytes: usize) -> bool {
     false
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(super) fn unlock_pages(_start: *const u8, _bytes: usize) {}

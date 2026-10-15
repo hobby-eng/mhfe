@@ -63,14 +63,8 @@ impl Content {
     fn hints(self) -> Option<Hints> {
         match self {
             Self::Text => None,
-            Self::Password => Some(Hints {
-                list: WordList::Eff,
-                says_no_word: false,
-            }),
-            Self::Words(list) => Some(Hints {
-                list,
-                says_no_word: true,
-            }),
+            Self::Password => Some(Hints::new(WordList::Eff, false)),
+            Self::Words(list) => Some(Hints::new(list, true)),
         }
     }
 
@@ -104,7 +98,7 @@ pub(crate) fn read_line(
                 eprintln!();
                 crate::style::retry(format!(
                     "{} Press Enter to discard this line.",
-                    failure.message
+                    failure.message()
                 ));
                 crate::style::prompt(&format!("{prompt}(discarding until Enter) "));
             };
@@ -132,9 +126,9 @@ pub(crate) fn read_line(
         // The terminal did not show the Enter key either.
         eprintln!();
         match result {
-            Err(failure) if failure.exit_code == crate::exit::INVALID_INPUT => {
+            Err(failure) if failure.exit_code() == crate::exit::INVALID_INPUT => {
                 if !announced {
-                    crate::style::retry(format!("{} Type the answer again.", failure.message));
+                    crate::style::retry(format!("{} Type the answer again.", failure.message()));
                 }
             }
             other => return other,
@@ -243,7 +237,7 @@ fn echo_stays_on() -> Failure {
 }
 
 /// The identifier of [`HiddenInputCheck`] in a self-check report.
-pub(crate) const HIDDEN_INPUT_ID: &str = mhfe::self_check::process::HIDDEN_INPUT.id;
+pub(crate) const HIDDEN_INPUT_ID: &str = mhfe::self_check::process::HIDDEN_INPUT.id();
 
 /// The `hidden-input` check of the full self-test: the terminal on standard input is switched as
 /// for a hidden prompt, read back and restored. Every prompt for a secret reads the switch back as
@@ -256,7 +250,7 @@ impl ComponentCheck for HiddenInputCheck {
     }
 
     fn label(&self) -> &'static str {
-        mhfe::self_check::process::HIDDEN_INPUT.label
+        mhfe::self_check::process::HIDDEN_INPUT.label()
     }
 
     /// Only on request: the check at start never touches the terminal, so that nothing typed
@@ -271,7 +265,9 @@ impl ComponentCheck for HiddenInputCheck {
         }
         match with_terminal_switched(platform::hide, || Ok(())) {
             Ok(()) => ComponentOutcome::Passed,
-            Err(_) => ComponentOutcome::Failed("the terminal did not turn its echo off".to_owned()),
+            Err(_) => ComponentOutcome::Failed(
+                mhfe::self_check::KnownAnswerDifference::TerminalEchoStayedOn.into(),
+            ),
         }
     }
 }
@@ -546,7 +542,7 @@ impl<'e, 's> LineEditor<'e, 's> {
                 (CTRL_D, _) if self.line.is_empty() => return Ok(true),
                 (other, _) => {
                     if let Err(failure) = self.push(other) {
-                        if failure.exit_code == crate::exit::INVALID_INPUT {
+                        if failure.exit_code() == crate::exit::INVALID_INPUT {
                             // Finish the refused line before a retry, so its remaining bytes can
                             // never answer the next prompt. No discarded byte is retained.
                             self.end()?;
@@ -660,8 +656,8 @@ impl<'e, 's> LineEditor<'e, 's> {
             return Ok(());
         };
         let completion = list.completion(text);
-        let space: &[u8] = if completion.word_ends { b" " } else { b"" };
-        for &byte in completion.letters.as_bytes().iter().chain(space) {
+        let space: &[u8] = if completion.word_ends() { b" " } else { b"" };
+        for &byte in completion.letters().as_bytes().iter().chain(space) {
             self.push(byte)?;
         }
         Ok(())
@@ -859,9 +855,9 @@ mod tests {
     #[test]
     fn hidden_input_refuses_when_echo_stays_on() {
         let refusal = echo_stays_on();
-        assert_eq!(refusal.exit_code, crate::exit::INTERNAL_ERROR);
+        assert_eq!(refusal.exit_code(), crate::exit::INTERNAL_ERROR);
         assert_eq!(
-            refusal.message,
+            refusal.message(),
             "The terminal did not turn its echo off; no secret was read."
         );
     }
@@ -1082,7 +1078,10 @@ mod tests {
         )
         .err()
         .expect("one byte beyond the answer limit must be refused");
-        assert_eq!(error.message, crate::terminal::too_long_answer().message);
+        assert_eq!(
+            error.message(),
+            crate::terminal::too_long_answer().message()
+        );
         let refused = |bytes: Vec<u8>| {
             edit_line(&mut io::Cursor::new(bytes), None, Content::Password).is_err()
         };

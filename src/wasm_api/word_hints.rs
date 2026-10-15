@@ -6,7 +6,6 @@ use wasm_bindgen::prelude::*;
 
 use super::{js_error, secret_json, SecretText};
 use crate::word_hints::{Hint, WordList};
-use crate::MhfeError;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,9 +36,7 @@ struct CompletionJson {
 pub fn word_hints(list: &str, typed_utf8: Vec<u8>) -> Result<js_sys::JsString, JsError> {
     let typed = SecretText::new(typed_utf8);
     let list = WordList::from_name(list).map_err(js_error)?;
-    let line = typed.text(MhfeError::InvalidRequest(
-        "the typed text is not UTF-8".to_owned(),
-    ))?;
+    let line = typed.text(crate::word_hints::WordHintError::Utf8.into())?;
     let (hint, count, words) = match list.hint(line) {
         Hint::Nothing => ("nothing", 0, &[][..]),
         Hint::Count(count) => ("count", count, &[][..]),
@@ -52,8 +49,8 @@ pub fn word_hints(list: &str, typed_utf8: Vec<u8>) -> Result<js_sys::JsString, J
         count,
         words,
         completion: CompletionJson {
-            letters: completion.letters,
-            word_ends: completion.word_ends,
+            letters: completion.letters(),
+            word_ends: completion.word_ends(),
         },
     })
 }
