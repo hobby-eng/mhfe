@@ -131,20 +131,22 @@ jobs:
         run: rustup show
       - name: Run the fast tests
         run: cargo test --locked
-      - name: Build the command-line tool
-        run: cargo build --locked
+      # The PTY cases compare every candidate for two missing words. Their existing deadline
+      # assumes optimized code; the debug build can spend the whole step on that search.
+      - name: Build the optimized command-line tool
+        run: cargo build --locked --release --bin mhfe
       # The fast cases; those that run Argon2 at full size run in scripts/check.sh, on Linux.
       - name: Check hidden input in a Unix pseudo-terminal
         if: runner.os == 'macOS'
         timeout-minutes: 10
-        run: python3 scripts/verify-hidden-input.py target/debug/mhfe
+        run: python3 scripts/verify-hidden-input.py target/release/mhfe
       - name: Check hidden input in a Windows pseudo-console
         if: runner.os == 'Windows'
         timeout-minutes: 10
         run: |
           # Only the exact files listed with their SHA-256 in the requirements file are accepted.
           python -m pip install --require-hashes -r scripts/verify-hidden-input-windows-requirements.txt
-          python scripts/verify-hidden-input-windows.py target/debug/mhfe.exe
+          python scripts/verify-hidden-input-windows.py target/release/mhfe.exe
 
   canonical-build:
     # An hour-long build runs only by hand and for a release, whose workflow builds the assets
