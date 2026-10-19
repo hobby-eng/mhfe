@@ -1,0 +1,617 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-036",
+  "auditNumber": 36,
+  "date": "2026-10-19",
+  "completedUtc": "2026-10-19T02:34:49.687971+00:00",
+  "title": "Native test-fixture privilege and signature fidelity",
+  "reviewer": {
+    "name": "Codex main implementer with independent Windows and macOS reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "c059b1afb00584d9a99fefe37247448b5ec7f3cd",
+    "commitComplete": false,
+    "workingTree": "Authorized test fixtures, their documentation and this scoped report/harness set.",
+    "sourceFileCount": 481,
+    "sourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+    "baseSourceManifest": {
+      "path": "docs/audits/AUD-035-2026-10-19.json",
+      "sha256": "c99a16cb2ea2a4599ea25553795d14f35f594b68b5e3bb925d6300e3dc386d92",
+      "sourceFingerprint": "cb1253ba0eda6da88d98958ba05f39c82e3778188a8784ca9b37472d157c3d55"
+    },
+    "changedPaths": {
+      "docs/DEVELOPMENT.md": {
+        "before": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5",
+        "after": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1"
+      },
+      "docs/releases/unreleased.md": {
+        "before": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b",
+        "after": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857"
+      },
+      "scripts/terminal_suite/self_test.py": {
+        "before": "67ed5c1bd517c7df3e2150d6d281455b9308759eeb613c702e9f848830e18619",
+        "after": "b62387780b28bf39b6b8b6ef951af11b5b19242a72d5fe09077465791a1ea306"
+      },
+      "src/bin/mhfe/protect/windows/tests.rs": {
+        "before": "2c0cbd5efa2e6dffabed4767d1cca52277b9c1f616ddf4a6aab29d7785acf720",
+        "after": "d11ad409f36a09a3534b7f0ec701b2ad8ae638bbe96cc94ba43925412768402e"
+      },
+      "src/bin/mhfe/protect/windows/tests/observer.rs": {
+        "before": null,
+        "after": "85666ef91f8c6d94ea5f7f626a92643ae68fae67602aa448745626517a3b3e36"
+      }
+    },
+    "fingerprintFormat": "SHA256 of sorted sha256 + two spaces + relative path + LF"
+  },
+  "scope": {
+    "mode": "Two native fixture failures; no production hardening/API/crypto change and no new all-files audit.",
+    "coverage": {
+      "CHECK-SEC-001": "Affected fixture/caller review and stated controls",
+      "CHECK-SEC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-005": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-006": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-007": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-005": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-006": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-007": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-001": "Affected fixture/caller review and stated controls",
+      "CHECK-API-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-002": "Affected fixture/caller review and stated controls",
+      "CHECK-BLD-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-005": "Affected fixture/caller review and stated controls",
+      "CHECK-UI-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-UI-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-UI-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-003": "Affected fixture/caller review and stated controls",
+      "CHECK-DOC-001": "Affected fixture/caller review and stated controls",
+      "CHECK-DOC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-DOC-003": "Affected fixture/caller review and stated controls"
+    },
+    "notApplicable": "MHFE does not implement transaction signing, provider accounting or coin scans."
+  },
+  "checks": [
+    {
+      "name": "native-fixture-standards",
+      "argv": [
+        "node",
+        "scripts/verify-code-rules.mjs"
+      ],
+      "exitCode": 1,
+      "outcome": "nested test module needed an explicit test-only declaration",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-standards.command.json",
+      "receiptSha256": "a61a87e5feb0f1e0130450984d9f9c1eec5b7ddbc6e33835c4a8babf6f88355a",
+      "logSha256": "e850a7607f639cdc3e8edc1d51394228591c3b2f356f2a51a76f439a0a9ac656",
+      "checkedSourceFingerprint": "c35ed8ff28151888f2b849c5b6b9fd73fbbb97e29afb237c1823f27956ce250c",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5",
+          "final": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b",
+          "final": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857"
+        },
+        "src/bin/mhfe/protect/windows/tests.rs": {
+          "checked": "f37cfa7736e2b949ce277483911dd09003443fd39af351134a4547b42f1c2901",
+          "final": "d11ad409f36a09a3534b7f0ec701b2ad8ae638bbe96cc94ba43925412768402e"
+        }
+      },
+      "peakRssKiB": 86376,
+      "minimumMachineMemAvailableKiB": 7817444,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-fixture-standards-test-scope",
+      "argv": [
+        "node",
+        "scripts/verify-code-rules.mjs"
+      ],
+      "exitCode": 0,
+      "outcome": "passed with unchanged gate",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-standards-test-scope.command.json",
+      "receiptSha256": "feee499dc8d29cccc7840f9604c676684768a00561ec094b358dc72314df784f",
+      "logSha256": "910330597c5f6dd619956579e00fe6c13951331bcbde4b9aff784fe13e14df30",
+      "checkedSourceFingerprint": "4043dedea2ab97fd0f1cf8d55690aa0fab35b7cfb63d3c2e6208ae934d26125a",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5",
+          "final": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b",
+          "final": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857"
+        }
+      },
+      "peakRssKiB": 85528,
+      "minimumMachineMemAvailableKiB": 7743620,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "fixture-signing-baseline-red",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-036-harnesses/fixture-signing.py",
+        "--baseline"
+      ],
+      "exitCode": 1,
+      "outcome": "expected baseline bare-signing dispatch failure",
+      "localOnly": true,
+      "receipt": "commands/fixture-signing-baseline-red.command.json",
+      "receiptSha256": "2ddf67b9932787cc6c0979bc1ad0d6980650e75fc037653911ade50089661068",
+      "logSha256": "cedf6fff8b68329d8dde67969c7d5a3f47c8f4edd65c71254cc9a6d85e1768c4",
+      "checkedSourceFingerprint": "4043dedea2ab97fd0f1cf8d55690aa0fab35b7cfb63d3c2e6208ae934d26125a",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5",
+          "final": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b",
+          "final": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857"
+        }
+      },
+      "peakRssKiB": 2680,
+      "minimumMachineMemAvailableKiB": 7843592,
+      "rssLimitKiB": 196608,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "fixture-signing-local-green",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-036-harnesses/fixture-signing.py"
+      ],
+      "exitCode": 0,
+      "outcome": "passed before optimization-refusal addition",
+      "localOnly": true,
+      "receipt": "commands/fixture-signing-local-green.command.json",
+      "receiptSha256": "ce94a720fa2974eda6083ea0402a2a5c63963fce8877d5c9bc784588a2d5dbec",
+      "logSha256": "95ac4e58ab90d25ba825b85adb672a997eff2b4b001f74dce892d42c236a8493",
+      "checkedSourceFingerprint": "4043dedea2ab97fd0f1cf8d55690aa0fab35b7cfb63d3c2e6208ae934d26125a",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5",
+          "final": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b",
+          "final": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857"
+        }
+      },
+      "peakRssKiB": 2860,
+      "minimumMachineMemAvailableKiB": 7825712,
+      "rssLimitKiB": 196608,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "fixture-signing-optimization-refusal",
+      "argv": [
+        "python3",
+        "-O",
+        "docs/audits/AUD-036-harnesses/fixture-signing.py"
+      ],
+      "exitCode": 1,
+      "outcome": "expected refusal of disabled Python assertions",
+      "localOnly": true,
+      "receipt": "commands/fixture-signing-optimization-refusal.command.json",
+      "receiptSha256": "60763331f73bd546d063bf02ff30ac3d85318db8149ea2afa060cc4759bc2aa9",
+      "logSha256": "be99f135ee1dbfb736ba5eecfc81cd39138cc2a330fe17d5628313b1bd6e4172",
+      "checkedSourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+      "deltaFromFinalSource": {},
+      "peakRssKiB": 46568,
+      "minimumMachineMemAvailableKiB": 7808252,
+      "rssLimitKiB": 196608,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "fixture-signing-final-green",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-036-harnesses/fixture-signing.py"
+      ],
+      "exitCode": 0,
+      "outcome": "passed final public dispatch controls",
+      "localOnly": true,
+      "receipt": "commands/fixture-signing-final-green.command.json",
+      "receiptSha256": "f6b7ff2dc1162a14d75deb39a1054c0867b29cb918012e5f2df4de56fd455e4b",
+      "logSha256": "95ac4e58ab90d25ba825b85adb672a997eff2b4b001f74dce892d42c236a8493",
+      "checkedSourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+      "deltaFromFinalSource": {},
+      "peakRssKiB": 3224,
+      "minimumMachineMemAvailableKiB": 7797396,
+      "rssLimitKiB": 196608,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-fixture-local-gates",
+      "argv": [
+        "bash",
+        "docs/audits/AUD-036-harnesses/checks.sh"
+      ],
+      "exitCode": 0,
+      "outcome": "passed final focused local gates",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-local-gates.command.json",
+      "receiptSha256": "e4aa4b3d1f1d98379d2df833ff4daf200e85402308615d3f46f3725a41ecc92b",
+      "logSha256": "fa863655495df438886c61c20269d102824c7b99cf8916d08801820c28e2274d",
+      "checkedSourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+      "deltaFromFinalSource": {},
+      "peakRssKiB": 378076,
+      "minimumMachineMemAvailableKiB": 7543260,
+      "rssLimitKiB": 524288,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-fixture-baseline-ci-metadata",
+      "argv": [
+        "gh",
+        "run",
+        "view",
+        "39189322671",
+        "--repo",
+        "hobby-eng/mhfe",
+        "--json",
+        "status,conclusion,headSha,event,jobs,url"
+      ],
+      "exitCode": 0,
+      "outcome": "retained completed failing baseline CI metadata",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-baseline-ci-metadata.command.json",
+      "receiptSha256": "42e36828ec9fc65d76f615fb08f857e45d1699fe3d07f0a02298f74fded4a543",
+      "logSha256": "92c098857fb2b77a363ef338699c1bbad2f8f6989768d09da5a5bc2e5778bca4",
+      "checkedSourceFingerprint": "4043dedea2ab97fd0f1cf8d55690aa0fab35b7cfb63d3c2e6208ae934d26125a",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5",
+          "final": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b",
+          "final": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857"
+        }
+      },
+      "peakRssKiB": 36632,
+      "minimumMachineMemAvailableKiB": 7726180,
+      "rssLimitKiB": 196608,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-policy-pushed-ci-windows-red",
+      "argv": [
+        "gh",
+        "api",
+        "repos/hobby-eng/mhfe/actions/jobs/117858416499/logs"
+      ],
+      "exitCode": 0,
+      "outcome": "retained actual Windows job log",
+      "localOnly": true,
+      "receipt": "commands/native-policy-pushed-ci-windows-red.command.json",
+      "receiptSha256": "d52c85b1b1f9557fa157b2941593c72ecdf20c8448ce2c2a942c6560c4355b88",
+      "logSha256": "edfc6a1fb2268bd23019cb453204f37a573eec3563383c45da2c96c4ff53c38f",
+      "checkedSourceFingerprint": "cb1253ba0eda6da88d98958ba05f39c82e3778188a8784ca9b37472d157c3d55",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5",
+          "final": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b",
+          "final": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857"
+        },
+        "scripts/terminal_suite/self_test.py": {
+          "checked": "67ed5c1bd517c7df3e2150d6d281455b9308759eeb613c702e9f848830e18619",
+          "final": "b62387780b28bf39b6b8b6ef951af11b5b19242a72d5fe09077465791a1ea306"
+        },
+        "src/bin/mhfe/protect/windows/tests.rs": {
+          "checked": "2c0cbd5efa2e6dffabed4767d1cca52277b9c1f616ddf4a6aab29d7785acf720",
+          "final": "d11ad409f36a09a3534b7f0ec701b2ad8ae638bbe96cc94ba43925412768402e"
+        },
+        "src/bin/mhfe/protect/windows/tests/observer.rs": {
+          "checked": null,
+          "final": "85666ef91f8c6d94ea5f7f626a92643ae68fae67602aa448745626517a3b3e36"
+        }
+      },
+      "peakRssKiB": 35704,
+      "minimumMachineMemAvailableKiB": 7880776,
+      "rssLimitKiB": 196608,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-policy-pushed-ci-macos-red",
+      "argv": [
+        "gh",
+        "api",
+        "repos/hobby-eng/mhfe/actions/jobs/117858416670/logs"
+      ],
+      "exitCode": 0,
+      "outcome": "retained actual macOS job log",
+      "localOnly": true,
+      "receipt": "commands/native-policy-pushed-ci-macos-red.command.json",
+      "receiptSha256": "440479ee645bdd855c09df54d6f0a70f3ac921422931a2d89656e91361b28a45",
+      "logSha256": "7967418723ccee73ebc0bfd080eea97ba7422f5e0dccf0e3466baa278dfa7732",
+      "checkedSourceFingerprint": "f224e8bfbf9a08272b856cde7233ed3c6a08ab9739a9c83b3ce02299bff0924c",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5",
+          "final": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b",
+          "final": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857"
+        },
+        "scripts/terminal_suite/self_test.py": {
+          "checked": "67ed5c1bd517c7df3e2150d6d281455b9308759eeb613c702e9f848830e18619",
+          "final": "b62387780b28bf39b6b8b6ef951af11b5b19242a72d5fe09077465791a1ea306"
+        },
+        "src/bin/mhfe/protect/windows/tests.rs": {
+          "checked": "f37cfa7736e2b949ce277483911dd09003443fd39af351134a4547b42f1c2901",
+          "final": "d11ad409f36a09a3534b7f0ec701b2ad8ae638bbe96cc94ba43925412768402e"
+        }
+      },
+      "peakRssKiB": 36460,
+      "minimumMachineMemAvailableKiB": 7860616,
+      "rssLimitKiB": 196608,
+      "reserveKiB": 3145728
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-036-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Windows external observer does not constrain the DACL threat context",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": true,
+      "affectedFiles": [
+        "src/bin/mhfe/protect/windows/tests.rs",
+        "src/bin/mhfe/protect/windows/tests/observer.rs"
+      ],
+      "reproduction": "Run the Windows native process-protection test at c059b1a on the hosted runner.",
+      "expected": "Both external observers exercise ordinary same-user access without privileged DACL bypass.",
+      "observed": "Strict DACL equality, memory_access and startup passed, but the fresh negative VM_READ open succeeded; 199 CLI cases passed and one failed.",
+      "impact": "The test can fail outside the documented DACL threat model. This does not demonstrate ordinary-user access after hardening; baseline effective privileges were not measured.",
+      "recommendedFix": "Prepare the same ordinary observer for both controls: reject impersonation/SYSTEM, disable only SeDebugPrivilege and independently read back its disabled/absent state.",
+      "implementedFix": "A test-only shared observer helper performs those checks with owned handles and bounded aligned token metadata; every original grant/denial assertion remains.",
+      "requiredVerification": "Native Windows compilation and paired ordinary VM_READ/WRITE_DAC grants/denials, plus startup and optimized CLI/pseudo-console acceptance.",
+      "evidence": {
+        "localOnly": true,
+        "log": "commands/native-policy-pushed-ci-windows-red.log",
+        "sha256": "edfc6a1fb2268bd23019cb453204f37a573eec3563383c45da2c96c4ff53c38f"
+      }
+    },
+    {
+      "id": "AUD-036-BLD002",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Damaged macOS known-answer fixtures lose hardened-runtime signing",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": true,
+      "affectedFiles": [
+        "scripts/terminal_suite/self_test.py"
+      ],
+      "reproduction": "Run the native PTY suite against the optimized runtime-signed c059b1a CLI.",
+      "expected": "Flipping one known-answer bit changes the tested answer while retaining the original runtime-policy conditions.",
+      "observed": "damaged_copy re-signed with bare codesign --force --sign -, omitting runtime. Wrong-answer startup/menu refusals passed, then exact full-report comparison failed because the damaged copy reported hardened runtime unverified.",
+      "impact": "The fixture changes a second independent condition and blocks native terminal acceptance. The original CLI passed its runtime verification and ordinary self-tests.",
+      "recommendedFix": "Reuse the shared hardened-runtime signing and verification script after writing/chmod; propagate failure before executing the modified fixture.",
+      "implementedFix": "The Darwin-only path calls absolute ROOT/scripts/harden-macos.sh with check=True and timeout30; original expected reports and known-answer assertions are byte-identical.",
+      "requiredVerification": "Red/green public helper dispatch and signer-refusal controls, followed by real macOS signing, damaged-known-answer and terminal suite execution.",
+      "evidence": {
+        "localOnly": true,
+        "log": "commands/native-policy-pushed-ci-macos-red.log",
+        "sha256": "7967418723ccee73ebc0bfd080eea97ba7422f5e0dccf0e3466baa278dfa7732"
+      }
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-036-BLD001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Exact candidate source hashes, local controls and independent review; new native CI pending."
+    },
+    {
+      "id": "AUD-036-BLD002",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Exact candidate source hashes, local controls and independent review; new native CI pending."
+    }
+  ],
+  "limitations": [
+    "Candidate native Windows and macOS execution remains pending; local helper mocks do not verify native signing or DACL enforcement.",
+    "The baseline Windows debug/SYSTEM/thread-token state was not measured. Successful child output may be captured/discarded; a passing candidate proves its asserted final ordinary context, not inherited debug_before=true.",
+    "No production source, API, cryptographic output, parameter or browser payload changed; this adds no startup diagnostic work.",
+    "No full-cost vectors, canonical release packaging, universal CORE certification or proof of absence of defects."
+  ],
+  "procedureHashes": {
+    "AGENTS.md": "1f2bd03825f0a0056dbf430da8b0243423ea34f130ac3dbe08b7235eb5d920d3",
+    ".github/instructions/code-core.instructions.md": "51ac92ddffea253bb7ed2f1926eb4cab6c2f52d336af95c1d63f3ebdd9fce066",
+    ".github/instructions/code-rust.instructions.md": "08bb268d4da1d1e01e93e6294b028a9471a062565eeaf7eb7355fd6592bdcc9c",
+    ".github/instructions/code-typescript.instructions.md": "5984f573d7df64ebd494f79891ce838dd518f0cf27876a2965fe46df6ace3ec1",
+    ".github/instructions/code-browser.instructions.md": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+    ".github/instructions/code-tooling.instructions.md": "ba09a6530475e8ba08cc96dbf4100b043b6c250263e62def21321f178bb631f7",
+    ".github/instructions/docs.instructions.md": "1fc9e20ab2f2dad220dc3f6b507e7372c161a05208c80ed2aa8dc28525bb33bf",
+    ".github/instructions/ci.instructions.md": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+    ".github/instructions/audits.instructions.md": "6eed08f958c11bd530006c89489796db8efa759f8a93c501a514de262d0ab004",
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb",
+    "GLOSSARY.md": "ef514c847fdd5fb24ab5a0bd649e29e01955190c6a0afcbf3445c14e775cc2e5",
+    "GLOSSARY-MAP.md": "a2b6c79b8279c5f98cbb62494b9aaf553e50b12be99363b6b6f09788cc64f9f6",
+    "mhfe_spec/GLOSSARY.md": "d52e50b41e2ad3fa97618c5bcdf270040d6762ee2990f4402c78fda9e976b665"
+  },
+  "repositoryAgentsSha256": "2578731c946d18af56e721b1f1a2f504c77d05eea6e343a9564a01553613c5d2",
+  "independentReviews": [
+    {
+      "path": "reviews/windows-observer-privilege-analysis.json",
+      "sha256": "30dee733d4f9b15faff5dfffc8409235e8789d58ef932834a91fabb0bf6a63ea",
+      "localOnly": true
+    },
+    {
+      "path": "reviews/windows-observer-privilege-review.json",
+      "sha256": "9aae31d589e3aaae5b42309c91612a3228c432688f069256ad20f980c7f528ce",
+      "localOnly": true
+    },
+    {
+      "path": "reviews/macos-damaged-fixture-analysis.json",
+      "sha256": "5e443c4c78a5242082bdc2d2ab4f8c34feb48ef586ba18eaafef3ab5780b7211",
+      "localOnly": true
+    },
+    {
+      "path": "reviews/macos-damaged-fixture-final-review.json",
+      "sha256": "ccdf675b26cfb48e254fd5a7c7506152511645f40613e582bbccfae2ab1bd311",
+      "localOnly": true
+    }
+  ],
+  "hostedBaseline": {
+    "runId": 39189322671,
+    "commit": "c059b1afb00584d9a99fefe37247448b5ec7f3cd",
+    "url": "https://github.com/hobby-eng/mhfe/actions/runs/39189322671",
+    "metadataSha256": "92c098857fb2b77a363ef338699c1bbad2f8f6989768d09da5a5bc2e5778bca4",
+    "jobs": [
+      {
+        "name": "portable (windows-2025)",
+        "id": 117858416499,
+        "conclusion": "failure"
+      },
+      {
+        "name": "portable (macos-15)",
+        "id": 117858416670,
+        "conclusion": "failure"
+      },
+      {
+        "name": "check",
+        "id": 117858416700,
+        "conclusion": "success"
+      },
+      {
+        "name": "canonical-build",
+        "id": 117858417590,
+        "conclusion": "skipped"
+      },
+      {
+        "name": "macos-packages",
+        "id": 117858417809,
+        "conclusion": "skipped"
+      },
+      {
+        "name": "canonical-windows",
+        "id": 117858417968,
+        "conclusion": "skipped"
+      }
+    ]
+  },
+  "retainedAcceptance": {
+    "linux": "All automatic fast gates passed at c059b1a.",
+    "macOS": "429 library and 205 CLI cases passed, plus contract/vector guards and 11 rustdoc cases; real paired attachment test, optimized build, runtime verification and ordinary terminal self-tests passed. Do not add overlapping totals.",
+    "windows": "429 library cases passed; strict DACL/startup now pass, but full native acceptance stops at the negative observer.",
+    "priorFinding": {
+      "id": "AUD-026-BLD003",
+      "status": "verified",
+      "verificationCommit": "c059b1afb00584d9a99fefe37247448b5ec7f3cd",
+      "scope": "Actual paired macOS PT_ATTACH control and protected tracer signal"
+    },
+    "browser": {
+      "builtSourceCommit": "804079743dd63794dfa747de0882b55c78284232",
+      "packageFiles": {
+        "dist/README.md": "0d2495ab45a515c3b92f7d9e95686f022cf2e7e373900c39eeda006333b12f8d",
+        "dist/core/argon2-mt.js": "707133f242f6506097fe5710d5c10887ac307b73e302475ab841f985ec64b57f",
+        "dist/core/argon2-st.js": "05fbf3d8dd07d866b8e23ab57012dd3f1883d8c1d9a6413d970bc611503ac6a4",
+        "dist/core/client.d.ts": "9cd68b44a6ce134c179f4a705e72c71dca524e99eb7410518ad6b97a4d599bf3",
+        "dist/core/client.js": "889d34e277d13adf83bc252adc2982487fef23803c95af8e784547828921b5f7",
+        "dist/core/mhfe-fast-mode.py": "cbab4c87720425a78567a6a5cccbc2287552bfff9a1d54de30c1b5104a85d664",
+        "dist/modules.json": "86b370a805fe3e37894419486a0384b46a5da3a851c84b5d75fed5252dfd29e0",
+        "dist/passwords/passwords.d.ts": "61ae42a721ed7a86c16caa779d5cae9f5b0b54c9aa542d07e36febcb3ded6362",
+        "dist/passwords/passwords.js": "71f60087d4a0c2f8805d11223aa64800edf9879faeb04af2e262b5d668ee4b52",
+        "dist/repair/repair.d.ts": "e015fe47d6d102cc6ae1ffa57f0de4f3ca6b6dc871970387bb3340a3eb59986b",
+        "dist/repair/repair.js": "0817259b1016637dd0d8253a712b57ff3ec770772ae9aff9e584781f80d29091",
+        "dist/runtime/mhfe.wasm": "cbb29315d56de39386fd91e05ad2fd088ac740d071722a7be697f6cbc98dac48",
+        "dist/runtime/runtime.d.ts": "002e5524bb20b0b3f9fee0e4e57aae614bb6dae04ea9f52ffbf25f6c47698448",
+        "dist/runtime/runtime.js": "6dc7c9b785fe2cdc51d7d6000fb6776d8e97b2fd5ecae4d5ae2c3507d73ac828",
+        "dist/runtime/worker.js": "736024d25ce584db40ba24dd74bc25c9bf7d3bcd9a290b31e774250401613a23",
+        "dist/wallet/wallet.d.ts": "060fc628773c698ebd1ba3865acb63af5b9a3372c8a2a97ae52ed040fd728e18",
+        "dist/wallet/wallet.js": "283cbf078c18a822e6b4d2bd7873fdad9cdf291358c5f9f52a6c59827e59607c"
+      },
+      "version": "0.6.1",
+      "buildId": "0974feefdbb10a26",
+      "nativeOnlyFollowupDoesNotRelabelPackageBuild": true
+    },
+    "precedingEvidenceManifests": {
+      "AUD-033": "f75fa8767cc8eea315932591dd6ddaf03db959b48c304841f3c514cd8872083f",
+      "AUD-034": "02d3492e41e6b593abb955c135d59eab60e5b04a0d428f709e9094cdb316cc95",
+      "AUD-035": "964874ed4bdf6c7e82a0df695dfd3cd07677eefb199ae9979b09fd98b632cab9"
+    }
+  },
+  "skillsAndTools": {
+    "newlyApplied": [],
+    "reused": [
+      "diagnosing-bugs",
+      "wallet-full-audit",
+      "wallet-security-review",
+      "microsoft-rust-guidelines"
+    ],
+    "newInstallations": [],
+    "skillHashes": {
+      "diagnosing-bugs": "9168404abda0967a5d32977e3498cd95fda6807018852f3de736a78357c82b40",
+      "wallet-full-audit": "5fef2f168d0d2895a469ea10be76dee1c44c55f8678162bcf5487108b2c4395d",
+      "wallet-security-review": "0039e3c1345f19948551739050269cab947eeb4d32c9c8cc8e10897a8dab3f66",
+      "microsoft-rust-guidelines": "94711a862784747fa06c47b4a088b91992b6aead0ffa4a811423f703b5da663f"
+    },
+    "tools": [
+      "Existing bounded AUD-033 recorder, GitHub CLI and native CI",
+      "Existing Rust/Node/pnpm formatting, standards and copies gates",
+      "Python standard-library mock of the actual public damaged-copy helper",
+      "Two independent read-only reviewers with distinct platform scopes"
+    ],
+    "notClaimed": "No new JS, derivation, SAST, mutation, fuzzing, timing or release campaign."
+  },
+  "supplementaryRustTopics": {
+    ".github/vendor/microsoft-rust-guidelines/src/guidelines/ffi/M-FFI-TRANSLATES.md": "0ce63fc687739527220bef6e114319fca1d9cbc0db1806c5148313dc244dbf50",
+    ".github/vendor/microsoft-rust-guidelines/src/guidelines/ffi/M-ISOLATE-DLL-STATE.md": "e964119927c0a14bbe18c7837cd2b47606e5b8c3b30b55ab280e723dd150373d"
+  },
+  "publicHarnesses": {
+    "docs/audits/AUD-036-harnesses/README.md": "0bdb13dd2414339a0afe093b840c9c2cdd793cb9aebcbdb873dbc0fe521d82fc",
+    "docs/audits/AUD-036-harnesses/checks.sh": "cf389fe0e7ca1ab421d8a162ec030e0d30219ea0dbd74bc5d489c63302302a13",
+    "docs/audits/AUD-036-harnesses/fixture-signing.py": "3ac54ceb547de48aa770240c67399f3d6ff45d4755050217a8d20009f56656da"
+  },
+  "primaryReferences": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess",
+    "https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-adjusttokenprivileges",
+    "https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-checktokenmembership",
+    "https://developer.apple.com/documentation/security/resolving-common-notarization-issues"
+  ],
+  "evidence": {
+    "directory": "docs/audits/AUD-036-evidence",
+    "localOnly": true,
+    "manifest": "SHA256SUMS",
+    "validation": "report-validation.json"
+  },
+  "reportDocument": {
+    "path": "docs/audits/AUD-036-2026-10-19.md",
+    "sha256": "32f09b6644e042278c816151cca15b771c97c58ef54933db6c3749bc1fef14e3"
+  }
+}

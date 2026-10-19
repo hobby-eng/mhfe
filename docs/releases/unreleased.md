@@ -262,6 +262,8 @@ are cancelled.
 
 ## Build, tests and release
 
+- Native access probes verify their ordinary-user context and disabled debugger privilege.
+  Damaged macOS test executables retain the shared hardened-runtime signing policy.
 - Browser diagnostics include the complete core parameter schema. Native lock expectations cover
   Windows and Unix. The macOS attachment probe first requires an attachable public control, then
   tests a protected child with a verified default signal disposition; unavailable controls fail

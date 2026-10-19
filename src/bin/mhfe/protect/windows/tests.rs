@@ -6,6 +6,9 @@ use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_VM_READ};
 use super::super::test_process::{require_success, run, TARGET_PID};
 use super::*;
 
+#[cfg(test)]
+mod observer;
+
 #[test]
 fn windows_process_protections_are_enforced() {
     require_success(run("protect::windows::tests::hardened_process", None));
@@ -50,6 +53,7 @@ fn another_process_can_read_memory() {
 }
 
 fn check_process_access(allowed: bool) {
+    observer::require_ordinary_access();
     let pid: u32 = std::env::var(TARGET_PID).unwrap().parse().unwrap();
     // WRITE_DAC (0x00040000) would let an owner grant VM_READ back to itself.
     const WRITE_DAC: u32 = 0x0004_0000;

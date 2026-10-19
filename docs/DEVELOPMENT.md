@@ -67,6 +67,11 @@ handler cannot consume the kernel's synthetic signal. Their core-file limits sta
 Without that opt-in it runs with the caller's permissions. An unavailable control fails the
 test and never establishes protection. The hosted macOS CI job sets the opt-in explicitly.
 
+Windows access probes use disposable ordinary-user observers with no impersonation token or
+SYSTEM membership. Each observer disables and reads back `SeDebugPrivilege` before its fresh
+access requests. On macOS, damaged-known-answer fixtures use the shared hardened-runtime signing
+and verification script so their process-policy conditions match the original executable.
+
 Markdown and JavaScript use the repository's pinned Prettier. The Node.js tools come through
 pnpm, in the version that `packageManager` in `package.json` names (with Corepack:
 `corepack enable`). Install the development dependencies from the lockfile and check formatting

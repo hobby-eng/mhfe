@@ -42,6 +42,7 @@ from .constants import (
     PRESS_ENTER_TO_QUIT,
     PROGRAM,
     RESET,
+    ROOT,
     SELF_TEST_ALARM,
     SELF_TEST_ANSWERS,
     SELF_TEST_ENTRY,
@@ -264,11 +265,10 @@ def damaged_copy(folder, text):
     copy.chmod(0o700)
     if sys.platform == "darwin":
         # macOS on Apple silicon runs only signed code, and the flipped
-        # bit breaks the signature
-        # the linker gave the program: the copy is signed again in the
-        # same way, ad hoc.
-        subprocess.run(["codesign", "--force", "--sign", "-", str(copy)], check=True,
-                       capture_output=True)
+        # bit breaks its signature. Keep the tested runtime policy when
+        # re-signing, rather than replacing it with a plain signature.
+        subprocess.run([str(ROOT / "scripts/harden-macos.sh"), str(copy)], check=True,
+                       capture_output=True, timeout=30)
     return str(copy)
 
 
