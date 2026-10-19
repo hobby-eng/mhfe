@@ -16,6 +16,12 @@ signatures and create a signed annotated tag matching `Cargo.toml`. Run the repo
 `scripts/check.sh` and a cached/uncached canonical comparison locally; keep heavy builds sequential.
 The long vector replays run on GitHub for the tag rather than being duplicated locally.
 
+A manual `ci.yml` run also checks the canonical Windows GNU executable in a Windows
+pseudo-console and builds both macOS packages without creating a release. The macOS acceptance
+check verifies their actual architectures, extracted hardened signatures, build provenance and byte-identical repacking
+after changing checkout modes and timestamps. Its unsigned control must fail. These native checks
+require their respective runners; portable archive controls on Linux do not replace them.
+
 Build and compare cached and uncached outputs in separate output folders, one after the other:
 
 ```sh

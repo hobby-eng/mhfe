@@ -4,9 +4,9 @@
 //! a secret runs the quick part of the same checks at its start (startup.rs).
 //!
 //! With `--vectors` it also runs two published test vectors at their full cost, an encryption of
-//! suite 3 and a recovery of suite 4, which take minutes and 2 GiB: a program that passes computes
-//! MHFE as the specification says, here and now, also where only the full size shows a fault. The
-//! vectors are public, so no secret is involved.
+//! suite 3 and a recovery of suite 4, which take minutes and 2 GiB. A pass confirms those finite
+//! operations and their witnessed rounds on this run; it does not prove every input or later
+//! execution correct. The vectors are public, so no secret is involved.
 
 use std::io::{self, IsTerminal};
 use std::time::{Duration, Instant};
@@ -286,8 +286,8 @@ fn alarm(headline: &str) -> i32 {
     INTERNAL_ERROR
 }
 
-/// Runs the two published vectors at their full cost and shows how each came out; whether both
-/// came out as published.
+/// Shows both full-cost vector results; returns whether both final outputs and all witnessed
+/// rounds matched the published vectors.
 fn run_vectors(flow: Flow) -> Result<bool, Failure> {
     let test = SelfTest::published()?;
     let work = test.work();
@@ -349,6 +349,18 @@ mod tests {
     #[test]
     #[ignore = "the whole full self-test: seconds and 256 MiB"]
     fn every_part_passes_the_full_self_test() {
+        crate::protect::test_process::require_success(crate::protect::test_process::run(
+            "self_test::tests::full_self_test_child",
+            Some(std::process::id()),
+        ));
+    }
+
+    #[test]
+    #[ignore = "the full self-test hardens only this disposable child; invoked on request"]
+    fn full_self_test_child() {
+        if std::env::var_os(crate::protect::test_process::TARGET_PID).is_none() {
+            return;
+        }
         let _alone = startup::one_test_at_a_time();
         crate::protect::harden_process();
         let started = Instant::now();

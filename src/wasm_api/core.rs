@@ -41,6 +41,8 @@ mod self_test;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SuiteParameters {
+    #[serde(flatten)]
+    input_text: super::InputTextParameters,
     version: &'static str,
     suite_id: &'static str,
     same_length_suite_id: &'static str,
@@ -69,6 +71,7 @@ struct SuiteParameters {
 #[wasm_bindgen(js_name = suiteParameters)]
 pub fn suite_parameters() -> Result<String, JsError> {
     json(&SuiteParameters {
+        input_text: super::InputTextParameters::new(),
         version: env!("CARGO_PKG_VERSION"),
         suite_id: SUITE_ID,
         same_length_suite_id: SAME_LENGTH_SUITE_ID,
@@ -325,8 +328,8 @@ fn sealed_json(
     sealed: &Sealed,
     work: WorkFactor,
     passphrase: WalletPassphrase,
-) -> Result<String, JsError> {
-    json(&sealed_view(sealed, work, passphrase)?)
+) -> Result<js_sys::JsString, JsError> {
+    secret_json(&sealed_view(sealed, work, passphrase)?)
 }
 
 /// Encrypts the phrase, its UTF-8 bytes `phrase_utf8`, and returns JSON `{ container, suiteId,
@@ -363,7 +366,7 @@ pub fn encrypt(
     argon2: JsArgon2,
     on_round: &js_sys::Function,
     on_unverified: &js_sys::Function,
-) -> Result<String, JsError> {
+) -> Result<js_sys::JsString, JsError> {
     // Every secret is put under a wiping owner before anything can fail, so that no early return
     // drops one of them unwiped. The phrase is read in place, without a copy.
     let phrase = SecretText::new(phrase_utf8);
@@ -597,11 +600,13 @@ fn word_count(words: f64) -> Result<PhraseLength, JsError> {
     PhraseLength::from_count(words as usize).map_err(js_error)
 }
 
-/// 0 for no repair words, else 2, 4, 6 or 8, which the encryption checks.
+/// 0 for no repair words, else the repair module's validated count, before any cipher work.
 fn repair_count(count: f64) -> Result<Option<usize>, JsError> {
     match whole_number(count, crate::request::NumberField::RepairWordCount)? {
         0 => Ok(None),
-        count => Ok(Some(count as usize)),
+        count => crate::repair::RepairWordCount::new(count as usize)
+            .map(|count| Some(count.get()))
+            .map_err(js_error),
     }
 }
 

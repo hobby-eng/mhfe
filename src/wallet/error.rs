@@ -142,7 +142,7 @@ impl fmt::Display for KeyIssue {
 }
 impl std::error::Error for KeyIssue {}
 
-/// A wallet-module failure. Reasons contain public counts or identifiers, never typed secrets.
+/// A wallet-module failure. Reasons contain bounded counts or categories, never supplied text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WalletError {
     /// An address was refused.

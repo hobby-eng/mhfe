@@ -46,12 +46,36 @@ impl crate::ErrorIdentity for PassphraseError {
     }
 }
 
-/// A guard before normalization or seed work; no extra passphrase copy is made.
-pub(crate) fn require_size(passphrase: &str) -> Result<(), PassphraseError> {
-    if passphrase.len() > MAX_PASSPHRASE_BYTES {
-        return Err(PassphraseError::TooLong(passphrase.len()));
+/// A borrowed BIP39 passphrase within the raw byte limit, before normalization or seed work.
+pub struct Bip39Passphrase<'a>(&'a str);
+
+impl<'a> Bip39Passphrase<'a> {
+    /// Checks [`crate::wallet::MAX_PASSPHRASE_BYTES`] raw UTF-8 bytes without copying the text.
+    ///
+    /// Returns [`PassphraseError::TooLong`] above the limit. An empty passphrase is accepted;
+    /// requiring a nonempty one remains a separate wallet-check policy.
+    pub fn read(passphrase: &'a str) -> Result<Self, PassphraseError> {
+        if passphrase.len() > MAX_PASSPHRASE_BYTES {
+            return Err(PassphraseError::TooLong(passphrase.len()));
+        }
+        Ok(Self(passphrase))
     }
-    Ok(())
+
+    /// The original bounded text, without normalization or another allocation.
+    pub const fn text(&self) -> &'a str {
+        self.0
+    }
+}
+
+impl fmt::Debug for Bip39Passphrase<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("Bip39Passphrase(hidden)")
+    }
+}
+
+/// The same guard used by every seed and passphrase consumer.
+pub(crate) fn require_size(passphrase: &str) -> Result<(), PassphraseError> {
+    Bip39Passphrase::read(passphrase).map(|_| ())
 }
 
 /// The largest growth of UTF-8 text under NFKD: U+FDFA, 3 bytes, decomposes into 33 bytes.
@@ -86,6 +110,30 @@ fn normalized_passphrase(passphrase: &str) -> LockedText {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn raw_passphrase_bytes_are_bounded_before_normalization() {
+        for unit in ["a", "é", "\u{1d400}"] {
+            let at_limit = unit.repeat(MAX_PASSPHRASE_BYTES / unit.len());
+            assert_eq!(
+                crate::Bip39Passphrase::read(&at_limit).unwrap().text(),
+                at_limit
+            );
+            let excessive = format!("{at_limit}a");
+            assert_eq!(
+                crate::Bip39Passphrase::read(&excessive).unwrap_err(),
+                PassphraseError::TooLong(MAX_PASSPHRASE_BYTES + 1)
+            );
+        }
+        assert_eq!(crate::Bip39Passphrase::read("").unwrap().text(), "");
+        assert_eq!(
+            format!(
+                "{:?}",
+                crate::Bip39Passphrase::read("public fixture").unwrap()
+            ),
+            "Bip39Passphrase(hidden)"
+        );
+    }
     /// The wiping normalization gives the seed that bip39 itself computes, also for a passphrase
     /// that NFKD changes, including one that grows the most.
     #[test]

@@ -2,6 +2,7 @@
 // bindings of its WebAssembly through its own wasm-bindgen glue, the page's Argon2 bridge over
 // both Emscripten builds, the core's operations with named arguments, and the stand-ins the checks
 // pass for the page's callbacks and its random source.
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import vm from "node:vm";
@@ -53,6 +54,19 @@ export const realArgon2 = argon2Engine(await builds["single-threaded"]());
 /** The core's facts, whose limits every file of the package shares. */
 export const parameters = JSON.parse(bindings.suiteParameters());
 
+/** Checks a returned secret JSON string before parsing, without another guest call. */
+export function readWipedJson(text) {
+  assert.equal(typeof text, "string", "secret JSON keeps its primitive-string API");
+  // Public synthetic outputs only. This finite live-memory control includes the stack; it
+  // does not establish erasure of registers or strings held by the JavaScript host.
+  assert.equal(
+    Buffer.from(coreMemory.buffer).includes(Buffer.from(text, "utf8")),
+    false,
+    "the complete returned secret JSON must not remain in WebAssembly linear memory",
+  );
+  return JSON.parse(text);
+}
+
 /** The core module's bindings: the bindings of the package's one WebAssembly. */
 const core = bindings;
 /**
@@ -63,7 +77,7 @@ const core = bindings;
  */
 export const operations = {
   encrypt: (phrase, password, argon2, options = {}) =>
-    JSON.parse(
+    readWipedJson(
       core.encrypt(
         encode(phrase),
         password,

@@ -105,6 +105,11 @@ signing and publication are described in [RELEASING.md](RELEASING.md).
 must be checked against the companion [specification](https://github.com/hobby-eng/mhfe-spec)
 and its vectors too. Version 0.3.0 was the last release to implement suite 2.
 
+Recorded vector reads and checksum generation accept regular files of at most 1 MiB each.
+Symlinks, FIFOs, devices and directories are refused. Hashing streams the bounded file instead
+of loading it whole. An existing temporary output path is refused rather than overwritten;
+after an interrupted write, inspect that path before removing it and retrying.
+
 The native full-size replays take about an hour for suite 3 and half an hour for suite 4:
 
 ```sh

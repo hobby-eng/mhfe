@@ -3,46 +3,11 @@
 // may carry; and a WebAssembly with one of them damaged, whose self-check must fail
 // (scripts/verify-browser-package.mjs, scripts/verify-single-modules.mjs).
 
-/** The string literals of Rust source text, with their escapes resolved. */
+import { RustSource } from "./rust-source.mjs";
+
+/** UTF-8 string bodies decoded by the shared bounded Rust lexical reader. */
 export function rustStrings(source) {
-  const strings = [];
-  let index = 0;
-  while (index < source.length) {
-    if (source.startsWith("//", index)) {
-      index = source.indexOf("\n", index);
-      if (index === -1) break;
-    } else if (source[index] === '"') {
-      let text = "";
-      index += 1;
-      while (source[index] !== '"') {
-        if (source[index] === "\\") {
-          const next = source[index + 1];
-          if (next === "\n") {
-            // A line continuation: the line break and the next line's indentation are left out.
-            index += 2;
-            while (/\s/u.test(source[index])) index += 1;
-            continue;
-          }
-          if (next === "u") {
-            const end = source.indexOf("}", index);
-            text += String.fromCodePoint(parseInt(source.slice(index + 3, end), 16));
-            index = end + 1;
-            continue;
-          }
-          text += { n: "\n", t: "\t", 0: "\0" }[next] ?? next;
-          index += 2;
-        } else {
-          text += source[index];
-          index += 1;
-        }
-      }
-      strings.push(text);
-      index += 1;
-    } else {
-      index += 1;
-    }
-  }
-  return strings;
+  return new RustSource(source).strings();
 }
 
 /**

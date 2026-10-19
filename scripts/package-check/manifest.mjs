@@ -100,7 +100,7 @@ const manifest = JSON.parse(read("dist/modules.json").toString());
 /**
  * The manifest matches the files, one build derived from every file a page loads is stamped into
  * each, another build is refused, and the JavaScript passes the lexical network tripwire, names no
- * coin or carries a wallet vector; gives the other build, which part 4b gives a class file of.
+ * coin and carries no wallet vector; gives the other build, which part 4b gives a class file of.
  */
 export async function checkPackageManifest() {
   checkManifestFiles();
@@ -366,7 +366,7 @@ async function checkOtherBuild(unstampedFiles) {
   console.log(
     "The manifest matches the files, one build derived from every file a page loads is stamped " +
       "into each, another build is refused, and the package JavaScript passes the lexical network tripwire, " +
-      "names a coin or carries a wallet vector.",
+      "names no coin and carries no wallet vector.",
   );
   return otherBuildId;
 }

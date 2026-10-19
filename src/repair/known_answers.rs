@@ -321,7 +321,7 @@ impl RepairWordsCheck {
 
     fn reading(case: &ReadingCase) -> Result<(), crate::self_check::FailureDetail> {
         let words = damaged_words(ZERO_12, case.changes)?;
-        let read = super::ContainerReading::read(&words);
+        let read = super::ContainerReading::read(&words).map_err(stopped)?;
         let expected = match case.expected {
             ExpectedReading::Container => super::ContainerReading::Container,
             ExpectedReading::Marked(unreadable) => super::ContainerReading::Marked {
@@ -356,6 +356,17 @@ impl ComponentCheck for RepairWordsCheck {
             .copied()
             .collect();
         let mut findings = Findings::new();
+        findings.one(|| {
+            let oversized = "x".repeat(crate::input_text::InputText::MAX_BYTES + 1);
+            expect_refusal(
+                super::CardWords::read(&oversized).map(|_| ()),
+                "INVALID_REQUEST",
+            )?;
+            expect_refusal(
+                super::ContainerReading::read(&oversized).map(|_| ()),
+                "INVALID_REQUEST",
+            )
+        });
         findings.each(crate::self_check::CaseKind::Card, cards, Self::cards);
         findings.each(crate::self_check::CaseKind::Repair, &repairs, Self::repair);
         findings.each(

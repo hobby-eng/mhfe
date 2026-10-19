@@ -1,11 +1,11 @@
-//! Public wallet data for rehearsing a recovery without showing the phrase: the BIP32 master
+//! Wallet references for rehearsing a recovery without showing the phrase: the BIP32 master
 //! key fingerprint and the single-key receiving addresses of twelve coins on their standard
 //! paths: Bitcoin on BIP44 (legacy), BIP49 (nested SegWit), BIP84 (native SegWit) and BIP86
 //! (Taproot), Litecoin likewise without Taproot, BIP44 for the others ([`Coin`]), and Dash
 //! Platform payment addresses on DIP17.
 //!
 //! Private keys exist only inside this module, and every binding that holds one, as bytes or as a
-//! scalar, is wiped when dropped; only public values and yes-or-no answers come out. Copies that
+//! scalar, is wiped when dropped; only wallet identifiers and yes-or-no answers come out. Copies that
 //! the compiler or the curve library makes on the way, in registers or on the stack, are outside
 //! this control.
 //!
@@ -185,6 +185,9 @@ impl Address {
         limits: SearchLimits,
         stopped: &dyn Fn() -> bool,
     ) -> Result<Option<DerivationPath>, WalletError> {
+        if path.is_some() && stopped() {
+            return Err(WalletError::Cancelled);
+        }
         let master = ExtendedKey::master(phrase, passphrase)?;
         if let Some(path) = path {
             let key = master.derive(&path.0)?;
@@ -960,6 +963,33 @@ mod tests {
             Err(WalletError::Cancelled)
         );
         assert_eq!(derived.get(), 4);
+    }
+
+    #[test]
+    fn an_explicit_path_observes_cancellation_before_derivation() {
+        let target =
+            Address::parse(Coin::Bitcoin, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu").unwrap();
+        let limits = SearchLimits::default();
+        for (text, matches) in [("m/84'/0'/0'/0/0", true), ("m/84'/0'/0'/0/1", false)] {
+            let path = path(text);
+            let calls = std::cell::Cell::new(0);
+            let stopped = || {
+                calls.set(calls.get() + 1);
+                true
+            };
+            assert_eq!(
+                target.find_until(ABANDON, "", Some(&path), limits, &stopped),
+                Err(WalletError::Cancelled)
+            );
+            assert_eq!(calls.get(), 1);
+            assert_eq!(
+                target
+                    .find_until(ABANDON, "", Some(&path), limits, &|| false)
+                    .unwrap()
+                    .is_some(),
+                matches
+            );
+        }
     }
 
     #[test]

@@ -117,14 +117,13 @@ NON_HTML = (
 # verify-fast-mode-script.py compares the standalone copies.
 SHA256_HEX_DIGITS = 64
 # The most a checksum file may hold; its one line is about 80 bytes. A
-# longer file is malformed,
-# and nothing beyond this is read of it (AUD-024-FUN005).
+# longer file is malformed; one extra byte detects oversize
+# (AUD-024-FUN005).
 # Deliberate copy: serve.rs; this launcher ships without Rust.
 # verify-fast-mode-script.py compares the standalone copies.
 MAX_CHECKSUM_FILE = 4 * 1024
 # The most a page may hold; a tool's page is a few megabytes. A larger
-# file is refused, and nothing
-# beyond this is read of it (AUD-024-FUN005).
+# file is refused; one extra byte detects oversize (AUD-024-FUN005).
 # Deliberate copy: serve.rs; this launcher ships without Rust.
 # verify-fast-mode-script.py compares the standalone copies.
 MAX_PAGE = 64 * 1024 * 1024
@@ -378,8 +377,8 @@ HELP = help_text(False)
 
 class Parser(argparse.ArgumentParser):
     """
-    argparse, with its error messages shown as every other message is: a
-    mistyped argument may hold control characters (AUD-018); and its
+    argparse, with refusals that withhold supplied argument text, which
+    may contain sensitive material or control characters; and its
     help in mhfe's sections and colours, without argparse's own colours
     (Python 3.14 adds them).
     """
@@ -396,7 +395,9 @@ class Parser(argparse.ArgumentParser):
         return help_text(colours(sys.stdout))
 
     def error(self, message):
-        error(shown(message))
+        # argparse's reason may contain supplied text, so the refusal
+        # has fixed text.
+        error("Invalid command line; use --help for usage.")
         self.exit(INVALID_INPUT)
 
 
@@ -585,14 +586,15 @@ def sha256_of(data):
 
 def read_regular_file(path, limit):
     """At most `limit` bytes of `path`, which must be a regular file: a
-    FIFO, a device or a folder is refused before anything is read,
+    FIFO, a device, a symlink or a folder is refused before reading,
     opened without waiting so that a FIFO with no writer does not block.
-    None for a longer file, of which nothing beyond the limit is read.
-    As read_regular_file in src/bin/mhfe/serve.rs (AUD-024-FUN005).
+    None for a longer file; one extra byte detects that it is too long.
+    As RegularFile in src/bin/mhfe/regular_file.rs (AUD-024-FUN005).
     """
     # Windows refuses to open a directory before fstat can check it.
-    require_regular_file(os.stat(path))
-    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+    require_regular_file(os.lstat(path))
+    flags = (os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+             | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
     descriptor = os.open(path, flags)
     try:
         # The path may have been replaced since stat checked it.
@@ -607,7 +609,9 @@ def read_regular_file(path, limit):
 
 
 def require_regular_file(metadata):
-    if not stat.S_ISREG(metadata.st_mode):
+    reparse = (getattr(metadata, "st_file_attributes", 0)
+               & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+    if not stat.S_ISREG(metadata.st_mode) or reparse:
         raise OSError("it is not a regular file")
 
 

@@ -112,3 +112,8 @@ def request(method, target, host):
 
 def status_line(reply):
     return reply.split(b"\r\n", 1)[0].decode("ascii")
+
+
+def stopped_by_ctrl_c(*arguments, **options):
+    """A stand-in for serve() that the person stops at once."""
+    raise KeyboardInterrupt

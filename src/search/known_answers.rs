@@ -114,7 +114,9 @@ impl ContainerSearchCheck {
             .map_err(stopped)?;
         let real = ZERO_12.split(' ').nth(23).unwrap_or("");
         expect(
-            found.is_some_and(|found| found.words == [(24, real)] && *found.container == ZERO_12),
+            found.is_some_and(|found| {
+                found.words().eq([(24, real)]) && found.container() == ZERO_12
+            }),
             crate::self_check::KnownAnswerDifference::FindsAnotherContainer,
         )?;
         let other = Reference::Fingerprint {

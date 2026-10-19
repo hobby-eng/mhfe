@@ -61,7 +61,7 @@ export async function checkClassSelfChecks(page) {
  * with the same WebAssembly is not run again but listed as that class found it.
  */
 async function checkPartsOncePerPage({ MhfeWallet, MhfeRepair, MhfePasswords, MhfeClient }) {
-  const sharedWasm = ownWasm();
+  const sharedWasm = await WebAssembly.compile(ownWasm());
   const checksBefore = StandInWorker.checks.length;
   const walletFirst = new MhfeWallet({ workerSource: "wallet worker", wasm: sharedWasm });
   const walletStartup = await walletFirst.startupCheck();
@@ -236,10 +236,15 @@ async function checkFailedPartCloses({ MhfeRepair }, { damagedCard }) {
     });
   }
   assert.equal(StandInWorker.started.length, workersBefore, "a closed class starts no worker");
-  const brokenParameters = brokenRepair.parameters();
-  worker = await started(({ operation }) => operation === "parameters");
-  worker.reply({ type: "result", result: { profile: "MHFE-REPAIR-1" } });
-  assert.deepEqual(await brokenParameters, { profile: "MHFE-REPAIR-1" });
+  StandInWorker.autoParameters = false;
+  try {
+    const brokenParameters = brokenRepair.parameters();
+    worker = await started(({ operation }) => operation === "parameters");
+    worker.reply({ type: "result", result: { profile: "MHFE-REPAIR-1" } });
+    assert.deepEqual(await brokenParameters, { profile: "MHFE-REPAIR-1" });
+  } finally {
+    StandInWorker.autoParameters = true;
+  }
   const brokenFull = await brokenRepair.fullCheck();
   assert.deepEqual(
     brokenFull.components.find(({ id }) => id === "repair-words"),
@@ -558,6 +563,14 @@ function checkProcessParts() {
   return { processParts, notRunHere };
 }
 
+const KNOWN_SINGLE = {
+  id: "argon2-known-answer-single-threaded",
+  label: "Argon2id known answer, single-threaded build",
+};
+const KNOWN_THREADED = {
+  id: "argon2-known-answer-threaded",
+  label: "Argon2id known answer, threaded build",
+};
 const SIZES_SINGLE = {
   id: "argon2-sizes-single-threaded",
   label: "Argon2id at 64 and 256 MiB, single-threaded build",
@@ -596,7 +609,9 @@ async function checkCoreFullCheck({ MhfeClient }, processParts, notRunHere) {
       components: [
         ...PAGE_PARTS_OF_SECRETS,
         ...CORE_PARTS.map((id) => part(id)),
+        { ...KNOWN_SINGLE, outcome: "passed" },
         { ...SIZES_SINGLE, outcome: "passed" },
+        { ...threadedRow, ...KNOWN_THREADED },
         threadedRow,
         ...notRunHere,
       ],
@@ -608,10 +623,8 @@ async function checkCoreFullCheck({ MhfeClient }, processParts, notRunHere) {
     const fullChecks = checksFrom(checksBefore);
     assert.deepEqual(firstMessages(fullChecks), [
       { module: "core", operation: "selfCheck", tier: "full", skip: [] },
-      { module: "core", operation: "selfCheckArgon2", tier: "full", skip: ["argon2"] },
-      ...(fast
-        ? [{ module: "core", operation: "selfCheckArgon2", tier: "full", skip: ["argon2"] }]
-        : []),
+      { module: "core", operation: "selfCheckArgon2", tier: "full", skip: [] },
+      ...(fast ? [{ module: "core", operation: "selfCheckArgon2", tier: "full", skip: [] }] : []),
       { module: "core", operation: "selfCheckProcess", tier: "full", skip: [] },
     ]);
     assert.deepEqual(await Promise.all(fullChecks.map((each) => each.script.text())), [
@@ -707,7 +720,14 @@ async function checkThreadedSizesNotStarted({ MhfeClient }, notRunHere) {
     const report = servedByTheWebAssembly(message, worker);
     const threaded = message.operation === "selfCheckArgon2" && message.argon2Script !== null;
     return threaded
-      ? { ...report, components: [part("argon2-sizes", "notAvailable", threadedSizesNotStarted)] }
+      ? {
+          ...report,
+          components: report.components.map((component) =>
+            component.id === "argon2-sizes"
+              ? part("argon2-sizes", "notAvailable", threadedSizesNotStarted)
+              : component,
+          ),
+        }
       : report;
   };
   const threadedNotStarted = await new MhfeClient({ ...sources, wasm: ownWasm() }).fullCheck();

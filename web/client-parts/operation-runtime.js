@@ -9,6 +9,7 @@ import {
   requireCallback,
   encodeSecret,
   SecretRequest,
+  InputTextBoundary,
 } from "../../runtime/runtime.js";
 /** @import { MhfeSources } from "../client.d.ts" */
 /** @import { WorkerRequest } from "../../runtime/runtime.js" */
@@ -20,6 +21,7 @@ export class CoreRuntime {
   /** @type {CompiledModule} */
   #wasm;
   #slot = new OperationSlot();
+  #inputText = new InputTextBoundary(() => this.quick({ operation: "parameters" }));
   /** @type {() => Promise<void>} */
   #readyGate;
   /** @param {Partial<MhfeSources> | undefined} sources
@@ -80,11 +82,18 @@ export class CoreRuntime {
    * A quick operation in a worker of its own, never BUSY. The job owns its secret buffers.
    * @param {WorkerRequest} message
    */
-  quick(message) {
+  async quick(message) {
+    if ("container" in message) await this.readInputText(message.container, "container");
     return new WorkerJob([this.#sources.workerSource]).run(
       { module: CORE_MODULE, ...message },
       this.#wasm,
     );
+  }
+  /** Admits borrowed phrase/container text using the library's raw limit before a copy.
+   * @param {unknown} value
+   * @param {string} name */
+  readInputText(value, name) {
+    return this.#inputText.read(value, name);
   }
   /**
    * A long operation, which resolves to its result; see CoreRuntime.begin.
@@ -127,7 +136,16 @@ export class CoreRuntime {
       );
     }
     const start = () => this.#start(request, typedTwice);
-    return gated ? this.#slot.after(this.ready(), start) : start();
+    const ready = gated
+      ? this.ready().then(() => this.#admitInput(request, typedTwice))
+      : this.#admitInput(request, typedTwice);
+    return this.#slot.after(ready, start);
+  }
+  /** @param {WorkerRequest} request
+   * @param {LongOptions} options */
+  async #admitInput(request, options) {
+    if (options.phrase !== undefined) await this.readInputText(options.phrase, "phrase");
+    if ("container" in request) await this.readInputText(request.container, "container");
   }
   /**
    * Copies the secrets of a checked request and starts its job in the slot; see CoreRuntime.begin.

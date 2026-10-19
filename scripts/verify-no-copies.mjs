@@ -23,6 +23,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { RustSource } from "./rust-source.mjs";
+
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 /**
  * The shortest run of tokens that counts as a copy, about four to six lines of code: jscpd's
@@ -90,11 +92,6 @@ const BEFORE_REGEX = new Set([
   "await",
 ]);
 
-/** A Rust character literal at the start of the text: 'a', '\n', '\'', '\u{1F600}'. */
-const RUST_CHAR = /^'(?:\\(?:u\{[0-9a-fA-F_]+\}|x[0-9a-fA-F]{2}|.)|[^\\'\n])'/u;
-/** A Rust raw string at the start of the text, with any prefix: r"…", r#"…"#, br##"…"##. */
-const RUST_RAW = /^(?:b|c)?r(#*)"/u;
-
 /**
  * The tokens of `text`, white space and comments left out, each with the line it starts on: words
  * and numbers whole, every string, character, template and regular expression as one token, and
@@ -114,6 +111,7 @@ function tokensOf(text, rust) {
 class Tokenizer {
   #text;
   #rust;
+  #rustSource;
   #at = 0;
   #line = 1;
   tokens = [];
@@ -122,6 +120,7 @@ class Tokenizer {
   constructor(text, rust) {
     this.#text = text;
     this.#rust = rust;
+    this.#rustSource = rust ? new RustSource(text) : null;
   }
 
   /** Whether the whole text has been read. */
@@ -137,9 +136,11 @@ class Tokenizer {
       this.#line += 1;
       this.#at += 1;
     } else if (/\s/u.test(char)) this.#at += 1;
-    else if (text.startsWith("//", this.#at)) this.#lineComment();
+    else if (this.#rust) {
+      if (!this.#rustPart()) this.#plainToken(char);
+    } else if (text.startsWith("//", this.#at)) this.#lineComment();
     else if (text.startsWith("/*", this.#at)) this.#blockComment();
-    else if (!(this.#rust ? this.#rustLiteral() : this.#scriptLiteral())) this.#plainToken(char);
+    else if (!this.#scriptLiteral()) this.#plainToken(char);
   }
 
   /** Records the lines of the comment `from`..here when it marks a deliberate copy. */
@@ -176,51 +177,24 @@ class Tokenizer {
   #blockComment() {
     const text = this.#text;
     const from = this.#at;
-    if (this.#rust) {
-      // Rust nests block comments.
-      let depth = 0;
-      while (this.#at < text.length) {
-        if (text.startsWith("/*", this.#at)) {
-          depth += 1;
-          this.#at += 2;
-        } else if (text.startsWith("*/", this.#at)) {
-          depth -= 1;
-          this.#at += 2;
-          if (depth === 0) break;
-        } else this.#at += 1;
-      }
-    } else {
-      const close = text.indexOf("*/", this.#at + 2);
-      this.#at = close < 0 ? text.length : close + 2;
-    }
+    // JavaScript block comments do not nest; Rust spans come from the shared lexical reader.
+    const close = text.indexOf("*/", this.#at + 2);
+    this.#at = close < 0 ? text.length : close + 2;
     this.#comment(from);
     this.#line += text.slice(from, this.#at).split("\n").length - 1;
   }
 
-  /** A Rust raw, byte or C string, a byte or character literal, or a lifetime; false if none. */
-  #rustLiteral() {
-    const text = this.#text;
+  /** A Rust comment/literal/lifetime from the same reader that the other source gates use. */
+  #rustPart() {
+    if (this.#rustSource === null) return false;
+    const span = this.#rustSource.spanAt(this.#at);
+    if (span === null) return false;
     const from = this.#at;
-    const rest = text.slice(this.#at, this.#at + 16);
-    if (RUST_RAW.test(rest)) {
-      const [opening, hashes] = RUST_RAW.exec(rest);
-      const close = text.indexOf(`"${hashes}`, this.#at + opening.length);
-      this.#at = close < 0 ? text.length : close + 1 + hashes.length;
-    } else if (rest.startsWith('b"') || rest.startsWith('c"')) {
-      this.#at += 1;
-      this.#skipQuoted('"');
-    } else if (rest.startsWith("b'") && RUST_CHAR.test(rest.slice(1))) {
-      this.#at += 1 + RUST_CHAR.exec(rest.slice(1))[0].length;
-    } else if (text[this.#at] === "'") {
-      // A character literal, or a lifetime or label: the quote and its name.
-      const literal = RUST_CHAR.exec(rest);
-      if (literal) this.#at += literal[0].length;
-      else {
-        this.#at += 1;
-        while (this.#at < text.length && /[\p{L}\p{N}_]/u.test(text[this.#at])) this.#at += 1;
-      }
-    } else return false;
-    this.#push(from);
+    this.#at = span.end;
+    if (span.kind === "comment") {
+      this.#comment(from);
+      this.#line += this.#text.slice(from, this.#at).split("\n").length - 1;
+    } else this.#push(from);
     return true;
   }
 

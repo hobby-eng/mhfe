@@ -9,12 +9,13 @@ pub use error::RekeyError;
 use crate::wallet::Fingerprint;
 
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
-use crate::rehearsal::{Confirmation, PassphraseReferences, RecoveredForRekey};
+use crate::rehearsal::{Confirmation, PassphraseReferences, RecoveredForRekey, RekeyOrigin};
 use crate::{Mhfe, MhfeError, Password, PhraseLength, WordCount, WorkFactor, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
@@ -24,7 +25,9 @@ pub(crate) mod known_answers;
 /// which the new container's keep list names. One confirmed by [`Confirmation::Owner`] awaits the
 /// owner's explicit yes, given with [`ConfirmedPhrase::confirmed_by_owner`], and is not sealed
 /// before it (the specification's re-encryption rules).
+/// It retains the source credentials together with the recovered phrase; see [`RecoveredForRekey`].
 pub struct ConfirmedPhrase {
+    origin: Arc<RekeyOrigin>,
     phrase: RecoveredPhrase,
     wallet_has_passphrase: bool,
     awaits_owner: bool,
@@ -117,7 +120,10 @@ impl ConfirmedPhrase {
     }
 }
 
-/// One rekey of one container.
+/// One rekey of one container. Recovered and confirmed tokens passed to its methods must match
+/// its canonical container, normalized old password and old work settings, otherwise
+/// [`RekeyError::OriginMismatch`] (`INVALID_REQUEST`) precedes callbacks and work. Independently
+/// constructed equivalent instances accept the same tokens; the stated length may differ.
 pub struct Rekey {
     container: ContainerFacts,
     length: PhraseLength,
@@ -160,6 +166,13 @@ impl Rekey {
         Ok(())
     }
 
+    fn require_origin(&self, origin: &RekeyOrigin) -> Result<(), MhfeError> {
+        if !origin.matches(&self.container, &self.old_password, self.old_work) {
+            return Err(MhfeError::Rekey(RekeyError::OriginMismatch));
+        }
+        Ok(())
+    }
+
     /// How the recovered phrase must be confirmed: by its built-in check at a stated 12- to 21-word
     /// length, or by the wallet or its owner, also for a detected length.
     ///
@@ -189,6 +202,7 @@ impl Rekey {
         recovered: &RecoveredForRekey,
         refusal: &MhfeError,
     ) -> Result<Option<Vec<usize>>, MhfeError> {
+        self.require_origin(recovered.origin())?;
         Ok(match refusal {
             MhfeError::Cipher(crate::CipherError::AmbiguousLength { .. }) => {
                 Some(recovered.lengths_the_owner_can_confirm()?)
@@ -365,6 +379,7 @@ impl Rekey {
         wallet_has_passphrase: Option<bool>,
         progress: StageCallback<'_>,
     ) -> Result<ConfirmedPhrase, MhfeError> {
+        self.require_origin(recovered.origin())?;
         let wallet_has_passphrase = wallet_passphrase(&confirmation, wallet_has_passphrase)?;
         let rounds = RoundCounter::starting_after(0, Self::ROUNDS);
         let phrase = recovered.confirm(self.length, confirmation, &mut || {
@@ -374,6 +389,7 @@ impl Rekey {
         })?;
         let by_owner = matches!(confirmation, Confirmation::Owner);
         Ok(ConfirmedPhrase {
+            origin: Arc::clone(recovered.origin()),
             phrase,
             wallet_has_passphrase,
             awaits_owner: by_owner,
@@ -400,6 +416,7 @@ impl Rekey {
         progress: StageCallback<'_>,
         on_unverified: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
     ) -> Result<Sealed, MhfeError> {
+        self.require_origin(&confirmed.origin)?;
         // The owner's comparison is a confirmation only once the owner has said yes.
         if confirmed.awaits_owner {
             return Err(MhfeError::Rekey(
@@ -473,6 +490,195 @@ mod tests {
 
     fn words(count: usize) -> PhraseLength {
         PhraseLength::Words(crate::WordCount::new(count).unwrap())
+    }
+
+    #[test]
+    fn a_recovery_from_another_container_cannot_be_confirmed() {
+        let source = rekey_of(ABANDON_12, words(12));
+        let foreign = rekey_of(crate::test_support::LEGAL_12, words(12));
+        let state = source
+            .recover_state(
+                &mut reduced(WorkFactor::default()),
+                Confirmation::BuiltInCheck,
+                &mut |_, _, _| Ok(()),
+            )
+            .unwrap();
+        assert!(foreign
+            .confirm(
+                &state,
+                Confirmation::BuiltInCheck,
+                Some(false),
+                &mut |_, _, _| Ok(())
+            )
+            .is_err());
+    }
+
+    fn origin_refused<T>(result: Result<T, MhfeError>) {
+        assert!(matches!(
+            result,
+            Err(MhfeError::Rekey(RekeyError::OriginMismatch))
+        ));
+    }
+
+    #[test]
+    fn every_cross_object_consumer_refuses_foreign_credentials_before_work() {
+        let source = rekey_of(ABANDON_12, words(12));
+        let recovered = source
+            .recover_state(
+                &mut reduced(WorkFactor::default()),
+                Confirmation::BuiltInCheck,
+                &mut |_, _, _| Ok(()),
+            )
+            .unwrap();
+        let confirmed = || {
+            source
+                .confirm(
+                    &recovered,
+                    Confirmation::Owner,
+                    Some(false),
+                    &mut |_, _, _| Ok(()),
+                )
+                .unwrap()
+        };
+        let waiting = confirmed();
+        let answered = confirmed().confirmed_by_owner();
+        let different = rekey_of(crate::test_support::LEGAL_12, words(12));
+        let candidate = |old_password, old_work| {
+            Rekey::new(source.container.words(), words(12), old_password, old_work).unwrap()
+        };
+        let wrong_password = candidate(password("another public password"), source.old_work);
+        let same_length_password = password(crate::test_support::WRONG_PASSWORD);
+        assert_eq!(
+            same_length_password.as_bytes().len(),
+            source.old_password.as_bytes().len()
+        );
+        assert_ne!(
+            same_length_password.as_bytes(),
+            source.old_password.as_bytes()
+        );
+        let wrong_same_length_password = candidate(same_length_password, source.old_work);
+        let wrong_pim = candidate(
+            password(crate::test_support::TEST_PASSWORD),
+            WorkFactor::new(1, 0).unwrap(),
+        );
+        let wrong_memory = candidate(
+            password(crate::test_support::TEST_PASSWORD),
+            WorkFactor::new(0, 1).unwrap(),
+        );
+        let refusal = MhfeError::Cipher(crate::CipherError::LengthDiffers {
+            stated: 15,
+            found: 12,
+        });
+        for mut foreign in [
+            different,
+            wrong_password,
+            wrong_same_length_password,
+            wrong_pim,
+            wrong_memory,
+        ] {
+            let original_length = foreign.length;
+            origin_refused(foreign.confirm(
+                &recovered,
+                Confirmation::BuiltInCheck,
+                None,
+                &mut |_, _, _| panic!("foreign confirmation reported progress"),
+            ));
+            origin_refused(foreign.owner_lengths_after(&recovered, &refusal));
+            origin_refused(
+                foreign.owner_lengths_after(&recovered, &MhfeError::Rekey(RekeyError::Unchanged)),
+            );
+            origin_refused(foreign.owner_states(
+                &recovered,
+                &refusal,
+                Some(WordCount::new(24).unwrap()),
+            ));
+            origin_refused(foreign.confirm_again(
+                &recovered,
+                &refusal,
+                Confirmation::Owner,
+                Some(WordCount::new(24).unwrap()),
+                None,
+                &mut |_, _, _| panic!("foreign retry reported progress"),
+            ));
+            assert_eq!(foreign.length, original_length);
+            for token in [&waiting, &answered] {
+                origin_refused(foreign.seal(
+                    &mut Mhfe::with_engine(source.old_work, NoArgon2Calls),
+                    token,
+                    &password("a new public password"),
+                    None,
+                    &mut |_, _, _| panic!("foreign seal reported progress"),
+                    &mut |_| panic!("foreign seal exposed a phrase"),
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn equivalent_canonical_credentials_share_tokens_across_rekey_instances() {
+        let work = WorkFactor::default();
+        let container = reduced(work)
+            .encrypt(
+                ABANDON_12,
+                &password("café"),
+                crate::Suite::TwentyFourWords,
+                &mut |_, _| Ok(()),
+            )
+            .unwrap();
+        let producer = Rekey::new(&container, words(12), password("café"), work).unwrap();
+        let alias = container
+            .split_whitespace()
+            .map(|word| word.get(..4).unwrap_or(word).to_ascii_uppercase())
+            .collect::<Vec<_>>()
+            .join("  ");
+        let consumer = Rekey::new(
+            &format!("  {alias}\n"),
+            words(12),
+            password("cafe\u{301}"),
+            work,
+        )
+        .unwrap();
+        let recovered = producer
+            .recover_state(
+                &mut reduced(work),
+                Confirmation::BuiltInCheck,
+                &mut |_, _, _| Ok(()),
+            )
+            .unwrap();
+        let confirmed = consumer
+            .confirm(
+                &recovered,
+                Confirmation::BuiltInCheck,
+                Some(false),
+                &mut |_, _, _| Ok(()),
+            )
+            .unwrap();
+        assert_eq!(confirmed.phrase().phrase(), ABANDON_12);
+        assert_eq!(
+            consumer
+                .owner_lengths_after(&recovered, &MhfeError::Rekey(RekeyError::Unchanged))
+                .unwrap(),
+            None
+        );
+        assert!(matches!(
+            producer.seal(
+                &mut Mhfe::with_engine(work, NoArgon2Calls),
+                &confirmed,
+                &password("cafe\u{301}"),
+                None,
+                &mut |_, _, _| panic!("unchanged seal reported progress"),
+                &mut |_| panic!("unchanged seal exposed a phrase")
+            ),
+            Err(MhfeError::Rekey(RekeyError::Unchanged))
+        ));
+    }
+
+    #[test]
+    fn rekey_capabilities_keep_their_send_and_sync_contract() {
+        fn send_and_sync<T: Send + Sync>() {}
+        send_and_sync::<Rekey>();
+        send_and_sync::<RecoveredForRekey>();
+        send_and_sync::<ConfirmedPhrase>();
     }
 
     #[test]

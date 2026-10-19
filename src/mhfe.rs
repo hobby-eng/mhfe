@@ -125,9 +125,9 @@ impl RecoveredPhrase {
     /// with `passphrase`, the wallet's BIP39 passphrase or the empty one; `None` for another
     /// length, where it does not apply. Every recovery evaluates it on each 24-word reading, as
     /// the container does not show whether the phrase was made with the check (the
-    /// specification's recovery rules). A pass makes a right password very likely; a phrase made
-    /// without the check fails it, so a failure means something only to an owner who knows the
-    /// wallet was made with it. One BIP39 seed: milliseconds.
+    /// specification's recovery rules). A phrase made without the check can pass by chance;
+    /// a failure matters only to an owner who knows the wallet was made with it. A pass does not
+    /// verify the reading or identify its wallet. One BIP39 seed: milliseconds.
     pub fn passes_wallet_check(
         &self,
         passphrase: &str,
@@ -233,6 +233,11 @@ impl NewContainer {
     /// The suite the unchecked container was made with.
     pub fn suite(&self) -> Suite {
         self.suite
+    }
+
+    /// Transfers only the encoded words after checking; the original state is wiped here.
+    pub(crate) fn into_words(self) -> Zeroizing<String> {
+        self.words
     }
 }
 
@@ -628,18 +633,18 @@ mod tests {
             let new = mhfe
                 .encrypt_unchecked(ZERO_12, &password, suite, &mut no_progress())
                 .unwrap();
-            assert_eq!(new.source.is_locked(), cfg!(unix));
+            assert_eq!(new.source.is_locked(), cfg!(any(unix, windows)));
             mhfe.check_new_container(&new, &password, &mut no_progress())
                 .unwrap();
             let (_, x) = mhfe
                 .recover_state(&new.words, &password, None, &mut no_progress())
                 .unwrap();
             assert_eq!(x[..], new.source[..]);
-            assert_eq!(x.is_locked(), cfg!(unix));
+            assert_eq!(x.is_locked(), cfg!(any(unix, windows)));
         }
         let entropy = locked_entropy(&phrase::parse(LEGAL_24).unwrap());
         assert_eq!(entropy[..], [0x7f; 32]);
-        assert_eq!(entropy.is_locked(), cfg!(unix));
+        assert_eq!(entropy.is_locked(), cfg!(any(unix, windows)));
     }
 
     #[test]

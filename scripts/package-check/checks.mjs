@@ -25,7 +25,9 @@
 import assert from "node:assert/strict";
 
 import { checkArgon2Faults, checkSelfTestFaults } from "./argon2-faults.mjs";
+import { checkOptionContainers, checkWishListBoundaries } from "./argument-boundaries.mjs";
 import { checkClassSelfChecks } from "./class-self-checks.mjs";
+import { checkCheckpointGates } from "./checkpoint-gates.mjs";
 import { checkCoreClient } from "./core-client.mjs";
 import {
   checkCoreThroughBuild,
@@ -44,9 +46,13 @@ import {
   checkWalletModule,
 } from "./module-bindings.mjs";
 import { checkModuleClasses } from "./module-classes.mjs";
-import { builds } from "./package.mjs";
+import { builds, parameters } from "./package.mjs";
 import { checkClientLimits, loadClasses, wasm } from "./page-classes.mjs";
 import { checkPhraseWipes } from "./phrase-wipes.mjs";
+import { checkRawPreflight } from "./preflight.mjs";
+import { checkInputText, checkInputTextClients } from "./input-text.mjs";
+import { checkUtilityClassBoundaries } from "./utility-input-boundaries.mjs";
+import { checkStartupReportBoundaries } from "./startup-report-boundaries.mjs";
 import {
   checkNumericRefusals,
   checkPageProgress,
@@ -59,6 +65,7 @@ import { installStandInWorker } from "./stand-in-worker.mjs";
 export async function checkBrowserPackage(full) {
   // Part 1: the core module and the Argon2 bridge.
   checkPackageFacts();
+  checkRawPreflight();
   for (const [name, createModule] of Object.entries(builds)) {
     await checkCoreThroughBuild(name, createModule);
   }
@@ -86,10 +93,17 @@ export async function checkBrowserPackage(full) {
 
   // Part 4: the page-side classes, with a stand-in worker.
   const classes = await loadClasses();
+  await checkInputText(classes.runtime, parameters.maxInputTextBytes);
   checkProtocolReports(classes.runtime);
   await checkSecretOwners(classes.runtime);
   checkClientLimits();
   installStandInWorker();
+  await checkStartupReportBoundaries(classes);
+  await checkOptionContainers(classes);
+  await checkWishListBoundaries(classes);
+  await checkInputTextClients(classes);
+  await checkUtilityClassBoundaries(classes);
+  await checkCheckpointGates(classes.runtime);
   await checkPageProtocol(classes.runtime);
   const client = await checkCoreClient(classes, libraryMessages);
   const walletClient = await checkModuleClasses(classes, client, libraryMessages);
@@ -128,8 +142,23 @@ function checkProtocolReports(runtime) {
   }
   const good = {
     version: "synthetic",
+    tier: "startup",
+    passed: true,
     ids: ["part"],
     components: [{ id: "part", label: "Part", outcome: "passed" }],
   };
   assert.deepEqual(runtime.readSetReport(good), good);
+  for (const value of [
+    { ...good, tier: undefined },
+    { ...good, tier: "other" },
+    { ...good, passed: undefined },
+    { ...good, ids: [] },
+    { ...good, ids: ["part", "part"] },
+    { ...good, ids: [""] },
+    { ...good, ids: ["another"] },
+    { ...good, components: [...good.components, ...good.components] },
+    { version: null, components: [] },
+  ]) {
+    assert.throws(() => runtime.readSetReport(value), { code: "PACKAGE_MISMATCH" });
+  }
 }

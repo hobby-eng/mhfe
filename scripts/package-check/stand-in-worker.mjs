@@ -25,6 +25,8 @@ export class StandInWorker {
    * the package's worker does; a test of a worker still loading turns it off.
    */
   static loads = true;
+  /** Internal raw-admission reads use real library parameters; a test may take one over. */
+  static autoParameters = true;
   constructor(url) {
     this.script = resolveObjectURL(url);
     this.terminated = false;
@@ -48,7 +50,25 @@ export class StandInWorker {
     // structuredClone with a transfer list empties the sender's buffers, as a real worker does.
     this.messages.push(structuredClone(message, { transfer }));
     this.firstMessage();
-    if (this.messages.length === 1 && SELF_CHECK_OPERATIONS.includes(message.operation)) {
+    if (
+      this.messages.length === 1 &&
+      message.operation === "parameters" &&
+      StandInWorker.autoParameters
+    ) {
+      this.parameterRead = true;
+      setTimeout(() => {
+        if (this.terminated) return;
+        this.reply({ type: "ready", buildId: BUILD_ID });
+        this.ready = true;
+        const read = {
+          core: bindings.suiteParameters,
+          repair: bindings.repairParameters,
+          wallet: bindings.walletParameters,
+          passwords: bindings.passwordParameters,
+        }[message.module];
+        this.reply({ type: "result", result: JSON.parse(read()) });
+      }, 0);
+    } else if (this.messages.length === 1 && SELF_CHECK_OPERATIONS.includes(message.operation)) {
       this.selfCheck = true;
       StandInWorker.checks.push(this);
       setTimeout(() => this.#serveCheck(), 0);
@@ -115,6 +135,7 @@ export function servedByTheWebAssembly(message, worker) {
 /** Puts the stand-in in place of the browser's Worker, answering self-checks as the package's. */
 export function installStandInWorker() {
   globalThis.Worker = StandInWorker;
+  StandInWorker.autoParameters = true;
   StandInWorker.serveCheck = servedByTheWebAssembly;
 }
 
@@ -125,7 +146,11 @@ export function installStandInWorker() {
 export async function started(matches = () => true) {
   for (let tries = 0; tries < 50; tries += 1) {
     const worker = StandInWorker.started.findLast(
-      (each) => !each.selfCheck && each.messages.length > 0 && matches(each.messages[0]),
+      (each) =>
+        !each.selfCheck &&
+        !each.parameterRead &&
+        each.messages.length > 0 &&
+        matches(each.messages[0]),
     );
     // A worker that loads says it is ready before any other message, as the package's does.
     const loaded = worker?.ready === true || !StandInWorker.loads;

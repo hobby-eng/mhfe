@@ -4,6 +4,9 @@
 import { createECDH, createHash, createHmac, pbkdf2Sync } from "node:crypto";
 
 import {
+  CHECK_WORD_MISMATCH_REPAIRS,
+  UTILITY_INPUT_BYTES,
+  WISH_COUNT_REFUSALS,
   CHECKED_PHRASE,
   NEW_PASSWORD,
   ZERO_24,
@@ -29,6 +32,9 @@ import {
 
 // The page's data of scripts/public-test-data.mjs.
 export {
+  CHECK_WORD_MISMATCH_REPAIRS,
+  UTILITY_INPUT_BYTES,
+  WISH_COUNT_REFUSALS,
   CHECKED_PHRASE,
   NEW_PASSWORD,
   ZERO_24,

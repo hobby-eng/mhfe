@@ -1,3 +1,5 @@
+<!-- long: One redistribution notice retains complete verbatim licences and its generated catalog. -->
+
 # Third-party notices
 
 The `mhfe` command-line tool and browser package include third-party material, each under its own

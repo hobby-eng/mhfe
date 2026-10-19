@@ -6,7 +6,7 @@
 //! prompts, progress and advice go to standard error, so a result can be piped on without the
 //! messages.
 
-use std::io::{self, BufRead, IsTerminal, Read, Write};
+use std::io::{self, IsTerminal, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use mhfe::memory::LockedText;
@@ -25,6 +25,8 @@ use crate::standard_input::StandardInput;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
 mod control;
+mod line;
+use line::read_bounded_line;
 mod private_screen;
 mod progress;
 
@@ -188,11 +190,18 @@ impl Input {
     pub(crate) fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
         match self {
             Self::Terminal { .. } => {
-                style::prompt(prompt);
-                io::stderr().flush()?;
-                match read_bounded_line(&mut StandardInput::new())? {
-                    Some(line) => Ok(line),
-                    None => Err(MhfeError::Cancelled.into()),
+                let mut reader = StandardInput::new();
+                loop {
+                    style::prompt(prompt);
+                    io::stderr().flush()?;
+                    match read_bounded_line(&mut reader, true) {
+                        Ok(Some(line)) => return Ok(line),
+                        Ok(None) => return Err(MhfeError::Cancelled.into()),
+                        Err(error) if error.exit_code() == exit::INVALID_INPUT => {
+                            style::retry(format_args!("{error} {TYPE_AGAIN}"));
+                        }
+                        Err(error) => return Err(error),
+                    }
                 }
             }
             Self::Script(lines) => read_script_line(lines, prompt),
@@ -461,53 +470,12 @@ fn no_terminal_advice(command_reads_stdin: bool) -> &'static str {
 }
 
 fn read_script_line(lines: &mut StandardInput, prompt: &str) -> Result<LockedText, Failure> {
-    read_bounded_line(lines)?.ok_or_else(|| {
+    read_bounded_line(lines, false)?.ok_or_else(|| {
         Failure::invalid_input(format!(
             "Standard input ended before this answer: {}",
             prompt.trim_end_matches([' ', ':'])
         ))
     })
-}
-
-/// Reads an answer of at most ANSWER_BYTES bytes into the reserved, locked LINE_CAPACITY buffer,
-/// without its line break. `None` means that the input had ended. A longer line is refused, and
-/// what was read of it is wiped with the buffer, so the buffer never grows.
-///
-/// The reader takes from standard input only what the line needs, and on Unix keeps no copy of it
-/// (standard_input.rs); on Windows the standard library keeps its own buffer, which it does not
-/// wipe.
-fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<LockedText>, Failure> {
-    let mut read = 0;
-    // Locked before anything is read into it: a script's line may be a password or a phrase.
-    let line = LockedText::build(LINE_CAPACITY, |line| {
-        read = reader
-            .take(LINE_CAPACITY as u64)
-            .read_line(line)
-            .map_err(|error| {
-                if error.kind() == io::ErrorKind::InvalidData {
-                    Failure::invalid_input("The answer is not valid UTF-8 text.")
-                } else {
-                    error.into()
-                }
-            })?;
-        strip_line_ending(line);
-        if line.len() > ANSWER_BYTES {
-            return Err(too_long_answer());
-        }
-        Ok(())
-    })?;
-    note_unlocked(line.is_locked());
-    Ok((read > 0).then_some(line))
-}
-
-/// Removes only the line break. Spaces are part of a password and are never trimmed.
-fn strip_line_ending(line: &mut String) {
-    if line.ends_with('\n') {
-        line.pop();
-        if line.ends_with('\r') {
-            line.pop();
-        }
-    }
 }
 
 /// Prints a phrase to standard output. For a person: in a frame, numbered, for comparing with
@@ -783,60 +751,5 @@ mod tests {
         assert!(!without.contains("--stdin"), "{without}");
         assert!(without.contains("Run the command in a terminal"));
         assert!(Input::new(false).can_ask_again() && Input::terminal_only().can_ask_again());
-    }
-
-    #[test]
-    fn only_the_line_break_is_removed() {
-        let mut line = String::from("  pass word \r\n");
-        strip_line_ending(&mut line);
-        assert_eq!(line, "  pass word ");
-    }
-
-    #[test]
-    fn lines_are_read_one_at_a_time_without_their_line_break() {
-        let mut input = io::Cursor::new("first answer\r\n second \nlast without break");
-        let mut next = || {
-            read_bounded_line(&mut input)
-                .unwrap()
-                .map(|line| line.to_string())
-        };
-        assert_eq!(next().as_deref(), Some("first answer"));
-        assert_eq!(next().as_deref(), Some(" second "));
-        assert_eq!(next().as_deref(), Some("last without break"));
-        assert_eq!(next(), None, "the end of the input is not an empty answer");
-    }
-
-    #[test]
-    fn a_line_up_to_the_limit_keeps_its_buffer() {
-        for ending in ["\n", "\r\n", ""] {
-            let longest = format!("{}{ending}", "a".repeat(ANSWER_BYTES));
-            let line = read_bounded_line(&mut io::Cursor::new(longest))
-                .unwrap()
-                .unwrap();
-            assert_eq!(line.len(), ANSWER_BYTES);
-            assert_eq!(
-                line.capacity(),
-                LINE_CAPACITY,
-                "the buffer was never reallocated"
-            );
-        }
-    }
-
-    #[test]
-    fn a_longer_line_is_refused() {
-        let too_long = format!("{}\n", "a".repeat(ANSWER_BYTES + 1));
-        let Err(failure) = read_bounded_line(&mut io::Cursor::new(too_long)) else {
-            panic!("a longer line was accepted");
-        };
-        assert_eq!(failure.message(), too_long_answer().message());
-    }
-
-    #[test]
-    fn invalid_utf8_on_standard_input_is_an_input_refusal() {
-        let Err(failure) = read_bounded_line(&mut io::Cursor::new(b"\xff\n")) else {
-            panic!("invalid UTF-8 was accepted");
-        };
-        assert_eq!(failure.exit_code(), crate::exit::INVALID_INPUT);
-        assert_eq!(failure.message(), "The answer is not valid UTF-8 text.");
     }
 }

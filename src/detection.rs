@@ -45,8 +45,9 @@ impl<'a> LengthDetection<'a> {
         Self { state, short }
     }
 
-    /// The 12- to 21-word lengths whose built-in check passes: one for a short original, none for
-    /// a 24-word one or a wrong password, and more than one only by accident.
+    /// The 12- to 21-word lengths whose built-in check passes. A short original includes its own
+    /// length; other lengths, including a short reading of a 24-word original or a wrong-password
+    /// state, can pass by chance.
     pub(crate) fn short_lengths(&self) -> &[usize] {
         &self.short
     }
@@ -125,7 +126,8 @@ impl<'a> LengthDetection<'a> {
 
     /// Whether the 24-word reading passes the criterion of the phrase + passphrase check without
     /// a passphrase, as a phrase another program made in that form does, which `mhfe decrypt`
-    /// reports. A failure says nothing: a phrase made without the check fails it.
+    /// reports. A phrase made without the check can pass by chance; a failure matters only to
+    /// an owner who knows the phrase was drawn with the check.
     pub(crate) fn passes_without_passphrase(&self) -> Result<bool, WalletCheckError> {
         wallet_check::WalletCheck::new("").passes(self.state)
     }

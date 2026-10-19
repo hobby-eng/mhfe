@@ -5,7 +5,7 @@
 //! alone MHFE would start Argon2 in a container limited to 1 GiB, and the kernel would end the
 //! process for lack of memory in the middle of a round, instead of MHFE refusing at the start
 //! with a clear message. This module reads the limit of the process's control group, and of every
-//! group above it, from cgroup v2 or from the memory controller of cgroup v1.
+//! visible group above it up to the mount point, from cgroup v2 or the memory controller of v1.
 //!
 //! A group may still take its limit minus its usage. The usage includes the page cache, whose
 //! inactive part (`inactive_file`) the kernel drops before it runs out of memory, so that part is
@@ -43,10 +43,7 @@ fn available_with(
     let (version, group_path) = memory_group(membership)?;
     let (mount_root, mount_point) = memory_mount(mounts, version)?;
     let directory = group_directory(&group_path, &mount_root, &mount_point)?;
-    match version {
-        Version::V2 => available_v2(&directory, &mount_point, read),
-        Version::V1 => available_v1(&directory, read),
-    }
+    available_in(version, &directory, &mount_point, read)
 }
 
 /// The cgroup version that controls memory, and the process's group path in it, from
@@ -119,48 +116,55 @@ fn group_directory(group_path: &str, mount_root: &str, mount_point: &Path) -> Op
     Some(mount_point.join(below))
 }
 
-/// cgroup v2: the smallest room left in the group and in every group above it up to the mount
-/// point. The root group has no memory.max, and "max" means no limit. A group whose usage cannot
-/// be read gives no figure, rather than one made up from its limit (AUD-024-FUN004).
-fn available_v2(
+/// The smallest readable limit/usage pair in its own accounting domain, up to the mount point.
+///
+/// An inherited v1 `hierarchical_memory_limit` must not be paired with child-only usage. A group
+/// whose usage cannot be read gives no figure instead of an invented one (AUD-024-FUN004).
+fn available_in(
+    version: Version,
     directory: &Path,
     mount_point: &Path,
     read: impl Fn(&Path) -> Option<String>,
 ) -> Option<u64> {
     let mut smallest: Option<u64> = None;
+    let (limit_file, usage_file) = match version {
+        Version::V1 => ("memory.limit_in_bytes", "memory.usage_in_bytes"),
+        Version::V2 => ("memory.max", "memory.current"),
+    };
     for group in directory
         .ancestors()
         .take_while(|group| group.starts_with(mount_point))
     {
-        let Some(limit) = read(&group.join("memory.max")) else {
+        let hierarchy = if version == Version::V1 {
+            read_number(&read, &group.join("memory.use_hierarchy"))
+        } else {
+            None
+        };
+        // Legacy v1 could disable hierarchical accounting; that ancestor does not charge us.
+        // Unreadable hierarchy state is unknown, not a made-up applicable parent limit.
+        if version == Version::V1 && group != directory && hierarchy != Some(1) {
             continue;
+        }
+        let Some(limit) = read_number(&read, &group.join(limit_file)) else {
+            continue; // v2 "max", an absent root control, or unreadable data
         };
-        let Ok(limit) = limit.trim().parse::<u64>() else {
-            continue; // "max"
-        };
-        let Some(usage) = read_number(&read, &group.join("memory.current")) else {
+        if version == Version::V1 && limit >= V1_NO_LIMIT_FROM {
+            continue;
+        }
+        let Some(usage) = read_number(&read, &group.join(usage_file)) else {
             continue;
         };
         let stat = read(&group.join("memory.stat")).unwrap_or_default();
-        let reclaimable = stat_value(&stat, "inactive_file").unwrap_or(0);
+        let cache_field = if version == Version::V1 && hierarchy == Some(1) {
+            "total_inactive_file"
+        } else {
+            "inactive_file"
+        };
+        let reclaimable = stat_value(&stat, cache_field).unwrap_or(0);
         let room = room_left(limit, usage, reclaimable);
         smallest = Some(smallest.map_or(room, |other| other.min(room)));
     }
     smallest
-}
-
-/// cgroup v1: memory.stat gives the limit that applies with every group above
-/// (`hierarchical_memory_limit`) and the reclaimable cache of the group and its children. No
-/// figure where the usage cannot be read (AUD-024-FUN004).
-fn available_v1(directory: &Path, read: impl Fn(&Path) -> Option<String>) -> Option<u64> {
-    let stat = read(&directory.join("memory.stat"))?;
-    let limit = stat_value(&stat, "hierarchical_memory_limit")?;
-    if limit >= V1_NO_LIMIT_FROM {
-        return None;
-    }
-    let usage = read_number(&read, &directory.join("memory.usage_in_bytes"))?;
-    let reclaimable = stat_value(&stat, "total_inactive_file").unwrap_or(0);
-    Some(room_left(limit, usage, reclaimable))
 }
 
 /// The limit minus the usage that the kernel cannot reclaim.
@@ -267,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn a_v1_memory_controller_uses_the_hierarchical_limit() {
+    fn a_v1_memory_controller_pairs_its_own_limit_usage_and_cache() {
         let mounts = "30 25 0:27 / /sys/fs/cgroup/memory rw shared:12 - cgroup cgroup rw,memory\n\
                       31 25 0:28 / /sys/fs/cgroup/cpu,cpuacct rw - cgroup cgroup rw,cpu,cpuacct";
         let membership = "5:cpu,cpuacct:/docker/abc\n4:memory:/docker/abc\n0::/\n";
@@ -278,6 +282,14 @@ mod tests {
         );
         let read = files(&[
             ("/sys/fs/cgroup/memory/docker/abc/memory.stat", stat),
+            (
+                "/sys/fs/cgroup/memory/docker/abc/memory.limit_in_bytes",
+                (2 * GIB).to_string(),
+            ),
+            (
+                "/sys/fs/cgroup/memory/docker/abc/memory.use_hierarchy",
+                "1".into(),
+            ),
             (
                 "/sys/fs/cgroup/memory/docker/abc/memory.usage_in_bytes",
                 format!("{}\n", GIB),
@@ -294,12 +306,131 @@ mod tests {
             "hierarchical_memory_limit {}\ntotal_inactive_file 0\n",
             2 * GIB
         );
-        let read = files(&[("/sys/fs/cgroup/memory/docker/abc/memory.stat", stat)]);
+        let read = files(&[
+            ("/sys/fs/cgroup/memory/docker/abc/memory.stat", stat),
+            (
+                "/sys/fs/cgroup/memory/docker/abc/memory.limit_in_bytes",
+                (2 * GIB).to_string(),
+            ),
+        ]);
         assert_eq!(available_with(membership, mounts, read), None);
 
         let unlimited = "hierarchical_memory_limit 9223372036854771712\n".to_owned();
-        let read = files(&[("/sys/fs/cgroup/memory/docker/abc/memory.stat", unlimited)]);
+        let read = files(&[
+            ("/sys/fs/cgroup/memory/docker/abc/memory.stat", unlimited),
+            (
+                "/sys/fs/cgroup/memory/docker/abc/memory.limit_in_bytes",
+                V1_NO_LIMIT_FROM.to_string(),
+            ),
+            (
+                "/sys/fs/cgroup/memory/docker/abc/memory.usage_in_bytes",
+                GIB.to_string(),
+            ),
+        ]);
         assert_eq!(available_with(membership, mounts, read), None);
+    }
+
+    #[test]
+    fn a_v1_parent_limit_uses_the_parents_usage_and_cache() {
+        let mounts = "30 25 0:27 / /cg rw - cgroup cgroup rw,memory";
+        let read = files(&[
+            (
+                "/cg/parent/child/memory.limit_in_bytes",
+                (8 * GIB).to_string(),
+            ),
+            (
+                "/cg/parent/child/memory.usage_in_bytes",
+                (GIB / 4).to_string(),
+            ),
+            ("/cg/parent/child/memory.use_hierarchy", "1".into()),
+            (
+                "/cg/parent/child/memory.stat",
+                format!(
+                    "hierarchical_memory_limit {}\ntotal_inactive_file {}\n",
+                    4 * GIB,
+                    GIB / 8
+                ),
+            ),
+            ("/cg/parent/memory.limit_in_bytes", (4 * GIB).to_string()),
+            ("/cg/parent/memory.usage_in_bytes", (3 * GIB).to_string()),
+            ("/cg/parent/memory.use_hierarchy", "1".into()),
+            (
+                "/cg/parent/memory.stat",
+                format!("total_inactive_file {}\n", GIB / 4),
+            ),
+        ]);
+        assert_eq!(
+            available_with("4:memory:/parent/child\n", mounts, read),
+            Some(GIB + GIB / 4)
+        );
+    }
+
+    #[test]
+    fn v1_unknown_parent_usage_is_not_replaced_by_child_usage() {
+        for usage in [None, Some("not a number"), Some("2000")] {
+            let mut entries = vec![
+                ("/cg/app/memory.limit_in_bytes", "4000".into()),
+                ("/cg/app/memory.usage_in_bytes", "500".into()),
+                (
+                    "/cg/app/memory.stat",
+                    "hierarchical_memory_limit 1000".into(),
+                ),
+                ("/cg/memory.limit_in_bytes", "1000".into()),
+                ("/cg/memory.use_hierarchy", "1".into()),
+            ];
+            if let Some(usage) = usage {
+                entries.push(("/cg/memory.usage_in_bytes", usage.into()));
+            }
+            let expected = if usage == Some("2000") { 0 } else { 3500 };
+            let mounts = "30 25 0:27 / /cg rw - cgroup cgroup rw,memory";
+            assert_eq!(
+                available_with("4:memory:/app", mounts, files(&entries)),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_v1_nonhierarchical_ancestors_do_not_limit_the_child() {
+        for hierarchy in ["0", "unreadable"] {
+            let read = files(&[
+                ("/cg/app/memory.limit_in_bytes", "4000".into()),
+                ("/cg/app/memory.usage_in_bytes", "1000".into()),
+                ("/cg/app/memory.use_hierarchy", "0".into()),
+                (
+                    "/cg/app/memory.stat",
+                    "inactive_file 100\ntotal_inactive_file 900".into(),
+                ),
+                ("/cg/memory.limit_in_bytes", "500".into()),
+                ("/cg/memory.usage_in_bytes", "500".into()),
+                ("/cg/memory.use_hierarchy", hierarchy.into()),
+            ]);
+            let mounts = "30 25 0:27 / /cg rw - cgroup cgroup rw,memory";
+            assert_eq!(available_with("4:memory:/app", mounts, read), Some(3100));
+        }
+    }
+
+    #[test]
+    fn a_v1_partial_mount_includes_its_root_and_never_reads_above_it() {
+        let read = files(&[
+            ("/visible/child/memory.limit_in_bytes", "4000".into()),
+            ("/visible/child/memory.usage_in_bytes", "1000".into()),
+            ("/visible/memory.limit_in_bytes", "2000".into()),
+            ("/visible/memory.usage_in_bytes", "1500".into()),
+            ("/visible/memory.use_hierarchy", "1".into()),
+        ]);
+        let bounded_read = |path: &Path| {
+            assert!(
+                path.starts_with("/visible"),
+                "a hidden ancestor must not be read"
+            );
+            read(path)
+        };
+        let mounts = "30 25 0:27 /parent /visible rw - cgroup cgroup rw,memory";
+        assert_eq!(
+            available_with("4:memory:/parent/child", mounts, bounded_read),
+            Some(500)
+        );
     }
 
     #[test]

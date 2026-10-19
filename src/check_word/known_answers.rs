@@ -94,8 +94,24 @@ impl CheckWordCheck {
             crate::self_check::KnownAnswerDifference::GivesAnotherCheckIndex,
         )?;
         expect(
-            PasswordReview::of(vector.password).reading() == Reading::Fits,
+            PasswordReview::of(vector.password)
+                .map_err(stopped)?
+                .reading()
+                == Reading::Fits,
             crate::self_check::KnownAnswerDifference::DoesNotFitItsCheckWord,
+        )
+    }
+    fn repair_identity(typed: &str) -> Result<(), crate::self_check::FailureDetail> {
+        let review = PasswordReview::of(typed).map_err(stopped)?;
+        let repair = review
+            .repairs()
+            .first()
+            .ok_or(crate::self_check::KnownAnswerDifference::AWordLeftOutIsNotRestored)?
+            .clone();
+        let unrelated = PasswordReview::of(typed).map_err(stopped)?;
+        crate::self_check::expect_refusal(
+            unrelated.typed_word(&repair),
+            "PASSWORD_REPAIR_NOT_OFFERED",
         )
     }
 }
@@ -121,8 +137,8 @@ impl ComponentCheck for CheckWordCheck {
             let list = EffList::try_get().map_err(stopped)?;
             expect(
                 list.words().len() == LIST_SIZE
-                    && list.word(0) == "abacus"
-                    && list.word(LIST_SIZE - 1) == "zoom",
+                    && list.word(0).map_err(stopped)? == "abacus"
+                    && list.word(LIST_SIZE - 1).map_err(stopped)? == "zoom",
                 crate::self_check::KnownAnswerDifference::TheEffListIsReadWrongly,
             )
         });
@@ -139,8 +155,22 @@ impl ComponentCheck for CheckWordCheck {
             )
         });
         findings.one(|| {
+            crate::self_check::expect_refusal(
+                EffList::try_get().map_err(stopped)?.word(LIST_SIZE),
+                "INVALID_REQUEST",
+            )
+        });
+        // A small public over-limit input guards the byte bound, including the no-review choice.
+        findings.one(|| {
+            let oversized = "x".repeat(crate::input_text::InputText::MAX_BYTES + 1);
+            crate::self_check::expect_refusal(
+                PasswordReview::choose(&oversized, None),
+                "INVALID_REQUEST",
+            )
+        });
+        findings.one(|| {
             let (typed, position, word) = ERASED;
-            let review = PasswordReview::of(typed);
+            let review = PasswordReview::of(typed).map_err(stopped)?;
             let repaired =
                 |repair: &super::Repair| repair.position() == position && repair.word() == word;
             let restored = review.reading() == Reading::Restorable
@@ -150,8 +180,9 @@ impl ComponentCheck for CheckWordCheck {
                 crate::self_check::KnownAnswerDifference::AWordLeftOutIsNotRestored,
             )
         });
+        findings.one(|| Self::repair_identity(ERASED.0));
         findings.one(|| {
-            let review = PasswordReview::of(MISMATCH);
+            let review = PasswordReview::of(MISMATCH).map_err(stopped)?;
             expect(
                 review.reading() == Reading::Mismatch && review.repairs().len() == DRAWN_WORDS + 1,
                 crate::self_check::KnownAnswerDifference::SixWordsThatDoNotFitAreAccepted,
@@ -165,6 +196,16 @@ impl ComponentCheck for CheckWordCheck {
 mod tests {
     use super::*;
     use crate::self_check::{fails_with, leak};
+
+    #[test]
+    fn an_absent_offered_repair_is_a_diagnostic_failure() {
+        assert_eq!(
+            CheckWordCheck::repair_identity("ordinary text").unwrap_err(),
+            crate::self_check::FailureDetail::from(
+                crate::self_check::KnownAnswerDifference::AWordLeftOutIsNotRestored,
+            )
+        );
+    }
 
     #[test]
     fn the_check_word_passes() {

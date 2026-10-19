@@ -6,7 +6,7 @@ import {
   ARGON2_PART,
   ARGON2_SIZES_PART,
   FAST_MODE,
-  ARGON2_SIZES_OF_BUILD,
+  ARGON2_CHECKS_OF_BUILD,
   NOT_RUN_IN_FULL_CHECK,
   CORE_MODULE,
 } from "./values.js";
@@ -80,29 +80,31 @@ export class CoreChecks {
    */
   async fullCheck({ onProgress } = {}) {
     requireCallback(onProgress, "onProgress");
-    /** @type {(build: { id: string, label: string }, threaded: boolean) => CheckStep} */
+    /** @type {(build: typeof ARGON2_CHECKS_OF_BUILD.singleThreaded, threaded: boolean) => CheckStep} */
     const sizesOf = (build, threaded) => ({
       run: (_, handlers) => this.#argon2Check(threaded, handlers),
       rename: (component) =>
-        component.id === ARGON2_SIZES_PART ? { ...component, ...build } : component,
+        component.id === ARGON2_SIZES_PART
+          ? { ...component, ...build.sizes }
+          : component.id === ARGON2_PART
+            ? { ...component, ...build.knownAnswer }
+            : component,
     });
     /** @type {CheckStep} */
     const threaded =
       this.#runtime.mode() === FAST_MODE
-        ? sizesOf(ARGON2_SIZES_OF_BUILD.threaded, true)
+        ? sizesOf(ARGON2_CHECKS_OF_BUILD.threaded, true)
         : {
-            components: [
-              {
-                ...ARGON2_SIZES_OF_BUILD.threaded,
-                outcome: "notRun",
-                detail: "the page is not cross-origin isolated",
-              },
-            ],
+            components: Object.values(ARGON2_CHECKS_OF_BUILD.threaded).map((part) => ({
+              ...part,
+              outcome: "notRun",
+              detail: "the page is not cross-origin isolated",
+            })),
           };
     return this.#check.full(
       [
         { run: (skip, handlers) => this.#coreCheck("full", skip, true, handlers) },
-        sizesOf(ARGON2_SIZES_OF_BUILD.singleThreaded, false),
+        sizesOf(ARGON2_CHECKS_OF_BUILD.singleThreaded, false),
         threaded,
         { components: NOT_RUN_IN_FULL_CHECK },
         { run: (skip, handlers) => this.#processCheck(skip, handlers) },
@@ -179,8 +181,8 @@ export class CoreChecks {
     );
   }
   /**
-   * One Argon2 build alone at 64 and 256 MiB, in a worker of its own. Its known answer at 1 MiB is
-   * left out: the core's check gave it for this mode's build, and these larger ones cover it.
+   * One Argon2 build alone at 1, 64 and 256 MiB, in a worker of its own. Its complete declared
+   * full tier runs, including the inexpensive known answer, without any implicit skipped result.
    * @param {boolean} threaded
    * @param {WorkerHandlers} handlers
    */
@@ -191,7 +193,7 @@ export class CoreChecks {
         module: CORE_MODULE,
         operation: "selfCheckArgon2",
         tier: "full",
-        skip: [ARGON2_PART],
+        skip: [],
         argon2Script: this.#runtime.argon2Script(threaded),
       },
       this.#runtime.wasm,

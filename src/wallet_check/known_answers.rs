@@ -173,6 +173,14 @@ impl ComponentCheck for WalletCheckProfile {
                 cause: Box::new(what),
             })
         });
+        // This shared new-wallet preflight is checked without normalization or seed work.
+        findings.one(|| {
+            let oversized = "x".repeat(crate::bip39_seed::MAX_PASSPHRASE_BYTES + 1);
+            expect_refusal(
+                WalletCheck::new(&oversized).require_same_passphrase(&oversized),
+                "PASSPHRASE_TOO_LONG",
+            )
+        });
         findings.outcome()
     }
 }

@@ -305,10 +305,10 @@ mod tests {
     #[test]
     fn the_password_is_held_locked_at_its_largest_size() {
         let password = crate::test_support::test_password();
-        assert_eq!(password.encoded.is_locked(), cfg!(unix));
+        assert_eq!(password.encoded.is_locked(), cfg!(any(unix, windows)));
         let longest = Password::new(&"a".repeat(MAX_PASSWORD_BYTES)).unwrap();
         assert_eq!(longest.as_bytes().len(), MAX_PASSWORD_BYTES);
-        assert_eq!(longest.encoded.is_locked(), cfg!(unix));
+        assert_eq!(longest.encoded.is_locked(), cfg!(any(unix, windows)));
     }
 
     #[test]

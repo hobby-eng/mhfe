@@ -54,13 +54,25 @@ export const ARGON2_PART = "argon2";
 
 export const ARGON2_SIZES_PART = "argon2-sizes";
 
-/** How the full self-check names the check at 64 and 256 MiB of each of the two Argon2 builds. */
-export const ARGON2_SIZES_OF_BUILD = {
+/** Separate known-answer and larger-memory results of each build in the full self-check. */
+export const ARGON2_CHECKS_OF_BUILD = {
   singleThreaded: {
-    id: "argon2-sizes-single-threaded",
-    label: "Argon2id at 64 and 256 MiB, single-threaded build",
+    knownAnswer: {
+      id: "argon2-known-answer-single-threaded",
+      label: "Argon2id known answer, single-threaded build",
+    },
+    sizes: {
+      id: "argon2-sizes-single-threaded",
+      label: "Argon2id at 64 and 256 MiB, single-threaded build",
+    },
   },
-  threaded: { id: "argon2-sizes-threaded", label: "Argon2id at 64 and 256 MiB, threaded build" },
+  threaded: {
+    knownAnswer: {
+      id: "argon2-known-answer-threaded",
+      label: "Argon2id known answer, threaded build",
+    },
+    sizes: { id: "argon2-sizes-threaded", label: "Argon2id at 64 and 256 MiB, threaded build" },
+  },
 };
 
 /**

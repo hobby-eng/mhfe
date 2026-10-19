@@ -199,7 +199,33 @@ export function readSetReport(value) {
     throw packageMismatch("The worker returned a malformed self-check report");
   }
   const report = { version: value.version, components: value.components.map(readComponent) };
-  return value.ids === undefined ? report : { ...report, ids: value.ids };
+  const componentIds = report.components.map(({ id }) => id);
+  if (
+    componentIds.some((id) => id.length === 0) ||
+    new Set(componentIds).size !== componentIds.length
+  ) {
+    throw packageMismatch("The worker returned repeated or empty self-check component identities");
+  }
+  if (value.ids === undefined) {
+    // A trap cannot supply its final order, but an explicit failed part closes the class.
+    if (!report.components.some(({ outcome }) => outcome === "failed") || value.passed === true) {
+      throw packageMismatch("The worker omitted the self-check identities");
+    }
+    return report;
+  }
+  const ids = value.ids;
+  if (
+    typeof value.version !== "string" ||
+    (value.tier !== "startup" && value.tier !== "full") ||
+    typeof value.passed !== "boolean" ||
+    ids.length === 0 ||
+    ids.some((id) => id.length === 0) ||
+    new Set(ids).size !== ids.length ||
+    componentIds.some((id) => !ids.includes(id))
+  ) {
+    throw packageMismatch("The worker returned inconsistent self-check identities or tier");
+  }
+  return { ...report, ids, tier: value.tier, passed: value.passed };
 }
 
 /**

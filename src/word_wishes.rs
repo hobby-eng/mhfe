@@ -178,6 +178,7 @@ impl WordWishes {
     /// What a phrase drawn with these wishes keeps, `check_bits` taken by a check of the drawn
     /// phrase: 16 with the wallet check, 0 without. The free positions are counted as independent
     /// uniform words, which is exact for all but the last and very close for it.
+    /// An expected count beyond the range of `f64` is positive infinity.
     pub fn odds(&self, check_bits: u32) -> WishOdds {
         let free = (STATE_WORDS - self.fixed.len()) as i32;
         let list = f64::from(LIST_SIZE);
@@ -217,7 +218,7 @@ impl WordWishes {
         WishOdds {
             random_bits,
             randomness,
-            expected_draws: wish_draws * 2f64.powi(check_bits as i32),
+            expected_draws: wish_draws * 2f64.powf(f64::from(check_bits)),
             recognisable: self.chosen_numbers().next().is_some(),
             fixed_position: !self.fixed.is_empty(),
         }
@@ -265,8 +266,9 @@ impl WordWishes {
 
 /// The number of a word as typed, `role` naming it in a refusal.
 fn number_of(typed: &str, role: WishWord) -> Result<u16, WishError> {
+    let typed = crate::input_text::InputText::read(typed).map_err(WishError::Text)?;
     // Read as a phrase's word is (phrase::typed_word).
-    phrase::typed_word(typed.trim())
+    phrase::typed_word(typed.text().trim())
         .and_then(phrase::word_number)
         // The word itself is not repeated: it is about to become part of a secret phrase.
         .ok_or(WishError::UnknownWord(role))
@@ -275,6 +277,30 @@ fn number_of(typed: &str, role: WishWord) -> Result<u16, WishError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn single_word_raw_bytes_are_bounded_before_whitespace_is_trimmed() {
+        let limit = crate::input_text::InputText::MAX_BYTES;
+        for unit in [" ", "\u{2003}"] {
+            let count = limit - "happy".len();
+            let value = format!(
+                "{}{}happy",
+                unit.repeat(count / unit.len()),
+                " ".repeat(count % unit.len())
+            );
+            assert!(WordWishes::new(&[(Place::At(1), &value)], &[]).is_ok());
+            assert!(WordWishes::new(&[], &[&value]).is_ok());
+            let excessive = format!("{value} ");
+            for result in [
+                WordWishes::new(&[(Place::At(1), &excessive)], &[]),
+                WordWishes::new(&[], &[&excessive]),
+            ] {
+                let error = result.unwrap_err();
+                assert_eq!(error.code(), "INVALID_REQUEST");
+                assert!(std::error::Error::source(&error).is_some());
+            }
+        }
+    }
 
     /// Public edge bytes exercise both setting and clearing, with different neighboring bits.
     const EDGE_ENTROPIES: [[u8; STATE_BYTES]; 8] = [
@@ -404,6 +430,27 @@ mod tests {
         assert!((80.0..90.0).contains(&odds.expected_draws()), "{odds:?}");
         // The wallet check multiplies them by 65,536.
         assert_eq!(last.odds(16).expected_draws(), 256.0 * 65_536.0);
+    }
+
+    #[test]
+    fn increasing_check_bits_never_reduces_expected_draws() {
+        for wishes in [
+            WordWishes::none(),
+            WordWishes::new(&[at(24, "zoo")], &[]).unwrap(),
+            WordWishes::new(&[(Place::Anywhere, "happy")], &["abandon"]).unwrap(),
+        ] {
+            let mut previous = 1.0;
+            for bits in [0, 16, 256, 1023, 1024, i32::MAX as u32, 1 << 31, u32::MAX] {
+                let draws = wishes.odds(bits).expected_draws();
+                assert!(draws >= previous, "{bits}: expected draws cannot decrease");
+                if bits > 1023 {
+                    assert_eq!(draws, f64::INFINITY);
+                }
+                previous = draws;
+            }
+        }
+        assert_eq!(WordWishes::none().odds(0).expected_draws(), 1.0);
+        assert_eq!(WordWishes::none().odds(16).expected_draws(), 65_536.0);
     }
 
     #[test]

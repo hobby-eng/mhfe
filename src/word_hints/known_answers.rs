@@ -107,6 +107,12 @@ impl ComponentCheck for WordHintsCheck {
                 crate::self_check::KnownAnswerDifference::TabCompletesAnotherWord,
             )
         });
+        findings.one(|| {
+            crate::self_check::expect_refusal(
+                crate::input_text::InputText::require_size(8193),
+                "INVALID_REQUEST",
+            )
+        });
         findings.outcome()
     }
 }

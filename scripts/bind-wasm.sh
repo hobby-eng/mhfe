@@ -26,8 +26,10 @@ if [[ "$actual_bindgen" != "$expected_bindgen" ]]; then
   exit 1
 fi
 
-# Cargo's target folder, relative to the repository root as cargo reads it from here.
-target_dir="${CARGO_TARGET_DIR:-target}"
+# Cargo resolves environment and configuration precedence; every wrapper asks the same owner.
+# A sentinel preserves newlines in the path; remove only the CLI's one record separator.
+target_dir="$(node scripts/cargo-output.mjs target-directory && printf '.')"
+target_dir="${target_dir%$'\n.'}"
 
 # The folders of this machine that would be compiled into the WebAssembly, such as the panic
 # locations of the dependencies under CARGO_HOME, are written under the fixed names of

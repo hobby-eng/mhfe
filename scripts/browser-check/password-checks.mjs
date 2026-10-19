@@ -36,6 +36,18 @@ export async function checkPasswordParameters(passwords) {
     effHint.hint === "count" && effHint.count === 27,
     "the hint below a password counts the EFF words that begin with one letter",
   );
+  const atLimit = " ".repeat(UTILITY_INPUT_BYTES - 4) + "abac";
+  for (const typed of [atLimit, encode(atLimit)]) {
+    const hint = await passwords.wordHints({ typed });
+    expect(hint.words.includes("abacus"), "bounded EFF hints preserve text and byte input");
+  }
+  for (const typed of [atLimit + " ", encode(atLimit + " ")]) {
+    await expectRejection(
+      passwords.wordHints({ typed }),
+      "INVALID_REQUEST",
+      "oversized hint text is refused before transport",
+    );
+  }
   expectEqual(
     await passwords.parameters(),
     {
@@ -48,6 +60,7 @@ export async function checkPasswordParameters(passwords) {
       recommendedCharacters: 12,
       mostCharacters: 64,
       weakBelowBits: 50,
+      maxInputTextBytes: UTILITY_INPUT_BYTES,
     },
     "parameters gives every fixed value",
   );
@@ -89,24 +102,13 @@ export async function checkPasswordReview(passwords) {
     }),
     "a word typed as ? is restorable, its repair offered first",
   );
-  // The six repairs follow from the profile alone: the check word is the EFF list word at
-  // (d1 + 5 d2 + 7 d3 + 11 d4 + 13 d5) mod 7776 for the list indexes d of the five words
-  // (src/check_word.rs), and each repair solves that for the word at its place. They were
-  // computed so from vendor/eff-large-wordlist, independently of mhfe.
   expectEqual(
     await passwords.review({
       password: encode("abacus abdomen abdominal zoom abiding aids"),
     }),
     review({
       reading: "mismatch",
-      repairs: [
-        { position: 1, word: "activate", typed: "abacus" },
-        { position: 2, word: "daylong", typed: "abdomen" },
-        { position: 3, word: "encrust", typed: "abdominal" },
-        { position: 4, word: "abide", typed: "zoom" },
-        { position: 5, word: "excretory", typed: "abiding" },
-        { position: 6, word: "affected", typed: "aids" },
-      ],
+      repairs: CHECK_WORD_MISMATCH_REPAIRS,
     }),
     "a wrong word is a mismatch with a repair at each of the six places; bytes are read",
   );
@@ -259,6 +261,16 @@ export async function checkMadePasswords(passwords) {
 
 /** The kinds, counts and dice that make() refuses. */
 export async function checkMadePasswordRefusals(passwords) {
+  await expectTypeError(
+    passwords.make(42),
+    "make() options must be an object.",
+    "a non-object configuration cannot silently generate a default password",
+  );
+  await expectRejection(
+    passwords.make({ kind: "words", count: 1, dice: "1".repeat(UTILITY_INPUT_BYTES + 1) }),
+    "INVALID_REQUEST",
+    "oversized dice text is refused",
+  );
   await expectRefusal(
     passwords.make({ kind: "characters", dice: "11111" }),
     "INVALID_REQUEST",

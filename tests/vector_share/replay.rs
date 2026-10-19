@@ -1,6 +1,6 @@
 //! The replay of a suite's test vectors, shared by tests/suite3_vectors.rs and
 //! tests/suite4_vectors.rs: a [`Suite`] names its folder, inputs, schemas and generators, and
-//! [`suite_tests!`] gives each suite the same four tests, three fast ones and the full-size replay.
+//! [`suite_tests!`] gives each suite four fast tests and one ignored full-size replay.
 //!
 //! A share of the full-size replay lets several processes replay one suite at once on a computer
 //! with the memory for it: `MHFE_VECTOR_SHARE=k/n` replays every n-th item of the suite, the
@@ -72,36 +72,66 @@ fn with_recorded_writer(mut written: Value, recorded: &Value) -> Value {
 }
 
 /// The digest of a file of the folder, in hex.
-fn file_digest(folder: &str, name: &str) -> String {
-    let bytes = fs::read(format!("{folder}/{name}")).unwrap();
+fn file_digest(read: &impl Fn(&str) -> Vec<u8>, name: &str) -> String {
+    let bytes = read(name);
     hex::encode(Sha256::digest(&bytes))
 }
 
 impl Suite {
+    /// The fixture bytes, with the generation command named on a missing input.
+    fn bytes(&self, name: &str) -> Vec<u8> {
+        let path = format!("{}/{name}", self.folder);
+        fs::read(&path).unwrap_or_else(|error| {
+            panic!("{path}: {error}; write the vectors with {}", self.writer)
+        })
+    }
+
     /// The recorded file `name` of the suite.
     fn recorded(&self, name: &str) -> Value {
-        let path = format!("{}/{name}", self.folder);
-        let text = fs::read_to_string(&path).unwrap_or_else(|error| {
-            panic!("{path}: {error}; write the vectors with {}", self.writer)
-        });
-        serde_json::from_str(&text).unwrap()
+        serde_json::from_slice(&self.bytes(name)).unwrap()
     }
 
     /// Every vector file is present, unchanged since it was written, and made from the public
     /// inputs in the source; the independent check covers exactly the files of SHA256SUMS.
     pub(crate) fn check_files(&self) {
-        let sums = fs::read_to_string(format!("{}/{CHECKSUM_FILE}", self.folder))
-            .unwrap_or_else(|error| panic!("{CHECKSUM_FILE} is missing: {error}"));
+        self.check_files_with(|name| self.bytes(name));
+    }
+
+    /// The same integrity check with fixture reads supplied at the filesystem boundary.
+    fn check_files_with(&self, read: impl Fn(&str) -> Vec<u8>) {
+        let recorded = |name: &str| serde_json::from_slice::<Value>(&read(name)).unwrap();
+        let sums = String::from_utf8(read(CHECKSUM_FILE)).unwrap();
+        let expected: HashSet<String> = self
+            .inputs
+            .iter()
+            .map(|input| vectors::Vector::file_name(input.name()))
+            .chain(std::iter::once(vectors::Vector::file_name(
+                NEGATIVE_CASES_STEM,
+            )))
+            .collect();
+        assert_eq!(
+            expected.len(),
+            self.inputs.len() + 1,
+            "source fixture names are unique"
+        );
         let mut listed = HashSet::new();
         for line in sums.lines() {
             let (digest, name) = line.split_once("  ").expect("sha256sum line format");
-            assert_eq!(file_digest(self.folder, name), digest, "{name} changed");
-            listed.insert(name.to_owned());
+            assert!(expected.contains(name), "unexpected checksum entry {name}");
+            assert!(
+                listed.insert(name.to_owned()),
+                "duplicate checksum entry {name}"
+            );
+            assert_eq!(file_digest(&read, name), digest, "{name} changed");
         }
+        assert_eq!(
+            listed, expected,
+            "checksums cover every positive and negative fixture"
+        );
         for input in self.inputs {
             let name = vectors::Vector::file_name(input.name());
             assert!(listed.contains(&name), "{name} is missing");
-            let vector = self.recorded(&name);
+            let vector = recorded(&name);
             let work = input.work().unwrap();
             assert_eq!(vector["inputs"]["phrase"], input.phrase(), "{name}");
             assert_eq!(vector["inputs"]["password"], input.password(), "{name}");
@@ -112,33 +142,162 @@ impl Suite {
                 "{name}"
             );
         }
-        let negative = self.recorded(&vectors::Vector::file_name(NEGATIVE_CASES_STEM));
+        let negative = recorded(&vectors::Vector::file_name(NEGATIVE_CASES_STEM));
         let negative = negative.as_array().unwrap();
         assert_eq!(negative.len(), self.negative_inputs.len());
-        for case in negative {
+        for (case, input) in negative.iter().zip(self.negative_inputs) {
             assert_eq!(case["schema"], self.negative_schema);
+            assert_eq!(case["suite_id"], self.suite_id);
+            assert_eq!(case["name"], input.name());
+            assert_eq!(case["password"], input.password());
+            let work = input.work().unwrap();
+            assert_eq!(case["pim"], work.pim());
+            assert_eq!(case["memory_level"], work.memory_level());
+            assert_eq!(case["words"], input.words());
+            let source = recorded(&vectors::Vector::file_name(input.container_of()));
+            assert_eq!(case["container"], source["container"]);
         }
 
         // The independent check records which files it checked, with the digests it saw; they
         // must be exactly the files of SHA256SUMS, so that the record cannot fall out of step.
-        let record = self.recorded("independent-verification.json");
-        let checked: HashSet<String> = record["files"]
+        let record = recorded("independent-verification.json");
+        let mut checked = HashSet::new();
+        for file in record["files"]
             .as_array()
             .expect("independent-verification.json lists its files")
             .iter()
-            .map(|file| {
-                let name = file["name"].as_str().unwrap();
-                assert_eq!(
-                    file["sha256"].as_str().unwrap(),
-                    file_digest(self.folder, name),
-                    "{name} changed after its independent check"
-                );
-                name.to_owned()
-            })
-            .collect();
+        {
+            let name = file["name"].as_str().unwrap();
+            assert!(
+                expected.contains(name),
+                "unexpected independent entry {name}"
+            );
+            assert!(
+                checked.insert(name.to_owned()),
+                "duplicate independent entry {name}"
+            );
+            assert_eq!(
+                file["sha256"].as_str().unwrap(),
+                file_digest(&read, name),
+                "{name} changed after its independent check"
+            );
+        }
         assert_eq!(
             checked, listed,
             "the independent check covers exactly SHA256SUMS"
+        );
+    }
+
+    /// Challenged metadata must fail even when both recorded lists agree on the same omission.
+    pub(crate) fn check_file_controls(&self) {
+        let negative = vectors::Vector::file_name(NEGATIVE_CASES_STEM);
+        let original_sums = String::from_utf8(self.bytes(CHECKSUM_FILE)).unwrap();
+        let original_record = self.recorded("independent-verification.json");
+        self.check_files(); // The unchanged filesystem boundary is a positive control.
+        let mut accepted = Vec::new();
+        for mode in [
+            "omit",
+            "duplicate-sum",
+            "duplicate-record",
+            "rename",
+            "extra",
+            "negative-input",
+            "positive-input",
+        ] {
+            let mut sums: Vec<(String, String)> = original_sums
+                .lines()
+                .map(|line| {
+                    let (digest, name) = line.split_once("  ").unwrap();
+                    (digest.into(), name.into())
+                })
+                .collect();
+            let mut record = original_record.clone();
+            let entries = record["files"].as_array_mut().unwrap();
+            let entry = entries
+                .iter()
+                .find(|file| file["name"] == negative)
+                .unwrap()
+                .clone();
+            let sum = sums
+                .iter()
+                .find(|(_, name)| name == &negative)
+                .unwrap()
+                .clone();
+            let mut changed = std::collections::HashMap::new();
+            match mode {
+                "omit" => {
+                    sums.retain(|(_, name)| name != &negative);
+                    entries.retain(|file| file["name"] != negative);
+                }
+                "duplicate-sum" => sums.push(sum),
+                "duplicate-record" => entries.push(entry),
+                "rename" | "extra" => {
+                    let alias = "unexpected-negative.json";
+                    changed.insert(alias.to_owned(), self.bytes(&negative));
+                    let mut renamed = entry;
+                    renamed["name"] = alias.into();
+                    if mode == "rename" {
+                        sums.retain(|(_, name)| name != &negative);
+                        entries.retain(|file| file["name"] != negative);
+                    }
+                    sums.push((sum.0, alias.into()));
+                    entries.push(renamed);
+                }
+                "negative-input" | "positive-input" => {
+                    let name = if mode == "negative-input" {
+                        negative.clone()
+                    } else {
+                        vectors::Vector::file_name(self.inputs[0].name())
+                    };
+                    let mut payload = self.recorded(&name);
+                    if mode == "negative-input" {
+                        payload[0]["password"] = "changed public input".into();
+                    } else {
+                        payload["inputs"]["password"] = "changed public input".into();
+                    }
+                    let bytes = serde_json::to_vec(&payload).unwrap();
+                    let digest = hex::encode(Sha256::digest(&bytes));
+                    for (sum, file) in &mut sums {
+                        if file == &name {
+                            *sum = digest.clone();
+                        }
+                    }
+                    for file in entries {
+                        if file["name"] == name {
+                            file["sha256"] = digest.clone().into();
+                        }
+                    }
+                    changed.insert(name, bytes);
+                }
+                _ => unreachable!(),
+            }
+            changed.insert(
+                CHECKSUM_FILE.to_owned(),
+                sums.iter()
+                    .map(|(digest, name)| format!("{digest}  {name}\n"))
+                    .collect::<String>()
+                    .into_bytes(),
+            );
+            changed.insert(
+                "independent-verification.json".to_owned(),
+                serde_json::to_vec(&record).unwrap(),
+            );
+            if std::panic::catch_unwind(|| {
+                self.check_files_with(|name| {
+                    changed
+                        .get(name)
+                        .cloned()
+                        .unwrap_or_else(|| self.bytes(name))
+                })
+            })
+            .is_ok()
+            {
+                accepted.push(mode);
+            }
+        }
+        assert!(
+            accepted.is_empty(),
+            "integrity mutations were accepted: {accepted:?}"
         );
     }
 
@@ -231,7 +390,7 @@ impl Suite {
     }
 }
 
-/// The four tests of a suite: `suite_tests!(SUITE, "<why the replay is ignored>")`.
+/// The fast integrity/control tests and the ignored full replay of one suite.
 macro_rules! suite_tests {
     ($suite:expr, $replay_cost:literal) => {
         /// Fast: every vector file is present, unchanged since it was written, and made from the
@@ -239,6 +398,11 @@ macro_rules! suite_tests {
         #[test]
         fn the_vector_files_are_complete_and_unchanged() {
             $suite.check_files();
+        }
+
+        #[test]
+        fn negative_vectors_cannot_be_omitted_from_both_integrity_records() {
+            $suite.check_file_controls();
         }
 
         /// Fast: in every round of every vector, the recorded salt input and mask message give

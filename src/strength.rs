@@ -3,13 +3,17 @@
 //! years, repeats, runs and keyboard rows, each counting what an attacker who tries such parts must
 //! guess, and the remaining characters by their kind. It catches the common weak passwords. It
 //! overrates one made of words it does not know, such as names or words of other languages, which
-//! the README says. The password is read in place: no copy of it is made.
+//! the README says. The pattern scanner borrows the text. The check-word review temporarily
+//! owns a locked copy and, when applicable, its corrected form; those owners wipe their buffers
+//! when the review ends.
 
 use std::sync::OnceLock;
 
 use crate::check_word::{PasswordReview, Reading, DRAWN_WORDS};
 use crate::eff::EffList;
 use crate::new_password::Millibits;
+mod error;
+pub use error::StrengthError;
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-passwords"))]
 pub(crate) mod known_answers;
@@ -101,10 +105,11 @@ impl Strength {
     /// drawn at random; one that reads as the check-word recipe's (MHFE-PASSWORD-CHECK-1) counts
     /// only its five drawn words, as the recipe does, since its sixth follows from them. Any other
     /// is read part by part.
-    pub fn of(password: &str) -> Self {
-        Self {
-            bits: estimated_bits(password),
-        }
+    /// Raw text above [`crate::input_text::InputText::MAX_BYTES`] is refused before a review copy.
+    pub fn of(password: &str) -> Result<Self, StrengthError> {
+        Ok(Self {
+            bits: estimated_bits(password)?,
+        })
     }
 
     /// The estimate in bits.
@@ -124,22 +129,22 @@ impl Strength {
     }
 }
 
-fn estimated_bits(password: &str) -> f64 {
+fn estimated_bits(password: &str) -> Result<f64, StrengthError> {
     // The check word adds nothing to what an attacker must guess (AUD-024-FUN011).
-    let drawn = if PasswordReview::of(password).reading() == Reading::Fits {
+    let drawn = if PasswordReview::of(password)?.reading() == Reading::Fits {
         first_words(password, DRAWN_WORDS)
     } else {
         password
     };
-    let dice_words = EffList::get().different_dice_words(drawn);
+    let dice_words = EffList::try_get()?.different_dice_words(drawn)?;
     if dice_words > 0 {
-        return Millibits::words(dice_words).bits();
+        return Ok(Millibits::words(dice_words).bits());
     }
     let end = password
         .char_indices()
         .nth(READ_CHARACTERS)
         .map_or(password.len(), |(index, _)| index);
-    read_parts(&password[..end], word_lists())
+    Ok(read_parts(&password[..end], word_lists()))
 }
 
 /// `text` up to the end of its `count`-th word, words being separated by white space.
@@ -359,7 +364,7 @@ mod tests {
             "abacus zoom yearbook",
             "correct horse battery",
         ] {
-            let bits = estimated_bits(weak);
+            let bits = Strength::of(weak).unwrap().bits();
             assert!(is_weak(bits), "{weak}: {bits:.1} bits");
         }
     }
@@ -373,19 +378,23 @@ mod tests {
             "correct horse battery staple",
             "correcthorsebatterystaple",
         ] {
-            let bits = estimated_bits(strong);
+            let bits = Strength::of(strong).unwrap().bits();
             assert!(!is_weak(bits), "{strong}: {bits:.1} bits");
         }
         let case = known_answers::CASES[4];
-        assert!((estimated_bits(case.password) - f64::from(case.millibits) / 1000.0).abs() < 0.01);
+        assert!(
+            (Strength::of(case.password).unwrap().bits() - f64::from(case.millibits) / 1000.0)
+                .abs()
+                < 0.01
+        );
     }
 
     #[test]
     fn repeated_words_and_runs_add_little() {
-        let once = estimated_bits("staple");
-        assert!(estimated_bits("staplestaplestaple") < once + 3.0);
-        assert!(estimated_bits("123456789") < 12.0);
-        assert!(estimated_bits("zyxwvutsrq") < 15.0);
+        let once = Strength::of("staple").unwrap().bits();
+        assert!(Strength::of("staplestaplestaple").unwrap().bits() < once + 3.0);
+        assert!(Strength::of("123456789").unwrap().bits() < 12.0);
+        assert!(Strength::of("zyxwvutsrq").unwrap().bits() < 15.0);
     }
 
     /// A password of the check-word recipe counts its five drawn words only, as the recipe does;
@@ -393,12 +402,18 @@ mod tests {
     #[test]
     fn the_check_word_adds_no_strength() {
         let five = 5.0 * 12.925;
-        let bits = estimated_bits("jovial trailing chokehold pavilion cresting ninth");
+        let bits = Strength::of("jovial trailing chokehold pavilion cresting ninth")
+            .unwrap()
+            .bits();
         assert!((bits - five).abs() < 1e-9, "{bits}");
-        let six = estimated_bits("jovial trailing chokehold pavilion cresting zoom");
+        let six = Strength::of("jovial trailing chokehold pavilion cresting zoom")
+            .unwrap()
+            .bits();
         assert!((six - 6.0 * 12.925).abs() < 1e-9, "{six}");
         // The drawn words are counted as any dice words: a repeated one once.
-        let repeated = estimated_bits("zoom zoom zoom zoom zoom yelling");
+        let repeated = Strength::of("zoom zoom zoom zoom zoom yelling")
+            .unwrap()
+            .bits();
         assert!((repeated - 12.925).abs() < 1e-9, "{repeated}");
         assert_eq!(first_words("  a b  c d", 3), "  a b  c");
         assert_eq!(first_words("a b", 3), "a b");
@@ -414,28 +429,28 @@ mod tests {
             "x7Qz-x7Qz-x7Qz-x7Qz-x7Qz",
             "Zq9!Zq9!Zq9!Zq9!Zq9!Zq9!",
         ] {
-            let bits = estimated_bits(repeated);
+            let bits = Strength::of(repeated).unwrap().bits();
             assert!(is_weak(bits), "{repeated}: {bits:.1} bits");
         }
-        let group = estimated_bits("x7Qz");
-        assert!(estimated_bits("x7Qzx7Qzx7Qz") < group + 3.0);
+        let group = Strength::of("x7Qz").unwrap().bits();
+        assert!(Strength::of("x7Qzx7Qzx7Qz").unwrap().bits() < group + 3.0);
         // Two characters that recur by chance in random ones are no repeat.
-        assert!(!is_weak(estimated_bits("Xk7mQ2vR9pLw4tZn")));
+        assert!(!is_weak(Strength::of("Xk7mQ2vR9pLw4tZn").unwrap().bits()));
     }
 
     #[test]
     fn only_the_first_hundred_characters_are_read() {
         let long = "Xk7mQ2vR9pLw4tZn".repeat(256);
-        assert!(!is_weak(estimated_bits(&long)));
+        assert!(!is_weak(Strength::of(&long).unwrap().bits()));
         let start = std::time::Instant::now();
-        estimated_bits(&"a".repeat(4096));
+        Strength::of(&"a".repeat(4096)).unwrap().bits();
         assert!(start.elapsed().as_secs() < 5);
     }
 
     #[test]
     fn other_alphabets_count_per_letter() {
         // Twelve Cyrillic letters without a pattern: about 60 bits.
-        assert!(!is_weak(estimated_bits("щуклебтжрвзф")));
-        assert!(is_weak(estimated_bits("пароль")));
+        assert!(!is_weak(Strength::of("щуклебтжрвзф").unwrap().bits()));
+        assert!(is_weak(Strength::of("пароль").unwrap().bits()));
     }
 }

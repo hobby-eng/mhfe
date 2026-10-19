@@ -1,4 +1,4 @@
-import type { MhfePackageParts } from "../runtime/runtime.js";
+import type { MhfeInputTextParameters, MhfePackageParts } from "../runtime/runtime.js";
 import { MhfeModuleClass } from "../runtime/runtime.js";
 export {
   MhfeError,
@@ -58,7 +58,7 @@ export interface MhfeContainerReading {
 }
 
 /** The module's fixed values, from parameters(). */
-export interface MhfeRepairParameters {
+export interface MhfeRepairParameters extends MhfeInputTextParameters {
   version: string;
   profile: "MHFE-REPAIR-1";
   repairWordCounts: (2 | 4 | 6 | 8)[];

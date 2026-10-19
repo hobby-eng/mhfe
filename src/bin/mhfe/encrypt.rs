@@ -612,7 +612,7 @@ pub(crate) fn read_typed_password(
             }
             _ => password,
         };
-        break (password, Strength::of(&text), check);
+        break (password, Strength::of(&text)?, check);
     };
     drop(screen);
     choice::record("Password", &check.record("typed twice"));

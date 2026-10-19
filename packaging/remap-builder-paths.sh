@@ -46,9 +46,9 @@ builder_directories() {
 # target, after the flags already there, such as the MinGW timestamp flag of the Windows build.
 # Calling it twice adds nothing, so that a second build sees the same flags and has nothing to redo.
 remap_builder_paths() {
-  # Cargo takes the first of RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS and the per-target flags that is
+  # Cargo takes the first of CARGO_ENCODED_RUSTFLAGS, RUSTFLAGS and the per-target flags that is
   # set, so either of the first two would silently drop the remapping.
-  if [ -n "${RUSTFLAGS:-}" ] || [ -n "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
+  if [ "${RUSTFLAGS+x}" = x ] || [ "${CARGO_ENCODED_RUSTFLAGS+x}" = x ]; then
     echo "RUSTFLAGS or CARGO_ENCODED_RUSTFLAGS is set and would replace the remapping of the" \
       "builder's directories; unset it for a release build." >&2
     return 1

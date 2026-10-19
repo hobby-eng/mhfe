@@ -392,7 +392,7 @@ impl RekeySession {
         &mut self,
         on_round: &js_sys::Function,
         on_unverified: &js_sys::Function,
-    ) -> Result<String, JsError> {
+    ) -> Result<js_sys::JsString, JsError> {
         self.expect(RekeyStep::Confirmed)?;
         self.step = RekeyStep::Ended;
         let (Some(confirmed), Some(password), Some(work), Some(rehearsal)) = (
@@ -416,7 +416,7 @@ impl RekeySession {
                     .seal(mhfe, &confirmed, &password, repair_words, progress, shown)
             },
         )?;
-        json(&ResealedJson {
+        secret_json(&ResealedJson {
             sealed: sealed_view(&sealed, work, confirmed.wallet_has_passphrase().into())?,
             rehearsal: RehearsalJson::from(&rehearsal),
         })

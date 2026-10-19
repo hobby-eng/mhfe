@@ -33,6 +33,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         on_progress: ProgressCallback<'_>,
     ) -> Result<RecoveredPhrase, HiddenError> {
         ContainerFacts::read(container)?.require_hidden_wallets()?;
+        crate::wallet::require_passphrase_size(passphrase)?;
         let (_, x) = self.recover_state(
             container,
             password,
@@ -53,7 +54,7 @@ impl<E: Argon2Engine> Mhfe<E> {
 /// nothing about the main wallet. Nothing is created or stored: the container and each password
 /// give the same wallet every time.
 pub struct HiddenWallets {
-    container: String,
+    container: LockedText,
     passphrase: LockedText,
     /// The passwords of this session, kept as the Password itself, whose buffer stays locked
     /// until it is wiped: a copy of its bytes would not be (AUD-008-SEC003).
@@ -82,7 +83,7 @@ impl HiddenWallets {
         facts.require_hidden_wallets()?;
         crate::wallet::require_passphrase_size(main_passphrase)?;
         Ok(Self {
-            container: facts.words().to_owned(),
+            container: LockedText::copy_of(facts.words()),
             passphrase: LockedText::copy_of(main_passphrase),
             used: Vec::new(),
         })
@@ -120,6 +121,28 @@ mod tests {
     use super::*;
     use crate::test_support::{reduced, test_password, ABANDON_12 as ABANDON};
     use crate::{PhraseLength, Recovery};
+
+    #[test]
+    fn an_excessive_passphrase_is_refused_before_any_hidden_wallet_work() {
+        let container = crate::test_support::zero_12_container();
+        let mut mhfe = Mhfe::with_engine(
+            crate::WorkFactor::default(),
+            crate::test_support::NoArgon2Calls,
+        );
+        for passphrase in [
+            "x".repeat(1025),
+            "é".repeat(513),
+            format!("{}é", "x".repeat(1023)),
+        ] {
+            let error = mhfe
+                .derive_wallet(&container, &test_password(), &passphrase, &mut |_, _| {
+                    panic!("unexpected progress")
+                })
+                .err()
+                .unwrap();
+            assert_eq!(error.code(), "PASSPHRASE_TOO_LONG");
+        }
+    }
 
     #[test]
     fn another_password_opens_another_24_word_wallet() {

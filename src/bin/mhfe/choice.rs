@@ -124,12 +124,30 @@ impl<'a> Help<'a> {
     }
 }
 
-/// The value of an option that answers a yes-or-no question of a menu: yes or no.
-pub(crate) fn parse_yes_no(text: &str) -> Result<bool, String> {
+/// A fixed refusal for a menu answer given as an option. It owns no typed text, so the usage
+/// renderer can retain its hint while withholding untrusted parser errors.
+#[derive(Debug)]
+pub(crate) enum YesNoError {
+    ExpectedAnswer,
+}
+
+impl std::fmt::Display for YesNoError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ExpectedAnswer => formatter.write_str("give yes or no"),
+        }
+    }
+}
+
+impl std::error::Error for YesNoError {}
+
+/// The value of an option that answers a yes-or-no question of a menu: yes or no. Other input
+/// fails without being repeated in the refusal.
+pub(crate) fn parse_yes_no(text: &str) -> Result<bool, YesNoError> {
     match text {
         "yes" => Ok(true),
         "no" => Ok(false),
-        _ => Err("give yes or no".to_owned()),
+        _ => Err(YesNoError::ExpectedAnswer),
     }
 }
 

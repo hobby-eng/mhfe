@@ -3,14 +3,15 @@
 //! Argon2.
 
 use crate::self_check::SelfCheck;
+use serde::ser::{Error as _, SerializeStruct};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use super::{
-    js_error, json, review_choice, run_self_check, secret_json, whole_number, yes_or_no, JsRandom,
-    SecretText,
+    js_error, json, review_choice, run_self_check, secret_json, serialize_sequence, whole_number,
+    yes_or_no, JsRandom, PositionJson, SecretText,
 };
-use crate::check_word::{Correction, PasswordReview, Reading, PROFILE};
+use crate::check_word::{Correction, PasswordReview, Reading, Repair, PROFILE};
 use crate::new_password::{
     PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS, MOST_CHARACTERS, MOST_WORDS,
     RECOMMENDED_CHARACTERS, RECOMMENDED_WORDS,
@@ -21,6 +22,8 @@ use crate::Password;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PasswordParameters {
+    #[serde(flatten)]
+    input_text: super::InputTextParameters,
     version: &'static str,
     check_word_profile: &'static str,
     default_words: usize,
@@ -36,6 +39,7 @@ struct PasswordParameters {
 #[wasm_bindgen(js_name = passwordParameters)]
 pub fn password_parameters() -> Result<String, JsError> {
     json(&PasswordParameters {
+        input_text: super::InputTextParameters::new(),
         version: env!("CARGO_PKG_VERSION"),
         check_word_profile: PROFILE,
         default_words: DEFAULT_WORDS,
@@ -48,14 +52,42 @@ pub fn password_parameters() -> Result<String, JsError> {
     })
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct RepairJson<'a> {
-    position: usize,
-    word: &'a str,
-    /// The word as typed that a repair replaces; null for a restored word, which may be "?" or a
-    /// long word outside the list.
-    typed: Option<&'a str>,
+    review: &'a PasswordReview,
+    repair: &'a Repair,
+    restorable: bool,
+}
+
+impl Serialize for RepairJson<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("Repair", 3)?;
+        let position = PositionJson::new(self.repair.position());
+        state.serialize_field("position", &position)?;
+        state.serialize_field("word", self.repair.word())?;
+        // A restored unknown token may be "?" or arbitrary text; the JSON omits it as before.
+        let typed = (!self.restorable)
+            .then(|| self.review.typed_word(self.repair))
+            .transpose()
+            .map_err(S::Error::custom)?;
+        state.serialize_field("typed", &typed)?;
+        state.end()
+    }
+}
+
+/// Borrows the owning review instead of allocating a second list of selected words/positions.
+struct RepairsJson<'a>(&'a PasswordReview);
+
+impl Serialize for RepairsJson<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serialize_sequence(
+            serializer,
+            self.0.repairs().iter().map(|repair| RepairJson {
+                review: self.0,
+                repair,
+                restorable: self.0.reading() == Reading::Restorable,
+            }),
+        )
+    }
 }
 
 #[derive(Serialize)]
@@ -67,7 +99,7 @@ struct ReviewJson<'a> {
     correction_text: Option<&'static str>,
     offers_correction: bool,
     repairs_first: bool,
-    repairs: Vec<RepairJson<'a>>,
+    repairs: RepairsJson<'a>,
 }
 
 /// Reviews a typed password under the check word profile, before any Argon2 work. When
@@ -88,8 +120,7 @@ pub fn review_password(
     let repeat = repeat.text(crate::PasswordError::InvalidPasswordUtf8.into())?;
     let repeated = yes_or_no(&repeated, crate::request::BooleanField::Repeated)?;
     Password::check_typed_twice(typed, repeated.then_some(repeat)).map_err(js_error)?;
-    let review = PasswordReview::of(typed);
-    let restorable = review.reading() == Reading::Restorable;
+    let review = PasswordReview::of(typed).map_err(js_error)?;
     secret_json(&ReviewJson {
         profile: PROFILE,
         reading: match review.reading() {
@@ -106,15 +137,7 @@ pub fn review_password(
         correction_text: review.correction().map(Correction::text),
         offers_correction: review.offers_correction(),
         repairs_first: review.repairs_first(),
-        repairs: review
-            .repairs()
-            .iter()
-            .map(|repair| RepairJson {
-                position: repair.position(),
-                word: repair.word(),
-                typed: (!restorable).then(|| review.typed_word(repair)),
-            })
-            .collect(),
+        repairs: RepairsJson(&review),
     })
 }
 
@@ -138,7 +161,7 @@ pub fn password_strength(
     let typed = password.text(crate::PasswordError::InvalidPasswordUtf8.into())?;
     let chosen =
         PasswordReview::choose(typed, review_choice(choice, position)?).map_err(js_error)?;
-    let strength = Strength::of(&chosen);
+    let strength = Strength::of(&chosen).map_err(js_error)?;
     json(&StrengthJson {
         bits: strength.bits(),
         weak: strength.is_weak(),

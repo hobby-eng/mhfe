@@ -87,8 +87,8 @@ export type MhfeErrorCode =
   /**
    * Files of different builds of the package: a class, runtime.js, worker.js, mhfe.wasm and the
    * Argon2 builds must come from one. Also a message of the worker that the page does not know or
-   * cannot read, which ends the operation and stops the worker. Not kept: the next call checks
-   * again.
+   * cannot read, which ends the operation and stops the worker. Before any component has failed,
+   * the next call checks again; this error never clears a previously recorded failed component.
    */
   | "PACKAGE_MISMATCH"
   /** cancel() stopped the operation (MhfeCancelledError); a failing callback is CALLBACK_FAILED. */
@@ -103,6 +103,8 @@ export type MhfeErrorCode =
   | "NOT_ENOUGH_MEMORY"
   /** The operating system refused the memory. */
   | "MEMORY_ALLOCATION_FAILED"
+  /** Native Linux could not confirm dump exclusion for the work area. */
+  | "MEMORY_PROTECTION_FAILED"
   /** The build cannot address that much memory (browser: > 0). */
   | "MEMORY_LEVEL_NOT_SUPPORTED_HERE"
   /** The Argon2 code reported an error. */
@@ -258,6 +260,33 @@ export interface MhfePackageParts {
    * classes compiles it once, with WebAssembly.compile, and passes the module to each.
    */
   wasm: Uint8Array | WebAssembly.Module;
+}
+
+/** The raw phrase/container admission limit, owned by the Rust library. */
+export interface MhfeInputTextParameters {
+  /** Maximum raw UTF-8 bytes, including whitespace, before parsing or copying. */
+  maxInputTextBytes: number;
+}
+
+/**
+ * Synchronously validates borrowed text before a retained copy. The limit comes from
+ * parameters().maxInputTextBytes. Wrong types/limits throw TypeError; ill-formed UTF-16 or
+ * excess UTF-8 bytes throw MhfeError(INVALID_REQUEST). No encoding buffer is created.
+ * Password/passphrase normalization and BIP39 validity remain the owning library's checks.
+ */
+export function requireInputText(
+  value: unknown,
+  maxBytes: number,
+  name: string,
+): asserts value is string;
+
+/** Caches one scalar library limit for admissions at a module's transport boundary. */
+export class InputTextBoundary {
+  constructor(readParameters: () => Promise<unknown>);
+  /** Refuses wrong types before reading parameters and admits text before copying it. */
+  read(value: unknown, name: string): Promise<void>;
+  /** Admits raw text/UTF-8 bytes and gives an owned copy for the caller to wipe. */
+  copy(value: unknown, name: string): Promise<Uint8Array>;
 }
 
 /**

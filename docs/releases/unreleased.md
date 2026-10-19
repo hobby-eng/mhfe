@@ -21,6 +21,52 @@ are cancelled.
 
 ## Changed
 
+- Native Linux Argon2 work areas require successful whole-page dump exclusion and bounded
+  `/proc/self/smaps` readback before use. Direct allocation failure returns the new
+  `EngineError::MemoryProtection` / `MEMORY_PROTECTION_FAILED` refusal. Startup and full checks
+  retain that cause in a failed component; their enclosing `SELF_CHECK_FAILED` contract remains.
+  Linux library hosts must permit reading that metadata. The logical Argon2 extent and
+  cryptographic parameters are unchanged.
+- Rust `Bip39Passphrase::read` checks the raw 1,024-byte passphrase bound without normalization.
+  Interactive CLI prompts retry excessive passphrases and malformed visible lines while retaining
+  earlier answers; scripted input remains fail-fast.
+- Browser word hints and each chosen/excluded word value enforce the shared 8,192-byte raw input bound
+  before scanning or copying. Browser methods retain string and `Uint8Array` support without
+  consuming caller storage. Rust `WordHintError` and `WishError` add a typed `Text` cause.
+- Browser startup reports must account for every requested check using current results or the
+  verified cache captured before the run. Incomplete reports cannot admit work or populate the
+  cache. Raw self-check IDs describe their requested tier; full Argon2 checks retain separate
+  known answers for each build as well as the larger memory checks.
+- Original/container phrase readers enforce the shared 8,192 raw UTF-8 byte limit before scanning,
+  including whitespace, with `INVALID_REQUEST`. Rust `PhraseError` adds the `Text` cause variant;
+  exhaustive matches must handle it. Password and passphrase encoding limits stay independent.
+  Browser core/repair/wallet parameters expose `maxInputTextBytes`; their phrase/container
+  transports and the exported `requireInputText` / `InputTextBoundary` admit text before copying.
+- Search candidate values, selected words, match indices and checksum scratch use wiping owners.
+  Two missing words have a flat candidate-value pool bounded to 16 MiB. Rust `Found::words()` now
+  returns an exact-size borrowed iterator. Encryption/rekey/repair/search/password JSON serializes borrowed owner
+  views into final-size wiping staging; JavaScript methods and result fields stay the same.
+- Repair arithmetic, changed-word positions, subset scratch and terminal card rows use wiping
+  owners allocated at their bounded sizes. Card output and correction reporting avoid ordinary
+  temporary word strings; public repair results and terminal layout remain the same.
+- Rust container inspection and card extraction return typed `Result`s and share the 8,192-byte
+  input limit with repair and dice text. Counts are checked before collection, card text is copied
+  at its exact final size, and indexed word/position buffers wipe on drop. Existing browser JSON
+  fields stay the same; oversized input fails with `INVALID_REQUEST`.
+- Rekey recovery and confirmation tokens are bound to the canonical source container, normalized
+  old password and old work settings. Other origins fail with `INVALID_REQUEST` before callbacks
+  or work; separately constructed equivalent rekeys remain compatible. Tokens retain a wiping
+  credential owner until the last token drops. Rust adds `RekeyError::OriginMismatch`; browser
+  methods and JSON fields are unchanged.
+- Rust `EffList::word`, `different_dice_words`, `PasswordReview::of` and `Strength::of` return
+  typed `Result`s. Text utilities refuse raw UTF-8 input above 8,192 bytes before owned copies;
+  empty and nonprofile input remain accepted by review/estimation. Repairs own and wipe their
+  selected word, position and typed range; `Repair::word()` borrows from the repair, and Debug
+  withholds all of them. Browser JSON fields are unchanged.
+- `Millibits::get()` and `PasswordRecipe::millibits()` return `u128`, so every host-sized draw
+  count has an exact strength without overflow. Existing recipe strengths and display text agree.
+- `PasswordReview::typed_word(&repair)` returns a `Result`. Repairs retain their review's
+  identity when cloned; another review's repair is refused, including for identical text.
 - Rust result records have private fields and read accessors. `Phrase::read` and `from_entropy`
   own normalized BIP39 text in a locked, wiping buffer; `into_words` transfers it without a copy.
   Native memory probes, self-check set constructors, password check indexes and vector generation
@@ -48,7 +94,8 @@ are cancelled.
   omit arbitrary thrown text that might contain secrets. Existing error codes are unchanged.
 - Independent Rust modules return their own typed errors, with `From` conversions into composed
   `MhfeError` operations and a shared `ErrorIdentity` interface. Error reasons carry typed fields;
-  the 52 stable codes and browser result schemas remain. Native callers matching flat error
+  the prior stable codes and browser result schemas remain, with `MEMORY_PROTECTION_FAILED`
+  added for a total of 53. Native callers matching flat error
   variants must use the owning error. Progress callbacks return `CancelledError` with their
   existing arguments/order. Self-check failures retain typed reasons and case metadata while
   their browser `detail` remains a string.
@@ -85,6 +132,20 @@ are cancelled.
 
 ## Fixed
 
+- Repacking an existing ZIP replaces removed entries rather than retaining them. A failed ZIP
+  command leaves the previous archive unchanged.
+- Browser methods refuse non-object option containers rather than silently selecting defaults.
+  Oversized chosen/excluded-word arrays fail before entry access, transport copies or workers.
+- Vector reads and checksum generation refuse nonregular files and vectors above 1 MiB;
+  checksum hashing uses fixed scratch space. Temporary vector paths are created exclusively.
+  Both fast-mode launchers also refuse final symbolic links to their page or checksum file.
+- CLI usage errors withhold supplied values, unknown arguments and subcommands, including every
+  line of multiline input. Suggestions name only configured options. A refused selector for
+  `test-vectors --only` is not repeated and creates no files or directories.
+- Direct hidden-wallet recovery and raw WebAssembly recovery enforce the shared BIP39 passphrase
+  byte limit before Argon2 work. Raw rekey options validate repair counts before recovery starts.
+- Address searches check cancellation for an explicit path before deriving it, as they do for
+  addresses in a scan.
 - An outside EFF word index, including an integer that would overflow the weighted sum, is refused
   as `INVALID_REQUEST` before arithmetic. A quick startup refusal guards the same boundary.
 - Browser progress refuses negative, fractional and over-total rounds before calling page code.
@@ -152,6 +213,9 @@ are cancelled.
 
 ## Library
 
+- A sealed result drops the original creation-check state before returning. Hidden-wallet sessions
+  keep container text in a locked, wiping owner; repair results and changes wipe their owned text
+  and omit it from `Debug`, including clones. These changes do not erase copies held by callers.
 - Rehearsal self-checks compare all evidence, including the wallet check, every passed check and
   the follow-up decision. Old-container keep lists and replacement rehearsal references have
   independent expected values and damaged-value controls.
@@ -179,7 +243,8 @@ are cancelled.
 - `repair::CardWords` owns normalized as-typed card text in locked memory, exposes its words and
   count, and wipes it when dropped; the internal card parser is private.
 - `CheckOutcome::NotVerified` adds an outcome, a breaking change for exhaustive matches.
-- New or newly exported APIs include `ContainerFacts::fingerprint`, `grouped`,
+- New or newly exported APIs include `ContainerFacts::fingerprint`, `GroupedCount::new(count)`
+  (formatted through `Display`),
   `PassphraseReferences::refuse_unused`, `PassedCheck`, `PassphraseReferences`, `Settings`,
   `ReplacementRehearsal`, `ConfirmedPhrase`'s rehearsal methods, `Keep::old_container` and
   `self_check::process`. `ContainerFacts::require_wallet_check` offers the same applicability
@@ -193,10 +258,14 @@ are cancelled.
 
 ## Build, tests and release
 
+- Browser diagnostics include the complete core parameter schema. Native lock expectations cover
+  Windows and Unix. The macOS attachment probe first requires an attachable public control, then
+  tests a protected child; unavailable controls fail with an explicit unverified result.
+- The live audit-record gate discovers both companions, refuses malformed or duplicate-key JSON,
+  and compares filename, audit identity, JSON date and the stated UTC completion metadata.
 - Browser source files are split by operation and runtime responsibility. A checked source join
   preserves the package's existing file paths and public exports; no file-length lint exceptions
   remain in the browser sources.
-
 - Update the pinned Rust dependencies `cc` to 1.8.0 and `serde_json` to 1.0.154.
 - Fast gates check Python widths and the inventory of CLI questions and scoped options. Terminal
   cases cover explicit scan gaps, address paths, checked passwords, repair, passphrase answers,

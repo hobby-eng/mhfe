@@ -1,3 +1,5 @@
+<!-- long: Shipped verbatim as the browser package's complete, self-contained README. -->
+
 # MHFE browser package
 
 This package runs MHFE in a web page: it encrypts an English BIP39 seed phrase into a 24-word
@@ -61,6 +63,8 @@ ends. A constructor throws a `TypeError` when a part is missing or of the wrong 
 throws. Every method rejects with a `TypeError` an option it does not take, naming it, so that a
 misspelled one such as `PIM` for `pim` is refused rather than left at its default; an option given
 as `undefined` counts as absent.
+Optional options may be omitted or `undefined`; a supplied primitive, array, function or `null`
+rejects with `TypeError` before a worker starts, rather than silently choosing defaults.
 
 The package has one version, the release version: every class's `parameters()` reports it as
 `version`, and the WebAssembly as `packageVersion()`. Each build of it also has an identifier,
@@ -78,6 +82,32 @@ Every class checks its parts before its first operation and stays closed if one 
 answer; [Self-checks](#self-checks) says what is checked and what the page shows.
 
 ## Use
+
+Phrase/container methods, `wordHints` and each chosen/excluded word refuse more than 8,192 raw
+UTF-8 bytes, including whitespace, before making their transport copies. All four modules'
+`parameters()` expose this single
+Rust-owned bound as `maxInputTextBytes`. A host that retains its own byte copy can use the same
+synchronous admission first:
+
+```js
+import { requireInputText } from "./runtime/runtime.js";
+
+const { maxInputTextBytes } = await client.parameters();
+requireInputText(container, maxInputTextBytes, "container");
+// Make a retained byte copy only after admission, and wipe that owner when it is no longer used.
+```
+
+`requireInputText` creates no encoding buffer. It throws `TypeError` for a non-string or invalid
+limit and `MhfeError` with `INVALID_REQUEST` for excess bytes or unpaired UTF-16 surrogates.
+It does not validate BIP39 words or change the independent password/passphrase encoding limits.
+`new InputTextBoundary(() => client.parameters())` offers asynchronous `read(text, name)` for a host
+that wants one cached scalar limit; failed parameter reads remain retryable.
+Its `copy(textOrBytes, name)` also accepts `Uint8Array` and returns an admitted, owned byte copy
+for the caller to wipe. It leaves caller-owned bytes unchanged and checks their current intrinsic
+size after the metadata wait. The library decodes supplied bytes and rejects invalid UTF-8.
+The copy fixes the admitted byte extent even when another worker grows shared storage; its contents
+remain caller-mutable until copied.
+A wish's single framing newline is additional to its text-value limit.
 
 ### Core
 
@@ -205,7 +235,9 @@ any key a reference does not have, is a `TypeError` rather than dropped.
   passes, or null. With `{ words }`, a check that passes at another length takes precedence and
   matches, and `builtInCheck` names that length: say so, as the command-line tool does.
 - `matchingLengths` lists every 12- to 21-word length whose built-in check passes, in ascending
-  order: one for a short original, none for a 24-word one, several only by chance.
+  order. For a 24-word container it includes a short original's own length. Other lengths can
+  pass by chance, including a shorter reading of a 24-word original or of a wrong-password
+  recovery. It is empty for a same-length container.
 - `passed` lists the checks that passed, in the order to show them beside the result, as the
   command-line tool does: `{ check: "builtInCheck", words }` for the verified reading,
   `{ check: "builtInChecks", lengths }` for several lengths, and `{ check: "walletCheck" }` where
@@ -213,8 +245,8 @@ any key a reference does not have, is a `TypeError` rather than dropped.
 - `walletCheck` says whether the 24-word reading passes the 16-bit phrase + passphrase check with
   the `passphrase` given, or with none if none was given. It is null for `{ words }` with a length
   stated, for a same-length container, and when exactly one shorter length passes its check and the
-  reference did not match the 24-word reading. A phrase drawn without that check fails it, so only
-  a pass says anything.
+  reference did not match the 24-word reading. A phrase drawn without that check can pass by
+  chance; a failure matters only when the owner knows it was drawn with the check.
 
 `{ words: 0 }` detects the length: the built-in check of whichever 12- to 21-word length passes it,
 or with a `passphrase`, the phrase + passphrase check of a 24-word phrase drawn with it. Ask the
@@ -418,6 +450,16 @@ a difference is `PASSWORDS_DIFFER`, and so is an empty `passwordRepeat`. Without
 the password was typed once, as for an existing container. `encrypt()`, `rekey()` and a hidden
 wallet's `open()` check a new password the same way.
 
+`strength()` accepts empty and nonprofile text but refuses more than 8,192 raw UTF-8 bytes with
+`INVALID_REQUEST`. It does not normalize the text as a cipher password. The Rust utility checks
+this bound before its owned review copy; JavaScript input strings and the initial binding transfer
+are still subject to the browser memory limits and erasure limitations described below.
+
+The same raw byte bound applies to container inspection, repair inputs and dice text. Oversized
+input rejects with `INVALID_REQUEST`; ordinary word/count outcomes within the bound keep their
+existing JSON fields. Printed card labels and profile names are filtered before the bounded card
+word count and exact text allocation. Character passwords still refuse dice before this size check.
+
 `make()` makes words by default: five words, or `count` words from 1 to 32.
 `{ kind: "characters" }` gives 16 characters, or `count` from 1 to 64, and `{ kind: "checkWord" }`
 gives five words and their check word. `"checkWord"` takes no `count`, as `mhfe password` refuses
@@ -474,8 +516,12 @@ at a time (`BUSY` otherwise), and `wallet.cancel()` stops it.
 (README, "Chosen words") and is a feature of this program, not of the specification. The chosen
 word is part of the secret phrase: it reaches the worker as bytes that it wipes, and no refusal
 names it. A word outside the English list, a second word of either kind or a chosen word also never
-to use is refused with `INVALID_WORD_WISH`. The phrase is drawn until it meets both wishes, so every
-phrase that meets them is equally likely. `describeDraw()` says first what they cost, as the
+to use is refused with `INVALID_WORD_WISH`.
+Oversized wish arrays are refused before their entries are read, framed or encoded and before any
+startup or drawing worker starts. The synchronous admission mirrors the library's limits and
+diagnostics; package checks compare those copies with the Rust owner.
+The phrase is drawn until it meets both wishes, so every phrase that meets them is equally likely.
+`describeDraw()` says first what they cost, as the
 command-line tool states it before it draws: `randomBits`, the random bits the phrase keeps for
 someone who knows the word, about, the check's 16 included, at least 228.98 with the check and
 244.98 without; `randomness`, `"full"` for all 256, `"ample"` from
@@ -496,11 +542,16 @@ letters is being typed or the word is whole with no longer word after it. `compl
 adds: the letters all those words share next, and whether one word is left, which then ends with a
 space. `MhfePasswords.wordHints()` gives the same for the words of the EFF list in a password; a
 password may hold any text, so a page shows nothing for `"noWord"` there and keeps Tab a character
-of the password. The line reaches the worker as bytes that it wipes. Each call starts a worker, so
+of the password. Both strings and UTF-8 `Uint8Array` inputs retain the raw byte bound;
+oversized input is `INVALID_REQUEST`. The line reaches the worker as bytes that it wipes. Each call starts a worker, so
 a page may ask once typing pauses. The lists are public: a hint tells nothing that someone who sees
 the screen could not look up, but it is shown only where the typed text itself is shown.
 
 ## Progress, cancelling and errors
+
+The shared 1024-byte BIP39 passphrase limit is checked before recovery work, including direct
+WebAssembly calls (`PASSPHRASE_TOO_LONG`). Direct rekey calls refuse unsupported repair-word
+counts before recovery starts (`INVALID_REPAIR_WORDS`).
 
 Long operations report `onProgress({ stage, round, rounds })` as each round starts:
 
@@ -640,11 +691,16 @@ long operation of the core or a new phrase waits for the check, the class is bus
 A report is made once for each class and choice, and every call shares it, except a report with a
 part that is "notAvailable" or a "warning", which at start only an Argon2 build that did not start
 gives: it passes but is not kept, and the next call checks again. A part that another class has
-passed with the same WebAssembly object is not run again and appears in the report as that class
+passed with the same immutable compiled `WebAssembly.Module` is not run again and appears in the report as that class
 found it: a page that compiles `runtime/mhfe.wasm` once and passes the module to every class checks
 a shared part, such as the BIP39 word list, once. Argon2's part counts only for the Argon2 build
 that gave it. In Chromium and Firefox a class's startup check, the start of its worker included,
 took from about 15 to 210 milliseconds, the wallet's and the core's the longest.
+
+Classes given bytes compile and check their own module independently, even if they receive the
+same byte-array object. A completed failed component closes its class immediately; a later worker
+or callback error cannot discard that failure. A worker error before any failed result remains
+retryable.
 
 ### The full self-test
 
@@ -658,11 +714,13 @@ generator, two probes and the spread of 1,024 of its bytes. `onProgress` receive
 `startupCheck()`, with `tier` "full". This includes the page's own parts, even when one fails,
 and every part not run here, with its reason, in report order.
 
-`MhfeClient.fullCheck()` then checks Argon2 at 64 and 256 MiB with the single-threaded build,
+`MhfeClient.fullCheck()` then runs each build's complete Argon2 set: its inexpensive 1 MiB known
+answer (`argon2-known-answer-single-threaded` or `argon2-known-answer-threaded`) followed by
+Argon2 at 64 and 256 MiB with the single-threaded build,
 `argon2-sizes-single-threaded`, "Argon2id at 64 and 256 MiB, single-threaded build", and on a
 cross-origin isolated page with the threaded build after it, `argon2-sizes-threaded`, "Argon2id at
 64 and 256 MiB, threaded build": never both at once, each in a worker of its own. In standard mode
-the threaded part is not run, "the page is not cross-origin isolated". A browser that cannot give
+the threaded parts are not run, "the page is not cross-origin isolated". A browser that cannot give
 the memory, or an Argon2 build that does not start, makes such a part not available rather than
 failed. Last, the report lists what the
 command-line tool's self-test has and a page does not run; the parts after the published vectors
@@ -728,7 +786,8 @@ loop. Every round also refuses a key that the build left unwritten or set to zer
   so does a `core/client.js` whose limits differ from the WebAssembly's.
 - A worker that does not start gives `WORKER_FAILED`, for example "The worker did not start within
   a minute.".
-- Neither `PACKAGE_MISMATCH` nor `WORKER_FAILED` closes the class: the next call checks again.
+- Before any component has failed, neither `PACKAGE_MISMATCH` nor `WORKER_FAILED` closes the
+  class: the next call checks again. Neither error clears a previously recorded failed component.
 - An Argon2 build that does not start makes the Argon2 parts not available, or in fast mode a
   warning when the single-threaded build ran instead (see [Before first use](#before-first-use)).
 - A warning, a part not available here and a part not run are not failures; `passed` stays true.
@@ -781,6 +840,10 @@ space and `*` before the name as `sha256sum --binary` writes it. Ship that file 
 HTML file, always under this name. Without it, with another file name in it or with a different
 SHA-256, the launcher refuses with a message and serves nothing. The page's file name must end
 in lower-case `.html`; `.htm` and `.HTML` are refused separately from checksum-format errors.
+The page and checksum must be regular files; final symbolic links, FIFOs, devices and directories
+are refused. Their parent directories must be trusted. The native launcher opens final paths
+without following links, as does Python on systems that provide `O_NOFOLLOW`; neither launcher
+sandboxes ancestor-directory changes.
 Started without arguments, as by a
 double-click, `mhfe` shows its menu, whose first entry serves the page named in the
 `mhfe-fast-mode.sha256` next to the program; when that file is wrong, the menu says that the fast
@@ -943,7 +1006,7 @@ do for them:
   comes out, ask whether a BIP39 passphrase is used with the phrase, and say why in a few
   sentences, not only a link; ask before the recovery or decrypt again with the answer. Say
   "passes the 16-bit check" for `true`; for `false` say that it matters only if the wallet was made
-  with the check, as a phrase made without it fails. When the user is done,
+  with the check; a phrase made without it can also pass by chance. When the user is done,
   remove the phrase from the screen, say so, and ask the user to close the page;
 - offer a check only where `readContainer()` says it applies, and show what an address check will
   search (`MhfeWallet.describeAddress()`) before it runs. Show the three outcomes apart, as the
@@ -1051,8 +1114,10 @@ The README sections that the command-line tool links to:
 A password, a BIP39 passphrase, a phrase and dice rolls given to a class are copied into UTF-8 bytes
 once its check at start has passed, transferred to the worker, so that no copy stays with the class,
 and wiped there; a `Uint8Array` the page passes is always copied into an array of its own, never
-transferred or emptied, whatever its kind. Text with an unpaired surrogate, a phrase included, is
-refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser. The Rust code and the
+transferred or emptied, whatever its kind. Text with an unpaired surrogate is refused rather than
+changed by the browser. Phrase/container text admitted through `requireInputText` uses
+`INVALID_REQUEST`; direct secret-string encoding, including passwords and passphrases, uses
+`INVALID_PASSWORD_TEXT`. The Rust code and the
 Argon2 bridge overwrite their own buffers of these bytes, the keys and the states they hold, and
 every worker is terminated when its operation or session ends. Copies that the compiler and the
 dependencies leave on the WebAssembly's stack, such as the BIP39 seed and the BIP32 master key and
@@ -1077,6 +1142,15 @@ state; a check waiting for `onNoLength` holds its recovered state. These waits l
 page takes to answer: cancel them when the user leaves or after a while without use. Hidden-wallet
 sessions and multi-worker phrase draws have the lifetimes described above.
 
+Rekey recovery and confirmation tokens internally retain the source credentials, including a
+normalized old-password copy, until their last shared owner drops. The Rust library refuses tokens
+paired with different source credentials (`INVALID_REQUEST`); the browser session keeps its tokens
+internally, with no added method or JSON field. Such tokens are sensitive capabilities, including
+the ability to test credential equality, and should not outlive the operation.
+
+Rust repair, search and password results serialize borrowed word/index owners through final-size
+wiping staging. Candidate value storage is bounded to at most 16 MiB for two missing
+words; match lists and arithmetic scratch have their own bounded wiping owners.
 What reaches the page is
 a JavaScript string, which the browser cannot erase: a password typed into a page, a recovered or
 new phrase, a generated password, the words of a check word review, the phrase of an owner

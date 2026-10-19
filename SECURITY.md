@@ -58,11 +58,25 @@ Never include a real seed phrase, password, private key or wallet file.
   terminal, secrets, a new container and a recovered phrase appear on the terminal's alternate
   screen, which is cleared before the tool returns to the main screen, so they do not enter its
   scrollback; a terminal that logs its output or a screen recording keeps them all the same.
+- A checked encryption result drops its original creation-check state before it is returned.
+  Hidden-wallet sessions hold their container text in a locked, wiping owner. Repair results and
+  their changes, and the repair words of a checked encryption, wipe owned text on drop; repaired
+  results and changes omit words from `Debug`, including clones. Callers' copies and the compiler
+  and runtime limits above remain outside these owners' control.
 - The CLI requests native crash-dump and memory-access protections. It forbids Unix core dumps
   (`RLIMIT_CORE` 0) and,
   on Linux, makes itself non-dumpable (`PR_SET_DUMPABLE` 0), which also keeps other programs of the
   same user from attaching to it or reading its memory through `/proc`, so a crash writes nothing
-  to disk; the Argon2 work area is marked `MADV_DONTDUMP` as well. Windows opts the process out of
+  to disk; Linux also requests `MADV_DONTDUMP` for the entire page-aligned, page-rounded Argon2
+  allocation. The library checks the request and reads `/proc/self/smaps` back before using it;
+  every covered page must report `dd`. Refusal or unavailable/incomplete readback gives
+  `MEMORY_PROTECTION_FAILED`, and the startup/full known-answer check fails. This requires readable
+  procfs metadata on Linux; other native platforms retain their process protections above.
+  The read is bounded to 8 MiB in total and 8 KiB per line. These checks establish the policy at
+  admission, not protection against a privileged actor changing it later. The existing allocator
+  still owns and frees the buffer; page alignment may commit its zeroed memory immediately, and
+  exclusion may persist on freed pages until the allocator unmaps them.
+  Windows opts the process out of
   Windows Error Reporting with `SEM_NOGPFAULTERRORBOX`, read back through `GetErrorMode`, and sets
   a restrictive process DACL. An `OWNER RIGHTS` ACE also removes the owner's implicit ability to
   grant itself memory-read access; the exact DACL is read back before secret input. macOS requests
@@ -100,8 +114,9 @@ Never include a real seed phrase, password, private key or wallet file.
   page file. MHFE does not inspect Windows pagefile encryption, so it warns that protection is
   unknown rather than reporting a protected or absent pagefile.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
-  again from its words and compares the result with the original seed phrase: a typing mistake or a
-  hardware fault cannot silently produce a container that no password opens. At a terminal the
+  again from its words and compares the result with the original seed phrase. This detects a
+  differing repeated password and faults that change the recovered phrase during that check;
+  a pass confirms the checked operation and does not rule out every hardware fault. At a terminal the
   container is shown during that check, marked as not yet verified, and the outcome is reported;
   a failed or cancelled check says that the container must not be relied on. With `--stdin`, or
   when standard output goes to a file or another program, the container is printed only after
@@ -194,13 +209,14 @@ whether standard output is the terminal the private screen is shown on (`fstat` 
 - On x86-64, `opt.c` is compiled twice, with SSE2 and with SSSE3. MHFE's own
   `src/engine/argon2_simd.c` runs the SSSE3 copy only for a call whose context carries MHFE's flag
   in bit 31 of `flags`, which the engine sets only where the processor reports SSSE3; the vendored
-  code reads only the two lowest bits. The choice travels with each call, so no global state is
-  shared.
+  code reads only the two lowest bits. The implementation choice travels with each call's context.
 - The work area is allocated once per operation and handed to C by the allocation callback. The C
   API passes no user data to the callback, so the area travels in a thread-local slot that is set
   just before and cleared just after each call; C calls the callback on the calling thread.
-- `argon2_ctx` joins its four lane threads before it returns and keeps no other global state, so no
-  pointer outlives a call and calls on different threads do not interfere.
+- `argon2_ctx` joins its four lane threads before it returns, so its worker pointers do not
+  outlive the call. Its upstream global `FLAG_clear_internal_memory` is shared; MHFE leaves it
+  at its default and never writes it. Concurrent calls in this integration read that fixed flag
+  and use their own contexts and work areas.
 - Every Argon2 error code is turned into an error with the reference implementation's message.
 
 The only other unsafe calls in that module are the free-memory queries for macOS and Windows.

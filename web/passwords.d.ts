@@ -3,6 +3,7 @@ import type {
   MhfePasswordRepair,
   MhfeSecret,
   MhfeWordHint,
+  MhfeInputTextParameters,
 } from "../runtime/runtime.js";
 import { MhfeModuleClass } from "../runtime/runtime.js";
 export {
@@ -31,7 +32,7 @@ export interface MhfePasswordReview {
 }
 
 /** The module's fixed values, from parameters(). */
-export interface MhfePasswordsParameters {
+export interface MhfePasswordsParameters extends MhfeInputTextParameters {
   version: string;
   checkWordProfile: "MHFE-PASSWORD-CHECK-1";
   defaultWords: number;
@@ -56,6 +57,7 @@ export class MhfePasswords extends MhfeModuleClass<MhfePasswordsParameters> {
   }): Promise<MhfePasswordReview>;
   /** The hint below a password being typed, from the EFF list; "noWord" is not shown there. */
   wordHints(options: { typed: MhfeSecret }): Promise<MhfeWordHint>;
+  /** Estimates raw UTF-8 text up to 8,192 bytes; larger input rejects with INVALID_REQUEST. */
   strength(options: {
     password: MhfeSecret;
     passwordRepair?: MhfePasswordRepair;

@@ -92,9 +92,9 @@ impl EffList {
         &self.words
     }
 
-    /// The word at `index`, below [`LIST_SIZE`].
-    pub fn word(&self, index: usize) -> &'static str {
-        self.words[index]
+    /// The word at `index`, or [`EffError::InvalidIndex`] when it is not below [`LIST_SIZE`].
+    pub fn word(&self, index: usize) -> Result<&'static str, EffError> {
+        self.words.get(index).copied().ok_or(EffError::InvalidIndex)
     }
 
     /// The position of `word`, compared exactly as written, hyphens included.
@@ -106,7 +106,9 @@ impl EffList {
     /// any ASCII letter case, else 0. A repeated word counts once: "abacus abacus abacus abacus"
     /// is one dice word, about 12.9 bits, not four (AUD-005-FUN001). The text is compared in
     /// place, so no copy of it is made; the positions found, which reveal it, are wiped.
-    pub fn different_dice_words(&self, text: &str) -> usize {
+    /// Raw text above [`crate::input_text::InputText::MAX_BYTES`] is refused before allocation.
+    pub fn different_dice_words(&self, text: &str) -> Result<usize, EffError> {
+        let text = crate::input_text::InputText::read(text)?.text();
         // Reserved for every token up front, so the list never grows and leaves no unwiped copy.
         let mut found = Zeroizing::new(Vec::with_capacity(text.split_whitespace().count()));
         for token in text.split_whitespace() {
@@ -116,12 +118,12 @@ impl EffList {
                 .position(|word| word.eq_ignore_ascii_case(token))
             {
                 Some(index) => found.push(index),
-                None => return 0,
+                None => return Ok(0),
             }
         }
         found.sort_unstable();
         found.dedup();
-        found.len()
+        Ok(found.len())
     }
 
     /// The word index that five dice digits select, read as a number in base 6 in the order of the
@@ -152,12 +154,23 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     #[test]
+    fn an_outside_word_lookup_does_not_panic() {
+        for index in [LIST_SIZE, usize::MAX] {
+            let result = std::panic::catch_unwind(|| EffList::get().word(index)).unwrap();
+            assert_eq!(result, Err(EffError::InvalidIndex));
+            let error = result.unwrap_err();
+            assert_eq!(error.code(), "INVALID_REQUEST");
+            assert!(!error.to_string().contains(&index.to_string()));
+        }
+    }
+
+    #[test]
     fn the_vendored_list_is_the_published_file() {
         let digest = Sha256::digest(EFF_LIST.as_bytes());
         assert_eq!(hex::encode(digest), EFF_LIST_SHA256);
         let list = EffList::get();
-        assert_eq!(list.word(0), "abacus");
-        assert_eq!(list.word(LIST_SIZE - 1), "zoom");
+        assert_eq!(list.word(0), Ok("abacus"));
+        assert_eq!(list.word(LIST_SIZE - 1), Ok("zoom"));
         assert_eq!(list.index_of("zoom"), Some(LIST_SIZE - 1));
         assert_eq!(list.index_of("Zoom"), None);
     }
@@ -182,7 +195,7 @@ mod tests {
         let list = EffList::get();
         for line in EFF_LIST.lines().step_by(97) {
             let (rolls, word) = line.split_once('\t').unwrap();
-            assert_eq!(list.word(EffList::index_of_rolls(rolls).unwrap()), word);
+            assert_eq!(list.word(EffList::index_of_rolls(rolls).unwrap()), Ok(word));
         }
         assert_eq!(EffList::index_of_rolls("11111"), Some(0));
         assert_eq!(EffList::index_of_rolls(" 66666 "), Some(LIST_SIZE - 1));
@@ -194,23 +207,39 @@ mod tests {
     #[test]
     fn recognises_texts_made_of_dice_words() {
         let list = EffList::get();
-        assert_eq!(list.different_dice_words("abacus zoom yearbook zipfile"), 4);
-        assert_eq!(list.different_dice_words("Abacus  ZOOM"), 2);
-        assert_eq!(list.different_dice_words("abacus zoom Tr0ub4dor"), 0);
-        assert_eq!(list.different_dice_words(""), 0);
+        assert_eq!(
+            list.different_dice_words("abacus zoom yearbook zipfile")
+                .unwrap(),
+            4
+        );
+        assert_eq!(list.different_dice_words("Abacus  ZOOM").unwrap(), 2);
+        assert_eq!(
+            list.different_dice_words("abacus zoom Tr0ub4dor").unwrap(),
+            0
+        );
+        assert_eq!(list.different_dice_words("").unwrap(), 0);
     }
 
     /// AUD-005-FUN001: a repeated word adds nothing, in any letter case.
     #[test]
     fn a_repeated_dice_word_counts_once() {
         let list = EffList::get();
-        assert_eq!(list.different_dice_words("abacus abacus abacus abacus"), 1);
-        assert_eq!(list.different_dice_words("abacus ABACUS Abacus zoom"), 2);
         assert_eq!(
-            list.different_dice_words("abacus zoom abacus zoom yearbook"),
+            list.different_dice_words("abacus abacus abacus abacus")
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            list.different_dice_words("abacus ABACUS Abacus zoom")
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            list.different_dice_words("abacus zoom abacus zoom yearbook")
+                .unwrap(),
             3
         );
         // Only ASCII letters change case; any other letter makes it a word outside the list.
-        assert_eq!(list.different_dice_words("abacus zo\u{d3}m"), 0);
+        assert_eq!(list.different_dice_words("abacus zo\u{d3}m").unwrap(), 0);
     }
 }

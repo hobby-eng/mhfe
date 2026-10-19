@@ -1,8 +1,9 @@
 //! The self-test: two published test vectors at their full cost on this computer, an encryption
-//! of suite 3 and a recovery of suite 4. A program that passes computes MHFE as the specification
-//! says, here and now; a build or computer fault that the round trip of an encryption cannot see,
-//! because it would encrypt and decrypt the same wrong way, shows here. The vectors are public, so
-//! no secret is involved. It takes minutes, so a front end runs it only when the person asks.
+//! of suite 3 and a recovery of suite 4. A pass confirms these operations and their witnessed
+//! rounds against the published answers on this run. It can detect a build or computer fault
+//! that a same-implementation round trip misses; untested inputs and later faults remain outside
+//! this finite check. The vectors are public, so no secret is involved. It takes minutes, so a
+//! front end runs it only when the person asks.
 //!
 //! A witness watches every Argon2id call, without changing its cost or its key, and compares it
 //! with the round the published vectors record at that place. A failure names the first round that
@@ -363,9 +364,9 @@ impl SelfTestResult {
         self.suite_4
     }
 
-    /// Whether both vectors gave their published results.
+    /// Whether both final results and every witnessed round matched the published vectors.
     pub fn passed(self) -> bool {
-        self.suite_3 && self.suite_4
+        self.suite_3 && self.suite_4 && self.first_round_fault.is_none()
     }
 }
 
@@ -516,6 +517,33 @@ mod tests {
         );
         // The stand-in gives the recorded keys too.
         assert!(with_fault_in_the_engine(Change::Key, 0).passed());
+    }
+
+    /// A fault in expected witness metadata still fails when the independent final outputs match.
+    #[test]
+    fn a_witness_fault_cannot_hide_behind_matching_final_outputs() {
+        let test = SelfTest::published().unwrap();
+        for (name, round, step) in [("zero-12", 0, 1), ("same-length-zero-12", 11, 13)] {
+            let mut vectors = published_table().to_vec();
+            let vector = vectors
+                .iter_mut()
+                .find(|vector| vector.name == name)
+                .unwrap();
+            vector.rounds[round].salt[0] ^= 1;
+            let expected = test.expected_calls(leaked(vectors)).unwrap();
+            let mut actual_keys = PublishedRoundKeys::of(published_table());
+            let witness = RoundKeyWitness::new(&mut actual_keys, expected);
+            let mut mhfe = Mhfe::with_engine(WorkFactor::default(), witness);
+            let (suite_3, suite_4) = test.replay(&mut mhfe, &mut |_, _, _| Ok(())).unwrap();
+            assert!(suite_3 && suite_4, "only witness metadata changed");
+            let result = mhfe.engine().verdict(suite_3, suite_4);
+            assert!(!result.passed(), "{name}: a recorded mismatch must fail");
+            assert_eq!(
+                result.fault(),
+                Some(SelfTestFault::Argon2Input { round: step })
+            );
+            assert_eq!(result.first_wrong_round(), Some(step));
+        }
     }
 
     /// An engine that gives a wrong key in one round: the witness names that round as a fault in

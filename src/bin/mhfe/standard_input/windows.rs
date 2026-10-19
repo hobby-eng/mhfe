@@ -17,7 +17,10 @@ use windows_sys::Win32::System::Console::{
 };
 
 /// A console uses UTF-16; a redirected stream carries bytes without a code-page conversion.
-pub(super) fn read(into: &mut [u8]) -> io::Result<usize> {
+pub(super) fn read(
+    into: &mut [u8],
+    console_input: &mut super::utf16::ScalarReader,
+) -> io::Result<usize> {
     let mut mode = 0;
     // SAFETY: GetStdHandle returns a borrowed handle; GetConsoleMode fills a live u32.
     let (input, console) = unsafe {
@@ -25,7 +28,7 @@ pub(super) fn read(into: &mut [u8]) -> io::Result<usize> {
         (input, GetConsoleMode(input, &mut mode) != 0)
     };
     if console {
-        super::utf16::read_scalar(|unit| read_unit(input, unit), into)
+        console_input.read(|unit| read_unit(input, unit), into)
     } else {
         read_byte(input, into)
     }

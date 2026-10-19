@@ -45,7 +45,14 @@ impl PasswordUnicodeCheck {
             Some(_) => {
                 let count =
                     usize::try_from(fixtures::number(case, "count")?).map_err(|_| damaged())?;
-                fixtures::bytes(case, "repeat_utf8_hex")?.repeat(count)
+                let block = fixtures::bytes(case, "repeat_utf8_hex")?;
+                let bytes = block.len().checked_mul(count).ok_or_else(damaged)?;
+                // Bound expansion of trusted fixture shorthand before allocating. This is a
+                // self-check data limit, independent of Password's normalized encoding limit.
+                if bytes > crate::input_text::InputText::MAX_BYTES {
+                    return Err(damaged());
+                }
+                block.repeat(count)
             }
             None => fixtures::bytes(case, "input_utf8_hex")?,
         };
@@ -163,6 +170,36 @@ mod tests {
             PasswordUnicodeCheck::new().run(Tier::Startup),
             ComponentOutcome::Passed
         );
+    }
+
+    #[test]
+    fn damaged_fixture_repeat_counts_fail_before_allocation() {
+        let case = serde_json::json!({
+            "repeat_utf8_hex": "6162",
+            "count": usize::MAX,
+            "expected_error": "PASSWORD_TOO_LONG",
+        });
+        assert!(PasswordUnicodeCheck::case(&case).is_err());
+    }
+
+    #[test]
+    fn fixture_expansion_has_a_raw_bound_independent_of_the_password_limit() {
+        let maximum = crate::input_text::InputText::MAX_BYTES;
+        for count in [maximum - 1, maximum, maximum + 1] {
+            let case = serde_json::json!({
+                "repeat_utf8_hex": "61",
+                "count": count,
+                "expected_error": "PASSWORD_TOO_LONG",
+                "expected_nfkd_bytes": count,
+            });
+            assert_eq!(PasswordUnicodeCheck::case(&case).is_ok(), count <= maximum);
+        }
+        let empty = serde_json::json!({
+            "repeat_utf8_hex": "61",
+            "count": 0,
+            "expected_error": "EMPTY_PASSWORD",
+        });
+        assert!(PasswordUnicodeCheck::case(&empty).is_ok());
     }
 
     /// The full tier scans every scalar value twice, which takes seconds in a debug build.

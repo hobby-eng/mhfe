@@ -1,0 +1,1902 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-027",
+  "auditNumber": 27,
+  "date": "2026-10-15",
+  "title": "Local acceptance follow-up and CLI/build regression fixes",
+  "completedUtc": "2026-10-15T16:33:33.174Z",
+  "reviewer": {
+    "name": "Codex coordinator and two independent read-only reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "575cbd1b7634646f6e19a2501ed9ea164a6a7acd",
+    "commitComplete": false,
+    "workingTree": "Intentional uncommitted AUD-026 remediation plus this scoped acceptance follow-up; no unrelated changes discarded.",
+    "sourceFingerprint": "4b9aa76f4cfa202a6de0c032372f8ebd510382249c68c2c4098229f7c023f31e",
+    "sourceFileCount": 457,
+    "fingerprintFormat": "SHA256 of sorted lowercase SHA256 + two spaces + relative path + LF, excluding docs/audits/",
+    "localSnapshotSha256": "5795291d75afc8f68dd18b0b78793330341969854c4738774d277942259a2597"
+  },
+  "scope": {
+    "kind": "targeted acceptance follow-up",
+    "areas": [
+      {
+        "change": "OS pipe reader regression and deferred mobile TODO",
+        "reviewRecord": "reviewer-result-native-reader.json"
+      },
+      {
+        "change": "manual macOS/canonical Windows packaging acceptance gates",
+        "reviewRecord": "review-native-packages-followup-result.json"
+      }
+    ],
+    "sourceDeltaFromInterruptedPrefix": [
+      "scripts/check-fast.sh",
+      "scripts/cargo-output.mjs"
+    ],
+    "laterOwnerAuthorization": "Continue automatic checks/full audit/remediation and then signed commits/push; no release publication requested.",
+    "fullRepositoryCoreCertification": false
+  },
+  "procedureHashes": {
+    "docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "instructionHashes": {
+    "capturedUtc": "2026-10-15T15:45:20.113254+00:00",
+    "files": {
+      "AGENTS.md": "1f2bd03825f0a0056dbf430da8b0243423ea34f130ac3dbe08b7235eb5d920d3",
+      ".github/instructions/code-core.instructions.md": "51ac92ddffea253bb7ed2f1926eb4cab6c2f52d336af95c1d63f3ebdd9fce066",
+      ".github/instructions/code-rust.instructions.md": "08bb268d4da1d1e01e93e6294b028a9471a062565eeaf7eb7355fd6592bdcc9c",
+      ".github/instructions/code-typescript.instructions.md": "5984f573d7df64ebd494f79891ce838dd518f0cf27876a2965fe46df6ace3ec1",
+      ".github/instructions/code-browser.instructions.md": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+      ".github/instructions/code-tooling.instructions.md": "ba09a6530475e8ba08cc96dbf4100b043b6c250263e62def21321f178bb631f7",
+      ".github/instructions/docs.instructions.md": "1fc9e20ab2f2dad220dc3f6b507e7372c161a05208c80ed2aa8dc28525bb33bf",
+      ".github/instructions/ci.instructions.md": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+      ".github/instructions/audits.instructions.md": "6eed08f958c11bd530006c89489796db8efa759f8a93c501a514de262d0ab004",
+      "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+      "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+      "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+      "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb",
+      "GLOSSARY.md": "ef514c847fdd5fb24ab5a0bd649e29e01955190c6a0afcbf3445c14e775cc2e5",
+      "GLOSSARY-MAP.md": "a2b6c79b8279c5f98cbb62494b9aaf553e50b12be99363b6b6f09788cc64f9f6",
+      "mhfe_spec/GLOSSARY.md": "d52e50b41e2ad3fa97618c5bcdf270040d6762ee2990f4402c78fda9e976b665"
+    },
+    "projectAgentsSha256": "2578731c946d18af56e721b1f1a2f504c77d05eea6e343a9564a01553613c5d2",
+    "pastedInstructionSha256": "f46c15cd01740eed97a125eb7b9be1a172e233c428a832829f67a542595d66bf"
+  },
+  "checks": [
+    {
+      "name": "fast-native-acceptance",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\nscripts/check-fast.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T14:39:48.387774+00:00",
+      "endedUtc": "2026-10-15T14:39:51.327252+00:00",
+      "exitCode": 1,
+      "sourceBefore": "b7468d962e64cb930e7eb9ab8acb23b29a5dfea366709bcb5e803efc5e5bc700",
+      "sourceAfter": "b7468d962e64cb930e7eb9ab8acb23b29a5dfea366709bcb5e803efc5e5bc700",
+      "sourceUnchanged": true,
+      "logSha256": "65912f6115ed8f7f75f6a9840e32b47618d3476aa50cdf67f1274a04e585034b",
+      "commandRecordSha256": "5e99237f9ade0ed3dfc2cf797f46cc5b9e33c5776b52a13457f9057aa3b6cda8",
+      "sampledDescendantPeakRssKiB": 342528,
+      "minimumMachineMemAvailableKiB": 6593640,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/fast-native-acceptance.command.json (local only)"
+    },
+    {
+      "name": "fast-native-acceptance-2",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\nscripts/check-fast.sh\nnode ../.github/scripts/verify-action-pins.mjs ."
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T14:40:33.643043+00:00",
+      "endedUtc": "2026-10-15T14:40:36.589094+00:00",
+      "exitCode": 1,
+      "sourceBefore": "076e5544b3686f81407b88fe0aac6c4c70ddf6fc280539c6aa86a9d7bec35a6d",
+      "sourceAfter": "076e5544b3686f81407b88fe0aac6c4c70ddf6fc280539c6aa86a9d7bec35a6d",
+      "sourceUnchanged": true,
+      "logSha256": "f32e95262ae054baad87bbc76b257115a2003bb5e23eb94bc76a8bcf500020d0",
+      "commandRecordSha256": "98e3c8675ef08efa83ae8c1fa401bd8d0f9e3dd04bfa41382e9dd885d82305e4",
+      "sampledDescendantPeakRssKiB": 347096,
+      "minimumMachineMemAvailableKiB": 6535836,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/fast-native-acceptance-2.command.json (local only)"
+    },
+    {
+      "name": "fast-native-acceptance-3",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\nscripts/check-fast.sh\nnode ../.github/scripts/verify-action-pins.mjs ."
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T14:41:08.504660+00:00",
+      "endedUtc": "2026-10-15T14:44:54.098289+00:00",
+      "exitCode": 0,
+      "sourceBefore": "97839006985ca253898fb4719d6fe752b750ddb86bd77a23fb23a0b4bca00922",
+      "sourceAfter": "97839006985ca253898fb4719d6fe752b750ddb86bd77a23fb23a0b4bca00922",
+      "sourceUnchanged": true,
+      "logSha256": "9c326a4776d7648adacd54b704e8b13a18880346fddd24c75a333cf1a8470749",
+      "commandRecordSha256": "438e8d2c704f7f42561bb3f6886cba6b4455b57d1d6f23b082efc812f472918a",
+      "sampledDescendantPeakRssKiB": 602812,
+      "minimumMachineMemAvailableKiB": 5443212,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/fast-native-acceptance-3.command.json (local only)"
+    },
+    {
+      "name": "native-package-followup",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\npython3 scripts/verify-macos-packages.py --self-test\nnode scripts/verify-code-rules.mjs\nnode scripts/verify-docker-stages.mjs\nnode ../.github/scripts/verify-action-pins.mjs .\ngit diff --check"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T14:47:34.412869+00:00",
+      "endedUtc": "2026-10-15T14:47:34.978931+00:00",
+      "exitCode": 1,
+      "sourceBefore": "06bdffd266a19b2cf0e01df9766dc14d4e5387672e4c2a526bbf88b6ec6986ee",
+      "sourceAfter": "06bdffd266a19b2cf0e01df9766dc14d4e5387672e4c2a526bbf88b6ec6986ee",
+      "sourceUnchanged": true,
+      "logSha256": "cbc2b2e0eac86198941e82b0e32a4aa007c1d68af681113bec545774ab76806f",
+      "commandRecordSha256": "43890e4f360bb81d30cead551c1a8726efd8a0c0f01a470e1258ee67767a8777",
+      "sampledDescendantPeakRssKiB": 88668,
+      "minimumMachineMemAvailableKiB": 6089536,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/native-package-followup.command.json (local only)"
+    },
+    {
+      "name": "native-package-followup-2",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\npython3 scripts/verify-macos-packages.py --self-test\nnode scripts/verify-code-rules.mjs\nnode scripts/verify-docker-stages.mjs\nnode ../.github/scripts/verify-action-pins.mjs .\ngit diff --check"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T14:47:54.752047+00:00",
+      "endedUtc": "2026-10-15T14:47:55.576660+00:00",
+      "exitCode": 0,
+      "sourceBefore": "2a8c55d99b54ffba572d4d28607e9ecd7c6be169b93ed9c2a85e2aaa1405d54b",
+      "sourceAfter": "2a8c55d99b54ffba572d4d28607e9ecd7c6be169b93ed9c2a85e2aaa1405d54b",
+      "sourceUnchanged": true,
+      "logSha256": "b0fced9f2fd8ea94020aa38b8cb75c453430970111614e6acd0674dd48bf7251",
+      "commandRecordSha256": "7b6a98adebecc5c656aa2ed71c8d2dcd298ca3fd197bf73c99efcdd63cad8ab0",
+      "sampledDescendantPeakRssKiB": 89300,
+      "minimumMachineMemAvailableKiB": 6270444,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/native-package-followup-2.command.json (local only)"
+    },
+    {
+      "name": "mutation-preview",
+      "argv": [
+        "cargo",
+        "mutants",
+        "--list",
+        "--json",
+        "--file",
+        "src/new_password/bits.rs",
+        "--re",
+        "Millibits::(words|characters)"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T14:42:06.733551+00:00",
+      "endedUtc": "2026-10-15T14:42:07.580249+00:00",
+      "exitCode": 0,
+      "sourceBefore": "97839006985ca253898fb4719d6fe752b750ddb86bd77a23fb23a0b4bca00922",
+      "sourceAfter": "97839006985ca253898fb4719d6fe752b750ddb86bd77a23fb23a0b4bca00922",
+      "sourceUnchanged": true,
+      "logSha256": "d84da0fccd321575952ad5af40dfb55d0c16884961457446f3c2768194fc569a",
+      "commandRecordSha256": "4f6f872354f9d82e02382b6cbd910bcb93e0c03d6156160584b8a8778b17aa7f",
+      "sampledDescendantPeakRssKiB": 25904,
+      "minimumMachineMemAvailableKiB": 6347944,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/mutation-preview.command.json (local only)"
+    },
+    {
+      "name": "full-linux-check",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\nsource ../workingspace/emsdk/emsdk_env.sh\nscripts/check.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T14:51:32.967858+00:00",
+      "endedUtc": "2026-10-15T14:57:04.861596+00:00",
+      "exitCode": 1,
+      "sourceBefore": "2a8c55d99b54ffba572d4d28607e9ecd7c6be169b93ed9c2a85e2aaa1405d54b",
+      "sourceAfter": "2a8c55d99b54ffba572d4d28607e9ecd7c6be169b93ed9c2a85e2aaa1405d54b",
+      "sourceUnchanged": true,
+      "logSha256": "7ba05be9f0206a09ae85d164a71f16ad953daa8ebc671521c1f2d3f3c812dc4f",
+      "commandRecordSha256": "07f3f92af3e79619573f2977ab5d6449512d0bf260a5ee89227dfe89922b7013",
+      "sampledDescendantPeakRssKiB": 500860,
+      "minimumMachineMemAvailableKiB": 5231096,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/full-linux-check.command.json (local only)"
+    },
+    {
+      "name": "yes-no-hint-red",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--bin",
+        "mhfe",
+        "tests::yes_no_usage_errors_keep_the_fixed_hint_without_repeating_the_input",
+        "--",
+        "--exact"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T14:59:25.495723+00:00",
+      "endedUtc": "2026-10-15T14:59:30.526260+00:00",
+      "exitCode": 101,
+      "sourceBefore": "4600d36f84a7be3bd16bd119d60a5331f92d4dc595a36753bcc101b1513737c3",
+      "sourceAfter": "4600d36f84a7be3bd16bd119d60a5331f92d4dc595a36753bcc101b1513737c3",
+      "sourceUnchanged": true,
+      "logSha256": "b1945b39dde61cc300718d72bd16cbf48979689cb9ba34d184c47a9f150138ff",
+      "commandRecordSha256": "affccc7b847411864ddee7f0b5b3dfa23cbeaba1b2178817cc64eda8a7976e08",
+      "sampledDescendantPeakRssKiB": 436472,
+      "minimumMachineMemAvailableKiB": 5692692,
+      "rssLimitKiB": 786432,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/yes-no-hint-red.command.json (local only)"
+    },
+    {
+      "name": "yes-no-hint-green",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--bin",
+        "mhfe",
+        "tests::yes_no_usage_errors_keep_the_fixed_hint_without_repeating_the_input",
+        "--",
+        "--exact"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:00:18.698881+00:00",
+      "endedUtc": "2026-10-15T15:00:20.829893+00:00",
+      "exitCode": 0,
+      "sourceBefore": "30d0bf719ff1e73373d8518f2129c6111b21e36307a349ea581c43e90b27189e",
+      "sourceAfter": "30d0bf719ff1e73373d8518f2129c6111b21e36307a349ea581c43e90b27189e",
+      "sourceUnchanged": true,
+      "logSha256": "41b271c552f82b2a2457cd1f415e7366ac027bdb03714ab4366ed52a80663015",
+      "commandRecordSha256": "260f6ee43fcebf710150404db88f4c1be80d2bafb6b217b88650514033c2f271",
+      "sampledDescendantPeakRssKiB": 446272,
+      "minimumMachineMemAvailableKiB": 5808656,
+      "rssLimitKiB": 786432,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/yes-no-hint-green.command.json (local only)"
+    },
+    {
+      "name": "yes-no-hint-targeted",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\ncargo fmt --check\nnode scripts/verify-no-copies.mjs\nnode scripts/verify-code-rules.mjs\ncargo clippy --locked --all-targets --all-features -- -D warnings\ncargo test --locked --bin mhfe"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:01:00.909560+00:00",
+      "endedUtc": "2026-10-15T15:01:09.135488+00:00",
+      "exitCode": 0,
+      "sourceBefore": "30d0bf719ff1e73373d8518f2129c6111b21e36307a349ea581c43e90b27189e",
+      "sourceAfter": "30d0bf719ff1e73373d8518f2129c6111b21e36307a349ea581c43e90b27189e",
+      "sourceUnchanged": true,
+      "logSha256": "b4107eee3db969bee1f1c94cb2e18de52112e381624c5004cb31ae5f9a15ef53",
+      "commandRecordSha256": "6f84b597d0fe6c2146f9feb254a56e8a8b43b4ce1bde2cc6aba14a15cc32693b",
+      "sampledDescendantPeakRssKiB": 408004,
+      "minimumMachineMemAvailableKiB": 5768480,
+      "rssLimitKiB": 1048576,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/yes-no-hint-targeted.command.json (local only)"
+    },
+    {
+      "name": "yes-no-hint-targeted-2",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\ncargo fmt --check\nnode scripts/verify-no-copies.mjs\nnode scripts/verify-code-rules.mjs\ncargo clippy --locked --all-targets --all-features -- -D warnings\ncargo test --locked --bin mhfe"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:03:20.393299+00:00",
+      "endedUtc": "2026-10-15T15:03:28.885903+00:00",
+      "exitCode": 0,
+      "sourceBefore": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+      "sourceAfter": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+      "sourceUnchanged": true,
+      "logSha256": "e3e84ff0d6b9e34030339d50a09bb3f736a5ff9f7ac65e403f4f48682b21b46f",
+      "commandRecordSha256": "85f34c291f01508b4994d1af5983725142dd0bf3124c0fadb284c9d307d9ea3a",
+      "sampledDescendantPeakRssKiB": 420376,
+      "minimumMachineMemAvailableKiB": 5738992,
+      "rssLimitKiB": 1048576,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/yes-no-hint-targeted-2.command.json (local only)"
+    },
+    {
+      "name": "yes-no-pty-green",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\nsource packaging/remap-builder-paths.sh\nremap_builder_paths \"$PWD\"\ncargo build --locked --release --bin mhfe\npython3 /home/user/Documents/bip_tools/tmp/mhfe-remaining-2026-10-15/focused-cli-pty.py"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:04:08.141028+00:00",
+      "endedUtc": "2026-10-15T15:04:32.046763+00:00",
+      "exitCode": 0,
+      "sourceBefore": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+      "sourceAfter": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+      "sourceUnchanged": true,
+      "logSha256": "aa0c82ba0ab23d5145a5e0a54505c90ec9f7d256e3e9ddb9f43b6c1aa43d2498",
+      "commandRecordSha256": "a4137c6ce450ec2ed58973c912cc3ce0c229f7a06096abca882b1adb0d647521",
+      "sampledDescendantPeakRssKiB": 499048,
+      "minimumMachineMemAvailableKiB": 5228384,
+      "rssLimitKiB": 1048576,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/yes-no-pty-green.command.json (local only)"
+    },
+    {
+      "name": "full-linux-resume",
+      "argv": [
+        "env",
+        "PYTHONUNBUFFERED=1",
+        "bash",
+        "/home/user/Documents/bip_tools/tmp/mhfe-remaining-2026-10-15/full-check-tail.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:23:17.234429+00:00",
+      "endedUtc": "2026-10-15T15:27:48.524122+00:00",
+      "exitCode": 1,
+      "sourceBefore": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+      "sourceAfter": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+      "sourceUnchanged": true,
+      "logSha256": "4037ef89106ca168ddc62ceaacee697545a2bd1d9edd5a76968bbe23f3948275",
+      "commandRecordSha256": "23631f6e9edaf1b915e73605863dfb347ee24c8a3be300baff90d72123bf20f9",
+      "sampledDescendantPeakRssKiB": 2124420,
+      "minimumMachineMemAvailableKiB": 4758888,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/full-linux-resume.command.json (local only)"
+    },
+    {
+      "name": "artifact-gate-red",
+      "argv": [
+        "bash",
+        "-c",
+        "set -euo pipefail\nsource packaging/remap-builder-paths.sh\nremap_builder_paths \"$PWD\"\ncargo test --locked --lib --no-run --message-format=json > ../tmp/mhfe-remaining-2026-10-15/cargo-lib-artifacts.jsonl\nnode scripts/cargo-output.mjs test-binary < ../tmp/mhfe-remaining-2026-10-15/cargo-lib-artifacts.jsonl"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:29:16.806932+00:00",
+      "endedUtc": "2026-10-15T15:29:17.100315+00:00",
+      "exitCode": 1,
+      "sourceBefore": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+      "sourceAfter": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+      "sourceUnchanged": true,
+      "logSha256": "b53c3c17bd0564f7d7154eb8c9bb76bf8d8cdacf882c9b567585484af5097d2c",
+      "commandRecordSha256": "12247175b8493e0ab083a2cbd1b6e20c7747a3ec5bccb105ac62e67ea6e7b0db",
+      "sampledDescendantPeakRssKiB": 3804,
+      "minimumMachineMemAvailableKiB": 7646360,
+      "rssLimitKiB": 786432,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/artifact-gate-red.command.json (local only)"
+    },
+    {
+      "name": "cargo-selector-green",
+      "argv": [
+        "bash",
+        "../tmp/mhfe-remaining-2026-10-15/cargo-selector-check.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:35:32.818291+00:00",
+      "endedUtc": "2026-10-15T15:35:34.095122+00:00",
+      "exitCode": 1,
+      "sourceBefore": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+      "sourceAfter": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+      "sourceUnchanged": true,
+      "logSha256": "6ab0defefc16e2dad5c24dce1e4c3f5dd0f75da45755b52d68f40c98a5c63a9b",
+      "commandRecordSha256": "5bf1d79ee86c1345ff5a9824e38e98c19664b3d36f5eb8b8028d4687b6577bde",
+      "sampledDescendantPeakRssKiB": 319376,
+      "minimumMachineMemAvailableKiB": 7595916,
+      "rssLimitKiB": 786432,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/cargo-selector-green.command.json (local only)"
+    },
+    {
+      "name": "cargo-selector-green-2",
+      "argv": [
+        "bash",
+        "../tmp/mhfe-remaining-2026-10-15/cargo-selector-check.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:36:01.070560+00:00",
+      "endedUtc": "2026-10-15T15:36:03.788965+00:00",
+      "exitCode": 0,
+      "sourceBefore": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+      "sourceAfter": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+      "sourceUnchanged": true,
+      "logSha256": "9c0e8b010184447b9387a22e2dc791cbcaa420c65841283801eaf711b5e8fb32",
+      "commandRecordSha256": "0fa97582900b9dcd9e4fb089211996c10d7766e7e320837c4e3f4c360719b32c",
+      "sampledDescendantPeakRssKiB": 472400,
+      "minimumMachineMemAvailableKiB": 7122044,
+      "rssLimitKiB": 786432,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/cargo-selector-green-2.command.json (local only)"
+    },
+    {
+      "name": "cargo-selector-green-final",
+      "argv": [
+        "bash",
+        "../tmp/mhfe-remaining-2026-10-15/cargo-selector-check.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:38:15.131028+00:00",
+      "endedUtc": "2026-10-15T15:38:17.518410+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "9c0e8b010184447b9387a22e2dc791cbcaa420c65841283801eaf711b5e8fb32",
+      "commandRecordSha256": "fc22e6f4b7afa34924b0c80e5f17e26f1249084bcdea52b5d4af4faaa53e9550",
+      "sampledDescendantPeakRssKiB": 485788,
+      "minimumMachineMemAvailableKiB": 7461132,
+      "rssLimitKiB": 786432,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/cargo-selector-green-final.command.json (local only)"
+    },
+    {
+      "name": "full-check-final-stages",
+      "argv": [
+        "bash",
+        "../tmp/mhfe-remaining-2026-10-15/full-check-final-stages.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:37:01.217738+00:00",
+      "endedUtc": "2026-10-15T15:37:09.938936+00:00",
+      "exitCode": 0,
+      "sourceBefore": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+      "sourceAfter": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+      "sourceUnchanged": true,
+      "logSha256": "0bdb7d4ede86190d97501ef6429f2d2d5844e07cb662061234d14331d85e13eb",
+      "commandRecordSha256": "513ee2992b41a1462a2afee6e08f90846cb1725e37a36b40aa26b18b704d2d80",
+      "sampledDescendantPeakRssKiB": 623156,
+      "minimumMachineMemAvailableKiB": 7103104,
+      "rssLimitKiB": 786432,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/full-check-final-stages.command.json (local only)"
+    },
+    {
+      "name": "full-check-final-stages-current",
+      "argv": [
+        "bash",
+        "../tmp/mhfe-remaining-2026-10-15/full-check-final-stages.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:39:43.875689+00:00",
+      "endedUtc": "2026-10-15T15:39:44.701724+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "e40cb50aac5588fa2b22eb7930c751c66ac58a1bcd35446b6a20f28159d4e16d",
+      "commandRecordSha256": "a802d313cf83fc28a86c880cbadec558a69bd62bb7ad90668be719de286f4ac1",
+      "sampledDescendantPeakRssKiB": 26912,
+      "minimumMachineMemAvailableKiB": 6758244,
+      "rssLimitKiB": 786432,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/full-check-final-stages-current.command.json (local only)"
+    },
+    {
+      "name": "canonical-cached",
+      "argv": [
+        "bash",
+        "../tmp/mhfe-remaining-2026-10-15/canonical-build.sh",
+        "canonical-output-aud027-cached"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:40:07.003414+00:00",
+      "endedUtc": "2026-10-15T15:40:07.304547+00:00",
+      "exitCode": 2,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "5ad714d0abb75debd244852d185ff82a652b7f95faef0c68c83c290f0c425030",
+      "commandRecordSha256": "38ef7b0c79cbcacf205fc6f024620df617f02bf5598f5d43ff5871698fe485e7",
+      "sampledDescendantPeakRssKiB": 3756,
+      "minimumMachineMemAvailableKiB": 7052788,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/canonical-cached.command.json (local only)"
+    },
+    {
+      "name": "canonical-cached-2",
+      "argv": [
+        "bash",
+        "../tmp/mhfe-remaining-2026-10-15/canonical-build.sh",
+        "canonical-output-aud027_cached"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T15:40:22.341842+00:00",
+      "endedUtc": "2026-10-15T16:05:03.660985+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "99e68739cf6b5456d1d4f7821ed6a84079507593f49a44c5c15a28311f998e00",
+      "commandRecordSha256": "da9129604550beea9a658b0f6939e1ebeba3b38bca65e8fa524c3e0b7fdb6f17",
+      "sampledDescendantPeakRssKiB": 112244,
+      "minimumMachineMemAvailableKiB": 6584580,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/canonical-cached-2.command.json (local only)"
+    },
+    {
+      "name": "guarded-cli-outcomes",
+      "argv": [
+        "bash",
+        "../tmp/mhfe-remaining-2026-10-15/guarded-full-size-checks.sh"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:08:42.017024+00:00",
+      "endedUtc": "2026-10-15T16:11:58.250833+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "a39392849862bbe4a346c8e34553844c57de4cdeb265795c95b2f0a14fda82cc",
+      "commandRecordSha256": "ba39cf2028b753eb656310da11a54b886986b97bb10a34e58c048a31c6e476e4",
+      "sampledDescendantPeakRssKiB": 2129176,
+      "minimumMachineMemAvailableKiB": 4954304,
+      "rssLimitKiB": 2621440,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/guarded-cli-outcomes.command.json (local only)"
+    },
+    {
+      "name": "canonical-payload-receipt",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/canonical-receipt.py",
+        "canonical-output-aud027_cached/release"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:08:03.477218+00:00",
+      "endedUtc": "2026-10-15T16:08:03.767305+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "81f2a0e6943279165ee018d154836b3c7312bf9a010250adae00096d18d04c06",
+      "commandRecordSha256": "8ca54c4a67e5f6b9acffc7e5de184feff451561ff12ec6e6ae7c0c17b7319fc3",
+      "sampledDescendantPeakRssKiB": 3284,
+      "minimumMachineMemAvailableKiB": 7434932,
+      "rssLimitKiB": 131072,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/canonical-payload-receipt.command.json (local only)"
+    },
+    {
+      "name": "canonical-payload-receipt-final",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/canonical-receipt.py",
+        "canonical-output-aud027_cached/release"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:18:47.643141+00:00",
+      "endedUtc": "2026-10-15T16:18:47.917672+00:00",
+      "exitCode": 1,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "83b13d8d4a5517400a2d090afb3faaa1343a712746783edea708ed4635e4236a",
+      "commandRecordSha256": "174f3aa4a93ffe16b5e36c52ed488bb1df65b8e75c71c9c98d83183da5ab25c3",
+      "sampledDescendantPeakRssKiB": 3320,
+      "minimumMachineMemAvailableKiB": 7177144,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/canonical-payload-receipt-final.command.json (local only)"
+    },
+    {
+      "name": "canonical-payload-receipt-final-2",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/canonical-receipt.py",
+        "canonical-output-aud027_cached/release"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:19:57.846537+00:00",
+      "endedUtc": "2026-10-15T16:19:58.121482+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "a747cfce997d18d5194942de9de79c62f49d348dd4739e4f6cf690a0161036d1",
+      "commandRecordSha256": "3993642d3edb2152cbbc7cc5b792251cf1bf4dad1baa7dcd09653f914b15404f",
+      "sampledDescendantPeakRssKiB": 2600,
+      "minimumMachineMemAvailableKiB": 7222848,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/canonical-payload-receipt-final-2.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls",
+      "argv": [
+        "bash",
+        "-c",
+        "python3 docs/audits/AUD-027-harnesses/receipt-controls.py ../tmp/mhfe-remaining-2026-10-15/control-fixtures && python3 -O docs/audits/AUD-027-harnesses/receipt-controls.py ../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:18:08.379383+00:00",
+      "endedUtc": "2026-10-15T16:18:10.154423+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "a82b071900b8de1a136c0141fb78ebbdf7a3618222e7e6dd939876b13134a0c4",
+      "commandRecordSha256": "31da8117dd93f90862eb35484b38d00ad683e3d6b2f35625da14e74ee9039505",
+      "sampledDescendantPeakRssKiB": 136108,
+      "minimumMachineMemAvailableKiB": 7089672,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls-final",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/receipt-controls.py",
+        "../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:18:41.430275+00:00",
+      "endedUtc": "2026-10-15T16:18:42.197352+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "c51c2423769ac99e0e4a8b38b972e6ff619a1af1352d1f146e9dfb8a843a4ffb",
+      "commandRecordSha256": "92ff15d7bb9df62d4ec75a2ab0250d32068ed7544832a00b2d7731a0a004b524",
+      "sampledDescendantPeakRssKiB": 88732,
+      "minimumMachineMemAvailableKiB": 7285300,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls-final.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls-optimized",
+      "argv": [
+        "python3",
+        "-O",
+        "docs/audits/AUD-027-harnesses/receipt-controls.py",
+        "../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:18:46.530353+00:00",
+      "endedUtc": "2026-10-15T16:18:47.557934+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "3b251e64498ef12cbbb8da1a3cb419616567cab3c57264f45ab68a3f78629fa2",
+      "commandRecordSha256": "4014c43e15747e2f5bbac4847fe59cf16bcc0f746842171ca874477a26411c62",
+      "sampledDescendantPeakRssKiB": 65204,
+      "minimumMachineMemAvailableKiB": 7201060,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls-optimized.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls-final-2",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/receipt-controls.py",
+        "../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:19:50.863120+00:00",
+      "endedUtc": "2026-10-15T16:19:51.882568+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "c51c2423769ac99e0e4a8b38b972e6ff619a1af1352d1f146e9dfb8a843a4ffb",
+      "commandRecordSha256": "96dca017da2215adb21f40ec922d53f2232ba682a5ef94c40fe0e757b379af0b",
+      "sampledDescendantPeakRssKiB": 26224,
+      "minimumMachineMemAvailableKiB": 7172508,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls-final-2.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls-optimized-2",
+      "argv": [
+        "python3",
+        "-O",
+        "docs/audits/AUD-027-harnesses/receipt-controls.py",
+        "../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:19:56.718481+00:00",
+      "endedUtc": "2026-10-15T16:19:57.755808+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "3b251e64498ef12cbbb8da1a3cb419616567cab3c57264f45ab68a3f78629fa2",
+      "commandRecordSha256": "f5d3981504e52e351b0bba851daeb7bfa185fd556acf99f9d27807896e1490f9",
+      "sampledDescendantPeakRssKiB": 57676,
+      "minimumMachineMemAvailableKiB": 7211016,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls-optimized-2.command.json (local only)"
+    },
+    {
+      "name": "canonical-payload-receipt-final-3",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/canonical-receipt.py",
+        "canonical-output-aud027_cached/release"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:30:41.428650+00:00",
+      "endedUtc": "2026-10-15T16:30:41.703642+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "9f4219d3d8ea4c4029d5232ee3793b2847510e4ba565691f76e775d9b1df673e",
+      "commandRecordSha256": "9faa552062ce3d94e838f5a0e8d44272780ecfeea3d30f33193775125b6d1010",
+      "sampledDescendantPeakRssKiB": 2420,
+      "minimumMachineMemAvailableKiB": 7084952,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/canonical-payload-receipt-final-3.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls-final-3",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/receipt-controls.py",
+        "../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:30:39.450846+00:00",
+      "endedUtc": "2026-10-15T16:30:40.229456+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "d7dadad00ec538a4169d601aa9839540acfdf1f725ec933d2c1384632f433772",
+      "commandRecordSha256": "197f954a2a70fe4035affdf6e482b3fd5fab2d07d28c5b706b56b20d896febae",
+      "sampledDescendantPeakRssKiB": 73300,
+      "minimumMachineMemAvailableKiB": 7171556,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls-final-3.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls-optimized-3",
+      "argv": [
+        "python3",
+        "-O",
+        "docs/audits/AUD-027-harnesses/receipt-controls.py",
+        "../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:30:40.316559+00:00",
+      "endedUtc": "2026-10-15T16:30:41.336259+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "18616fb2b066cce36627663302ed39b22b220d6193841924124be95b7715a12f",
+      "commandRecordSha256": "78c490be8a91836036b6c811b7cf44eb3f6eacff75826115f726256480d91e99",
+      "sampledDescendantPeakRssKiB": 94228,
+      "minimumMachineMemAvailableKiB": 7093348,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls-optimized-3.command.json (local only)"
+    },
+    {
+      "name": "canonical-payload-receipt-final-4",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/canonical-receipt.py",
+        "canonical-output-aud027_cached/release"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:31:41.762785+00:00",
+      "endedUtc": "2026-10-15T16:31:42.038393+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "7782ec41508ef93adb6cbb370a78cdf9c4812fb9fb558e991a9720e9f45959a0",
+      "commandRecordSha256": "de891c98f0a694be0d9749472437fb692950f56b2fe567a7affe71b076b0942a",
+      "sampledDescendantPeakRssKiB": 2540,
+      "minimumMachineMemAvailableKiB": 6938308,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/canonical-payload-receipt-final-4.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls-final-4",
+      "argv": [
+        "python3",
+        "docs/audits/AUD-027-harnesses/receipt-controls.py",
+        "../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:31:39.520772+00:00",
+      "endedUtc": "2026-10-15T16:31:40.550089+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "0f2f025cd4bef394a135707d4419ede8ca795cff3ff2ebb015fe7d21b315ccb5",
+      "commandRecordSha256": "5ec2b5acfae21d3e2b2f642fb4f47421568039d308dc57416387661f8b8fb7a7",
+      "sampledDescendantPeakRssKiB": 89576,
+      "minimumMachineMemAvailableKiB": 6509460,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls-final-4.command.json (local only)"
+    },
+    {
+      "name": "receipt-controls-optimized-4",
+      "argv": [
+        "python3",
+        "-O",
+        "docs/audits/AUD-027-harnesses/receipt-controls.py",
+        "../tmp/mhfe-remaining-2026-10-15/control-fixtures"
+      ],
+      "environment": {
+        "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+        "CARGO_BUILD_JOBS": "1",
+        "RUST_TEST_THREADS": "1",
+        "EMCC_CORES": "1"
+      },
+      "startedUtc": "2026-10-15T16:31:40.643099+00:00",
+      "endedUtc": "2026-10-15T16:31:41.670249+00:00",
+      "exitCode": 0,
+      "sourceBefore": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceAfter": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+      "sourceUnchanged": true,
+      "logSha256": "1383141ce07d35e3f5852b7d2e331a0e3aeea30d38903c4489770f23ec7d0c72",
+      "commandRecordSha256": "1d50c14b1ec5bcbcdb6617a0a6c240b8d1db09a8f919a81606ff81accb296343",
+      "sampledDescendantPeakRssKiB": 94824,
+      "minimumMachineMemAvailableKiB": 6599124,
+      "rssLimitKiB": 393216,
+      "machineReserveKiB": 3145728,
+      "evidence": "AUD-027-evidence/receipt-controls-optimized-4.command.json (local only)"
+    }
+  ],
+  "procedureCoverage": [
+    {
+      "checkId": "CHECK-SEC-001",
+      "name": "Threat model and secret ownership",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-SEC-002",
+      "name": "Secret Vault, CSP, sandbox, and transport",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-SEC-003",
+      "name": "Network egress and secret guards",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-SEC-004",
+      "name": "Randomness, encryption, and authentication",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-SEC-005",
+      "name": "Secret lifecycle and exceptional paths",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-SEC-006",
+      "name": "Browser injection, persistence, and sensitive APIs",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-SEC-007",
+      "name": "Read-only guarantees and availability bounds",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-FUN-001",
+      "name": "BIP39, entropy, and seed interpretation",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-FUN-002",
+      "name": "HD derivation and every coin/profile",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-FUN-003",
+      "name": "BIP85, BIP38, messages, and Silent Payments",
+      "status": "not-applicable",
+      "evidence": "No BIP85/BIP38/signing/Silent Payments implementation"
+    },
+    {
+      "checkId": "CHECK-FUN-004",
+      "name": "Scripts, descriptors, Miniscript, and multisig",
+      "status": "not-applicable",
+      "evidence": "No script/descriptor/Miniscript/multisig parser; supported address references are covered under FUN002/API004"
+    },
+    {
+      "checkId": "CHECK-FUN-005",
+      "name": "Transactions, PSBT version context, and commitments",
+      "status": "not-applicable",
+      "evidence": "No transaction/PSBT/spending implementation"
+    },
+    {
+      "checkId": "CHECK-FUN-006",
+      "name": "Recovery and backup formats",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-FUN-007",
+      "name": "Discovery, providers, proofs, and accounting",
+      "status": "not-applicable",
+      "evidence": "No connected discovery/provider/accounting; local bounded wallet-address search is FUN002/SEC007/API002"
+    },
+    {
+      "checkId": "CHECK-API-001",
+      "name": "Actual dependency call contracts",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-API-002",
+      "name": "Async state, cancellation, and revisions",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-API-003",
+      "name": "Public export schema and monetary fidelity",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-API-004",
+      "name": "Encoding and import/export interoperability",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-BLD-001",
+      "name": "Manifest, flags, and feature composition",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-BLD-002",
+      "name": "Matrix depth and runtime sampling",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-BLD-003",
+      "name": "Lockfiles, source provenance, and licenses",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-BLD-004",
+      "name": "Canonical WASM and Docker bytes",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-BLD-005",
+      "name": "Artifacts, CI, and release workflows",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-UI-001",
+      "name": "Real files and representative viewports",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-UI-002",
+      "name": "Navigation, inputs, and state preservation",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-UI-003",
+      "name": "Secret visibility, help, QR, and accessibility",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-ARC-001",
+      "name": "Ownership, imports, and composition seams",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-ARC-002",
+      "name": "Dead code, duplication, and false positives",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-ARC-003",
+      "name": "Comments, tests, and production-path fidelity",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-DOC-001",
+      "name": "User-facing capability and safety descriptions",
+      "status": "not-repeated",
+      "evidence": "Outside this targeted follow-up; fresh whole-repository review reserved for AUD-028."
+    },
+    {
+      "checkId": "CHECK-DOC-002",
+      "name": "Commands, metadata, links, and legal materials",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    },
+    {
+      "checkId": "CHECK-DOC-003",
+      "name": "Audit records and evidence consistency",
+      "status": "scoped-follow-up",
+      "evidence": "Only the follow-up paths and exact records described here; inherited native/final-build limitations remain."
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-027-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Release artifact gate rejects Cargo rlib test artifacts",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingAtDiscovery": true,
+      "releaseBlockingReason": "At discovery the mandatory local release-artifact gate stopped; the regression is now verified fixed.",
+      "affectedFiles": [
+        "scripts/cargo-output.mjs",
+        "scripts/check-fast.sh",
+        "scripts/check-release-artifacts.sh"
+      ],
+      "ruleIds": [
+        "CORE-28",
+        "CORE-32",
+        "CORE-33",
+        "CORE-43"
+      ],
+      "evidence": {
+        "discovery": [
+          "artifact-gate-red.command.json"
+        ],
+        "verification": [
+          "cargo-selector-green-final.command.json",
+          "full-check-final-stages-current.command.json"
+        ],
+        "review": "reviewer-result-cargo-selector-final.json",
+        "reviewSha256": "b25443d0bf5063cdba738d00e62e5dca67f838775b17f5aa9f0eaab3dd271940",
+        "location": "AUD-027-evidence/ (local only)"
+      },
+      "reproduction": "Pipe cargo test --locked --lib --no-run --message-format=json into node scripts/cargo-output.mjs test-binary with Cargo1.99 and this manifest's crate-type=[rlib].",
+      "expected": "Select exactly the checkout's library-test executable from documented Cargo library kinds; refuse absent/ambiguous or malformed streams.",
+      "observed": "Actual JSON target.kind=[rlib] with profile.test=true yielded Expected one library test executable, found0 under the lib-only filter.",
+      "impact": "Release integrity verification stopped before marker/notices acceptance; this is a build failure, not evidence of altered cryptographic outputs.",
+      "recommendedFix": "Use Cargo's library crate-kind semantics and bind selection to own manifest, test profile and one nonempty executable; keep independent positive and refusal controls in fast gates.",
+      "requiredVerification": "Actual retained Cargo stream, six independent literal kind fixtures, foreign/non-test/nonlibrary/empty/ambiguous/malformed controls, and real release marker/notices/archive gates."
+    },
+    {
+      "id": "AUD-027-UI001",
+      "category": "UI",
+      "kind": "finding",
+      "title": "Redacted yes/no refusals omit their fixed answer hint",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingAtDiscovery": false,
+      "releaseBlockingReason": "The fixed-answer hint affects usability; refused input remained withheld.",
+      "affectedFiles": [
+        "src/bin/mhfe/choice.rs",
+        "src/bin/mhfe/main.rs",
+        "scripts/terminal_suite/options.py"
+      ],
+      "ruleIds": [
+        "CORE-23",
+        "CORE-24",
+        "CORE-28",
+        "CORE-33",
+        "CORE-42"
+      ],
+      "evidence": {
+        "discovery": [
+          "full-linux-check.command.json",
+          "yes-no-hint-red.command.json"
+        ],
+        "verification": [
+          "yes-no-hint-targeted-2.command.json",
+          "yes-no-pty-green.command.json"
+        ],
+        "review": "reviewer-result-yes-no-hint-final.json",
+        "reviewSha256": "8cb74a34d0ab845f2bee68700797f03b1a787b46a29d242ea214caee777a9524",
+        "location": "AUD-027-evidence/ (local only)"
+      },
+      "reproduction": "Give maybe or a synthetic marker to each supported yes/no CLI option; the usage refusal omitted the fixed give yes or no hint.",
+      "expected": "Refuse input without repeating it, retain the fixed input-free yes/no answer hint, and withhold unrelated parser sources.",
+      "observed": "The existing PTY suite and focused red regression failed because redaction withheld the safe hint as well as untrusted parser text.",
+      "impact": "A person received less guidance on supported answers; no secret echo was demonstrated by this hint regression.",
+      "recommendedFix": "Use a typed input-free YesNoError and recognize only that source in usage rendering; keep all other parser causes withheld.",
+      "requiredVerification": "Four option families with line/separator marker variants, unrelated typed parser-source redaction, exact exit2/Usage/plain/colour PTY behavior and focused CLI tests."
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-027-BLD001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": {
+        "discovery": [
+          "artifact-gate-red.command.json"
+        ],
+        "verification": [
+          "cargo-selector-green-final.command.json",
+          "full-check-final-stages-current.command.json"
+        ],
+        "review": "reviewer-result-cargo-selector-final.json",
+        "reviewSha256": "b25443d0bf5063cdba738d00e62e5dca67f838775b17f5aa9f0eaab3dd271940",
+        "location": "AUD-027-evidence/ (local only)"
+      }
+    },
+    {
+      "id": "AUD-027-UI001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": {
+        "discovery": [
+          "full-linux-check.command.json",
+          "yes-no-hint-red.command.json"
+        ],
+        "verification": [
+          "yes-no-hint-targeted-2.command.json",
+          "yes-no-pty-green.command.json"
+        ],
+        "review": "reviewer-result-yes-no-hint-final.json",
+        "reviewSha256": "8cb74a34d0ab845f2bee68700797f03b1a787b46a29d242ea214caee777a9524",
+        "location": "AUD-027-evidence/ (local only)"
+      }
+    }
+  ],
+  "inheritedAcceptance": {
+    "verifiedInScope": [
+      "AUD-024-BLD007 fresh canonical Windows archive notices"
+    ],
+    "notYetExecuted": [
+      "AUD-026-BLD002 actual Windows memory-owner assertions",
+      "AUD-026-BLD003 actual macOS attachable-control/protected-child result",
+      "AUD-024-SEC007 Windows console/ConPTY/owned-buffer acceptance",
+      "AUD-024-SEC010 Windows/macOS runtime enforcement and hardened signature acceptance",
+      "AUD-024-BLD009 actual native macOS package checks"
+    ],
+    "finalReproducibility": "pending final post-audit source"
+  },
+  "historicalEvidence": {
+    "frozenAud026": {
+      "docs/audits/AUD-026-2026-10-15.md": "9c2302f218afe32d707c3ba8ad809c06db76156829cc00bb7e7cf92ebd01306d",
+      "docs/audits/AUD-026-2026-10-15.json": "c96d88c8e0e087078d699d97a141c6347586ce933e94a78be4ed0fd66a9be9a6"
+    },
+    "interruptedCheck": {
+      "recordedUtc": "2026-10-15T15:21:21.129627+00:00",
+      "status": "interrupted; command completion unavailable",
+      "logSha256": "683177a828b4c05f5a186e1ede1ab712e7f444db79745c4d6c7fb2f8d7f55a07",
+      "sourceBinding": "final-source-before-full.json; post-interruption-integrity.json exact byte comparison passed",
+      "retainedSuccessfulStages": [
+        "fast gates",
+        "rustdoc warnings denied",
+        "optimized CLI build",
+        "ordinary Unix PTY input/menu/options/refusals/self-test/negative controls",
+        "full-size encrypt --stdin --repair-words 4, exact container and card shape"
+      ],
+      "missingStages": [
+        "three full-size check --stdin outcomes",
+        "build-wasm and package/module/parity/fast-launcher/artifact/archive checks after PTY",
+        "canonical cached/uncached builds and comparison"
+      ],
+      "exitCode": null,
+      "memoryMetrics": "No final memory record survived; do not invent peak/minimum values",
+      "ownerReport": "The owner reported overheating and requested unchanged settings; cause of process exit is not established by the log"
+    },
+    "composedStages": {
+      "scope": "Final bounded CORE-53 reconciliation of check.sh prefix, interrupted/resumed partial evidence and final two-stage completion; no project execution or unrelated audit.",
+      "reviewer": "/root/aud026_browser_tooling",
+      "reviewedUtc": "2026-10-15T15:42:34.636660+00:00",
+      "status": "stage-evidence-reconciled-with-explicit-historical-limitations",
+      "findings": [],
+      "stageLedger": [
+        {
+          "stage": "source/remap setup, blame IDs, vendored controls/integrity, cargo fetch, licence checks and generated published-round table",
+          "status": "retained-interrupted-prefix",
+          "basis": "Direct log markers plus original set-e script order; quiet commands inferred from reaching later stages. Foreign-target standard libraries explicitly not installed/compared."
+        },
+        {
+          "stage": "fast gates",
+          "status": "retained-interrupted-prefix",
+          "basis": "409lib/187CLI/4errors/3+3fastfixtures/10docs passed; ignored4lib/4CLI/1+1fixtures remain ignored."
+        },
+        {
+          "stage": "warnings-denied rustdoc and optimized CLI build",
+          "status": "retained-interrupted-prefix",
+          "basis": "rustdoc generated and release finished before PTY output."
+        },
+        {
+          "stage": "ordinary Unix PTY/menu/options/refusals/self-test/damaged-program controls",
+          "status": "retained-interrupted-prefix",
+          "basis": "All ordinary calls precede FULL_SIZE_CHECKS in current unchanged entrypoint; log reaches their final markers and first full-size case."
+        },
+        {
+          "stage": "full-size encrypt --stdin --repair-words4",
+          "status": "retained-interrupted-prefix",
+          "basis": "Exact container and two-line/card-word-count assertions completed before its distinctive success marker; no final command exit available."
+        },
+        {
+          "stage": "three full-size check --stdin outcomes",
+          "status": "success-marker-retained-with-historical-optimization-limit",
+          "basis": "Existing unchanged function returned and printed all three outcome summary; original private wrapper lacked optimization refusal. Current caller optimize0 is retrospective and cannot establish contemporaneous historical assertion activity."
+        },
+        {
+          "stage": "build-wasm.sh",
+          "status": "completed-in-resume",
+          "basis": "Package fd0d4908ad796c56 rebuilt."
+        },
+        {
+          "stage": "verify-argon2-wasm.mjs",
+          "status": "completed-in-resume",
+          "basis": "Threaded/single-threaded three expected tags and native container controls passed."
+        },
+        {
+          "stage": "verify-browser-package.mjs",
+          "status": "completed-in-resume",
+          "basis": "Node package checks completed, distinct from real-browser execution."
+        },
+        {
+          "stage": "verify-single-modules.mjs",
+          "status": "completed-in-resume",
+          "basis": "Four module-only startups completed."
+        },
+        {
+          "stage": "verify-cli-browser-parity.mjs",
+          "status": "completed-in-resume",
+          "basis": "Same-results completion marker present."
+        },
+        {
+          "stage": "verify-fast-mode-script.py",
+          "status": "completed-in-resume",
+          "basis": "40tests OK."
+        },
+        {
+          "stage": "check-release-artifacts.sh",
+          "status": "completed-on-current-source",
+          "basis": "Current final suffix exits0; positive test-only-engine marker exists in test binary and is absent in both release artifacts; builder paths and standard-library notice checks passed. Earlier resume failure is preserved."
+        },
+        {
+          "stage": "verify-archive-packing.sh",
+          "status": "completed-on-current-source",
+          "basis": "Current final suffix log confirms identical archives under umask022/002/027/077."
+        },
+        {
+          "stage": "check.sh final success marker",
+          "status": "not-claimed-monolithic",
+          "basis": "Stage coverage is composed across separate retained runs. No original whole-command exit0 or fabricated All checks passed line is asserted."
+        }
+      ],
+      "interruptedRun": {
+        "logSha256": "683177a828b4c05f5a186e1ede1ab712e7f444db79745c4d6c7fb2f8d7f55a07",
+        "interruptionRecordSha256": "5f0e7444233b0096576f9e18389794cc647c810676170df58e52d09f5383456f",
+        "exitCode": null,
+        "memoryMetrics": null,
+        "cause": "Owner-reported overheating; the log establishes no thermal/process-exit cause.",
+        "recordGap": "Original command/session vanished without final command metadata; no successful exit or final peak/minimum memory values are inferred."
+      },
+      "resume": {
+        "commandRecordSha256": "23631f6e9edaf1b915e73605863dfb347ee24c8a3be300baff90d72123bf20f9",
+        "logSha256": "4037ef89106ca168ddc62ceaacee697545a2bd1d9edd5a76968bbe23f3948275",
+        "exitCode": 1,
+        "sourceUnchanged": true,
+        "sampledDescendantPeakRssKiB": 2124420,
+        "minimumMachineMemAvailableKiB": 4758888,
+        "runnerSha256": "cb89b15eb84aa252ecc322c3a3f0913e8fedc0536ad800e0b969c82a659757a9",
+        "resourceLimits": {
+          "rssLimitKiB": 2621440,
+          "machineReserveKiB": 3145728
+        },
+        "sameRecordedFlagsAsEarlierAttempt": true,
+        "environmentFlags": {
+          "CARGO_HOME": "/home/user/Documents/bip_tools/workingspace/cargo",
+          "RUSTUP_HOME": "/home/user/Documents/bip_tools/workingspace/rustup",
+          "CARGO_BUILD_JOBS": "1",
+          "RUST_TEST_THREADS": "1",
+          "EMCC_CORES": "1"
+        }
+      },
+      "sourceBinding": {
+        "snapshot": "final-source-before-full.json",
+        "snapshotSha256": "c9d2ac78df1852da91d71c830ef64e47914c7d01ff53286747f8715942850a64",
+        "postInterruptionIntegritySha256": "6331446e5dabccef0a2d212da5a87de81385500cf7dbfd04fd963f1d1baa5607",
+        "head": "575cbd1b7634646f6e19a2501ed9ea164a6a7acd",
+        "allFiles": 1225,
+        "nonAuditFiles": 457,
+        "resumeBeforeAfterMapsEqualSnapshotNonAudit": true,
+        "runnerSourceMapSha256": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+        "runnerMapHashDefinition": "SHA256 of json.dumps(files, sort_keys=True).encode(), not the baseline sorted-sha256-line fingerprint.",
+        "sortedLineSourceFingerprint": "e22c41652822d40d4bf79b343e4d2bfcb0981bb1a302a87f8c429ccdc8bbece0",
+        "currentChangedOrMissingAtThisReview": [
+          "scripts/cargo-output.mjs",
+          "scripts/check-fast.sh"
+        ],
+        "currentDelta": {
+          "scripts/cargo-output.mjs": {
+            "before": "89d13728d9697a44e945972762ec42dab750dc9ab45c07c763cd8b6a92e79155",
+            "after": "bde227437cb618c829669114687611562eb244cef38520aec4a39ce7482dbb00"
+          },
+          "scripts/check-fast.sh": {
+            "before": "f7881460096dc34ab48b625694ba43489e5f66a123c3ddb367a16084dfe5c84b",
+            "after": "377d5eeb6d10185a5b519a7cb17839628cef643cb306f5134bfedb3ee13b6a32"
+          }
+        },
+        "unaccountedNewOrMissingNonAuditFiles": [],
+        "finalCurrentRunnerMapSha256": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+        "finalCurrentSortedLineSourceFingerprint": "4b9aa76f4cfa202a6de0c032372f8ebd510382249c68c2c4098229f7c023f31e",
+        "meaning": "Only the Cargo metadata selector and its added fast self-test line differ from the c9d2ac78 pre-full snapshot. Native CLI/library/browser implementation inputs and dependencies retain their hashes. Current final before/after/current maps match.",
+        "runtimeAndLibrarySourceBytesUnchangedFromPrefix": true
+      },
+      "packageBinding": {
+        "handoverSha256": "9c7684b65154faa29c689d40940ab17e98911ca67c6265f98c3194d53d6e0dcb",
+        "packageBuildId": "fd0d4908ad796c56",
+        "packageManifestSha256": "43d4db419d7b7e6a4f625bf0c0713535063ca48d7f7ab4c4784ff7dbbbf48714",
+        "packageFiles": 17,
+        "currentByteMismatches": [],
+        "handoverScope": "Retained handover remains bound to its earlier455-file source fingerprint1f1a4c46; byte-identical package hashes are current, not a relabeling of that old handover as the new457-file source."
+      },
+      "privateHarnesses": {
+        "historicalTailSha256": "ece5fda6ea8498d0767537004b5d23e62899526e40208777c5bf4b322a17c9b6",
+        "historicalHelperSha256": "53ce5ac8390b6a4593147430660eee4c7064a802b418ede41b04a8aa0ba50ba5",
+        "currentTailSha256": "15abe2d940108590c86001b1e6e789e139e78dcef367cb577659144651d6e342",
+        "currentHelperSha256": "1191f22925c4bdb555fb9e7b5f7247dc8e1b0277e8bd81969fa072bc686e32e1",
+        "currentFinalSuffixSha256": "c22d3013c8b83a5c9dd14a91e1103235bdec99ec35a1b8a39f41c728399f605c",
+        "tailSuffixOrderStillMatchesCheckSh": true,
+        "guardsNowClosed": [
+          "Early sys.flags.optimize refusal precedes operand validation/import/test work.",
+          "Computed target_dir/release/mhfe is explicitly supplied, strictly resolved and hashed rather than silently replaced by a fixed path."
+        ],
+        "controlRecordSha256": "7539fe18245df753ed7fbf75f2e0873938c104a06d37a7647810b109bb202a14",
+        "negativeModes": [
+          [
+            "-O"
+          ],
+          [
+            "-OO"
+          ],
+          [
+            "PYTHONOPTIMIZE=1"
+          ]
+        ],
+        "allNegativeExitOneWithSpecifiedRefusal": true,
+        "retrospectiveCaller": {
+          "optimize": 0,
+          "PYTHONOPTIMIZE": null,
+          "CARGO_TARGET_DIR": null,
+          "resolvedExecutable": "/home/user/Documents/bip_tools/mhfe/target/release/mhfe",
+          "executableSha256": "f4c5688eda6e5fdb7e444555824c629405b79bda39d44ee94a785b4c861f9982",
+          "actualBinaryHashMatches": true
+        },
+        "historicalLimit": "Retrospective caller observation; the interrupted/resumed historical command did not separately retain PYTHONOPTIMIZE. No full-size outcomes replayed for this private wrapper guard.",
+        "notClaimed": "Old resume did not execute these newer private wrapper bytes or contemporaneously retain optimize/env/path digest. No expensive three-outcome replay was performed solely for these private guard corrections."
+      },
+      "externalPlannedChecks": "Canonical cached/uncached builds and comparison are additional planned acceptance work outside scripts/check.sh; their absence is not an omitted check.sh command. Full-size suite3/suite4 vector replays are excluded by check.sh and were not added to resume.",
+      "reviewerActions": [
+        "Read stage entrypoints and full_size functions, private resume scripts, resource runner and retained command/log/interruption records.",
+        "Read/hash1225 declared files to compare current source snapshot; checked resume maps, package17hashes and handover identity.",
+        "No project application/test/build/native tool, expensive process, CI/network action or subagent execution.",
+        "Read current cheap final suffix/selector records and controls; reconcile final independent reviewer hashes and only two source deltas. Preserve both selector snapshots and failed sandbox/red runs without relabeling."
+      ],
+      "limitations": [
+        "Historical full-size check assertions were not contemporaneously accompanied by a retained PYTHONOPTIMIZE/sys.flags record; retrospective optimize0 does not prove that earlier process state.",
+        "Original interrupted full command has no final exit or memory metrics.",
+        "Canonical cached/uncached pair remains unstarted and separate future evidence. Native Windows/macOS acceptance remains separate; foreign-target standard-library inventories absent in the prefix are not silently treated as checked.",
+        "The original whole check.sh command was not rerun or reclassified as exit0; composed stage evidence and historical limits are stated instead.",
+        "No suite3/suite4 full-cost vector replay or extra full-size recovery run was added by these final cheap stages.",
+        "No project execution, implementation edit, build, browser/native tool, test, scanner/fuzz/mutation, Docker, network or subagent work by this reviewer."
+      ],
+      "reviewerMemoryBudgetMiB": 250,
+      "closedFindings": [
+        {
+          "id": "FULL-CHECK-EVIDENCE001",
+          "status": "closed-at-current-source",
+          "basis": "Actual rlib Cargo artifact selector was independently fixed/reviewed; current exact-source final suffix now exits0 and includes artifact and archive gates. Original failure remains retained."
+        }
+      ],
+      "monolithicRunExitZeroClaimed": false,
+      "wholeRepositoryOrReleaseAcceptance": false,
+      "followUpToPartial": {
+        "path": "/home/user/Documents/bip_tools/tmp/mhfe-remaining-2026-10-15/review-full-check-completeness-partial.json",
+        "sha256": "b200139aec6e5f9f28b156239622255d2cdf35d14a1da006a8f24ed0f595cd09",
+        "partialUnmodified": true,
+        "earlierFinalSuffixSnapshot": "full-check-final-stages.command.json bound selector b1e95bee; not relabeled as bde22743 execution. Fresh full-check-final-stages-current record closes the exact-current boundary."
+      },
+      "retainedStageRecords": {
+        "full-linux-resume": {
+          "commandRecordSha256": "23631f6e9edaf1b915e73605863dfb347ee24c8a3be300baff90d72123bf20f9",
+          "logSha256": "4037ef89106ca168ddc62ceaacee697545a2bd1d9edd5a76968bbe23f3948275",
+          "exitCode": 1,
+          "sourceUnchanged": true,
+          "sourceMapSha256": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+          "selectorSha256": "89d13728d9697a44e945972762ec42dab750dc9ab45c07c763cd8b6a92e79155",
+          "checkFastSha256": "f7881460096dc34ab48b625694ba43489e5f66a123c3ddb367a16084dfe5c84b",
+          "sampledDescendantPeakRssKiB": 2124420,
+          "minimumMachineMemAvailableKiB": 4758888,
+          "rssLimitKiB": 2621440,
+          "machineReserveKiB": 3145728
+        },
+        "artifact-gate-red": {
+          "commandRecordSha256": "12247175b8493e0ab083a2cbd1b6e20c7747a3ec5bccb105ac62e67ea6e7b0db",
+          "logSha256": "b53c3c17bd0564f7d7154eb8c9bb76bf8d8cdacf882c9b567585484af5097d2c",
+          "exitCode": 1,
+          "sourceUnchanged": true,
+          "sourceMapSha256": "6b37bd19b7f5b14ae4b5a92563ad7990bc7fd92149496b443d9164012bb95d9a",
+          "selectorSha256": "89d13728d9697a44e945972762ec42dab750dc9ab45c07c763cd8b6a92e79155",
+          "checkFastSha256": "f7881460096dc34ab48b625694ba43489e5f66a123c3ddb367a16084dfe5c84b",
+          "sampledDescendantPeakRssKiB": 3804,
+          "minimumMachineMemAvailableKiB": 7646360,
+          "rssLimitKiB": 786432,
+          "machineReserveKiB": 3145728
+        },
+        "cargo-selector-green": {
+          "commandRecordSha256": "5bf1d79ee86c1345ff5a9824e38e98c19664b3d36f5eb8b8028d4687b6577bde",
+          "logSha256": "6ab0defefc16e2dad5c24dce1e4c3f5dd0f75da45755b52d68f40c98a5c63a9b",
+          "exitCode": 1,
+          "sourceUnchanged": true,
+          "sourceMapSha256": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+          "selectorSha256": "b1e95bee04b60026fb759d6ccf5a6d62c8c5ace952458e650669609087662df2",
+          "checkFastSha256": "377d5eeb6d10185a5b519a7cb17839628cef643cb306f5134bfedb3ee13b6a32",
+          "sampledDescendantPeakRssKiB": 319376,
+          "minimumMachineMemAvailableKiB": 7595916,
+          "rssLimitKiB": 786432,
+          "machineReserveKiB": 3145728
+        },
+        "cargo-selector-green-2": {
+          "commandRecordSha256": "0fa97582900b9dcd9e4fb089211996c10d7766e7e320837c4e3f4c360719b32c",
+          "logSha256": "9c0e8b010184447b9387a22e2dc791cbcaa420c65841283801eaf711b5e8fb32",
+          "exitCode": 0,
+          "sourceUnchanged": true,
+          "sourceMapSha256": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+          "selectorSha256": "b1e95bee04b60026fb759d6ccf5a6d62c8c5ace952458e650669609087662df2",
+          "checkFastSha256": "377d5eeb6d10185a5b519a7cb17839628cef643cb306f5134bfedb3ee13b6a32",
+          "sampledDescendantPeakRssKiB": 472400,
+          "minimumMachineMemAvailableKiB": 7122044,
+          "rssLimitKiB": 786432,
+          "machineReserveKiB": 3145728
+        },
+        "cargo-selector-green-final": {
+          "commandRecordSha256": "fc22e6f4b7afa34924b0c80e5f17e26f1249084bcdea52b5d4af4faaa53e9550",
+          "logSha256": "9c0e8b010184447b9387a22e2dc791cbcaa420c65841283801eaf711b5e8fb32",
+          "exitCode": 0,
+          "sourceUnchanged": true,
+          "sourceMapSha256": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+          "selectorSha256": "bde227437cb618c829669114687611562eb244cef38520aec4a39ce7482dbb00",
+          "checkFastSha256": "377d5eeb6d10185a5b519a7cb17839628cef643cb306f5134bfedb3ee13b6a32",
+          "sampledDescendantPeakRssKiB": 485788,
+          "minimumMachineMemAvailableKiB": 7461132,
+          "rssLimitKiB": 786432,
+          "machineReserveKiB": 3145728
+        },
+        "full-check-final-stages": {
+          "commandRecordSha256": "513ee2992b41a1462a2afee6e08f90846cb1725e37a36b40aa26b18b704d2d80",
+          "logSha256": "0bdb7d4ede86190d97501ef6429f2d2d5844e07cb662061234d14331d85e13eb",
+          "exitCode": 0,
+          "sourceUnchanged": true,
+          "sourceMapSha256": "89fcf7b3c4127060adeca082583ffead32b738409bfb5ca90b395cb53da509b9",
+          "selectorSha256": "b1e95bee04b60026fb759d6ccf5a6d62c8c5ace952458e650669609087662df2",
+          "checkFastSha256": "377d5eeb6d10185a5b519a7cb17839628cef643cb306f5134bfedb3ee13b6a32",
+          "sampledDescendantPeakRssKiB": 623156,
+          "minimumMachineMemAvailableKiB": 7103104,
+          "rssLimitKiB": 786432,
+          "machineReserveKiB": 3145728
+        },
+        "full-check-final-stages-current": {
+          "commandRecordSha256": "a802d313cf83fc28a86c880cbadec558a69bd62bb7ad90668be719de286f4ac1",
+          "logSha256": "e40cb50aac5588fa2b22eb7930c751c66ac58a1bcd35446b6a20f28159d4e16d",
+          "exitCode": 0,
+          "sourceUnchanged": true,
+          "sourceMapSha256": "5eae3cf3bb4deb41e357c400d1bea127e976437f5cb916dbc1625a48ca893d0b",
+          "selectorSha256": "bde227437cb618c829669114687611562eb244cef38520aec4a39ce7482dbb00",
+          "checkFastSha256": "377d5eeb6d10185a5b519a7cb17839628cef643cb306f5134bfedb3ee13b6a32",
+          "sampledDescendantPeakRssKiB": 26912,
+          "minimumMachineMemAvailableKiB": 6758244,
+          "rssLimitKiB": 786432,
+          "machineReserveKiB": 3145728
+        }
+      },
+      "selectorIndependentReview": {
+        "path": "/home/user/Documents/bip_tools/tmp/mhfe-remaining-2026-10-15/reviewer-result-cargo-selector-final.json",
+        "sha256": "b25443d0bf5063cdba738d00e62e5dca67f838775b17f5aa9f0eaab3dd271940",
+        "reviewer": "/root/review_owner_fixes",
+        "reviewedFiles": {
+          "scripts/cargo-output.mjs": "bde227437cb618c829669114687611562eb244cef38520aec4a39ce7482dbb00",
+          "scripts/check-fast.sh": "377d5eeb6d10185a5b519a7cb17839628cef643cb306f5134bfedb3ee13b6a32"
+        },
+        "verdict": "no-additional-actionable-findings-in-assigned-scope",
+        "openFindings": [],
+        "limit": "This reviewer reconciled identities and relied on the distinct selector reviewer for semantic/CORE53 closure instead of repeating that review."
+      },
+      "resourceAssessment": {
+        "buildTestAndEmccConcurrencyFlagsRemainOne": true,
+        "heavyResumeRssLimitKiB": 2621440,
+        "lightSelectorAndSuffixRssLimitKiB": 786432,
+        "osReserveKiB": 3145728,
+        "meaning": "Lighter final gate limits were intentionally reduced for cheap non-Argon2 stages. No production PIM/memory setting was reduced; earlier interrupted peak/minimum remain unknown. Samples do not establish thermal cause or cgroup/allocator peaks.",
+        "reviewerMemoryBudgetMiB": 384,
+        "otherHeavyWork": "Main reports another project Docker interval; reviewer performed file/metadata/hash work only."
+      },
+      "unresolvedEvidenceLimits": [
+        "Historical full-size check assertions were not contemporaneously accompanied by a retained PYTHONOPTIMIZE/sys.flags record; retrospective optimize0 does not prove that earlier process state.",
+        "Original interrupted full command has no final exit or memory metrics.",
+        "Canonical cached/uncached pair remains unstarted and separate future evidence. Native Windows/macOS acceptance remains separate; foreign-target standard-library inventories absent in the prefix are not silently treated as checked.",
+        "The original whole check.sh command was not rerun or reclassified as exit0; composed stage evidence and historical limits are stated instead."
+      ]
+    },
+    "privateWrapperControls": {
+      "currentCallerOptimize": 0,
+      "currentPythonOptimizeEnvironment": null,
+      "currentCargoTargetDirEnvironment": null,
+      "resolvedExecutable": "/home/user/Documents/bip_tools/mhfe/target/release/mhfe",
+      "executableSha256": "f4c5688eda6e5fdb7e444555824c629405b79bda39d44ee94a785b4c861f9982",
+      "helperSha256": "1191f22925c4bdb555fb9e7b5f7247dc8e1b0277e8bd81969fa072bc686e32e1",
+      "negativeControls": [
+        {
+          "flags": [
+            "-O"
+          ],
+          "environmentOverrides": {},
+          "exitCode": 1,
+          "stderr": "Python optimization disables assertions; run this checker without -O or PYTHONOPTIMIZE.\n"
+        },
+        {
+          "flags": [
+            "-OO"
+          ],
+          "environmentOverrides": {},
+          "exitCode": 1,
+          "stderr": "Python optimization disables assertions; run this checker without -O or PYTHONOPTIMIZE.\n"
+        },
+        {
+          "flags": [],
+          "environmentOverrides": {
+            "PYTHONOPTIMIZE": "1"
+          },
+          "exitCode": 1,
+          "stderr": "Python optimization disables assertions; run this checker without -O or PYTHONOPTIMIZE.\n"
+        }
+      ],
+      "limitation": "Retrospective caller observation; the interrupted/resumed historical command did not separately retain PYTHONOPTIMIZE. No full-size outcomes replayed for this private wrapper guard."
+    }
+  },
+  "canonicalPayloadReceipt": {
+    "recordedUtc": "2026-10-15T16:31:41.802378+00:00",
+    "archives": {
+      "SHA256SUMS": "5e49eb12a34eb7d187967f14cef058588712fe07f91d79a297d563d92dbe01ed",
+      "mhfe-v0.6.1-browser.tar.gz": "6b7275c7e0e04ac85bd45483a0a892f109f991d2709d8478849259bdc91a6354",
+      "mhfe-v0.6.1-linux-aarch64.tar.gz": "b224f691f15b948db0f2ef59258f7fd9c29f326084a3f5d0ed82e4ec7d771936",
+      "mhfe-v0.6.1-linux-x86_64.tar.gz": "b1f2d47ae7522d053d7bd80e9c399798116582d5122ba40220a33c3e4e938a5f",
+      "mhfe-v0.6.1-windows-x86_64.zip": "02c7002df54c73e82c95339875a4560f239f635893c3a45989a2f0dc3bbf5164"
+    },
+    "browserFiles": {
+      "README.md": "94ea0066668b1e4092fd2cfd61051d489df24ed74951372ef6c4703a8ad4fc3e",
+      "core/argon2-mt.js": "c7f34f3e36a96ebe9b494836f09ff1b081b48d15d36a54ce1ad6ef892e8d4612",
+      "core/argon2-st.js": "4150029c24d61154f01ce4a1dff028df9d8bef7b4dcf277a9a169abda3245b02",
+      "core/client.d.ts": "efadc980118c8c523d7a0c1b65cd8755afde39bd7075c25b65d4abe0f8b02b18",
+      "core/client.js": "c0f2aa0cc5d54e58c65079fc5771ed76d92918450ec84bcae3fffa1fe36d19f3",
+      "core/mhfe-fast-mode.py": "94a886165c1d5649c4761431c8b5186bc8aa0d52c321d3fb90cec1c56d9f0a2b",
+      "modules.json": "43d4db419d7b7e6a4f625bf0c0713535063ca48d7f7ab4c4784ff7dbbbf48714",
+      "passwords/passwords.d.ts": "b106de77939582d4b7beb4af83abfb4c6c84d81f6b5c893dd7c1949938ad868b",
+      "passwords/passwords.js": "a83811fc28a9dc920f6089e4b5906326c5cb777a333c38540a14169642f649e7",
+      "repair/repair.d.ts": "66a71dbd68e96a8316ea1f7c8c76b6ae2339625731e5a3c6a726be077c7a4be5",
+      "repair/repair.js": "6dfd11a0aa5a630e49293a30bc1d88ec7208ea1d59b333ecea66df3fb12beeba",
+      "runtime/mhfe.wasm": "d5203527beca56bd1eeb5c0aa5bc60b7bf260e2929fe71a3403a318cb57e13a4",
+      "runtime/runtime.d.ts": "4fc38f8bdb06992129972f67f3775c458b64f24dc809b27bd04fde22c48a363e",
+      "runtime/runtime.js": "84d30f2a21a78d2c1eaaf0fa4e9e633e59e8d4db434204db6b38c7ca8d9501ee",
+      "runtime/worker.js": "d6efc1002b3a4dac9765d74957d3cd7f4e77f4dc07766f54d6778b795863f3cb",
+      "wallet/wallet.d.ts": "9d96d47b2cd718f84d1cb516b69a31d48517f4416d2e7fe522943c1471ac55ee",
+      "wallet/wallet.js": "be6bc37db6d4bf4c8bc2cc2835e3f4f12615134ba63124328807a27ac2670426"
+    },
+    "browserFileCount": 17,
+    "windowsLicenseMatches": {
+      "LICENSE-MIT": "89c9c1f7cbbbb67060b354dab442571f2935669c284291338b3f9bc4bec23712",
+      "LICENSE-APACHE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "THIRD_PARTY_NOTICES.md": "f56ba6fa796c747c20033b1c7b70488d4e74a285a95e72ce37f2c7412841ab35",
+      "licenses/mingw-w64-COPYRIGHT": "af23297b7d17e8e31817a5d58088de6fdafe34705bb5a7d1d330f08711b31314"
+    },
+    "windowsBuildInfo": "mhfe v0.6.1\nsource: 575cbd1b7634646f6e19a2501ed9ea164a6a7acd (modified)\nrustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\nwasm-bindgen 0.2.129\nArgon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb\n",
+    "harnessSha256": "112e2514de6db6ec6e78c3a13999641c6d442d6c8fb3cac2b6d088e21f2b4cd7",
+    "commandRecordSha256": "de891c98f0a694be0d9749472437fb692950f56b2fe567a7affe71b076b0942a",
+    "logSha256": "7782ec41508ef93adb6cbb370a78cdf9c4812fb9fb558e991a9720e9f45959a0"
+  },
+  "toolsAndSkills": {
+    "newProjectChecks": [
+      "scripts/verify-macos-packages.py (portable controls executed; native mode pending)",
+      "scripts/cargo-output.mjs --self-test in fast gates",
+      "actual OS pipe-reader regression"
+    ],
+    "methodsUsed": [
+      "wallet-full-audit shared report/evidence procedure",
+      "wallet-release-verification scoped artifact/reproducible-build acceptance",
+      "diagnosing-bugs red/green diagnosis",
+      "javascript-testing-expert independent fixtures and actual Node harnesses",
+      "property-based-testing oracle/tautology principles without a new PBT dependency",
+      "CORE-53 read-only snapshot-bound review"
+    ],
+    "externalToolInstallations": [],
+    "mutation": "cargo-mutants27.1.0 list-only6candidates; no compiled campaign"
+  },
+  "limitations": [
+    "This is a targeted acceptance/remediation follow-up, not the fresh all-files CORE audit; that is reserved separately as AUD-028.",
+    "The original interrupted check.sh invocation has no final exit or complete memory metrics. Stage evidence is composed explicitly; it is not relabeled as one exit0 run.",
+    "The old three-outcome resume lacked a contemporaneous Python optimization record. A new guarded execution supersedes that uncertainty for those outcomes only; the original record remains unchanged.",
+    "Cached canonical success establishes current composition and archive checks. A genuine final cached/uncached comparison remains pending the post-AUD-028 final source.",
+    "AUD-026-BLD002 actual Windows memory-owner assertions: not executed on this Linux host in this record.",
+    "AUD-026-BLD003 actual macOS attachable-control/protected-child result: not executed on this Linux host in this record.",
+    "AUD-024-SEC007 Windows console/ConPTY/owned-buffer acceptance: not executed on this Linux host in this record.",
+    "AUD-024-SEC010 Windows/macOS runtime enforcement and hardened signature acceptance: not executed on this Linux host in this record.",
+    "AUD-024-BLD009 actual native macOS package checks: not executed on this Linux host in this record.",
+    "The compiled mutation campaign remains unperformed at this dirty working-tree phase; discovery of six candidates is not six defects or six compiled tests.",
+    "Full-cost suite3/suite4 vector replays were not repeated; unchanged relevant algorithms/corpora/checkers and retained results must be identified separately from newly executed CLI production-cost cases.",
+    "Prior Chromium/Firefox standard/fast checks are reused only for the exact unchanged fd0d4908ad796c56 package bytes; no host-page audit is claimed here.",
+    "Sampled descendant RSS excludes daemon-owned Docker containers. Per-RUN buildx resource flags and global MemAvailable monitoring provide the stated local bounds; they are not allocator peak measurements or evidence of the cause of overheating.",
+    "No temperature, fan, power, CPU-frequency or other system setting was changed. No release/tag was created."
+  ],
+  "reportDocument": {
+    "path": "AUD-027-2026-10-15.md",
+    "sha256": "467798ceb0fbc38e6d68602d90e290b95d1e941cd45b95faf4ea8c03f4f4d982"
+  }
+}

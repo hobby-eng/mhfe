@@ -16,13 +16,13 @@ use crate::workers::start_scoped;
 /// A drawn entropy, wiped when dropped.
 type Entropy = Zeroizing<[u8; NEW_ENTROPY_BYTES]>;
 
-/// What the threads of one draw share: the first ending, a passing entropy or an error, and the
-/// count of the draws that found nothing, with the callback that hears it.
+/// What the threads of one draw share: the first passing entropy, overridden by any worker's
+/// failure, and the count of draws that found nothing, with the callback that hears it.
 pub(super) struct ThreadedDraw<'a> {
     draw: &'a PhraseDraw,
     /// Set by the first thread that ends the draw; the others stop before their next draw.
     ended: AtomicBool,
-    /// What that thread ended the draw with.
+    /// The first success or first failure; a failure always takes precedence over a success.
     ending: Mutex<Option<Result<Entropy, WalletCheckError>>>,
     /// Draws that found nothing, over all threads.
     draws: AtomicU64,
@@ -72,7 +72,7 @@ impl<'a> ThreadedDraw<'a> {
             .unwrap_or_else(|| Err(WalletCheckError::NoThreadResult))
     }
 
-    /// One thread's part: what it finds ends the draw, unless another thread ended it first.
+    /// Records one worker's result; a failure overrides an already found entropy.
     fn work(&self, source: &mut dyn RandomSource) {
         if let Some(ending) = self.search(source) {
             self.end(ending);
@@ -118,11 +118,60 @@ impl<'a> ThreadedDraw<'a> {
         Ok(())
     }
 
-    /// Keeps the first ending. A later one, from a thread that ended its own draw at the same
-    /// time, is dropped, and an entropy in it wiped.
+    /// Keeps the first success unless any worker fails, then keeps the first failure. Threads
+    /// are joined before this is consumed, so an in-flight failure cannot be lost to a winner.
+    /// A replaced or unused entropy is wiped by its owner on drop.
     fn end(&self, ending: Result<Entropy, WalletCheckError>) {
-        if !self.ended.swap(true, Ordering::SeqCst) {
-            *self.ending.lock().unwrap_or_else(PoisonError::into_inner) = Some(ending);
+        let mut saved = self.ending.lock().unwrap_or_else(PoisonError::into_inner);
+        if saved.is_none() || (ending.is_err() && saved.as_ref().is_some_and(Result::is_ok)) {
+            *saved = Some(ending);
+        }
+        self.ended.store(true, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::random::{RandomError, ScriptedSource};
+
+    #[test]
+    fn a_late_worker_failure_overrides_a_found_phrase() {
+        let draw = PhraseDraw::unchecked();
+        let mut report = |_| Ok(());
+        let threads = ThreadedDraw::new(&draw, &mut report);
+        let entropy = crate::test_support::counted(7);
+        threads.work(&mut ScriptedSource::after_probes(&entropy));
+        assert!(threads.ended.load(Ordering::SeqCst));
+        // A worker already starting when the winner ended still validates its own source.
+        let mut failed = |_: &mut [u8]| Err(RandomError::OperatingSystem(Some(5)));
+        threads.work(&mut failed);
+        assert!(matches!(
+            threads.ending.into_inner().unwrap(),
+            Some(Err(WalletCheckError::Random(RandomError::OperatingSystem(
+                Some(5)
+            ))))
+        ));
+    }
+
+    #[test]
+    fn a_late_success_never_replaces_a_failure_or_the_first_success() {
+        for first_fails in [false, true] {
+            let draw = PhraseDraw::unchecked();
+            let mut report = |_| Ok(());
+            let threads = ThreadedDraw::new(&draw, &mut report);
+            if first_fails {
+                threads.end(Err(WalletCheckError::Cancelled));
+            } else {
+                threads.end(Ok(Zeroizing::new(crate::test_support::counted(7))));
+            }
+            threads.end(Ok(Zeroizing::new(crate::test_support::counted(8))));
+            let ending = threads.ending.into_inner().unwrap().unwrap();
+            if first_fails {
+                assert!(matches!(ending, Err(WalletCheckError::Cancelled)));
+            } else {
+                assert_eq!(*ending.unwrap(), crate::test_support::counted(7));
+            }
         }
     }
 }

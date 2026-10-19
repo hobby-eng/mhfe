@@ -31,6 +31,7 @@ import {
   requireSecret,
   requireText,
   secretOrEmpty,
+  sentence,
   SecretRequest,
   wordHintsOf,
 } from "../runtime/runtime.js";
@@ -57,6 +58,7 @@ export { MhfeCancelledError, MhfeError } from "../runtime/runtime.js";
 /**
  * The wishes of a new phrase as the worker takes them (wishesOf).
  * @typedef {{ words: string, places: number[], neverUse: string }} Wishes
+ * @typedef {{ words: string[], places: number[], neverUse: string[] }} PendingWishes
  */
 
 /** Workers that draw a checked phrase at once by default; each takes a processor core. */
@@ -66,6 +68,11 @@ const MOST_DRAW_WORKERS = 8;
  * bound, so that a mistaken count is refused before any passphrase is copied (AUD-012-SEC001).
  */
 const HIGHEST_DRAW_WORKERS = 256;
+
+// Deliberate copy of word_wishes' two limits: refuse counts before entries, encoding or workers,
+// including on a fresh class. Package checks bind both values and messages to the Rust owner.
+const MAX_CHOSEN_WORDS = 1;
+const MAX_NEVER_USE_WORDS = 1;
 
 /** The name of this module's operations in the package's worker. */
 const WALLET_MODULE = "wallet";
@@ -107,10 +114,7 @@ export class MhfeWallet extends MhfeModuleClass {
    * @param {Partial<Parameters<DeclaredWallet["walletCheck"]>[0]>} [options]
    */
   async walletCheck({ phrase, passphrase } = {}) {
-    requireText(phrase, "phrase");
-    const given = secretOrEmpty(passphrase, "passphrase");
-    await this.#module.ready();
-    return this.#module.run(phraseRequest("walletCheck", phrase, given));
+    return this.#phrase("walletCheck", phrase, passphrase);
   }
 
   /**
@@ -131,10 +135,21 @@ export class MhfeWallet extends MhfeModuleClass {
    * @param {Partial<Parameters<DeclaredWallet["fingerprint"]>[0]>} [options]
    */
   async fingerprint({ phrase, passphrase } = {}) {
+    return this.#phrase("fingerprint", phrase, passphrase);
+  }
+
+  /**
+   * Admits borrowed phrase text before either wallet operation creates its owned request.
+   * @param {"walletCheck" | "fingerprint"} operation
+   * @param {unknown} phrase
+   * @param {unknown} passphrase
+   */
+  async #phrase(operation, phrase, passphrase) {
     requireText(phrase, "phrase");
     const given = secretOrEmpty(passphrase, "passphrase");
     await this.#module.ready();
-    return this.#module.run(phraseRequest("fingerprint", phrase, given));
+    await this.#module.readInputText(phrase, "phrase");
+    return this.#module.run(phraseRequest(operation, phrase, given));
   }
 
   /**
@@ -174,9 +189,10 @@ export class MhfeWallet extends MhfeModuleClass {
    * @param {Partial<NonNullable<Parameters<DeclaredWallet["describeDraw"]>[0]>>} [options]
    */
   async describeDraw({ chosen = [], neverUse = [], walletCheck = false } = {}) {
-    const wishes = wishesOf(chosen, neverUse);
+    const pending = wishesOf(chosen, neverUse);
     if (typeof walletCheck !== "boolean") throw new TypeError("walletCheck must be true or false.");
     await this.#module.ready();
+    const wishes = await frameWishes(this.#module, pending);
     const message = {
       operation: "describeDraw",
       chosenWords: encodeSecret(wishes.words, "chosen words"),
@@ -211,7 +227,7 @@ export class MhfeWallet extends MhfeModuleClass {
     onProgress,
   } = {}) {
     requireCallback(onProgress, "onProgress");
-    const wishes = wishesOf(chosen, neverUse);
+    const pending = wishesOf(chosen, neverUse);
     this.#slot.requireIdle();
     // Left out, the passphrase and its repetition are empty; given, each must be a secret, even
     // where it is not compared, so that a wrong type is never taken as no passphrase.
@@ -240,7 +256,8 @@ export class MhfeWallet extends MhfeModuleClass {
     const checked = hasPassphrase && walletCheck;
     const count = checked ? (workers ?? defaultWorkers()) : 1;
     // The drawing takes over from the wait for the startup check with nothing in between.
-    return this.#slot.after(this.#module.ready(), () =>
+    const ready = this.#module.ready().then(() => frameWishes(this.#module, pending));
+    return this.#slot.after(ready, (wishes) =>
       this.#draw(given, repeat, hasPassphrase, checked, count, wishes, onProgress),
     );
   }
@@ -413,23 +430,42 @@ refuseUnknownOptions(MhfeWallet.prototype, {
 /**
  * The wishes of a new phrase as the WebAssembly takes them: the chosen words, each after a line
  * break, a secret; the place of each, 0 for anywhere and otherwise its position; and the words
- * never to use, each after a line break. Types and the wire's numeric range are checked here;
- * the library judges the words, their places within the phrase and how many (INVALID_WORD_WISH).
+ * never to use, each after a line break. Types, mirrored count limits and the wire's numeric
+ * range are checked here; the library judges the words and their places within the phrase.
  * @param {MhfeChosenWord[]} chosen
  * @param {string[]} neverUse
- * @returns {Wishes}
+ * @returns {PendingWishes}
  */
 function wishesOf(chosen, neverUse) {
   if (!Array.isArray(chosen)) throw new TypeError("chosen must be an array of { word, position }.");
-  if (!Array.isArray(neverUse) || !neverUse.every((word) => typeof word === "string")) {
-    throw new TypeError("neverUse must be an array of words.");
+  if (!Array.isArray(neverUse)) throw new TypeError("neverUse must be an array of words.");
+  const chosenCount = chosen.length;
+  const excludedCount = neverUse.length;
+  if (
+    !Number.isSafeInteger(chosenCount) ||
+    chosenCount < 0 ||
+    !Number.isSafeInteger(excludedCount) ||
+    excludedCount < 0
+  ) {
+    throw new TypeError("Wish arrays must have nonnegative whole-number lengths.");
+  }
+  if (chosenCount > MAX_CHOSEN_WORDS) {
+    throw wishCountError(MAX_CHOSEN_WORDS, "chosen");
+  }
+  if (excludedCount > MAX_NEVER_USE_WORDS) {
+    throw wishCountError(MAX_NEVER_USE_WORDS, "neverUse");
   }
   const words = [];
   const places = [];
-  for (const wish of chosen) {
-    requireText(wish?.word, "a chosen word");
-    const { position } = wish;
-    if (position !== "anywhere" && !Number.isSafeInteger(position)) {
+  for (let index = 0; index < chosenCount; index += 1) {
+    const wish = chosen[index];
+    const word = wish?.word;
+    requireText(word, "a chosen word");
+    const position = wish?.position;
+    if (
+      position !== "anywhere" &&
+      (typeof position !== "number" || !Number.isSafeInteger(position))
+    ) {
       throw new TypeError('A chosen word\'s position is a whole number from 1, or "anywhere".');
     }
     // The worker encodes anywhere as 0. A numeric position must fit its positive wire range;
@@ -440,13 +476,49 @@ function wishesOf(chosen, neverUse) {
         "A chosen word needs a position from 1, or anywhere.",
       );
     }
-    words.push(wish.word);
+    words.push(word);
     places.push(position === "anywhere" ? 0 : position);
   }
-  // Each word after a line break of its own, so that an empty or blank one stays an entry, which
-  // the library refuses, rather than vanishing (AUD-024-API009).
+  const excluded = [];
+  for (let index = 0; index < excludedCount; index += 1) {
+    const word = neverUse[index];
+    if (typeof word !== "string") throw new TypeError("neverUse must be an array of words.");
+    excluded.push(word);
+  }
+  return { words, places, neverUse: excluded };
+}
+
+/**
+ * Admits captured immutable values before framing, encoding or drawing; count/type guards run
+ * synchronously first. One LF is wire framing, not part of the per-entry raw-text byte domain.
+ * @param {ModuleWorker} module
+ * @param {PendingWishes} wishes
+ * @returns {Promise<Wishes>}
+ */
+async function frameWishes(module, wishes) {
+  for (const word of wishes.words) await module.readInputText(word, "chosen word");
+  for (const word of wishes.neverUse) await module.readInputText(word, "word never to use");
   const entries = (/** @type {string[]} */ list) => list.map((word) => `\n${word}`).join("");
-  return { words: entries(words), places, neverUse: entries(neverUse) };
+  return {
+    words: entries(wishes.words),
+    places: wishes.places,
+    neverUse: entries(wishes.neverUse),
+  };
+}
+
+/**
+ * Deliberate copy of the Rust count refusal: admission must happen before entries or workers.
+ * @param {number} maximum
+ * @param {"chosen" | "neverUse"} kind
+ */
+function wishCountError(maximum, kind) {
+  const count = `${maximum} ${maximum === 1 ? "word" : "words"}`;
+  const reason =
+    kind === "chosen" ? `choose at most ${count}` : `name at most ${count} never to use`;
+  return new MhfeError(
+    "INVALID_WORD_WISH",
+    sentence(`the wishes for the new phrase cannot be used: ${reason}`),
+  );
 }
 
 /**

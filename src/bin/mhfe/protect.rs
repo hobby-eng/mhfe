@@ -28,9 +28,8 @@ use mhfe::self_check::{process, ComponentCheck, ComponentOutcome, Tier};
 #[cfg(target_os = "macos")]
 mod macos;
 
-#[cfg(any(windows, target_os = "macos"))]
 #[cfg(test)]
-mod test_process;
+pub(crate) mod test_process;
 #[cfg(windows)]
 mod windows;
 
@@ -944,6 +943,25 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn the_process_forbids_core_dumps() {
+        let before = CoreDumps::read();
+        test_process::require_success(test_process::run(
+            "protect::tests::hardened_linux_process",
+            Some(std::process::id()),
+        ));
+        // Hardening is irreversible and process-wide; memory-observer tests need their original
+        // access policy. Only the disposable child may change it.
+        assert_eq!(CoreDumps::read(), before);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "invoked by the process-protection test in a disposable child"]
+    fn hardened_linux_process() {
+        let Some(parent) = std::env::var_os(test_process::TARGET_PID) else {
+            return;
+        };
+        assert_ne!(parent.to_string_lossy(), std::process::id().to_string());
+        assert_eq!(dumpable(), Some(ReadBack::Differs));
         harden_process();
         // SAFETY: PR_GET_DUMPABLE takes no pointer.
         assert_eq!(unsafe { libc::prctl(libc::PR_GET_DUMPABLE, 0, 0, 0, 0) }, 0);

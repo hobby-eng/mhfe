@@ -13,9 +13,9 @@ use super::{
 use crate::wallet::{AddressSearch, Coin, Fingerprint, SearchLimits};
 use crate::wallet_check::{self, PhraseDraw, DRAW_REPORT_INTERVAL, WALLET_CHECK_BITS};
 use crate::word_wishes::{
-    Place, Randomness, WordWishes, MAX_CHOSEN_WORDS, MAX_NEVER_USE_WORDS, RECOMMENDED_RANDOM_BITS,
+    Place, Randomness, WishError, WordWishes, MAX_CHOSEN_WORDS, MAX_NEVER_USE_WORDS,
+    RECOMMENDED_RANDOM_BITS,
 };
-use crate::MhfeError;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +28,8 @@ struct CoinJson {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WalletParameters {
+    #[serde(flatten)]
+    input_text: super::InputTextParameters,
     version: &'static str,
     coins: Vec<CoinJson>,
     wallet_check_bits: u32,
@@ -41,6 +43,7 @@ struct WalletParameters {
 #[wasm_bindgen(js_name = walletParameters)]
 pub fn wallet_parameters() -> Result<String, JsError> {
     json(&WalletParameters {
+        input_text: super::InputTextParameters::new(),
         version: env!("CARGO_PKG_VERSION"),
         coins: Coin::ALL
             .into_iter()
@@ -65,11 +68,15 @@ pub fn wallet_parameters() -> Result<String, JsError> {
 /// splitting (AUD-024-API009). A place is refused unless it is a whole number from 0
 /// (AUD-024-API022).
 fn wishes_from(chosen_words: &str, places: &[f64], never_use: &str) -> Result<WordWishes, JsError> {
-    let words = entries(chosen_words);
-    if words.len() != places.len() {
+    let words = entries(chosen_words).map_err(js_error)?;
+    let count = words.clone().count();
+    if count != places.len() {
         return Err(js_error(crate::word_wishes::WishError::MismatchedPlaces));
     }
-    let mut chosen: Vec<(Place, &str)> = Vec::with_capacity(words.len());
+    if count > MAX_CHOSEN_WORDS {
+        return Err(js_error(WishError::TooManyChosen));
+    }
+    let mut chosen: Vec<(Place, &str)> = Vec::with_capacity(count);
     for (&place, word) in places.iter().zip(words) {
         chosen.push(
             match whole_number(place, crate::request::NumberField::ChosenWordPosition)? {
@@ -78,17 +85,26 @@ fn wishes_from(chosen_words: &str, places: &[f64], never_use: &str) -> Result<Wo
             },
         );
     }
-    WordWishes::new(&chosen, &entries(never_use)).map_err(js_error)
+    let excluded = entries(never_use).map_err(js_error)?;
+    if excluded.clone().take(MAX_NEVER_USE_WORDS + 1).count() > MAX_NEVER_USE_WORDS {
+        return Err(js_error(WishError::TooManyExcluded));
+    }
+    WordWishes::new(&chosen, &excluded.collect::<Vec<_>>()).map_err(js_error)
 }
 
-/// The entries of `text`, each after a line break: none for an empty text.
-fn entries(text: &str) -> Vec<&str> {
-    text.split('\n').skip(1).collect()
-}
-
-/// The refusal of chosen words that are not UTF-8 text.
-fn not_utf8() -> MhfeError {
-    crate::word_wishes::WishError::Utf8.into()
+/// Read the wire framing and count before allocating the bounded entry list.
+fn entries(text: &str) -> Result<impl Iterator<Item = &str> + Clone, WishError> {
+    let words = if text.is_empty() {
+        None
+    } else {
+        let value = text.strip_prefix('\n').ok_or(WishError::EntryFraming)?;
+        Some(
+            crate::input_text::InputText::read(value)
+                .map_err(WishError::Text)?
+                .text(),
+        )
+    };
+    Ok(words.into_iter().flat_map(|words| words.split('\n')))
 }
 
 #[derive(Serialize)]
@@ -119,7 +135,7 @@ pub fn describe_draw(
     wallet_check: JsValue,
 ) -> Result<String, JsError> {
     let chosen_words = SecretText::new(chosen_words_utf8);
-    let wishes = wishes_from(chosen_words.text(not_utf8())?, &places, never_use)?;
+    let wishes = wishes_from(chosen_words.wish_text()?, &places, never_use)?;
     let check_bits = if yes_or_no(&wallet_check, crate::request::BooleanField::WalletCheck)? {
         WALLET_CHECK_BITS
     } else {
@@ -249,7 +265,7 @@ pub fn draw_phrase(
     wallet_check::WalletCheck::new(passphrase)
         .require_same_passphrase(repeat)
         .map_err(js_error)?;
-    let wishes = wishes_from(chosen_words.text(not_utf8())?, &places, never_use)?;
+    let wishes = wishes_from(chosen_words.wish_text()?, &places, never_use)?;
     let wallet_check = yes_or_no(&wallet_check, crate::request::BooleanField::WalletCheck)?;
     let draw = if wallet_check {
         PhraseDraw::with_check(passphrase)

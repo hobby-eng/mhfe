@@ -310,7 +310,7 @@ def usage_errors_hide_secrets_and_help_keeps_terminal_colours():
     width with examples.
     """
     for arguments, message in (
-        (("encrypt", "--no-such-option"), "Unexpected argument '--no-such-option' found"),
+        (("encrypt", "--no-such-option"), "Unexpected argument"),
         (("serve",), "The following required arguments were not provided: <FILE>"),
         (("check", "--address", "--fingerprint"),
          "The argument '--address' cannot be used with '--fingerprint'"),
@@ -322,11 +322,17 @@ def usage_errors_hide_secrets_and_help_keeps_terminal_colours():
         shown = result.stderr.decode().split("\n")
         assert shown[:2] == ["", ERROR_MARK + message], f"{label}: {shown!r}"
         assert "error:" not in result.stderr.decode(), f"{label}: clap's own error line"
+        assert b"--no-such-option" not in result.stderr, (
+            "A refused option was repeated")
         assert "Usage: mhfe" in result.stderr.decode(), f"{label}: no usage"
         assert all(len(line) <= TEXT_WIDTH for line in shown), f"{label}: a line is too long"
     result = run_plainly(("encrypt", "--no-such-option"), colour=True)
     assert (ERROR_RED + ERROR_MARK.strip()).encode() in result.stderr, (
         f"usage error: not in mhfe's red: {result.stderr!r}")
+    assert b"--no-such-option" not in result.stderr, (
+        "A coloured refusal repeated the supplied option")
+    assert b"what was given is not repeated" in result.stderr, (
+        "A coloured refusal lost its withholding explanation")
     print("usage errors: one red ✗ Error: line, then the usage in grey; exit code 2")
     for flag in ("--help", "--version"):
         result = run_plainly((flag,))

@@ -95,7 +95,7 @@ function check() {
   const codes = new Set([...codeSource.matchAll(/=>\s*"([A-Z0-9_]+)"/gu)].map((match) => match[1]));
   assert.equal(
     codes.size,
-    52,
+    53,
     "the documented stable vocabulary must be read before checking bindings",
   );
   const found = [...new Set(files)].flatMap((path) => {

@@ -29,7 +29,9 @@
 //! the container phrase.
 
 use bip39::{Language, Mnemonic};
+use zeroize::Zeroizing;
 
+use crate::input_text::InputText;
 use crate::memory::LockedText;
 use crate::phrase::{self, WORD_COUNTS};
 mod error;
@@ -96,10 +98,10 @@ impl RepairWordCount {
     pub fn words_of(self, container: &str) -> Result<String, RepairError> {
         let count = self.0;
         let mnemonic = phrase::parse_container(container)?;
-        let data: Vec<u16> = mnemonic
-            .words()
-            .map(|word| phrase::word_number(word).expect("a parsed word is in the list"))
-            .collect();
+        let mut data = Zeroizing::new(Vec::with_capacity(mnemonic.word_count()));
+        for word in mnemonic.words() {
+            data.push(phrase::word_number(word).expect("a parsed word is in the list"));
+        }
         let field = Field::new();
         let parity = field.parity(&data, count);
         check_card(&field, &data, &parity)?;
@@ -115,20 +117,23 @@ impl RepairWordCount {
     /// the card belongs to the container phrase or that the container is the original, which only a
     /// rehearsal against the wallet does (AUD-008-DOC001).
     pub fn repair(written: &str, card: &str) -> Result<Repaired, RepairError> {
-        let (container_words, container_unreadable) = phrase::word_numbers(written);
-        if !WORD_COUNTS.contains(&container_words.len()) {
-            return Err(RepairError::ContainerLength(container_words.len()));
+        InputText::read(written)?;
+        let written_count = written.split_whitespace().count();
+        if !WORD_COUNTS.contains(&written_count) {
+            return Err(RepairError::ContainerLength(written_count));
         }
-        let typed_card = CardWords::read(card);
-        let (card_words, card_unreadable) = phrase::word_numbers(typed_card.words());
-        let count = card_words.len();
+        let typed_card = CardWords::read(card)?;
+        let count = typed_card.count();
         Self::new(count).map_err(RepairError::with_unreadable_hint)?;
-        let received: Vec<u16> = container_words.iter().chain(&card_words).copied().collect();
-        let unreadable: Vec<usize> = container_unreadable
-            .iter()
-            .copied()
-            .chain(card_unreadable.iter().map(|&i| i + container_words.len()))
-            .collect();
+        let (container_words, container_unreadable) = phrase::word_numbers(written)?;
+        let (card_words, card_unreadable) = phrase::word_numbers(typed_card.words())?;
+        let mut received = Zeroizing::new(Vec::with_capacity(container_words.len() + count));
+        received.extend(container_words.iter().chain(card_words.iter()).copied());
+        let mut unreadable = Zeroizing::new(Vec::with_capacity(
+            container_unreadable.len() + card_unreadable.len(),
+        ));
+        unreadable.extend(container_unreadable.iter().copied());
+        unreadable.extend(card_unreadable.iter().map(|&i| i + container_words.len()));
         let field = Field::new();
         let corrected =
             field
@@ -137,7 +142,7 @@ impl RepairWordCount {
                     repair_words: count,
                 })?;
         let (data, parity) = corrected.split_at(container_words.len());
-        let container = phrase::words_of(data);
+        let container = zeroize::Zeroizing::new(phrase::words_of(data));
         // Damage beyond the code's reach can end in another codeword; the BIP39 checksum of the
         // container still catches most of those.
         Mnemonic::parse_in_normalized(Language::English, &container).map_err(|_| {
@@ -145,26 +150,29 @@ impl RepairWordCount {
                 repair_words: count,
             }
         })?;
-        let changed =
-            |on_card: bool, was: &[u16], now: &[u16], unreadable: &[usize]| -> Vec<Change> {
-                (0..was.len())
-                    .filter(|&i| was[i] != now[i] || unreadable.contains(&i))
-                    .map(|i| Change {
-                        on_card,
-                        position: i + 1,
-                        read: (!unreadable.contains(&i)).then(|| phrase::word(was[i]).to_owned()),
-                        word: phrase::word(now[i]).to_owned(),
-                    })
-                    .collect()
-            };
-        let mut changes = changed(false, &container_words, data, &container_unreadable);
-        changes.extend(changed(true, &card_words, parity, &card_unreadable));
-        let positions = |on_card: bool| -> Vec<usize> {
-            changes
-                .iter()
-                .filter(|change| change.on_card == on_card)
-                .map(|change| change.position)
-                .collect()
+        let mut changes = Vec::with_capacity(received.len());
+        let mut changed = |on_card: bool, was: &[u16], now: &[u16], unreadable: &[usize]| {
+            for i in (0..was.len()).filter(|&i| was[i] != now[i] || unreadable.contains(&i)) {
+                changes.push(Change {
+                    on_card,
+                    position: Zeroizing::new(i + 1),
+                    read: (!unreadable.contains(&i))
+                        .then(|| zeroize::Zeroizing::new(phrase::word(was[i]).to_owned())),
+                    word: zeroize::Zeroizing::new(phrase::word(now[i]).to_owned()),
+                });
+            }
+        };
+        changed(false, &container_words, data, &container_unreadable);
+        changed(true, &card_words, parity, &card_unreadable);
+        let positions = |on_card: bool| {
+            let mut positions = Zeroizing::new(Vec::with_capacity(changes.len()));
+            positions.extend(
+                changes
+                    .iter()
+                    .filter(|change| change.on_card == on_card)
+                    .map(Change::position),
+            );
+            positions
         };
         Ok(Repaired {
             container,
@@ -258,9 +266,9 @@ impl Field {
     }
 
     /// The k parity symbols of `data`: the remainder of m(x) * x^k by g(x), highest degree first.
-    fn parity(&self, data: &[u16], k: usize) -> Vec<u16> {
+    fn parity(&self, data: &[u16], k: usize) -> Zeroizing<Vec<u16>> {
         let g = self.generator(k);
-        let mut remainder = vec![0u16; k];
+        let mut remainder = Zeroizing::new(vec![0u16; k]);
         for &symbol in data {
             let feedback = symbol ^ remainder[0];
             for i in 0..k - 1 {
@@ -272,35 +280,41 @@ impl Field {
     }
 
     /// S_j = c(alpha^j) for j from 1 to k; all zero for a codeword.
-    fn syndromes(&self, codeword: &[u16], k: usize) -> Vec<u16> {
-        (1..=k)
-            .map(|power| self.eval(codeword, self.alpha(power)))
-            .collect()
+    fn syndromes(&self, codeword: &[u16], k: usize) -> Zeroizing<Vec<u16>> {
+        let mut syndromes = Zeroizing::new(Vec::with_capacity(k));
+        syndromes.extend((1..=k).map(|power| self.eval(codeword, self.alpha(power))));
+        syndromes
     }
 
     /// Corrects `received` when every damaged symbol is among `positions` and there are at most k
     /// of them (erasure decoding, Forney's formula); `None` when no codeword results.
-    fn correct_at(&self, received: &[u16], positions: &[usize], k: usize) -> Option<Vec<u16>> {
+    fn correct_at(
+        &self,
+        received: &[u16],
+        positions: &[usize],
+        k: usize,
+    ) -> Option<Zeroizing<Vec<u16>>> {
         let n = received.len();
         let syndromes = self.syndromes(received, k);
-        let mut corrected = received.to_vec();
+        let mut corrected = Zeroizing::new(received.to_vec());
         if syndromes.iter().all(|&syndrome| syndrome == 0) {
             return Some(corrected);
         }
         // The locator of a position: alpha to the power of the degree of its term.
-        let locators: Vec<u16> = positions.iter().map(|&i| self.alpha(n - 1 - i)).collect();
+        let mut locators = Zeroizing::new(Vec::with_capacity(positions.len()));
+        locators.extend(positions.iter().map(|&i| self.alpha(n - 1 - i)));
         // Gamma(x) = prod (1 + X_i x), and Omega(x) = S(x) Gamma(x) mod x^k with
         // S(x) = S_1 + S_2 x + ... + S_k x^(k-1); both lowest degree first.
-        let mut gamma = vec![1u16];
-        for &locator in &locators {
-            let mut next = vec![0u16; gamma.len() + 1];
+        let mut gamma = Zeroizing::new(vec![1u16]);
+        for &locator in locators.iter() {
+            let mut next = Zeroizing::new(vec![0u16; gamma.len() + 1]);
             for (i, &coefficient) in gamma.iter().enumerate() {
                 next[i] ^= coefficient;
                 next[i + 1] ^= self.mul(coefficient, locator);
             }
             gamma = next;
         }
-        let mut omega = vec![0u16; k];
+        let mut omega = Zeroizing::new(vec![0u16; k]);
         for (i, &syndrome) in syndromes.iter().enumerate() {
             for (j, &coefficient) in gamma.iter().enumerate() {
                 if i + j < k {
@@ -315,13 +329,15 @@ impl Field {
                 .fold(0, |sum, &coefficient| self.mul(sum, x) ^ coefficient)
         };
         // Gamma'(x): in characteristic 2 only the odd powers survive the derivative.
-        let derivative: Vec<u16> = gamma
-            .iter()
-            .enumerate()
-            .skip(1)
-            .map(|(i, &coefficient)| if i % 2 == 1 { coefficient } else { 0 })
-            .collect();
-        for (&position, &locator) in positions.iter().zip(&locators) {
+        let mut derivative = Zeroizing::new(Vec::with_capacity(gamma.len() - 1));
+        derivative.extend(gamma.iter().enumerate().skip(1).map(|(i, &coefficient)| {
+            if i % 2 == 1 {
+                coefficient
+            } else {
+                0
+            }
+        }));
+        for (&position, &locator) in positions.iter().zip(locators.iter()) {
             let inverse = self.div(1, locator)?;
             let denominator = low_first(&derivative, inverse);
             if denominator == 0 {
@@ -340,18 +356,24 @@ impl Field {
     /// positions with 2e + s <= k, fewest first. The first codeword found is the only one within
     /// that distance, as the code's minimum distance is k + 1. A codeword has at most 32 symbols
     /// and k is at most 8, so trying the sets takes milliseconds.
-    fn repair(&self, received: &[u16], unreadable: &[usize], k: usize) -> Option<Vec<u16>> {
+    fn repair(
+        &self,
+        received: &[u16],
+        unreadable: &[usize],
+        k: usize,
+    ) -> Option<Zeroizing<Vec<u16>>> {
         if unreadable.len() > k {
             return None;
         }
-        let readable: Vec<usize> = (0..received.len())
-            .filter(|position| !unreadable.contains(position))
-            .collect();
+        let mut readable = Zeroizing::new(Vec::with_capacity(received.len()));
+        readable.extend((0..received.len()).filter(|position| !unreadable.contains(position)));
         for wrong in 0..=(k - unreadable.len()) / 2 {
             let mut found = None;
             for_each_subset(&readable, wrong, &mut |chosen| {
                 if found.is_none() {
-                    let positions: Vec<usize> = unreadable.iter().chain(chosen).copied().collect();
+                    let mut positions =
+                        Zeroizing::new(Vec::with_capacity(unreadable.len() + chosen.len()));
+                    positions.extend(unreadable.iter().chain(chosen).copied());
                     found = self.correct_at(received, &positions, k);
                 }
             });
@@ -382,7 +404,13 @@ fn for_each_subset(items: &[usize], size: usize, visit: &mut dyn FnMut(&[usize])
             chosen.pop();
         }
     }
-    walk(items, size, 0, &mut Vec::with_capacity(size), visit);
+    walk(
+        items,
+        size,
+        0,
+        &mut Zeroizing::new(Vec::with_capacity(size)),
+        visit,
+    );
 }
 
 /// Reads a new card back before it is given out: the container phrase and its repair words must
@@ -392,15 +420,20 @@ fn for_each_subset(items: &[usize], size: usize, visit: &mut dyn FnMut(&[usize])
 /// damaged.
 fn check_card(field: &Field, data: &[u16], parity: &[u16]) -> Result<(), RepairError> {
     let count = parity.len();
-    let codeword: Vec<u16> = data.iter().chain(parity).copied().collect();
+    let mut codeword = Zeroizing::new(Vec::with_capacity(data.len() + parity.len()));
+    codeword.extend(data.iter().chain(parity).copied());
     let is_codeword = field
         .syndromes(&codeword, count)
         .iter()
         .all(|&syndrome| syndrome == 0);
-    let unreadable: Vec<usize> = (0..count).collect();
+    let unreadable = Zeroizing::new((0..count).collect::<Vec<_>>());
     let mut erased = codeword.clone();
     unreadable.iter().for_each(|&position| erased[position] = 0);
-    let restores = field.repair(&erased, &unreadable, count).as_deref() == Some(&codeword[..]);
+    let restores = field
+        .repair(&erased, &unreadable, count)
+        .as_ref()
+        .map(|words| words.as_slice())
+        == Some(codeword.as_slice());
     if is_codeword && restores {
         Ok(())
     } else {
@@ -409,17 +442,27 @@ fn check_card(field: &Field, data: &[u16], parity: &[u16]) -> Result<(), RepairE
 }
 
 /// A container repaired with its repair words.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Repaired {
     /// The container, every word in full and in lower case, one space apart.
-    container: String,
+    container: zeroize::Zeroizing<String>,
     /// The positions of the container's words that were repaired, from 1, in order.
-    container_words: Vec<usize>,
+    container_words: Zeroizing<Vec<usize>>,
     /// The positions of the repair words that were wrong or unreadable, from 1, in order.
-    card_words: Vec<usize>,
+    card_words: Zeroizing<Vec<usize>>,
     /// Every repaired word with what was read there, container phrase first: a repair is never
     /// silent.
     changes: Vec<Change>,
+}
+
+impl std::fmt::Debug for Repaired {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Repaired")
+            .field("container_words", &*self.container_words)
+            .field("card_words", &*self.card_words)
+            .field("changes", &self.changes)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Repaired {
@@ -445,16 +488,25 @@ impl Repaired {
 }
 
 /// One repaired word.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Change {
     /// A word of the card rather than of the container phrase.
     on_card: bool,
     /// Its position on the container phrase or the card, from 1.
-    position: usize,
+    position: Zeroizing<usize>,
     /// The word that was read there, or `None` when it could not be read.
-    read: Option<String>,
+    read: Option<zeroize::Zeroizing<String>>,
     /// The word it is now.
-    word: String,
+    word: zeroize::Zeroizing<String>,
+}
+
+impl std::fmt::Debug for Change {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Change")
+            .field("on_card", &self.on_card)
+            .field("position", &*self.position)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Change {
@@ -465,12 +517,12 @@ impl Change {
 
     /// The corrected word's position, counted from one.
     pub fn position(&self) -> usize {
-        self.position
+        *self.position
     }
 
     /// The word read there, or none when it was unreadable.
     pub fn read(&self) -> Option<&str> {
-        self.read.as_deref()
+        self.read.as_deref().map(String::as_str)
     }
 
     /// The corrected word.
@@ -503,22 +555,25 @@ pub enum ContainerReading {
 impl ContainerReading {
     /// Reads `written` as [`RepairWordCount::repair`] reads a container phrase: `?` for a word that cannot be read,
     /// any spacing and letter case, and the first four letters of a word.
-    pub fn read(written: &str) -> Self {
-        let typed: Vec<&str> = written.split_whitespace().collect();
-        if !WORD_COUNTS.contains(&typed.len()) {
-            return Self::WrongLength(typed.len());
+    /// Raw input above [`InputText::MAX_BYTES`] fails before collection; other unsupported counts
+    /// remain the [`Self::WrongLength`] outcome with their exact count.
+    pub fn read(written: &str) -> Result<Self, RepairError> {
+        InputText::read(written)?;
+        let count = written.split_whitespace().count();
+        if !WORD_COUNTS.contains(&count) {
+            return Ok(Self::WrongLength(count));
         }
-        if typed.contains(&UNREADABLE) {
-            let (_, unreadable) = phrase::word_numbers(written);
-            return Self::Marked {
+        if written.split_whitespace().any(|word| word == UNREADABLE) {
+            let (_, unreadable) = phrase::word_numbers(written)?;
+            return Ok(Self::Marked {
                 unreadable: unreadable.iter().map(|position| position + 1).collect(),
-            };
+            });
         }
-        if phrase::parse_container(written).is_ok() {
+        Ok(if phrase::parse_container(written).is_ok() {
             Self::Container
         } else {
             Self::NotAContainer
-        }
+        })
     }
 
     /// Whether repair words may make a container of these words.
@@ -540,11 +595,31 @@ pub struct CardWords {
 }
 
 impl CardWords {
-    /// Reads only the words from a printed or plain card, retaining the original word spelling.
-    pub fn read(written: &str) -> Self {
-        Self {
-            text: card_text(written),
+    /// Reads only the words from a printed or plain card, retaining the original spelling.
+    ///
+    /// Refuses raw UTF-8 input above [`InputText::MAX_BYTES`] or more than the largest supported
+    /// card's token count before copying. Smaller counts are left for the repair operation to judge.
+    pub fn read(written: &str) -> Result<Self, RepairError> {
+        InputText::read(written)?;
+        let count = Self::tokens(written).count();
+        if count > REPAIR_WORD_COUNTS[REPAIR_WORD_COUNTS.len() - 1] {
+            return Err(RepairError::WordCount {
+                count,
+                unreadable_hint: true,
+            });
         }
+        let bytes = Self::tokens(written).map(str::len).sum::<usize>() + count.saturating_sub(1);
+        let text = LockedText::build::<std::convert::Infallible>(bytes, |text| {
+            for token in Self::tokens(written) {
+                if !text.is_empty() {
+                    text.push(' ');
+                }
+                text.push_str(token);
+            }
+            Ok(())
+        })
+        .unwrap_or_else(|never| match never {});
+        Ok(Self { text })
     }
 
     /// The words as typed, without presentation labels.
@@ -556,13 +631,10 @@ impl CardWords {
     pub fn count(&self) -> usize {
         self.text.split_whitespace().count()
     }
-}
 
-/// The words of a card as written: the profile's name and the numbers such as "1/4" before each
-/// word are left out, so that a card can be typed as it is.
-fn card_text(card: &str) -> LockedText {
-    LockedText::build::<std::convert::Infallible>(card.len(), |text| {
-        for token in card.split_whitespace().filter(|token| {
+    /// One borrowed extraction rule for counting, sizing and writing a printed card.
+    fn tokens(card: &str) -> impl Iterator<Item = &str> {
+        card.split_whitespace().filter(|token| {
             let numbered = token.split_once('/').is_some_and(|(left, right)| {
                 !left.is_empty()
                     && !right.is_empty()
@@ -572,20 +644,102 @@ fn card_text(card: &str) -> LockedText {
                         .all(|c| c.is_ascii_digit())
             });
             !numbered && !token.eq_ignore_ascii_case(PROFILE)
-        }) {
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            text.push_str(token);
-        }
-        Ok(())
-    })
-    .unwrap_or_else(|never| match never {})
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::zero_12_container;
+
+    #[test]
+    fn oversized_card_text_is_refused_before_repair() {
+        let card = format!(
+            "{} abacus",
+            "x".repeat(crate::input_text::InputText::MAX_BYTES)
+        );
+        let error = RepairWordCount::repair(crate::test_support::ABANDON_12, &card).unwrap_err();
+        assert_eq!(error.error_code(), crate::ErrorCode::InvalidRequest);
+    }
+
+    #[test]
+    fn repair_readers_keep_exact_counts_and_bound_raw_bytes_before_copying() {
+        let limit = InputText::MAX_BYTES;
+        let too_long = "é".repeat(limit / "é".len()) + "x";
+        for error in [
+            ContainerReading::read(&too_long).unwrap_err(),
+            CardWords::read(&too_long).err().unwrap(),
+            RepairWordCount::repair(&too_long, "abandon about").unwrap_err(),
+        ] {
+            assert_eq!(
+                error,
+                RepairError::Text(crate::input_text::TextSizeError::TooLong { bytes: limit + 1 })
+            );
+        }
+        assert_eq!(
+            ContainerReading::read(&"x".repeat(limit)).unwrap(),
+            ContainerReading::WrongLength(1)
+        );
+        for count in [0, 1, 3, 8] {
+            let text = "abandon ".repeat(count);
+            assert_eq!(CardWords::read(&text).unwrap().count(), count);
+        }
+        for count in [9, 25, 1000] {
+            let text = "? ".repeat(count);
+            assert_eq!(
+                ContainerReading::read(&text).unwrap(),
+                ContainerReading::WrongLength(count)
+            );
+            assert!(
+                matches!(CardWords::read(&text), Err(RepairError::WordCount { count: actual, .. }) if actual == count)
+            );
+        }
+        let printed = " mhfe-repair-1\n1/4\tabandon 2/4 about 3/4\u{2003}? 4/4 XyZ ";
+        let card = CardWords::read(printed).unwrap();
+        assert_eq!(card.words(), "abandon about ? XyZ");
+        assert_eq!(card.count(), 4);
+        let padding = " ".repeat(limit - "abandon about".len());
+        assert_eq!(
+            CardWords::read(&(padding + "abandon about"))
+                .unwrap()
+                .words(),
+            "abandon about"
+        );
+        assert!(phrase::word_numbers(&"abandon ".repeat(25)).is_err());
+        // A huge single token is never lowercased or copied as a selected word.
+        let (numbers, missing) = phrase::word_numbers(&"X".repeat(limit + 1)).unwrap();
+        assert_eq!(&*numbers, &[0]);
+        assert_eq!(&*missing, &[0]);
+    }
+
+    #[test]
+    fn repaired_results_and_their_clones_hide_words_in_debug_text() {
+        let original = crate::test_support::ABANDON_12;
+        let card = RepairWordCount::new(2).unwrap().words_of(original).unwrap();
+        for wrong in ["?", "ability"] {
+            let damaged = original.replacen("abandon", wrong, 1);
+            let repaired = RepairWordCount::repair(&damaged, &card).unwrap();
+            let copy = repaired.clone();
+            assert_eq!(copy, repaired);
+            assert_eq!(copy.container(), original);
+            assert_eq!(copy.changes().len(), 1);
+            assert_eq!(copy.changes()[0].read(), (wrong != "?").then_some(wrong));
+            for item in [&repaired, &copy] {
+                let text = format!("{item:?}");
+                for word in original.split(' ').chain(card.split(' ')) {
+                    assert!(!text.contains(word));
+                }
+                for change in item.changes() {
+                    let text = format!("{change:?}");
+                    assert!(!text.contains(change.word()));
+                    if let Some(read) = change.read() {
+                        assert!(!text.contains(read));
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn a_typed_card_count_has_only_the_profiles_supported_capacities() {
@@ -602,7 +756,6 @@ mod tests {
             ));
         }
     }
-    use crate::test_support::zero_12_container;
 
     #[test]
     fn alpha_generates_the_whole_field() {
@@ -626,9 +779,9 @@ mod tests {
             let card = RepairWordCount::new(count)
                 .and_then(|count| count.words_of(&container))
                 .unwrap();
-            let (words, _) = phrase::word_numbers(&container);
-            let (parity, _) = phrase::word_numbers(&card);
-            let codeword: Vec<u16> = words.iter().chain(&parity).copied().collect();
+            let (words, _) = phrase::word_numbers(&container).unwrap();
+            let (parity, _) = phrase::word_numbers(&card).unwrap();
+            let codeword: Vec<u16> = words.iter().chain(parity.iter()).copied().collect();
             assert!(field.syndromes(&codeword, count).iter().all(|&s| s == 0));
             let repaired = RepairWordCount::repair(&container, &card).unwrap();
             assert_eq!(repaired.container(), container);
@@ -653,7 +806,7 @@ mod tests {
                 for _ in 0..300 {
                     let data: Vec<u16> = (0..words).map(|_| next(FIELD_SIZE) as u16).collect();
                     let parity = field.parity(&data, count);
-                    let codeword: Vec<u16> = data.iter().chain(&parity).copied().collect();
+                    let codeword: Vec<u16> = data.iter().chain(parity.iter()).copied().collect();
                     let unreadable_count = next(count + 1);
                     let wrong_count = next((count - unreadable_count) / 2 + 1);
                     let mut received = codeword.clone();
@@ -675,7 +828,10 @@ mod tests {
                         }
                     }
                     let repaired = field.repair(&received, &unreadable, count);
-                    assert_eq!(repaired.as_deref(), Some(&codeword[..]));
+                    assert_eq!(
+                        repaired.as_ref().map(|words| words.as_slice()),
+                        Some(&codeword[..])
+                    );
                 }
             }
         }
@@ -729,7 +885,7 @@ mod tests {
         let shown: Vec<(bool, usize, Option<&str>, &str)> = repaired
             .changes()
             .iter()
-            .map(|c| (c.on_card, c.position, c.read.as_deref(), c.word.as_str()))
+            .map(|c| (c.on_card(), c.position(), c.read(), c.word()))
             .collect();
         assert_eq!(
             shown,
@@ -759,7 +915,7 @@ mod tests {
     #[test]
     fn a_card_that_does_not_repair_its_container_phrase_is_refused() {
         let field = Field::new();
-        let (data, _) = phrase::word_numbers(&zero_12_container());
+        let (data, _) = phrase::word_numbers(&zero_12_container()).unwrap();
         for count in REPAIR_WORD_COUNTS {
             let mut parity = field.parity(&data, count);
             assert_eq!(check_card(&field, &data, &parity), Ok(()));
@@ -826,7 +982,7 @@ mod tests {
             words.join(" ")
         };
         assert_eq!(
-            ContainerReading::read(&container),
+            ContainerReading::read(&container).unwrap(),
             ContainerReading::Container
         );
         // Capitals, extra spaces and four letters a word, as for any container.
@@ -835,39 +991,39 @@ mod tests {
             .map(|word| word[..word.len().min(4)].to_uppercase())
             .collect();
         assert_eq!(
-            ContainerReading::read(&typed.join("   ")),
+            ContainerReading::read(&typed.join("   ")).unwrap(),
             ContainerReading::Container
         );
         assert_eq!(
-            ContainerReading::read(&with(&[(3, "?"), (17, "?")])),
+            ContainerReading::read(&with(&[(3, "?"), (17, "?")])).unwrap(),
             ContainerReading::Marked {
                 unreadable: vec![3, 17]
             }
         );
         // A word outside the list is unreadable too once the owner has marked another.
         assert_eq!(
-            ContainerReading::read(&with(&[(3, "?"), (9, "towr")])),
+            ContainerReading::read(&with(&[(3, "?"), (9, "towr")])).unwrap(),
             ContainerReading::Marked {
                 unreadable: vec![3, 9]
             }
         );
         for unmarked in [with(&[(9, "towr")]), with(&[(24, "abandon")])] {
             assert_eq!(
-                ContainerReading::read(&unmarked),
+                ContainerReading::read(&unmarked).unwrap(),
                 ContainerReading::NotAContainer
             );
-            assert!(ContainerReading::read(&unmarked).can_be_repaired());
+            assert!(ContainerReading::read(&unmarked).unwrap().can_be_repaired());
             let repaired =
                 RepairWordCount::repair(&unmarked, known_answers::ZERO_12_CARD.1).unwrap();
             assert_eq!(repaired.container(), container);
         }
         let shorter: Vec<&str> = container.split(' ').take(23).collect();
         assert_eq!(
-            ContainerReading::read(&shorter.join(" ")),
+            ContainerReading::read(&shorter.join(" ")).unwrap(),
             ContainerReading::WrongLength(23)
         );
         assert_eq!(
-            ContainerReading::read(&format!("{container} ?")),
+            ContainerReading::read(&format!("{container} ?")).unwrap(),
             ContainerReading::WrongLength(25)
         );
         assert!(!ContainerReading::Container.can_be_repaired());

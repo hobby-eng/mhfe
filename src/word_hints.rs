@@ -42,7 +42,7 @@ pub enum WordList {
 }
 
 /// What a front end shows below a word being typed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Hint {
     /// Nothing: no word is being typed, or the list has it whole and no longer word begins with it.
     Nothing,
@@ -55,12 +55,24 @@ pub enum Hint {
 }
 
 /// What Tab adds to the word being typed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Completion {
     /// The letters every word that begins with the typed ones has next; empty when they differ.
     letters: &'static str,
     /// Whether one word is left, so that the word ends and a space follows.
     word_ends: bool,
+}
+
+impl std::fmt::Debug for Hint {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Hint(hidden)")
+    }
+}
+
+impl std::fmt::Debug for Completion {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Completion(hidden)")
+    }
 }
 
 impl Completion {
@@ -278,6 +290,21 @@ mod tests {
         assert_eq!(completion(WordList::Eff, "zook"), ("eeper", true));
         assert_eq!(completion(WordList::Bip39, "xq"), ("", false));
         assert_eq!(completion(WordList::Bip39, "abandon "), ("", false));
+    }
+
+    #[test]
+    fn diagnostics_hide_selected_words_and_completion_letters() {
+        let hint = WordList::Bip39.hint("artw");
+        assert_eq!(hint, Hint::Words(&["artwork"]));
+        let completion = WordList::Bip39.completion("artw");
+        assert_eq!(completion.letters(), "ork");
+        assert!(completion.word_ends());
+        for list in [WordList::Bip39, WordList::Eff] {
+            for line in ["", "a", "artw", "abou", "zook", "xq"] {
+                assert_eq!(format!("{:?}", list.hint(line)), "Hint(hidden)");
+                assert_eq!(format!("{:?}", list.completion(line)), "Completion(hidden)");
+            }
+        }
     }
 
     #[test]

@@ -132,21 +132,28 @@ impl ContainerFactsCheck {
 
     fn container(case: &ContainerCase) -> Result<(), crate::self_check::FailureDetail> {
         let vector = published(case.vector)?;
+        Self::container_text(case, vector.container)
+    }
+
+    fn container_text(
+        case: &ContainerCase,
+        container: &str,
+    ) -> Result<(), crate::self_check::FailureDetail> {
         // Read as typed from a written container phrase: capitals and the first four letters of
         // each word.
-        let typed: Vec<String> = vector
-            .container
+        let typed: Vec<String> = container
             .split(' ')
-            .map(|word| word[..word.len().min(4)].to_ascii_uppercase())
+            // A damaged table can contain non-ASCII text: leave an incomplete UTF-8 prefix
+            // whole so the normal phrase reader refuses it instead of panicking here.
+            .map(|word| word.get(..4).unwrap_or(word).to_ascii_uppercase())
             .collect();
         let facts = ContainerFacts::read(&typed.join("  ")).map_err(stopped)?;
         expect(
-            facts.words() == vector.container,
+            facts.words() == container,
             crate::self_check::KnownAnswerDifference::IsReadAsOtherWords,
         )?;
         expect(
-            facts.word_count() == vector.container.split(' ').count()
-                && facts.suite() == case.suite,
+            facts.word_count() == container.split(' ').count() && facts.suite() == case.suite,
             crate::self_check::KnownAnswerDifference::GivesAnotherSuite,
         )?;
         expect(
@@ -238,6 +245,17 @@ mod tests {
             ContainerFactsCheck::new().run(Tier::Startup),
             ComponentOutcome::Passed
         );
+    }
+
+    #[test]
+    fn damaged_utf8_words_fail_the_check_without_panicking() {
+        // Byte four is inside the second accented scalar, not a UTF-8 boundary.
+        let damaged = std::iter::repeat_n("aéé", crate::packing::STATE_WORDS)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut findings = Findings::new();
+        findings.one(|| ContainerFactsCheck::container_text(&CONTAINERS[0], &damaged));
+        assert!(matches!(findings.outcome(), ComponentOutcome::Failed(_)));
     }
 
     #[test]

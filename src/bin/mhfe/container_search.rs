@@ -531,7 +531,7 @@ fn use_found(
     let mut places = Zeroizing::new(String::with_capacity(
         found.words().len() * FOUND_WORD_BYTES,
     ));
-    for (index, (position, word)) in found.words().iter().enumerate() {
+    for (index, (position, word)) in found.words().enumerate() {
         if index > 0 {
             places.push_str(", ");
         }
@@ -548,7 +548,6 @@ fn use_found(
     }
     let positions: Vec<String> = found
         .words()
-        .iter()
         .map(|(position, _)| position.to_string())
         .collect();
     let which = match positions.as_slice() {
@@ -572,6 +571,36 @@ fn use_found(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_candidate_indices_are_wiped_when_the_search_drops() {
+        use crate::test_allocator::{index_bytes, unwiped_matching};
+        // The last two words of the published zero-12 container: caution and peace.
+        static NEEDLE: [u8; 4] = index_bytes(&[293, 1294]);
+        let vector: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/suite3-vectors/zero-12.json"
+        ))
+        .unwrap();
+        let container = vector["container"].as_str().unwrap();
+        assert!(container
+            .split_whitespace()
+            .rev()
+            .take(2)
+            .map(|word| bip39::Language::English.find_word(word).unwrap())
+            .eq([1294, 293]));
+        let mut words: Vec<&str> = container.split_whitespace().collect();
+        let end = words.len();
+        for word in &mut words[end - mhfe::search::MAX_MISSING_FOR_DECOY..] {
+            *word = "?";
+        }
+        let damaged = zeroize::Zeroizing::new(words.join(" "));
+        let unwiped = unwiped_matching(&NEEDLE, || {
+            let search = ContainerSearch::new(&damaged).unwrap();
+            assert_eq!(search.count(), 16384);
+            drop(search);
+        });
+        assert_eq!(unwiped, 0);
+    }
 
     #[test]
     fn the_messages_and_questions_fit() {

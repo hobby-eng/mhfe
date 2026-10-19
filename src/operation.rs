@@ -4,10 +4,11 @@
 //! stage and stop the operation between any two rounds.
 
 use crate::engine::Argon2Engine;
-use crate::mhfe::{Mhfe, NewContainer};
+use crate::mhfe::Mhfe;
 use crate::phrase::check_phrase;
 use crate::repair::RepairWordCount;
 use crate::{MhfeError, OriginalFacts, Password, Suite, WorkFactor};
+use zeroize::Zeroizing;
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -265,13 +266,15 @@ impl Encryption {
         let repair_words = self
             .repair_word_count
             .map(|count| count.words_of(container.words()))
-            .transpose()?;
+            .transpose()?
+            .map(Zeroizing::new);
         on_unverified(container.words())?;
         mhfe.check_new_container(&container, password, &mut |round, rounds| {
             progress(Stage::Check, round, rounds)
         })?;
         Ok(Sealed {
-            container,
+            suite: container.suite(),
+            container: container.into_words(),
             original_words,
             other_lengths,
             repair_words,
@@ -281,39 +284,39 @@ impl Encryption {
 
 /// A new container whose check has passed, with its repair words if made.
 pub struct Sealed {
-    container: NewContainer,
+    container: Zeroizing<String>,
+    suite: Suite,
     original_words: usize,
     other_lengths: Vec<usize>,
-    repair_words: Option<String>,
+    repair_words: Option<Zeroizing<String>>,
 }
 
 impl Sealed {
     /// The container's words.
     pub fn container(&self) -> &str {
-        self.container.words()
+        &self.container
     }
 
     /// The suite the container was made with.
     pub fn suite(&self) -> Suite {
-        self.container.suite()
+        self.suite
     }
 
     /// The number of the container's words.
     pub fn container_words(&self) -> usize {
-        self.container.words().split(' ').count()
+        self.container.split(' ').count()
     }
 
     /// The repair words, made only once the check has passed.
     pub fn repair_words(&self) -> Option<&str> {
-        self.repair_words.as_deref()
+        self.repair_words.as_deref().map(String::as_str)
     }
 
     /// Whether a recovery of this container checks the phrase on its own: a 12- to 21-word phrase
     /// in a 24-word container carries a built-in check; a 24-word phrase and a same-length
     /// container do not.
     pub fn built_in_check(&self) -> bool {
-        self.container
-            .suite()
+        self.suite
             .built_in_check_lengths()
             .contains(&self.original_words)
     }

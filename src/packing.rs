@@ -157,7 +157,7 @@ pub(crate) mod tests {
     #[test]
     fn the_state_is_packed_into_locked_memory_and_read_in_place() {
         let state = pack(&entropy(20)).unwrap();
-        assert_eq!(state.is_locked(), cfg!(unix));
+        assert_eq!(state.is_locked(), cfg!(any(unix, windows)));
         let reading = unpack(state_of(&state), 15).unwrap();
         assert_eq!(reading.as_ptr(), state.as_ptr(), "the reading is a copy");
         assert_eq!(reading, entropy(20));

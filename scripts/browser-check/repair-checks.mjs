@@ -33,6 +33,7 @@ export async function checkRepairWords(repair) {
   expectEqual(
     await fromBytes.parameters(),
     {
+      maxInputTextBytes: UTILITY_INPUT_BYTES,
       version: VERSION,
       profile: REPAIR_PROFILE,
       ...REPAIR_PARAMETERS,
@@ -178,6 +179,17 @@ export async function checkRepairLimits(repair, card) {
 
 /** What a container phrase as typed is, before it is used. */
 export async function checkInspectContainer(repair) {
+  const oversized = "é".repeat(UTILITY_INPUT_BYTES / 2) + "x";
+  await expectRejection(
+    repair.inspectContainer({ container: oversized }),
+    "INVALID_REQUEST",
+    "oversized inspection text is refused",
+  );
+  await expectRejection(
+    repair.repairContainer({ container: FULL_SIZE_CONTAINER, card: oversized }),
+    "INVALID_REQUEST",
+    "oversized card text is refused",
+  );
   // What a container phrase as typed is, before it is used: the page asks for the card when it
   // is "marked" and offers it when it is "notAContainer".
   for (const [typed, reading, wordCount, unreadable, description] of [

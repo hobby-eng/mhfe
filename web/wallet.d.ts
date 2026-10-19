@@ -1,4 +1,9 @@
-import type { MhfePackageParts, MhfeSecret, MhfeWordHint } from "../runtime/runtime.js";
+import type {
+  MhfeInputTextParameters,
+  MhfePackageParts,
+  MhfeSecret,
+  MhfeWordHint,
+} from "../runtime/runtime.js";
 import { MhfeModuleClass } from "../runtime/runtime.js";
 export {
   MhfeCancelledError,
@@ -24,7 +29,7 @@ export interface MhfeNewPhrase {
 }
 
 /** The module's fixed values, from parameters(). */
-export interface MhfeWalletParameters {
+export interface MhfeWalletParameters extends MhfeInputTextParameters {
   version: string;
   coins: { id: string; name: string; addressForms: string }[];
   walletCheckBits: number;

@@ -131,7 +131,7 @@ pub(crate) fn run(options: Options) -> Result<i32, Failure> {
         None => !passphrase.is_empty() && ask_for_check()?,
     };
     if checked {
-        let strength = Strength::of(&passphrase);
+        let strength = Strength::of(&passphrase)?;
         let bits = strength.bits();
         eprintln!();
         if strength.is_weak() {

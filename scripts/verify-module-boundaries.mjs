@@ -64,9 +64,9 @@ function useEntries(text) {
 /** Expand grouped imports to paths before classifying error-only references. */
 function usePaths(text, prefix = "") {
   return useEntries(text).flatMap((entry) => {
-    const part = entry.trim().split(/\s+as\s+/u)[0];
+    const part = entry.trim();
     const brace = part.indexOf("{");
-    if (brace === -1) return [prefix + part];
+    if (brace === -1) return [prefix + part.split(/\s+as\s+/u)[0]];
     return usePaths(part.slice(brace + 1, part.lastIndexOf("}")), prefix + part.slice(0, brace));
   });
 }
@@ -78,6 +78,49 @@ function targetOf(path, modules, exports) {
     return null;
   const target = modules.has(names[0]) ? names[0] : exports.get(names[0]);
   return target === undefined || CHECKS.has(target) || target === "error" ? null : target;
+}
+
+/** Explicit internal paths resolved at their file/inline-module scope, not expression blocks. */
+function rootedReferences(file, code) {
+  const references = [];
+  const expressions = code.replace(/\buse\s+([^;]+);/gu, (whole, imports, index) => {
+    for (const path of usePaths(imports)) references.push({ path, index });
+    return whole.replace(/[^\n]/gu, " ");
+  });
+  for (const match of expressions.matchAll(/\b(?:crate|super|self)\s*::\s*\w+(?:\s*::\s*\w+)*/gu))
+    references.push({ path: match[0], index: match.index });
+  references.sort((left, right) => left.index - right.index);
+  const scopes = [...code.matchAll(/\bmod\s+(\w+)\s*\{|[{}]/gu)];
+  const parents = [];
+  let module = file
+    .replace(/^src\//u, "")
+    .replace(/\.rs$/u, "")
+    .split("/");
+  if (module.at(-1) === "mod" || module.at(-1) === "lib") module.pop();
+  let nextScope = 0;
+  return references.map(({ path, index }) => {
+    while (nextScope < scopes.length && scopes[nextScope].index < index) {
+      const token = scopes[nextScope++];
+      if (token[0] === "}") {
+        const parent = parents.pop();
+        if (parent === undefined) throw new Error(`${file}: unbalanced module scope`);
+        module = parent;
+      } else {
+        parents.push(module);
+        if (token[1] !== undefined) module = [...module, token[1]];
+      }
+    }
+    const names = path.split("::").map((name) => name.trim());
+    const explicit = ["crate", "self", "super"].includes(names[0]);
+    // An unprefixed use starts at the crate root/extern prelude; self/super use this module.
+    const root = names[0] === "self" || names[0] === "super" ? [...module] : [];
+    if (names[0] === "crate" || names[0] === "self") names.shift();
+    while (names[0] === "super") {
+      names.shift();
+      if (root.pop() === undefined) throw new Error(`${file}: path above the crate root`);
+    }
+    return { path: [...root, ...names].join("::"), index, explicit };
+  });
 }
 
 /** All edges, with source evidence, rather than only edges already known to be cyclic. */
@@ -103,8 +146,9 @@ function graphOf(files) {
     )
       continue;
     const code = production(source);
-    const add = (path, index) => {
-      if (path.includes("*"))
+    const add = (path, index, explicit) => {
+      const first = path.split("::")[0];
+      if (path.includes("*") && (explicit || modules.has(first) || exports.has(first)))
         throw new Error(`${file}: wildcard crate imports cannot prove a boundary`);
       const target = targetOf(path, modules, exports);
       if (target === null || target === owner) return;
@@ -113,14 +157,9 @@ function graphOf(files) {
       const number = code.slice(0, index).split("\n").length;
       evidence.set(`${owner}->${target}`, `${file}:${number}`);
     };
-    // Remove use statements before scanning expression paths: a grouped EngineError import
-    // does not itself import executable engine operations. Every expanded member is inspected.
-    const expressions = code.replace(/\buse\s+crate::([^;]+);/gu, (whole, imports, index) => {
-      for (const path of usePaths(imports)) add(path, index);
-      return whole.replace(/[^\n]/gu, " ");
-    });
-    for (const match of expressions.matchAll(/\bcrate::(\w+(?:::\w+)*)/gu))
-      add(match[1], match.index);
+    // Imports are expanded before error-only classification; expressions use the same resolver.
+    for (const { path, index, explicit } of rootedReferences(file, code))
+      add(path, index, explicit);
   }
   return { graph, evidence };
 }
@@ -221,7 +260,57 @@ function selfTest() {
     findings(fixture({ "src/repair/known_answers.rs": "crate::engine::run();" })).failed,
     [],
   );
-  assert.throws(() => findings(fixture({ "src/repair.rs": "use crate::*;" })), /wildcard/u);
+  for (const source of [
+    "use crate::*;",
+    "use {crate::*};",
+    "use {super::*};",
+    "mod nested { use {super::super::*}; }",
+  ]) {
+    assert.throws(() => findings(fixture({ "src/repair.rs": source })), /wildcard/u);
+  }
+  assert.throws(
+    () =>
+      findings({
+        "src/lib.rs": "mod repair; mod engine; mod bridge { pub use crate::engine::Engine; }",
+        "src/repair.rs": "use {crate::bridge::*};",
+      }),
+    /wildcard/u,
+  );
+  for (const path of ["crate::engine", "super::engine", "super::Engine"]) {
+    const files = {
+      "src/lib.rs": "mod repair; mod engine; pub use engine::Engine;",
+      "src/repair.rs": `use ${path};`,
+    };
+    assert.equal(findings(files).failed.length, 1, `same root edge through ${path}`);
+  }
+  for (const [file, source, expected] of [
+    ["src/repair.rs", "fn call() { super::engine::run(); }", 1],
+    ["src/repair.rs", "mod nested { use super::super::engine::run; }", 1],
+    ["src/repair/inner.rs", "use super::super::{engine::{EngineError, run}};", 1],
+    ["src/repair/inner.rs", "use super::super::{Engine as CoreEngine};", 1],
+    ["src/repair/inner.rs", "super::super::engine::run();", 1],
+    ["src/repair.rs", "mod nested { super::super::engine::run(); }", 1],
+    ["src/repair.rs", "use self::local; mod local {}", 0],
+    ["src/repair/inner.rs", "use super::local;", 0],
+    ["src/repair.rs", "mod nested { use super::local; }", 0],
+    ["src/repair.rs", "fn independent() { let super_name = 1; }", 0],
+    ["src/repair.rs", "use super::engine::EngineError;", 0],
+    ["src/repair.rs", "use external::prelude::*;", 0],
+    ["src/repair.rs", "use {external::prelude::*, super::engine::Engine};", 1],
+  ]) {
+    assert.equal(
+      findings({
+        "src/lib.rs": "mod repair; mod engine; pub use engine::Engine;",
+        [file]: source,
+      }).failed.length,
+      expected,
+      `relative boundary in ${file}: ${source}`,
+    );
+  }
+  assert.throws(
+    () => findings(fixture({ "src/repair.rs": "use super::super::engine;" })),
+    /above the crate root/u,
+  );
   assert.throws(() => findings({}), /requires src\/lib.rs/u);
   console.log("Module boundary controls passed, including acyclic and transitive violations.");
 }

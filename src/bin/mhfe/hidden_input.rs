@@ -81,8 +81,8 @@ impl Content {
 /// line of `content` as described above, shown as it is typed when `shown` is true, and restores
 /// the terminal, also when reading fails. `None` means that the input was closed. The terminal is
 /// switched before the prompt appears, so that a key typed or text pasted as soon as the prompt
-/// shows is already read as data. On Windows the standard library turns the console's UTF-16
-/// characters into UTF-8 bytes.
+/// shows is already read as data. On Windows StandardInput decodes the console's UTF-16 into
+/// its own wiping UTF-8 scalar buffer, without standard-input read-ahead.
 pub(crate) fn read_line(
     prompt: &str,
     shown: bool,
@@ -356,9 +356,8 @@ impl TerminalKeys {
     fn new(input: StandardInput) -> Self {
         Self {
             input,
-            // Reserved at the size of the longest answer, at least what the reader's buffer holds
-            // (one byte on Unix, the standard library's buffer on Windows), whose contents it
-            // takes whole, so that it is never reallocated and leaves no unwiped copy.
+            // Reserve the longest answer up front: reads from StandardInput extend this wiping
+            // buffer without reallocating the entered key sequence.
             pending: Zeroizing::new(Vec::with_capacity(crate::terminal::LINE_CAPACITY)),
             next: 0,
             ended: false,
@@ -529,29 +528,29 @@ impl<'e, 's> LineEditor<'e, 's> {
                 Err(error) => return Err(error.into()),
             }
             let words = self.content.completes_from();
-            match (byte[0], words) {
+            let changed = match (byte[0], words) {
                 (b'\r' | b'\n', _) => return self.end(),
                 // The first bytes of a character that has not arrived whole go without a trace.
                 (BACKSPACE | DELETE, _) if self.complete < self.line.len() => {
-                    self.line.truncate(self.complete)
+                    self.line.truncate(self.complete);
+                    Ok(())
                 }
-                (BACKSPACE | DELETE, _) => self.remove(1)?,
-                (CTRL_U, _) => self.remove(self.entries.len())?,
-                (CTRL_W, Some(_)) => self.remove(self.last_word())?,
-                (TAB, Some(list)) => self.complete_word(list)?,
+                (BACKSPACE | DELETE, _) => self.remove(1),
+                (CTRL_U, _) => self.remove(self.entries.len()),
+                (CTRL_W, Some(_)) => self.remove(self.last_word()),
+                (TAB, Some(list)) => self.complete_word(list),
                 (CTRL_D, _) if self.line.is_empty() => return Ok(true),
-                (other, _) => {
-                    if let Err(failure) = self.push(other) {
-                        if failure.exit_code() == crate::exit::INVALID_INPUT {
-                            // Finish the refused line before a retry, so its remaining bytes can
-                            // never answer the next prompt. No discarded byte is retained.
-                            self.end()?;
-                            announce(&failure);
-                            discard_line(reader)?;
-                        }
-                        return Err(failure);
-                    }
+                (other, _) => self.push(other),
+            };
+            if let Err(failure) = changed {
+                if failure.exit_code() == crate::exit::INVALID_INPUT {
+                    // Typed bytes and completion share refusal framing: no remainder may
+                    // answer a later prompt. No discarded byte is retained.
+                    self.end()?;
+                    announce(&failure);
+                    discard_line(reader)?;
                 }
+                return Err(failure);
             }
         }
     }
@@ -1105,6 +1104,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn tab_completion_overflow_discards_only_its_refused_line() {
+        let words = Content::Words(WordList::Bip39);
+        for shown in [false, true] {
+            for ending in ["\r", "\n"] {
+                let input = format!(
+                    "{}artw\tignored{ending}next{ending}",
+                    " ".repeat(crate::terminal::ANSWER_BYTES - 4)
+                );
+                let mut reader = io::Cursor::new(input);
+                let (mut controls, mut text) = (Vec::new(), Vec::new());
+                let mut screen = LineScreen::new(&mut controls, &mut text, 2, 80, None);
+                let mut announced = 0;
+                let refused = edit_line_reporting(
+                    &mut reader,
+                    shown.then_some(&mut screen),
+                    words,
+                    &mut |_| announced += 1,
+                )
+                .err()
+                .expect("completion must keep the answer byte limit");
+                assert_eq!(refused.exit_code(), crate::exit::INVALID_INPUT);
+                assert_eq!(
+                    &*edit_line(&mut reader, None, words).unwrap().unwrap(),
+                    "next",
+                    "completion overflow must discard the remainder before retry"
+                );
+                assert_eq!(announced, 1);
+            }
+        }
+        let input = format!("{}artw\t\r", " ".repeat(crate::terminal::ANSWER_BYTES - 8));
+        let accepted = edited_as(input.as_bytes(), words).unwrap();
+        assert_eq!(accepted.len(), crate::terminal::ANSWER_BYTES);
+        assert!(accepted.ends_with("artwork "));
+    }
+
     /// The lock of the buffer goes with the line to the caller (AUD-007-SEC003).
     #[test]
     fn a_line_stays_locked_after_it_is_returned() {
@@ -1116,6 +1151,6 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(&*line, "pass word");
-        assert_eq!(line.is_locked(), cfg!(unix));
+        assert_eq!(line.is_locked(), cfg!(any(unix, windows)));
     }
 }

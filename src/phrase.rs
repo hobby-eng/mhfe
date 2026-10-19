@@ -19,9 +19,11 @@ pub struct Phrase {
 }
 
 impl Phrase {
-    /// Reads full words or unique prefixes of at least four letters, ignoring case and spacing.
+    /// Reads full words or unique prefixes of at least four letters, ignoring case and spacing
+    /// within [`crate::input_text::InputText::MAX_BYTES`] raw UTF-8 bytes.
     ///
-    /// Invalid length, words or checksum return [`PhraseError::Original`].
+    /// Oversized text returns [`PhraseError::Text`] before scanning or copying. Invalid length,
+    /// words or checksum return [`PhraseError::Original`].
     pub fn read(input: &str) -> Result<Self, PhraseError> {
         parse(input).map(Self::of)
     }
@@ -86,10 +88,12 @@ pub(crate) const LONGEST_WORD: usize = 8;
 /// Shortest typed prefix that is expanded: the English list is unique in its first four letters.
 const PREFIX_LETTERS: usize = 4;
 
-/// Parses an English BIP39 phrase. Any spacing and letter case is accepted, and so are the
+/// Parses an English BIP39 phrase within the raw input byte limit. Any spacing and letter case
+/// within that limit is accepted, and so are the
 /// first four or more letters of a word, because many metal backups keep only four letters.
 /// The checksum must be valid. Error messages give word positions, never the words.
 pub(crate) fn parse(input: &str) -> Result<Mnemonic, PhraseError> {
+    crate::input_text::InputText::read(input)?;
     let word_count = input.split_whitespace().count();
     if !WORD_COUNTS.contains(&word_count) {
         return Err(PhraseError::Original(PhraseIssue::WordCount(word_count)));
@@ -229,10 +233,15 @@ pub(crate) fn typed_word(typed: &str) -> Option<&'static str> {
 
 /// The word numbers of `text` as typed, each word completed from four letters in any case, and the
 /// positions, from 0, that are unreadable: `?` or not a word of the list. An unreadable word stands
-/// as 0 until it is repaired or found.
-pub(crate) fn word_numbers(text: &str) -> (Vec<u16>, Vec<usize>) {
-    let mut numbers = Vec::new();
-    let mut unreadable = Vec::new();
+/// as 0 until it is repaired or found. More than [`STATE_WORDS`] tokens fail before allocation;
+/// both returned exact-capacity owners wipe their numbers and positions on drop.
+pub(crate) fn word_numbers(text: &str) -> Result<IndexedWords, PhraseError> {
+    let count = text.split_whitespace().count();
+    if count > STATE_WORDS {
+        return Err(PhraseError::Container(PhraseIssue::WordCount(count)));
+    }
+    let mut numbers = Zeroizing::new(Vec::with_capacity(count));
+    let mut unreadable = Zeroizing::new(Vec::with_capacity(count));
     for (position, typed) in text.split_whitespace().enumerate() {
         match typed_word(typed).and_then(word_number) {
             Some(number) => numbers.push(number),
@@ -242,8 +251,11 @@ pub(crate) fn word_numbers(text: &str) -> (Vec<u16>, Vec<usize>) {
             }
         }
     }
-    (numbers, unreadable)
+    Ok((numbers, unreadable))
 }
+
+/// Wiping word numbers and their unreadable positions, both allocated at the validated token count.
+type IndexedWords = (Zeroizing<Vec<u16>>, Zeroizing<Vec<usize>>);
 
 /// The number of a word of the English list.
 pub(crate) fn word_number(word: &str) -> Option<u16> {
@@ -280,11 +292,14 @@ pub(crate) fn write_bits(bits: &mut [u8], start: usize, count: usize, value: u16
 
 /// The words of `numbers`, one space apart.
 pub(crate) fn words_of(numbers: &[u16]) -> String {
-    numbers
-        .iter()
-        .map(|&number| word(number))
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut text = String::with_capacity(numbers.len() * (LONGEST_WORD + 1));
+    for &number in numbers {
+        if !text.is_empty() {
+            text.push(' ');
+        }
+        text.push_str(word(number));
+    }
+    text
 }
 
 #[cfg(test)]
@@ -300,6 +315,68 @@ mod tests {
         let phrase = Phrase::read(typed).unwrap();
         assert_eq!(phrase.words(), ZERO_12);
         assert_eq!(phrase.word_count(), 12);
+    }
+
+    #[test]
+    fn phrase_readers_bound_raw_utf8_before_ignoring_whitespace() {
+        let maximum = crate::input_text::InputText::MAX_BYTES;
+        for size in [maximum - 1, maximum, maximum + 1] {
+            for whitespace in [" ", "\u{2003}"] {
+                let extra = size - ZERO_12.len();
+                let padding = format!(
+                    "{}{}",
+                    whitespace.repeat(extra / whitespace.len()),
+                    " ".repeat(extra % whitespace.len())
+                );
+                for text in [
+                    format!("{padding}{ZERO_12}"),
+                    ZERO_12.replacen(' ', &format!(" {padding}"), 1),
+                ] {
+                    assert_eq!(text.len(), size);
+                    let results = [
+                        Phrase::read(&text)
+                            .map(|facts| facts.words() == ZERO_12)
+                            .map_err(|error| error.error_code()),
+                        crate::OriginalFacts::read(&text)
+                            .map(|facts| facts.words() == ZERO_12)
+                            .map_err(|error| error.error_code()),
+                        crate::ContainerFacts::read(&text)
+                            .map(|facts| facts.words() == ZERO_12)
+                            .map_err(|error| error.error_code()),
+                    ];
+                    for result in results {
+                        assert_eq!(
+                            result,
+                            if size <= maximum {
+                                Ok(true)
+                            } else {
+                                Err(crate::ErrorCode::InvalidRequest)
+                            }
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn raw_size_refusals_preserve_the_typed_cause_without_repeating_input() {
+        let marker = "synthetic-private-marker";
+        let text = format!(
+            "{marker}{}",
+            " ".repeat(crate::input_text::InputText::MAX_BYTES)
+        );
+        let size = crate::input_text::TextSizeError::TooLong { bytes: text.len() };
+        let error = Phrase::read(&text).unwrap_err();
+        assert_eq!(error, PhraseError::Text(size));
+        assert_eq!(error.as_container(), error);
+        assert_eq!(error.to_string(), size.to_string());
+        assert_eq!(
+            std::error::Error::source(&error).unwrap().to_string(),
+            size.to_string()
+        );
+        assert!(!error.to_string().contains(marker));
+        assert!(!format!("{error:?}").contains(marker));
     }
 
     #[test]
@@ -346,13 +423,28 @@ mod tests {
     }
 
     #[test]
-    fn an_overlong_word_is_refused_at_its_position_without_echoing_it() {
-        for length in [LONGEST_WORD + 1, 100_000] {
+    fn an_overlong_word_is_refused_without_echoing_it() {
+        let maximum = crate::input_text::InputText::MAX_BYTES;
+        for length in [
+            LONGEST_WORD + 1,
+            maximum - ZERO_12.len() + "about".len(),
+            100_000,
+        ] {
             let token = "X".repeat(length);
             let input = ZERO_12.replacen("about", &token, 1);
             let error = Phrase::read(&input).unwrap_err();
-            assert_eq!(error, PhraseError::Original(PhraseIssue::UnknownWord(12)));
-            assert_eq!(error.code(), "INVALID_PHRASE");
+            if input.len() > maximum {
+                assert_eq!(
+                    error,
+                    PhraseError::Text(crate::input_text::TextSizeError::TooLong {
+                        bytes: input.len()
+                    })
+                );
+                assert_eq!(error.code(), "INVALID_REQUEST");
+            } else {
+                assert_eq!(error, PhraseError::Original(PhraseIssue::UnknownWord(12)));
+                assert_eq!(error.code(), "INVALID_PHRASE");
+            }
             assert!(!error.to_string().contains(&token));
         }
     }
@@ -389,7 +481,7 @@ mod tests {
         let locked = locked_phrase_from_entropy(&[0x7f; 32]).unwrap();
         assert_eq!(&*locked, &*new);
         assert_eq!(locked.capacity(), new.len());
-        assert_eq!(locked.is_locked(), cfg!(unix));
+        assert_eq!(locked.is_locked(), cfg!(any(unix, windows)));
     }
 
     #[test]

@@ -26,6 +26,7 @@ use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
 mod reencryption;
+pub(crate) use reencryption::RekeyOrigin;
 
 pub use reencryption::{Confirmation, RecoveredForRekey};
 
@@ -79,7 +80,7 @@ impl CheckEvidence {
 
     /// The original seed phrase's own checks that passed, in the order a front end lists them:
     /// the built-in check of the verified reading or those of the several lengths that pass, then
-    /// the 16-bit check, only where it passes, as a phrase drawn without it fails it.
+    /// the 16-bit check, only where it passes. A phrase drawn without it can pass by chance.
     pub fn own_checks_passed(&self) -> Vec<PassedCheck> {
         let mut passed = Vec::new();
         match (self.built_in_check, &self.matching_lengths[..]) {
@@ -167,15 +168,17 @@ pub struct CheckEvidence {
     /// container, which has no built-in check.
     built_in_check: Option<usize>,
     /// Every 12- to 21-word length whose built-in check passes, in ascending order: one for a
-    /// short original, none for a 24-word one or a wrong password, and several only by chance,
-    /// about once in 2^32. Empty for a same-length container.
+    /// short original's own length is included, and other lengths can pass by chance, including
+    /// a shorter reading of a 24-word original or a wrong-password state. Empty for a same-length
+    /// container.
     matching_lengths: Vec<usize>,
     /// Whether the 24-word reading passes the phrase + passphrase check of `mhfe new` (the 16-bit
     /// wallet check) with the reference's passphrase, or the empty one where it has none, where
     /// that reading comes out: no short length's check passes, several do, or the reference
     /// matched the 24-word reading. `None` for the built-in check, for a same-length container,
     /// and when exactly one short length passes and the reference did not match the 24-word
-    /// reading. A phrase drawn without that check fails it, so that only a pass says anything.
+    /// reading. A phrase drawn without that check can pass by chance; a failure matters only
+    /// when the owner knows it was drawn with the check.
     wallet_check: Option<bool>,
 }
 
@@ -722,7 +725,7 @@ mod tests {
 
     /// A check tells beside its reference the original seed phrase's own checks: the built-in
     /// check of a 12-word original, and for a 24-word one the 16-bit wallet check with the
-    /// reference's passphrase or none, which a phrase drawn without it fails.
+    /// reference's passphrase or none. This fixture fails; another unchecked phrase can pass by chance.
     #[test]
     fn a_check_lists_the_checks_of_the_phrase_itself() {
         let mut mhfe = reduced();
@@ -744,7 +747,7 @@ mod tests {
         assert!(evidence.outcome.matches());
         // A 12-word phrase: the 24-word reading does not come out, so it is not checked.
         assert_eq!(evidence.wallet_check, None);
-        // A 24-word phrase drawn without the check fails it, with no passphrase as with one.
+        // This unchecked public fixture fails with either passphrase; other phrases can pass by chance.
         let phrase = crate::phrase::phrase_from_entropy(&[7u8; 32]).unwrap();
         let container = container_of(&mut mhfe, &phrase, Suite::TwentyFourWords);
         let reference = Reference::Fingerprint {

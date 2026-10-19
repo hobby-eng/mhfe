@@ -267,11 +267,13 @@ impl Argon2Answers for NativeArgon2 {
         let largest = self.sizes[1].cost.memory_bytes();
         let mut work_area = match WorkArea::allocate(largest) {
             Ok(work_area) => work_area,
-            Err(_) => {
-                return ComponentOutcome::NotAvailable(format!(
-                    "the computer could not reserve {} MiB",
-                    self.sizes[1].mebibytes()
-                ))
+            Err(error) => {
+                return self.sizes[1].could_not_run(
+                    error,
+                    Some(super::ArgonCore::native(
+                        super::native::processor_has_ssse3(),
+                    )),
+                )
             }
         };
         let mut runs = Vec::new();
@@ -388,6 +390,19 @@ impl Argon2Answers for PageArgon2<'_> {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn protection_failure_is_failed_even_when_memory_refusal_is_unavailable() {
+        let core = Some(super::super::ArgonCore::native(false));
+        let allocation = SMALL.could_not_run(EngineError::MemoryAllocation { bytes: 1 }, core);
+        assert!(matches!(allocation, ComponentOutcome::NotAvailable(_)));
+        let protection = SMALL.could_not_run(EngineError::MemoryProtection, core);
+        assert!(protection.is_failure());
+        assert!(protection
+            .detail()
+            .unwrap()
+            .contains("MEMORY_PROTECTION_FAILED"));
+    }
 
     #[test]
     fn the_engine_passes_its_known_answers() {

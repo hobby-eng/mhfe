@@ -553,26 +553,32 @@ const CELL_WIDTH: usize = 3 + 2 + 8;
 const CELL_GAP: usize = 3;
 /// Characters inside the frame: four cells, three gaps and one space on either side.
 const INNER_WIDTH: usize = WORDS_PER_ROW * CELL_WIDTH + (WORDS_PER_ROW - 1) * CELL_GAP + 2;
+/// A complete four-word row with BIP39 words, numbering, borders and ANSI style escapes fits here.
+pub(crate) const WORD_ROW_BYTES: usize = 512;
 
 /// A phrase in a frame, numbered, four words to a row, the numbers grey and the words bold.
 ///
 /// The lines are wiped when dropped, because the words may be secret.
 pub(crate) fn boxed_words(phrase: &str) -> Vec<Zeroizing<String>> {
     let border = "─".repeat(INNER_WIDTH);
-    let mut lines = vec![Zeroizing::new(paint(MUTED, format!("┌{border}┐")))];
-    let words: Vec<&str> = phrase.split(' ').collect();
-    for (row, chunk) in words.chunks(WORDS_PER_ROW).enumerate() {
+    let word_count = phrase.split(' ').count();
+    let mut lines = Vec::with_capacity(word_count.div_ceil(WORDS_PER_ROW) + 2);
+    lines.push(Zeroizing::new(paint(MUTED, format!("┌{border}┐"))));
+    let mut words = phrase.split(' ').peekable();
+    let mut shown = 0;
+    while words.peek().is_some() {
         // Reserved generously so that writing never reallocates and leaves a copy behind.
-        let mut line = Zeroizing::new(String::with_capacity(512));
+        let mut line = Zeroizing::new(String::with_capacity(WORD_ROW_BYTES));
         let mut visible = 1;
         line.push_str(&paint(MUTED, "│"));
         line.push(' ');
-        for (column, word) in chunk.iter().enumerate() {
+        for (column, word) in words.by_ref().take(WORDS_PER_ROW).enumerate() {
             if column > 0 {
                 line.push_str(&" ".repeat(CELL_GAP));
                 visible += CELL_GAP;
             }
-            let number = row * WORDS_PER_ROW + column + 1;
+            shown += 1;
+            let number = shown;
             // Writing into a String cannot fail.
             let _ = write!(
                 line,

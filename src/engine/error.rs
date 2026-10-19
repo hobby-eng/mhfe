@@ -71,6 +71,8 @@ pub enum EngineError {
         /// The memory asked for, in bytes.
         bytes: u64,
     },
+    /// Linux could not apply or confirm dump exclusion for every page of the work area.
+    MemoryProtection,
     /// The reference implementation or its browser bridge failed.
     Argon2(Argon2Failure),
     /// The input length cannot be passed to the C interface.
@@ -86,6 +88,7 @@ impl EngineError {
         match self {
             Self::NotEnoughMemory { .. } => ErrorCode::NotEnoughMemory,
             Self::MemoryAllocation { .. } => ErrorCode::MemoryAllocationFailed,
+            Self::MemoryProtection => ErrorCode::MemoryProtectionFailed,
             Self::Argon2(_) => ErrorCode::Argon2Failed,
             Self::InputTooLong | Self::NoPublishedRound => ErrorCode::InternalError,
             Self::Settings(error) => error.error_code(),
@@ -118,6 +121,9 @@ impl fmt::Display for EngineError {
                 f,
                 "the computer could not reserve {} of memory for Argon2",
                 crate::text::memory_text(*bytes)
+            ),
+            Self::MemoryProtection => f.write_str(
+                "the operating system could not confirm exclusion of the Argon2 work area from core dumps",
             ),
             Self::Argon2(error) => write!(f, "Argon2 failed: {error}"),
             Self::InputTooLong => f.write_str("internal error: an Argon2 input exceeds 4 GiB"),

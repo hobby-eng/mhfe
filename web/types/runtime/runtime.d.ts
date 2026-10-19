@@ -16,6 +16,8 @@ import { MhfeModuleClass as ScriptModuleClass } from "#runtime-script";
 export {
   BUILD_ID,
   CompiledModule,
+  InputTextBoundary,
+  requireInputText,
   MhfeCancelledError,
   MhfeError,
   PackageCheck,

@@ -107,14 +107,19 @@ impl PasswordRecipe {
 
     /// The strength in bits of the recipe's independent random draws.
     pub fn bits(&self) -> f64 {
-        Millibits::new(self.millibits()).bits()
+        self.strength().bits()
     }
 
     /// The strength in thousandths of a bit; the check word adds none.
-    pub fn millibits(&self) -> usize {
+    pub fn millibits(&self) -> u128 {
+        self.strength().get()
+    }
+
+    /// The recipe owns the draw count and alphabet; presentation uses the resulting value.
+    fn strength(&self) -> Millibits {
         match self.kind {
-            Kind::Characters(count) => Millibits::characters(count).get(),
-            _ => Millibits::words(self.drawn_words()).get(),
+            Kind::Characters(count) => Millibits::characters(count),
+            _ => Millibits::words(self.drawn_words()),
         }
     }
 
@@ -127,7 +132,7 @@ impl PasswordRecipe {
             Kind::CheckWord => format!("{DRAWN_WORDS} words from the EFF list and a check word"),
             Kind::Characters(count) => format!("{count} random characters"),
         };
-        format!("{made}, about {} bits", Millibits::new(self.millibits()))
+        format!("{made}, about {} bits", self.strength())
     }
 
     /// Whether the password is shorter than recommended.
@@ -158,18 +163,23 @@ impl PasswordRecipe {
         if self.is_characters() {
             return Err(NewPasswordError::CharactersFromDice);
         }
-        let groups: Vec<&str> = rolls.split_whitespace().collect();
+        crate::input_text::InputText::read(rolls)?;
+        let count = rolls.split_whitespace().count();
         // A count of groups that is not the recipe's is said as such, apart from the digits of a
         // word (AUD-024-API015).
-        if groups.len() != self.drawn_words() {
+        if count != self.drawn_words() {
             return Err(NewPasswordError::DiceGroups {
-                actual: groups.len(),
+                actual: count,
                 expected: self.drawn_words(),
                 check_word: self.has_check_word(),
             });
         }
+        let mut groups = rolls.split_whitespace();
         self.make_from_indexes(&mut |number| {
-            EffList::word_index_of_rolls(number, groups[number - 1]).map_err(Into::into)
+            let group = groups
+                .next()
+                .ok_or(NewPasswordError::WordIndexOutsideList)?;
+            EffList::word_index_of_rolls(number, group).map_err(Into::into)
         })
     }
 
@@ -198,7 +208,7 @@ impl PasswordRecipe {
                 if number > 1 {
                     text.push(' ');
                 }
-                text.push_str(list.word(index));
+                text.push_str(list.word(index)?);
                 if let Some(slot) = drawn.get_mut(number - 1) {
                     *slot = index;
                 }
@@ -207,13 +217,13 @@ impl PasswordRecipe {
                 text.push(' ');
                 let index = PasswordReview::check_index(&drawn)
                     .map_err(|_| NewPasswordError::WordIndexOutsideList)?;
-                text.push_str(list.word(index));
+                text.push_str(list.word(index)?);
             }
             Ok(())
         })?;
         // The six words are read back as a person's program will read them: a fault between the
         // drawing and the writing would otherwise give a password whose check word does not fit.
-        if self.has_check_word() && PasswordReview::of(&text).reading() != Reading::Fits {
+        if self.has_check_word() && PasswordReview::of(&text)?.reading() != Reading::Fits {
             return Err(NewPasswordError::CheckWordMismatch);
         }
         Ok(NewPassword {
@@ -318,6 +328,7 @@ mod tests {
         assert_eq!(
             words[5],
             list.word(PasswordReview::check_index(&[0, 1, 2, 3, 4]).unwrap())
+                .unwrap()
         );
     }
 
@@ -357,6 +368,48 @@ mod tests {
             .unwrap()
             .make_from_rolls("11111")
             .is_err());
+    }
+
+    #[test]
+    fn dice_text_is_bounded_before_group_collection_without_changing_recipe_precedence() {
+        let limit = crate::input_text::InputText::MAX_BYTES;
+        let oversized = "1".repeat(limit + 1);
+        assert!(
+            matches!(PasswordRecipe::words(1).unwrap().make_from_rolls(&oversized),
+            Err(NewPasswordError::Text(crate::input_text::TextSizeError::TooLong { bytes })) if bytes == limit + 1)
+        );
+        assert!(matches!(
+            PasswordRecipe::characters(8)
+                .unwrap()
+                .make_from_rolls(&oversized),
+            Err(NewPasswordError::CharactersFromDice)
+        ));
+        let rolls = " ".repeat(limit - "11111".len()) + "11111";
+        assert_eq!(
+            PasswordRecipe::words(1)
+                .unwrap()
+                .make_from_rolls(&rolls)
+                .unwrap()
+                .text(),
+            "abacus"
+        );
+        let groups = "1 ".repeat(1000);
+        assert!(matches!(
+            PasswordRecipe::words(2).unwrap().make_from_rolls(&groups),
+            Err(NewPasswordError::DiceGroups {
+                actual: 1000,
+                expected: 2,
+                ..
+            })
+        ));
+        assert!(matches!(
+            PasswordRecipe::words(1)
+                .unwrap()
+                .make_from_rolls(&"1".repeat(limit)),
+            Err(NewPasswordError::Eff(
+                crate::eff::EffError::InvalidDiceRolls(1)
+            ))
+        ));
     }
 
     #[test]

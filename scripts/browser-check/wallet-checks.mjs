@@ -5,6 +5,7 @@
 export async function checkWallet(wallet) {
   group("MhfeWallet");
   await checkWalletParameters(wallet);
+  await checkUtilityAdmission(wallet);
   await checkWalletFingerprints(wallet);
   await checkDescribeAddress(wallet);
   await checkDrawWishes(wallet);
@@ -19,6 +20,30 @@ export async function checkWallet(wallet) {
   await checkFailingDrawReport(wallet, checkedDraw);
   await checkCheckedDraws(wallet, checkedDraw, stoppedDrawing);
   await checkDrawAfterStop(wallet);
+}
+
+/** Actual browser workers preserve bounded hints and refuse excessive individual wish text. */
+export async function checkUtilityAdmission(wallet) {
+  const atLimit = " ".repeat(UTILITY_INPUT_BYTES - 4) + "artw";
+  for (const typed of [atLimit, encode(atLimit)]) {
+    expect(
+      (await wallet.wordHints({ typed })).words.includes("artwork"),
+      "bounded BIP39 hints preserve text and byte input",
+    );
+  }
+  for (const typed of [atLimit + " ", encode(atLimit + " ")]) {
+    await expectRejection(wallet.wordHints({ typed }), "INVALID_REQUEST", "bounded hint bytes");
+  }
+  for (const options of [
+    { chosen: [{ word: " ".repeat(UTILITY_INPUT_BYTES) + "happy", position: 1 }] },
+    { neverUse: [" ".repeat(UTILITY_INPUT_BYTES) + "abandon"] },
+  ]) {
+    const { workersStarted } = await countingWorkers(async () => {
+      await expectRejection(wallet.describeDraw(options), "INVALID_REQUEST", "wish byte limit");
+      await expectRejection(wallet.drawPhrase(options), "INVALID_REQUEST", "draw wish byte limit");
+    });
+    expect(workersStarted === 0, "oversized individual wishes start no operation worker");
+  }
 }
 
 /** Counts the workers a drawing really starts, through the page's Worker constructor. */
@@ -49,6 +74,7 @@ export async function checkWalletParameters(wallet) {
   expectEqual(
     await wallet.parameters(),
     {
+      maxInputTextBytes: UTILITY_INPUT_BYTES,
       version: VERSION,
       coins: [
         coin("bitcoin", "Bitcoin", "1…, 3…, bc1q… or bc1p…"),
@@ -249,6 +275,34 @@ export async function checkDrawWishes(wallet) {
 
 /** A passphrase's refusals, no workers, and one worker for a drawing without the wallet check. */
 export async function checkDrawRefusals(wallet) {
+  const limits = await wallet.parameters();
+  let reads = 0;
+  const { workersStarted } = await countingWorkers(async () => {
+    await expectTypeError(
+      wallet.drawPhrase(false),
+      "drawPhrase() options must be an object.",
+      "a non-object configuration cannot silently draw an unchecked phrase",
+    );
+    for (const [field, maximum] of [
+      ["chosen", limits.maxChosenWords],
+      ["neverUse", limits.maxNeverUseWords],
+    ]) {
+      const oversized = Array(maximum + 1);
+      Object.defineProperty(oversized, 0, {
+        get() {
+          reads += 1;
+          throw new Error("An oversized wish entry was read");
+        },
+      });
+      await expectRefusal(
+        wallet.drawPhrase({ [field]: oversized }),
+        "INVALID_WORD_WISH",
+        WISH_COUNT_REFUSALS[field],
+        `${field} is refused by count before entries or workers`,
+      );
+    }
+  });
+  expect(reads === 0 && workersStarted === 0, "oversized wishes start no worker or entry access");
   await expectTypeError(
     wallet.drawPhrase({ passphrase: "TREZOR", passphraseRepeat: "TREZOR" }),
     "walletCheck must be true or false when a passphrase is given.",

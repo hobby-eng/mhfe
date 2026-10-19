@@ -1,3 +1,5 @@
+<!-- long: One stable API/migration reference for native, raw WASM and browser contracts. -->
+
 # MHFE implementation API
 
 This describes the Rust library and the browser package of suite `MHFE-BIP39-256-EXPERIMENTAL-3`,
@@ -32,7 +34,12 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `memory_kib()`, `passes()`, `estimated_seconds()`.
 - `Mhfe::new`, in native builds only, refuses a memory level the computer cannot provide
   (`engine::EngineError::NotEnoughMemory`) and reserves the work area once (`MEMORY_ALLOCATION_FAILED` when
-  the system refuses it); every round of every operation reuses it. A native build is always 64-bit
+  the system refuses it); every round of every operation reuses it. Linux requires readable
+  `/proc/self/smaps` metadata and confirmed `MADV_DONTDUMP` coverage for the complete page-aligned
+  allocation before use; a refused request or unavailable/partial readback gives
+  `EngineError::MemoryProtection` (`MEMORY_PROTECTION_FAILED`). Startup and full native Argon2
+  checks report this as failed, rather than an unavailable memory size. Other native targets
+  retain their existing process-level protections. A native build is always 64-bit
   and supports every level (`engine::HIGHEST_MEMORY_LEVEL` is `MAX_MEMORY_LEVEL`). The browser
   build has no `Mhfe::new`: its engine, `engine::browser::BrowserEngine::new`, refuses a level above
   `engine::browser::HIGHEST_BROWSER_MEMORY_LEVEL` (0) with `SettingsError::MemoryLevelNotSupportedHere`.
@@ -46,7 +53,13 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   as NUL, TAB or a line break), U+2028 or U+2029, any code point that Unicode 17.0.0 does not
   assign, an empty result and more than 1024 bytes after normalization. Private Use characters are
   allowed. `Password::from_utf8` does the same for bytes.
-- `encrypt` accepts an English phrase of 12 to 24 words in any letter case and spacing, and four or
+- All original/container BIP39 readers, including `Phrase::read`, `OriginalFacts::read` and
+  `ContainerFacts::read`, refuse more than `input_text::InputText::MAX_BYTES` (8,192) raw UTF-8
+  bytes with `INVALID_REQUEST` before scanning or copying; whitespace counts toward that bound.
+  `PhraseError::Text(TextSizeError)` preserves the shared cause through `Display`, `source()` and
+  wrapped errors. Rust callers matching `PhraseError` exhaustively must handle this new variant.
+  The cipher password's normalized-byte limit and BIP39 passphrase's raw-byte limit are independent.
+- `encrypt` accepts an English phrase of 12 to 24 words within that raw bound, in any letter case and spacing, and four or
   more leading letters per word. It refuses the practically impossible case that the container
   equals the original seed phrase (`CipherError::FixedPoint`). Before it returns the container it
   decrypts its words again and compares the result with the original seed phrase, so it runs 24
@@ -117,7 +130,12 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   a length that has none in any container (`INVALID_WORD_COUNT`): only a 12- to 21-word original
   seed phrase carries one. The crate root also exports `SUITE_ID`, `SAME_LENGTH_SUITE_ID`, `ROUNDS`
   (12), `ENCRYPTION_ROUNDS` (24), `MAX_PIM` (1023), `MAX_MEMORY_LEVEL` (21), `MAX_PASSWORD_BYTES`
-  (1024) and the callback type `ProgressCallback`. `WorkFactor::memory_text()` writes its memory
+  (1024) and the callback type `ProgressCallback`. `Bip39Passphrase::read(text)` checks a raw
+  BIP39 passphrase before normalization or work, borrowing its bytes without copying. It accepts
+  an empty passphrase and returns `PassphraseError::TooLong` (`PASSPHRASE_TOO_LONG`) above the
+  BIP39 byte limit; `text()` borrows the accepted value and `Debug` hides it. Requiring a nonempty
+  passphrase remains the wallet-check policy.
+  `WorkFactor::memory_text()` writes its memory
   size as a front end shows it, such as "2 GiB"; `GroupedCount::new(count)` formats an integer with
   grouped digits through `Display`.
 - `recover_confirmed(container, password, words, confirmation, on_progress)` recovers a phrase to
@@ -151,10 +169,11 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `password` opens on a 24-word container, read as 24 words, unverified (a hidden wallet behind an
   honest disclosure). A password whose reading passes the built-in check of a 12- to 21-word phrase,
   or the wallet check with the main wallet's `passphrase` or without a passphrase, is refused
-  (`HIDDEN_WALLET_PASSES_CHECK`). Running the published vectors at full cost on the computer, as
+  (`HIDDEN_WALLET_PASSES_CHECK`). An excessive passphrase is refused before recovery, even when
+  a short reading would pass its built-in check. Running the published vectors at full cost on the computer, as
   `mhfe self-test --vectors` and the browser package's `selfTest()` do, before such a wallet is
-  funded guards against a build or computer that computes MHFE wrongly and would show a wallet no
-  correct program finds again.
+  funded checks those published operations for build or computer faults that could show a wallet
+  a correct program does not reproduce. A pass does not cover untested inputs or later faults.
 - `wallet_check` (a draft of the profile MHFE-WALLET-CHECK-SEED-1). The criterion: a phrase passes
   when `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(ENT) || seed)` starts with 16 zero bits, its
   first two bytes being zero. The tag is 24 ASCII bytes with no NUL; `BE32(ENT)` is the entropy's
@@ -168,7 +187,9 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
     `WalletCheck::new(passphrase)` borrows the passphrase without copying it; constructing it does
     no work. Its `require_passphrase()`
     refuses an empty passphrase (`WALLET_CHECK_NEEDS_PASSPHRASE`), for a front end to ask before
-    anything else. `verify(phrase)` tests a recovered phrase: an empty passphrase is
+    anything else. `require_same_passphrase(repeat)` checks the original's 1024-byte limit as
+    typed before exact repetition, including for a new wallet without the check. NFKD expansion
+    does not change that byte domain. `verify(phrase)` tests a recovered phrase: an empty passphrase is
     refused first, then a phrase of another length than 24 words (`INVALID_WORD_COUNT`).
     `verify_entropy(entropy)` does the same for the entropy of a 24-word phrase, 32
     bytes (`INVALID_WORD_COUNT`, by the words it would have, otherwise).
@@ -199,8 +220,11 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
     read the phrase they found back, which must give the same entropy and, with the check, pass it
     again (`INTERNAL_ERROR` otherwise); `try_draws` does neither, so a program that calls it probes
     each source with `RandomSampler::check_source` first. Every draw refuses an entropy of a single byte value, or
-    equal to the one drawn before it on that thread (`RANDOM_FAILED`), as from a source stuck after
-    its probes. `is_checked()` says whether the draw has the check. A `NewPhrase` holds the phrase
+    equal to the preceding source entropy (`RANDOM_FAILED`), as from a source stuck after
+    its probes. `draw` retains the preceding entropy across progress reports, and native workers
+    each retain their own. Separate `try_draws` calls start independent histories. These finite
+    health checks do not prove that a source is cryptographically random.
+    `is_checked()` says whether the draw has the check. A `NewPhrase` holds the phrase
     in locked memory (`phrase()`) and says whether it was drawn with the check (`checked()`).
   - `PhraseDraw::with_wishes(wishes)` draws a phrase that also meets `word_wishes::WordWishes`;
     `check_bits()` gives the bits the check takes (16, or 0) and `odds()` what the phrase keeps.
@@ -212,7 +236,10 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `WordWishes::new(chosen, never_use)` takes at most `MAX_CHOSEN_WORDS` (1) word with a `Place`,
   `At(position)` from 1 to 24 or `Anywhere`, as a person types it (any letter case, four letters
   enough), and at most `MAX_NEVER_USE_WORDS` (1) word the phrase must not hold. It refuses a word
-  outside the English list, a second word of either kind and a chosen word also never to use
+  value over `InputText::MAX_BYTES` raw UTF-8 bytes, including whitespace, with
+  `WishError::Text(TextSizeError)` (`INVALID_REQUEST`) before trimming; `source()` retains that
+  typed cause. Rust callers matching `WishError` exhaustively must handle this variant.
+  It also refuses a word outside the English list, a second word of either kind and a chosen word also never to use
   (`INVALID_WORD_WISH`), and never repeats a word in its message. `odds(check_bits)` gives
   an immutable `WishOdds`, read through `random_bits()`, `randomness()`, `expected_draws()`,
   `recognisable()` and `fixed_position()`: a word at a
@@ -230,7 +257,9 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   last word, whose checksum bits must come out of the hash, and draws again for every other miss,
   before the check's seed; every phrase that meets the wishes stays equally likely.
 - `word_hints`: the hint below a word being typed from the BIP39 or the EFF list, the owner's rule
-  of 2026-10-08. `WordList::hint(line)` gives, for the last word of a line, `Hint::Count(n)` after
+  of 2026-10-08. Browser `wordHints` uses the shared raw text bound before decoding or scanning;
+  `WordHintError::Text(TextSizeError)` retains the cause through `source()`. Rust callers
+  matching that enum exhaustively must handle this variant. `WordList::hint(line)` gives, for the last word of a line, `Hint::Count(n)` after
   one letter, how many words begin with it; `Hint::Words(words)` from `LIST_FROM_LETTERS` (2)
   letters, the words that begin with them; `Hint::NoWord` when none does; and `Hint::Nothing` when
   no word of letters is being typed or the word is whole with no longer word after it.
@@ -247,7 +276,12 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   positions it repaired (`Repaired`). Its `container()` borrows the repaired phrase,
   `container_words()` and `card_words()` borrow the repaired positions, and `changes()` borrows
   `Change` records with `on_card()`, `position()`, `read()` and `word()` accessors. These results
-  have no writable fields. When no repair within that bound passes the BIP39 checksum it
+  have no writable fields. Their owned text and position buffers are wiped on drop, as are the
+  producer's indexed repair arithmetic and subset scratch on success or refusal. Display rows
+  hold word text in wiping buffers. These lifetimes cover ordinary drop and unwind, with no
+  general guarantee for compiler stack copies, registers, aborts or host I/O buffers.
+  `Debug` gives positions rather than
+  container, read or corrected words, also for clones. When no repair within that bound passes the BIP39 checksum it
   gives `REPAIR_NOT_POSSIBLE`. More damage, or a card of another container phrase, usually ends so,
   but can also give another container that passes the checksum: a repair does not show that the card
   belongs to the container phrase or that the container is the original seed phrase; only a
@@ -255,13 +289,21 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   container phrase and the card must form a codeword, and the card must restore as many of the
   container phrase's first words as it has words when they are unreadable (`INTERNAL_ERROR`
   otherwise). The module documentation gives the code byte for byte.
-  `ContainerReading::read(written)` says what a container phrase as typed is before anything is
+  `ContainerReading::read(written)` returns a `Result` and says what a container phrase as typed is before anything is
   computed with it: `Container` as it stands; `Marked { unreadable }`, words typed as `?` (the
   `UNREADABLE` mark), with every unreadable word from 1, for which a front end asks for the repair
   words at once; `NotAContainer`, a container's length but not a container, from a typing mistake or
   a damaged container phrase, for which it offers them; `WrongLength(n)`, a length no container has.
   `can_be_repaired()` is true for the middle two. The self-check `repair-words` compares one case of
   each kind.
+  Inspection, repair inputs, `CardWords::read` and `PasswordRecipe::make_from_rolls` refuse more
+  than `input_text::InputText::MAX_BYTES` raw UTF-8 bytes (`INVALID_REQUEST`) before copies.
+  `CardWords::read` now returns `Result<CardWords, RepairError>`; it removes printed profile and
+  numeric labels using borrowed tokens and reserves only the exact joined text length. More than
+  eight retained tokens fail with the exact count (`INVALID_REPAIR_WORDS`); counts zero through
+  eight remain available to `count()`, before the repair operation validates supported even sizes.
+  Input within the raw byte bound keeps `WrongLength(actual)` inspection outcomes. Dice group
+  counts are checked on borrowed input before generation; character recipes still refuse dice first.
 - `search` finds words typed as `?` without the repair words. `ContainerSearch::new(written)` lists
   every candidate container the BIP39 checksum allows (`missing()`, `count()`), at most
   `MAX_MISSING_FOR_DECOY` = 2 missing words (`TOO_MANY_MISSING_WORDS`), and needs words marked
@@ -283,8 +325,16 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   with its BIP39 `passphrase` also the phrase + passphrase check of a 24-word one made by `mhfe new`
   (`NO_BUILT_IN_CHECK` for a same-length container). Both look for `MAX_MISSING_FOR_WALLET` = 1
   missing word. Each gives `Option<Found>`: the container, each word found with its position, and
-  `Found::container()`, `words()` and `path()` expose this result without mutation.
-  the outcome with an address's path. The self-check `container-search` compares the candidates of
+  the outcome with an address's path. `Found::container()`, `words()` and `path()` expose this
+  result without mutation. `words()` now gives an exact-size iterator of `(position, &str)`
+  borrowed from the result, replacing the old slice of selected static pointers. Selected words
+  are retained as wiping numeric indices. The flat candidate-value pool reserves its complete
+  combination bound before filling; two missing words use at most 16 MiB for that pool.
+  Candidate indices, match selections and checksum scratch also have wiping lifetimes on ordinary
+  drop and unwind. Browser repair/search/review JSON borrows these owners rather than collecting
+  another selected-word list; the final Rust staging buffer is allocated once and wiped after
+  constructing the JavaScript string. Caller-owned exports and JavaScript strings remain subject
+  to their host's erasure limits. The self-check `container-search` compares the candidates of
   zero-12 with one word missing and finds its last word by its decoy fingerprint, computed by an
   independent implementation.
 - `ContainerFacts::read(container)` and `OriginalFacts::read(phrase)` read words before any work and
@@ -301,7 +351,9 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   work, and `run(mhfe, original, password, progress, on_unverified)` encrypts, makes the repair
   words, hands the unchecked container to `on_unverified` and checks it, returning a `Sealed`
   container: its words, suite, repair words, `built_in_check()`, `other_lengths()` and
-  `keep(work, passphrase)`, a `Keep` list of what the owner keeps (`KeepItem`). `passphrase` is a
+  `keep(work, passphrase)`, a `Keep` list of what the owner keeps (`KeepItem`). The original
+  creation-check state is dropped and wiped before the `Sealed` is returned; it keeps only the
+  encoded result and metadata. `passphrase` is a
   `WalletPassphrase`, what is known of the wallet's BIP39 passphrase: `Present`, `Absent` or
   `Unknown`, also `From` a `bool` or an `Option<bool>`, whose `None` is `Unknown`. MHFE encrypts
   only the phrase, so the list names a passphrase the wallet has (`KeepItem::Passphrase`) or, where
@@ -325,6 +377,15 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `RecoveredForRekey`, the recovered state in locked memory, wiped when dropped, and
   `confirm(recovered, confirmation, wallet_has_passphrase, progress)` takes the phrase from it once
   confirmed, as often as a confirmation is refused, without the rounds again (AUD-017-UI002).
+  Every receiving rekey checks the token's canonical source container, normalized old password
+  and old work settings before confirmation, owner follow-up or sealing. A mismatch is
+  `RekeyError::OriginMismatch` (`INVALID_REQUEST`), before callbacks, mutation or rounds. Separate
+  instances with equivalent source credentials remain compatible, including a changed stated
+  length. Tokens retain a locked copy of the normalized old password until their last shared owner
+  drops; they are sensitive capabilities and permit cheap credential equality checks against a
+  candidate rekey. There is no public origin digest or serializable token. This check does not
+  establish constant-time behavior or erase compiler stack/register copies; locking is best effort
+  natively and unavailable in browsers.
   `check_confirmation(confirmation, wallet_has_passphrase)` judges the first confirmation and the
   statement about the wallet's BIP39 passphrase before any Argon2 work, as `recover` does, and
   returns the answer, which then holds for every confirmation. After a refusal,
@@ -396,14 +457,27 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
 - `check_word` (the optional profile MHFE-PASSWORD-CHECK-1): `PasswordReview::check_index(&indexes)`
   computes the check-word index as `Result<usize, ReviewError>`. Every one of the five drawn indexes
   must be below 7,776; an outside index is `ReviewError::InvalidIndex` (`INVALID_REQUEST`) before arithmetic.
-  `PasswordReview::of(typed)` reads a typed password, in its written form when only that fits, with
+  `PasswordReview::of(typed)` returns `Result<PasswordReview, ReviewError>` and reads a typed password,
+  in its written form when only that fits, with
   the repairs it offers and their order (`repairs_first`), and `apply(ReviewChoice)` gives the
-  chosen password; `PasswordReview::choose(typed, choice)` applies a review choice,
+  chosen password. `typed_word(&repair)` returns `Result<&str, ReviewError>`; a repair from another
+  review is `NotOffered` (`PASSWORD_REPAIR_NOT_OFFERED`), even for identical text. Clones of that
+  review's repair keep their identity without retaining its password. Each repair owns its selected
+  word in a locked, wiping buffer; `Repair::word()` borrows `&str` from that owner. Its position and
+  typed range are wiped on drop, and Debug is redacted.
+  `PasswordReview::choose(typed, choice)` applies a review choice,
   `Password::check_typed_twice` checks a new password's rules and then its repetition, and
   `Password::from_typed(typed, repeat, choice)`
   does both and gives the `Password`. `eff::EffList` is the EFF large wordlist the password tools
   share. `EffList::index_of_rolls` reads five dice digits, and `word_index_of_rolls` reports a
   refusal with the drawn word's number.
+  `EffList::word(index)` returns `Result<&'static str, EffError>`; an index at or above 7,776 is
+  `EffError::InvalidIndex` (`INVALID_REQUEST`). `different_dice_words(text)` returns a `Result` too.
+  Review, `choose` (including no choice or `AsTyped`), dice-word counting and strength estimation
+  refuse raw UTF-8 text above `input_text::InputText::MAX_BYTES` (8,192 bytes) with `INVALID_REQUEST`
+  before copying or collecting tokens. `InputText::read` validates that borrowed view without
+  normalization. Empty and nonprofile text remain valid utility inputs; the cipher password's
+  separate 1–1,024-byte normalized rules still belong to `Password`.
 - `new_password::PasswordRecipe` makes a password of 1 to 32 words, of five words and their check
   word, or of 1 to 64 characters (`INVALID_PASSWORD_SIZE` otherwise), from a `random::RandomSource`
   or, for words, from real dice (`INVALID_DICE_ROLLS`). `random::RandomSampler::new(source)` borrows
@@ -420,14 +494,19 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   back, which must fit its check word (`INTERNAL_ERROR` otherwise). `RandomSampler::uniform_below` draws without
   bias below a bound of 2 to 65,536 (`INVALID_REQUEST` for any other), and refuses a source that
   gives 128 values above the range in a row (`RANDOM_FAILED`), which a working source does less than
-  once in 2^128. `strength::Strength::of(password)` is the rough estimate, weak below 50 bits.
+  once in 2^128. `strength::Strength::of(password)` returns `Result<Strength, StrengthError>`:
+  the rough estimate, weak below 50 bits.
   `PasswordRecipe::summary()` says what a recipe makes ("5 words from the EFF list, about 64.6
   bits"). `new_password::Millibits::words` and `characters` give a count's strength;
-  `new(value)` takes an existing millibit count, `get()` returns it, and `bits()` gives bits as
-  a number. `Display` rounds half up to one decimal, so every front end shows the same strength.
+  `new(value)` takes an existing `usize` millibit count, `get()` and `PasswordRecipe::millibits()`
+  return `u128`, and `bits()` gives bits as a number. Every `usize` draw count has an exact
+  millibit value without host-integer overflow. `Display` rounds half up to one decimal, so every
+  front end shows the same strength.
 - `self_test::SelfTest::published().run(mhfe, progress)` encrypts the public suite 3 vector and
   recovers the public suite 4 vector at full cost and says whether each came out as published
-  (`suite_3_as_published()`, `suite_4_as_published()`, `passed()`). `mhfe` must be at the vectors'
+  (`suite_3_as_published()`, `suite_4_as_published()`). `passed()` also requires every witnessed
+  round to match: a recorded mismatch fails the test even when both final outputs match.
+  `mhfe` must be at the vectors'
   settings, which `work()` gives as they record them; any other is refused before the first round
   (`INVALID_REQUEST`). A witness compares every Argon2id call, without changing its cost or its key,
   with the round the published vectors record at that place. `self_test::SELF_TEST_ROUNDS` gives
@@ -475,7 +554,8 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `Fingerprint::of(phrase, passphrase)` derives the BIP32 master-key fingerprint;
   `Fingerprint::parse(text)` reads eight hexadecimal digits in either case, with surrounding
   white space allowed. Its `Display` writes eight lower-case hexadecimal digits, including leading
-  zeros. `from_bytes` and `bytes` exchange the four public bytes. References and replacement
+  zeros. `from_bytes` and `bytes` exchange the four identifier bytes. They do not reveal the phrase;
+  fingerprints can link wallet references. References and replacement
   rehearsals carry this type. `ContainerFacts::fingerprint()` is the one entry for a container's
   own fingerprint, with no BIP39 passphrase. An `Address`
   comes only from `Address::parse(coin, text)`, which refuses a text longer than `MAX_ADDRESS_BYTES`
@@ -553,7 +633,8 @@ report.require_passed()?;                       // SelfCheckError::Failed for th
 - `SelfCheck` is a set of checks, each part once: `SelfCheck::new().with(check)` adds a check unless
   one with its identifier is there already, `merge(other)` adds those of another set in the same
   way, `skip(ids)` leaves parts out, such as those another module of the same page has passed, and
-  `ids()`, `contains(id)`, `len()` and `is_empty()` describe it. `run(tier, on_start, on_result)`
+  `ids()`, `contains(id)`, `len()` and `is_empty()` describe it. `ids_at(tier)` lists only the
+  current set's checks that run at that tier, in order. `run(tier, on_start, on_result)`
   runs the checks of `tier` in order, calling `on_start(id, label)` before each and
   `on_result(&ComponentResult)` after it; a check of the other tier is left out of the report.
   `run_quietly(tier)` reports nothing along the way. A front end adds checks of its own through the
@@ -728,6 +809,7 @@ provide the closed vocabulary without constructing an error or inventing a fallb
 | `WorkFactor`, engine reservation and Argon2           | `SettingsError`, `engine::EngineError`                                                             |
 | `Mhfe` cipher and container facts                     | `CipherError`                                                                                      |
 | EFF, password review and generation                   | `eff::EffError`, `check_word::ReviewError`, `new_password::NewPasswordError`                       |
+| Raw utility text and strength estimation              | `input_text::TextSizeError`, `strength::StrengthError`                                             |
 | Repair and missing-word request validation            | `repair::RepairError`, `search::SearchError`                                                       |
 | Wallet derivation, addresses, paths and fingerprints  | `wallet::WalletError`                                                                              |
 | Phrase draws and chosen/excluded words                | `wallet_check::WalletCheckError`, `word_wishes::WishError`                                         |
@@ -819,6 +901,7 @@ to expose the same error codes and result schemas. The stable codes are:
 | `INVALID_FINGERPRINT`             | The fingerprint is not eight hexadecimal digits                                                                         |
 | `NOT_ENOUGH_MEMORY`               | Less free memory than the level needs, also within a cgroup                                                             |
 | `MEMORY_ALLOCATION_FAILED`        | The operating system refused the memory                                                                                 |
+| `MEMORY_PROTECTION_FAILED`        | Native Linux could not apply or confirm exclusion of every Argon2 work-area page from core dumps                        |
 | `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser: > 0)                                                                |
 | `ARGON2_FAILED`                   | The Argon2 code reported an error, or returned without writing its key or wrote zeros                                   |
 | `INVALID_PASSPHRASE`              | The BIP39 passphrase bytes are not UTF-8                                                                                |
@@ -840,6 +923,17 @@ to expose the same error codes and result schemas. The stable codes are:
 | `INTERNAL_ERROR`                  | Anything else                                                                                                           |
 
 ## Browser package
+
+All four modules' `parameters()` include `maxInputTextBytes`, from the shared Rust
+`InputText::MAX_BYTES`. Phrase/container admission happens before transport or secret-byte copies.
+`runtime/runtime.js` exports `requireInputText(value, maxBytes, name): void`, a synchronous
+string validator with no encoding allocation. Supply `maxBytes` from those parameters; wrong
+types/limits throw `TypeError`, and oversized or ill-formed UTF-16 input throws `INVALID_REQUEST`.
+The exported `InputTextBoundary(readParameters)` caches only that scalar and offers
+`read(value, name): Promise<void>` and `copy(value, name): Promise<Uint8Array>` for string or byte
+input. The owned byte copy fixes the admitted extent; callers wipe it after use. Failed parameter
+reads can be retried. Hosts call admission
+before retaining their own copies. These checks keep the separate password/passphrase rules.
 
 `scripts/build-wasm.sh` writes the package to `dist/`: the runtime every class shares, with one
 WebAssembly (`runtime/mhfe.wasm`) and one worker script (`runtime/worker.js`), and a folder per
@@ -1070,14 +1164,26 @@ parts", needs the class and the runtime of one build. The classes that take secr
 vector unicode-password, and the refusal of a lone surrogate. The class's own parts follow: those of
 `SelfCheck::core`, `SelfCheck::repair`, `SelfCheck::passwords` or `SelfCheck::wallet`, at start without live randomness
 and in the full check with the worker's `crypto.getRandomValues`. A startup report is made once
-for each class and choice; a part that another class has passed with the same WebAssembly
-object is not run again and is listed as that class found it. `fullCheck()` runs every part anew.
-`MhfeClient.fullCheck()` adds Argon2 at 64 and 256 MiB with each Argon2 build in turn,
+for each class and choice; a part that another class has passed with the same immutable compiled
+`WebAssembly.Module` is not run again and is listed as that class found it. Classes given bytes
+compile their own module and check it independently, even when the byte-array object is shared.
+`fullCheck()` runs every part anew. A completed failed component closes the class immediately,
+including when a later callback or worker fails before the complete report arrives.
+`MhfeClient.fullCheck()` adds each build's inexpensive 1 MiB known answer as
+`argon2-known-answer-single-threaded` and `argon2-known-answer-threaded`, followed by
+Argon2 at 64 and 256 MiB with each Argon2 build in turn,
 `argon2-sizes-single-threaded` and `argon2-sizes-threaded` (not run on a page that is not
 cross-origin isolated), and lists `published-vectors` as not run, since `selfTest()` runs them, and
 `memory-locking`, `core-dumps`, `isolation` and `hidden-input` as not available, each with the
 reason, as the WebAssembly reports them from the library (`selfCheckProcess`). `onProgress` receives `{ id, label, running: true }` as a part starts and its result with
 `running: false` as it ends.
+
+Normal worker reports declare a nonempty, unique `ids` list for the requested tier, including
+explicitly skipped checks, with `tier` and `passed`. Before admitting an operation or caching a
+passing component, the page requires one result for every declared id or an exact verified result
+captured from the same immutable module before the invocation. Missing, duplicate and undeclared
+results are `PACKAGE_MISMATCH`. An explicit failed trap can omit its unfinished catalog and still
+closes the class. This checks protocol consistency; it does not authenticate a malicious producer.
 
 An Argon2 build that does not start, as when the browser refuses its memory or its lane workers,
 gave no wrong answer. When no build in front of the worker starts, `MhfeClient`'s Argon2 parts are
@@ -1094,8 +1200,9 @@ unchanged: they use their mode's build and, when it does not start, reject with 
 
 A failed part closes the class for good: every call that awaits the check, and every later one,
 rejects with `SELF_CHECK_FAILED`, whose message names the part and the case and whose `report` is
-the report. A failed `fullCheck()` closes the class too. `WORKER_FAILED` and `PACKAGE_MISMATCH`
-give no report and close nothing: the next call checks again. A startup report with a part that is
+the report. A failed `fullCheck()` closes the class too. Before any component has failed,
+`WORKER_FAILED` and `PACKAGE_MISMATCH` give no report and leave the class retryable: the next call
+checks again. They do not reopen a class after a recorded failed component. A startup report with a part that is
 "notAvailable" or a "warning", which at start only an Argon2 build that did not start gives, passes
 but is not kept either: the next call checks again. Secrets are copied into bytes only after the
 check has passed. Every operation that runs Argon2, `selfTest()` included, also computes
@@ -1181,7 +1288,9 @@ code unless they are whole numbers from 0, so that no value wraps around; a whol
 for 32 bits reaches the rule that owns the setting, which refuses it in its own words. A chosen
 word's place is such a number too (`INVALID_WORD_WISH`), and `walletCheck`, `sameLength` and
 `repeated` must be `true` or `false` (`INVALID_REQUEST`). Chosen words and words never to use
-arrive one entry each, so an empty or blank one is refused, not dropped. `makePassword` takes
+arrive as an empty field for no entries, or with a leading LF before every entry. Missing framing
+is `INVALID_WORD_WISH`; empty or blank entries are refused rather than dropped. Entry counts are
+checked against the one-chosen/one-excluded limits before the binding collects them. `makePassword` takes
 `undefined` or `null` as the default size, and with "checkWord" any other size is `INVALID_REQUEST`:
 that kind always gives five words and their check word; counts belong only to "words" and
 "characters", as `mhfe password`

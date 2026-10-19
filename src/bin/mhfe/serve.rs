@@ -12,6 +12,7 @@
 //! header against DNS rebinding, ignores request bodies and logs nothing. Each connection has
 //! its own thread and a fixed time for its request, so a slow client cannot hold up the page.
 
+#[cfg(test)]
 use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
@@ -26,6 +27,7 @@ use clap::Args;
 use sha2::{Digest, Sha256};
 
 use crate::exit::{Failure, SUCCESS};
+use crate::regular_file::RegularFile;
 use crate::style::{self, paint, ACCENT, MUTED};
 
 /// The checksum file that must lie next to the page. Its name never changes, so a tool can ship
@@ -51,12 +53,12 @@ const NON_HTML: &str = "The fast mode serves only a page whose name ends in lowe
 const SHA256_HEX_DIGITS: usize = 64;
 
 /// The most a checksum file may hold: its one line is about 80 bytes. A longer file is malformed,
-/// and nothing beyond this is read of it (AUD-024-FUN005).
+/// with one extra byte read to detect oversize (AUD-024-FUN005).
 // Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const MAX_CHECKSUM_FILE: u64 = 4 * 1024;
 
 /// The most a page may hold: a tool's page is a few megabytes. A larger file is refused, and
-/// nothing beyond this is read of it (AUD-024-FUN005).
+/// one extra byte detects that it is too long (AUD-024-FUN005).
 // Deliberate copy in the standalone Python launcher; its parity tests compare both.
 const MAX_PAGE: u64 = 64 * 1024 * 1024;
 
@@ -170,7 +172,8 @@ fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
         ))
     };
     let malformed = || Failure::invalid_input(format!("{} {MALFORMED}", style::shown_path(&path)));
-    let bytes = read_regular_file(&path, MAX_CHECKSUM_FILE)
+    let bytes = RegularFile::open(&path)
+        .and_then(|file| file.bytes(MAX_CHECKSUM_FILE))
         .map_err(|error| unreadable(&error))?
         .ok_or_else(malformed)?;
     let text = String::from_utf8(bytes).map_err(|error| unreadable(&error))?;
@@ -222,7 +225,8 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
             file_name(file)
         )));
     }
-    let page = read_regular_file(file, MAX_PAGE)
+    let page = RegularFile::open(file)
+        .and_then(|file| file.bytes(MAX_PAGE))
         .map_err(|error| {
             Failure::invalid_input(format!(
                 "Cannot read {}: {error}; nothing was served.",
@@ -245,34 +249,6 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
         )));
     }
     Ok((page, digest))
-}
-
-/// At most `limit` bytes of `path`, which must be a regular file: a FIFO, a device or a folder is
-/// refused before anything is read, opened without waiting so that a FIFO with no writer does not
-/// block. `None` for a longer file, of which nothing beyond the limit is read (AUD-024-FUN005).
-fn read_regular_file(path: &Path, limit: u64) -> io::Result<Option<Vec<u8>>> {
-    // Windows refuses to open a directory before its handle can be checked.
-    require_regular_file(&fs::metadata(path)?)?;
-    let mut options = fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::custom_flags(&mut options, libc::O_NONBLOCK);
-    let file = options.open(path)?;
-    // The path may have been replaced since its metadata was read.
-    require_regular_file(&file.metadata()?)?;
-    let mut bytes = Vec::new();
-    file.take(limit + 1).read_to_end(&mut bytes)?;
-    Ok((bytes.len() as u64 <= limit).then_some(bytes))
-}
-
-fn require_regular_file(metadata: &fs::Metadata) -> io::Result<()> {
-    if !metadata.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "it is not a regular file",
-        ));
-    }
-    Ok(())
 }
 
 /// The end of `mhfe serve -h` and `--help`.
@@ -941,6 +917,25 @@ mod tests {
             assert!(made.success());
             assert!(refusal(&folder).contains("it is not a regular file"));
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_a_symlink_for_the_page_or_checksum() {
+        use std::os::unix::fs::symlink;
+        let folder = TestFolder::new("symlinks");
+        let digest = hex::encode(Sha256::digest(PAGE));
+        folder.write_checksum_file(&format!("{digest}  tool.html\n"));
+        let target = folder.0.join("public-target");
+        fs::rename(folder.page(), &target).unwrap();
+        symlink(&target, folder.page()).unwrap();
+        assert!(refusal(&folder).contains("it is not a regular file"));
+        fs::remove_file(folder.page()).unwrap();
+        fs::rename(&target, folder.page()).unwrap();
+        let checksum = folder.0.join(CHECKSUM_FILE);
+        fs::rename(&checksum, &target).unwrap();
+        symlink(&target, &checksum).unwrap();
+        assert!(refusal(&folder).contains("it is not a regular file"));
     }
 
     /// The refusal of a malformed checksum file reads the same after the wrapping of an error

@@ -47,6 +47,33 @@ pub fn package_version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
+/// The library-owned raw text limit read by every utility page boundary.
+#[cfg(any(
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-passwords",
+    feature = "browser-wallet"
+))]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct InputTextParameters {
+    max_input_text_bytes: usize,
+}
+
+#[cfg(any(
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-passwords",
+    feature = "browser-wallet"
+))]
+impl InputTextParameters {
+    pub(crate) const fn new() -> Self {
+        Self {
+            max_input_text_bytes: crate::input_text::InputText::MAX_BYTES,
+        }
+    }
+}
+
 /// What a card of `count` repair words repairs, as the page reads it.
 #[cfg(any(feature = "browser-core", feature = "browser-repair"))]
 #[derive(serde::Serialize)]
@@ -139,7 +166,7 @@ struct SelfCheckJson<'a> {
     version: &'static str,
     tier: &'static str,
     passed: bool,
-    /// Every part of the set in its order, the skipped ones included, so that the page can place
+    /// Every part of the requested tier in order, the skipped ones included, so the page can place
     /// the outcomes it has from another module among those of this run.
     ids: Vec<&'static str>,
     /// The parts that ran, in their order.
@@ -159,7 +186,7 @@ pub(crate) fn run_self_check(
     on_result: &js_sys::Function,
 ) -> Result<String, JsError> {
     let tier = Tier::from_name(tier).map_err(js_error)?;
-    let ids = set.ids();
+    let ids = set.ids_at(tier);
     let skip: Vec<&str> = skip_ids.iter().map(String::as_str).collect();
     let mut set = set.skip(&skip);
     // The callbacks only report progress, so a page callback that throws does not stop the check:
@@ -193,6 +220,7 @@ pub(crate) fn run_self_check(
 /// buffer is wiped once the JavaScript string is made from it.
 #[cfg(any(
     feature = "browser-core",
+    feature = "browser-repair",
     feature = "browser-passwords",
     feature = "browser-wallet"
 ))]
@@ -206,9 +234,60 @@ pub(crate) fn secret_json(value: &impl Serialize) -> Result<js_sys::JsString, Js
     Ok(js_sys::JsString::from(text))
 }
 
+/// A selected position owned until its serialized element has been written or refused.
+#[cfg(any(
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-passwords"
+))]
+pub(crate) struct PositionJson(zeroize::Zeroizing<usize>);
+
+#[cfg(any(
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-passwords"
+))]
+impl PositionJson {
+    pub(crate) fn new(position: usize) -> Self {
+        Self(zeroize::Zeroizing::new(position))
+    }
+}
+
+#[cfg(any(
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-passwords"
+))]
+impl Serialize for PositionJson {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (*self.0).serialize(serializer)
+    }
+}
+
+/// Writes borrowed owner views without collecting another allocation of selected words/positions.
+#[cfg(any(
+    feature = "browser-core",
+    feature = "browser-repair",
+    feature = "browser-passwords"
+))]
+pub(crate) fn serialize_sequence<S, I>(serializer: S, items: I) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    I: ExactSizeIterator,
+    I::Item: Serialize,
+{
+    use serde::ser::SerializeSeq as _;
+    let mut sequence = serializer.serialize_seq(Some(items.len()))?;
+    for item in items {
+        sequence.serialize_element(&item)?;
+    }
+    sequence.end()
+}
+
 /// Counts the bytes written to it, and keeps none.
 #[cfg(any(
     feature = "browser-core",
+    feature = "browser-repair",
     feature = "browser-passwords",
     feature = "browser-wallet"
 ))]
@@ -216,6 +295,7 @@ struct ByteCounter(usize);
 
 #[cfg(any(
     feature = "browser-core",
+    feature = "browser-repair",
     feature = "browser-passwords",
     feature = "browser-wallet"
 ))]
@@ -258,10 +338,33 @@ impl SecretText {
         std::str::from_utf8(&self.0).map_err(|_| js_error(error))
     }
 
-    /// The wallet's BIP39 passphrase, or INVALID_PASSPHRASE for invalid UTF-8.
+    /// Utility input is byte-bounded before UTF-8 validation or any word scanning.
+    #[cfg(any(feature = "browser-passwords", feature = "browser-wallet"))]
+    pub(crate) fn input_text(&self, error: MhfeError) -> Result<&str, JsError> {
+        crate::input_text::InputText::require_size(self.0.len())
+            .map_err(crate::word_hints::WordHintError::Text)
+            .map_err(js_error)?;
+        self.text(error)
+    }
+
+    /// A word-entry wire has one framing LF in addition to its bounded text value.
+    #[cfg(feature = "browser-wallet")]
+    pub(crate) fn wish_text(&self) -> Result<&str, JsError> {
+        let value = self.0.strip_prefix(b"\n").unwrap_or(&self.0);
+        crate::input_text::InputText::require_size(value.len())
+            .map_err(crate::word_wishes::WishError::Text)
+            .map_err(js_error)?;
+        self.text(crate::word_wishes::WishError::Utf8.into())
+    }
+
+    /// A size-checked wallet passphrase, or INVALID_PASSPHRASE for invalid UTF-8.
+    ///
+    /// The library's byte limit is applied before a caller starts recovery or seed work.
     #[cfg(any(feature = "browser-core", feature = "browser-wallet"))]
     pub(crate) fn passphrase(&self) -> Result<&str, JsError> {
-        self.text(crate::wallet::WalletError::InvalidPassphrase.into())
+        let text = self.text(crate::wallet::WalletError::InvalidPassphrase.into())?;
+        crate::wallet::require_passphrase_size(text).map_err(js_error)?;
+        Ok(text)
     }
 
     /// The text of a seed phrase, or INVALID_PHRASE when the bytes are not UTF-8.

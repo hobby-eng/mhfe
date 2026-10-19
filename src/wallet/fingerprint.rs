@@ -1,4 +1,4 @@
-//! The public BIP32 master-key fingerprint: four bytes, parsed and displayed as eight hex digits.
+//! The BIP32 master-key fingerprint: four bytes, parsed and displayed as eight hex digits.
 
 use std::fmt;
 
@@ -10,8 +10,8 @@ use super::WalletError;
 /// BIP32 fixes the fingerprint to the first four bytes of HASH160 of the public key.
 const BYTES: usize = 4;
 
-/// A BIP32 master-key fingerprint. It identifies a wallet with 32 bits, independently of how its
-/// public text was typed. It is public data and does not grant spending authority.
+/// A BIP32 master-key fingerprint. These identifiers match wallets with 32 bits, independently
+/// of text spelling. They do not reveal the phrase. They can link wallet references.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fingerprint([u8; BYTES]);
 
@@ -40,7 +40,7 @@ impl Fingerprint {
         Ok(Self(bytes))
     }
 
-    /// Takes the four public bytes a wallet already supplied; every four-byte value is valid.
+    /// Takes the four identifier bytes a wallet already supplied; every four-byte value is valid.
     pub const fn from_bytes(bytes: [u8; BYTES]) -> Self {
         Self(bytes)
     }

@@ -18,11 +18,19 @@ pub(super) fn read_check_passphrase(
     input: &mut Input,
     operation: Operation,
 ) -> Result<LockedText, Failure> {
-    let passphrase = read_passphrase_until(input, operation, "the wallet", |passphrase| {
-        wallet_check::WalletCheck::new(passphrase)
-            .require_passphrase()
-            .map_err(|_| "Type the passphrase: the phrase + passphrase check needs one.".to_owned())
-    })?;
+    let passphrase = read_passphrase_until(
+        input,
+        operation,
+        "the wallet",
+        "BIP39 passphrase of the wallet",
+        |passphrase| {
+            wallet_check::WalletCheck::new(passphrase)
+                .require_passphrase()
+                .map_err(|_| {
+                    "Type the passphrase: the phrase + passphrase check needs one.".to_owned()
+                })
+        },
+    )?;
     choice::record("Passphrase", "typed");
     Ok(passphrase)
 }
@@ -50,12 +58,16 @@ fn read_passphrase_until(
     input: &mut Input,
     operation: Operation,
     whose: &str,
+    question: &str,
     accept: impl Fn(&str) -> Result<(), String>,
 ) -> Result<LockedText, Failure> {
     let _screen = passphrase_screen(input, operation, whose)?;
     loop {
-        let passphrase = input.secret(&format!("BIP39 passphrase of {whose}"))?;
-        let message = match accept(&passphrase) {
+        let passphrase = input.secret(question)?;
+        let accepted = mhfe::Bip39Passphrase::read(&passphrase)
+            .map_err(|error| error.to_string())
+            .and_then(|_| accept(&passphrase));
+        let message = match accepted {
             Ok(()) => return Ok(passphrase),
             Err(message) => message,
         };
@@ -73,11 +85,17 @@ pub(crate) fn read_passphrase_named(
     operation: Operation,
     whose: &str,
 ) -> Result<LockedText, Failure> {
-    read_passphrase_until(input, operation, whose, |passphrase| {
-        (!passphrase.is_empty())
-            .then_some(())
-            .ok_or_else(|| format!("Type the passphrase: you said {whose} has one."))
-    })
+    read_passphrase_until(
+        input,
+        operation,
+        whose,
+        &format!("BIP39 passphrase of {whose}"),
+        |passphrase| {
+            (!passphrase.is_empty())
+                .then_some(())
+                .ok_or_else(|| format!("Type the passphrase: you said {whose} has one."))
+        },
+    )
 }
 
 /// `--passphrase-used yes|no`: the answer to whether a BIP39 passphrase is used, as an option of
@@ -178,11 +196,13 @@ pub(crate) fn read_passphrase_of(
     operation: Operation,
     wallet: &str,
 ) -> Result<LockedText, Failure> {
-    let screen = passphrase_screen(input, operation, wallet)?;
-    let passphrase = input.secret(&format!(
-        "BIP39 passphrase of {wallet}, or Enter if it has none"
-    ))?;
-    drop(screen);
+    let passphrase = read_passphrase_until(
+        input,
+        operation,
+        wallet,
+        &format!("BIP39 passphrase of {wallet}, or Enter if it has none"),
+        |_| Ok(()),
+    )?;
     let what = if passphrase.is_empty() {
         "none"
     } else {

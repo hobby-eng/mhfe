@@ -9,14 +9,15 @@ use crate::engine::browser::JsArgon2;
 use crate::operation::Stage;
 use crate::search::{ContainerSearch, Found};
 use crate::wasm_api::{
-    call_page, container_fingerprint_text, js_error, json, whole_number, SecretText,
+    call_page, container_fingerprint_text, js_error, secret_json, serialize_sequence, whole_number,
+    PositionJson, SecretText,
 };
 use crate::{PassphraseReferences, ReferenceTarget};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CandidatesJson {
-    missing: Vec<usize>,
+struct CandidatesJson<'a> {
+    missing: MissingJson<'a>,
     candidates: usize,
     /// Whether the original seed phrase's wallet can tell the candidates apart (one missing word).
     offers_wallet_search: bool,
@@ -25,16 +26,27 @@ struct CandidatesJson {
     offers_own_checks: bool,
 }
 
+struct MissingJson<'a>(&'a ContainerSearch);
+
+impl Serialize for MissingJson<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serialize_sequence(
+            serializer,
+            self.0.missing_positions().map(PositionJson::new),
+        )
+    }
+}
+
 /// The candidates of a container phrase with words typed as "?", before a search: JSON
 /// `{ missing, candidates, offersWalletSearch, offersOwnChecks }`, the missing words' positions
 /// from 1, how many candidate containers pass the BIP39 checksum, and which searches with the
 /// password the library offers for them, as the command-line tool asks it. More than two missing
 /// words are refused (`TOO_MANY_MISSING_WORDS`), and words with none marked (`INVALID_REQUEST`).
 #[wasm_bindgen(js_name = searchCandidates)]
-pub fn search_candidates(written: &str) -> Result<String, JsError> {
+pub fn search_candidates(written: &str) -> Result<js_sys::JsString, JsError> {
     let search = ContainerSearch::new(written).map_err(js_error)?;
-    json(&CandidatesJson {
-        missing: search.missing(),
+    secret_json(&CandidatesJson {
+        missing: MissingJson(&search),
         candidates: search.count(),
         offers_wallet_search: search.offers_wallet_search(),
         offers_own_checks: search.offers_own_checks(),
@@ -42,46 +54,58 @@ pub fn search_candidates(written: &str) -> Result<String, JsError> {
 }
 
 #[derive(Serialize)]
-struct FoundWordJson {
-    position: usize,
-    word: &'static str,
+struct FoundWordJson<'a> {
+    position: PositionJson,
+    word: &'a str,
+}
+
+struct FoundWordsJson<'a>(Option<&'a Found>);
+
+impl Serialize for FoundWordsJson<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self.0 {
+            Some(found) => serialize_sequence(
+                serializer,
+                found.words().map(|(position, word)| FoundWordJson {
+                    position: PositionJson::new(position),
+                    word,
+                }),
+            ),
+            None => serialize_sequence(serializer, std::iter::empty::<FoundWordJson<'_>>()),
+        }
+    }
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SearchJson {
+struct SearchJson<'a> {
     found: bool,
     /// The container phrase found, or null.
-    container: Option<String>,
+    container: Option<&'a str>,
     container_fingerprint: Option<String>,
-    words: Vec<FoundWordJson>,
+    words: FoundWordsJson<'a>,
     /// Where a matched address was found, or null.
     path: Option<String>,
     candidates: usize,
 }
 
-fn search_json(search: &ContainerSearch, found: Option<Found>) -> Result<String, JsError> {
-    let Some(found) = found else {
-        return json(&SearchJson {
-            found: false,
-            container: None,
-            container_fingerprint: None,
-            words: Vec::new(),
-            path: None,
-            candidates: search.count(),
-        });
-    };
-    let fingerprint = container_fingerprint_text(found.container())?;
-    json(&SearchJson {
-        found: true,
-        container: Some(found.container().to_owned()),
-        container_fingerprint: Some(fingerprint),
-        words: found
-            .words()
-            .iter()
-            .map(|&(position, word)| FoundWordJson { position, word })
-            .collect(),
-        path: found.path().map(ToString::to_string),
+fn search_json(
+    search: &ContainerSearch,
+    found: Option<Found>,
+) -> Result<js_sys::JsString, JsError> {
+    let fingerprint = found
+        .as_ref()
+        .map(|found| container_fingerprint_text(found.container()))
+        .transpose()?;
+    secret_json(&SearchJson {
+        found: found.is_some(),
+        container: found.as_ref().map(Found::container),
+        container_fingerprint: fingerprint,
+        words: FoundWordsJson(found.as_ref()),
+        path: found
+            .as_ref()
+            .and_then(Found::path)
+            .map(ToString::to_string),
         candidates: search.count(),
     })
 }
@@ -113,7 +137,7 @@ pub fn search_decoy(
     passphrase_utf8: Vec<u8>,
     scan_gap: f64,
     on_candidates: &js_sys::Function,
-) -> Result<String, JsError> {
+) -> Result<js_sys::JsString, JsError> {
     let passphrase = SecretText::new(passphrase_utf8);
     let passphrase = passphrase.passphrase()?;
     let scan_gap = whole_number(scan_gap, crate::request::NumberField::ScanGap)?;
@@ -160,7 +184,7 @@ pub fn search_wallet(
     argon2: JsArgon2,
     on_candidates: &js_sys::Function,
     on_round: &js_sys::Function,
-) -> Result<String, JsError> {
+) -> Result<js_sys::JsString, JsError> {
     // Both secrets are put under a wiping owner before anything can fail.
     let passphrase = SecretText::new(passphrase_utf8);
     let password = password_from(password_utf8, choice, position)?;

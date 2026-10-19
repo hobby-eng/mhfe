@@ -23,8 +23,8 @@ export class CompiledModule {
   }
 
   /**
-   * The bytes or the module the page passed: the classes made with the same one share their
-   * self-check results on the page.
+   * The original bytes or module the page passed. Passed self-checks belong to the immutable
+   * module returned by get(), rather than the identity of a mutable input array.
    */
   get source() {
     return this.#wasm;

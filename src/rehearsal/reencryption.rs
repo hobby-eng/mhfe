@@ -4,6 +4,10 @@
 #[cfg(test)]
 use crate::wallet::Fingerprint;
 
+use std::sync::Arc;
+
+use k256::elliptic_curve::subtle::ConstantTimeEq;
+
 use super::{compare, Reference};
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
@@ -14,7 +18,27 @@ use crate::mhfe::{
 };
 use crate::packing::STATE_WORDS;
 use crate::suite::Suite;
-use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
+use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount, WorkFactor};
+
+/// Private credentials of a recovered rekey capability, retained until its last token drops.
+pub(crate) struct RekeyOrigin {
+    facts: ContainerFacts,
+    password: LockedBytes,
+    work: WorkFactor,
+}
+
+impl RekeyOrigin {
+    pub(crate) fn matches(
+        &self,
+        facts: &ContainerFacts,
+        password: &Password,
+        work: WorkFactor,
+    ) -> bool {
+        self.facts.words() == facts.words()
+            && self.work == work
+            && bool::from(self.password.ct_eq(password.as_bytes()))
+    }
+}
 
 /// How a phrase recovered to be encrypted again is confirmed (the re-encryption guard).
 #[derive(Clone, Copy)]
@@ -132,7 +156,11 @@ impl<E: Argon2Engine> Mhfe<E> {
         confirmation.refuse_for(facts.confirmation_needed(length)?)?;
         let (suite, state) = self.recover_state(container, password, None, on_progress)?;
         Ok(RecoveredForRekey {
-            facts,
+            origin: Arc::new(RekeyOrigin {
+                facts,
+                password: LockedBytes::copy_of(password.as_bytes()),
+                work: self.work_factor(),
+            }),
             suite,
             state,
         })
@@ -142,14 +170,20 @@ impl<E: Argon2Engine> Mhfe<E> {
 /// A container recovered to be encrypted again: its facts and state `X` in locked memory, from
 /// which a phrase comes out only once confirmed (the re-encryption guard). A confirmation that is
 /// refused, such as the built-in check where several lengths pass, can be followed by another
-/// without the rounds again (AUD-017-UI002). The state is wiped when it is dropped.
+/// without the rounds again (AUD-017-UI002). It also retains a locked copy of the normalized old
+/// password to bind rekey consumers to the source credentials. These sensitive capabilities allow
+/// credential equality checks; the state and credentials are wiped when their last owner drops.
 pub struct RecoveredForRekey {
-    facts: ContainerFacts,
+    origin: Arc<RekeyOrigin>,
     suite: Suite,
     state: LockedBytes,
 }
 
 impl RecoveredForRekey {
+    pub(crate) fn origin(&self) -> &Arc<RekeyOrigin> {
+        &self.origin
+    }
+
     /// The phrase of `length`, a stated word count or [`PhraseLength::Detect`], once
     /// `confirmation` confirms it. A 12- to 21-word original of a 24-word container passes its
     /// built-in check at the length the owner states; a 24-word original, a detected length or a
@@ -165,7 +199,7 @@ impl RecoveredForRekey {
         confirmation: Confirmation<'_>,
         before_compare: &mut dyn FnMut() -> Result<(), MhfeError>,
     ) -> Result<RecoveredPhrase, MhfeError> {
-        confirmation.refuse_for(self.facts.confirmation_needed(length)?)?;
+        confirmation.refuse_for(self.origin.facts.confirmation_needed(length)?)?;
         if let Some(reference) = confirmation.wallet_reference() {
             // An address or the fingerprint tells the readings apart, as the rehearsal check
             // compares them: the one that matches is the wallet's.
@@ -216,7 +250,7 @@ impl RecoveredForRekey {
     /// from another, such as 24 words beside a short length whose check passes.
     pub fn lengths_the_owner_can_confirm(&self) -> Result<Vec<usize>, MhfeError> {
         let mut lengths = Vec::new();
-        for words in self.facts.phrase_lengths() {
+        for words in self.origin.facts.phrase_lengths() {
             let length = PhraseLength::Words(WordCount::new(*words)?);
             if self.owner_can_confirm(length)? {
                 lengths.push(*words);
@@ -228,7 +262,7 @@ impl RecoveredForRekey {
     /// Whether the owner can confirm the reading of `length` by comparing it with their backup:
     /// false where the owner could not tell it from another reading.
     pub fn owner_can_confirm(&self, length: PhraseLength) -> Result<bool, MhfeError> {
-        if self.facts.require_length(length).is_err() {
+        if self.origin.facts.require_length(length).is_err() {
             return Ok(false);
         }
         // A stated short length whose check fails gives no reading to compare.
@@ -250,7 +284,7 @@ impl RecoveredForRekey {
     /// allows: those of the length detection for a 24-word container, the one reading of a
     /// same-length one.
     fn every_reading(&self, length: PhraseLength) -> Result<Vec<RecoveredPhrase>, MhfeError> {
-        self.facts.require_length(length)?;
+        self.origin.facts.require_length(length)?;
         match self.suite {
             Suite::TwentyFourWords => {
                 every_reading(suite_3_state(&self.state)?, length).map_err(Into::into)
@@ -262,7 +296,7 @@ impl RecoveredForRekey {
     /// The readings of the state for `length`, under the length rules of recovery: a built-in
     /// check that passes takes precedence over a stated length.
     fn readings(&self, length: PhraseLength) -> Result<Vec<RecoveredPhrase>, MhfeError> {
-        self.facts.require_length(length)?;
+        self.origin.facts.require_length(length)?;
         let recovery = match self.suite {
             Suite::TwentyFourWords => recover(suite_3_state(&self.state)?, length),
             Suite::SameLength => Ok(Recovery::Phrase(read_same_length(&self.state)?)),

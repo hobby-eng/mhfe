@@ -10,7 +10,7 @@
 //! password opens a given container.
 
 use std::convert::Infallible;
-use std::ops::Range;
+use std::sync::Arc;
 
 use zeroize::Zeroizing;
 
@@ -27,39 +27,8 @@ use crate::Password;
 ))]
 pub(crate) mod known_answers;
 
-/// An explicit correction or repair that this review did not offer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ReviewError {
-    /// The explicit choice was absent from this review.
-    NotOffered,
-    /// The caller supplied a review-choice name the profile does not offer.
-    UnknownChoice,
-    /// A drawn word's index is outside the EFF list.
-    InvalidIndex,
-}
-impl ReviewError {
-    /// The stable typed refusal code.
-    pub const fn error_code(&self) -> crate::ErrorCode {
-        match self {
-            Self::NotOffered => crate::ErrorCode::PasswordRepairNotOffered,
-            Self::UnknownChoice | Self::InvalidIndex => crate::ErrorCode::InvalidRequest,
-        }
-    }
-    /// The machine-readable refusal code.
-    pub const fn code(&self) -> &'static str {
-        self.error_code().as_str()
-    }
-}
-impl std::fmt::Display for ReviewError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::NotOffered => "the review of this password did not offer that choice",
-            Self::UnknownChoice => "invalid request: unknown password choice",
-            Self::InvalidIndex => "invalid request: password word index is outside the EFF list",
-        })
-    }
-}
-impl std::error::Error for ReviewError {}
+mod error;
+pub use error::ReviewError;
 
 /// The profile's name in the specification.
 pub const PROFILE: &str = "MHFE-PASSWORD-CHECK-1";
@@ -133,33 +102,53 @@ impl Correction {
     }
 }
 
-/// One word of the reviewed password replaced so that the six fit. Its Debug text gives the place
-/// only: the word and where it was typed are parts of the password (AUD-024-SEC006).
-#[derive(Clone, PartialEq, Eq)]
+/// One word of the reviewed password replaced so that the six fit. Its selected word, position
+/// and typed range have wiping owners and stay out of Debug (AUD-024-SEC006).
 pub struct Repair {
-    position: usize,
-    word: &'static str,
+    position: Zeroizing<usize>,
+    word: LockedText,
     /// Where the word as typed lies in the reviewed text.
-    typed: Range<usize>,
+    typed: Zeroizing<[usize; 2]>,
+    /// A nonsecret identity survives clones without retaining the reviewed password.
+    owner: Arc<()>,
 }
+
+impl Clone for Repair {
+    fn clone(&self) -> Self {
+        Self {
+            position: self.position.clone(),
+            word: LockedText::copy_of(&self.word),
+            typed: self.typed.clone(),
+            owner: Arc::clone(&self.owner),
+        }
+    }
+}
+
+impl PartialEq for Repair {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.owner, &other.owner)
+            && *self.position == *other.position
+            && *self.word == *other.word
+            && *self.typed == *other.typed
+    }
+}
+impl Eq for Repair {}
 
 impl std::fmt::Debug for Repair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Repair")
-            .field("position", &self.position)
-            .finish_non_exhaustive()
+        f.write_str("Repair(hidden)")
     }
 }
 
 impl Repair {
     /// The place of the word, from 1; 6 is the check word.
     pub fn position(&self) -> usize {
-        self.position
+        *self.position
     }
 
     /// The word it becomes.
-    pub fn word(&self) -> &'static str {
-        self.word
+    pub fn word(&self) -> &str {
+        &self.word
     }
 }
 
@@ -179,6 +168,7 @@ pub enum ReviewChoice {
 /// correction and repair is used only when chosen, and the password as typed is always a choice:
 /// a container does not record whether its password has a check word.
 pub struct PasswordReview {
+    owner: Arc<()>,
     typed: LockedText,
     written: Option<(LockedText, Correction)>,
     reading: Reading,
@@ -186,36 +176,43 @@ pub struct PasswordReview {
 }
 
 impl PasswordReview {
-    /// Reviews `typed`. The text is copied once, locked, and wiped with the review.
-    pub fn of(typed: &str) -> Self {
-        let list = EffList::get();
+    /// Reviews `typed`, first refusing raw text above [`crate::input_text::InputText::MAX_BYTES`].
+    ///
+    /// Accepted text is copied once, locked, and wiped with the review.
+    pub fn of(typed: &str) -> Result<Self, ReviewError> {
+        let typed = crate::input_text::InputText::read(typed)?.text();
+        let owner = Arc::new(());
+        let list = EffList::try_get()?;
         let typed = LockedText::copy_of(typed);
-        let (reading, repairs) = read(list, &typed);
+        let (reading, repairs) = read(list, &typed, &owner)?;
         if reading != Reading::NotThisShape {
-            return Self {
+            return Ok(Self {
+                owner,
                 typed,
                 written: None,
                 reading,
                 repairs,
-            };
+            });
         }
         match written_form(&typed) {
             Some((form, correction)) => {
-                let (reading, repairs) = read(list, &form);
+                let (reading, repairs) = read(list, &form, &owner)?;
                 let written = (reading != Reading::NotThisShape).then_some((form, correction));
-                Self {
+                Ok(Self {
+                    owner,
                     typed,
                     written,
                     reading,
                     repairs,
-                }
+                })
             }
-            None => Self {
+            None => Ok(Self {
+                owner,
                 typed,
                 written: None,
                 reading,
                 repairs,
-            },
+            }),
         }
     }
 
@@ -236,8 +233,15 @@ impl PasswordReview {
 
     /// The word as typed that `repair` replaces: "?" or another word outside the list for a
     /// restorable word.
-    pub fn typed_word(&self, repair: &Repair) -> &str {
-        &self.reviewed()[repair.typed.clone()]
+    /// Returns [`ReviewError::NotOffered`] for another review's repair, even for identical text.
+    /// A clone of this review's repair remains valid.
+    pub fn typed_word(&self, repair: &Repair) -> Result<&str, ReviewError> {
+        if !Arc::ptr_eq(&self.owner, &repair.owner) {
+            return Err(ReviewError::NotOffered);
+        }
+        self.reviewed()
+            .get(repair.typed[0]..repair.typed[1])
+            .ok_or(ReviewError::NotOffered)
     }
 
     /// Whether the repairs, or the correction, should be offered before the password as typed.
@@ -248,7 +252,7 @@ impl PasswordReview {
     pub fn repairs_first(&self) -> bool {
         self.repairs
             .iter()
-            .any(|repair| self.typed_word(repair) == UNREADABLE)
+            .any(|repair| self.reviewed().get(repair.typed[0]..repair.typed[1]) == Some(UNREADABLE))
             || (self.repairs.is_empty() && self.offers_correction())
     }
 
@@ -267,7 +271,7 @@ impl PasswordReview {
             ReviewChoice::Repair(position) => self
                 .repairs
                 .iter()
-                .find(|repair| repair.position == position)
+                .find(|repair| repair.position() == position)
                 .map(|repair| repaired(self.reviewed(), repair))
                 .ok_or(ReviewError::NotOffered),
             ReviewChoice::Corrected => Err(ReviewError::NotOffered),
@@ -277,9 +281,10 @@ impl PasswordReview {
     /// The password a person typed for a new container or wallet, after the review choice they made:
     /// `choice` applies a correction or repair the review offered, and `None` keeps the text as typed.
     pub fn choose(typed: &str, choice: Option<ReviewChoice>) -> Result<LockedText, ReviewError> {
+        let typed = crate::input_text::InputText::read(typed)?.text();
         match choice {
             None | Some(ReviewChoice::AsTyped) => Ok(LockedText::copy_of(typed)),
-            Some(choice) => PasswordReview::of(typed).apply(choice),
+            Some(choice) => PasswordReview::of(typed)?.apply(choice),
         }
     }
 
@@ -292,48 +297,63 @@ impl PasswordReview {
 /// Reads a password. It is split at single spaces and each word is compared with the list exactly
 /// as written, hyphens included: the prefix rules of seed phrases do not apply, since the list has
 /// both "yo-yo" and "yoyo". A word not in the list, such as "?", is a gap.
-fn read(list: &EffList, text: &str) -> (Reading, Vec<Repair>) {
-    let ranges = token_ranges(text);
-    if ranges.len() != DRAWN_WORDS + 1 {
-        return (Reading::NotThisShape, Vec::new());
-    }
-    // The positions in the list reveal the password: wiped when done.
-    let found: Zeroizing<Vec<Option<usize>>> = Zeroizing::new(
-        ranges
-            .iter()
-            .map(|range| list.index_of(&text[range.clone()]))
-            .collect(),
-    );
-    let gaps: Vec<usize> = (0..ranges.len()).filter(|&i| found[i].is_none()).collect();
-    let known: Zeroizing<Vec<usize>> =
-        Zeroizing::new(found.iter().map(|index| index.unwrap_or(0)).collect());
-    let repair_at = |position: usize| Repair {
-        position: position + 1,
-        word: list.word(restored_index(&known, position)),
-        typed: ranges[position].clone(),
+fn read(
+    list: &EffList,
+    text: &str,
+    owner: &Arc<()>,
+) -> Result<(Reading, Vec<Repair>), ReviewError> {
+    let Some(ranges) = token_ranges(text) else {
+        return Ok((Reading::NotThisShape, Vec::new()));
     };
-    match gaps.as_slice() {
-        [] if restored_index(&known, DRAWN_WORDS) == known[DRAWN_WORDS] => {
+    // The positions in the list reveal the password: wiped when done.
+    let found = Zeroizing::new(std::array::from_fn::<_, { DRAWN_WORDS + 1 }, _>(|index| {
+        let [start, end] = ranges[index];
+        list.index_of(&text[start..end])
+    }));
+    let mut gaps = Zeroizing::new(Vec::with_capacity(DRAWN_WORDS + 1));
+    for (index, entry) in found.iter().enumerate() {
+        if entry.is_none() {
+            gaps.push(index);
+        }
+    }
+    let known = Zeroizing::new(std::array::from_fn::<_, { DRAWN_WORDS + 1 }, _>(|index| {
+        found[index].unwrap_or(0)
+    }));
+    let repair_at = |position: usize| -> Result<Repair, ReviewError> {
+        Ok(Repair {
+            owner: Arc::clone(owner),
+            position: Zeroizing::new(position + 1),
+            word: LockedText::copy_of(list.word(restored_index(known.as_ref(), position))?),
+            typed: Zeroizing::new(ranges[position]),
+        })
+    };
+    Ok(match gaps.as_slice() {
+        [] if restored_index(known.as_ref(), DRAWN_WORDS) == known[DRAWN_WORDS] => {
             (Reading::Fits, Vec::new())
         }
-        [] => (
-            Reading::Mismatch,
-            (0..ranges.len()).map(repair_at).collect(),
-        ),
-        [gap] => (Reading::Restorable, vec![repair_at(*gap)]),
+        [] => {
+            let mut repairs = Vec::with_capacity(DRAWN_WORDS + 1);
+            for position in 0..=DRAWN_WORDS {
+                repairs.push(repair_at(position)?);
+            }
+            (Reading::Mismatch, repairs)
+        }
+        [gap] => (Reading::Restorable, vec![repair_at(*gap)?]),
         _ => (Reading::NotThisShape, Vec::new()),
-    }
+    })
 }
 
 /// The byte ranges of the words of `text` split at single spaces.
-fn token_ranges(text: &str) -> Vec<Range<usize>> {
-    let mut ranges = Vec::new();
+fn token_ranges(text: &str) -> Option<Zeroizing<[[usize; 2]; DRAWN_WORDS + 1]>> {
+    let mut ranges = Zeroizing::new([[0; 2]; DRAWN_WORDS + 1]);
     let mut start = 0;
+    let mut count = 0;
     for token in text.split(' ') {
-        ranges.push(start..start + token.len());
+        *ranges.get_mut(count)? = [start, start + token.len()];
         start += token.len() + 1;
+        count += 1;
     }
-    ranges
+    (count == DRAWN_WORDS + 1).then_some(ranges)
 }
 
 /// The index at `position` that makes the six fit, the other five as given.
@@ -363,11 +383,11 @@ fn inverse(weight: usize) -> usize {
 /// `text` with one word replaced, built at its final size and locked, so that no unwiped copy is
 /// left behind.
 fn repaired(text: &str, repair: &Repair) -> LockedText {
-    let capacity = text.len() - repair.typed.len() + repair.word.len();
+    let capacity = text.len() - (repair.typed[1] - repair.typed[0]) + repair.word.len();
     let Ok(result) = LockedText::build::<Infallible>(capacity, |result| {
-        result.push_str(&text[..repair.typed.start]);
-        result.push_str(repair.word);
-        result.push_str(&text[repair.typed.end..]);
+        result.push_str(&text[..repair.typed[0]]);
+        result.push_str(&repair.word);
+        result.push_str(&text[repair.typed[1]..]);
         Ok(())
     });
     result
@@ -398,15 +418,78 @@ fn written_form(typed: &str) -> Option<(LockedText, Correction)> {
     Some((text, correction))
 }
 
-impl crate::ErrorIdentity for ReviewError {
-    fn error_code(&self) -> crate::ErrorCode {
-        self.error_code()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_oversized_text_is_refused_before_a_choice_copies_it() {
+        let typed = "x".repeat(crate::memory::TYPED_LINE_BYTES + 1);
+        for choice in [
+            None,
+            Some(ReviewChoice::AsTyped),
+            Some(ReviewChoice::Corrected),
+            Some(ReviewChoice::Repair(3)),
+        ] {
+            let error = PasswordReview::choose(&typed, choice).err().unwrap();
+            assert_eq!(error.code(), "INVALID_REQUEST");
+        }
+        assert_eq!(
+            PasswordReview::of(&typed).err().unwrap().code(),
+            "INVALID_REQUEST"
+        );
+    }
+
+    #[test]
+    fn raw_utility_limits_preserve_empty_and_nonprofile_text() {
+        use crate::input_text::InputText;
+        let exact = "é".repeat(InputText::MAX_BYTES / 2);
+        let expanding = "\u{fdfa}".repeat(1024);
+        let contracting = "\u{2126}".repeat(342);
+        assert!(crate::Password::new(&expanding).is_err());
+        assert!(crate::Password::new(&contracting).is_ok());
+        for typed in ["", "ordinary", &exact, &expanding, &contracting] {
+            let review = PasswordReview::of(typed).unwrap();
+            assert_eq!(review.reading(), Reading::NotThisShape);
+            assert_eq!(&*review.apply(ReviewChoice::AsTyped).unwrap(), typed);
+            assert_eq!(&*PasswordReview::choose(typed, None).unwrap(), typed);
+            assert_eq!(EffList::get().different_dice_words(typed).unwrap(), 0);
+            assert!(crate::strength::Strength::of(typed)
+                .unwrap()
+                .bits()
+                .is_finite());
+        }
+        let oversized = format!("{exact}x");
+        assert_eq!(
+            PasswordReview::of(&oversized).err().unwrap().code(),
+            "INVALID_REQUEST"
+        );
+        assert_eq!(
+            EffList::get()
+                .different_dice_words(&oversized)
+                .unwrap_err()
+                .code(),
+            "INVALID_REQUEST"
+        );
+        assert_eq!(
+            crate::strength::Strength::of(&oversized)
+                .unwrap_err()
+                .code(),
+            "INVALID_REQUEST"
+        );
+        assert_eq!(crate::strength::Strength::of("").unwrap().bits(), 0.0);
+        assert!(crate::strength::Strength::of("").unwrap().is_weak());
+    }
+
+    #[test]
+    fn a_cloned_repair_keeps_its_owned_word_after_the_review_is_dropped() {
+        let repair = {
+            let review = PasswordReview::of("jovial trailing ? pavilion cresting ninth").unwrap();
+            review.repairs()[0].clone()
+        };
+        assert_eq!((repair.position(), repair.word()), (3, "chokehold"));
+        assert_eq!(format!("{repair:?}"), "Repair(hidden)");
+    }
 
     fn drawn(rolls: &str) -> [usize; DRAWN_WORDS] {
         let indexes: Vec<usize> = rolls
@@ -424,7 +507,7 @@ mod tests {
             .chain(std::iter::once(
                 &PasswordReview::check_index(drawn).unwrap(),
             ))
-            .map(|&index| list.word(index))
+            .map(|&index| list.word(index).unwrap())
             .collect::<Vec<_>>()
             .join(" ")
     }
@@ -439,7 +522,10 @@ mod tests {
                 "{rolls}"
             );
             assert_eq!(password(&drawn(rolls)), expected);
-            assert_eq!(PasswordReview::of(expected).reading(), Reading::Fits);
+            assert_eq!(
+                PasswordReview::of(expected).unwrap().reading(),
+                Reading::Fits
+            );
         }
     }
 
@@ -451,6 +537,23 @@ mod tests {
             assert_eq!(error.code(), "INVALID_REQUEST");
             assert!(!error.to_string().contains(&usize::MAX.to_string()));
         }
+    }
+
+    #[test]
+    fn a_repair_belongs_to_its_review_even_when_cloned() {
+        let typed = "jovial trailing 🧪 pavilion cresting ninth";
+        let review = PasswordReview::of(typed).unwrap();
+        let repair = review.repairs()[0].clone();
+        assert_eq!(review.typed_word(&repair), Ok("🧪"));
+        for foreign in ["x", typed, "jovial trailing test pavilion cresting ninth"] {
+            assert_eq!(
+                PasswordReview::of(foreign).unwrap().typed_word(&repair),
+                Err(ReviewError::NotOffered)
+            );
+        }
+        let unrelated = PasswordReview::of(typed).unwrap();
+        assert_ne!(repair, unrelated.repairs()[0]);
+        assert_eq!(review.typed_word(&review.repairs()[0]), Ok("🧪"));
     }
 
     #[test]
@@ -466,11 +569,11 @@ mod tests {
     #[test]
     fn the_erased_third_word_of_the_third_vector_is_chokehold() {
         let (erased, position, word) = known_answers::ERASED;
-        let review = PasswordReview::of(erased);
+        let review = PasswordReview::of(erased).unwrap();
         assert_eq!(review.reading(), Reading::Restorable);
         let repair = &review.repairs()[0];
         assert_eq!((repair.position(), repair.word()), (position, word));
-        assert_eq!(review.typed_word(repair), UNREADABLE);
+        assert_eq!(review.typed_word(repair), Ok(UNREADABLE));
         assert!(review.repairs_first());
     }
 
@@ -481,7 +584,7 @@ mod tests {
             for position in 0..=DRAWN_WORDS {
                 let mut words: Vec<&str> = expected.split(' ').collect();
                 words[position] = "unreadable";
-                let review = PasswordReview::of(&words.join(" "));
+                let review = PasswordReview::of(&words.join(" ")).unwrap();
                 assert_eq!(
                     review.reading(),
                     Reading::Restorable,
@@ -501,7 +604,7 @@ mod tests {
     fn one_wrong_word_leaves_six_repairs_with_the_right_one_among_them() {
         let expected = known_answers::VECTORS[0].password;
         let typed = expected.replace("abide", "zoom");
-        let review = PasswordReview::of(&typed);
+        let review = PasswordReview::of(&typed).unwrap();
         assert_eq!(review.reading(), Reading::Mismatch);
         assert_eq!(review.repairs().len(), DRAWN_WORDS + 1);
         let right: Vec<usize> = review
@@ -516,13 +619,16 @@ mod tests {
             .map(Repair::position)
             .collect();
         assert_eq!(right, [4]);
-        assert_eq!(review.typed_word(&review.repairs()[3]), "zoom");
+        assert_eq!(review.typed_word(&review.repairs()[3]), Ok("zoom"));
         // Every one of the six makes the words fit.
         for repair in review.repairs() {
             let repaired = review
                 .apply(ReviewChoice::Repair(repair.position()))
                 .unwrap();
-            assert_eq!(PasswordReview::of(&repaired).reading(), Reading::Fits);
+            assert_eq!(
+                PasswordReview::of(&repaired).unwrap().reading(),
+                Reading::Fits
+            );
         }
         assert_eq!(&*review.apply(ReviewChoice::AsTyped).unwrap(), typed);
     }
@@ -531,16 +637,13 @@ mod tests {
     fn the_debug_text_of_a_repair_gives_no_part_of_the_password() {
         let expected = known_answers::VECTORS[0].password;
         let reviews = [
-            PasswordReview::of("jovial trailing ? pavilion cresting ninth"),
-            PasswordReview::of(&expected.replace("abide", "zoom")),
+            PasswordReview::of("jovial trailing ? pavilion cresting ninth").unwrap(),
+            PasswordReview::of(&expected.replace("abide", "zoom")).unwrap(),
         ];
         for review in &reviews {
             for repair in review.repairs() {
                 let text = format!("{repair:?}");
-                assert_eq!(
-                    text,
-                    format!("Repair {{ position: {}, .. }}", repair.position())
-                );
+                assert_eq!(text, "Repair(hidden)");
                 assert!(!text.contains(repair.word()), "{text}");
             }
         }
@@ -548,7 +651,7 @@ mod tests {
 
     #[test]
     fn extra_spaces_and_capitals_give_the_written_form() {
-        let review = PasswordReview::of(" jovial trailing ? pavilion  cresting ninth ");
+        let review = PasswordReview::of(" jovial trailing ? pavilion  cresting ninth ").unwrap();
         assert_eq!(review.correction(), Some(Correction::ExtraSpaces));
         assert_eq!(review.reading(), Reading::Restorable);
         // A repair of the written form carries the correction with it.
@@ -557,7 +660,8 @@ mod tests {
             "jovial trailing chokehold pavilion cresting ninth"
         );
         assert!(!review.offers_correction());
-        let review = PasswordReview::of("JOVIAL Trailing chokehold pavilion cresting ninth");
+        let review =
+            PasswordReview::of("JOVIAL Trailing chokehold pavilion cresting ninth").unwrap();
         assert_eq!(review.correction(), Some(Correction::Capitals));
         assert_eq!(review.reading(), Reading::Fits);
         assert!(review.offers_correction());
@@ -566,14 +670,16 @@ mod tests {
             &*review.apply(ReviewChoice::Corrected).unwrap(),
             "jovial trailing chokehold pavilion cresting ninth"
         );
-        let review = PasswordReview::of("  Jovial trailing chokehold pavilion cresting ninth");
+        let review =
+            PasswordReview::of("  Jovial trailing chokehold pavilion cresting ninth").unwrap();
         assert_eq!(review.correction(), Some(Correction::SpacesAndCapitals));
         assert_eq!(
             Correction::SpacesAndCapitals.text(),
             "spaces and capitals corrected"
         );
         // The written form already: nothing to correct.
-        let review = PasswordReview::of("jovial trailing chokehold pavilion cresting ninth");
+        let review =
+            PasswordReview::of("jovial trailing chokehold pavilion cresting ninth").unwrap();
         assert_eq!(review.correction(), None);
     }
 
@@ -610,7 +716,7 @@ mod tests {
     #[test]
     fn choices_not_offered_are_refused() {
         let (erased, _, _) = known_answers::ERASED;
-        let review = PasswordReview::of(erased);
+        let review = PasswordReview::of(erased).unwrap();
         assert!(matches!(
             review.apply(ReviewChoice::Repair(2)),
             Err(ReviewError::NotOffered)
@@ -629,14 +735,16 @@ mod tests {
             "abacus ? ? abide abiding aids",
             "Abacus abdomen abdominal abide abiding aids extra",
         ] {
-            let review = PasswordReview::of(typed);
+            let review = PasswordReview::of(typed).unwrap();
             assert_eq!(review.reading(), Reading::NotThisShape, "{typed}");
             assert_eq!(review.correction(), None, "{typed}");
             assert!(review.repairs().is_empty());
         }
         // Words count only as written: "yoyo" and "yo-yo" are different words of the list.
         assert_eq!(
-            PasswordReview::of("drop-down t-shirt abacus yoyo felt-tip rubble").reading(),
+            PasswordReview::of("drop-down t-shirt abacus yoyo felt-tip rubble")
+                .unwrap()
+                .reading(),
             Reading::Mismatch
         );
     }

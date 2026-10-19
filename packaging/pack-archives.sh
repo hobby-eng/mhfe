@@ -32,14 +32,23 @@ pack_tar_portable() {
 }
 
 # Packs the content of `folder` into the zip archive `archive`, an absolute path.
-pack_zip() {
+pack_zip() (
   local folder="$1" archive="$2"
-  chmod -R "$ARCHIVE_MODES" "$folder"
+  local temporary
+  if [[ -d "$archive" ]]; then
+    echo "The ZIP destination must be a file, not a directory." >&2
+    return 1
+  fi
+  temporary="$(mktemp -d "${archive}.XXXXXX")" || return
+  trap 'rm -f -- "$temporary/archive.zip"; rmdir -- "$temporary"' EXIT
+  chmod -R "$ARCHIVE_MODES" "$folder" || return
   # zip stores local times from 1980 on; UTC and one fixed time make it reproducible.
+  # A fresh archive drops obsolete entries; replacing it only after success preserves an old one.
   (
-    cd "$folder"
+    cd "$folder" || exit
     export TZ=UTC
-    find . -exec touch -d '1980-01-01 00:00:00' {} +
-    find . -type f | LC_ALL=C sort | zip -X -q "$archive" -@
-  )
-}
+    find . -exec touch -d '1980-01-01 00:00:00' {} + || exit
+    find . -type f | LC_ALL=C sort | zip -X -q "$temporary/archive.zip" -@
+  ) || return
+  mv -f -- "$temporary/archive.zip" "$archive"
+)

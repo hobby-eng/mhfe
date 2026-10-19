@@ -1,7 +1,8 @@
 // Part 1 of the checks of the browser package, continued: the core's rekey through one Argon2
 // build at the reduced cost, which core-operations.mjs runs for each build. A rekey recovers the
 // phrase (rounds 1-12 of 36), is confirmed by the built-in check, a wallet reference or the owner,
-// and seals it again (rounds 13-36); every refusal comes before any Argon2 round.
+// and seals it again (rounds 13-36). Input and confirmation-admission refusals precede the rounds;
+// refusals based on the recovered phrase or length follow recovery, before replacement sealing.
 import assert from "node:assert/strict";
 
 import {
@@ -10,7 +11,7 @@ import {
   REDUCED_COST_SAME_LENGTH_CONTAINER,
 } from "../public-test-data.mjs";
 import { expectCode, expectMessage, noRoundExpected } from "./expect.mjs";
-import { bindings, operations } from "./package.mjs";
+import { bindings, operations, readWipedJson } from "./package.mjs";
 import {
   NEW_PASSWORD,
   NOT_BOOLEAN_ANSWERS,
@@ -59,7 +60,7 @@ function checkBuiltInCheckRekey({ reduced, steps, onRound, created }) {
     JSON.parse(rekey.recover("builtInCheck", "", "", "", noBytes(), false, onRound)),
     NOTHING_TO_ASK,
   );
-  const rekeyed = JSON.parse(rekey.seal(onRound, () => {}));
+  const rekeyed = readWipedJson(rekey.seal(onRound, () => {}));
   rekey.free();
   assert.deepEqual(steps.slice(0, 1), ["recover 1/36"]);
   assert.deepEqual(steps.slice(-1), ["check 36/36"]);
@@ -77,20 +78,19 @@ function checkBuiltInCheckRekey({ reduced, steps, onRound, created }) {
   const stated = new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, reduced);
   stated.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 2);
   stated.recover("builtInCheck", "", "", "", noBytes(), true, () => {});
-  assert.deepEqual(
-    JSON.parse(
-      stated.seal(
-        () => {},
-        () => {},
-      ),
-    ).keep,
-    [
-      { item: "containerWords", words: 24 },
-      { item: "password" },
-      { item: "passphrase" },
-      { item: "repairWords", apart: true },
-    ],
+  const withPassphrase = readWipedJson(
+    stated.seal(
+      () => {},
+      () => {},
+    ),
   );
+  assert.equal(withPassphrase.repairWords.split(" ").length, 2);
+  assert.deepEqual(withPassphrase.keep, [
+    { item: "containerWords", words: 24 },
+    { item: "password" },
+    { item: "passphrase" },
+    { item: "repairWords", apart: true },
+  ]);
   stated.free();
 }
 

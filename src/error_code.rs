@@ -63,6 +63,7 @@ error_codes! {
     PassphraseTooLong => "PASSPHRASE_TOO_LONG";
     NotEnoughMemory => "NOT_ENOUGH_MEMORY";
     MemoryAllocationFailed => "MEMORY_ALLOCATION_FAILED";
+    MemoryProtectionFailed => "MEMORY_PROTECTION_FAILED";
     MemoryLevelNotSupportedHere => "MEMORY_LEVEL_NOT_SUPPORTED_HERE";
     Argon2Failed => "ARGON2_FAILED";
     InvalidRequest => "INVALID_REQUEST";

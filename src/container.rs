@@ -57,6 +57,8 @@ impl ContainerFacts {
     /// Reads a container, refusing anything but a valid English BIP39 phrase of 12, 15, 18, 21
     /// or 24 words with `INVALID_CONTAINER`. Any spacing and letter case and the first
     /// four letters of a word are accepted, as for an original phrase.
+    /// Text above [`crate::input_text::InputText::MAX_BYTES`] raw UTF-8 bytes is refused with
+    /// `INVALID_REQUEST` before scanning, even when the extra bytes are whitespace.
     pub fn read(text: &str) -> Result<Self, crate::CipherError> {
         let container = phrase::parse_container(text)?;
         let word_count = container.word_count();
@@ -172,8 +174,9 @@ impl ContainerFacts {
         }
     }
 
-    /// The fingerprint of the container's own wallet without a BIP39 passphrase. This public
-    /// decoy-wallet identifier does not identify the original wallet. It costs one BIP39 seed.
+    /// The fingerprint of the container's own wallet without a BIP39 passphrase. Container
+    /// fingerprints do not identify the original wallet. They do not reveal the phrase.
+    /// Derivation costs one BIP39 seed.
     pub fn fingerprint(&self) -> Result<wallet::Fingerprint, MhfeError> {
         wallet::Fingerprint::of(&self.words, "").map_err(Into::into)
     }
@@ -202,6 +205,8 @@ impl OriginalFacts {
     /// Reads an original phrase, refusing anything but a valid English BIP39 phrase of 12, 15,
     /// 18, 21 or 24 words with `INVALID_PHRASE`. Any spacing and letter case and the
     /// first four letters of a word are accepted.
+    /// Text above [`crate::input_text::InputText::MAX_BYTES`] raw UTF-8 bytes is refused with
+    /// `INVALID_REQUEST` before scanning, even when the extra bytes are whitespace.
     pub fn read(phrase: &str) -> Result<Self, crate::CipherError> {
         let phrase = Phrase::read(phrase)?;
         let word_count = phrase.word_count();
@@ -428,7 +433,7 @@ mod tests {
         assert!(original.other_lengths().is_empty());
         // Reserved at its final size, so that no growing copy of the words is left behind.
         assert_eq!(original.words.capacity(), ZERO_12.len());
-        assert_eq!(original.words.is_locked(), cfg!(unix));
+        assert_eq!(original.words.is_locked(), cfg!(any(unix, windows)));
         let refused = OriginalFacts::read(&ZERO_12.replace("about", "abandon"))
             .err()
             .unwrap();

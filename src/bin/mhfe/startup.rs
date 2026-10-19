@@ -225,6 +225,18 @@ mod tests {
     /// leave out the parts of the full self-test only.
     #[test]
     fn every_part_passes_at_start() {
+        protect::test_process::require_success(protect::test_process::run(
+            "startup::tests::startup_check_child",
+            Some(std::process::id()),
+        ));
+    }
+
+    #[test]
+    #[ignore = "the real startup changes process-wide policy only in this disposable child"]
+    fn startup_check_child() {
+        if std::env::var_os(protect::test_process::TARGET_PID).is_none() {
+            return;
+        }
         let _alone = one_test_at_a_time();
         protect::harden_process();
         let mut set = every_part(None);

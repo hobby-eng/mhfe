@@ -1,10 +1,11 @@
 // @ts-check
 // Common operations of browser modules without Argon2.
-import { encodeSecret } from "./secrets.js";
+import { requireSecret, SecretBytes } from "./secrets.js";
 import { CompiledModule } from "./compiled.js";
 import { PackageCheck } from "./checks.js";
 import { requireCallback, refuseUnknownOptions } from "./arguments.js";
 import { WorkerJob } from "./jobs.js";
+import { InputTextBoundary } from "./input-text.js";
 /** @import { WorkerRequest, WorkerHandlers, SelfCheckListener, PackageCheckOptions } from "../types/runtime-shared.d.ts" */
 /** @import { MhfeSelfCheckTier } from "../runtime.d.ts" */
 
@@ -16,8 +17,10 @@ import { WorkerJob } from "./jobs.js";
  * @param {unknown} typed
  */
 export async function wordHintsOf(module, typed) {
+  requireSecret(typed, "typed");
   await module.ready();
-  return module.run({ operation: "wordHints", typed: encodeSecret(typed, "typed") });
+  const bytes = await module.copyInputText(typed, "typed");
+  return module.run({ operation: "wordHints", typed: new SecretBytes(bytes) });
 }
 
 /**
@@ -27,6 +30,7 @@ export async function wordHintsOf(module, typed) {
  * MhfeClient has its own, with its slot and Argon2 builds.
  */
 export class ModuleWorker {
+  #inputText = new InputTextBoundary(() => this.run({ operation: "parameters" }));
   /** @type {string} */
   #module;
   /** @type {string} */
@@ -87,8 +91,25 @@ export class ModuleWorker {
    * Runs an operation of the module in a worker of its own, its secret buffers transferred.
    * @param {WorkerRequest} message
    */
-  run(message) {
+  async run(message) {
+    for (const name of ["container", "card"]) {
+      if (name in message) await this.readInputText(message[name], name);
+    }
     return this.start(message).done;
+  }
+
+  /** Admits borrowed text before making a secret copy or posting a container/card.
+   * @param {unknown} value
+   * @param {string} name */
+  readInputText(value, name) {
+    return this.#inputText.read(value, name);
+  }
+
+  /** Admits raw utility secret bytes before their owned copy is made.
+   * @param {unknown} value
+   * @param {string} name */
+  copyInputText(value, name) {
+    return this.#inputText.copy(value, name);
   }
 
   /**
@@ -137,7 +158,7 @@ export class MhfeModuleClass {
    * cancel() awaits before its first call: known answers of each part the class computes, each
    * with a case it must refuse, and what the page itself must do. Resolves to `{ passed, tier,
    * version, buildId, components: [{ id, label, outcome, detail? }] }`, made once per page: parts
-   * that another class of the page passed with the same WebAssembly are not run again. When a part
+   * that another class of the page passed with the same compiled module are not run again. When a part
    * has failed, every method of the class rejects with SELF_CHECK_FAILED from then on, the report
    * attached; a page keeps its controls closed and shows the report.
    */

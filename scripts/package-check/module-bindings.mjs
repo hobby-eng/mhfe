@@ -5,6 +5,9 @@ import assert from "node:assert/strict";
 
 import { FULL_SIZE_CONTAINER, PHRASE } from "../public-test-data.mjs";
 import { expectCode, expectMessage, fieldsOf } from "./expect.mjs";
+import { checkPasswordBoundaries } from "./password-boundaries.mjs";
+import { checkWordInputBoundaries } from "./word-input-boundaries.mjs";
+import { checkUtilityInputBoundaries } from "./utility-input-boundaries.mjs";
 import {
   VERSION,
   argon2Engine,
@@ -34,6 +37,7 @@ const wallet = bindings;
 
 /** The repair module: a card of repair words, a repaired container and what a typed one is. */
 export function checkRepairModule() {
+  checkWordInputBoundaries(bindings);
   assert.equal(JSON.parse(repair.repairParameters()).version, VERSION);
   assert.equal(repair.packageVersion(), VERSION);
   // Vectors of an independent implementation (src/repair.rs).
@@ -107,6 +111,7 @@ export function checkPasswordsModule() {
     "capitals",
   );
   assert.equal(JSON.parse(passwords.passwordStrength(encode("password"), "", 0)).weak, true);
+  checkPasswordBoundaries(passwords);
   // Without a count, as many words or characters as the command-line tool makes.
   assert.equal(
     JSON.parse(passwords.makePassword("words", undefined, noBytes(), testRandom)).password.split(
@@ -163,6 +168,7 @@ export function checkPasswordsModule() {
 
 /** The wallet module: fingerprints, the wallet check, draws, chosen words and word hints. */
 export function checkWalletModule() {
+  checkUtilityInputBoundaries();
   checkWalletFacts();
   checkWordWishes();
   checkWordHints();

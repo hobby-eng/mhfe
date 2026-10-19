@@ -14,6 +14,7 @@ import {
   REDUCED_COST_CONTAINER,
   REDUCED_COST_SAME_LENGTH_CONTAINER,
   ZERO_24,
+  UTILITY_INPUT_BYTES,
 } from "../public-test-data.mjs";
 import { checkRekey } from "./core-rekey.mjs";
 import { expectCode, expectMessage, fieldsOf, noRoundExpected, sorted } from "./expect.mjs";
@@ -52,6 +53,7 @@ const core = bindings;
 /** The core's facts, and the copies that the page's runtime and the worker cannot avoid. */
 export function checkPackageFacts() {
   assert.equal(parameters.version, VERSION);
+  assert.equal(parameters.maxInputTextBytes, UTILITY_INPUT_BYTES);
   assert.equal(core.packageVersion(), VERSION);
   assert.equal(parameters.apiVersion, undefined, "the release version replaced the API counter");
   assert.equal(parameters.suiteId, SUITE_3);

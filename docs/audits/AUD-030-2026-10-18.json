@@ -1,0 +1,608 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-030",
+  "auditNumber": 30,
+  "date": "2026-10-18",
+  "title": "Bounded current-tree audit and remediation",
+  "reviewer": {
+    "name": "GitHub Copilot coordinator with two independent read-only scope reviewers",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": null,
+    "independentReviewerModels": null
+  },
+  "snapshot": {
+    "commit": "575cbd1b7634646f6e19a2501ed9ea164a6a7acd",
+    "commitComplete": false,
+    "workingTree": "Extensive pre-existing uncommitted remediation preserved on main; no commits, pushes, tags, releases or branch changes.",
+    "sourceFingerprint": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65",
+    "sourceFileCount": 475,
+    "baselineSourceFingerprint": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65",
+    "baselineSourceFileCount": 475,
+    "fingerprintFormat": "SHA256 of sorted file SHA256, two spaces, relative path and LF records; docs/audits excluded.",
+    "phase": "Frozen discovery baseline, before this audit's product remediation"
+  },
+  "verificationSnapshot": {
+    "commit": "575cbd1b7634646f6e19a2501ed9ea164a6a7acd",
+    "commitComplete": false,
+    "workingTree": "Source-bound uncommitted remediation; original dirty work preserved",
+    "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+    "sourceFileCount": 476,
+    "lastAcceptanceRecord": "message-compatibility-acceptance.command.json",
+    "localOnly": true
+  },
+  "scope": {
+    "repository": "hobby-eng/mhfe only, existing authoritative checkout",
+    "requestedDepth": "Full scope with CORE and applicable rules, followed by confirmed fixes",
+    "attainedDepth": "Bounded partial semantic audit and source-bound remediation; not whole-CORE certification or release acceptance",
+    "nativePrimary": {
+      "assigned": 251,
+      "completeFileReads": 59,
+      "partialReads": 47,
+      "hashOnly": 145
+    },
+    "browserToolingPrimary": {
+      "assigned": 194,
+      "completeFileReads": 141,
+      "partialOrInventoryOnly": 53
+    },
+    "coordinatorRootPaths": 30,
+    "assignmentCounts": {
+      "procedureChecks": 32,
+      "ruleCandidates": 104,
+      "coreRules": 53
+    },
+    "newSourcePath": "scripts/package-check/argument-boundaries.mjs",
+    "limits": "Read-depth totals, structured validation, retained context and executed tests are separate evidence, not independent totals to add."
+  },
+  "checks": {
+    "coverage": [
+      {"checkId": "CHECK-SEC-001","title": "Threat model and secret ownership","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-SEC-002","title": "Secret Vault, CSP, sandbox, and transport","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-SEC-003","title": "Network egress and secret guards","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-SEC-004","title": "Randomness, encryption, and authentication","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-SEC-005","title": "Secret lifecycle and exceptional paths","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-SEC-006","title": "Browser injection, persistence, and sensitive APIs","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-SEC-007","title": "Read-only guarantees and availability bounds","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-FUN-001","title": "BIP39, entropy, and seed interpretation","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-FUN-002","title": "HD derivation and every coin/profile","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-FUN-003","title": "BIP85, BIP38, messages, and Silent Payments","primaryOwner": "native-reviewer","outcome": "not-applicable","scope": "No supported BIP85/BIP38/message-signing/Silent-Payments operation.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-FUN-004","title": "Scripts, descriptors, Miniscript, and multisig","primaryOwner": "native-reviewer","outcome": "not-applicable","scope": "No descriptor/Miniscript/multisig operation; single-key address encodings remain in FUN-002.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-FUN-005","title": "Transactions, PSBT version context, and commitments","primaryOwner": "native-reviewer","outcome": "not-applicable","scope": "No transaction/PSBT operation.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-FUN-006","title": "Recovery and backup formats","primaryOwner": "native-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-FUN-007","title": "Discovery, providers, proofs, and accounting","primaryOwner": "native-reviewer","outcome": "not-applicable","scope": "No connected provider/proof/accounting operation; offline address search remains in FUN-002/SEC-007.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-API-001","title": "Actual dependency call contracts","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-API-002","title": "Async state, cancellation, and revisions","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-API-003","title": "Public export schema and monetary fidelity","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-API-004","title": "Encoding and import/export interoperability","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-BLD-001","title": "Manifest, flags, and feature composition","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-BLD-002","title": "Matrix depth and runtime sampling","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-BLD-003","title": "Lockfiles, source provenance, and licenses","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-BLD-004","title": "Canonical WASM and Docker bytes","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-BLD-005","title": "Artifacts, CI, and release workflows","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-UI-001","title": "Real files and representative viewports","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-UI-002","title": "Navigation, inputs, and state preservation","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-UI-003","title": "Secret visibility, help, QR, and accessibility","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-ARC-001","title": "Ownership, imports, and composition seams","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-ARC-002","title": "Dead code, duplication, and false positives","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-ARC-003","title": "Comments, tests, and production-path fidelity","primaryOwner": "browser-tooling-reviewer","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-DOC-001","title": "User-facing capability and safety descriptions","primaryOwner": "coordinator","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-DOC-002","title": "Commands, metadata, links, and legal materials","primaryOwner": "coordinator","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"},
+      {"checkId": "CHECK-DOC-003","title": "Audit records and evidence consistency","primaryOwner": "coordinator","outcome": "not-run","scope": "Partial source review and named bounded passing executions; the entire broad task is not established.","evidence": "Qualified path/rule ledger and exact command receipts, local only"}
+    ],
+    "commands": [
+      {"record": "baseline-fast.command.json","argv": ["bash","scripts/check-fast.sh"],"startedUtc": "2026-10-18T12:09:36.027Z","completedUtc": "2026-10-18T12:13:56.215Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65","sourceUnchanged": true,"logSha256": "138bc259eabc11c706fe3bb9c78f703036a18395695d429263ca8bdf5b20b3dd","localOnly": true},
+      {"record": "browser-source-gates-2.command.json","argv": ["bash","-c","set -euo pipefail; pnpm exec prettier --write web/runtime-parts/arguments.js web/wallet.js web/client.d.ts web/runtime.d.ts web/runtime-parts/checks.js scripts/package-check/argument-boundaries.mjs scripts/package-check/checks.mjs scripts/package-check/page-classes.mjs scripts/browser-check/password-checks.mjs scripts/browser-check/wallet-checks.mjs docs/API.md docs/BROWSER-PACKAGE.md docs/releases/unreleased.md; pnpm run --silent lint; node scripts/verify-no-copies.mjs; node scripts/verify-code-rules.mjs; node scripts/verify-docker-stages.mjs; pnpm run --silent format:check; bash -n packaging/pack-archives.sh scripts/verify-archive-packing.sh; git diff --check"],"startedUtc": "2026-10-18T13:07:26.267Z","completedUtc": "2026-10-18T13:07:35.995Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "37b6ce46000525079f4433bd8f247d7f4bf781159840601c5f49c939b2678761","sourceUnchanged": true,"logSha256": "e88c7a73931398a78f1fa737d6e8e668c7abf511d53408c03502620e15b8a916","localOnly": true},
+      {"record": "browser-source-gates.command.json","argv": ["bash","-c","set -euo pipefail; pnpm run --silent check:types; pnpm run --silent lint; node scripts/verify-no-copies.mjs; node scripts/verify-code-rules.mjs; node scripts/verify-docker-stages.mjs; pnpm run --silent format:check; bash -n packaging/pack-archives.sh scripts/verify-archive-packing.sh; git diff --check"],"startedUtc": "2026-10-18T13:05:04.713Z","completedUtc": "2026-10-18T13:05:06.223Z","exitCode": 1,"outcome": "failed","expectedNegativeControl": false,"sourceFingerprintAfter": "b626438357e39c2c159ddf8e1eb113037e5e5eb9abf13df74053453ab90354d3","sourceUnchanged": true,"logSha256": "76a846d9fc00814626b0072c7a819e652f25e587448928dcba87e8de4acdd5d0","localOnly": true},
+      {"record": "current-browser-build.command.json","argv": ["bash","-c","set -euo pipefail; source ../workingspace/emsdk/emsdk_env.sh; scripts/build-wasm.sh"],"startedUtc": "2026-10-18T12:15:29.844Z","completedUtc": "2026-10-18T12:15:54.402Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65","sourceUnchanged": true,"logSha256": "aff8753d3adc6955e96bc3f3d7bc3cfb0f493987f328de3c9368fbd8b66cebe5","localOnly": true},
+      {"record": "current-node-and-boundaries.command.json","argv": ["bash","-c","set -euo pipefail; node scripts/verify-argon2-wasm.mjs; node scripts/verify-browser-package.mjs; node docs/audits/AUD-029-harnesses/sealed-json-owners.mjs; node docs/audits/AUD-029-harnesses/native-probe.mjs phrase-raw-boundary; node docs/audits/AUD-029-harnesses/native-probe.mjs hint-debug-boundary; python3 docs/audits/AUD-029-harnesses/structured-data.py docs/audits/AUD-029-2026-10-15.json; python3 docs/audits/AUD-026-harnesses/spec-bindings.py"],"startedUtc": "2026-10-18T12:17:24.996Z","completedUtc": "2026-10-18T12:17:54.533Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65","sourceUnchanged": true,"logSha256": "146946924aca7e96d0e02259a8b987ccb924362c800eac94b53aee4ccc6f7526","localOnly": true},
+      {"record": "current-real-browsers.command.json","argv": ["bash","-c","set -euo pipefail; node scripts/verify-browsers.mjs --browser chromium --mode standard; node scripts/verify-browsers.mjs --browser firefox --mode standard"],"startedUtc": "2026-10-18T12:18:22.977Z","completedUtc": "2026-10-18T12:19:36.191Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65","sourceUnchanged": true,"logSha256": "683ee2da92c920e0cc2e665c5119ae8c50f6f143ea0d647afb20c71e62807f23","localOnly": true},
+      {"record": "documentation-format-and-package-readme.command.json","argv": ["bash","-c","set -euo pipefail; pnpm exec prettier --ignore-path /dev/null --write docs/API.md docs/BROWSER-PACKAGE.md docs/audits/AUD-030-harnesses/README.md docs/audits/AUD-030-harnesses/record-command.mjs; node --check docs/audits/AUD-030-harnesses/record-command.mjs; node scripts/write-package-manifest.mjs dist; git diff --check"],"startedUtc": "2026-10-18T12:31:32.186Z","completedUtc": "2026-10-18T12:31:32.935Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "94be2fa599d4f514d351c5df741032a8619e45090a83a944069a1fc2222862aa","sourceUnchanged": true,"logSha256": "f9f42d2cbd1041c7c26fce156187449bb57e4fa15758a5b8a62fb2de40d52844","localOnly": true},
+      {"record": "final-browser-acceptance.command.json","argv": ["bash","-c","set -euo pipefail; pnpm run --silent check:types; pnpm run --silent lint; node scripts/verify-no-copies.mjs; node scripts/verify-code-rules.mjs; python3 scripts/third-party-licenses.py --check; pnpm run --silent format:check; source ../workingspace/emsdk/emsdk_env.sh; scripts/build-wasm.sh; node scripts/verify-argon2-wasm.mjs; node scripts/verify-browser-package.mjs; node docs/audits/AUD-029-harnesses/sealed-json-owners.mjs; node scripts/verify-browsers.mjs --browser chromium --mode standard; node scripts/verify-browsers.mjs --browser firefox --mode standard; git diff --check"],"startedUtc": "2026-10-18T13:14:13.978Z","completedUtc": "2026-10-18T13:18:33.158Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "34f13f4cf2522888f355cb88967fd599ea1fdc1ff737265a685d3fffdeea408b","sourceUnchanged": true,"logSha256": "5f127e5a02b6115a96e692e2719daf04fb3e843257645d5e8b7c3b2e480038d2","localOnly": true},
+      {"record": "message-compatibility-acceptance.command.json","argv": ["bash","-c","set -euo pipefail; pnpm run --silent check:types; pnpm run --silent lint; node scripts/verify-no-copies.mjs; node scripts/verify-code-rules.mjs; pnpm run --silent format:check; source ../workingspace/emsdk/emsdk_env.sh; scripts/build-wasm.sh; node scripts/verify-browser-package.mjs; node scripts/verify-browsers.mjs --browser chromium --mode standard; node scripts/verify-browsers.mjs --browser firefox --mode standard; git diff --check"],"startedUtc": "2026-10-18T13:30:46.385Z","completedUtc": "2026-10-18T13:35:48.858Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600","sourceUnchanged": true,"logSha256": "c0bf31a5873814177134169aea6436aea93a268472a1995d93d23d81ccd5b683","localOnly": true},
+      {"record": "options-shape-red.command.json","argv": ["node","--max-old-space-size=128","--input-type=module","-e","import { loadClasses } from \"./scripts/package-check/page-classes.mjs\"; import { installStandInWorker } from \"./scripts/package-check/stand-in-worker.mjs\"; import { checkOptionContainers } from \"./scripts/package-check/argument-boundaries.mjs\"; const classes = await loadClasses(); installStandInWorker(); await checkOptionContainers(classes);"],"startedUtc": "2026-10-18T12:58:20.624Z","completedUtc": "2026-10-18T12:58:20.741Z","exitCode": 1,"outcome": "failed","expectedNegativeControl": true,"sourceFingerprintAfter": "42a998faa9aca5acde0be7591c76e339cb98e9f3850274bb97523bee4d842041","sourceUnchanged": true,"logSha256": "757e0b135cb4b6190dc251a5c2af5eb998caa8ffb58fa8e4bc4fc5a38a8fbd06","localOnly": true},
+      {"record": "recorder-negative-control.command.json","argv": ["node","--max-old-space-size=16","-e","console.log(\"Public recorder refusal control reached\"); process.exit(7);"],"startedUtc": "2026-10-18T12:26:39.639Z","completedUtc": "2026-10-18T12:26:39.678Z","exitCode": 7,"outcome": "failed","expectedNegativeControl": true,"sourceFingerprintAfter": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65","sourceUnchanged": true,"logSha256": "dd3cdb170dd519d89bcf51dd8982b58ecf6aa3159507e77d9db09b6d76034e36","localOnly": true},
+      {"record": "recorder-positive-control.command.json","argv": ["node","--max-old-space-size=16","-e","console.log(\"Public recorder control reached\");"],"startedUtc": "2026-10-18T12:26:39.535Z","completedUtc": "2026-10-18T12:26:39.581Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65","sourceUnchanged": true,"logSha256": "de600e15250ac3488443deab77b282f4f693a560b9a07b1561741412e3dbe230","localOnly": true},
+      {"record": "source-integrity-and-notices.command.json","argv": ["bash","-c","set -euo pipefail; python3 scripts/third-party-licenses.py --self-test; python3 scripts/third-party-licenses.py --check; node scripts/verify-vendored-argon2.mjs; node ../.github/scripts/verify-action-pins.mjs .; node scripts/generate-published-rounds.mjs --check; python3 docs/audits/AUD-026-harnesses/inspect-known-answer-data.py"],"startedUtc": "2026-10-18T12:27:35.695Z","completedUtc": "2026-10-18T12:27:36.698Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "c3076e94878ef1d0f57061badf8f28d4234fb6733e58c862bcb99e45ee1cad65","sourceUnchanged": true,"logSha256": "820fc142773a5efd05bff4f05bc697cd41aa957762242e875dea78d89a108698","localOnly": true},
+      {"record": "wish-list-red.command.json","argv": ["node","--max-old-space-size=128","--input-type=module","-e","import { loadClasses } from \"./scripts/package-check/page-classes.mjs\"; import { installStandInWorker } from \"./scripts/package-check/stand-in-worker.mjs\"; import { checkWishListBoundaries } from \"./scripts/package-check/argument-boundaries.mjs\"; const classes = await loadClasses(); installStandInWorker(); await checkWishListBoundaries(classes);"],"startedUtc": "2026-10-18T12:58:28.692Z","completedUtc": "2026-10-18T12:58:28.817Z","exitCode": 1,"outcome": "failed","expectedNegativeControl": true,"sourceFingerprintAfter": "42a998faa9aca5acde0be7591c76e339cb98e9f3850274bb97523bee4d842041","sourceUnchanged": true,"logSha256": "a6b0e568bb3797bbb41a2ec2e9c8e0977c01dade22eb827a8e583e02f7a74994","localOnly": true},
+      {"record": "wish-message-compatibility-red.command.json","argv": ["node","--max-old-space-size=128","--input-type=module","-e","import { loadClasses } from \"./scripts/package-check/page-classes.mjs\"; import { installStandInWorker } from \"./scripts/package-check/stand-in-worker.mjs\"; import { checkWishListBoundaries } from \"./scripts/package-check/argument-boundaries.mjs\"; const classes = await loadClasses(); installStandInWorker(); await checkWishListBoundaries(classes);"],"startedUtc": "2026-10-18T13:24:45.223Z","completedUtc": "2026-10-18T13:24:45.325Z","exitCode": 1,"outcome": "failed","expectedNegativeControl": true,"sourceFingerprintAfter": "f7d56acab7beaf56c353ca2446219364c1528adfe06eb78d01cc1e03ff255d61","sourceUnchanged": true,"logSha256": "3f8d6522bffd482dd440a3c2c987ef627700ac32b5dda852164ef621b454ac17","localOnly": true},
+      {"record": "zip-repack-green.command.json","argv": ["bash","-c","set -euo pipefail; bash -n packaging/pack-archives.sh scripts/verify-archive-packing.sh; bash scripts/verify-archive-packing.sh; node scripts/verify-code-rules.mjs; node scripts/verify-docker-stages.mjs; git diff --check"],"startedUtc": "2026-10-18T12:51:48.642Z","completedUtc": "2026-10-18T12:51:49.757Z","exitCode": 0,"outcome": "passed","expectedNegativeControl": false,"sourceFingerprintAfter": "c4ad01487d8815f8c37033566a929516c172d01101843a015985f5cf091e2366","sourceUnchanged": true,"logSha256": "9c0c5f5ff3693ed166806dc6d127aec5656a12efd414de7dfcb524c8bc5ecbfb","localOnly": true},
+      {"record": "zip-repack-red.command.json","argv": ["bash","scripts/verify-archive-packing.sh"],"startedUtc": "2026-10-18T12:50:31.931Z","completedUtc": "2026-10-18T12:50:32.465Z","exitCode": 1,"outcome": "failed","expectedNegativeControl": true,"sourceFingerprintAfter": "6cd3867eb99ac97f975c3db9fc555d417bec070fb9aacfaa5caa74baf0d7e8fc","sourceUnchanged": true,"logSha256": "32e76e21262c6b859c535417a378dd2ee9c0367826eeacc67a27df2df401ed22","localOnly": true}
+    ]
+  },
+  "findings": [
+    {
+      "id": "AUD-030-BLD001",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "Repacking an existing ZIP retains obsolete entries",
+      "severity": "medium",
+      "status": "verified",
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Fresh canonical destinations avoid the demonstrated local repeat-packaging trigger; no corrupted published archive was established.",
+      "affectedFiles": [
+        "packaging/pack-archives.sh",
+        "scripts/verify-archive-packing.sh"
+      ],
+      "reproduction": "Pack two synthetic files, remove one, change/add content, repack into the same path, and compare with a fresh ZIP. Inject a partial failed ZIP writer and compare the previous destination bytes.",
+      "expected": "Only current staged content, with the previous archive preserved on failure.",
+      "observed": "The original ZIP add/update retained absent old entries and a failed writer overwrote the previous destination.",
+      "impact": "Stale or incomplete local repeat-package payload; no demonstrated secret compromise.",
+      "recommendedFix": "Fresh sibling temporary ZIP, explicit failure propagation and rename only after success.",
+      "requiredVerification": "Literal member/content and fresh-byte controls, failure preservation, existing umasks and independent review.",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "zip-repack-red.command.json",
+          "zip-repack-green.command.json",
+          "zip-fix-snapshot.json",
+          "zip-review.json"
+        ]
+      },
+      "relatedFindings": [
+        "AUD-023-BLD002"
+      ],
+      "ruleIds": [
+        "CORE-28",
+        "CORE-32",
+        "CORE-33",
+        "CORE-43"
+      ]
+    },
+    {
+      "id": "AUD-030-API001",
+      "category": "API",
+      "kind": "finding",
+      "title": "Non-object browser options silently select defaults",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "web/runtime-parts/arguments.js",
+        "scripts/package-check/argument-boundaries.mjs"
+      ],
+      "reproduction": "Pass a number/boolean/string/symbol/bigint/function/array/null into optional-options public methods; make(42) reaches the worker rather than TypeError.",
+      "expected": "Omitted/undefined options remain defaults; supplied invalid container shapes reject before work.",
+      "observed": "The original shared guard skipped nonobjects and destructuring silently selected defaults.",
+      "impact": "Unexpected generation/check work from malformed caller configuration.",
+      "recommendedFix": "Validate the container once in the shared guard before key enumeration/default destructuring.",
+      "requiredVerification": "Nine optional-options families, eight invalid shapes, zero-worker assertions, omission/undefined/empty-record positives and real-browser regressions.",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "options-shape-red.command.json",
+          "browser-fix-review.json",
+          "message-compatibility-acceptance.command.json"
+        ]
+      },
+      "relatedFindings": [
+        "AUD-024-API003"
+      ],
+      "ruleIds": [
+        "CORE-22",
+        "CORE-48",
+        "TS-02"
+      ]
+    },
+    {
+      "id": "AUD-028-API005",
+      "category": "API",
+      "kind": "finding",
+      "title": "Follow-up: browser wishes are collected before count refusal",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "web/wallet.js",
+        "scripts/package-check/argument-boundaries.mjs",
+        "scripts/public-test-data.mjs"
+      ],
+      "reproduction": "Give an oversized chosen/excluded array with a throwing first-entry getter to describeDraw/drawPhrase.",
+      "expected": "Refuse count before entry access, framing, encoding or workers; preserve established public diagnostic sentences.",
+      "observed": "The original page traversed/framed every invalid entry before the Rust count guard.",
+      "impact": "Caller-controlled local work/copies before refusal; no measured OOM, remote attack or secret exposure.",
+      "recommendedFix": "Synchronous explicit count/type admission and bounded indexed traversal; preserve existing message adaptation.",
+      "requiredVerification": "Max+1 and 4096-entry getter controls, malformed lengths, overridden collection methods, scalar-copy damage controls, independent literal messages, Node and both browsers.",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "wish-list-red.command.json",
+          "wish-message-compatibility-red.command.json",
+          "browser-fix-review.json",
+          "message-correction-review.json",
+          "message-compatibility-acceptance.command.json"
+        ]
+      },
+      "history": "Original ID retained. Native/raw fixes remain source-confirmed separately; this record addresses the demonstrated browser continuation.",
+      "ruleIds": [
+        "CORE-07",
+        "CORE-10",
+        "CORE-23",
+        "CORE-24",
+        "CORE-48",
+        "CORE-50"
+      ]
+    },
+    {
+      "id": "AUD-030-DOC001",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Erasure guidance retains the former phrase-text refusal code",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "docs/BROWSER-PACKAGE.md",
+        "web/client.d.ts"
+      ],
+      "reproduction": "Compare new raw admission INVALID_REQUEST wording with obsolete INVALID_PASSWORD_TEXT wording for readPhrase.",
+      "expected": "Distinguish raw phrase/container admission from direct secret-string encoding.",
+      "observed": "The same supported path was described with incompatible refusal codes.",
+      "impact": "Incorrect host error guidance, not a new runtime leak.",
+      "recommendedFix": "Correct the guides and specific declaration against their current callers.",
+      "requiredVerification": "Exact changed-document/caller review, type/format gates and independent review.",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "baseline-findings.json",
+          "documentation-fix-snapshot.json",
+          "browser-tooling-review.json",
+          "browser-fix-review.json"
+        ]
+      },
+      "ruleIds": [
+        "CORE-23",
+        "DOC-06"
+      ]
+    },
+    {
+      "id": "AUD-030-DOC002",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Retry guidance omits retained failed self-check components",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "docs/API.md",
+        "docs/BROWSER-PACKAGE.md",
+        "web/runtime.d.ts",
+        "web/runtime-parts/checks.js"
+      ],
+      "reproduction": "Compare unconditional retry-after-worker-error statements with the completed-failure latch.",
+      "expected": "Operational errors remain retryable only before any failed component closes the class.",
+      "observed": "Old wording omitted the earlier failure condition and contradicted the retained-failure policy.",
+      "impact": "Incorrect host recovery guidance; no implementation bypass established.",
+      "recommendedFix": "Qualify related guide/declaration/comment wording without changing the failure latch.",
+      "requiredVerification": "Current caller and checkpoint controls, changed-document review and independent acceptance.",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "baseline-findings.json",
+          "browser-tooling-review.json",
+          "browser-fix-review.json",
+          "message-compatibility-acceptance.command.json"
+        ]
+      },
+      "relatedFindings": [
+        "AUD-028-SEC003"
+      ],
+      "ruleIds": [
+        "CORE-27",
+        "DOC-06",
+        "DOC-07"
+      ]
+    },
+    {
+      "id": "AUD-030-ARC001",
+      "category": "ARC",
+      "kind": "finding",
+      "title": "Oversized reference documents lack explicit whole-file exceptions",
+      "severity": "low",
+      "status": "verified",
+      "releaseBlocking": false,
+      "affectedFiles": [
+        "docs/API.md",
+        "docs/BROWSER-PACKAGE.md",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "reproduction": "Baseline files have 1295/1138/2650 lines with no first-line reason and are not read by the length gate.",
+      "expected": "A justified whole-file exception or coherent restructuring, not an inferred pass.",
+      "observed": "The explicit exception documentation was absent.",
+      "impact": "Limited coding-rule documentation gap.",
+      "recommendedFix": "State the stable API reference, standalone shipped README and complete redistribution-catalog reasons explicitly.",
+      "requiredVerification": "Independent whole-file rationale judgment, exact unchanged-body checks and preserved licence bodies; no gate relaxation.",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "document-length-observation.json",
+          "browser-tooling-review.json",
+          "browser-fix-review.json"
+        ]
+      },
+      "ruleIds": [
+        "CORE-15"
+      ]
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-030-BLD001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "zip-repack-red.command.json",
+          "zip-repack-green.command.json",
+          "zip-fix-snapshot.json",
+          "zip-review.json"
+        ]
+      },
+      "scope": "This report finding/variant only, not blanket historical or whole-project acceptance."
+    },
+    {
+      "id": "AUD-030-API001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "options-shape-red.command.json",
+          "browser-fix-review.json",
+          "message-compatibility-acceptance.command.json"
+        ]
+      },
+      "scope": "This report finding/variant only, not blanket historical or whole-project acceptance."
+    },
+    {
+      "id": "AUD-028-API005",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "wish-list-red.command.json",
+          "wish-message-compatibility-red.command.json",
+          "browser-fix-review.json",
+          "message-correction-review.json",
+          "message-compatibility-acceptance.command.json"
+        ]
+      },
+      "scope": "This report finding/variant only, not blanket historical or whole-project acceptance."
+    },
+    {
+      "id": "AUD-030-DOC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "baseline-findings.json",
+          "documentation-fix-snapshot.json",
+          "browser-tooling-review.json",
+          "browser-fix-review.json"
+        ]
+      },
+      "scope": "This report finding/variant only, not blanket historical or whole-project acceptance."
+    },
+    {
+      "id": "AUD-030-DOC002",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "baseline-findings.json",
+          "browser-tooling-review.json",
+          "browser-fix-review.json",
+          "message-compatibility-acceptance.command.json"
+        ]
+      },
+      "scope": "This report finding/variant only, not blanket historical or whole-project acceptance."
+    },
+    {
+      "id": "AUD-030-ARC001",
+      "status": "verified",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "document-length-observation.json",
+          "browser-tooling-review.json",
+          "browser-fix-review.json"
+        ]
+      },
+      "scope": "This report finding/variant only, not blanket historical or whole-project acceptance."
+    }
+  ],
+  "limitations": [
+    "Full semantic review of every current path and whole-CORE/RUST conformity are not established; partial/hash-only paths remain explicit.",
+    "Five inherited native acceptance groups and AUD-029-BLD002 Windows positive-control execution remain unavailable on this Linux host.",
+    "No final canonical cached/uncached pair, current release archive/signature/attestation acceptance, full-cost suite replay or downstream integration was executed.",
+    "Fast/isolated browser mode was not freshly repeated; both final standard-mode engines were executed.",
+    "No new dependency advisory, scanner, literature, fuzz, mutation, sanitizer, assembly erasure, Miri or statistical timing campaign.",
+    "Best-effort MADV_DONTDUMP per-allocation readback remains an unresolved policy/defense-in-depth observation, not accepted risk or demonstrated secret compromise.",
+    "All source changes remain uncommitted; no external publication or new runtime dependency."
+  ],
+  "evidence": {
+    "localOnly": true,
+    "directory": "docs/audits/AUD-030-evidence/",
+    "scope": "Original logs, command receipts, manifests, qualified path/rule ledgers, failed attempts and authentic reviewer dossiers; never committed."
+  },
+  "completedUtc": "2026-10-18T13:46:03.714122+00:00",
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "instructionHashes": {
+    "AGENTS.md": "1f2bd03825f0a0056dbf430da8b0243423ea34f130ac3dbe08b7235eb5d920d3",
+    "GLOSSARY.md": "ef514c847fdd5fb24ab5a0bd649e29e01955190c6a0afcbf3445c14e775cc2e5",
+    "GLOSSARY-MAP.md": "a2b6c79b8279c5f98cbb62494b9aaf553e50b12be99363b6b6f09788cc64f9f6",
+    "handovers/README.md": "ccc8792292d361082055d28cd535660067739ab1b4b006f0b0f402c1c320e0f4",
+    "handovers/mhfe.md": "f908f43d6e3406b491f8a8bc7ffcf654d43cd3f97af809abcdb0aabe4dc266f8",
+    ".github/instructions/code-core.instructions.md": "51ac92ddffea253bb7ed2f1926eb4cab6c2f52d336af95c1d63f3ebdd9fce066",
+    ".github/instructions/code-rust.instructions.md": "08bb268d4da1d1e01e93e6294b028a9471a062565eeaf7eb7355fd6592bdcc9c",
+    ".github/instructions/code-typescript.instructions.md": "5984f573d7df64ebd494f79891ce838dd518f0cf27876a2965fe46df6ace3ec1",
+    ".github/instructions/code-browser.instructions.md": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+    ".github/instructions/code-tooling.instructions.md": "ba09a6530475e8ba08cc96dbf4100b043b6c250263e62def21321f178bb631f7",
+    ".github/instructions/docs.instructions.md": "1fc9e20ab2f2dad220dc3f6b507e7372c161a05208c80ed2aa8dc28525bb33bf",
+    ".github/instructions/ci.instructions.md": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+    ".github/instructions/audits.instructions.md": "6eed08f958c11bd530006c89489796db8efa759f8a93c501a514de262d0ab004",
+    "mhfe/AGENTS.md": "2578731c946d18af56e721b1f1a2f504c77d05eea6e343a9564a01553613c5d2",
+    "user/copilot-instructions.md": "a82e9c51b58cea12aee5520819a84b2fa1a694f707d3816e3e28d00630117e22",
+    ".github/skills/wallet-full-audit/SKILL.md": "5fef2f168d0d2895a469ea10be76dee1c44c55f8678162bcf5487108b2c4395d",
+    ".github/skills/wallet-security-review/SKILL.md": "0039e3c1345f19948551739050269cab947eeb4d32c9c8cc8e10897a8dab3f66",
+    ".github/skills/audit-context-building/SKILL.md": "33fa693dc6e166cfa4919e4373cb6578c009d296234c2ae7cb3cd4e79b443765",
+    ".github/skills/spec-to-code-compliance/SKILL.md": "eb0d91b50a9c06f50baf8763d1e23566897b9fa3e7ffcf13134eee4e1ccaefe5",
+    ".github/skills/post-patch-validation/SKILL.md": "33b604f4d7d62eab393d710edb98b18505fcbe079c07c9428daa018f29439b54",
+    ".github/skills/zeroize-audit/SKILL.md": "933273f0c9cd0ae197c010a4d3de81782a593b2160507b897f1e04d579bfba6f",
+    ".github/skills/rust-review/SKILL.md": "52ee8b08876b0ad90ecdf4a58de8d41fb2d8627f1e4d259a806a35a6e187ae91",
+    ".github/skills/property-based-testing/SKILL.md": "9448cacb65c6237a7c22dc59602667177ecae405524079ae9ff92240590b995a",
+    ".github/skills/javascript-testing-expert/SKILL.md": "5aacae521c8a7df27029283920264d52003d55dbddef9dbe01a45e0394f84465",
+    ".github/skills/microsoft-rust-guidelines/SKILL.md": "94711a862784747fa06c47b4a088b91992b6aead0ffa4a811423f703b5da663f"
+  },
+  "artifacts": {
+    "buildId": "98c6df9b536939c3",
+    "version": "0.6.1",
+    "files": {
+      "README.md": "0ae9d00c5314974db384e90fd6c54402b71461dfac4c857edaa2bbf3e1d67661",
+      "core/argon2-mt.js": "65051591a15864d419bf2b61950d7922c9e9eb460877fcb3150ba3bfe7b18f38",
+      "core/argon2-st.js": "c2b7cd39c00089df29be1a1ae35dc28fbd80904b37268999189d48b4071e7f5f",
+      "core/client.d.ts": "9cd68b44a6ce134c179f4a705e72c71dca524e99eb7410518ad6b97a4d599bf3",
+      "core/client.js": "85421c9889325bafeebf17f84e14220894aa9a104678e8a324a9ce445a0e6148",
+      "core/mhfe-fast-mode.py": "cbab4c87720425a78567a6a5cccbc2287552bfff9a1d54de30c1b5104a85d664",
+      "modules.json": "4629c75c08d847909a9d17128879465e76780b74616cd916b96c551bd662a5ff",
+      "passwords/passwords.d.ts": "14afc98df771bb3fbd718cbd6ed35f7039a849e02bac30ae2ec639098e5e7820",
+      "passwords/passwords.js": "9a472af3c2f6c295455d2a45f0d0e0b90b750f12f3aa742f80b96360b9a83336",
+      "repair/repair.d.ts": "e015fe47d6d102cc6ae1ffa57f0de4f3ca6b6dc871970387bb3340a3eb59986b",
+      "repair/repair.js": "10cbc17ad6593316cb79fae385d5543bd6c174708cba497f01b150bc5ad39aec",
+      "runtime/mhfe.wasm": "660d653205c131209f86976287b37204070ddefedb8da6072cbaef7063b03ef1",
+      "runtime/runtime.d.ts": "df19263b1d8e12bc94bf961761c7ca4fcc403bcaa5b17949a1f7c357d8b7f7c8",
+      "runtime/runtime.js": "1a3d166eba018a29a8733b554a9b1a036857b99d4db14cc1ff1570cb3e320d8a",
+      "runtime/worker.js": "4894dacb7660266c1190d5997f84298afe38565d320c01141f132c77150b3206",
+      "wallet/wallet.d.ts": "060fc628773c698ebd1ba3865acb63af5b9a3372c8a2a97ae52ed040fd728e18",
+      "wallet/wallet.js": "435253f31180f53fc6edecaac0d9b7cee518eacfc7ffba09506f96a4075f7680"
+    },
+    "relationship": "Fresh developer-host build; final Node and real Chromium/Firefox standard execution. Not canonical/release acceptance.",
+    "localOnlyBuildOutput": true
+  },
+  "independentReviews": {
+    "native-review.json": {
+      "sha256": "d5118393fb50ba1e3bc77552a2b6e7d3982b66207e0c6671bb34f1495f0bb697",
+      "localOnly": true
+    },
+    "browser-tooling-review.json": {
+      "sha256": "aa2a8eaa24a1047922d28f96c23eb4e0672c0a0e94e819554ba7874b96274dda",
+      "localOnly": true
+    },
+    "zip-review.json": {
+      "sha256": "eb6d635a3881e8b1a9d2fdf48da5c521bcbd55f62fc4374dff970dd4068757e9",
+      "localOnly": true
+    },
+    "browser-fix-review.json": {
+      "sha256": "5624dd6f25580e380b002ec9e524f0d96941c8bf40e2593acc187d2d12706275",
+      "localOnly": true
+    },
+    "message-correction-review.json": {
+      "sha256": "4d098832392acf5be99563b814cc7fd075ccd2fd5475f639c1b9de58a9af2079",
+      "localOnly": true
+    }
+  },
+  "sourceAdmission": {
+    "unchangedNativePaths": 251,
+    "baselineFastResultsAdmitted": true,
+    "lastAcceptanceSourceUnchanged": true,
+    "lastAcceptanceLogSha256": "c0bf31a5873814177134169aea6436aea93a268472a1995d93d23d81ccd5b683",
+    "lastAcceptanceUtc": "2026-10-18T13:35:48.858Z",
+    "sampledMemory": {
+      "reserveKiB": 3145728,
+      "budgetKiB": 2097152,
+      "peakRssKiB": 1247664,
+      "minimumAvailableKiB": 6466100
+    }
+  },
+  "remainingPlatformAcceptance": [
+    {
+      "id": "AUD-026-BLD002",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual Windows memory-owner locking"
+    },
+    {
+      "id": "AUD-026-BLD003",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual macOS paired attachment"
+    },
+    {
+      "id": "AUD-024-SEC007",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual Windows console/ConPTY and residue"
+    },
+    {
+      "id": "AUD-024-SEC010",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual Windows/macOS enforcement and signed runtime"
+    },
+    {
+      "id": "AUD-024-BLD009",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual native macOS packing"
+    },
+    {
+      "id": "AUD-029-BLD002",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual Windows successful-access/denial control pair"
+    }
+  ],
+  "informationalObservations": [
+    {
+      "candidateId": "NATIVE-READBACK-001",
+      "classification": "unresolved policy and defense-in-depth observation",
+      "sourceFact": "Best-effort Linux MADV_DONTDUMP advice has no per-allocation retained/read-back result.",
+      "scopeChallenge": "CLI separately verifies its process-wide dump policy; no refused-advice or dump reproduction executed. No risk acceptance is inferred.",
+      "requiredFollowup": "Settle the protection-reporting contract before changing allocation semantics; use a small public control, not full-size Argon2.",
+      "riskAccepted": false
+    }
+  ],
+  "retainedNonpassingAttempts": [
+    "Expected defect probes and recorder exit-7 control retain actual nonzero exits.",
+    "A recorder admission failed the combined-memory prerequisite without spawning a child; later controls passed after the slot returned.",
+    "Initial generated README delta expectation incorrectly included modules.json; corrected exact README-only admission passed.",
+    "Initial ZIP member literal included ./; independent stale-byte and overwritten-output comparisons still demonstrated the product failures.",
+    "An explicit Prettier invocation included unsupported shell files and exited2; no formatter/dependency was added and Bash syntax/affected gates passed.",
+    "A new test message failed type-aware lint; corrected fixed assertion labels pass.",
+    "First browser acceptance passed with a lowercase count-message oracle; independent review required sentence adaptation and independent literal messages. The corrected probe failed before the latest passing acceptance."
+  ],
+  "coverageEvidence": {
+    "localOnly": true,
+    "path": "docs/audits/AUD-030-evidence/final-coverage-ledger.json",
+    "sha256": "d218213810277154dadebebb2f1833184daae8057a62c47c63e4953ba45d41e7",
+    "pathCount": 476,
+    "ruleCount": 104,
+    "semanticCoverageComplete": false
+  },
+  "reportDocument": {
+    "path": "AUD-030-2026-10-18.md",
+    "sha256": "20d1f9f809005801c5061ccba896cae258d1ca0349f19669be5f53cf4faa0533"
+  }
+}

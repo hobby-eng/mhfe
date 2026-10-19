@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -16,9 +16,9 @@ use mhfe::vectors::{
 };
 use mhfe::{Password, PhraseLength, Suite, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS};
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 use crate::exit::{Failure, SUCCESS};
+use crate::regular_file::RegularFile;
 use crate::settings;
 use crate::style::{self, paint, MUTED};
 use crate::time_text::{self, duration};
@@ -204,8 +204,7 @@ fn check_selection(set: &VectorSet, only: Option<&str>) -> Result<(), Failure> {
         return Ok(());
     }
     Err(Failure::invalid_input(format!(
-        "--only \"{}\" selects none of the {} test vectors; their names are {}.",
-        style::escaped(text),
+        "--only selects none of the {} test vectors; their names are {}.",
         set.suite,
         names.join(", ")
     )))
@@ -224,7 +223,7 @@ fn recorded_container(folder: &Path, name: &str, schema: &str) -> Result<String,
     let unreadable = |error: &dyn std::fmt::Display| {
         Failure::internal(format!("Could not read {shown}: {error}"))
     };
-    let file = match fs::File::open(&path) {
+    let file = match RegularFile::open(&path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return Err(Failure::internal(format!(
                 "The negative cases need {shown}; write that vector first."
@@ -232,17 +231,14 @@ fn recorded_container(folder: &Path, name: &str, schema: &str) -> Result<String,
         }
         file => file.map_err(|error| unreadable(&error))?,
     };
-    let mut text = String::new();
-    file.take(MAX_VECTOR_FILE + 1)
-        .read_to_string(&mut text)
-        .map_err(|error| unreadable(&error))?;
     let invalid =
         |why: &str| Failure::internal(format!("{shown} is not a valid vector file: {why}"));
-    if text.len() as u64 > MAX_VECTOR_FILE {
-        return Err(invalid("it is larger than any vector file"));
-    }
+    let bytes = file
+        .bytes(MAX_VECTOR_FILE)
+        .map_err(|error| unreadable(&error))?
+        .ok_or_else(|| invalid("it is larger than any vector file"))?;
     let vector: serde_json::Value =
-        serde_json::from_str(&text).map_err(|error| invalid(&error.to_string()))?;
+        serde_json::from_slice(&bytes).map_err(|error| invalid(&error.to_string()))?;
     if vector["schema"] != schema || vector["name"] != name {
         return Err(invalid(&format!(
             "it is not the vector {name} of the layout {schema}"
@@ -262,12 +258,7 @@ fn recorded_container(folder: &Path, name: &str, schema: &str) -> Result<String,
 /// in place rather than replaced, because a replaced file would carry a different lock. A crash
 /// in the middle leaves a short list, which the vector tests report; the next run writes it again.
 fn write_checksums(folder: &Path, set: &VectorSet) -> Result<(), Failure> {
-    let mut list = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(folder.join(CHECKSUM_FILE))?;
+    let mut list = RegularFile::for_update(&folder.join(CHECKSUM_FILE))?;
     list.lock()?;
     let names = set
         .inputs
@@ -277,15 +268,18 @@ fn write_checksums(folder: &Path, set: &VectorSet) -> Result<(), Failure> {
         .map(vectors::Vector::file_name);
     let mut sums = String::new();
     for name in names {
-        match fs::read(folder.join(&name)) {
-            Ok(bytes) => sums += &format!("{}  {name}\n", hex::encode(Sha256::digest(&bytes))),
+        match RegularFile::open(&folder.join(&name)) {
+            Ok(file) => {
+                let digest = file.sha256(MAX_VECTOR_FILE)?.ok_or_else(|| {
+                    Failure::internal("A vector file is larger than the 1 MiB limit.")
+                })?;
+                sums += &format!("{}  {name}\n", hex::encode(digest));
+            }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
         }
     }
-    list.set_len(0)?;
-    list.write_all(sums.as_bytes())?;
-    list.sync_all()?;
+    list.rewrite(sums.as_bytes())?;
     // Closing the file releases the lock.
     Ok(())
 }
@@ -302,7 +296,8 @@ fn write_json(folder: &Path, name: &str, value: &impl Serialize) -> Result<(), F
 /// parallel run never leaves a half-written file behind.
 fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), Failure> {
     let temporary = path.with_extension(format!("tmp{}", std::process::id()));
-    let mut file = fs::File::create(&temporary)?;
+    // Never follow or truncate a pre-existing temporary path, including a symlink or FIFO.
+    let mut file = fs::File::create_new(&temporary)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     fs::rename(&temporary, path)?;
@@ -412,6 +407,88 @@ fn show_vector_estimate(name: &str, work: WorkFactor, rounds: u32) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn checksum_generation_refuses_an_oversized_vector() {
+        let folder = std::env::temp_dir().join(format!("mhfe-large-vector-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        let file =
+            fs::File::create(folder.join(vectors::Vector::file_name(PUBLIC_INPUTS[0].name())))
+                .unwrap();
+        file.set_len(MAX_VECTOR_FILE + 1).unwrap();
+        drop(file);
+        let result = write_checksums(&folder, &SUITE_3_SET);
+        fs::remove_dir_all(&folder).unwrap();
+        assert!(
+            result.is_err(),
+            "an oversized vector must not enter the checksum list"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn vector_readers_and_checksum_output_refuse_links_and_fifos() {
+        use std::os::unix::fs::symlink;
+        let folder = std::env::temp_dir().join(format!("mhfe-vector-kinds-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        let name = PUBLIC_INPUTS[0].name();
+        let path = folder.join(vectors::Vector::file_name(name));
+        let target = folder.join("public-target.json");
+        let text = serde_json::json!({"schema": vectors::SCHEMA, "name": name, "container": "c"})
+            .to_string();
+        fs::write(&target, &text).unwrap();
+        let refuse_readers = || {
+            assert!(recorded_container(&folder, name, vectors::SCHEMA).is_err());
+            assert!(write_checksums(&folder, &SUITE_3_SET).is_err());
+        };
+        symlink(&target, &path).unwrap();
+        refuse_readers();
+        fs::remove_file(&path).unwrap();
+        assert!(std::process::Command::new("mkfifo")
+            .arg(&path)
+            .status()
+            .unwrap()
+            .success());
+        refuse_readers();
+        fs::remove_file(&path).unwrap();
+        let sums = folder.join(CHECKSUM_FILE);
+        fs::remove_file(&sums).unwrap();
+        symlink(&target, &sums).unwrap();
+        assert!(write_checksums(&folder, &SUITE_3_SET).is_err());
+        fs::remove_file(&sums).unwrap();
+        assert!(std::process::Command::new("mkfifo")
+            .arg(&sums)
+            .status()
+            .unwrap()
+            .success());
+        assert!(write_checksums(&folder, &SUITE_3_SET).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), text);
+        fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn an_existing_atomic_temporary_is_never_truncated() {
+        let folder = std::env::temp_dir().join(format!("mhfe-vector-temp-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        let path = folder.join("public.json");
+        let temporary = path.with_extension(format!("tmp{}", std::process::id()));
+        fs::write(&temporary, b"retained public data").unwrap();
+        assert!(write_atomically(&path, b"replacement").is_err());
+        assert_eq!(fs::read(&temporary).unwrap(), b"retained public data");
+        fs::remove_file(&temporary).unwrap();
+        #[cfg(unix)]
+        {
+            let target = folder.join("target.json");
+            fs::write(&target, b"retained public data").unwrap();
+            std::os::unix::fs::symlink(&target, &temporary).unwrap();
+            assert!(write_atomically(&path, b"replacement").is_err());
+            assert_eq!(fs::read(&target).unwrap(), b"retained public data");
+            fs::remove_file(&temporary).unwrap();
+        }
+        write_atomically(&path, b"replacement").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"replacement");
+        fs::remove_dir_all(folder).unwrap();
+    }
+
     /// An --only that selects nothing is refused before anything is written (AUD-024-API010).
     #[test]
     fn an_only_that_selects_nothing_is_refused() {
@@ -419,7 +496,7 @@ mod tests {
             assert!(check_selection(set, None).is_ok());
             assert!(check_selection(set, Some(NEGATIVE_CASES_STEM)).is_ok());
             assert!(check_selection(set, Some(set.inputs[0].name())).is_ok());
-            for nothing in ["", "no-such-vector"] {
+            for nothing in ["", "AUD026FIRST", "AUD026FIRST\nAUD026SECOND"] {
                 let refused = check_selection(set, Some(nothing)).unwrap_err();
                 assert_eq!(refused.exit_code(), crate::exit::INVALID_INPUT);
                 assert!(
@@ -427,6 +504,8 @@ mod tests {
                     "{}",
                     refused.message()
                 );
+                assert!(!refused.message().contains("AUD026FIRST"));
+                assert!(!refused.message().contains("AUD026SECOND"));
             }
         }
     }

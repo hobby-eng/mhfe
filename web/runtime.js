@@ -17,7 +17,8 @@
 
 /**
  * @import { CompiledModule as DeclaredCompiledModule, MhfeError as DeclaredError,
- *   MhfeModuleClass as DeclaredModuleClass } from "./runtime.d.ts"
+ *   MhfeModuleClass as DeclaredModuleClass,
+ *   InputTextBoundary as DeclaredInputTextBoundary } from "./runtime.d.ts"
  */
 
 /** @import { NoKeys } from "./types/api-presence.d.ts" */
@@ -33,11 +34,14 @@
 /** @typedef {NoKeys<Exclude<keyof typeof MhfeError, keyof typeof DeclaredError>>} ExtraErrorStatics */
 /** @typedef {NoKeys<Exclude<keyof typeof DeclaredModuleClass, keyof typeof MhfeModuleClass>>} MissingModuleStatics */
 /** @typedef {NoKeys<Exclude<keyof typeof MhfeModuleClass, keyof typeof DeclaredModuleClass>>} ExtraModuleStatics */
+/** @typedef {NoKeys<Exclude<keyof DeclaredInputTextBoundary, keyof InputTextBoundary>>} MissingTextBoundaryKeys */
+/** @typedef {NoKeys<Exclude<keyof InputTextBoundary, keyof DeclaredInputTextBoundary>>} ExtraTextBoundaryKeys */
 
 // Source parts are joined by scripts/browser-source.mjs into the unchanged shipped path.
 /** @import { CompiledModule } from "./runtime-parts/compiled.js" */
 /** @import { MhfeError } from "./runtime-parts/errors.js" */
 /** @import { MhfeModuleClass } from "./runtime-parts/modules.js" */
+/** @import { InputTextBoundary } from "./runtime-parts/input-text.js" */
 
 /** Shared errors exports. */
 export {
@@ -49,6 +53,9 @@ export {
 
 /** Shared values exports. */
 export { isRecord, sentence, countsText } from "./runtime-parts/values.js";
+
+/** Library-parameter-driven raw text admission before owned copies. */
+export { InputTextBoundary, requireInputText } from "./runtime-parts/input-text.js";
 
 /** Shared protocol exports. */
 export { readSetReport } from "./runtime-parts/protocol.js";

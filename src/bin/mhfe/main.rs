@@ -50,6 +50,7 @@ mod new_wallet;
 mod phrase_length;
 mod protect;
 mod readme;
+mod regular_file;
 mod rekey;
 mod self_test;
 mod serve;
@@ -357,60 +358,66 @@ fn exit_unparsed(error: clap::Error) -> ! {
 
 /// clap's text for a usage error, rendered as plain text, as mhfe adds its own colours. A value or
 /// argument the person gave is left out, with every tip that repeats it: it may be a password or
-/// a seed phrase typed on the command line by mistake (AUD-024-SEC004). A mistyped option name,
-/// such as --stdn, is kept with clap's tip.
+/// a seed phrase typed on the command line by mistake (AUD-024-SEC004). A suggested option may
+/// be named, but the unknown option itself is withheld too: its spelling proves no authority.
 fn usage_error_text(error: &clap::Error) -> String {
-    let rendered = error.render().to_string();
-    let Some(given) = withheld_value(error) else {
-        return rendered;
-    };
-    let quoted = format!("'{given}'");
-    let mut lines: Vec<String> = Vec::new();
-    for (index, line) in rendered.lines().enumerate() {
-        if index == 0 {
-            lines.push(line.replacen(&format!(" {quoted}"), "", 1));
-            lines.push(String::new());
-            lines.push(format!("  tip: {WITHHELD_TIP}"));
-        } else if !line.contains(&quoted) {
-            lines.push(line.to_owned());
-        }
+    use clap::error::{ContextKind, ContextValue, ErrorKind};
+    if withheld_value(error).is_none() {
+        return error.render().to_string();
     }
-    lines.join("\n")
+    // Render only closed parser context. Clap's suggestions can repeat the same input in
+    // several forms, including a multiline '-- value'; filtering rendered lines cannot own it.
+    let summary = match error.kind() {
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation | ErrorKind::TooManyValues => {
+            match error.get(ContextKind::InvalidArg) {
+                Some(ContextValue::String(argument)) => {
+                    format!("error: invalid value for '{argument}'")
+                }
+                _ => "error: invalid value".to_owned(),
+            }
+        }
+        ErrorKind::InvalidSubcommand => "error: unrecognized subcommand".to_owned(),
+        _ => "error: unexpected argument".to_owned(),
+    };
+    let mut text = format!("{summary}\n\n  tip: {WITHHELD_TIP}");
+    // Only this typed, input-free refusal is safe to retain. An arbitrary parser's source may
+    // include the supplied value even when its main error context has been withheld.
+    if let Some(hint) = std::error::Error::source(error)
+        .and_then(|source| source.downcast_ref::<choice::YesNoError>())
+    {
+        text.push_str(&format!("\n  tip: {hint}"));
+    }
+    if let Some(ContextValue::String(suggestion)) = error.get(ContextKind::SuggestedArg) {
+        text.push_str(&format!(
+            "\n  tip: a similar argument exists: '{suggestion}'"
+        ));
+    }
+    if let Some(ContextValue::StyledStr(usage)) = error.get(ContextKind::Usage) {
+        text.push_str("\n\n");
+        text.push_str(&usage.to_string());
+    }
+    text
 }
 
 /// Why a usage error leaves out what was given.
 const WITHHELD_TIP: &str = "what was given is not repeated, as it may be a secret: passwords and \
                             phrases are typed when asked, or given with --stdin";
 
-/// What a usage error would repeat from the command line, unless it names an option.
+/// The supplied value or argument that a usage error must withhold.
 fn withheld_value(error: &clap::Error) -> Option<&str> {
     use clap::error::{ContextKind, ContextValue, ErrorKind};
-    let (kind, may_name_an_option) = match error.kind() {
+    let kind = match error.kind() {
         ErrorKind::InvalidValue | ErrorKind::ValueValidation | ErrorKind::TooManyValues => {
-            (ContextKind::InvalidValue, false)
+            ContextKind::InvalidValue
         }
-        ErrorKind::UnknownArgument => (ContextKind::InvalidArg, true),
-        ErrorKind::InvalidSubcommand => (ContextKind::InvalidSubcommand, false),
+        ErrorKind::UnknownArgument => ContextKind::InvalidArg,
+        ErrorKind::InvalidSubcommand => ContextKind::InvalidSubcommand,
         _ => return None,
     };
     match error.get(kind) {
-        Some(ContextValue::String(given))
-            if !given.is_empty() && !(may_name_an_option && names_an_option(given)) =>
-        {
-            Some(given)
-        }
+        Some(ContextValue::String(given)) if !given.is_empty() => Some(given),
         _ => None,
     }
-}
-
-/// Whether an argument reads as a mistyped option name: a dash, then letters, digits and dashes,
-/// 32 characters at most.
-fn names_an_option(argument: &str) -> bool {
-    argument.starts_with('-')
-        && argument.len() <= 32
-        && argument
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-')
 }
 
 /// Isolates a command started directly and runs its checks at start, before it reads anything.
@@ -499,7 +506,7 @@ mod tests {
     }
 
     /// A usage error names the option, never a phrase or password given by mistake; a mistyped
-    /// option name keeps its tip (AUD-024-SEC004).
+    /// option name keeps only the closed suggestion (AUD-024-SEC004).
     #[test]
     fn a_usage_error_does_not_repeat_what_was_given() {
         let phrase = "abandon ability able about above absent absorb abstract absurd abuse access \
@@ -531,10 +538,84 @@ mod tests {
         );
         let typo = usage_error_of(&["encrypt", "--stdn"]);
         assert!(
-            typo.contains("'--stdn'") && typo.contains("'--stdin'"),
+            !typo.contains("--stdn") && typo.contains("'--stdin'"),
             "{typo}"
         );
-        assert!(!typo.contains(WITHHELD_TIP));
+        assert!(typo.contains(WITHHELD_TIP));
+    }
+
+    #[test]
+    fn a_usage_error_withholds_every_line_of_a_refused_argument() {
+        for separator in ["", ".", "\n", "\r\n", "\r", "\u{85}", "\u{2028}"] {
+            let given = format!("AUD026FIRST{separator}AUD026SECOND");
+            let option = format!("--{given}");
+            for arguments in [
+                vec!["encrypt", "--pim", &given],
+                vec!["rekey", "--new-pim", &given],
+                vec!["encrypt", &given],
+                vec![&given],
+                vec!["serve", &option],
+            ] {
+                let text = usage_error_of(&arguments);
+                for part in ["AUD026FIRST", "AUD026SECOND"] {
+                    assert!(!text.contains(part), "{arguments:?}: {text}");
+                }
+                assert!(text.contains(WITHHELD_TIP), "{text}");
+            }
+        }
+    }
+
+    #[test]
+    fn yes_no_usage_errors_keep_the_fixed_hint_without_repeating_the_input() {
+        let options: &[&[&str]] = &[
+            &["new", "--wallet-check"],
+            &["new", "--choose-word"],
+            &["encrypt", "--same-length"],
+            &["check", "--words", "auto", "--passphrase-used"],
+        ];
+        for prefix in options {
+            for given in [
+                "maybe",
+                "AUD027FIRST\nAUD027SECOND",
+                "AUD027FIRST\u{2028}AUD027SECOND",
+            ] {
+                let mut arguments = prefix.to_vec();
+                arguments.push(given);
+                let text = usage_error_of(&arguments);
+                assert!(text.contains("give yes or no"), "{text}");
+                assert!(text.contains(WITHHELD_TIP), "{text}");
+                for withheld in [given, "AUD027FIRST", "AUD027SECOND"] {
+                    assert!(!text.contains(withheld), "{text}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_arbitrary_parser_source_cannot_supply_a_displayed_hint() {
+        fn refuses(text: &str) -> Result<String, std::io::Error> {
+            Err(std::io::Error::other(format!(
+                "AUD027SOURCE give yes or no: {text}"
+            )))
+        }
+        let error = clap::Command::new("probe")
+            .arg(clap::Arg::new("value").long("value").value_parser(refuses))
+            .try_get_matches_from(["probe", "--value", "AUD027INPUT\nAUD027SECOND"])
+            .unwrap_err();
+        assert!(std::error::Error::source(&error)
+            .unwrap()
+            .to_string()
+            .contains("AUD027SOURCE"));
+        let text = usage_error_text(&error);
+        assert!(text.contains(WITHHELD_TIP), "{text}");
+        for withheld in [
+            "AUD027SOURCE",
+            "AUD027INPUT",
+            "AUD027SECOND",
+            "give yes or no",
+        ] {
+            assert!(!text.contains(withheld), "{text}");
+        }
     }
 
     /// The help of the tool and of every command, short (-h) and long (--help, and `mhfe help`),

@@ -22,7 +22,7 @@ macro_rules! case {
     };
 }
 
-/// One independently named representative of each pre-migration public code.
+/// Independently named representatives of the cipher and password refusal codes.
 fn cipher_and_password_refusals() -> Vec<(MhfeError, &'static str)> {
     vec![
         case!(
@@ -164,6 +164,7 @@ fn application_refusals() -> Vec<(MhfeError, &'static str)> {
             EngineError::MemoryAllocation { bytes: 2 << 30 },
             "MEMORY_ALLOCATION_FAILED"
         ),
+        case!(EngineError::MemoryProtection, "MEMORY_PROTECTION_FAILED"),
         case!(
             SettingsError::MemoryLevelNotSupportedHere {
                 level: 1,
@@ -248,7 +249,7 @@ fn every_stable_code_survives_conversion_and_has_an_owned_source() {
         );
         assert_eq!(error.source().unwrap().to_string(), message, "{expected}");
     }
-    assert_eq!(seen.len(), 52);
+    assert_eq!(seen.len(), 53);
     assert_eq!(
         seen,
         ErrorCode::ALL.iter().map(|code| code.as_str()).collect()

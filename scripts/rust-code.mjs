@@ -1,45 +1,10 @@
 // Rust lexical scopes shared by static gates; contents of literals never count as code.
 
-/** Rust code with comments and string/character contents blanked; braces there affect no scope.
- * `state` carries multiline strings and nested block comments between lines.
- * @param {string} line
- * @param {{ quoted: string | null, block: number }} state */
-export function rustCode(line, state) {
-  let code = "";
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (state.block > 0) {
-      if (line.startsWith("/*", index)) {
-        state.block += 1;
-        index += 1;
-      } else if (line.startsWith("*/", index)) {
-        state.block -= 1;
-        index += 1;
-      }
-    } else if (state.quoted !== null) {
-      if (state.quoted === '"' && character === "\\") index += 1;
-      else if (line.startsWith(state.quoted, index)) {
-        index += state.quoted.length - 1;
-        state.quoted = null;
-      }
-    } else if (line.startsWith("//", index)) {
-      break;
-    } else if (line.startsWith("/*", index)) {
-      state.block = 1;
-      index += 1;
-    } else if (character === '"') {
-      state.quoted = '"';
-    } else {
-      const raw = /^(?:b)?r(#+)?"/u.exec(line.slice(index));
-      const char = /^'(?:\\(?:u\{[\da-f_]+\}|x[\da-f]{2}|.)|[^'\\])'/iu.exec(line.slice(index));
-      if (raw !== null) {
-        state.quoted = '"' + (raw[1] ?? "");
-        index += raw[0].length - 1;
-      } else if (char !== null) index += char[0].length - 1;
-      else code += character;
-    }
-  }
-  return code;
+import { RustSource } from "./rust-source.mjs";
+
+/** Whole-source code with comments and literal contents blanked, preserving line offsets. */
+export function rustCode(source) {
+  return new RustSource(source).code();
 }
 
 /** Scope changes of a lexical Rust line whose literals and comments are already blanked. */
@@ -62,10 +27,7 @@ export function rustRunTimeLines(lines) {
   /** The depth at which a left-out part ends, "statement" until a `;`, or null outside one. */
   let skipUntil = null;
   let pendingTest = false;
-  /** @type {{ quoted: string | null, block: number }} */
-  const lexical = { quoted: null, block: 0 };
-  for (const [index, line] of lines.entries()) {
-    const code = rustCode(line, lexical);
+  for (const [index, code] of rustCode(lines.join("\n")).split("\n").entries()) {
     const trimmed = code.trim();
     if (skipUntil === null && /^#\[cfg\((?:all\()?test\b/u.test(trimmed)) pendingTest = true;
     const startsConst =
@@ -93,13 +55,11 @@ export function rustRunTimeLines(lines) {
  */
 export function rustProductionLines(lines) {
   const kept = [];
-  const lexical = { quoted: null, block: 0 };
   let depth = 0;
   let parentheses = 0;
   let pending = false;
   let skipped = null;
-  for (const [index, line] of lines.entries()) {
-    const code = rustCode(line, lexical);
+  for (const [index, code] of rustCode(lines.join("\n")).split("\n").entries()) {
     const trimmed = code.trim();
     if (/^#\[cfg\((?:all\()?test\b/u.test(trimmed)) pending = true;
     if (skipped === null && pending && trimmed !== "" && !trimmed.startsWith("#")) {

@@ -2,6 +2,28 @@
 // comparison of the command-line tool with the package share. Only public data: BIP39's all-zero
 // phrases and containers of them under the public test password, and the self-checks' parts.
 
+/** Independent literal oracle for the shared raw utility-input limit, in UTF-8 bytes. */
+export const UTILITY_INPUT_BYTES = 8192;
+
+/** Independent literals for the established public one-word-limit refusals, not formatted by code. */
+export const WISH_COUNT_REFUSALS = {
+  chosen: "The wishes for the new phrase cannot be used: choose at most 1 word",
+  neverUse: "The wishes for the new phrase cannot be used: name at most 1 word never to use",
+};
+
+/**
+ * The six repairs of "abacus abdomen abdominal zoom abiding aids", computed independently
+ * from the EFF list and MHFE-PASSWORD-CHECK-1 weights, solving each one-place congruence.
+ */
+export const CHECK_WORD_MISMATCH_REPAIRS = [
+  { position: 1, word: "activate", typed: "abacus" },
+  { position: 2, word: "daylong", typed: "abdomen" },
+  { position: 3, word: "encrust", typed: "abdominal" },
+  { position: 4, word: "abide", typed: "zoom" },
+  { position: 5, word: "excretory", typed: "abiding" },
+  { position: 6, word: "affected", typed: "aids" },
+];
+
 /** BIP39's all-zero 12-word phrase. */
 export const PHRASE =
   "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";

@@ -18,6 +18,8 @@ remap_builder_paths "$repo_root"
 cargo fmt --check
 # The copy gate reads Rust sources/tests, browser classes and the JavaScript of scripts.
 # Python and shell are reviewed separately; each rule has one source (CORE-10).
+# Check the shared reader in a bounded worker before any gate uses it on repository files.
+node scripts/verify-rust-strings.mjs
 node scripts/verify-no-copies.mjs --self-test
 node scripts/verify-no-copies.mjs
 # The guide's rules the other gates cannot see: the length of Rust, Python and shell files, script
@@ -32,16 +34,22 @@ node scripts/verify-cli-questions.mjs
 python3 scripts/verify-audit-records.py --self-test
 python3 scripts/verify-audit-records.py --metadata-only
 node scripts/verify-python-checks.mjs
+python3 -m scripts.terminal_suite.session
 # The retained module graph's low-level boundary criterion (AUD-024-ARC022), excluding the
 # separately tracked error and self-check dependencies.
 node scripts/verify-module-boundaries.mjs --self-test
+node scripts/verify-module-boundaries.mjs
 python3 docs/audits/AUD-024-harnesses/verify-module-edges/decisive_edges.py
 node scripts/verify-blame-revs.mjs --self-test
 node scripts/verify-blame-revs.mjs --syntax-only
 node scripts/verify-release-checksums.mjs --self-test
+node scripts/cargo-output.mjs --self-test
+python3 scripts/verify-macos-packages.py --self-test
 node scripts/verify-packaged-readme.mjs --self-test
 node scripts/verify-browser-wait.mjs
 node scripts/verify-browser-source.mjs
+node scripts/verify-builder-remapping.mjs
+node scripts/verify-wasm-binding-path.mjs
 node scripts/verify-network-code.mjs --self-test
 node scripts/verify-network-code.mjs
 node scripts/verify-single-modules.mjs --self-test

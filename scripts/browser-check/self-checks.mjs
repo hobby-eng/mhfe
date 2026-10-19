@@ -156,7 +156,11 @@ export async function checkFullChecks(client, repair, passwords, wallet) {
     partLines(report),
     [
       ...passedLines([...PAGE_PARTS, ...SELF_CHECK.core]),
+      "argon2-known-answer-single-threaded passed",
       "argon2-sizes-single-threaded passed",
+      fast
+        ? "argon2-known-answer-threaded passed"
+        : "argon2-known-answer-threaded notRun: the page is not cross-origin isolated",
       fast
         ? "argon2-sizes-threaded passed"
         : "argon2-sizes-threaded notRun: the page is not cross-origin isolated",
@@ -330,8 +334,14 @@ export async function checkArgon2Start() {
     [
       argon2Line,
       fast
+        ? "argon2-known-answer-single-threaded passed"
+        : `argon2-known-answer-single-threaded notAvailable: Argon2id could not run: ${notStarted}`,
+      fast
         ? "argon2-sizes-single-threaded passed"
         : `argon2-sizes-single-threaded notAvailable: Argon2id could not run: ${notStarted}`,
+      fast
+        ? `argon2-known-answer-threaded notAvailable: Argon2id could not run: ${notStarted}`
+        : "argon2-known-answer-threaded notRun: the page is not cross-origin isolated",
       fast
         ? `argon2-sizes-threaded notAvailable: Argon2id could not run: ${notStarted}`
         : "argon2-sizes-threaded notRun: the page is not cross-origin isolated",

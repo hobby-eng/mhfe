@@ -109,7 +109,10 @@ impl<'a> WalletCheck<'a> {
 
     /// The rule of a new wallet's passphrase, typed twice: the repetition must be exactly the same text
     /// (`PASSPHRASES_DIFFER` otherwise). An empty passphrase, none, is typed once and needs none.
+    /// The original text must fit the shared BIP39 byte limit before normalization or drawing
+    /// (`PASSPHRASE_TOO_LONG` otherwise), including when no wallet check is requested.
     pub fn require_same_passphrase(&self, repeat: &str) -> Result<(), WalletCheckError> {
+        crate::bip39_seed::require_size(self.passphrase)?;
         if !self.passphrase.is_empty() && repeat != self.passphrase {
             return Err(WalletCheckError::PassphrasesDiffer);
         }
@@ -238,6 +241,8 @@ impl PhraseDraw {
     /// leaves every passing entropy equally likely. An entropy that a random source never gives
     /// in practice is refused: one of a single byte value, zeros among them, as from a source that
     /// fills nothing or is stuck, or one equal to the entropy drawn before it (AUD-024-SEC014).
+    /// The preceding entropy is retained within this call; [`PhraseDraw::draw`] also retains it
+    /// across its progress batches. Separate `try_draws` calls start independent histories.
     pub fn try_draws(
         &self,
         source: &mut dyn RandomSource,
@@ -289,8 +294,9 @@ impl PhraseDraw {
     ) -> Result<NewPhrase, WalletCheckError> {
         RandomSampler::new(source).check_source()?;
         let mut draws = 0;
+        let mut previous = Zeroizing::new([0u8; NEW_ENTROPY_BYTES]);
         loop {
-            if let Some(entropy) = self.try_draws(source, DRAW_REPORT_INTERVAL)? {
+            if let Some(entropy) = self.draws_after(source, DRAW_REPORT_INTERVAL, &mut previous)? {
                 return self.give_out(&entropy);
             }
             draws += DRAW_REPORT_INTERVAL;
@@ -454,7 +460,7 @@ mod tests {
         assert!(checked.checked());
         assert!(WalletCheck::new("TREZOR").verify(checked.phrase()).unwrap());
         // Written into a buffer locked first, as a recovered phrase is.
-        assert_eq!(checked.phrase.is_locked(), cfg!(unix));
+        assert_eq!(checked.phrase.is_locked(), cfg!(any(unix, windows)));
         let unchecked = PhraseDraw::unchecked()
             .draw(&mut fill, &mut |_| Ok(()))
             .unwrap();
@@ -521,9 +527,44 @@ mod tests {
             Ok(())
         );
         assert_eq!(WalletCheck::new("").require_same_passphrase(""), Ok(()));
+        assert_eq!(
+            WalletCheck::new("").require_same_passphrase("unused"),
+            Ok(())
+        );
         for repeat in ["trezor", "TREZOR ", ""] {
             assert_eq!(
                 WalletCheck::new("TREZOR").require_same_passphrase(repeat),
+                Err(WalletCheckError::PassphrasesDiffer)
+            );
+        }
+    }
+
+    #[test]
+    fn a_repeated_new_passphrase_is_bounded_as_typed() {
+        use unicode_normalization::UnicodeNormalization;
+        let expanding = format!("{}a", "\u{FDFA}".repeat(341));
+        assert_eq!(expanding.len(), 1024);
+        assert!(expanding.nfkd().map(char::len_utf8).sum::<usize>() > 1024);
+        for valid in ["a".repeat(1024), expanding] {
+            assert_eq!(
+                WalletCheck::new(&valid).require_same_passphrase(&valid),
+                Ok(())
+            );
+        }
+        let contracting = format!("{}aa", "\u{FF21}".repeat(341));
+        assert_eq!(contracting.len(), 1025);
+        assert!(contracting.nfkd().map(char::len_utf8).sum::<usize>() < 1024);
+        for over in ["a".repeat(1025), contracting] {
+            for repeat in [&*over, "different"] {
+                assert_eq!(
+                    WalletCheck::new(&over).require_same_passphrase(repeat),
+                    Err(WalletCheckError::Passphrase(
+                        crate::PassphraseError::TooLong(1025)
+                    ))
+                );
+            }
+            assert_eq!(
+                WalletCheck::new("in-bound").require_same_passphrase(&over),
                 Err(WalletCheckError::PassphrasesDiffer)
             );
         }
@@ -618,6 +659,31 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_repeated_entropy_across_progress_batches_is_refused() {
+        let draw = PhraseDraw::unchecked().with_wishes(WordWishes::new(&[], &["abandon"]).unwrap());
+        // Every counter has a leading "abandon", so none meets the exclusion and no seed runs.
+        let mut script = Vec::new();
+        for counter in 1..=DRAW_REPORT_INTERVAL {
+            script.extend_from_slice(&counted(counter));
+        }
+        script.extend_from_slice(&counted(DRAW_REPORT_INTERVAL));
+        let mut source = crate::random::ScriptedSource::after_probes(&script);
+        let mut reports = Vec::new();
+        let result = draw.draw(&mut source, &mut |draws| {
+            reports.push(draws);
+            Ok(())
+        });
+        assert!(
+            matches!(
+                result,
+                Err(WalletCheckError::Random(RandomError::UnusableEntropy))
+            ),
+            "the previous source entropy must survive a progress report"
+        );
+        assert_eq!(reports, [DRAW_REPORT_INTERVAL]);
     }
 
     /// A stand-in for the system's generator on one thread: the [`counted`] entropies after

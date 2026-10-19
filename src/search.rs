@@ -21,16 +21,18 @@
 
 mod error;
 pub use error::SearchError;
+mod candidates;
+use candidates::Candidates;
+#[cfg(test)]
+use candidates::{pack, passes_checksum};
 
 #[cfg(test)]
 use crate::wallet::Fingerprint;
 
-use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::engine::Argon2Engine;
-use crate::packing::{self, STATE_BYTES};
-use crate::phrase::{self, LIST_SIZE, WORD_BITS, WORD_COUNTS};
+use crate::phrase::{self, WORD_COUNTS};
 use crate::rehearsal::{self, CheckOutcome, Reference};
 use crate::repair::ContainerReading;
 use crate::wallet::{DerivationPath, SearchLimits};
@@ -59,6 +61,8 @@ pub type RecoveryProgress<'a> =
 /// addresses.
 type CandidateCompare<'a> =
     &'a (dyn Fn(usize, &dyn Fn() -> bool) -> Result<CheckOutcome, MhfeError> + Sync);
+/// A retained selected candidate index, wiped when its comparison result is dropped.
+type CandidateMatch = (Zeroizing<usize>, CheckOutcome);
 /// The most missing words a search with the owner's wallet looks for: each candidate takes a full
 /// recovery, so one word, about 8 candidates of 24 words, takes minutes and two would take weeks.
 pub const MAX_MISSING_FOR_WALLET: usize = 1;
@@ -66,11 +70,11 @@ pub const MAX_MISSING_FOR_WALLET: usize = 1;
 /// A container phrase with missing words and every candidate container the BIP39 checksum allows.
 pub struct ContainerSearch {
     /// The numbers of the words typed; a missing word holds 0 until a candidate fills it.
-    words: Vec<u16>,
+    words: Zeroizing<Vec<u16>>,
     /// The positions of the missing words, from 0.
-    missing: Vec<usize>,
+    missing: Zeroizing<Vec<usize>>,
     /// The numbers of the missing words of every candidate, in the order of `missing`.
-    candidates: Vec<Vec<u16>>,
+    candidates: Candidates,
 }
 
 /// A candidate that matched the reference.
@@ -80,14 +84,19 @@ pub struct ContainerSearch {
 /// ```compile_fail
 /// fn corrupt(found: &mut mhfe::search::Found) { found.words.clear(); }
 /// ```
-#[derive(Debug)]
 pub struct Found {
     /// The container phrase, every word in full, one space apart.
     container: Zeroizing<String>,
     /// Each missing word as found, with its position from 1.
-    words: Vec<(usize, &'static str)>,
+    words: Zeroizing<Vec<(usize, u16)>>,
     /// For an address, the path where it was found.
     path: Option<DerivationPath>,
+}
+
+impl std::fmt::Debug for Found {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Found { .. }")
+    }
 }
 
 impl Found {
@@ -96,9 +105,18 @@ impl Found {
         &self.container
     }
 
-    /// Each missing word found, with its position from one.
-    pub fn words(&self) -> &[(usize, &'static str)] {
-        &self.words
+    /// Each missing word found, with its position from one, borrowed from this result's protected
+    /// index owner. The exact-size iterator replaces the former slice of retained static pointers.
+    ///
+    /// ```compile_fail
+    /// fn detached(found: &mhfe::search::Found) -> Option<&'static str> {
+    ///     found.words().next().map(|(_, word)| word)
+    /// }
+    /// ```
+    pub fn words(&self) -> impl ExactSizeIterator<Item = (usize, &str)> {
+        self.words
+            .iter()
+            .map(|&(position, number)| (position, phrase::word(number)))
     }
 
     /// The matched address's derivation path, or none for another kind of reference.
@@ -114,31 +132,35 @@ impl ContainerSearch {
     pub fn new(written: &str) -> Result<Self, SearchError> {
         // `?` or a word outside the BIP39 list marks a missing word, as for a repair
         // (AUD-024-API013).
-        let unreadable = match ContainerReading::read(written) {
-            ContainerReading::Marked { unreadable } => unreadable,
+        let unreadable = match ContainerReading::read(written)? {
+            ContainerReading::Marked { unreadable } => Zeroizing::new(unreadable),
             ContainerReading::WrongLength(count) => {
                 return Err(crate::repair::RepairError::ContainerLength(count).into())
             }
             ContainerReading::NotAContainer => {
-                let (_, outside) = phrase::word_numbers(written);
+                let (_, outside) =
+                    phrase::word_numbers(written).map_err(crate::repair::RepairError::from)?;
                 if outside.is_empty() {
                     return Err(SearchError::WrongWord);
                 }
-                outside.iter().map(|position| position + 1).collect()
+                Zeroizing::new(
+                    outside
+                        .iter()
+                        .map(|position| position + 1)
+                        .collect::<Vec<_>>(),
+                )
             }
             ContainerReading::Container => return Err(SearchError::NoMissingWord),
         };
-        if unreadable.len() > MAX_MISSING_FOR_DECOY {
-            return Err(SearchError::TooManyMissing {
-                missing: unreadable.len(),
-                limit: MAX_MISSING_FOR_DECOY,
-            });
-        }
         // The unreadable words stand as 0, read as the repair reads them.
-        let (words, missing) = phrase::word_numbers(written);
-        debug_assert!(missing.iter().map(|position| position + 1).eq(unreadable));
+        let (words, missing) =
+            phrase::word_numbers(written).map_err(crate::repair::RepairError::from)?;
+        debug_assert!(missing
+            .iter()
+            .map(|position| position + 1)
+            .eq(unreadable.iter().copied()));
         debug_assert!(WORD_COUNTS.contains(&words.len()));
-        let candidates = candidates(&words, &missing);
+        let candidates = Candidates::new(&words, &missing)?;
         Ok(Self {
             words,
             missing,
@@ -148,7 +170,11 @@ impl ContainerSearch {
 
     /// The positions of the missing words, from 1.
     pub fn missing(&self) -> Vec<usize> {
-        self.missing.iter().map(|position| position + 1).collect()
+        self.missing_positions().collect()
+    }
+
+    pub(crate) fn missing_positions(&self) -> impl ExactSizeIterator<Item = usize> + '_ {
+        self.missing.iter().map(|position| position + 1)
     }
 
     /// How many candidate containers pass the BIP39 checksum.
@@ -196,7 +222,7 @@ impl ContainerSearch {
         };
         let matched = only_match(compare_candidates(self.count(), &compare, on_progress)?)?;
         Ok(matched.map(|(index, outcome)| {
-            let missing = &self.candidates[index];
+            let missing = &self.candidates[*index];
             self.found(self.container(missing), missing, outcome.path().cloned())
         }))
     }
@@ -309,14 +335,16 @@ impl ContainerSearch {
         missing: &[u16],
         path: Option<DerivationPath>,
     ) -> Found {
-        Found {
-            container,
-            words: self
-                .missing
+        let mut words = Zeroizing::new(Vec::with_capacity(self.missing.len()));
+        words.extend(
+            self.missing
                 .iter()
                 .zip(missing)
-                .map(|(&position, &number)| (position + 1, phrase::word(number)))
-                .collect(),
+                .map(|(&position, &number)| (position + 1, number)),
+        );
+        Found {
+            container,
+            words,
             path,
         }
     }
@@ -333,7 +361,7 @@ fn compare_candidates(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
-) -> Result<Vec<(usize, CheckOutcome)>, MhfeError> {
+) -> Result<Vec<CandidateMatch>, MhfeError> {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Condvar, Mutex};
     use std::time::Duration;
@@ -348,7 +376,7 @@ fn compare_candidates(
     let all_finished = Condvar::new();
     // After an error or a cancel, ends the taking of candidates and the comparisons under way.
     let abort = AtomicBool::new(false);
-    let matched: Mutex<Vec<(usize, CheckOutcome)>> = Mutex::new(Vec::new());
+    let matched: Mutex<Vec<CandidateMatch>> = Mutex::new(Vec::with_capacity(count));
     let failure: Mutex<Option<MhfeError>> = Mutex::new(None);
     // Keeps the error and ends every comparison, those under way too.
     let abort_with = |error| {
@@ -365,7 +393,7 @@ fn compare_candidates(
                 Ok(outcome) if outcome.matches() => matched
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
-                    .push((index, outcome)),
+                    .push((Zeroizing::new(index), outcome)),
                 Ok(_) => {}
                 // A comparison abandoned after an abort: the abort's error stands.
                 Err(_) if abort.load(Ordering::Relaxed) => {}
@@ -414,7 +442,8 @@ fn compare_candidates(
     }
     on_progress(count, count)?;
     let mut matched = matched.into_inner().unwrap_or_else(|e| e.into_inner());
-    matched.sort_by_key(|(index, _)| *index);
+    // In-place sorting avoids an ordinary temporary allocation of selected indices.
+    matched.sort_unstable_by_key(|(index, _)| **index);
     Ok(matched)
 }
 
@@ -427,7 +456,7 @@ fn compare_candidates(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
-) -> Result<Vec<(usize, CheckOutcome)>, MhfeError> {
+) -> Result<Vec<CandidateMatch>, MhfeError> {
     compare_in_turn(count, compare, on_progress)
 }
 
@@ -437,13 +466,13 @@ fn compare_in_turn(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
-) -> Result<Vec<(usize, CheckOutcome)>, MhfeError> {
-    let mut matched = Vec::new();
+) -> Result<Vec<CandidateMatch>, MhfeError> {
+    let mut matched = Vec::with_capacity(count);
     for index in 0..count {
         let outcome = compare(index, &|| false)?;
         on_progress(index + 1, count)?;
         if outcome.matches() {
-            matched.push((index, outcome));
+            matched.push((Zeroizing::new(index), outcome));
         }
     }
     Ok(matched)
@@ -451,15 +480,17 @@ fn compare_in_turn(
 
 /// The one candidate that matched, or none; a reference that more than one candidate matches
 /// cannot tell them apart, so that none is taken (AUD-024-FUN001).
-fn only_match(
-    matched: Vec<(usize, CheckOutcome)>,
-) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
+fn only_match(matched: Vec<CandidateMatch>) -> Result<Option<CandidateMatch>, MhfeError> {
     if matched.len() > 1 {
         return Err(MhfeError::Search(SearchError::SeveralMatches {
             matches: matched.len(),
         }));
     }
-    Ok(matched.into_iter().next())
+    // Keep the original element initialized until its owner wipes it; moving it out would leave
+    // the selected index in Vec spare storage without running that element's drop there.
+    Ok(matched
+        .first()
+        .map(|(index, outcome)| (Zeroizing::new(**index), outcome.clone())))
 }
 
 /// `reference` as the decoy search compares it: an address without a path within `limits`.
@@ -509,73 +540,35 @@ fn require_wallet_reference(reference: &Reference<'_>) -> Result<(), MhfeError> 
     Ok(())
 }
 
-/// The numbers of the missing words of every candidate that passes the BIP39 checksum, in the
-/// order of the list, the first missing word slowest.
-fn candidates(words: &[u16], missing: &[usize]) -> Vec<Vec<u16>> {
-    // The bits of the words typed are packed once; each candidate adds only its missing words'.
-    let mut known = words.to_vec();
-    for &position in missing {
-        known[position] = 0;
-    }
-    let base = pack(&known);
-    let mut found = Vec::new();
-    let mut values = vec![0_u16; missing.len()];
-    loop {
-        let mut bits = base;
-        for (&position, &value) in missing.iter().zip(&values) {
-            set_word(&mut bits, position, value);
-        }
-        if passes_checksum(&bits, words.len()) {
-            found.push(values.clone());
-        }
-        // The next combination, the last missing word fastest.
-        let mut place = values.len();
-        loop {
-            if place == 0 {
-                return found;
-            }
-            place -= 1;
-            values[place] += 1;
-            if values[place] < LIST_SIZE {
-                break;
-            }
-            values[place] = 0;
-        }
-    }
-}
-
-/// The bits of up to 24 words of 11 bits: 33 bytes, 32 of entropy and one of checksum.
-type WordBits = [u8; STATE_BYTES + 1];
-
-fn pack(numbers: &[u16]) -> WordBits {
-    let mut bits = [0_u8; STATE_BYTES + 1];
-    for (index, &number) in numbers.iter().enumerate() {
-        set_word(&mut bits, index, number);
-    }
-    bits
-}
-
-/// Writes the 11 bits of word `index`.
-fn set_word(bits: &mut WordBits, index: usize, number: u16) {
-    phrase::write_bits(bits, index * WORD_BITS, WORD_BITS, number);
-}
-
-/// Whether `words` words packed in `bits` pass the BIP39 checksum: the first
-/// [`packing::checksum_bits`] bits of the SHA-256 of the entropy, which the last word carries after
-/// the entropy's last bits.
-fn passes_checksum(bits: &WordBits, words: usize) -> bool {
-    let entropy_bytes = packing::entropy_of_words(words);
-    let hash = Sha256::digest(&bits[..entropy_bytes]);
-    let shift = 8 - packing::checksum_bits(words);
-    hash[0] >> shift == bits[entropy_bytes] >> shift
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::{container_of, reduced, test_password, zero_12_container, LEGAL_12};
     use crate::wallet;
     use crate::Suite;
+
+    #[test]
+    fn found_debug_never_formats_selected_container_words() {
+        let container = zero_12_container();
+        let search = ContainerSearch::new(&with(&container, &[(24, "?")])).unwrap();
+        assert_eq!(search.count(), 8);
+        let reference = Reference::Fingerprint {
+            fingerprint: Fingerprint::of(&container, "").unwrap(),
+            passphrase: "",
+        };
+        let found = search
+            .search_decoy(&reference, DECOY_SCAN_GAP, &mut |_, _| Ok(()))
+            .unwrap()
+            .unwrap();
+        assert_eq!(format!("{found:?}"), "Found { .. }");
+        assert_eq!(format!("{found:#?}"), "Found { .. }");
+        assert_eq!(found.container(), container);
+        assert_eq!(
+            found.words().collect::<Vec<_>>(),
+            [(24, container.split(' ').next_back().unwrap())]
+        );
+        assert!(found.path().is_none());
+    }
 
     /// One instant comparison ends before a progress interval; a fixed sleep in the waiting
     /// loop must fail in debug builds too. A median tolerates occasional scheduler delays.
@@ -628,7 +621,7 @@ mod tests {
         for place in [1, 13, 24] {
             for word in list.iter().step_by(7) {
                 let typed = with(&container, &[(place, word)]);
-                let (numbers, _) = phrase::word_numbers(&typed);
+                let (numbers, _) = phrase::word_numbers(&typed).unwrap();
                 assert_eq!(
                     passes_checksum(&pack(&numbers), numbers.len()),
                     phrase::parse_container(&typed).is_ok(),
@@ -658,6 +651,21 @@ mod tests {
                 .iter()
                 .all(|candidate| phrase::parse_container(candidate).is_ok()));
         }
+    }
+
+    #[test]
+    fn two_missing_candidates_hold_the_published_pair_in_lexicographic_order() {
+        let container = zero_12_container();
+        assert!(container.ends_with("caution peace"));
+        let search = ContainerSearch::new(&with(&container, &[(23, "?"), (24, "?")])).unwrap();
+        assert_eq!(search.count(), 16_384);
+        assert!(search.candidates.iter().any(|pair| pair == [293, 1294]));
+        assert!(search.candidates.iter().all(|pair| pair.len() == 2));
+        assert!(search
+            .candidates
+            .iter()
+            .zip(search.candidates.iter().skip(1))
+            .all(|(left, right)| left < right));
     }
 
     /// The decoy wallet's fingerprint finds the container among the candidates of a missing word,
@@ -731,10 +739,10 @@ mod tests {
     fn found_words(found: &Found, container: &str) -> Vec<usize> {
         assert_eq!(*found.container, container);
         let words: Vec<&str> = container.split(' ').collect();
-        for &(position, word) in &found.words {
+        for (position, word) in found.words() {
             assert_eq!(word, words[position - 1]);
         }
-        found.words.iter().map(|&(position, _)| position).collect()
+        found.words().map(|(position, _)| position).collect()
     }
 
     /// Two candidates of "abandon" ten times and two missing words share the fingerprint
@@ -790,12 +798,12 @@ mod tests {
                 Ok(())
             })
             .unwrap();
-            let indexes: Vec<usize> = found.iter().map(|(index, _)| *index).collect();
+            let indexes: Vec<usize> = found.iter().map(|(index, _)| **index).collect();
             assert_eq!(indexes, [1, 3, 4]);
             assert_eq!(last, 6);
         }
         let in_turn = compare_in_turn(6, &compare, &mut |_, _| Ok(())).unwrap();
-        let indexes: Vec<usize> = in_turn.iter().map(|(index, _)| *index).collect();
+        let indexes: Vec<usize> = in_turn.iter().map(|(index, _)| **index).collect();
         assert_eq!(indexes, [1, 3, 4]);
         // A progress error ends the comparison in turn too.
         let stopped = compare_in_turn(6, &compare, &mut |_, _| Err(crate::CancelledError));
@@ -808,12 +816,12 @@ mod tests {
         let matched = |indexes: &[usize]| {
             indexes
                 .iter()
-                .map(|&index| (index, CheckOutcome::Matches { path: None }))
+                .map(|&index| (Zeroizing::new(index), CheckOutcome::Matches { path: None }))
                 .collect::<Vec<_>>()
         };
         assert_eq!(only_match(matched(&[])).unwrap(), None);
         assert_eq!(
-            only_match(matched(&[2])).unwrap().map(|(index, _)| index),
+            only_match(matched(&[2])).unwrap().map(|(index, _)| *index),
             Some(2)
         );
         assert_eq!(
@@ -856,6 +864,10 @@ mod tests {
         let container = zero_12_container();
         let one = ContainerSearch::new(&with(&container, &[(24, "?")])).unwrap();
         let two = ContainerSearch::new(&with(&container, &[(15, "?"), (21, "?")])).unwrap();
+        assert!(two
+            .candidates
+            .iter()
+            .any(|missing| two.container(missing).as_str() == container));
         assert!(one.offers_wallet_search());
         assert!(!two.offers_wallet_search());
         assert_eq!(

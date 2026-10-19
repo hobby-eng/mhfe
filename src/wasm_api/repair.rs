@@ -6,17 +6,19 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use super::{
-    container_fingerprint_text, js_error, json, repair_capacities, run_self_check, whole_number,
-    CapacityJson,
+    container_fingerprint_text, js_error, json, repair_capacities, run_self_check, secret_json,
+    serialize_sequence, whole_number, CapacityJson, PositionJson,
 };
 use crate::repair::{
-    ContainerReading, RepairWordCount, Repaired, PROFILE, RECOMMENDED_REPAIR_WORDS,
+    Change, ContainerReading, RepairWordCount, Repaired, PROFILE, RECOMMENDED_REPAIR_WORDS,
     REPAIR_WORD_COUNTS,
 };
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RepairParameters {
+    #[serde(flatten)]
+    input_text: super::InputTextParameters,
     version: &'static str,
     profile: &'static str,
     repair_word_counts: [usize; 4],
@@ -28,6 +30,7 @@ struct RepairParameters {
 #[wasm_bindgen(js_name = repairParameters)]
 pub fn repair_parameters() -> Result<String, JsError> {
     json(&RepairParameters {
+        input_text: super::InputTextParameters::new(),
         version: env!("CARGO_PKG_VERSION"),
         profile: PROFILE,
         repair_word_counts: REPAIR_WORD_COUNTS,
@@ -38,23 +41,23 @@ pub fn repair_parameters() -> Result<String, JsError> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CardJson {
+struct CardJson<'a> {
     profile: &'static str,
-    words: String,
+    words: &'a str,
     repairs_unreadable: usize,
     repairs_wrong: usize,
 }
 
 /// The repair words of a container, as JSON `{ profile, words, repairsUnreadable, repairsWrong }`.
 #[wasm_bindgen(js_name = repairWords)]
-pub fn repair_words(container: &str, count: f64) -> Result<String, JsError> {
+pub fn repair_words(container: &str, count: f64) -> Result<js_sys::JsString, JsError> {
     let count = whole_number(count, crate::request::NumberField::RepairWordCount)? as usize;
     let count = RepairWordCount::new(count).map_err(js_error)?;
-    let words = count.words_of(container).map_err(js_error)?;
+    let words = zeroize::Zeroizing::new(count.words_of(container).map_err(js_error)?);
     let (unreadable, wrong) = count.capacity();
-    json(&CardJson {
+    secret_json(&CardJson {
         profile: PROFILE,
-        words,
+        words: &words,
         repairs_unreadable: unreadable,
         repairs_wrong: wrong,
     })
@@ -64,7 +67,7 @@ pub fn repair_words(container: &str, count: f64) -> Result<String, JsError> {
 #[serde(rename_all = "camelCase")]
 struct ChangeJson<'a> {
     on_card: bool,
-    position: usize,
+    position: PositionJson,
     read: Option<&'a str>,
     word: &'a str,
 }
@@ -79,7 +82,23 @@ struct RepairedJson<'a> {
     unchanged: bool,
     container_words: &'a [usize],
     card_words: &'a [usize],
-    changes: Vec<ChangeJson<'a>>,
+    changes: ChangesJson<'a>,
+}
+
+struct ChangesJson<'a>(&'a [Change]);
+
+impl Serialize for ChangesJson<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serialize_sequence(
+            serializer,
+            self.0.iter().map(|change| ChangeJson {
+                on_card: change.on_card(),
+                position: PositionJson::new(change.position()),
+                read: change.read(),
+                word: change.word(),
+            }),
+        )
+    }
 }
 
 /// Repairs a container from its container phrase and card words as read, `?` for a word that cannot
@@ -87,34 +106,25 @@ struct RepairedJson<'a> {
 /// changes: [{ onCard, position, read, word }] }`. A repair is never silent, and it does not show
 /// that the card belongs to the container phrase, which only a rehearsal against the wallet does.
 #[wasm_bindgen(js_name = repairContainer)]
-pub fn repair_container(written: &str, card: &str) -> Result<String, JsError> {
+pub fn repair_container(written: &str, card: &str) -> Result<js_sys::JsString, JsError> {
     let repaired: Repaired = RepairWordCount::repair(written, card).map_err(js_error)?;
     let fingerprint = container_fingerprint_text(repaired.container())?;
-    json(&RepairedJson {
+    secret_json(&RepairedJson {
         container: repaired.container(),
         container_fingerprint: fingerprint,
         unchanged: repaired.changes().is_empty(),
         container_words: repaired.container_words(),
         card_words: repaired.card_words(),
-        changes: repaired
-            .changes()
-            .iter()
-            .map(|change| ChangeJson {
-                on_card: change.on_card(),
-                position: change.position(),
-                read: change.read(),
-                word: change.word(),
-            })
-            .collect(),
+        changes: ChangesJson(repaired.changes()),
     })
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ReadingJson {
+struct ReadingJson<'a> {
     reading: &'static str,
     word_count: usize,
-    unreadable: Vec<usize>,
+    unreadable: &'a [usize],
 }
 
 /// What a container phrase as typed is, before it is decrypted, checked or repaired, as JSON
@@ -123,18 +133,20 @@ struct ReadingJson {
 /// words at once; "notAContainer", a container's length but not a container, for which it offers
 /// them; "wrongLength", a length no container has.
 #[wasm_bindgen(js_name = inspectContainer)]
-pub fn inspect_container(written: &str) -> Result<String, JsError> {
+pub fn inspect_container(written: &str) -> Result<js_sys::JsString, JsError> {
+    let inspected = ContainerReading::read(written).map_err(js_error)?;
     let word_count = written.split_whitespace().count();
-    let (reading, unreadable) = match ContainerReading::read(written) {
+    let (reading, unreadable) = match inspected {
         ContainerReading::Container => ("container", Vec::new()),
         ContainerReading::Marked { unreadable } => ("marked", unreadable),
         ContainerReading::NotAContainer => ("notAContainer", Vec::new()),
         ContainerReading::WrongLength(_) => ("wrongLength", Vec::new()),
     };
-    json(&ReadingJson {
+    let unreadable = zeroize::Zeroizing::new(unreadable);
+    secret_json(&ReadingJson {
         reading,
         word_count,
-        unreadable,
+        unreadable: &unreadable,
     })
 }
 

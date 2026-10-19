@@ -35,6 +35,7 @@ export class CoreReads {
   async readPhrase(phrase) {
     requireText(phrase, "phrase");
     await this.#runtime.ready();
+    await this.#runtime.readInputText(phrase, "phrase");
     // The phrase goes as bytes that the worker and the WebAssembly wipe, as a password does.
     const message = { operation: "describePhrase", phrase: encodeSecret(phrase, "phrase") };
     return this.#runtime.quick(message);

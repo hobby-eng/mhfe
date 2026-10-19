@@ -173,3 +173,67 @@ jobs:
           path: canonical-output/release/
           if-no-files-found: error
           retention-days: 7
+
+  # Accept the exact GNU executable shipped by the canonical container as well as the MSVC
+  # build in portable. Download only this run's source-bound artifact, never a released binary.
+  canonical-windows:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: canonical-build
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mhfe-canonical-${{ github.sha }}
+          path: canonical-output-windows
+      - name: Verify the canonical checksums and unpack the Windows package
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-release-checksums.mjs canonical-output-windows
+          version="v$(node scripts/cargo-output.mjs version)"
+          python -m zipfile -e "canonical-output-windows/mhfe-$version-windows-x86_64.zip" canonical-output-windows/program
+      - name: Check the canonical GNU program in a Windows pseudo-console
+        run: |
+          python -m pip install --require-hashes -r scripts/verify-hidden-input-windows-requirements.txt
+          python scripts/verify-hidden-input-windows.py canonical-output-windows/program/mhfe.exe
+
+  # Native package acceptance without a tag, release publication or Homebrew. Both archives are
+  # built on the same host; their extracted payloads must retain hardened signatures and repack
+  # identically after irrelevant checkout metadata changes (AUD-024-BLD009).
+  macos-packages:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain and package targets
+        run: |
+          rustup show
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Build and verify both macOS packages
+        run: |
+          version="v$(node scripts/cargo-output.mjs version)"
+          scripts/package-release.sh "$version" canonical-output-macos macos-aarch64 macos-x86_64
+          node scripts/verify-release-checksums.mjs canonical-output-macos
+          python3 scripts/verify-macos-packages.py "$version" canonical-output-macos
+      - name: Preserve accepted macOS packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mhfe-macos-${{ github.sha }}
+          path: canonical-output-macos/
+          if-no-files-found: error
+          retention-days: 7

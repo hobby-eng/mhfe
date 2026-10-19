@@ -125,15 +125,21 @@ class Session:
                     return needle
         raise AssertionError(f"none of {needles} in {self.output[start:]!r}")
 
-    def answer(self, keys, *expected, limit=10):
+    def answer(self, keys, *expected, limit=10, typed=False):
         """Types `keys` and reads until every one of `expected` has
-        appeared after them. A list and its question arrive together, so
-        each is looked for in all that followed the keys.
+        appeared after them. `typed` observes key echo with hints and
+        control sequences removed. A list and its question arrive
+        together, so each is looked for in all that followed the keys.
         """
         start = len(self.output)
         self.press(keys)
         end = time.monotonic() + limit
-        while not all(needle in self.output[start:] for needle in expected):
+
+        def arrived():
+            output = self.output[start:]
+            return typed_echo(output) if typed else output
+
+        while not all(needle in arrived() for needle in expected):
             if time.monotonic() > end:
                 raise AssertionError(f"not all of {expected} in {self.output[start:]!r}")
             if select.select([self.master], [], [], 0.1)[0]:
@@ -238,11 +244,27 @@ class Session:
         self.answer(CONTAINER.encode() + b"\r", b"Container password: ")
 
 
-def shown_privately(label, output, secret):
+def shown_privately(label, output, secret, typed=False):
     """The secret was shown on the private screen and nowhere after the
-    tool left it.
+    tool left it. `typed` checks ANSI-separated echo inside the original
+    screen boundaries; dictionary hint rows cannot supply its fixture.
     """
-    entered = output.rfind(ENTER_PRIVATE, 0, output.find(secret))
+    if typed:
+        segments = output.split(ENTER_PRIVATE)
+        assert secret not in segments[0] and secret not in typed_echo(segments[0]), (
+            f"{label}: the password preceded its screen")
+        shown = False
+        for segment in segments[1:]:
+            private, left, main = segment.partition(LEAVE_PRIVATE)
+            assert left, f"{label}: the private screen was not left"
+            shown |= secret in typed_echo(private)
+            assert secret not in main and secret not in typed_echo(main), (
+                f"{label}: the password reached the main screen")
+        assert shown, f"{label}: the expected password was not shown"
+        return
+    position = output.find(secret)
+    assert position >= 0, f"{label}: the expected password was not shown"
+    entered = output.rfind(ENTER_PRIVATE, 0, position)
     assert entered >= 0, f"{label}: the password was shown off the private screen"
     left = output.find(LEAVE_PRIVATE, entered)
     assert left >= 0, f"{label}: the private screen was not left"
@@ -306,3 +328,49 @@ def run_with_output(arguments, redirected=False, term=None, capped=False):
     # ended.
     os.close(writer)
     return session, reader
+
+
+def check_private_screen_oracle():
+    """Challenge this helper without a PTY or a running MHFE process."""
+    secret = b"SYNTHETIC_PRIVATE_SCREEN_WORD"
+    cases = [
+        (ENTER_PRIVATE + secret + LEAVE_PRIVATE, True),
+        (b"metadata" + ENTER_PRIVATE + secret + LEAVE_PRIVATE, True),
+        (ENTER_PRIVATE + LEAVE_PRIVATE, False),
+        (secret + ENTER_PRIVATE + LEAVE_PRIVATE, False),
+        (ENTER_PRIVATE + LEAVE_PRIVATE + secret, False),
+        (ENTER_PRIVATE + secret, False),
+        (ENTER_PRIVATE + secret + LEAVE_PRIVATE + secret, False),
+    ]
+    for transcript, expected in cases:
+        try:
+            shown_privately("synthetic oracle control", transcript, secret)
+            passed = True
+        except AssertionError:
+            passed = False
+        if passed != expected:
+            raise AssertionError(
+                "CORE-32: private-screen oracle control failed")
+    separated = b"\x1b[J".join(bytes([byte]) for byte in secret)
+    hint = b"\x1b[J\r\r\n  " + secret + b"\x1b[1A"
+    typed_cases = [
+        (ENTER_PRIVATE + separated + LEAVE_PRIVATE, True),
+        (ENTER_PRIVATE + hint + LEAVE_PRIVATE, False),
+        (separated + ENTER_PRIVATE + LEAVE_PRIVATE, False),
+        (ENTER_PRIVATE + separated + LEAVE_PRIVATE + separated, False),
+        (ENTER_PRIVATE + separated, False),
+        (hint + ENTER_PRIVATE + separated + LEAVE_PRIVATE, False),
+        (ENTER_PRIVATE + separated + LEAVE_PRIVATE + hint, False),
+    ]
+    for transcript, expected in typed_cases:
+        try:
+            shown_privately("typed oracle control", transcript, secret, typed=True)
+            passed = True
+        except AssertionError:
+            passed = False
+        assert passed == expected, "CORE-32: typed private-screen oracle control failed"
+    print("CORE-32: all seven plain and seven typed private-screen oracle controls passed")
+
+
+if __name__ == "__main__":
+    check_private_screen_oracle()

@@ -136,6 +136,7 @@ impl From<MhfeError> for Failure {
             ErrorCode::FixedPoint
             | ErrorCode::VerificationFailed
             | ErrorCode::Argon2Failed
+            | ErrorCode::MemoryProtectionFailed
             | ErrorCode::RandomFailed
             | ErrorCode::SelfCheckFailed
             | ErrorCode::InternalError => INTERNAL_ERROR,
@@ -180,6 +181,11 @@ impl From<mhfe::PasswordError> for Failure {
 }
 impl From<mhfe::check_word::ReviewError> for Failure {
     fn from(error: mhfe::check_word::ReviewError) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+impl From<mhfe::strength::StrengthError> for Failure {
+    fn from(error: mhfe::strength::StrengthError) -> Self {
         MhfeError::from(error).into()
     }
 }

@@ -43,6 +43,8 @@ impl std::error::Error for PhraseIssue {}
 /// An input or entropy failure owned by the phrase module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhraseError {
+    /// Raw UTF-8 text exceeds the shared input byte limit, before phrase parsing.
+    Text(crate::input_text::TextSizeError),
     /// Text supplied as an original phrase was refused.
     Original(PhraseIssue),
     /// Text supplied as a container was refused.
@@ -56,6 +58,7 @@ impl PhraseError {
     /// The stable typed refusal code.
     pub const fn error_code(&self) -> ErrorCode {
         match self {
+            Self::Text(error) => error.error_code(),
             Self::Original(_) => ErrorCode::InvalidPhrase,
             Self::Container(_) => ErrorCode::InvalidContainer,
             Self::EntropyLength(_) | Self::EntropyEncoding => ErrorCode::InternalError,
@@ -75,6 +78,7 @@ impl PhraseError {
 impl fmt::Display for PhraseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Text(error) => error.fmt(f),
             Self::Original(issue) => write!(
                 f,
                 "the seed phrase is not a valid English BIP39 phrase: {issue}"
@@ -97,9 +101,16 @@ impl fmt::Display for PhraseError {
 impl std::error::Error for PhraseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Text(error) => Some(error),
             Self::Original(issue) | Self::Container(issue) => Some(issue),
             _ => None,
         }
+    }
+}
+
+impl From<crate::input_text::TextSizeError> for PhraseError {
+    fn from(error: crate::input_text::TextSizeError) -> Self {
+        Self::Text(error)
     }
 }
 

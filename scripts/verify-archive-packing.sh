@@ -11,7 +11,8 @@ cd "$repo_root"
 tar_command="$(command -v gtar || command -v tar)"
 . packaging/pack-archives.sh
 
-scratch="$(mktemp -d)"
+mkdir -p target
+scratch="$(mktemp -d "$repo_root/target/archive-packing.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 
 # A staging folder as a checkout under `umask` gives it: two documents, a licence in a subfolder, a
@@ -54,7 +55,50 @@ done
 python3 scripts/verify-archive-permissions.py "$scratch/022.tar.gz" "$scratch/022.zip" || failed=1
 python3 scripts/verify-archive-permissions.py "$scratch/022-portable.tar.gz" "$scratch/022.zip" || failed=1
 
+mkdir -p "$scratch/repack"
+printf 'Old content.\n' > "$scratch/repack/current.txt"
+printf 'Obsolete content.\n' > "$scratch/repack/obsolete.txt"
+pack_zip "$scratch/repack" "$scratch/repacked.zip"
+rm "$scratch/repack/obsolete.txt"
+printf 'Changed content.\n' > "$scratch/repack/current.txt"
+printf 'Added content.\n' > "$scratch/repack/added.txt"
+pack_zip "$scratch/repack" "$scratch/repacked.zip"
+pack_zip "$scratch/repack" "$scratch/fresh.zip"
+cmp "$scratch/repacked.zip" "$scratch/fresh.zip" || failed=1
+python3 - "$scratch/repacked.zip" <<'PY' || failed=1
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    expected = {
+        'added.txt': b'Added content.\n',
+        'current.txt': b'Changed content.\n',
+    }
+    if archive.namelist() != list(expected):
+        raise SystemExit('The repacked ZIP has stale or unexpected entries')
+    for name, content in expected.items():
+        if archive.read(name) != content:
+            raise SystemExit('The repacked ZIP has incorrect content')
+PY
+
+cp "$scratch/repacked.zip" "$scratch/previous.zip"
+if (
+  zip() {
+    printf 'A partial failed archive.\n' > "$3"
+    return 77
+  }
+  pack_zip "$scratch/repack" "$scratch/repacked.zip"
+); then
+  echo "The packer accepted a failed ZIP command." >&2
+  failed=1
+fi
+cmp "$scratch/repacked.zip" "$scratch/previous.zip" || {
+  echo "A failed ZIP command replaced the previous archive." >&2
+  failed=1
+}
+
 if ((failed)); then
   exit 1
 fi
 echo "Archives packed from checkouts under umask 022, 002, 027 and 077 are identical."
+echo "ZIP repacking replaces stale entries and preserves the previous archive on failure."

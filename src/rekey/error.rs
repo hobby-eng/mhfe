@@ -6,6 +6,8 @@ use std::fmt;
 /// returned by the orchestration methods; this enum never hides an aggregate or free-text reason.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RekeyError {
+    /// The recovered or confirmed state belongs to other source credentials.
+    OriginMismatch,
     /// The rehearsal's fingerprint needs the wallet's BIP39 passphrase.
     RehearsalNeedsPassphrase,
     /// The wallet is stated to have no BIP39 passphrase.
@@ -58,6 +60,7 @@ impl RekeyError {
             | Self::MissingSealingInputs
             | Self::ConfirmationWithoutRecovery => ErrorCode::InternalError,
             Self::RehearsalNeedsPassphrase
+            | Self::OriginMismatch
             | Self::WalletHasNoPassphrase
             | Self::NoFurtherConfirmation
             | Self::OwnerCannotConfirm
@@ -80,6 +83,7 @@ impl RekeyError {
 impl fmt::Display for RekeyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::OriginMismatch => f.write_str("invalid request: the recovered state belongs to different source credentials"),
             Self::RehearsalNeedsPassphrase => f.write_str("invalid request: the rehearsal's fingerprint needs the wallet's BIP39 passphrase"),
             Self::WalletHasNoPassphrase => f.write_str("invalid request: the wallet is stated to have no BIP39 passphrase"),
             Self::NoFurtherConfirmation => f.write_str("invalid request: this refusal does not allow another confirmation"),

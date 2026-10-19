@@ -236,6 +236,11 @@ impl ComponentCheck for WordListCheck {
                 )
             },
         );
+        // A cheap refusal checks the common raw boundary without a KDF or a large fixture.
+        findings.one(|| {
+            let oversized = " ".repeat(crate::input_text::InputText::MAX_BYTES + 1);
+            expect_refusal(crate::Phrase::read(&oversized), "INVALID_REQUEST")
+        });
         findings.outcome()
     }
 }

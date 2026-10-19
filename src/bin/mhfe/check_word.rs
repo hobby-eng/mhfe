@@ -73,7 +73,7 @@ pub(crate) fn review(
     if input.is_script() || !screen.is_active() || !hidden_input::can_redraw() {
         return Ok(Reviewed::Use(typed, Outcome::NotChecked));
     }
-    let review = PasswordReview::of(&typed);
+    let review = PasswordReview::of(&typed)?;
     let change = review.correction().map(Correction::text);
     match (review.reading(), change) {
         (Reading::NotThisShape, _) => return Ok(Reviewed::Use(typed, Outcome::NotChecked)),
@@ -166,7 +166,10 @@ fn decide(
         offered.push(Action::Correct(change));
     }
     actions.splice(position..position, offered);
-    let answers: Vec<Answer> = actions.iter().map(|action| action.answer(review)).collect();
+    let answers = actions
+        .iter()
+        .map(|action| action.answer(review))
+        .collect::<Result<Vec<_>, _>>()?;
     let chosen = input.choose_here(&question, &answers)?;
     Ok(match actions[chosen] {
         Action::Restore(repair) | Action::Replace(repair) => Decision::Repaired(repair.position()),
@@ -203,8 +206,8 @@ pub(crate) fn word_label(position: usize, word: &str, typed: Option<&str>) -> St
 }
 
 impl Action<'_> {
-    fn answer(&self, review: &PasswordReview) -> Answer {
-        match self {
+    fn answer(&self, review: &PasswordReview) -> Result<Answer, Failure> {
+        Ok(match self {
             // A word outside the list is not repeated: it may be too long for the line.
             Self::Restore(repair) => Answer::new(
                 word_label(repair.position(), repair.word(), None),
@@ -214,20 +217,42 @@ impl Action<'_> {
                 word_label(
                     repair.position(),
                     repair.word(),
-                    Some(review.typed_word(repair)),
+                    Some(review.typed_word(repair)?),
                 ),
                 "",
             ),
             Self::Correct(change) => Answer::new("Use the corrected password", *change),
             Self::AsTyped => Answer::new("Use the password as typed", "it has no check word"),
             Self::TypeAgain => Answer::new("Type the password again", ""),
-        }
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_and_cloned_repair_drop_their_owned_selected_word() {
+        use crate::test_allocator::{unwiped_blocks, WATCHED};
+        use mhfe::eff::EffList;
+        let list = EffList::get();
+        // Public synthetic profile data; the lifetime observation has its own unwiped control.
+        let indexes = [0, 1, list.index_of(WATCHED).unwrap(), 3, 4];
+        let check = list
+            .word(PasswordReview::check_index(&indexes).unwrap())
+            .unwrap();
+        let typed = format!("abacus abdomen ? abide abiding {check}");
+        let unwiped = unwiped_blocks(|| {
+            let review = PasswordReview::of(&typed).unwrap();
+            assert_eq!(review.repairs()[0].word(), WATCHED);
+            let repair = review.repairs()[0].clone();
+            drop(review);
+            assert_eq!(repair.word(), WATCHED);
+            drop(repair);
+        });
+        assert_eq!(unwiped, 0);
+    }
 
     /// The hint stays on one line where a password is typed.
     #[test]

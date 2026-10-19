@@ -40,10 +40,14 @@ export async function checkConstruction(client, compiled) {
   expectEqual(
     parameters,
     {
+      maxInputTextBytes: UTILITY_INPUT_BYTES,
       version: VERSION,
       suiteId: SUITE_3,
       sameLengthSuiteId: SUITE_4,
       rounds: 12,
+      progressStages: ["recover", "encrypt", "check", "compare"],
+      progressRoundTotals: [12, 24, 36],
+      openedWordCount: 24,
       maxPim: 1023,
       maxMemoryLevel: 21,
       highestBrowserMemoryLevel: 0,
@@ -88,6 +92,13 @@ export async function checkReading(client, made) {
 
 /** readPhrase: the forms it reads, the containers a phrase can have, and its refusals. */
 export async function checkReadPhrase(client) {
+  const atLimit = " ".repeat(UTILITY_INPUT_BYTES - PHRASE.length) + PHRASE;
+  expectEqual((await client.readPhrase(atLimit)).phrase, PHRASE, "raw limit preserves the phrase");
+  await expectRejection(
+    client.readPhrase(`${atLimit} `),
+    "INVALID_REQUEST",
+    "raw phrase size is checked before whitespace normalization",
+  );
   const read = await client.readPhrase(PHRASE.toUpperCase());
   expect(
     read.phrase === PHRASE && read.words === 12 && read.otherLengths.length === 0,

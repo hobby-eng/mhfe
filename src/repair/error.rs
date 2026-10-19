@@ -5,6 +5,8 @@ use std::fmt;
 /// Why a repair card could not be created or applied.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RepairError {
+    /// Raw repair input exceeds the shared UTF-8 utility bound.
+    Text(crate::input_text::TextSizeError),
     /// The card size is unsupported.
     WordCount {
         /// The number supplied, without any card word.
@@ -28,6 +30,7 @@ impl RepairError {
     /// The stable typed refusal code.
     pub const fn error_code(&self) -> ErrorCode {
         match self {
+            Self::Text(error) => error.error_code(),
             Self::WordCount { .. } => ErrorCode::InvalidRepairWords,
             Self::ContainerLength(_) => ErrorCode::InvalidContainer,
             Self::Phrase(error) => error.error_code(),
@@ -54,9 +57,15 @@ impl From<PhraseError> for RepairError {
         Self::Phrase(error)
     }
 }
+impl From<crate::input_text::TextSizeError> for RepairError {
+    fn from(error: crate::input_text::TextSizeError) -> Self {
+        Self::Text(error)
+    }
+}
 impl fmt::Display for RepairError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Text(error) => error.fmt(f),
             Self::WordCount { count, unreadable_hint } => {
                 write!(f, "the repair words cannot be used: a card has {} repair words, not {count}", crate::text::counts_text(&super::REPAIR_WORD_COUNTS))?;
                 if *unreadable_hint { write!(f, "; {}", UnreadableHint)?; }
@@ -72,6 +81,7 @@ impl fmt::Display for RepairError {
 impl std::error::Error for RepairError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Text(error) => Some(error),
             Self::Phrase(error) => Some(error),
             _ => None,
         }

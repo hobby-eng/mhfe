@@ -116,6 +116,15 @@ impl ComponentCheck for GeneratorCheck {
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
+        findings.one(|| {
+            let oversized = "1".repeat(crate::input_text::InputText::MAX_BYTES + 1);
+            expect_refusal(
+                PasswordRecipe::check_word()
+                    .make_from_rolls(&oversized)
+                    .map(|_| ()),
+                "INVALID_REQUEST",
+            )
+        });
         for &(bytes, bound, expected) in &REJECTION_CASES {
             findings.one(|| {
                 let mut source = ScriptedSource::new(bytes.to_vec());
@@ -126,6 +135,22 @@ impl ComponentCheck for GeneratorCheck {
             });
         }
         findings.each(crate::self_check::CaseKind::Draw, self.draws, Self::draw);
+        findings.one(|| {
+            // Independently computed decimal products; check wide arithmetic at startup too.
+            let (words, characters) = if usize::BITS == 64 {
+                (
+                    238_424_167_152_695_954_623_875,
+                    107_599_858_181_947_814_570_295,
+                )
+            } else {
+                (55_512_452_287_875, 25_052_544_231_735)
+            };
+            expect(
+                super::Millibits::words(usize::MAX).get() == words
+                    && super::Millibits::characters(usize::MAX).get() == characters,
+                crate::self_check::KnownAnswerDifference::GivesAnotherEstimate,
+            )
+        });
         // A stuck source is refused before anything is drawn from it.
         findings.one(|| {
             let mut stuck = ScriptedSource::new(vec![0; 256]);

@@ -242,15 +242,16 @@ pub(super) fn argon2id(
 }
 
 fn run(context: &mut Argon2Context, work_area: &mut WorkArea) -> Result<(), EngineError> {
-    CURRENT_WORK_AREA.with(|slot| slot.set(Some((work_area.start, work_area.layout.size()))));
+    CURRENT_WORK_AREA.with(|slot| slot.set(Some((work_area.start, work_area.bytes()))));
     // SAFETY: every pointer in `context` is either NULL with length 0 or points to a live
     // buffer of the stated length that outlives this call: the inputs are shared borrows the C
     // code only reads, `out` is an exclusive borrow, and the work area is exclusively borrowed
     // through `&mut WorkArea`, so nothing else touches it meanwhile. argon2_ctx joins all its
     // worker threads before it returns, also when creating one fails, so no thread keeps these
     // pointers afterwards; only a failing join could leave one running, and a join fails only
-    // for a thread that is invalid or would deadlock, which the C code never passes. It keeps
-    // no other global state, so calls on different threads do not interfere.
+    // for a thread that is invalid or would deadlock, which the C code never passes. The
+    // upstream clear-memory flag is global, but MHFE never writes it. These calls share
+    // only that fixed flag and use independent contexts/work areas on different threads.
     let code = unsafe { argon2_ctx(context, ARGON2_ID) };
     CURRENT_WORK_AREA.with(|slot| slot.set(None));
     if code == ARGON2_OK {
@@ -292,21 +293,39 @@ fn pointer_or_null(buffer: &[u8]) -> *mut u8 {
 pub(super) struct WorkArea {
     start: NonNull<u8>,
     layout: Layout,
+    logical_bytes: usize,
 }
 
 impl WorkArea {
     pub(super) fn allocate(bytes: u64) -> Result<Self, EngineError> {
         let refused = EngineError::MemoryAllocation { bytes };
         let size = usize::try_from(bytes).map_err(|_| refused)?;
-        let layout = Layout::from_size_align(size, WORK_AREA_ALIGNMENT).map_err(|_| refused)?;
+        let logical_bytes = size;
+        #[cfg(target_os = "linux")]
+        let alignment = page_size()
+            .ok_or(EngineError::MemoryProtection)?
+            .max(WORK_AREA_ALIGNMENT);
+        #[cfg(not(target_os = "linux"))]
+        let alignment = WORK_AREA_ALIGNMENT;
+        #[cfg(target_os = "linux")]
+        let size = size.checked_next_multiple_of(alignment).ok_or(refused)?;
+        let layout = Layout::from_size_align(size, alignment).map_err(|_| refused)?;
         if layout.size() == 0 {
             return Err(refused);
         }
-        // SAFETY: the layout has a non-zero size. Zeroed memory comes from the operating
-        // system lazily, so the pages are only committed when Argon2 writes them.
+        // SAFETY: the layout has a non-zero size. Linux owns whole pages so dump policy cannot
+        // affect another allocation. The allocator may commit aligned zeroed pages immediately.
         let start = NonNull::new(unsafe { alloc::alloc_zeroed(layout) }).ok_or(refused)?;
-        exclude_from_core_dumps(start.as_ptr(), layout.size());
-        Ok(Self { start, layout })
+        let area = Self {
+            start,
+            layout,
+            logical_bytes,
+        };
+        // Keep the allocation owner alive before either fallible protection step, so every
+        // refusal frees the still-zeroed allocation with its exact layout.
+        #[cfg(target_os = "linux")]
+        super::dump_protection::DumpRange::read(area.start, area.layout.size())?.require()?;
+        Ok(area)
     }
 
     /// Overwrites the whole area with zeros. The C code wipes it at the end of every successful
@@ -341,7 +360,7 @@ impl WorkArea {
 
     /// The size of the area in bytes.
     pub(super) fn bytes(&self) -> usize {
-        self.layout.size()
+        self.logical_bytes
     }
 
     /// Fills the area with `byte`, as a round leaves it before the C code wipes it.
@@ -351,28 +370,6 @@ impl WorkArea {
         unsafe { ptr::write_bytes(self.start.as_ptr(), byte, self.layout.size()) };
     }
 }
-
-/// Leaves the whole pages of `bytes` at `start` out of any core dump (MADV_DONTDUMP), so that a
-/// crash cannot write Argon2's blocks, from which a password guess could be tested cheaply, to
-/// disk. Best effort: the process also forbids core dumps as a whole (src/bin/mhfe/protect.rs),
-/// and a refusal leaves the area as it was. The partial pages at either end, at most two, stay
-/// as they are, because madvise works on whole pages only.
-#[cfg(target_os = "linux")]
-fn exclude_from_core_dumps(start: *mut u8, bytes: usize) {
-    let Some(page) = page_size() else {
-        return;
-    };
-    let first = (start as usize).next_multiple_of(page);
-    let end = (start as usize + bytes) & !(page - 1);
-    if end > first {
-        // SAFETY: [first, end) lies inside the allocation of `bytes` bytes at `start`, which this
-        // process owns; MADV_DONTDUMP only marks the pages and changes no content.
-        unsafe { libc::madvise(first as *mut libc::c_void, end - first, libc::MADV_DONTDUMP) };
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn exclude_from_core_dumps(_start: *mut u8, _bytes: usize) {}
 
 impl Drop for WorkArea {
     fn drop(&mut self) {
@@ -752,6 +749,60 @@ mod tests {
         fill_with_ones(&mut work_area);
         work_area.wipe();
         assert!(work_area.contents().iter().all(|&byte| byte == 0));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_work_area_owns_and_confirms_every_dump_excluded_page() {
+        let area = WorkArea::allocate(17).unwrap();
+        let page = page_size().unwrap();
+        assert_eq!(area.start.as_ptr() as usize % page, 0);
+        assert_eq!(area.layout.size() % page, 0);
+        assert_eq!(
+            area.bytes(),
+            17,
+            "C receives only the requested logical extent"
+        );
+        let range =
+            super::super::dump_protection::DumpRange::read(area.start, area.layout.size()).unwrap();
+        assert!(range.confirmed().unwrap());
+        assert_eq!(
+            // SAFETY: the whole allocation remains owned, zeroed and unused for cryptography.
+            unsafe {
+                libc::madvise(
+                    area.start.as_ptr().cast(),
+                    area.layout.size(),
+                    libc::MADV_DODUMP,
+                )
+            },
+            0
+        );
+        assert!(
+            !range.confirmed().unwrap(),
+            "readback must notice a changed kernel policy"
+        );
+        range.require().unwrap();
+        assert!(range.confirmed().unwrap());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn page_rounding_does_not_enlarge_the_extent_given_to_c() {
+        let mut request = inputs(b"public password", b"0123456789abcdef");
+        request.memory_kib = 8;
+        request.lanes = 1;
+        request.threads = 1;
+        request.passes = 1;
+        assert_eq!(c_tag(&request, 32).unwrap(), rustcrypto_tag(&request, 32));
+        let mut area = WorkArea::allocate(8 * 1024 - 1).unwrap();
+        assert!(
+            area.layout.size() >= 8 * 1024,
+            "rounded capacity could satisfy C"
+        );
+        let error = argon2id(&request, &mut area, &mut [0; 32]).unwrap_err();
+        assert_eq!(error.code(), "ARGON2_FAILED");
+        assert_eq!(error.to_string(), "Argon2 failed: Memory allocation error");
+        assert!(area.is_wiped());
     }
 
     #[test]

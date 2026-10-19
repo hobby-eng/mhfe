@@ -22,18 +22,22 @@ sibling procedure files or historical Git objects.
 """
 import argparse
 import ast
+import datetime
 import hashlib
 import json
 import os
 import re
 import runpy
 import subprocess
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 AUDITS = ROOT / "docs/audits"
 WORKSPACE = ROOT.parent
 BASELINE = AUDITS / "AUD-024-harnesses/audit-records/check_records.py"
+# AUD-005's frozen supporting decision sheet accompanies its record.
+SUPPORTING_DOCUMENTS = {"AUD-005-decisions.md"}
 PROCEDURES = {
     "FULL_AUDIT_GUIDE.md": "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md",
     "AUDIT_STANDARD.md": "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md",
@@ -45,6 +49,89 @@ PROCEDURES = {
 def sha256(data):
     """SHA-256 of exact bytes, without newline or JSON normalization."""
     return hashlib.sha256(data).hexdigest()
+
+
+def unique_keys(pairs):
+    """Reject duplicate object keys."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def invalid_constant(value):
+    """Nonfinite numeric tokens are not JSON values."""
+    raise ValueError(f"invalid JSON numeric token: {value}")
+
+
+def record_inventory(audits):
+    """Discover both companions before legacy validation."""
+    stems = {path.with_suffix("")
+             for path in audits.glob("AUD-[0-9][0-9][0-9]-*")
+             if path.is_file() and path.suffix in (".md", ".json")
+             and path.name not in SUPPORTING_DOCUMENTS}
+    records, found = [], []
+    required = {"auditId": str, "auditNumber": int, "date": str,
+                "findings": list, "observations": list}
+    for stem in sorted(stems):
+        md = stem.with_name(stem.name + ".md")
+        companion = stem.with_name(stem.name + ".json")
+        if not md.is_file() or not companion.is_file():
+            found.append(f"{stem.name}: missing Markdown or JSON companion")
+            continue
+        try:
+            data = json.loads(companion.read_text(encoding="utf-8"),
+                              object_pairs_hook=unique_keys,
+                              parse_constant=invalid_constant)
+            if (not isinstance(data, dict) or
+                    any(type(data.get(key)) is not kind
+                        for key, kind in required.items())):
+                raise ValueError("invalid audit-record envelope")
+            records.append((md, data))
+        except (OSError, UnicodeError, ValueError) as error:
+            found.append(f"{companion.name}: {error}")
+    return records, found
+
+
+def identity_findings(records):
+    """Check filename, JSON identity and completion dates."""
+    found = []
+    for md, data in records:
+        try:
+            named = re.fullmatch(
+                r"(AUD-(\d{3}))-(\d{4}-\d{2}-\d{2})\.md", md.name,
+            )
+            if named is None:
+                raise ValueError("invalid audit-record filename")
+            datetime.date.fromisoformat(named[3])
+            if (data["auditId"] != named[1]
+                    or data["auditNumber"] != int(named[2])
+                    or data["date"] != named[3]):
+                raise ValueError(
+                    "filename and JSON auditId/auditNumber/date differ"
+                )
+            if data.get("completedUtc") is not None:
+                completed = datetime.datetime.fromisoformat(
+                    data["completedUtc"]
+                )
+                if (completed.utcoffset() != datetime.timedelta(0)
+                        or completed.date().isoformat() != named[3]):
+                    raise ValueError(
+                        "completedUtc must be UTC on the filename date"
+                    )
+            stated = re.search(
+                r"\*\*Completed \(UTC\):\*\*\s*(\d{4}-\d{2}-\d{2})",
+                md.read_text(encoding="utf-8"),
+            )
+            if stated and stated[1] != named[3]:
+                raise ValueError(
+                    "Markdown completion date differs from filename"
+                )
+        except (OSError, UnicodeError, TypeError, ValueError) as error:
+            found.append(f"{md.name}: {error}")
+    return found
 
 
 def recover_versions(current, changes, historical):
@@ -216,10 +303,81 @@ def pair_findings(args, baseline, records):
     return found
 
 
+def record_input_controls():
+    """Check discovery and equality using synthetic files."""
+    data = {
+        "auditId": "AUD-999", "auditNumber": 999, "date": "2026-10-15",
+        "completedUtc": "2026-10-15T00:00:00Z", "findings": [],
+        "observations": [],
+    }
+    with tempfile.TemporaryDirectory(prefix="mhfe-audit-records-") as folder:
+        audits = Path(folder)
+        md = audits / "AUD-999-2026-10-15.md"
+        companion = md.with_suffix(".json")
+        text = "# Synthetic control\n\n**Completed (UTC):** 2026-10-15\n"
+
+        def check(expected):
+            records, found = record_inventory(audits)
+            found += identity_findings(records)
+            if bool(found) != expected:
+                raise RuntimeError(f"self-test: audit input control: {found}")
+
+        def write(record=None):
+            md.write_text(text, encoding="utf-8")
+            companion.write_text(
+                json.dumps(data if record is None else record),
+                encoding="utf-8",
+            )
+
+        write()
+        check(False)
+        for key, wrong in [
+            ("date", "2000-01-01"), ("auditId", "AUD-998"),
+            ("auditNumber", 998),
+            ("auditNumber", True), ("completedUtc", "2026-10-14T23:59:59Z"),
+            ("completedUtc", "2026-10-15T00:00:00+01:00"),
+        ]:
+            write({**data, key: wrong})
+            check(True)
+        write()
+        md.write_text(
+            text.replace("2026-10-15", "2000-01-01"), encoding="utf-8",
+        )
+        check(True)
+        for raw in [
+            "{", "[]", "{}", '{"auditId":"AUD-999","auditId":"AUD-998"}',
+            json.dumps(data)[:-1] + ',"unexpected":NaN}',
+            json.dumps(data)[:-1] + ',"unexpected":Infinity}',
+        ]:
+            write()
+            companion.write_text(raw, encoding="utf-8")
+            check(True)
+        write()
+        orphan = audits / "AUD-999-2026-10-15.extra.json"
+        orphan.write_text("{}", encoding="utf-8")
+        check(True)
+        orphan.unlink()
+        check(False)
+        invalid = audits / "AUD-999-invalid.json"
+        invalid.write_text("{}", encoding="utf-8")
+        check(True)
+        invalid.unlink()
+        md.unlink()
+        check(True)
+        write()
+        companion.unlink()
+        check(True)
+        write()
+        md.rename(audits / "AUD-999-2026-10-16.md")
+        companion.rename(audits / "AUD-999-2026-10-16.json")
+        check(True)
+
+
 def self_test():
     """Wrong edits, missing links in a chain and unrouted verdicts must
     fail.
     """
+    record_input_controls()
     old, middle, current = b"old", b"middle", b"current"
     edges = [{"currentSha256": sha256(b), "auditedSha256": sha256(a),
               "reverseEdit": {"current": b.decode(), "audited": a.decode()}}
@@ -227,18 +385,26 @@ def self_test():
     def refuse_history(_):
         raise ValueError("unexpected historical lookup")
     if sha256(old) not in recover_versions(current, edges, refuse_history):
-        raise RuntimeError("self-test: the complete chain must recover its oldest pin")
+        raise RuntimeError(
+            "self-test: the complete chain must recover its oldest pin"
+        )
     for changed in [edges[:1], [{**edges[1], "auditedSha256": "0" * 64}]]:
         try:
             recover_versions(current, changed, refuse_history)
         except ValueError:
             pass
         else:
-            raise RuntimeError("self-test: an incomplete or incorrect chain was accepted")
+            raise RuntimeError(
+                "self-test: an incomplete or incorrect chain was accepted"
+            )
     if sha256(old) in recover_versions(current, edges[1:], refuse_history):
-        raise RuntimeError("self-test: an unlisted oldest pin must remain unreachable")
+        raise RuntimeError(
+            "self-test: an unlisted oldest pin must remain unreachable"
+        )
     candidate = {"title": "test", "verdicts": [{"adjustedSeverity": "low"}]}
-    records = [(Path("test.md"), {"findings": [{"id": "test"}], "refutedCandidates": [candidate]})]
+    records = [(Path("test.md"), {
+        "findings": [{"id": "test"}], "refutedCandidates": [candidate],
+    })]
     if not disposition_findings(records):
         raise RuntimeError("self-test: an unrouted low verdict was accepted")
     candidate["laterDisposition"] = {"id": "test", "status": "open"}
@@ -246,7 +412,9 @@ def self_test():
         raise RuntimeError("self-test: a routed verdict was refused")
     policy = "Each row stays open here until a commit records it."
     if not owns_open_until_commit_policy(policy):
-        raise RuntimeError("self-test: an actual open-until-commit policy was missed")
+        raise RuntimeError(
+            "self-test: an actual open-until-commit policy was missed"
+        )
     for quoted in [
         "| Evidence | " + policy + " |",
         "> " + policy,
@@ -254,16 +422,24 @@ def self_test():
         "### AUD-024-DOC006 — historical contradiction\n\n" + policy,
     ]:
         if owns_open_until_commit_policy(quoted):
-            raise RuntimeError("self-test: quoted evidence became the report's own policy")
+            raise RuntimeError(
+                "self-test: quoted evidence became the report's own policy"
+            )
     if not owns_open_until_commit_policy(
             "### AUD-024-DOC006\nOld finding.\n## Remediation\n" + policy):
         raise RuntimeError("self-test: a later remediation policy was missed")
     broken = "lines += local-only: `procedure.md` were applied.\"\n"
     if harness_syntax_findings({"assemble.py": broken}) != [
-            "assemble.py:1: invalid Python: unterminated string literal (detected at line 1)"]:
-        raise RuntimeError("self-test: the malformed procedure-reference edit was accepted")
-    if harness_syntax_findings({"assemble.py": 'lines += ["local-only: `procedure.md`"]\n'}):
-        raise RuntimeError("self-test: a valid local-only reference was refused")
+            "assemble.py:1: invalid Python: unterminated string literal "
+            "(detected at line 1)"]:
+        raise RuntimeError(
+            "self-test: the malformed procedure-reference edit was accepted"
+        )
+    if harness_syntax_findings({
+            "assemble.py": 'lines += ["local-only: `procedure.md`"]\n'}):
+        raise RuntimeError(
+            "self-test: a valid local-only reference was refused"
+        )
     print("Audit-record controls passed.")
 
 
@@ -285,13 +461,24 @@ def main():
         result = raw_git(*commands)
         if commands == ("ls-files",):
             names = result.stdout.splitlines()
-            names += raw_git("ls-files", "--others", "--exclude-standard").stdout.splitlines()
-            live = sorted(name for name in set(names) if (ROOT / name).is_file())
+            names += raw_git(
+                "ls-files", "--others", "--exclude-standard",
+            ).stdout.splitlines()
+            live = sorted(
+                name for name in set(names) if (ROOT / name).is_file()
+            )
             result.stdout = "\n".join(live)
         return result
     baseline["check_links"].__globals__["git"] = live_git
-    records = list(baseline["records"]())
-    selected = ["pairs", "dates", "links"]
+    records, found = record_inventory(AUDITS)
+    found += identity_findings(records)
+    if found:
+        for item in found:
+            print(item)
+        raise SystemExit(1)
+    # Every reused check sees the live wrapper's one strict inventory.
+    baseline["check_pairs"].__globals__["records"] = lambda: iter(records)
+    selected = ["pairs", "links"]
     if not args.metadata_only:
         selected.append("fixed_in")
     if args.schema:
@@ -315,8 +502,10 @@ def main():
     if found:
         raise SystemExit(1)
     scope = "metadata" if args.metadata_only else "metadata and procedure pins"
-    print(f"All {len(records)} audit-record pairs, links, dispositions and {scope} agree.")
-    print(f"All {len(harnesses)} retained Python harnesses parse without executing audit work.")
+    print(f"All {len(records)} audit-record pairs, links, dispositions "
+          f"and {scope} agree.")
+    print(f"All {len(harnesses)} retained Python harnesses parse "
+          "without executing audit work.")
 
 
 if __name__ == "__main__":

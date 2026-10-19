@@ -50,14 +50,17 @@ export function requireText(value, name) {
 /**
  * Refuses an own key of `options` that `method` does not take, with a TypeError that names it, as
  * a misspelled option such as PIM for pim would otherwise fall back to its default unseen
- * (AUD-024-API003). A key whose value is undefined counts as absent; a value that is not an object
- * is left to the method's own checks.
+ * (AUD-024-API003). Omitted options and keys whose value is undefined count as absent. A supplied
+ * container must be a non-null, non-array object, never a primitive silently read as defaults.
  * @param {unknown} options
  * @param {readonly string[]} keys
  * @param {string} method
  */
 export function requireKnownKeys(options, keys, method) {
-  if (typeof options !== "object" || options === null) return;
+  if (options === undefined) return;
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new TypeError(`${method}() options must be an object.`);
+  }
   for (const [key, value] of Object.entries(options)) {
     if (value !== undefined && !keys.includes(key)) {
       throw new TypeError(

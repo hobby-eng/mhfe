@@ -215,9 +215,15 @@ from terminal_suite.constants import FULL
 from terminal_suite.address_options import (
     explicit_address_options_skip_questions_and_refuse_misplaced_options,
 )
-from terminal_suite.line_retry import refused_lines_start_again_without_control_characters
+from terminal_suite.line_retry import (
+    refused_lines_start_again_without_control_characters,
+    public_input_refusals_retry_before_any_recovery,
+)
 from terminal_suite.spelling import supported_typographic_spellings_are_normalized
 from terminal_suite.full_size import FULL_SIZE_CHECKS
+from terminal_suite.new_passphrase import (
+    new_wallet_passphrases_are_bounded_before_drawing,
+)
 from terminal_suite.menus import (
     a_lone_escape_quits_the_menu_and_restores_the_terminal,
     ctrl_c_ends_the_menu_with_exit_code_130_and_restores_the_terminal,
@@ -288,6 +294,7 @@ def main():
     supported_typographic_spellings_are_normalized()
     explicit_address_options_skip_questions_and_refuse_misplaced_options()
     refused_lines_start_again_without_control_characters()
+    public_input_refusals_retry_before_any_recovery()
     secret_commands_have_an_empty_network_namespace_when_supported()
     menu_passwords_regenerate_and_clear_their_private_screens()
     a_lone_escape_quits_the_menu_and_restores_the_terminal()
@@ -301,6 +308,7 @@ def main():
     a_dumb_terminal_asks_rekey_choices_without_a_default()
     private_results_refuse_redirected_or_unusable_terminals()
     a_new_wallet_requires_an_explicit_wallet_check_answer()
+    new_wallet_passphrases_are_bounded_before_drawing()
     a_new_wallet_asks_chosen_words_and_retries_conflicts()
     an_invalid_never_use_word_is_refused_before_any_question()
     quit_keys_leave_the_private_screen()

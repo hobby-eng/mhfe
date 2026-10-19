@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 
 import { bundleClasses } from "../bundle-browser-classes.mjs";
-import { parameters, read, root } from "./package.mjs";
+import { bindings, parameters, read, root } from "./package.mjs";
 
 /** The runtime's text as a module address, which each class file's import is pointed at. */
 export const runtimeUrl = `data:text/javascript;base64,${read("dist/runtime/runtime.js").toString("base64")}`;
@@ -83,6 +83,16 @@ export async function loadClasses() {
 
 /** The client's own limits, checked before any secret is copied, equal the core's. */
 export function checkClientLimits() {
+  const walletText = read("dist/wallet/wallet.js").toString();
+  checkWishLimits(walletText);
+  for (const name of ["MAX_CHOSEN_WORDS", "MAX_NEVER_USE_WORDS"]) {
+    const damaged = walletText.replace(
+      new RegExp(`^const ${name} = .+;$`, "mu"),
+      `const ${name} = 0;`,
+    );
+    assert.notEqual(damaged, walletText);
+    assert.throws(() => checkWishLimits(damaged), assert.AssertionError);
+  }
   const clientText = read("dist/core/client.js").toString();
   const clientConstant = (name) =>
     JSON.parse(new RegExp(`^const ${name} = (.+);$`, "mu").exec(clientText)[1]);
@@ -115,6 +125,19 @@ export function checkClientLimits() {
     );
     assert.notEqual(changed, runtimeText, `${name}: the control changes the actual copy`);
     assert.throws(() => checkProtocolConstants(changed), assert.AssertionError);
+  }
+}
+
+/** Every synchronous wish-count copy equals the library value, with a failing control per copy. */
+function checkWishLimits(text) {
+  const wallet = JSON.parse(bindings.walletParameters());
+  for (const [name, expected] of [
+    ["MAX_CHOSEN_WORDS", wallet.maxChosenWords],
+    ["MAX_NEVER_USE_WORDS", wallet.maxNeverUseWords],
+  ]) {
+    const match = new RegExp(`^const ${name} = (.+);$`, "mu").exec(text);
+    assert.ok(match, `missing wallet limit ${name}`);
+    assert.equal(JSON.parse(match[1]), expected, name);
   }
 }
 

@@ -4,6 +4,8 @@
 //! without the password and without Argon2.
 
 mod reviewed;
+#[cfg(test)]
+mod wipe_tests;
 pub(crate) use reviewed::Reviewed;
 
 use clap::Args;
@@ -13,6 +15,8 @@ use mhfe::search::DECOY_SCAN_GAP;
 use mhfe::wallet::SearchLimits;
 use mhfe::word_hints::WordList;
 use mhfe::{ContainerFacts, WorkFactor};
+use std::fmt::Write as _;
+use zeroize::Zeroizing;
 
 use crate::check::AddressOptions;
 use crate::choice::{Answer, Question};
@@ -327,7 +331,7 @@ pub(crate) fn review(
     written: LockedText,
     asked: CardAsked,
 ) -> Result<Option<Reviewed>, Failure> {
-    let reading = ContainerReading::read(&written);
+    let reading = ContainerReading::read(&written)?;
     match asked {
         // A length no container has is refused where it is read, with its usual message.
         CardAsked::Never => Ok(Some(Reviewed::as_typed(written))),
@@ -415,14 +419,11 @@ fn repair_with_card(
         }
         let then = "Type them again, or Enter alone without them.";
         if let Some(repaired) = input.accepted(RepairWordCount::repair(written, &card), then)? {
-            let typed = repair::CardWords::read(&card);
+            let typed = repair::CardWords::read(&card)?;
             let count = typed.count();
-            terminal::read_back(
-                input,
-                typed.words(),
-                &RepairWordCount::new(count)?.words_of(repaired.container())?,
-                false,
-            )?;
+            let corrected_card =
+                Zeroizing::new(RepairWordCount::new(count)?.words_of(repaired.container())?);
+            terminal::read_back(input, typed.words(), &corrected_card, false)?;
             break repaired;
         }
     };
@@ -559,7 +560,7 @@ pub(crate) fn run_words(options: WordsOptions) -> Result<i32, Failure> {
         // Without --count a script is refused by clap, so the person at a terminal is asked.
         None => ask_count(&mut input, false)?.unwrap_or(repair::RECOMMENDED_REPAIR_WORDS),
     };
-    let words = RepairWordCount::new(count)?.words_of(container.words())?;
+    let words = Zeroizing::new(RepairWordCount::new(count)?.words_of(container.words())?);
     let screen = PrivateScreen::enter_to_show(&input)?;
     if screen.is_active() {
         style::title(WORDS_TITLE);
@@ -691,23 +692,23 @@ pub(crate) fn print_card(words: &str, input: &Input) -> Result<(), Failure> {
         paint(HEADING, "Repair card"),
         paint(STRONG, repair::PROFILE)
     );
-    for row in words
-        .split(' ')
-        .enumerate()
-        .collect::<Vec<_>>()
-        .chunks(style::WORDS_PER_ROW)
-    {
-        let cells: Vec<String> = row
-            .iter()
-            .map(|(index, word)| {
-                format!(
-                    "{} {}",
-                    paint(MUTED, format!("{:>3}/{count}", index + 1)),
-                    paint(STRONG, format!("{word:<8}"))
-                )
-            })
-            .collect();
-        style::out(format_args!(" {}", cells.join("  ")))?;
+    let mut row = Zeroizing::new(String::with_capacity(style::WORD_ROW_BYTES));
+    for (index, word) in words.split(' ').enumerate() {
+        row.push_str(if index % style::WORDS_PER_ROW == 0 {
+            " "
+        } else {
+            "  "
+        });
+        let number = index + 1;
+        // Writing into the preallocated row cannot fail; only its output can.
+        let _ = write!(
+            row,
+            "{MUTED}{number:>3}/{count}{MUTED:#} {STRONG}{word:<8}{STRONG:#}"
+        );
+        if number % style::WORDS_PER_ROW == 0 || number == count {
+            style::out(format_args!("{}", *row))?;
+            row.clear();
+        }
     }
     style::hint("Write it on a card as shown, and keep the card apart from the container phrase.");
     Ok(())
@@ -721,10 +722,9 @@ fn report_changes(repaired: &Repaired) {
         let place = if change.on_card() { "card" } else { "word" };
         let read = change.read().unwrap_or("unreadable");
         eprintln!(
-            "  {} {} → {}",
-            paint(MUTED, format!("{place} {:>2}", change.position())),
-            paint(MUTED, format!("{read:<10}")),
-            paint(STRONG, change.word())
+            "  {MUTED}{place} {:>2}{MUTED:#} {MUTED}{read:<10}{MUTED:#} → {STRONG}{}{STRONG:#}",
+            change.position(),
+            change.word()
         );
     }
 }

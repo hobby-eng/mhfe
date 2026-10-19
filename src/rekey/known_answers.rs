@@ -235,7 +235,26 @@ impl RekeyCheck {
             confirmed.replacement_rehearsal("").map_err(stopped)? == case.replacement,
             crate::self_check::KnownAnswerDifference::TheReplacementRehearsalDiffers,
         )?;
-        self.sealed_as(&rekey, &confirmed, to)
+        // This retained capability must reject other source credentials before any work.
+        let foreign =
+            Rekey::new(to.container, length, to.password()?, to.work()?).map_err(stopped)?;
+        expect_refusal(
+            foreign
+                .seal(
+                    &mut to.mhfe(self.vectors)?,
+                    &confirmed,
+                    &to.password()?,
+                    None,
+                    &mut |_, _, _| Err(crate::CancelledError),
+                    &mut |_| Err(crate::MhfeError::Cancelled),
+                )
+                .map(|_| ()),
+            crate::ErrorCode::InvalidRequest.as_str(),
+        )?;
+        // Equivalent instances remain compatible; no extra recovery rounds are needed.
+        let equivalent =
+            Rekey::new(from.container, length, from.password()?, from.work()?).map_err(stopped)?;
+        self.sealed_as(&equivalent, &confirmed, to)
     }
 
     /// One recovery, a refused confirmation, then another on the same recovery (AUD-017-UI002):

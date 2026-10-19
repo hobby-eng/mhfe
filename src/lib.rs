@@ -45,6 +45,7 @@ mod error;
 mod error_code;
 mod feistel;
 mod hidden;
+pub mod input_text;
 #[cfg(all(target_arch = "wasm32", feature = "browser-core"))]
 mod js_error;
 pub mod memory;
@@ -89,7 +90,7 @@ pub mod word_wishes;
 #[cfg(not(target_arch = "wasm32"))]
 mod workers;
 
-pub use bip39_seed::PassphraseError;
+pub use bip39_seed::{Bip39Passphrase, PassphraseError};
 pub use cancelled::CancelledError;
 pub use check_state::CheckState;
 pub use container::{

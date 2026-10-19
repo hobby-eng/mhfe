@@ -44,6 +44,8 @@ pub enum MhfeError {
     NewPassword(crate::new_password::NewPasswordError),
     /// A choice was not offered by the password check-word review.
     Review(crate::check_word::ReviewError),
+    /// The bounded strength estimate could not be made.
+    Strength(crate::strength::StrengthError),
     /// A failure of the EFF list or its numbered dice reader.
     Eff(crate::eff::EffError),
     /// The wallet check of a new phrase needs a BIP39 passphrase: without one, anyone who sees the
@@ -81,6 +83,7 @@ impl fmt::Display for MhfeError {
             Self::Password(error) => error.fmt(f),
             Self::NewPassword(error) => error.fmt(f),
             Self::Review(error) => error.fmt(f),
+            Self::Strength(error) => error.fmt(f),
             Self::WalletCheck(error) => error.fmt(f),
             Self::Random(error) => error.fmt(f),
             Self::Request(error) => error.fmt(f),
@@ -119,6 +122,7 @@ impl std::error::Error for MhfeError {
             Self::Password(error) => Some(error),
             Self::NewPassword(error) => Some(error),
             Self::Review(error) => Some(error),
+            Self::Strength(error) => Some(error),
             Self::SelfCheck(error) => Some(error),
             Self::Search(error) => Some(error),
             Self::Rehearsal(error) => Some(error),
@@ -180,6 +184,7 @@ impl MhfeError {
             Self::Password(error) => error.error_code(),
             Self::NewPassword(error) => error.error_code(),
             Self::Review(error) => error.error_code(),
+            Self::Strength(error) => error.error_code(),
             Self::WalletCheck(error) => error.error_code(),
             Self::Random(error) => error.error_code(),
             Self::Request(error) => error.error_code(),
@@ -202,6 +207,11 @@ impl From<crate::PasswordError> for MhfeError {
 impl From<crate::check_word::ReviewError> for MhfeError {
     fn from(error: crate::check_word::ReviewError) -> Self {
         Self::Review(error)
+    }
+}
+impl From<crate::strength::StrengthError> for MhfeError {
+    fn from(error: crate::strength::StrengthError) -> Self {
+        Self::Strength(error)
     }
 }
 impl From<crate::new_password::NewPasswordError> for MhfeError {

@@ -371,9 +371,9 @@ export class OperationSlot {
    * returns: `begin` starts the operation's job in the slot at once, with nothing in between. A
    * cancel() in the meantime rejects with MhfeCancelledError, and a rejected `ready` rejects with
    * its error; both free the slot.
-   * @template Begun
-   * @param {Promise<void>} ready
-   * @param {() => Begun | PromiseLike<Begun>} begin
+   * @template Ready, Begun
+   * @param {Promise<Ready>} ready
+   * @param {(value: Ready) => Begun | PromiseLike<Begun>} begin
    * @returns {Promise<Begun>}
    */
   async after(ready, begin) {
@@ -393,14 +393,15 @@ export class OperationSlot {
       },
     };
     this.#running = waiting;
+    let value;
     try {
-      await Promise.race([ready, cancelled]);
+      value = await Promise.race([ready, cancelled]);
       // A cancel() after the check settled, before this went on, stops the operation too.
       if (stopped !== null) throw stopped;
     } finally {
       if (this.#running === waiting) this.#running = null;
     }
-    return begin();
+    return begin(value);
   }
 
   /**

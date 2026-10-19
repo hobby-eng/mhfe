@@ -2,6 +2,7 @@
 import type {
   MhfeComponentResult,
   MhfeSelfCheckProgress,
+  MhfeSelfCheckTier,
   PackageCheck as DeclaredPackageCheck,
 } from "../runtime.d.ts";
 
@@ -36,11 +37,13 @@ export type WorkerReply = { type: string; [field: string]: unknown };
 
 /** What a class's set of known answers gives from its worker (`selfCheck` in
 web/worker-runtime.js): the release version, the parts that ran, and `ids`, the order of the
-whole set, parts left out included; a WebAssembly that stopped gives no order. */
+requested tier, skipped parts included; a WebAssembly that stopped gives no order. */
 export type SetReport = {
   version: string | null;
   components: MhfeComponentResult[];
   ids?: string[];
+  tier?: MhfeSelfCheckTier;
+  passed?: boolean;
 };
 
 /** Runs a class's set of known answers in a worker, without the parts `skip`, its news going to

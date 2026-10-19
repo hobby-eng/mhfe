@@ -28,7 +28,7 @@
 //! dice-word path.
 
 use super::Strength;
-use crate::self_check::{expect, ComponentCheck, ComponentOutcome, Findings, Tier};
+use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
 
 /// A password and its estimate in millibits.
 #[derive(Clone, Copy)]
@@ -96,7 +96,7 @@ impl ComponentCheck for StrengthCheck {
         let mut findings = Findings::new();
         findings.each(crate::self_check::CaseKind::Password, self.cases, |case| {
             expect(
-                Strength::of(case.password).millibits() == case.millibits,
+                Strength::of(case.password).map_err(stopped)?.millibits() == case.millibits,
                 crate::self_check::KnownAnswerDifference::GivesAnotherEstimate,
             )
         });

@@ -60,14 +60,20 @@ def password_input_hides_keys_and_restores_the_terminal():
     check_password("Ctrl+U", b"\t" + CTRL_U + SECRET, ACCEPTED)
     print("edited: Backspace and Ctrl+U at the password")
 
-    session = Session()
-    session.at_password_prompt()
-    session.type(SECRET + CTRL_C)
-    session.wait_for(CANCELLED_SHOWN)
-    code, settings = session.close()
-    assert code == CANCELLED, f"Ctrl+C: exit code {code}"
-    assert settings == session.original, "Ctrl+C: the terminal settings were not restored"
-    shown_privately("Ctrl+C", session.output, SECRET)
+    cancellation_text = SECRET + b"0"
+    for _ in range(3):
+        session = Session()
+        try:
+            session.at_password_prompt()
+            # Ctrl+C may flush unread text: establish display first.
+            # The digit excludes EFF hints from this typed-line fixture.
+            session.answer(cancellation_text, cancellation_text, typed=True)
+            session.answer(CTRL_C, CANCELLED_SHOWN)
+        finally:
+            code, settings = session.close()
+        assert code == CANCELLED, f"Ctrl+C: exit code {code}"
+        assert settings == session.original, "Ctrl+C: the terminal settings were not restored"
+        shown_privately("Ctrl+C", session.output, cancellation_text, typed=True)
     print("cancelled: Ctrl+C at the password, exit code 130, private screen left, "
           "terminal restored")
 

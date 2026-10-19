@@ -36,7 +36,7 @@ struct CompletionJson {
 pub fn word_hints(list: &str, typed_utf8: Vec<u8>) -> Result<js_sys::JsString, JsError> {
     let typed = SecretText::new(typed_utf8);
     let list = WordList::from_name(list).map_err(js_error)?;
-    let line = typed.text(crate::word_hints::WordHintError::Utf8.into())?;
+    let line = typed.input_text(crate::word_hints::WordHintError::Utf8.into())?;
     let (hint, count, words) = match list.hint(line) {
         Hint::Nothing => ("nothing", 0, &[][..]),
         Hint::Count(count) => ("count", count, &[][..]),

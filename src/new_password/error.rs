@@ -15,6 +15,10 @@ pub enum PasswordKind {
 /// Why password generation stopped; the module owns both the reason and its display.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NewPasswordError {
+    /// The raw dice text exceeds the shared utility input bound.
+    Text(crate::input_text::TextSizeError),
+    /// The generated password's check-word review failed.
+    Review(crate::check_word::ReviewError),
     /// The requested size is outside the kind's bounds.
     Size {
         /// The requested output kind.
@@ -57,6 +61,7 @@ impl NewPasswordError {
     /// The stable typed code of this refusal.
     pub const fn error_code(&self) -> ErrorCode {
         match self {
+            Self::Text(error) => error.error_code(),
             Self::Size { .. } => ErrorCode::InvalidPasswordSize,
             Self::TypedInputRequired
             | Self::UnknownKind
@@ -67,6 +72,7 @@ impl NewPasswordError {
             Self::WordIndexOutsideList | Self::CheckWordMismatch => ErrorCode::InternalError,
             Self::Random(error) => error.error_code(),
             Self::Eff(error) => error.error_code(),
+            Self::Review(error) => error.error_code(),
             Self::Cancelled => ErrorCode::Cancelled,
         }
     }
@@ -80,9 +86,19 @@ impl From<RandomError> for NewPasswordError {
         Self::Random(error)
     }
 }
+impl From<crate::input_text::TextSizeError> for NewPasswordError {
+    fn from(error: crate::input_text::TextSizeError) -> Self {
+        Self::Text(error)
+    }
+}
 impl From<EffError> for NewPasswordError {
     fn from(error: EffError) -> Self {
         Self::Eff(error)
+    }
+}
+impl From<crate::check_word::ReviewError> for NewPasswordError {
+    fn from(error: crate::check_word::ReviewError) -> Self {
+        Self::Review(error)
     }
 }
 impl From<crate::CancelledError> for NewPasswordError {
@@ -93,6 +109,7 @@ impl From<crate::CancelledError> for NewPasswordError {
 impl fmt::Display for NewPasswordError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Text(error) => error.fmt(f),
             Self::Size { kind, .. } => {
                 let (maximum, unit) = match kind {
                     PasswordKind::Words => (super::MOST_WORDS, "words"),
@@ -130,6 +147,7 @@ impl fmt::Display for NewPasswordError {
             }
             Self::Random(error) => error.fmt(f),
             Self::Eff(error) => error.fmt(f),
+            Self::Review(error) => error.fmt(f),
             Self::Cancelled => crate::CancelledError.fmt(f),
         }
     }
@@ -137,8 +155,10 @@ impl fmt::Display for NewPasswordError {
 impl std::error::Error for NewPasswordError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Text(error) => Some(error),
             Self::Random(error) => Some(error),
             Self::Eff(error) => Some(error),
+            Self::Review(error) => Some(error),
             Self::Cancelled => Some(&crate::CancelledError),
             _ => None,
         }

@@ -78,14 +78,18 @@ impl WordCount {
 }
 
 /// How recovery of a 24-word container learns the length of the original phrase. A same-length
-/// container keeps its original's length and takes only [`PhraseLength::Detect`].
+/// container keeps its original's length and accepts [`PhraseLength::Detect`] or
+/// [`PhraseLength::Words`] with that same word count; another stated count is refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhraseLength {
-    /// Tests the 12-, 15-, 18- and 21-word layouts and falls back to 24 words.
+    /// For a 24-word container, tests the 12-, 15-, 18- and 21-word layouts and falls back to
+    /// 24 words. A same-length container already determines its original's length.
     Detect,
-    /// The length the user states. The layouts are tested all the same, and a built-in check that
+    /// The length the user states. For a 24-word container the layouts are tested all the same,
+    /// and a built-in check that
     /// passes takes precedence over the stated length (the specification's recovery rules): a
     /// person can misremember a length, while a check passes by chance at most once in 2^32.
+    /// A same-length container accepts only its own word count.
     Words(WordCount),
 }
 

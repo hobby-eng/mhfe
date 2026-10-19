@@ -5,6 +5,7 @@ import { readSetReport } from "./protocol.js";
 import { BUILD_ID, packageMismatch, MhfeError } from "./errors.js";
 import { messageOf, isRecord, sentence } from "./values.js";
 import { encodeSecret } from "./secrets.js";
+import { requireInputText } from "./input-text.js";
 /** @import { SetReport, RunSet, CheckStep, SelfCheckListener, PackageCheckOptions } from "../types/runtime-shared.d.ts" */
 /** @import { CompiledModule as DeclaredCompiledModule, MhfeComponentResult, MhfeSelfCheckReport, MhfeSelfCheckTier } from "../runtime.d.ts" */
 
@@ -39,10 +40,9 @@ const ENCODING_PROBE_UTF8 = "436166c3a920efac8120efbcb0e284abe291a020f09f949020d
 const LONE_SURROGATE = "a\uD800";
 
 /**
- * The parts each page passed, per WebAssembly the page gave the classes: a part another class has
- * passed with the same WebAssembly is not run again at startup. Kept by the WebAssembly object, so
- * that it goes away with it.
- * @type {WeakMap<Uint8Array | WebAssembly.Module, Map<string, Map<unknown, MhfeComponentResult>>>}
+ * The parts each page passed, per immutable compiled WebAssembly module. Caller-owned byte arrays
+ * may change before another class compiles them, so their identity cannot identify checked code.
+ * @type {WeakMap<WebAssembly.Module, Map<string, Map<unknown, MhfeComponentResult>>>}
  */
 const passedOnPage = new WeakMap();
 
@@ -51,9 +51,10 @@ const passedOnPage = new WeakMap();
  * the page's own parts, then the class's parts in a worker, leaving out those another class of the
  * page has passed. `require()` is what every operation awaits: it rejects with SELF_CHECK_FAILED,
  * the report attached, once any part has failed, and then for good. A worker that did not start
- * (WORKER_FAILED) or parts of different builds (PACKAGE_MISMATCH) give no report: the check is
- * tried again at the next call. So is a report with a part that could not run here or ran with a
- * limit, such as an Argon2 build that did not start, which the browser may give at the next call.
+ * (WORKER_FAILED) or parts of different builds (PACKAGE_MISMATCH) leave the check retryable only
+ * before any component has failed; neither clears an earlier failed component. A report with a
+ * part that could not run here or ran with a limit is retried too, such as an Argon2 build that
+ * did not start, which the browser may give at the next call.
  * `full()` runs every part, the slower cases included, anew.
  */
 export class PackageCheck {
@@ -157,17 +158,36 @@ export class PackageCheck {
    * @returns {Promise<MhfeSelfCheckReport>}
    */
   async #check(tier, steps, onProgress) {
+    /** @type {MhfeComponentResult[]} */
+    const completedFailures = [];
+    /** @type {MhfeSelfCheckReport | null} */
+    let partialFailure = null;
+    /** @type {string | null} */
+    let version = null;
+    const remember = (/** @type {MhfeComponentResult} */ part) => {
+      if (part.outcome !== "failed") return;
+      completedFailures.push(part);
+      if (this.#failed !== null) return;
+      partialFailure = {
+        passed: false,
+        tier,
+        version,
+        buildId: BUILD_ID,
+        components: [part],
+      };
+      // Close before a callback or later worker can fail. Operational errors alone do not close.
+      this.#failed = partialFailure;
+    };
     const start = async (/** @type {{ id: string, label: string }} */ part) => {
       if (onProgress)
         await askPage(onProgress, { id: part.id, label: part.label, running: true }, "onProgress");
     };
     const end = async (/** @type {MhfeComponentResult} */ part) => {
+      remember(part);
       if (onProgress) await askPage(onProgress, { ...part, running: false }, "onProgress");
     };
     await start(PAGE_PARTS.features);
     let features = this.#features();
-    /** @type {string | null} */
-    let version = null;
     if (features.outcome === "passed") {
       const compiled = await this.#compiles();
       if (compiled !== null) features = compiled;
@@ -195,16 +215,38 @@ export class PackageCheck {
           continue;
         }
         const rename = step.rename ?? ((component) => component);
+        // Capture verified outcomes before the worker starts. Later cache updates cannot
+        // excuse a missing result from this invocation or prove it skipped a part.
+        const cached = step.skipPassed ? await this.#passedParts() : new Map();
+        /** @type {MhfeComponentResult[]} */
+        const received = [];
         const ran = readSetReport(
-          await step.run(step.skipPassed ? this.#passedIds() : [], {
+          await step.run([...cached.keys()], {
             componentStart: (/** @type {{ id: string, label: string }} */ part) =>
               onProgress?.({ ...rename(part), running: true }),
-            component: (/** @type {MhfeComponentResult} */ part) =>
-              onProgress?.({ ...rename(part), running: false }),
+            component: (/** @type {MhfeComponentResult} */ part) => {
+              received.push(part);
+              const named = rename(part);
+              remember(named);
+              return onProgress?.({ ...named, running: false });
+            },
           }),
         );
+        if (version !== null && ran.version !== null && version !== ran.version) {
+          throw packageMismatch("The self-check sets have different versions");
+        }
         version ??= ran.version;
-        components.push(...this.#placed(ran, step.skipPassed).map(rename));
+        for (const part of ran.components) remember(rename(part));
+        const placed = (await this.#placed(ran, tier, cached, received, step.skipPassed)).map(
+          rename,
+        );
+        components.push(...placed);
+      }
+    }
+    // A streamed failed result cannot be erased by a later incomplete or inconsistent report.
+    for (const failed of completedFailures) {
+      if (!components.some((part) => part.id === failed.id && part.outcome === "failed")) {
+        components.push(failed);
       }
     }
     const report = {
@@ -214,7 +256,9 @@ export class PackageCheck {
       buildId: BUILD_ID,
       components,
     };
-    if (!report.passed) this.#failed ??= report;
+    if (!report.passed && (this.#failed === null || this.#failed === partialFailure)) {
+      this.#failed = report;
+    }
     return report;
   }
 
@@ -297,36 +341,68 @@ export class PackageCheck {
   }
 
   /** The parts another class of the page has passed with this WebAssembly. */
-  #passedIds() {
-    const passed = this.#passed();
-    return [...passed.keys()].filter((id) => passed.get(id)?.has(this.#identityOf(id)));
+  async #passedParts() {
+    const passed = await this.#passed();
+    /** @type {Map<string, MhfeComponentResult>} */
+    const parts = new Map();
+    for (const [id, identities] of passed) {
+      const part = identities.get(this.#identityOf(id));
+      if (part?.outcome === "passed") parts.set(id, part);
+    }
+    return parts;
   }
 
   /**
    * The parts passed with this WebAssembly on the page: for each identifier, the outcome for each
    * identity of the part (see the constructor), undefined for most.
    */
-  #passed() {
-    let passed = passedOnPage.get(this.#wasm.source);
+  async #passed() {
+    const compiled = await this.#wasm.get();
+    let passed = passedOnPage.get(compiled);
     if (passed === undefined) {
       passed = new Map();
-      passedOnPage.set(this.#wasm.source, passed);
+      passedOnPage.set(compiled, passed);
     }
     return passed;
   }
 
   /**
-   * The parts of a worker's report in the set's order, those left out because another class
-   * passed them included as that class found them. At startup the parts that passed are kept for
-   * the other classes. A report of a WebAssembly that stopped has no order: its parts as they are.
+   * Validate a complete declared tier before publishing any passing outcome to the shared cache.
+   * Failed/trapped checks remain conclusive even when the producer could not finish the set.
    * @param {SetReport} ran
+   * @param {MhfeSelfCheckTier} tier
+   * @param {Map<string, MhfeComponentResult>} cached
+   * @param {MhfeComponentResult[]} received
    * @param {boolean | undefined} skipPassed
    */
-  #placed(ran, skipPassed) {
+  async #placed(ran, tier, cached, received, skipPassed) {
+    if (ran.ids === undefined) return ran.components; // Parser requires an explicit failed part.
+    if (ran.tier !== tier) throw packageMismatch("The final self-check has another tier");
+    // A streamed/completed failure must stay latched and may never seed another class.
+    if (this.#failed !== null || ran.components.some(({ outcome }) => outcome === "failed")) {
+      return ran.components;
+    }
+    if (ran.passed !== true) throw packageMismatch("The self-check verdict has no failed part");
+    const current = new Map(ran.components.map((part) => [part.id, part]));
+    const placed = ran.ids.map((id) => {
+      const found = current.get(id);
+      const skipped = cached.get(id);
+      const part = found ?? skipped;
+      if (part === undefined || (found !== undefined && skipped !== undefined)) {
+        throw packageMismatch("The final self-check has a missing or repeated completed part");
+      }
+      return part;
+    });
+    if (
+      received.some((part) => !current.has(part.id)) ||
+      new Set(received.map(({ id }) => id)).size !== received.length
+    ) {
+      throw packageMismatch("The final self-check omitted or repeated a streamed part");
+    }
     if (!skipPassed) return ran.components;
-    const passed = this.#passed();
+    const passed = await this.#passed();
     for (const component of ran.components) {
-      if (component.outcome !== "passed") continue;
+      if (component.outcome !== "passed" || this.#failed !== null) continue;
       let identities = passed.get(component.id);
       if (identities === undefined) {
         identities = new Map();
@@ -334,14 +410,7 @@ export class PackageCheck {
       }
       identities.set(this.#identityOf(component.id), component);
     }
-    if (ran.ids === undefined) return ran.components;
-    return ran.ids
-      .map(
-        (id) =>
-          ran.components.find((component) => component.id === id) ??
-          passed.get(id)?.get(this.#identityOf(id)),
-      )
-      .filter((component) => component !== undefined);
+    return placed;
   }
 }
 
@@ -352,6 +421,8 @@ export class PackageCheck {
 function encodingPart() {
   let failure = null;
   try {
+    // The published UTF-8 hex supplies an independent byte count for raw admission too.
+    requireInputText(ENCODING_PROBE, ENCODING_PROBE_UTF8.length / 2, "probe");
     const owned = encodeSecret(ENCODING_PROBE, "probe");
     let hex;
     try {
@@ -370,6 +441,21 @@ function encodingPart() {
     } catch (error) {
       if (!isRecord(error) || error.code !== "INVALID_PASSWORD_TEXT") {
         failure = "a lone surrogate is refused with another error";
+      }
+    }
+  }
+  if (failure === null) {
+    for (const [text, limit] of /** @type {const} */ ([
+      [ENCODING_PROBE, ENCODING_PROBE_UTF8.length / 2 - 1],
+      [LONE_SURROGATE, ENCODING_PROBE_UTF8.length / 2],
+    ])) {
+      try {
+        requireInputText(text, limit, "probe");
+        failure = "invalid raw text is accepted instead of refused";
+      } catch (error) {
+        if (!isRecord(error) || error.code !== "INVALID_REQUEST") {
+          failure = "invalid raw text is refused with another error";
+        }
       }
     }
   }

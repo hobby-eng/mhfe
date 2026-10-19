@@ -158,7 +158,7 @@ async function checkThroughEachBuild() {
       runCheck((start, end) => bindings.selfCheckArgon2("startup", [], engine, start, end)),
       "startup",
       ["argon2"],
-      ["argon2", "argon2-sizes"],
+      ["argon2"],
     );
     const started = performance.now();
     expectReport(

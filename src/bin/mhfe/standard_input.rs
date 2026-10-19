@@ -18,15 +18,20 @@ pub(crate) struct StandardInput {
     /// At most one UTF-8 scalar; the allocation never moves and is wiped before it is unlocked.
     bytes: LockedBytes,
     pending: std::ops::Range<usize>,
+    #[cfg(windows)]
+    console: utf16::ScalarReader,
 }
 
 impl StandardInput {
     /// A reader of standard input. Bytes it read and that were not consumed are lost when it is
-    /// dropped: at most one byte from a descriptor or one scalar from a Windows console.
+    /// dropped: at most one byte from a descriptor or one scalar and one pending UTF-16 unit
+    /// from a Windows console. A malformed surrogate keeps its following unit for the next read.
     pub(crate) fn new() -> Self {
         Self {
             bytes: LockedBytes::copy_of(&[0; 4]),
             pending: 0..0,
+            #[cfg(windows)]
+            console: utf16::ScalarReader::new(),
         }
     }
 }
@@ -47,7 +52,14 @@ impl Read for StandardInput {
 impl BufRead for StandardInput {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         if self.pending.is_empty() {
-            self.pending = 0..read_input(&mut self.bytes)?;
+            #[cfg(not(windows))]
+            {
+                self.pending = 0..read_input(&mut self.bytes)?;
+            }
+            #[cfg(windows)]
+            {
+                self.pending = 0..read_input(&mut self.bytes, &mut self.console)?;
+            }
         }
         Ok(&self.bytes[self.pending.clone()])
     }
@@ -82,8 +94,8 @@ fn read_input(into: &mut [u8]) -> io::Result<usize> {
 }
 
 #[cfg(windows)]
-fn read_input(into: &mut [u8]) -> io::Result<usize> {
-    windows::read(into)
+fn read_input(into: &mut [u8], console: &mut utf16::ScalarReader) -> io::Result<usize> {
+    windows::read(into, console)
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -94,6 +106,86 @@ fn read_input(_: &mut [u8]) -> io::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use std::process::{Child, Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    const FIRST_LINE: &str = "public UTF-8 \u{1d400}\n";
+    const SECOND_LINE: &str = "second public line\n";
+    const PIPE_PROBE_PASSED: &str = "MHFE_PUBLIC_PIPE_READER_PASSED";
+    // Bound a stalled public-input probe even on a busy native CI host.
+    const PIPE_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
+    const PIPE_PROBE_POLL: Duration = Duration::from_millis(10);
+
+    struct PipeProbe(Option<Child>);
+
+    impl Drop for PipeProbe {
+        fn drop(&mut self) {
+            if let Some(child) = &mut self.0 {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
+
+    #[test]
+    fn native_pipe_bytes_and_lines_leave_no_consumed_bytes_in_the_owner() {
+        let mut probe = PipeProbe(Some(
+            Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--ignored",
+                    "--exact",
+                    "standard_input::tests::native_pipe_reader",
+                    "--nocapture",
+                ])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap(),
+        ));
+        let child = probe.0.as_mut().unwrap();
+        let deadline = Instant::now() + PIPE_PROBE_TIMEOUT;
+        {
+            let mut pipe = child.stdin.take().unwrap();
+            pipe.write_all(FIRST_LINE.as_bytes()).unwrap();
+            pipe.write_all(SECOND_LINE.as_bytes()).unwrap();
+        }
+        while child.try_wait().unwrap().is_none() {
+            assert!(Instant::now() < deadline, "the public pipe probe timed out");
+            std::thread::sleep(PIPE_PROBE_POLL);
+        }
+        let output = probe.0.take().unwrap().wait_with_output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(String::from_utf8_lossy(&output.stdout).contains(PIPE_PROBE_PASSED));
+    }
+
+    #[test]
+    #[ignore = "invoked by the native pipe test with fixed public input"]
+    fn native_pipe_reader() {
+        // The parent supplies two public lines through a real pipe, exercising actual read(2)
+        // or ReadFile rather than a constructed pending buffer. Inspect only live owned memory.
+        let mut input = StandardInput::new();
+        for expected in FIRST_LINE.as_bytes() {
+            assert_eq!(input.fill_buf().unwrap(), &[*expected]);
+            assert!(input.bytes[1..].iter().all(|byte| *byte == 0));
+            let mut byte = [0; 1];
+            assert_eq!(input.read(&mut byte).unwrap(), 1);
+            assert_eq!(byte, [*expected]);
+            assert!(input.bytes.iter().all(|byte| *byte == 0));
+        }
+        let mut line = zeroize::Zeroizing::new(String::new());
+        assert_eq!(input.read_line(&mut line).unwrap(), SECOND_LINE.len());
+        assert_eq!(line.as_str(), SECOND_LINE);
+        assert!(input.pending.is_empty());
+        assert!(input.bytes.iter().all(|byte| *byte == 0));
+        line.zeroize();
+        assert_eq!(input.read_line(&mut line).unwrap(), 0);
+        assert!(line.is_empty());
+        assert!(input.fill_buf().unwrap().is_empty());
+        assert!(input.bytes.iter().all(|byte| *byte == 0));
+        crate::style::out(PIPE_PROBE_PASSED).unwrap();
+    }
 
     /// Every reader of the tool goes through [`StandardInput`]: no other code of the binary reads
     /// the standard library's standard input, whose buffer it cannot wipe (AUD-024-SEC007).

@@ -1,6 +1,7 @@
 import type {
   MhfeError,
   MhfeErrorCode,
+  MhfeInputTextParameters,
   MhfePackageParts,
   MhfePasswordRepair,
   MhfeSecret,
@@ -69,7 +70,7 @@ export interface MhfeSettings {
 }
 
 /** The core's fixed values, from parameters(). */
-export interface MhfeParameters {
+export interface MhfeParameters extends MhfeInputTextParameters {
   /** Round-bearing protocol stages, taken from the library's Stage values. */
   progressStages: string[];
   /** Round totals of recovery, checked encryption and rekey. */
@@ -318,12 +319,13 @@ export type MhfeCheckOutcome = "matches" | "notVerified" | "doesNotMatch";
  * word. `builtInCheck` is the length of the one verified reading, a 12- to 21-word original whose
  * built-in check passes: the stated length where it passes, else the one other length that does;
  * null where none passes or several do with none stated. `matchingLengths` lists every length
- * whose built-in check passes, in ascending order. `walletCheck` is whether the 24-word reading
+ * whose built-in check passes, in ascending order; it is empty for a same-length container.
+ * `walletCheck` is whether the 24-word reading
  * passes the 16-bit phrase + passphrase check with the passphrase given, or with none if none
  * was given; null for `{ words }` with a length stated, for a same-length container, and when
  * exactly one shorter length passes its check and the reference did not match the 24-word
- * reading. A phrase drawn without that check fails it, so that only a pass says anything, and a
- * pass does not verify the reading.
+ * reading. A phrase drawn without that check can pass by chance; a failure matters only when the
+ * owner knows it was drawn with the check. A pass does not verify the reading.
  */
 export interface MhfeCheckEvidence {
   builtInCheck: number | null;
@@ -477,8 +479,9 @@ export interface MhfeSelfTestFault {
   message: string;
 }
 
-/** The result of selfTest(): whether both published vectors came out as published. */
+/** The final-vector and witnessed-round results of selfTest(). */
 export interface MhfeSelfTest {
+  /** True only when both final outputs and every witnessed round match the published vectors. */
   passed: boolean;
   suite3: { vector: string; asPublished: boolean };
   suite4: { vector: string; asPublished: boolean };
@@ -532,7 +535,7 @@ export class MhfeClient {
   parameters(): Promise<MhfeParameters>;
   /**
    * The phrase reaches the worker as UTF-8 bytes, which the worker and the WebAssembly wipe after
-   * use, as in encrypt(); a phrase with an unpaired surrogate is refused (INVALID_PASSWORD_TEXT).
+   * use, as in encrypt(); raw phrase admission refuses an unpaired surrogate (INVALID_REQUEST).
    */
   readPhrase(phrase: string): Promise<MhfePhraseFacts>;
   readContainer(container: string): Promise<MhfeContainerFacts>;

@@ -444,15 +444,15 @@ pub(crate) mod tests {
         let (left, right) = permutation.split(&x).unwrap();
         assert_eq!(
             (left.is_locked(), right.is_locked()),
-            (cfg!(unix), cfg!(unix))
+            (cfg!(any(unix, windows)), cfg!(any(unix, windows)))
         );
         let values = permutation.round_values(0, &right).unwrap();
-        assert_eq!(values.message.is_locked(), cfg!(unix));
+        assert_eq!(values.message.is_locked(), cfg!(any(unix, windows)));
         let y = permutation.forward(&x, &mut |_| Ok(()), None).unwrap();
-        assert_eq!(y.is_locked(), cfg!(unix));
+        assert_eq!(y.is_locked(), cfg!(any(unix, windows)));
         let back = permutation.inverse(&y, &mut |_| Ok(()), None).unwrap();
         assert_eq!(*back, x);
-        assert_eq!(back.is_locked(), cfg!(unix));
+        assert_eq!(back.is_locked(), cfg!(any(unix, windows)));
     }
 
     #[test]

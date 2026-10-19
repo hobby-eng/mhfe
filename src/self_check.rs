@@ -293,6 +293,15 @@ impl<'a> SelfCheck<'a> {
         self.checks.iter().map(|check| check.id()).collect()
     }
 
+    /// The identifiers that belong to `tier`, in order, before any explicitly skipped checks.
+    pub fn ids_at(&self, tier: Tier) -> Vec<&'static str> {
+        self.checks
+            .iter()
+            .filter(|check| check.runs_at(tier))
+            .map(|check| check.id())
+            .collect()
+    }
+
     /// Whether the set has a check with the identifier `id`.
     pub fn contains(&self, id: &str) -> bool {
         self.checks.iter().any(|check| check.id() == id)
@@ -619,6 +628,8 @@ mod tests {
         let mut set = SelfCheck::new()
             .with(Fixed::new("quick", ComponentOutcome::Passed))
             .with(slow);
+        assert_eq!(set.ids_at(Tier::Startup), ["quick"]);
+        assert_eq!(set.ids_at(Tier::Full), ["quick", "slow"]);
         let startup = set.run_quietly(Tier::Startup);
         let ids: Vec<&str> = startup.results().iter().map(ComponentResult::id).collect();
         assert_eq!(ids, ["quick"]);

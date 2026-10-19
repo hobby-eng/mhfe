@@ -1,0 +1,526 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-031",
+  "auditNumber": 31,
+  "date": "2026-10-18",
+  "title": "Current code compliance and optimality review",
+  "reviewer": {
+    "name": "GitHub Copilot coordinator and two independent read-only scope reviewers",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": null,
+    "independentReviewerModels": null
+  },
+  "snapshot": {
+    "commit": "575cbd1b7634646f6e19a2501ed9ea164a6a7acd",
+    "commitComplete": false,
+    "workingTree": "Existing uncommitted work preserved on main. Review-only phase; all 476 non-audit source inputs exactly equal final accepted AUD-030 bytes.",
+    "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+    "sourceFileCount": 476,
+    "fingerprintFormat": "SHA256 of sorted SHA256, two spaces, relative path and LF records; docs/audits excluded."
+  },
+  "scope": {
+    "repository": "hobby-eng/mhfe, existing authoritative checkout only",
+    "request": "All current code, CORE and applicable rule compliance, and defensible code/resource optimality",
+    "mode": "Audit-only; no product fixes, features, ports, dependency changes, commits or release actions",
+    "primaryPathCounts": {
+      "nativeLibrary": 193,
+      "browserTooling": 194,
+      "coordinatorCLI": 58,
+      "coordinatorRootContext": 31
+    },
+    "reviewMethod": "Complete current-path ledger at explicit mixed fresh/composed/retained/data depth; not 476 new whole-file readings, complete execution or universal conformance.",
+    "initialHistoricalAuditContextPaths": 803,
+    "noUnreviewedFirstPartyRemainderAfterContextComposition": true,
+    "noClaimOfGlobalOptimality": true
+  },
+  "checks": {
+    "procedureRows": [
+      {"checkId": "CHECK-SEC-001","title": "Threat model and secret ownership","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-SEC-002","title": "Secret Vault, CSP, sandbox, and transport","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-SEC-003","title": "Network egress and secret guards","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-SEC-004","title": "Randomness, encryption, and authentication","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-SEC-005","title": "Secret lifecycle and exceptional paths","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-SEC-006","title": "Browser injection, persistence, and sensitive APIs","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-SEC-007","title": "Read-only guarantees and availability bounds","outcome": "failed","scopeAndReason": "Confirmed low input/retry or source-comment rule gaps documented; no product changes in this audit.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-FUN-001","title": "BIP39, entropy, and seed interpretation","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-FUN-002","title": "HD derivation and every coin/profile","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-FUN-003","title": "BIP85, BIP38, messages, and Silent Payments","outcome": "not-applicable","scopeAndReason": "No BIP85/BIP38/message-signing/Silent-Payments operation.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-FUN-004","title": "Scripts, descriptors, Miniscript, and multisig","outcome": "not-applicable","scopeAndReason": "No descriptors/Miniscript/multisig API; single-key address forms remain in FUN002.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-FUN-005","title": "Transactions, PSBT version context, and commitments","outcome": "not-applicable","scopeAndReason": "No transaction/PSBT API.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-FUN-006","title": "Recovery and backup formats","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-FUN-007","title": "Discovery, providers, proofs, and accounting","outcome": "not-applicable","scopeAndReason": "No connected providers/proofs/accounting; offline address search assessed in FUN002/SEC007.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-API-001","title": "Actual dependency call contracts","outcome": "failed","scopeAndReason": "Confirmed low input/retry or source-comment rule gaps documented; no product changes in this audit.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-API-002","title": "Async state, cancellation, and revisions","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-API-003","title": "Public export schema and monetary fidelity","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-API-004","title": "Encoding and import/export interoperability","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-BLD-001","title": "Manifest, flags, and feature composition","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-BLD-002","title": "Matrix depth and runtime sampling","outcome": "not-run","scopeAndReason": "Source/mixed-depth review performed; new release/canonical/platform/viewport acceptance not requested or executed.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-BLD-003","title": "Lockfiles, source provenance, and licenses","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-BLD-004","title": "Canonical WASM and Docker bytes","outcome": "not-run","scopeAndReason": "Source/mixed-depth review performed; new release/canonical/platform/viewport acceptance not requested or executed.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-BLD-005","title": "Artifacts, CI, and release workflows","outcome": "not-run","scopeAndReason": "Source/mixed-depth review performed; new release/canonical/platform/viewport acceptance not requested or executed.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-UI-001","title": "Real files and representative viewports","outcome": "not-run","scopeAndReason": "Source/mixed-depth review performed; new release/canonical/platform/viewport acceptance not requested or executed.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-UI-002","title": "Navigation, inputs, and state preservation","outcome": "failed","scopeAndReason": "Confirmed low input/retry or source-comment rule gaps documented; no product changes in this audit.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-UI-003","title": "Secret visibility, help, QR, and accessibility","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-ARC-001","title": "Ownership, imports, and composition seams","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-ARC-002","title": "Dead code, duplication, and false positives","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-ARC-003","title": "Comments, tests, and production-path fidelity","outcome": "failed","scopeAndReason": "Confirmed low input/retry or source-comment rule gaps documented; no product changes in this audit.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-DOC-001","title": "User-facing capability and safety descriptions","outcome": "failed","scopeAndReason": "Confirmed low input/retry or source-comment rule gaps documented; no product changes in this audit.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only."},
+      {"checkId": "CHECK-DOC-002","title": "Commands, metadata, links, and legal materials","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."},
+      {"checkId": "CHECK-DOC-003","title": "Audit records and evidence consistency","outcome": "passed","scopeAndReason": "Fresh and exact-context mixed-depth body/caller review; existing unchanged-source runtime checks admitted separately, not a new full matrix.","primaryOwners": ["native-library","browser-tooling","coordinator-cli","coordinator-docs"],"evidence": "Current primary dossiers, exact retained receipts, targeted public controls; local-only.","executionScope": "Mixed-depth source/caller assessment only; runtime admission listed separately."}
+    ],
+    "currentCommands": [
+      {"record": "cli-refusal-controls-2.command.json","argv": ["bash","-c","set -euo pipefail; python3 docs/audits/AUD-031-harnesses/cli-refusal.py target/debug/mhfe invalid-utf8; python3 docs/audits/AUD-031-harnesses/cli-refusal.py target/debug/mhfe long-passphrase"],"startedUtc": "2026-10-18T14:47:44.078699+00:00","completedUtc": "2026-10-18T14:47:59.800247+00:00","exitCode": 1,"stoppedReason": null,"sourceUnchanged": true,"logSha256": "f4aee21410a35d5cc1bb3839cac7b591382d07e65314e612034c658a852585e8","memory": {"peakDescendantRssKiB": 36980,"minimumAvailableKiB": 7126780,"budgetKiB": 2097152,"reserveKiB": 3145728},"meaning": "Actual command outcome; initial CLI prompt/readback failures are harness failures, not defects.","localOnly": true},
+      {"record": "cli-refusal-controls-3.command.json","argv": ["bash","-c","set -euo pipefail; python3 docs/audits/AUD-031-harnesses/cli-refusal.py target/debug/mhfe invalid-utf8; python3 docs/audits/AUD-031-harnesses/cli-refusal.py target/debug/mhfe long-passphrase"],"startedUtc": "2026-10-18T14:48:32.085603+00:00","completedUtc": "2026-10-18T14:48:35.232136+00:00","exitCode": 0,"stoppedReason": null,"sourceUnchanged": true,"logSha256": "486bc4b8e735c2b26f501ad295229f48e06b8eb8a4cf1a9f9659a5bd3117f7a6","memory": {"peakDescendantRssKiB": 32548,"minimumAvailableKiB": 7201560,"budgetKiB": 2097152,"reserveKiB": 3145728},"meaning": "Reproduction harness success means the proposed product defect was observed, not passing product acceptance.","localOnly": true},
+      {"record": "cli-refusal-controls.command.json","argv": ["bash","-c","set -euo pipefail; python3 docs/audits/AUD-031-harnesses/cli-refusal.py target/debug/mhfe invalid-utf8; python3 docs/audits/AUD-031-harnesses/cli-refusal.py target/debug/mhfe long-passphrase"],"startedUtc": "2026-10-18T14:46:20.895644+00:00","completedUtc": "2026-10-18T14:46:36.630055+00:00","exitCode": 1,"stoppedReason": null,"sourceUnchanged": true,"logSha256": "e41517229a8a917df772b10e21588ef0def833dc673b342e2e492ed1fcb948b3","memory": {"peakDescendantRssKiB": 32884,"minimumAvailableKiB": 7155716,"budgetKiB": 2097152,"reserveKiB": 3145728},"meaning": "Actual command outcome; initial CLI prompt/readback failures are harness failures, not defects.","localOnly": true},
+      {"record": "cli-targeted-build.command.json","argv": ["bash","-c","set -euo pipefail; source packaging/remap-builder-paths.sh; remap_builder_paths \"$PWD\"; cargo build --locked --bin mhfe"],"startedUtc": "2026-10-18T14:46:13.037525+00:00","completedUtc": "2026-10-18T14:46:13.599703+00:00","exitCode": 0,"stoppedReason": null,"sourceUnchanged": true,"logSha256": "4f27ac380b22e1d975eee20ce727fa8cbc09061177f6253af0777fd4de7b7506","memory": {"peakDescendantRssKiB": 4164,"minimumAvailableKiB": 7455384,"budgetKiB": 2097152,"reserveKiB": 3145728},"meaning": "Actual command outcome; initial CLI prompt/readback failures are harness failures, not defects.","localOnly": true},
+      {"record": "word-hint-boundary-formatted.command.json","argv": ["node","--max-old-space-size=128","docs/audits/AUD-031-harnesses/word-hints.mjs"],"startedUtc": "2026-10-18T15:03:18.096568+00:00","completedUtc": "2026-10-18T15:03:18.637675+00:00","exitCode": 0,"stoppedReason": null,"sourceUnchanged": true,"logSha256": "14f2d3459a53fe48472ffd7d87ec52915a3a77f8183597e7d0f3bb27adb20c41","memory": {"peakDescendantRssKiB": 27080,"minimumAvailableKiB": 7536088,"budgetKiB": 2097152,"reserveKiB": 3145728},"meaning": "Reproduction harness success means the proposed product defect was observed, not passing product acceptance.","localOnly": true},
+      {"record": "word-hint-boundary.command.json","argv": ["node","--max-old-space-size=128","docs/audits/AUD-031-harnesses/word-hints.mjs"],"startedUtc": "2026-10-18T15:02:02.699853+00:00","completedUtc": "2026-10-18T15:02:03.244434+00:00","exitCode": 0,"stoppedReason": null,"sourceUnchanged": true,"logSha256": "14f2d3459a53fe48472ffd7d87ec52915a3a77f8183597e7d0f3bb27adb20c41","memory": {"peakDescendantRssKiB": 27148,"minimumAvailableKiB": 7557288,"budgetKiB": 2097152,"reserveKiB": 3145728},"meaning": "Reproduction harness success means the proposed product defect was observed, not passing product acceptance.","localOnly": true}
+    ],
+    "retainedExecutionAdmission": "Exact-source AUD-030 native fast and final type/lint/format/Node/real-browser standard receipts retain their own dates and scopes. No new full-suite execution."
+  },
+  "findings": [
+    {
+      "id": "AUD-031-API001",
+      "category": "API",
+      "title": "Word-hint requests have no raw utility byte admission",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "expected": "An outside utility request has an explicit size bound; reuse the existing InputText domain, preserving normal last-word behavior. This is a coding-rule bound, not an altered cryptographic-format requirement.",
+      "observed": "Both actual raw bindings and public classes accept8193UTF8bytes for bothbip39/eff lists; all8192positives also pass. ASCII and multibyte whitespace show bytes, not character counts. Class transport includes the whole supplied payload.",
+      "impact": "Avoidable linear scanning and copied/transferred data before a small answer; no measured exhaustion, remote attack or secret leak. Native typed-line front ends already cap their input; raw/browser callers expose this gap.",
+      "recommendedFix": "Settle the public hint input contract and use library-owned admission in the raw binding and pre-encode class paths; expose/reuse needed metadata. Do not silently truncate text or alter KDF parameters.",
+      "requiredVerification": "Exact max/max+1 byte controls with multibyte input; normal hints/completions; stable error code; pre-copy/worker ordering; document any source API signature/limit changes.",
+      "kind": "finding",
+      "affectedFilesAndLines": [
+        "src/wasm_api/word_hints.rs:36-45",
+        "src/word_hints.rs:195-205",
+        "web/runtime-parts/modules.js::wordHintsOf"
+      ],
+      "reproduction": "node --max-old-space-size=128 docs/audits/AUD-031-harnesses/word-hints.mjs",
+      "ruleIds": [
+        "CORE-48",
+        "CORE-50",
+        "CORE-10"
+      ],
+      "evidence": {
+        "localOnly": true,
+        "sourceDossiers": [
+          "native-library-review.json",
+          "browser-tooling-review.json",
+          "coordinator-cli-review.json"
+        ],
+        "actualCommand": "word-hint-boundary-formatted.command.json"
+      }
+    },
+    {
+      "id": "AUD-031-UI001",
+      "category": "UI",
+      "title": "Invalid UTF-8 in an interactive visible answer bypasses retry",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "expected": "Explain the invalid interactive answer and ask the same field again, preserving preceding answers. Real I/O failure and cancellation remain failures/stops.",
+      "observed": "The ordinary malformed fingerprint is asked again, but the invalid UTF-8 answer ends the process with exit code 2.",
+      "impact": "Recoverable interactive input loses prior state. Script fail-fast behavior is not alleged to be wrong; hidden secret input has a separate retry loop.",
+      "recommendedFix": "Handle the existing typed invalid-input refusal at the interactive visible-input seam and drain only the refused line; do not swallow cancellation or genuine I/O errors.",
+      "requiredVerification": "The actual PTY control remains alive and re-prompts after malformed UTF-8, accepts a subsequent valid answer, preserves prior state, and keeps script exits/cancellation/I/O semantics.",
+      "kind": "finding",
+      "affectedFilesAndLines": [
+        "src/bin/mhfe/terminal.rs:192-202",
+        "src/bin/mhfe/terminal.rs:479-500",
+        "src/bin/mhfe/check/wallet_reference.rs:350-376"
+      ],
+      "reproduction": "At the actual current check --fingerprint interactive prompt, first enter an ordinary invalid fingerprint and observe a new prompt; then submit byte FF followed by LF.",
+      "ruleIds": [
+        "CORE-42",
+        "CORE-22"
+      ],
+      "evidence": {
+        "localOnly": true,
+        "sourceDossiers": [
+          "native-library-review.json",
+          "browser-tooling-review.json",
+          "coordinator-cli-review.json"
+        ],
+        "actualCommand": "cli-refusal-controls-3.command.json"
+      }
+    },
+    {
+      "id": "AUD-031-UI002",
+      "category": "UI",
+      "title": "An excessive interactive BIP39 passphrase is refused only after its prompt",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "expected": "The passphrase's shared raw-byte domain is applied at the interactive prompt and an invalid value is asked again without retyping earlier answers.",
+      "observed": "The prompt accepts the line; later reference preflight refuses it with the correct passphrase-size error and the process exits 2. No recovery round runs.",
+      "impact": "Late recoverable input refusal loses prior interactive state. This is not the historical too-late-KDF variant: the native domain guard correctly prevents Argon2 rounds.",
+      "recommendedFix": "Expose/reuse the existing library-owned passphrase size rule in the shared CLI passphrase reader, preserving empty-passphrase applicability and script refusal behavior.",
+      "requiredVerification": "1024/1025 raw bytes, multibyte byte counts, retry preserving earlier answers, named/nonempty and optional-empty prompts, scripts and no work before refusal.",
+      "kind": "finding",
+      "affectedFilesAndLines": [
+        "src/bin/mhfe/check/passphrase.rs:17-27",
+        "src/bin/mhfe/check/passphrase.rs:49-81",
+        "src/bin/mhfe/check/passphrase.rs:176-194",
+        "src/bin/mhfe/check.rs:360-415"
+      ],
+      "reproduction": "Supply the published zero-12 container, synthetic password and valid fingerprint to actual check --fingerprint; submit a synthetic 1025-byte ASCII BIP39 passphrase.",
+      "ruleIds": [
+        "CORE-42",
+        "CORE-48",
+        "CORE-10"
+      ],
+      "evidence": {
+        "localOnly": true,
+        "sourceDossiers": [
+          "native-library-review.json",
+          "browser-tooling-review.json",
+          "coordinator-cli-review.json"
+        ],
+        "actualCommand": "cli-refusal-controls-3.command.json"
+      }
+    },
+    {
+      "id": "AUD-028-DOC003",
+      "category": "DOC",
+      "kind": "finding",
+      "title": "Follow-up: CLI self-test source comment still overstates finite coverage",
+      "severity": "low",
+      "status": "open",
+      "releaseBlocking": false,
+      "affectedFilesAndLines": [
+        "src/bin/mhfe/self_test.rs:6-9"
+      ],
+      "reproduction": "Compare the actual CLI header comment at6-9 with the limited library self-test evidence and implementation; no full-cost execution is required to establish a wording mismatch.",
+      "expected": "Passing published checks establishes only the tested operations and witnessed rounds, not all MHFE inputs here and now.",
+      "observed": "The comment still says a passing program computes MHFE as the specification says here and now; the library correctly limits evidence to two published operations and their witnessed rounds.",
+      "impact": "Limited source documentation overclaim, not an altered runtime verdict or a new cryptographic vulnerability.",
+      "recommendedFix": "Qualify the current CLI source comment to the actual finite checks, retaining the original finding ID.",
+      "requiredVerification": "Source/wording comparison against the library; no new full-cost campaign merely for a comment.",
+      "evidence": {
+        "localOnly": true,
+        "records": [
+          "coordinator-cli-review.json",
+          "native-library-review.json"
+        ],
+        "scope": "Current CLI-comment variant only; historical corrected subclaims retain their statuses."
+      },
+      "ruleIds": [
+        "CORE-19",
+        "DOC-07"
+      ]
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-031-API001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review-only current finding/variant; no product remediation performed. Source-bound reproduction/source comparison retained."
+    },
+    {
+      "id": "AUD-031-UI001",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review-only current finding/variant; no product remediation performed. Source-bound reproduction/source comparison retained."
+    },
+    {
+      "id": "AUD-031-UI002",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review-only current finding/variant; no product remediation performed. Source-bound reproduction/source comparison retained."
+    },
+    {
+      "id": "AUD-028-DOC003",
+      "status": "open",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Review-only current finding/variant; no product remediation performed. Source-bound reproduction/source comparison retained."
+    }
+  ],
+  "limitations": [
+    "Three new current Low defects and one original-ID CLI source-comment continuation remain open; no product code was modified.",
+    "Mixed-depth source coverage is not 476 fresh whole-file readings, proof of all runtime paths, defect absence or globally optimal performance.",
+    "Six inherited Windows/macOS/native packaging and paired-access acceptance IDs remain unexecuted locally.",
+    "Best-effort per-allocation MADV_DONTDUMP readback/reporting remains unresolved; no owner risk acceptance or demonstrated dump compromise is inferred.",
+    "No new full-size vectors, independent full cryptographic computation, canonical cached/uncached build, release artifact/signature/attestation or downstream host acceptance.",
+    "No new real-browser or viewport run, advisory/literature/scanner/fuzz/mutation/sanitizer/Miri/assembly-erasure/statistical-timing campaign.",
+    "No benchmark or speedup claim; allocation opportunities are static source cost traces with explicit bounded tradeoffs.",
+    "Wiping/worker termination cannot establish erasure of every compiler, GC, string, register, browser, OS or crash-report copy."
+  ],
+  "evidence": {
+    "localOnly": true,
+    "directory": "docs/audits/AUD-031-evidence/",
+    "contents": "Source and input manifests, actual command receipts/logs, failed helper attempts, complete path/rule/check ledger and authentic reviewer dossiers"
+  },
+  "procedureHashes": {
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb"
+  },
+  "instructionHashes": {
+    "AGENTS.md": "1f2bd03825f0a0056dbf430da8b0243423ea34f130ac3dbe08b7235eb5d920d3",
+    "GLOSSARY.md": "ef514c847fdd5fb24ab5a0bd649e29e01955190c6a0afcbf3445c14e775cc2e5",
+    "GLOSSARY-MAP.md": "a2b6c79b8279c5f98cbb62494b9aaf553e50b12be99363b6b6f09788cc64f9f6",
+    "handovers/README.md": "ccc8792292d361082055d28cd535660067739ab1b4b006f0b0f402c1c320e0f4",
+    "handovers/mhfe.md": "f908f43d6e3406b491f8a8bc7ffcf654d43cd3f97af809abcdb0aabe4dc266f8",
+    ".github/instructions/code-core.instructions.md": "51ac92ddffea253bb7ed2f1926eb4cab6c2f52d336af95c1d63f3ebdd9fce066",
+    ".github/instructions/code-rust.instructions.md": "08bb268d4da1d1e01e93e6294b028a9471a062565eeaf7eb7355fd6592bdcc9c",
+    ".github/instructions/code-typescript.instructions.md": "5984f573d7df64ebd494f79891ce838dd518f0cf27876a2965fe46df6ace3ec1",
+    ".github/instructions/code-browser.instructions.md": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+    ".github/instructions/code-tooling.instructions.md": "ba09a6530475e8ba08cc96dbf4100b043b6c250263e62def21321f178bb631f7",
+    ".github/instructions/docs.instructions.md": "1fc9e20ab2f2dad220dc3f6b507e7372c161a05208c80ed2aa8dc28525bb33bf",
+    ".github/instructions/ci.instructions.md": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+    ".github/instructions/audits.instructions.md": "6eed08f958c11bd530006c89489796db8efa759f8a93c501a514de262d0ab004",
+    "mhfe/AGENTS.md": "2578731c946d18af56e721b1f1a2f504c77d05eea6e343a9564a01553613c5d2",
+    "user/copilot-instructions.md": "a82e9c51b58cea12aee5520819a84b2fa1a694f707d3816e3e28d00630117e22",
+    ".github/skills/wallet-full-audit/SKILL.md": "5fef2f168d0d2895a469ea10be76dee1c44c55f8678162bcf5487108b2c4395d",
+    ".github/skills/wallet-security-review/SKILL.md": "0039e3c1345f19948551739050269cab947eeb4d32c9c8cc8e10897a8dab3f66",
+    ".github/skills/audit-context-building/SKILL.md": "33fa693dc6e166cfa4919e4373cb6578c009d296234c2ae7cb3cd4e79b443765",
+    ".github/skills/spec-to-code-compliance/SKILL.md": "eb0d91b50a9c06f50baf8763d1e23566897b9fa3e7ffcf13134eee4e1ccaefe5",
+    ".github/skills/post-patch-validation/SKILL.md": "33b604f4d7d62eab393d710edb98b18505fcbe079c07c9428daa018f29439b54",
+    ".github/skills/zeroize-audit/SKILL.md": "933273f0c9cd0ae197c010a4d3de81782a593b2160507b897f1e04d579bfba6f",
+    ".github/skills/rust-review/SKILL.md": "52ee8b08876b0ad90ecdf4a58de8d41fb2d8627f1e4d259a806a35a6e187ae91",
+    ".github/skills/property-based-testing/SKILL.md": "9448cacb65c6237a7c22dc59602667177ecae405524079ae9ff92240590b995a",
+    ".github/skills/javascript-testing-expert/SKILL.md": "5aacae521c8a7df27029283920264d52003d55dbddef9dbe01a45e0394f84465",
+    ".github/skills/microsoft-rust-guidelines/SKILL.md": "94711a862784747fa06c47b4a088b91992b6aead0ffa4a811423f703b5da663f"
+  },
+  "completedUtc": "2026-10-18T15:24:13.464318+00:00",
+  "coverage": {
+    "pathCount": 476,
+    "ruleCount": 104,
+    "coreRuleCount": 53,
+    "procedureCheckCount": 32,
+    "ledger": {
+      "path": "docs/audits/AUD-031-evidence/complete-coverage-ledger.json",
+      "sha256": "9a8b16f559ee0c93f14f0d60a5839eb276e43b79ae35d717ab8dcaecc554c116",
+      "localOnly": true
+    },
+    "nativeDepth": {
+      "primaryPaths": 193,
+      "firstPartyCodePathsExcludingGeneratedRoundData": 124,
+      "freshReadPaths": 44,
+      "freshWholePaths": 31,
+      "freshPartialPaths": 13,
+      "retainedOnlyPaths": 149,
+      "methodCounts": {
+        "retained-all-record-structural-provenance": 40,
+        "fresh-whole-source": 31,
+        "composed-exact-current-source-ranges": 37,
+        "retained-exact-hash-whole-source-context": 85
+      },
+      "changedSinceAUD029PrimaryPaths": [
+        "src/container.rs",
+        "src/container/known_answers.rs",
+        "src/password/known_answers.rs",
+        "src/phrase.rs",
+        "src/phrase/error.rs",
+        "src/phrase/known_answers.rs",
+        "src/wasm_api.rs",
+        "src/wasm_api/core.rs",
+        "src/wasm_api/core/rekey.rs",
+        "src/wasm_api/repair.rs",
+        "src/wasm_api/wallet.rs",
+        "src/word_hints.rs"
+      ],
+      "unreviewedPrimaryPaths": [],
+      "unreviewedFirstPartyCodePaths": [],
+      "hashOnlyPrimaryPaths": [],
+      "meaning": "Zero unreviewed current primary remainder only after explicitly admitted exact-hash historical whole/context and structural methods plus fresh range completion. Not 193 fresh whole reads, not a new dependency audit and not complete runtime execution."
+    },
+    "browserDepth": {
+      "freshWholeFiles": 88,
+      "retainedWholeSourceContextWithFreshImpactAssessment": 102,
+      "freshDeclarativeData": 3,
+      "retainedDependencyData": 1,
+      "omittedAssignedPaths": 0,
+      "remainingPartialOrInventoryOnlyFirstPartyCode": 0,
+      "meaning": "This closes the assigned source-reading gap, not the execution gaps. The 102 retained paths were NOT all freshly reread. Their exact per-path admission was checked, and no changed-since-primary-review file remains in that category."
+    },
+    "limits": "Complete stated-method current source ledger after exact context composition, not fresh whole reading of every file or complete runtime execution. Historical data/legal/vendor methods are distinct."
+  },
+  "independentReviews": {
+    "native-library-review.json": {
+      "sha256": "69722b0df4017e9538317b3ecbb60e92eeb5e98d5bbac13b452ff041977e5cad",
+      "localOnly": true
+    },
+    "browser-tooling-review.json": {
+      "sha256": "0ffce164d749b1c3a15d152ed03e5a6dc9ae29bd420644ab37355579e421cc99",
+      "localOnly": true
+    }
+  },
+  "runtimeAdmission": {
+    "admittedUtc": "2026-10-18T14:52:03.975719+00:00",
+    "sourceFingerprint": "d42ee90e77eee7578d86351d406e673709f93f2d12968adc93b3f4598ea53600",
+    "current476FilesExactlyEqualAcceptedSource": true,
+    "current17PackageFilesExactlyEqualAcceptedArtifacts": true,
+    "packageBuildId": "98c6df9b536939c3",
+    "records": [
+      {
+        "name": "baseline-fast",
+        "recordSha256": "ffb0f626bd7ce3dcba5e0865c6a9dc9cdb41018793b3d58515ac66b23f83fb4f",
+        "logSha256": "138bc259eabc11c706fe3bb9c78f703036a18395695d429263ca8bdf5b20b3dd",
+        "startedUtc": "2026-10-18T12:09:36.027Z",
+        "completedUtc": "2026-10-18T12:13:56.215Z",
+        "exitCode": 0,
+        "admission": "Native source exact when native tests ran; all476current inputs and17package files exactly equal final corrected acceptance; no new execution."
+      },
+      {
+        "name": "source-integrity-and-notices",
+        "recordSha256": "15d1046945198eeb07dad8e68b22f457bc931f9c587a7d4d75ff1a1b59335b12",
+        "logSha256": "820fc142773a5efd05bff4f05bc697cd41aa957762242e875dea78d89a108698",
+        "startedUtc": "2026-10-18T12:27:35.695Z",
+        "completedUtc": "2026-10-18T12:27:36.698Z",
+        "exitCode": 0,
+        "admission": "Native source exact when native tests ran; all476current inputs and17package files exactly equal final corrected acceptance; no new execution."
+      },
+      {
+        "name": "message-compatibility-acceptance",
+        "recordSha256": "7f52af9cf7a6d729034a70e908c521ffb3faa8e3b006046df9724505867c647f",
+        "logSha256": "c0bf31a5873814177134169aea6436aea93a268472a1995d93d23d81ccd5b683",
+        "startedUtc": "2026-10-18T13:30:46.385Z",
+        "completedUtc": "2026-10-18T13:35:48.858Z",
+        "exitCode": 0,
+        "admission": "Native source exact when native tests ran; all476current inputs and17package files exactly equal final corrected acceptance; no new execution."
+      },
+      {
+        "name": "report-record-validation",
+        "recordSha256": "87ed8bc1f556d33a2c4e1e3c3b36e1bf9e8518efc6f88d745ccfd4b470dca0b8",
+        "logSha256": "8637418a231b03d46c39716d19bf79b08e20aa610bcaedc5f6aa0276f9ce1284",
+        "startedUtc": "2026-10-18T13:52:04.256Z",
+        "completedUtc": "2026-10-18T13:52:04.883Z",
+        "exitCode": 0,
+        "admission": "Native source exact when native tests ran; all476current inputs and17package files exactly equal final corrected acceptance; no new execution."
+      }
+    ],
+    "limits": "Retained fast/native/type/lint/Node/browser evidence only; no new fullcost/native-otherplatform/canonical acceptance. Baseline-fast had475inputs;251nativeones remain unchanged through final476 acceptance.",
+    "localOnlySourceReceipts": true
+  },
+  "remainingPlatformAcceptance": [
+    {
+      "id": "AUD-026-BLD002",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual Windows memory-owner locking"
+    },
+    {
+      "id": "AUD-026-BLD003",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual macOS paired attachment"
+    },
+    {
+      "id": "AUD-024-SEC007",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual Windows console/ConPTY and residue"
+    },
+    {
+      "id": "AUD-024-SEC010",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual Windows/macOS enforcement and signed runtime"
+    },
+    {
+      "id": "AUD-024-BLD009",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual native macOS packing"
+    },
+    {
+      "id": "AUD-029-BLD002",
+      "status": "fixed",
+      "runtimeAcceptance": "not-run",
+      "reason": "Actual Windows successful-access/denial control pair"
+    }
+  ],
+  "optionalOptimalityOpportunities": [
+    {
+      "topic": "Loopback native/Python response copies",
+      "classification": "Optional resource simplification, not confirmed output corruption/vulnerability",
+      "paths": [
+        "src/bin/mhfe/serve.rs:407-430,494-500",
+        "packaging/mhfe-fast-mode.py:418-431,527-545,550-585"
+      ],
+      "evidence": "Native HEAD clones a body not sent; native GET stages a second full copy; Python GET constructs head+body. Fixed page/concurrency limits bound the work.",
+      "tradeoff": "Preserve exact headers, HEAD Content-Length and one total send deadline when sharing/streaming public bytes.",
+      "measurement": "Static source cost only; no peak RSS benchmark or performance percentage."
+    },
+    {
+      "topic": "Hint last-token scan reuse",
+      "classification": "Optional low-priority optimization after fixing input admission",
+      "paths": [
+        "src/wasm_api/word_hints.rs:40-45",
+        "src/word_hints.rs:130-169,195-215"
+      ],
+      "tradeoff": "A private shared query could avoid repeated parsing without a speculative public API expansion."
+    },
+    {
+      "topic": "Raw ended-session credential lifetime",
+      "classification": "Optional least-lifetime design, not demonstrated leak or post-end operation",
+      "paths": [
+        "src/wasm_api/core/rekey.rs:394-425,551-558"
+      ],
+      "tradeoff": "Earlier drop requires a meaningful terminal owner shape; supported workers already dispose sessions."
+    },
+    {
+      "topic": "Launcher harness blocking-read deadlines",
+      "classification": "Optional test robustness, no current product hang reproduced",
+      "paths": [
+        "scripts/terminal_suite/serve.py:58-70",
+        "scripts/verify-fast-mode-script.py:303-328"
+      ],
+      "tradeoff": "Use a finite startup/read deadline and reap only the owned child; enclosing CI timeout is not equivalent local evidence."
+    },
+    {
+      "topic": "Avoid unrelated memory query in settings error path",
+      "classification": "Minor optional error-path I/O reduction, not measured regression",
+      "paths": [
+        "src/bin/mhfe/settings.rs:517-530"
+      ],
+      "tradeoff": "Only ask highest_available_level inside NotEnoughMemory handling if the path is changed later."
+    }
+  ],
+  "unresolvedPolicyObservation": {
+    "topic": "Per-allocation MADV_DONTDUMP readback/reporting",
+    "retainedFrom": "AUD-030 NATIVE-READBACK-001",
+    "riskAccepted": false,
+    "runtimeCompromiseDemonstrated": false,
+    "scope": "Best-effort extra defense has no retained/read-back outcome; CLI separately verifies process dump policy. No forced-advice/dump test was run."
+  },
+  "reportDocument": {
+    "path": "AUD-031-2026-10-18.md",
+    "sha256": "04f4d44d78d699ae6b97a1ce6cdc1cca85cfea330ee50c7d666e206cefae33cb"
+  },
+  "reportValidationScope": "Strict schema/pair/IDs/source/artifact/log/reviewer/privacy admission is recorded separately; this record cannot certify all semantic properties.",
+  "finalizationValidation": {
+    "localOnly": true,
+    "pairGateReceipt": "report-pair-gate.command.json",
+    "strictSchemaAndBindingReceipt": "report-schema-and-bindings-2.command.json",
+    "result": "passed on the recorded paired draft; final unchanged-source/report identities rechecked before closure",
+    "uncreditedNoop": "report-schema-and-bindings.command.json executed empty stdin and is explicitly excluded; see validation-noop-disposition.json"
+  },
+  "auditHelperCorrection": {
+    "findingCountUnchanged": 4,
+    "productionSourceUnchanged": true,
+    "review": "final-report-review.json, local only; substantive assessment accepted with one helper cleanup correction required",
+    "red": {
+      "record": "audit-cleanup-red.command.json",
+      "exitCode": 1,
+      "logSha256": "bc97bd3e420f305053faf88c2252111bc08bca6d32de2077d0222421565a1336"
+    },
+    "green": {
+      "record": "audit-cleanup-and-refusal-green.command.json",
+      "exitCode": 0,
+      "logSha256": "34b5bfbfd00a59c9bf92108fd2394e8115b3d269aed6d42ba640c27d87bc72f4"
+    },
+    "scope": "Synthetic child recovery marker no longer interrupts unconditional reaping/PTy closure; two actual current CLI premature-exit controls still reproduce. No production binary starts in the synthetic cleanup control.",
+    "localOnly": true
+  }
+}

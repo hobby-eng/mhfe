@@ -19,6 +19,12 @@ fn hardened_process() {
         ReadBack::Set,
         "the control process is initially unrestricted"
     );
+    // The same external observer must obtain both rights before hardening. Otherwise an
+    // unrelated host restriction could make the later denial look like product enforcement.
+    require_success(run(
+        "protect::windows::tests::another_process_can_read_memory",
+        Some(std::process::id()),
+    ));
     harden();
     assert_eq!(crash_reporting(), ReadBack::Set);
     assert_eq!(memory_access(), ReadBack::Set);
@@ -31,6 +37,16 @@ fn hardened_process() {
 #[test]
 #[ignore = "invoked only as the other process of the enforcement probe"]
 fn another_process_cannot_read_memory() {
+    check_process_access(false);
+}
+
+#[test]
+#[ignore = "invoked only as the unrestricted control of the enforcement probe"]
+fn another_process_can_read_memory() {
+    check_process_access(true);
+}
+
+fn check_process_access(allowed: bool) {
     let pid: u32 = std::env::var(TARGET_PID).unwrap().parse().unwrap();
     // WRITE_DAC (0x00040000) would let an owner grant VM_READ back to itself.
     const WRITE_DAC: u32 = 0x0004_0000;
@@ -41,12 +57,19 @@ fn another_process_cannot_read_memory() {
         let error = unsafe { GetLastError() };
         if !handle.is_null() {
             // SAFETY: close the one handle returned by OpenProcess, once.
-            unsafe { CloseHandle(handle) };
+            assert_ne!(unsafe { CloseHandle(handle) }, 0);
         }
-        assert!(
-            handle.is_null(),
-            "a same-user process obtained access {rights:#x}"
-        );
-        assert_eq!(error, ERROR_ACCESS_DENIED);
+        if allowed {
+            assert!(
+                !handle.is_null(),
+                "UNAVAILABLE: the unrestricted control could not obtain {rights:#x}: {error}"
+            );
+        } else {
+            assert!(
+                handle.is_null(),
+                "a same-user process obtained access {rights:#x}"
+            );
+            assert_eq!(error, ERROR_ACCESS_DENIED);
+        }
     }
 }
