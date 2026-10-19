@@ -63,7 +63,7 @@ impl DumpRange {
         let mut remaining = MAX_SCAN_BYTES;
         let mut cursor = self.start.as_ptr() as usize;
         let mut current: Option<(usize, usize)> = None;
-        let mut previous_end = 0;
+        let mut covered_owned_pages = false;
         let mut line = Vec::with_capacity(256);
         while remaining > 0 {
             line.clear();
@@ -90,18 +90,20 @@ impl DumpRange {
                     return Ok(false);
                 }
                 cursor = last.min(self.end);
+                covered_owned_pages = true;
                 if cursor == self.end {
                     return Ok(true);
                 }
             } else {
                 match Self::header(&line) {
                     Ok(Some((first, last))) => {
-                        if first < previous_end
+                        // Concurrent mappings can change the streamed prefix before our area.
+                        // Once coverage begins, require disjoint progress over the owned pages.
+                        if (covered_owned_pages && first < cursor)
                             || current.is_some_and(|(begin, end)| begin <= cursor && end > cursor)
                         {
                             return Ok(false);
                         }
-                        previous_end = last;
                         current = Some((first, last));
                     }
                     Ok(None) => {}
@@ -142,6 +144,36 @@ mod tests {
             bytes: 0x2000,
             end: 0x3000,
         }
+    }
+
+    #[test]
+    fn parallel_work_areas_keep_their_verified_dump_policy() {
+        std::thread::scope(|scope| {
+            for worker in 0..4 {
+                scope.spawn(move || {
+                    for round in 0..128 {
+                        let bytes = 512 * 1024 + ((worker + round) % 17) * 4096;
+                        let area = super::super::ffi::WorkArea::allocate(bytes).unwrap();
+                        assert!(area.is_wiped());
+                    }
+                });
+            }
+        });
+    }
+
+    #[test]
+    fn unrelated_mapping_churn_does_not_hide_the_owned_pages() {
+        let prefix = "0000-1000 r--p\nVmFlags: rd\n0000-1000 r--p\nVmFlags: rd\n";
+        assert!(range()
+            .confirms(io::Cursor::new(format!(
+                "{prefix}1000-3000 rw-p\nVmFlags: wr dd\n"
+            )))
+            .unwrap());
+        assert!(!range()
+            .confirms(io::Cursor::new(format!(
+                "{prefix}1000-3000 rw-p\nVmFlags: wr\n"
+            )))
+            .unwrap());
     }
 
     #[test]

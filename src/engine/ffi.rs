@@ -670,6 +670,21 @@ mod tests {
         assert_eq!(c_tag(&single, 32).unwrap(), c_tag(&parallel, 32).unwrap());
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn concurrent_c_calls_keep_verified_work_area_protection() {
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                scope.spawn(|| {
+                    for _ in 0..64 {
+                        let inputs = Argon2Inputs::rfc_9106(false);
+                        assert_eq!(c_tag(&inputs, 32).unwrap(), rustcrypto_tag(&inputs, 32));
+                    }
+                });
+            }
+        });
+    }
+
     #[test]
     fn every_context_field_reaches_the_c_code() {
         // Changing one input at a time must change the tag, so no field is silently ignored or

@@ -226,10 +226,9 @@ mod tests {
     /// A consumed byte is wiped from the reader, and an empty buffer reads nothing.
     #[test]
     fn a_consumed_byte_is_wiped() {
-        let mut input = StandardInput {
-            bytes: LockedBytes::copy_of(b"x\0\0\0"),
-            pending: 0..1,
-        };
+        let mut input = StandardInput::new();
+        input.bytes.copy_from_slice(b"x\0\0\0");
+        input.pending = 0..1;
         assert_eq!(input.read(&mut []).unwrap(), 0);
         let mut taken = [0u8; 4];
         assert_eq!(input.read(&mut taken).unwrap(), 1);
@@ -240,10 +239,9 @@ mod tests {
 
     #[test]
     fn a_partly_consumed_scalar_keeps_only_its_unread_bytes() {
-        let mut input = StandardInput {
-            bytes: LockedBytes::copy_of("\u{1d400}".as_bytes()),
-            pending: 0..4,
-        };
+        let mut input = StandardInput::new();
+        input.bytes.copy_from_slice("\u{1d400}".as_bytes());
+        input.pending = 0..4;
         let mut bytes = [0; 2];
         assert_eq!(input.read(&mut bytes).unwrap(), 2);
         assert_eq!(bytes, [0xf0, 0x9d]);

@@ -56,6 +56,15 @@ scripts/check-fast.sh
 scripts/check.sh
 ```
 
+The macOS debugger-attachment test first requires a successful attach/stop/detach control.
+On a test host that authorizes noninteractive `sudo`, set
+`MHFE_PUBLIC_MACOS_ATTACH_PROBE_SUDO=1` for `cargo test --locked`. This elevates only the fixed
+public-data monitor and its named probe subprocesses; Cargo, the rest of the suite and production
+commands are not elevated. The monitor
+checks the actual protected child's signal before its own result passes through `sudo`.
+Without that opt-in it runs with the caller's permissions. An unavailable control fails the
+test and never establishes protection. The hosted macOS CI job sets the opt-in explicitly.
+
 Markdown and JavaScript use the repository's pinned Prettier. The Node.js tools come through
 pnpm, in the version that `packageManager` in `package.json` names (with Corepack:
 `corepack enable`). Install the development dependencies from the lockfile and check formatting

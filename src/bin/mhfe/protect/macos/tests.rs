@@ -5,12 +5,16 @@ use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use super::super::test_process::run;
+use super::super::test_process::{require_success, run};
 use super::*;
 
 const PROTECTED: &str = "MHFE_PUBLIC_PROBE_HARDENED";
 const READY: &str = "MHFE_PUBLIC_TARGET_READY";
 const ATTACHED: &str = "MHFE_PUBLIC_ATTACHED_AND_DETACHED";
+const ATTACHING: &str = "MHFE_PUBLIC_TARGET_READY_FOR_ATTACH";
+const MONITOR_PASSED: &str = "MHFE_PUBLIC_PAIRED_ATTACH_MONITOR_PASSED";
+const MONITOR_TEST: &str = "protect::macos::tests::paired_attachment_monitor";
+const ELEVATED_PROBES: &str = "MHFE_PUBLIC_MACOS_ATTACH_PROBE_SUDO";
 // Public probes poll promptly while giving a busy host time to deliver a process stop.
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const TRACE_STOP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -21,6 +25,29 @@ const MAX_READY_LINES: usize = 16;
 
 #[test]
 fn macos_debugger_attachment_is_refused() {
+    // Hosted macOS requires debugger authorization even for the public unprotected control.
+    // Only this explicit opt-in elevates the fixed public monitor, never cargo or the program.
+    let output = if std::env::var(ELEVATED_PROBES).as_deref() == Ok("1") {
+        Command::new("/usr/bin/sudo")
+            .args(["-n", "--"])
+            .arg(std::env::current_exe().unwrap())
+            .args(["--ignored", "--exact", MONITOR_TEST, "--nocapture"])
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
+    } else {
+        run(MONITOR_TEST, None)
+    };
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains(MONITOR_PASSED),
+        "{output:?}"
+    );
+    require_success(output);
+}
+
+#[test]
+#[ignore = "fixed public monitor invoked by the paired attachment test"]
+fn paired_attachment_monitor() {
     let control = run("protect::macos::tests::unrestricted_process", None);
     assert!(control.status.success(),
         "UNAVAILABLE: PT_ATTACH control could not run; target protection remains unverified: {control:?}");
@@ -29,6 +56,10 @@ fn macos_debugger_attachment_is_refused() {
         "{control:?}"
     );
     let protected = run("protect::macos::tests::hardened_process", None);
+    assert!(
+        String::from_utf8_lossy(&protected.stdout).contains(ATTACHING),
+        "{protected:?}"
+    );
     // Apple's ptrace manual describes SIGSEGV in the tracing parent. Only an attachable,
     // otherwise equivalent control lets that signal demonstrate the target's policy.
     assert_eq!(
@@ -36,6 +67,7 @@ fn macos_debugger_attachment_is_refused() {
         Some(libc::SIGSEGV),
         "{protected:?}"
     );
+    crate::style::out(MONITOR_PASSED).unwrap();
 }
 
 #[test]
@@ -95,6 +127,7 @@ fn attempt_attachment(protected: bool) {
     }
     assert!(ready, "the public target did not reach its ready state");
     let pid = libc::pid_t::try_from(target.0.id()).unwrap();
+    crate::style::out(ATTACHING).unwrap();
     // SAFETY: this PID belongs to our public child. PT_ATTACH dereferences no pointer. Unlike
     // a child-to-parent probe, this follows the parent relationship of PT_DENY_ATTACH's contract.
     let result = unsafe { libc::ptrace(libc::PT_ATTACH, pid, std::ptr::null_mut(), 0) };

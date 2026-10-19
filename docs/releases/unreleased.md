@@ -21,6 +21,10 @@ are cancelled.
 
 ## Changed
 
+- Linux work-area readback tolerates mapping changes before the owned range while still requiring
+  exact dump-exclusion flags and continuous, nonoverlapping coverage of every owned page.
+  Concurrent native C calls have dedicated regression coverage; cryptographic outputs and costs
+  are unchanged.
 - Native Linux Argon2 work areas require successful whole-page dump exclusion and bounded
   `/proc/self/smaps` readback before use. Direct allocation failure returns the new
   `EngineError::MemoryProtection` / `MEMORY_PROTECTION_FAILED` refusal. Startup and full checks

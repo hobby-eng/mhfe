@@ -130,6 +130,9 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Run the fast tests
+        env:
+          # Authorize only the fixed, public-data attachment monitor; cargo stays unprivileged.
+          MHFE_PUBLIC_MACOS_ATTACH_PROBE_SUDO: ${{ runner.os == 'macOS' && '1' || '0' }}
         run: cargo test --locked
       # The PTY cases compare every candidate for two missing words. Their existing deadline
       # assumes optimized code; the debug build can spend the whole step on that search.
