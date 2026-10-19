@@ -1,0 +1,643 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-035",
+  "auditNumber": 35,
+  "date": "2026-10-19",
+  "completedUtc": "2026-10-19T02:15:57.800063+00:00",
+  "title": "Native process-policy acceptance and Rust signal-oracle follow-up",
+  "reviewer": {
+    "name": "Codex main implementer with two independent read-only reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "8ebba34a2bcfaad3dbc4cd6f094e60b28516b8e2",
+    "commitComplete": false,
+    "workingTree": "Five source/document paths changed; three new public harnesses and this report pair/index.",
+    "sourceFileCount": 480,
+    "sourceFingerprint": "cb1253ba0eda6da88d98958ba05f39c82e3778188a8784ca9b37472d157c3d55",
+    "fingerprintFormat": "SHA256 of sorted sha256 + two spaces + relative path + LF",
+    "baseSourceManifest": {
+      "path": "docs/audits/AUD-034-2026-10-19.json",
+      "sha256": "dc751048cc8686975c22b2661999fa97f9d66c4b5f4bb14a7591775eea1949c6",
+      "sourceFingerprint": "9e5f499130ea60b09580f72c40c8471f69543332f7c9e3941b95dd2c28e55309"
+    },
+    "changedPaths": {
+      "docs/DEVELOPMENT.md": {
+        "before": "b818a9764e731fd7019baaf94de1c76a32b3baf55baf6a2ab43552c835d29042",
+        "after": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5"
+      },
+      "docs/releases/unreleased.md": {
+        "before": "68013929e91f647cc36ae2e8948a7347dae18010cb4c068ce6a47f0a70180573",
+        "after": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+      },
+      "src/bin/mhfe/protect/macos/tests.rs": {
+        "before": "49fae750267e8644c919344eb19e0a6b78875ea5530e515dce1bcf0ada79cc9d",
+        "after": "98cbe4fde257d7a82f35256f38e1540133eb6087c67436527c52319cf9ad41d8"
+      },
+      "src/bin/mhfe/protect/windows.rs": {
+        "before": "dc561a9499056b6f6ffa7da78cebe9a2ff24d0def587f12358cb563cebb1423d",
+        "after": "4dcab083a12697ccce12b89b2eb10015a0518b52e3a7451e951d05cfa271ac59"
+      },
+      "src/bin/mhfe/protect/windows/tests.rs": {
+        "before": "94656033b0416503981412560ded64e5cbc1f4cc6b0f671b86f4c2112b462700",
+        "after": "2c0cbd5efa2e6dffabed4767d1cca52277b9c1f616ddf4a6aab29d7785acf720"
+      }
+    }
+  },
+  "scope": {
+    "mode": "Focused follow-up of two native CI failures; not a new repository-wide audit.",
+    "coverage": {
+      "CHECK-SEC-001": "Scoped static review and stated controls",
+      "CHECK-SEC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-005": "Scoped static review and stated controls",
+      "CHECK-SEC-006": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-007": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-005": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-006": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-007": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-001": "Scoped static review and stated controls",
+      "CHECK-API-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-002": "Scoped static review and stated controls",
+      "CHECK-BLD-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-005": "Scoped static review and stated controls",
+      "CHECK-UI-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-UI-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-UI-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-003": "Scoped static review and stated controls",
+      "CHECK-DOC-001": "Scoped static review and stated controls",
+      "CHECK-DOC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-DOC-003": "Scoped static review and stated controls"
+    },
+    "notApplicable": "MHFE has no transaction signing, coin/provider/accounting implementations."
+  },
+  "checks": [
+    {
+      "name": "macos-synthetic-signal-build",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "/home/user/Documents/bip_tools/workingspace/rustup/toolchains/1.99.0-x86_64-unknown-linux-gnu/bin/rustc",
+        "--edition=2024",
+        "docs/audits/AUD-035-harnesses/signal.rs",
+        "-o",
+        "/home/user/Documents/bip_tools/tmp/mhfe-aud032-remediation-2026-10-19/signal-control"
+      ],
+      "receipt": "commands/macos-synthetic-signal-build.command.json",
+      "receiptSha256": "ce51f13b64eebfb83ec08fc181c32f66cfd7216964c645d3c923d052b76bd569",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "localOnly": true,
+      "checkedSourceFingerprint": "cbacf75319ebdc5b0b711d52c685ff762ad68936b9a932e3453f7658eb644f99",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "b818a9764e731fd7019baaf94de1c76a32b3baf55baf6a2ab43552c835d29042",
+          "final": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "68013929e91f647cc36ae2e8948a7347dae18010cb4c068ce6a47f0a70180573",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        },
+        "src/bin/mhfe/protect/macos/tests.rs": {
+          "checked": "c643542596f146e47cd0ffb1891733b8991d2da5ed2eebdf24ed68a70db65dad",
+          "final": "98cbe4fde257d7a82f35256f38e1540133eb6087c67436527c52319cf9ad41d8"
+        },
+        "src/bin/mhfe/protect/windows.rs": {
+          "checked": "dc561a9499056b6f6ffa7da78cebe9a2ff24d0def587f12358cb563cebb1423d",
+          "final": "4dcab083a12697ccce12b89b2eb10015a0518b52e3a7451e951d05cfa271ac59"
+        },
+        "src/bin/mhfe/protect/windows/tests.rs": {
+          "checked": "94656033b0416503981412560ded64e5cbc1f4cc6b0f671b86f4c2112b462700",
+          "final": "2c0cbd5efa2e6dffabed4767d1cca52277b9c1f616ddf4a6aab29d7785acf720"
+        }
+      },
+      "peakRssKiB": 1252,
+      "minimumMachineMemAvailableKiB": 7632604,
+      "rssLimitKiB": 524288,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "macos-synthetic-signal-control",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "/home/user/Documents/bip_tools/tmp/mhfe-aud032-remediation-2026-10-19/signal-control"
+      ],
+      "receipt": "commands/macos-synthetic-signal-control.command.json",
+      "receiptSha256": "e2c1aeacb11104ce6f591c03fe1f6e8778d983161663e532ca4e327c13768522",
+      "logSha256": "1d06cd3f17b0158ba83d3fed497c7647a7924cf4caa733e1cae5d6ba69583035",
+      "localOnly": true,
+      "checkedSourceFingerprint": "cbacf75319ebdc5b0b711d52c685ff762ad68936b9a932e3453f7658eb644f99",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "b818a9764e731fd7019baaf94de1c76a32b3baf55baf6a2ab43552c835d29042",
+          "final": "92f9a7501bdbc954aefa9efd2d83ef4c11ad57ae2729d423cb177542906627e5"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "68013929e91f647cc36ae2e8948a7347dae18010cb4c068ce6a47f0a70180573",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        },
+        "src/bin/mhfe/protect/macos/tests.rs": {
+          "checked": "c643542596f146e47cd0ffb1891733b8991d2da5ed2eebdf24ed68a70db65dad",
+          "final": "98cbe4fde257d7a82f35256f38e1540133eb6087c67436527c52319cf9ad41d8"
+        },
+        "src/bin/mhfe/protect/windows.rs": {
+          "checked": "dc561a9499056b6f6ffa7da78cebe9a2ff24d0def587f12358cb563cebb1423d",
+          "final": "4dcab083a12697ccce12b89b2eb10015a0518b52e3a7451e951d05cfa271ac59"
+        },
+        "src/bin/mhfe/protect/windows/tests.rs": {
+          "checked": "94656033b0416503981412560ded64e5cbc1f4cc6b0f671b86f4c2112b462700",
+          "final": "2c0cbd5efa2e6dffabed4767d1cca52277b9c1f616ddf4a6aab29d7785acf720"
+        }
+      },
+      "peakRssKiB": 2396,
+      "minimumMachineMemAvailableKiB": 7606372,
+      "rssLimitKiB": 131072,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "aud035-signal-control",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "node",
+        "docs/audits/AUD-035-harnesses/signal-control.mjs",
+        "../tmp/mhfe-aud035/signal-control-recorded"
+      ],
+      "receipt": "commands/aud035-signal-control.command.json",
+      "receiptSha256": "0d720ebc423d21a3097889a959cb44cc9ad7b02c66c46b1f84eb6e71e0d7ca0f",
+      "logSha256": "cae6a09809cc29e1141c99b4b915482d4afd20633b0eebd4483c92cf284ffa8b",
+      "localOnly": true,
+      "checkedSourceFingerprint": "ac47291995830a81c0b27644c1acea473d143dba3ec06aef70b36fd0e892f033",
+      "deltaFromFinalSource": {
+        "docs/releases/unreleased.md": {
+          "checked": "41aa7677c8386237d251dea7ebfd767bde921c23a878784878213687c1abfdf0",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        }
+      },
+      "peakRssKiB": 64520,
+      "minimumMachineMemAvailableKiB": 7671600,
+      "rssLimitKiB": 524288,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "aud035-signal-control-final",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "node",
+        "docs/audits/AUD-035-harnesses/signal-control.mjs",
+        "../tmp/mhfe-aud035/signal-control-recorded-final"
+      ],
+      "receipt": "commands/aud035-signal-control-final.command.json",
+      "receiptSha256": "be1f2bc0e5f40b7b079e751ca36361e8c67b283fa38a8f2b3ef2209d7d4098ab",
+      "logSha256": "0aef352195e49420642574eb5770d937a3eef106c51edb6c4fa219535d82adf3",
+      "localOnly": true,
+      "checkedSourceFingerprint": "ac47291995830a81c0b27644c1acea473d143dba3ec06aef70b36fd0e892f033",
+      "deltaFromFinalSource": {
+        "docs/releases/unreleased.md": {
+          "checked": "41aa7677c8386237d251dea7ebfd767bde921c23a878784878213687c1abfdf0",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        }
+      },
+      "peakRssKiB": 64812,
+      "minimumMachineMemAvailableKiB": 7934360,
+      "rssLimitKiB": 524288,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-platform-formatter",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "env",
+        "CARGO_HOME=/home/user/Documents/bip_tools/workingspace/cargo",
+        "RUSTUP_HOME=/home/user/Documents/bip_tools/workingspace/rustup",
+        "cargo",
+        "fmt",
+        "--check"
+      ],
+      "receipt": "commands/native-platform-formatter.command.json",
+      "receiptSha256": "6d90bc9bf32859a9276ab1a5c886e1fec027ccd351c28bd69df75f9995351d90",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "localOnly": true,
+      "checkedSourceFingerprint": "e1c6b554690c3f1c4ef47464cd88c2c3a1455bdc5a2c9a432e6088a484bd0fef",
+      "deltaFromFinalSource": {
+        "docs/releases/unreleased.md": {
+          "checked": "41aa7677c8386237d251dea7ebfd767bde921c23a878784878213687c1abfdf0",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        },
+        "src/bin/mhfe/protect/windows/tests.rs": {
+          "checked": "32a894456101685e796796af67c0314d622e7df54f29fcd5ca091bd66b83ab17",
+          "final": "2c0cbd5efa2e6dffabed4767d1cca52277b9c1f616ddf4a6aab29d7785acf720"
+        }
+      },
+      "peakRssKiB": 70284,
+      "minimumMachineMemAvailableKiB": 7864620,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-platform-static-gates",
+      "exitCode": 1,
+      "wrapperExitCode": 1,
+      "outcome": "sandbox spawn EPERM, not a source failure",
+      "argv": [
+        "node",
+        "scripts/verify-code-rules.mjs"
+      ],
+      "receipt": "commands/native-platform-static-gates.command.json",
+      "receiptSha256": "ea21e65d28fb3b05775a84c34a6755c0fe62c911668b4dd79530c05f5c9070c1",
+      "logSha256": "ebea131635ef96339970057747b04ffde083424fd3f4bed115a7264de60ecb5b",
+      "localOnly": true,
+      "checkedSourceFingerprint": "ac47291995830a81c0b27644c1acea473d143dba3ec06aef70b36fd0e892f033",
+      "deltaFromFinalSource": {
+        "docs/releases/unreleased.md": {
+          "checked": "41aa7677c8386237d251dea7ebfd767bde921c23a878784878213687c1abfdf0",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        }
+      },
+      "peakRssKiB": 2496,
+      "minimumMachineMemAvailableKiB": 7724052,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-platform-static-gates-unconfined",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "node",
+        "scripts/verify-code-rules.mjs"
+      ],
+      "receipt": "commands/native-platform-static-gates-unconfined.command.json",
+      "receiptSha256": "122f888081210880bcd67a5de2700f7381fb11e900e07f4900f7b3fe5db7dcf6",
+      "logSha256": "910330597c5f6dd619956579e00fe6c13951331bcbde4b9aff784fe13e14df30",
+      "localOnly": true,
+      "checkedSourceFingerprint": "ac47291995830a81c0b27644c1acea473d143dba3ec06aef70b36fd0e892f033",
+      "deltaFromFinalSource": {
+        "docs/releases/unreleased.md": {
+          "checked": "41aa7677c8386237d251dea7ebfd767bde921c23a878784878213687c1abfdf0",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        }
+      },
+      "peakRssKiB": 85056,
+      "minimumMachineMemAvailableKiB": 7568652,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-platform-copy-gate",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "node",
+        "scripts/verify-no-copies.mjs"
+      ],
+      "receipt": "commands/native-platform-copy-gate.command.json",
+      "receiptSha256": "3d5ffbaecf8a30cb7da5c6e8e48fc7c647ffb1c76318c668e42b40824e081342",
+      "logSha256": "d79f398852da15102626bff02f079502e0181ee382e05afd418a379174c77dfd",
+      "localOnly": true,
+      "checkedSourceFingerprint": "ac47291995830a81c0b27644c1acea473d143dba3ec06aef70b36fd0e892f033",
+      "deltaFromFinalSource": {
+        "docs/releases/unreleased.md": {
+          "checked": "41aa7677c8386237d251dea7ebfd767bde921c23a878784878213687c1abfdf0",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        }
+      },
+      "peakRssKiB": 351992,
+      "minimumMachineMemAvailableKiB": 7210784,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-platform-document-check",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "pnpm",
+        "exec",
+        "prettier",
+        "--check",
+        "docs/DEVELOPMENT.md",
+        "docs/releases/unreleased.md"
+      ],
+      "receipt": "commands/native-platform-document-check.command.json",
+      "receiptSha256": "76cb100de9a0054030c8036deab32281c21cfec26607d54ac549fbb41dfa1abd",
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "localOnly": true,
+      "checkedSourceFingerprint": "ac47291995830a81c0b27644c1acea473d143dba3ec06aef70b36fd0e892f033",
+      "deltaFromFinalSource": {
+        "docs/releases/unreleased.md": {
+          "checked": "41aa7677c8386237d251dea7ebfd767bde921c23a878784878213687c1abfdf0",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        }
+      },
+      "peakRssKiB": 27224,
+      "minimumMachineMemAvailableKiB": 7990264,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "aud035-record-metadata",
+      "exitCode": 1,
+      "wrapperExitCode": 1,
+      "outcome": "report register status wording mismatch; corrected",
+      "argv": [
+        "python3",
+        "scripts/verify-audit-records.py",
+        "--metadata-only"
+      ],
+      "receipt": "commands/aud035-record-metadata.command.json",
+      "receiptSha256": "be0ec46011d2b2a9ac223fb3dcac0a4a0fbd1d4004f7c2b7e91e37482a7acd1a",
+      "logSha256": "4f94beb8aa512523688a2026144f7044e8edad268c113706c5447dced05af45a",
+      "localOnly": true,
+      "checkedSourceFingerprint": "ac47291995830a81c0b27644c1acea473d143dba3ec06aef70b36fd0e892f033",
+      "deltaFromFinalSource": {
+        "docs/releases/unreleased.md": {
+          "checked": "41aa7677c8386237d251dea7ebfd767bde921c23a878784878213687c1abfdf0",
+          "final": "41092ecadfb819f7cd373a36dbc8dc925a699e22660b60eff9d3d6f8dd2c310b"
+        }
+      },
+      "peakRssKiB": 48200,
+      "minimumMachineMemAvailableKiB": 7505744,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-platform-release-wording",
+      "exitCode": 0,
+      "wrapperExitCode": 0,
+      "outcome": "passed",
+      "argv": [
+        "pnpm",
+        "exec",
+        "prettier",
+        "--check",
+        "docs/releases/unreleased.md"
+      ],
+      "receipt": "commands/native-platform-release-wording.command.json",
+      "receiptSha256": "e468e905d6cb4040c14e36c3f57ebb007a2f2952bbeddef2a46c1618f4d57ae1",
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "localOnly": true,
+      "checkedSourceFingerprint": "cb1253ba0eda6da88d98958ba05f39c82e3778188a8784ca9b37472d157c3d55",
+      "deltaFromFinalSource": {},
+      "peakRssKiB": 29144,
+      "minimumMachineMemAvailableKiB": 7621588,
+      "rssLimitKiB": 393216,
+      "reserveKiB": 3145728
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-026-BLD003",
+      "category": "BLD",
+      "kind": "finding",
+      "title": "macOS synthetic ptrace signal can be consumed by the Rust tracer",
+      "severity": "low",
+      "status": "fixed",
+      "releaseBlocking": true,
+      "relatedFinding": "AUD-026-BLD003 continuation; retain the original identifier",
+      "reproduction": "Run the ordinary macOS attachment test at 8ebba34 on the authorized native CI host.",
+      "expected": "An attachable control followed by the protected tracer terminating with real SIGSEGV.",
+      "observed": "The control succeeded; protected PT_ATTACH returned EBUSY and the tracer panicked exit101. The monitor saw no terminating signal.",
+      "impact": "The required native protection test fails; no successful protected attach or private-data exposure is demonstrated.",
+      "recommendedFix": "Restore/read back SIG_DFL only in both disposable public tracers, after disabling core files.",
+      "requiredVerification": "Native macOS paired PT_ATTACH control and real protected SIGSEGV; no errno-only or synthetic replacement fallback.",
+      "implementedFix": "default_segv_delivery sets and reads back SIG_DFL; all original attach and signal assertions remain.",
+      "evidence": {
+        "localOnly": true,
+        "log": "macos-native-followup.log",
+        "sha256": "8d20791ca2c8a7c363f099166bb72e25bfc224f2194f56563b61e9e5fe32d2c7",
+        "mechanismControl": "aud035-signal-control-final"
+      }
+    },
+    {
+      "id": "AUD-035-FUN001",
+      "category": "FUN",
+      "kind": "finding",
+      "title": "Windows native startup refuses the stored process DACL",
+      "severity": "medium",
+      "status": "fixed",
+      "releaseBlocking": true,
+      "reproduction": "Run Windows protection and startup tests at signed 8ebba34.",
+      "expected": "Stored process policy matches the requested restricted owner and SYSTEM policy; startup accepts the read-back.",
+      "observed": "All 429 library tests passed; 198 CLI cases passed and two failed because memory_access was Differs after harden.",
+      "impact": "Native startup fails closed, preventing secret operations on the affected host; no unauthorized access is demonstrated.",
+      "recommendedFix": "Request process-specific SYSTEM rights instead of generic GA; preserve strict read-back and external before/after probes.",
+      "requiredVerification": "Native Windows startup, exact DACL equality and fresh external VM_READ/WRITE_DAC refusal following successful unprotected controls.",
+      "implementedFix": "SYSTEM uses 0x001fffff, matching the pinned SDK PROCESS_ALL_ACCESS. Owner rights, strict read-back and production harden entry point remain.",
+      "evidence": {
+        "localOnly": true,
+        "log": "windows-native-followup.log",
+        "sha256": "49e6317019d65126980cf62d8f1536ffe8db754fc67f0776f00ecdff12500b71"
+      }
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-026-BLD003",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Exact candidate source hashes; final native acceptance pending next automatic CI."
+    },
+    {
+      "id": "AUD-035-FUN001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Exact candidate source hashes; final native acceptance pending next automatic CI."
+    }
+  ],
+  "limitations": [
+    "Native macOS and Windows acceptance of this candidate has not yet run. Local Linux checks do not substitute for it.",
+    "The Linux signal control demonstrates Rust handler behavior, not macOS ptrace enforcement. The baseline installed handler was not read back on macOS; its causal explanation is source-backed inference.",
+    "The Windows GA-to-specific mapping explanation is a candidate mechanism; baseline setter status and actual ACE masks were not captured. Native candidate acceptance remains decisive.",
+    "No new all-files CORE certification, full-cost vector replay, canonical GNU/Windows/macOS packaging, release acceptance, SAST, fuzzing, mutation or timing campaign."
+  ],
+  "procedureHashes": {
+    "AGENTS.md": "1f2bd03825f0a0056dbf430da8b0243423ea34f130ac3dbe08b7235eb5d920d3",
+    ".github/instructions/code-core.instructions.md": "51ac92ddffea253bb7ed2f1926eb4cab6c2f52d336af95c1d63f3ebdd9fce066",
+    ".github/instructions/code-rust.instructions.md": "08bb268d4da1d1e01e93e6294b028a9471a062565eeaf7eb7355fd6592bdcc9c",
+    ".github/instructions/code-typescript.instructions.md": "5984f573d7df64ebd494f79891ce838dd518f0cf27876a2965fe46df6ace3ec1",
+    ".github/instructions/code-browser.instructions.md": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+    ".github/instructions/code-tooling.instructions.md": "ba09a6530475e8ba08cc96dbf4100b043b6c250263e62def21321f178bb631f7",
+    ".github/instructions/docs.instructions.md": "1fc9e20ab2f2dad220dc3f6b507e7372c161a05208c80ed2aa8dc28525bb33bf",
+    ".github/instructions/ci.instructions.md": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+    ".github/instructions/audits.instructions.md": "6eed08f958c11bd530006c89489796db8efa759f8a93c501a514de262d0ab004",
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb",
+    "GLOSSARY.md": "ef514c847fdd5fb24ab5a0bd649e29e01955190c6a0afcbf3445c14e775cc2e5",
+    "GLOSSARY-MAP.md": "a2b6c79b8279c5f98cbb62494b9aaf553e50b12be99363b6b6f09788cc64f9f6",
+    "mhfe_spec/GLOSSARY.md": "d52e50b41e2ad3fa97618c5bcdf270040d6762ee2990f4402c78fda9e976b665"
+  },
+  "repositoryAgentsSha256": "2578731c946d18af56e721b1f1a2f504c77d05eea6e343a9564a01553613c5d2",
+  "independentReviews": [
+    {
+      "path": "reviews/macos-signal-oracle-analysis.json",
+      "sha256": "775886ae6a40db958c5ed30c6e751e56248c54520d542ddb68cda1bb33ee5a80",
+      "localOnly": true
+    },
+    {
+      "path": "reviews/macos-signal-oracle-final-review.json",
+      "sha256": "e1395bcda08e27d36656a5aef4a6fff785df32c2df845a5b259dc74e00af3aa0",
+      "localOnly": true
+    },
+    {
+      "path": "reviews/windows-dacl-followup-review.json",
+      "sha256": "27eb8a5b5d7b51cc019eb42707bb3c1b7cd1f644ef4f09a3768f6243cc39e088",
+      "localOnly": true
+    },
+    {
+      "path": "reviews/windows-dacl-followup-clarification.json",
+      "sha256": "8a1968d4faa4a15b12c0532e552bd4947ecec7a349f87e118f22f7ae18137b7f",
+      "localOnly": true
+    }
+  ],
+  "reviewDocumentationBridge": {
+    "path": "docs/audits/AUD-035-harnesses/README.md",
+    "reason": "After native reviewer acceptance, replace only the Windows attachable/readable label with successful external access-rights control. The probe obtains OpenProcess rights; it does not attach a debugger or read process memory. Final report reviewer checks this correction.",
+    "runtimeSourcesAndMacOSInstructionsUnchanged": true
+  },
+  "hostedCI": {
+    "runId": 39187816798,
+    "commit": "8ebba34a2bcfaad3dbc4cd6f094e60b28516b8e2",
+    "conclusion": "failure",
+    "url": "https://github.com/hobby-eng/mhfe/actions/runs/39187816798",
+    "metadataSha256": "711ba6722741ec3f4f85f913148105ce59325111fe2ad8d9ca78157a10b1a3a0",
+    "jobs": [
+      {
+        "name": "portable (windows-2025)",
+        "id": 117853862365,
+        "conclusion": "failure"
+      },
+      {
+        "name": "check",
+        "id": 117853862484,
+        "conclusion": "success"
+      },
+      {
+        "name": "portable (macos-15)",
+        "id": 117853862520,
+        "conclusion": "failure"
+      },
+      {
+        "name": "canonical-build",
+        "id": 117853863261,
+        "conclusion": "skipped"
+      },
+      {
+        "name": "macos-packages",
+        "id": 117853863385,
+        "conclusion": "skipped"
+      },
+      {
+        "name": "canonical-windows",
+        "id": 117853863424,
+        "conclusion": "skipped"
+      }
+    ]
+  },
+  "retainedEvidence": {
+    "priorReportSha256": "dc751048cc8686975c22b2661999fa97f9d66c4b5f4bb14a7591775eea1949c6",
+    "linuxCI": "The unchanged production Linux paths passed the full automatic fast gates at 8ebba34.",
+    "linuxLocalFast": "AUD-034 retains the two-thread fast suite, parser and real C concurrency regression; not replayed here.",
+    "browser": {
+      "builtSourceCommit": "804079743dd63794dfa747de0882b55c78284232",
+      "packageFiles": {
+        "dist/README.md": "0d2495ab45a515c3b92f7d9e95686f022cf2e7e373900c39eeda006333b12f8d",
+        "dist/core/argon2-mt.js": "707133f242f6506097fe5710d5c10887ac307b73e302475ab841f985ec64b57f",
+        "dist/core/argon2-st.js": "05fbf3d8dd07d866b8e23ab57012dd3f1883d8c1d9a6413d970bc611503ac6a4",
+        "dist/core/client.d.ts": "9cd68b44a6ce134c179f4a705e72c71dca524e99eb7410518ad6b97a4d599bf3",
+        "dist/core/client.js": "889d34e277d13adf83bc252adc2982487fef23803c95af8e784547828921b5f7",
+        "dist/core/mhfe-fast-mode.py": "cbab4c87720425a78567a6a5cccbc2287552bfff9a1d54de30c1b5104a85d664",
+        "dist/modules.json": "86b370a805fe3e37894419486a0384b46a5da3a851c84b5d75fed5252dfd29e0",
+        "dist/passwords/passwords.d.ts": "61ae42a721ed7a86c16caa779d5cae9f5b0b54c9aa542d07e36febcb3ded6362",
+        "dist/passwords/passwords.js": "71f60087d4a0c2f8805d11223aa64800edf9879faeb04af2e262b5d668ee4b52",
+        "dist/repair/repair.d.ts": "e015fe47d6d102cc6ae1ffa57f0de4f3ca6b6dc871970387bb3340a3eb59986b",
+        "dist/repair/repair.js": "0817259b1016637dd0d8253a712b57ff3ec770772ae9aff9e584781f80d29091",
+        "dist/runtime/mhfe.wasm": "cbb29315d56de39386fd91e05ad2fd088ac740d071722a7be697f6cbc98dac48",
+        "dist/runtime/runtime.d.ts": "002e5524bb20b0b3f9fee0e4e57aae614bb6dae04ea9f52ffbf25f6c47698448",
+        "dist/runtime/runtime.js": "6dc7c9b785fe2cdc51d7d6000fb6776d8e97b2fd5ecae4d5ae2c3507d73ac828",
+        "dist/runtime/worker.js": "736024d25ce584db40ba24dd74bc25c9bf7d3bcd9a290b31e774250401613a23",
+        "dist/wallet/wallet.d.ts": "060fc628773c698ebd1ba3865acb63af5b9a3372c8a2a97ae52ed040fd728e18",
+        "dist/wallet/wallet.js": "283cbf078c18a822e6b4d2bd7873fdad9cdf291358c5f9f52a6c59827e59607c"
+      },
+      "version": "0.6.1",
+      "buildId": "0974feefdbb10a26",
+      "nativeOnlyFollowupDoesNotRelabelPackageBuild": true
+    },
+    "precedingEvidenceManifests": {
+      "AUD-033": "f75fa8767cc8eea315932591dd6ddaf03db959b48c304841f3c514cd8872083f",
+      "AUD-034": "02d3492e41e6b593abb955c135d59eab60e5b04a0d428f709e9094cdb316cc95"
+    }
+  },
+  "skillsAndTools": {
+    "newlyApplied": [],
+    "reused": [
+      "diagnosing-bugs",
+      "wallet-full-audit",
+      "wallet-security-review",
+      "microsoft-rust-guidelines"
+    ],
+    "newInstallations": [],
+    "skillHashes": {
+      "diagnosing-bugs": "9168404abda0967a5d32977e3498cd95fda6807018852f3de736a78357c82b40",
+      "wallet-full-audit": "5fef2f168d0d2895a469ea10be76dee1c44c55f8678162bcf5487108b2c4395d",
+      "wallet-security-review": "0039e3c1345f19948551739050269cab947eeb4d32c9c8cc8e10897a8dab3f66",
+      "microsoft-rust-guidelines": "94711a862784747fa06c47b4a088b91992b6aead0ffa4a811423f703b5da663f"
+    },
+    "tools": [
+      "Existing Rust 1.99.0 and Node 26.10.0: public synthetic-signal control",
+      "Existing GitHub CLI: completed native job metadata and logs",
+      "Existing rustfmt, code-rules, copies and Prettier gates",
+      "Existing bounded AUD-033 recorder, two independent read-only reviewers"
+    ],
+    "notClaimed": "No new JS, derivation, SAST, mutation, fuzzing, timing or release campaign."
+  },
+  "primaryReferences": [
+    "https://github.com/rust-lang/rust/blob/1.99.0/library/std/src/sys/pal/unix/stack_overflow.rs#L96-L136",
+    "https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/mach_process.c",
+    "https://learn.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights",
+    "https://learn.microsoft.com/en-us/windows/win32/secauthz/generic-access-rights",
+    "https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setsecurityinfo"
+  ],
+  "publicHarnesses": {
+    "docs/audits/AUD-035-harnesses/README.md": "6133a9f27556892b3a3396878ef42c64de17860cc53ae1cff905725a07dd855f",
+    "docs/audits/AUD-035-harnesses/signal-control.mjs": "06b14f13d6dc9e4b1a69fd56135a9e369c4c5870cbd74f206afca28790506551",
+    "docs/audits/AUD-035-harnesses/signal.rs": "fdea1eb5799a3e6af0b3f6cf33c179aa9822a92653fea88ea69e6bb33d3a7627"
+  },
+  "evidence": {
+    "directory": "docs/audits/AUD-035-evidence",
+    "localOnly": true,
+    "manifest": "SHA256SUMS",
+    "validation": "report-validation.json"
+  },
+  "reportDocument": {
+    "path": "docs/audits/AUD-035-2026-10-19.md",
+    "sha256": "647270d64e7181dedb0a72e0f86f8d4e9564c688918ed75fe171c396fa0ce22b"
+  }
+}

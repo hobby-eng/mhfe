@@ -27,6 +27,9 @@ fn hardened_process() {
     ));
     harden();
     assert_eq!(crash_reporting(), ReadBack::Set);
+    let expected = Descriptor::wanted().unwrap();
+    let current = Descriptor::current().unwrap();
+    assert_eq!(current.dacl().unwrap(), expected.dacl().unwrap());
     assert_eq!(memory_access(), ReadBack::Set);
     require_success(run(
         "protect::windows::tests::another_process_cannot_read_memory",

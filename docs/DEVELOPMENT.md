@@ -61,7 +61,9 @@ On a test host that authorizes noninteractive `sudo`, set
 `MHFE_PUBLIC_MACOS_ATTACH_PROBE_SUDO=1` for `cargo test --locked`. This elevates only the fixed
 public-data monitor and its named probe subprocesses; Cargo, the rest of the suite and production
 commands are not elevated. The monitor
-checks the actual protected child's signal before its own result passes through `sudo`.
+checks the actual protected child's signal before its own result passes through `sudo`. Both
+public tracers restore and read back the default `SIGSEGV` disposition, so Rust's stack-overflow
+handler cannot consume the kernel's synthetic signal. Their core-file limits stay at zero.
 Without that opt-in it runs with the caller's permissions. An unavailable control fails the
 test and never establishes protection. The hosted macOS CI job sets the opt-in explicitly.
 

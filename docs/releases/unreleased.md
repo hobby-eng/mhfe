@@ -264,7 +264,9 @@ are cancelled.
 
 - Browser diagnostics include the complete core parameter schema. Native lock expectations cover
   Windows and Unix. The macOS attachment probe first requires an attachable public control, then
-  tests a protected child; unavailable controls fail with an explicit unverified result.
+  tests a protected child with a verified default signal disposition; unavailable controls fail
+  with an explicit unverified result. The Windows process DACL requests process-specific SYSTEM
+  rights for strict startup read-back.
 - The live audit-record gate discovers both companions, refuses malformed or duplicate-key JSON,
   and compares filename, audit identity, JSON date and the stated UTC completion metadata.
 - Browser source files are split by operation and runtime responsibility. A checked source join

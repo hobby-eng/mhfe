@@ -28,7 +28,10 @@ use super::ReadBack;
 /// OWNER RIGHTS suppresses the owner's implicit WRITE_DAC, preventing a same-user program from
 /// granting itself VM_READ. The owner keeps synchronize, read-control, query and terminate rights
 /// (0x00121401); SYSTEM keeps full access. No inherited ACE can grant extra rights.
-const PROCESS_DACL: *const u16 = windows_sys::core::w!("D:P(A;;0x00121401;;;OW)(A;;GA;;;SY)");
+// Use process-specific rights for SYSTEM so an exact read-back need not rely on generic GA
+// retaining its representation when the kernel stores the process DACL.
+const PROCESS_DACL: *const u16 =
+    windows_sys::core::w!("D:P(A;;0x00121401;;;OW)(A;;0x001fffff;;;SY)");
 const CANNOT_READ: ReadBack = ReadBack::Unknown("the process memory-access policy cannot be read");
 
 pub(super) fn harden() {

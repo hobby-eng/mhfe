@@ -100,6 +100,7 @@ fn attempt_attachment(protected: bool) {
     // SAFETY: the structure lives for the call; the intentionally signalled public probe must
     // not leave a core file behind.
     assert_eq!(unsafe { libc::setrlimit(libc::RLIMIT_CORE, &none) }, 0);
+    default_segv_delivery();
     let child = Command::new(std::env::current_exe().unwrap())
         .args([
             "--ignored",
@@ -160,6 +161,27 @@ fn attempt_attachment(protected: bool) {
         std::io::Error::last_os_error()
     );
     crate::style::out(ATTACHED).unwrap();
+}
+
+/// A synthetic kernel SIGSEGV must terminate this disposable tracer, not reach Rust's
+/// stack-overflow handler, which can reset itself and return without a fault to retry.
+fn default_segv_delivery() {
+    // SAFETY: macOS sigaction is zero-initializable; sigemptyset initializes its signal mask.
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = libc::SIG_DFL;
+    // SAFETY: the mask is live and writable for the call.
+    assert_eq!(unsafe { libc::sigemptyset(&mut action.sa_mask) }, 0);
+    assert_eq!(
+        // SAFETY: changes only SIGSEGV in this public tracer; action lives for the call.
+        unsafe { libc::sigaction(libc::SIGSEGV, &action, std::ptr::null_mut()) },
+        0
+    );
+    assert_eq!(
+        // SAFETY: a null new action reads the disposition into the live structure.
+        unsafe { libc::sigaction(libc::SIGSEGV, std::ptr::null(), &mut action) },
+        0
+    );
+    assert_eq!(action.sa_sigaction, libc::SIG_DFL);
 }
 
 #[test]
