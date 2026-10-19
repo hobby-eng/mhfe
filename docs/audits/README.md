@@ -44,6 +44,8 @@ cryptographic proofs or independent security certifications.
 | [AUD-035](AUD-035-2026-10-19.md) | 2026-10-19 | Signed base `8ebba34a2bcfaad3dbc4cd6f094e60b28516b8e2`; five candidate source/document changes | Focused native follow-up: macOS tracer signal handling and Windows strict DACL startup acceptance. One original finding continuation and one Medium fail-closed startup finding; independent source review and isolated public Rust signal control pass. Native candidate acceptance remains pending; no full-cost/canonical or universal CORE claim. |
 | [AUD-036](AUD-036-2026-10-19.md) | 2026-10-19 | Signed base `c059b1afb00584d9a99fefe37247448b5ec7f3cd`; candidate 481-file source | Focused native fixture follow-up: ordinary Windows observer context and retained macOS runtime signing after deliberate known-answer damage. Two Low build/test findings fixed, scoped local controls and independent platform reviews pass; new native execution pending. No production/API/crypto/browser changes or release/global CORE claim. |
 
+| [AUD-037](AUD-037-2026-10-19.md) | 2026-10-19 | Signed base `205c4547b17108ae7bf9c2b01aa803bb84a7c5c7`; three candidate source/document changes | Focused localhost request-timeout follow-up: one Low deadline policy defect fixed with deterministic red/green actual sockets and preserved timing limits. 21 Rust / 12 selected Python checks and native review pass; new native CI pending. Prior complete macOS and partial Windows acceptance are separated. No full-cost/canonical/global CORE claim. |
+
 Machine-readable companions are [`AUD-001-2026-09-22.json`](AUD-001-2026-09-22.json),
 [`AUD-002-2026-09-22.json`](AUD-002-2026-09-22.json),
 [`AUD-003-2026-09-30.json`](AUD-003-2026-09-30.json),
@@ -142,3 +144,5 @@ The AUD-034 machine-readable companion is [AUD-034-2026-10-19.json](AUD-034-2026
 The AUD-035 machine-readable companion is [AUD-035-2026-10-19.json](AUD-035-2026-10-19.json).
 
 The AUD-036 machine-readable companion is [AUD-036-2026-10-19.json](AUD-036-2026-10-19.json).
+
+The AUD-037 machine-readable companion is [AUD-037-2026-10-19.json](AUD-037-2026-10-19.json).

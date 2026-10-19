@@ -136,6 +136,8 @@ are cancelled.
 
 ## Fixed
 
+- `mhfe serve` closes a timed-out request without attempting a new HTTP response, matching the
+  standalone Python launcher. Malformed requests still receive HTTP 400.
 - Repacking an existing ZIP replaces removed entries rather than retaining them. A failed ZIP
   command leaves the previous archive unchanged.
 - Browser methods refuse non-object option containers rather than silently selecting defaults.

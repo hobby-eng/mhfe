@@ -363,6 +363,16 @@ fn answer(stream: TcpStream, host: &str, page: &[u8], deadline: Duration) -> io:
     });
     let response = match read_request_head(&mut reader) {
         Ok(head) => respond(&head, host, page),
+        // A timed-out read must close, not start a fresh response budget. Winsock also leaves
+        // such a connection indeterminate; the standalone Python launcher drops it too.
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+            ) =>
+        {
+            return Err(error);
+        }
         Err(_) => Response::status(400, "Bad Request"),
     };
     write_until(
@@ -644,9 +654,7 @@ mod tests {
     /// every single write makes some progress until the buffers are full.
     #[test]
     fn a_client_that_does_not_read_is_dropped_at_the_response_deadline() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let _idle = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
-        let (server_side, _) = listener.accept().unwrap();
+        let (_idle, server_side) = connected_sockets();
         let answer = vec![b'x'; 64 * 1024 * 1024];
         let started = Instant::now();
         let (send, receive) = std::sync::mpsc::channel();
@@ -672,6 +680,48 @@ mod tests {
         );
     }
 
+    /// A real loopback client and accepted server socket on an ephemeral port.
+    fn connected_sockets() -> (TcpStream, TcpStream) {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        (client, server)
+    }
+
+    #[test]
+    fn an_expired_request_is_closed_without_a_response_budget() {
+        for deadline in [Duration::ZERO, Duration::from_millis(50)] {
+            let (mut client, server) = connected_sockets();
+            let started = Instant::now();
+            let error = answer(server, HOST, PAGE, deadline).unwrap_err();
+            assert!(matches!(
+                error.kind(),
+                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+            ));
+            assert!(started.elapsed() < Duration::from_secs(2));
+            client
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut response = Vec::new();
+            client.read_to_end(&mut response).unwrap();
+            assert!(response.is_empty(), "an expired request was answered");
+        }
+    }
+
+    #[test]
+    fn a_malformed_request_still_receives_bad_request() {
+        let (mut client, server) = connected_sockets();
+        client.write_all(b"GET / HTTP/1.1").unwrap();
+        client.shutdown(std::net::Shutdown::Write).unwrap();
+        answer(server, HOST, PAGE, Duration::from_secs(1)).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        assert!(response.starts_with("HTTP/1.1 400 Bad Request\r\n"));
+    }
+
     #[test]
     fn a_slow_client_neither_holds_up_others_nor_outlives_the_deadline() {
         let port = start_server(Duration::from_millis(500));
@@ -694,11 +744,13 @@ mod tests {
         );
         slow.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
         let mut answer = Vec::new();
-        let _ = slow.read_to_end(&mut answer);
+        let received = slow.read_to_end(&mut answer);
         assert!(
             started.elapsed() < Duration::from_secs(2),
-            "dropped at its deadline"
+            "dropped at its deadline: elapsed {:?}, receive {received:?}",
+            started.elapsed()
         );
+        assert!(answer.is_empty(), "the expired request received a response");
     }
 
     /// A fresh folder with the page in it, removed when the test ends.

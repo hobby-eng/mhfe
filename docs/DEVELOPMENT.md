@@ -72,6 +72,10 @@ SYSTEM membership. Each observer disables and reads back `SeDebugPrivilege` befo
 access requests. On macOS, damaged-known-answer fixtures use the shared hardened-runtime signing
 and verification script so their process-policy conditions match the original executable.
 
+The localhost launchers close an expired request without starting a response budget. Targeted
+`cargo test --locked --bin mhfe serve::tests::` covers real socket deadlines, fast concurrent
+requests and the separate HTTP 400 response for malformed input.
+
 Markdown and JavaScript use the repository's pinned Prettier. The Node.js tools come through
 pnpm, in the version that `packageManager` in `package.json` names (with Corepack:
 `corepack enable`). Install the development dependencies from the lockfile and check formatting

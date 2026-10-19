@@ -1,0 +1,781 @@
+{
+  "schemaVersion": 1,
+  "auditId": "AUD-037",
+  "auditNumber": 37,
+  "date": "2026-10-19",
+  "completedUtc": "2026-10-19T03:03:12.932175+00:00",
+  "title": "Request deadline termination and native acceptance follow-up",
+  "reviewer": {
+    "name": "Main implementer with independent read-only native and report reviewers",
+    "model": null,
+    "reasoningEffort": null
+  },
+  "snapshot": {
+    "commit": "205c4547b17108ae7bf9c2b01aa803bb84a7c5c7",
+    "commitComplete": false,
+    "workingTree": "Authorized localhost timeout fix, regression tests, adjacent documents and scoped report.",
+    "sourceFileCount": 481,
+    "sourceFingerprint": "ac0c097ef02e7ff36cffafe1a1e1a951edbbb511f2ec8ecede6e39d39a600b83",
+    "baseSourceManifest": {
+      "path": "docs/audits/AUD-036-2026-10-19.json",
+      "sha256": "557af78040f8a7965ad9a968987fba9175dd0880f166ced4a5b0c0d4639a89f2",
+      "sourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436"
+    },
+    "changedPaths": {
+      "docs/DEVELOPMENT.md": {
+        "before": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+        "after": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+      },
+      "docs/releases/unreleased.md": {
+        "before": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+        "after": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+      },
+      "src/bin/mhfe/serve.rs": {
+        "before": "c2cf69c18a97eeb4cd61105eed2567931b495b7ec65be1080cbf4665c05fda8d",
+        "after": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+      }
+    },
+    "fingerprintFormat": "SHA256 of sorted sha256 + two spaces + relative path + LF"
+  },
+  "scope": {
+    "mode": "Focused request-timeout follow-up; no fresh all-files audit.",
+    "coverage": {
+      "CHECK-SEC-001": "Affected request/error/cleanup paths, callers and stated controls",
+      "CHECK-SEC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-005": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-006": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-SEC-007": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-005": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-006": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-FUN-007": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-001": "Affected request/error/cleanup paths, callers and stated controls",
+      "CHECK-API-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-API-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-002": "Affected request/error/cleanup paths, callers and stated controls",
+      "CHECK-BLD-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-004": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-BLD-005": "Affected request/error/cleanup paths, callers and stated controls",
+      "CHECK-UI-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-UI-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-UI-003": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-001": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-ARC-003": "Affected request/error/cleanup paths, callers and stated controls",
+      "CHECK-DOC-001": "Affected request/error/cleanup paths, callers and stated controls",
+      "CHECK-DOC-002": "Outside this follow-up; no fresh execution or compliance claim",
+      "CHECK-DOC-003": "Affected request/error/cleanup paths, callers and stated controls"
+    },
+    "notApplicable": "MHFE does not implement transaction signing, provider accounting or coin scans."
+  },
+  "checks": [
+    {
+      "name": "native-fixture-pushed-ci-watch",
+      "argv": [
+        "gh",
+        "run",
+        "watch",
+        "39190959197",
+        "--interval",
+        "30",
+        "--exit-status"
+      ],
+      "exitCode": 1,
+      "childExitCode": 1,
+      "terminationReason": null,
+      "outcome": "completed baseline workflow failed on the Windows slow-client test",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-pushed-ci-watch.command.json",
+      "receiptSha256": "b0f29aaa602f92d73f5a8c68db00b6c5d5dfeb95a35c47acf693b7440919dd9f",
+      "logSha256": "2d256b67393b73ae94a2c7ee5af865b24225fb399b42615b8361c47add40fcd4",
+      "checkedSourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "c2cf69c18a97eeb4cd61105eed2567931b495b7ec65be1080cbf4665c05fda8d",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 38356,
+      "rssLimitKiB": 393216,
+      "minimumMachineMemAvailableKiB": 7638124,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-fixture-pushed-ci-final-metadata",
+      "argv": [
+        "gh",
+        "run",
+        "view",
+        "39190959197",
+        "--json",
+        "status,conclusion,headSha,event,jobs,url"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "downloaded exact completed baseline metadata",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-pushed-ci-final-metadata.command.json",
+      "receiptSha256": "7f7d442916d19a52c3de3e847f65d65b2301ad0aea880835899e4dc34894a021",
+      "logSha256": "0e27861712e3924d6f7e820e3337e2c36040704dd68d45b99409b8dd168eb1dc",
+      "checkedSourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "c2cf69c18a97eeb4cd61105eed2567931b495b7ec65be1080cbf4665c05fda8d",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 36380,
+      "rssLimitKiB": 131072,
+      "minimumMachineMemAvailableKiB": 7763488,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-fixture-pushed-ci-windows-red",
+      "argv": [
+        "gh",
+        "api",
+        "repos/hobby-eng/mhfe/actions/jobs/117863435969/logs"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "downloaded failed baseline Windows job; access/startup passed",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-pushed-ci-windows-red.command.json",
+      "receiptSha256": "73f4c19d9b55f8c2280204c379b10d91f29c5cd39f544cbd98db1f92a86e8a1d",
+      "logSha256": "72a88999c180b3855eec9cc4f3ebeab4c595aca68118ae6959f3dbe3f31a3bd9",
+      "checkedSourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "c2cf69c18a97eeb4cd61105eed2567931b495b7ec65be1080cbf4665c05fda8d",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 37104,
+      "rssLimitKiB": 196608,
+      "minimumMachineMemAvailableKiB": 7909784,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-fixture-pushed-ci-macos-job",
+      "argv": [
+        "gh",
+        "api",
+        "repos/hobby-eng/mhfe/actions/jobs/117863436033/logs"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "downloaded successful complete baseline macOS job",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-pushed-ci-macos-job.command.json",
+      "receiptSha256": "7cc3ed974416d61717d08f54cd285fbbe4ac14ed0e5c88380c705be9c47c11ee",
+      "logSha256": "d581d176a31d152e5e576f188e9e511f5a8bf6307da96b2ff54605b3e6fc37e9",
+      "checkedSourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "c2cf69c18a97eeb4cd61105eed2567931b495b7ec65be1080cbf4665c05fda8d",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 36016,
+      "rssLimitKiB": 131072,
+      "minimumMachineMemAvailableKiB": 7761616,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "native-fixture-pushed-ci-linux-job",
+      "argv": [
+        "gh",
+        "api",
+        "repos/hobby-eng/mhfe/actions/jobs/117863436045/logs"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "downloaded successful baseline Linux fast gates",
+      "localOnly": true,
+      "receipt": "commands/native-fixture-pushed-ci-linux-job.command.json",
+      "receiptSha256": "00ebda3bf053a73706b8d526055f2f2a2f7f68f426420d19aae932dbfa0d9836",
+      "logSha256": "dfa9d10ead62f9a3ca77b970ab62281eebdeb030741ec89a65f8baa023ce5f7e",
+      "checkedSourceFingerprint": "ea706da72b594e79ec02c8d3ab1981a3f331eebedf21ff49febc148e7bec1436",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "c2cf69c18a97eeb4cd61105eed2567931b495b7ec65be1080cbf4665c05fda8d",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 36256,
+      "rssLimitKiB": 131072,
+      "minimumMachineMemAvailableKiB": 7593200,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-expired-request-before",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--bin",
+        "mhfe",
+        "serve::tests::an_expired_request_is_closed_without_a_response_budget",
+        "--",
+        "--exact"
+      ],
+      "exitCode": 101,
+      "childExitCode": 101,
+      "terminationReason": null,
+      "outcome": "expected regression failure: old answer returned success for expired request",
+      "localOnly": true,
+      "receipt": "commands/serve-expired-request-before.command.json",
+      "receiptSha256": "0e1721416240966f56928c7d03a745e5f42786428789309a3ffae82c397cf87c",
+      "logSha256": "e3e30a63cb430e1f0e3c295d5835bd1608d18d7ed51c3ab88fc21775b4eeac95",
+      "checkedSourceFingerprint": "1690dd23ec57b9b475e58493cba5cd0ff187e40d2ddd8d299ce101ceaa2a6cfa",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "0f1c775d298ce3a89e92f939fb40226edb7ffe5988276edc7cbf8a981b13d61a",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 412344,
+      "rssLimitKiB": 1572864,
+      "minimumMachineMemAvailableKiB": 7528124,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-expired-request-after",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--bin",
+        "mhfe",
+        "serve::tests::",
+        "--",
+        "--test-threads=2"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "21 server tests passed before shared socket-setup extraction",
+      "localOnly": true,
+      "receipt": "commands/serve-expired-request-after.command.json",
+      "receiptSha256": "4f6eb349c60e6c9bf59319aeb6977a0881237fe326bb6ec7f6d680a7b0119a29",
+      "logSha256": "f4ec4bdff2186fa3bf821699341a3daae8cb827a0377b2238a9255fd77a59ac9",
+      "checkedSourceFingerprint": "646c39275bf2f33fbf220a71e90d5150d2ce6365ed391dc51052bd1eb15f5cab",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "438df4384572e5adb106876f9732512202c8719c49f923bafb569a4fdba995f1",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 410792,
+      "rssLimitKiB": 1572864,
+      "minimumMachineMemAvailableKiB": 7583360,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-deadline-clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--bin",
+        "mhfe",
+        "--tests",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "Clippy passed before shared socket-setup extraction",
+      "localOnly": true,
+      "receipt": "commands/serve-deadline-clippy.command.json",
+      "receiptSha256": "b6d054b7504f94fcecfd85112a9983493ad7134903ec290655410b060f3da3d2",
+      "logSha256": "0de392ed9d2223310beddc572a810e4be0583e9ea2d7da811e678e6a8604887e",
+      "checkedSourceFingerprint": "646c39275bf2f33fbf220a71e90d5150d2ce6365ed391dc51052bd1eb15f5cab",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "438df4384572e5adb106876f9732512202c8719c49f923bafb569a4fdba995f1",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 510064,
+      "rssLimitKiB": 1572864,
+      "minimumMachineMemAvailableKiB": 7461728,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-python-parity",
+      "argv": [
+        "python3",
+        "scripts/verify-fast-mode-script.py",
+        "Routing",
+        "Server"
+      ],
+      "exitCode": 1,
+      "childExitCode": -15,
+      "terminationReason": "process-memory",
+      "outcome": "128 MiB harness budget stopped the existing large public-response test; not a product failure",
+      "localOnly": true,
+      "receipt": "commands/serve-python-parity.command.json",
+      "receiptSha256": "2ab0c927a6c0b0e7fb65f57ecae0f5ce25ec64754d6414c2b7ac6f916bf779c8",
+      "logSha256": "095a3e32f2239e579df5fc641e994cc09d528003da2e2df0c146a8b342abf069",
+      "checkedSourceFingerprint": "646c39275bf2f33fbf220a71e90d5150d2ce6365ed391dc51052bd1eb15f5cab",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "438df4384572e5adb106876f9732512202c8719c49f923bafb569a4fdba995f1",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 159996,
+      "rssLimitKiB": 131072,
+      "minimumMachineMemAvailableKiB": 7635352,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-python-parity-budgeted",
+      "argv": [
+        "python3",
+        "scripts/verify-fast-mode-script.py",
+        "Routing",
+        "Server"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "12 selected Python routing/server tests passed with 256 MiB budget",
+      "localOnly": true,
+      "receipt": "commands/serve-python-parity-budgeted.command.json",
+      "receiptSha256": "bd0eb90f583e4fce96e7af5bd7fa8ef20e5ae2d88b9950c438057827279ef615",
+      "logSha256": "4b469f9961b0d28dc70752a011140e85074c42978700b61563132f2280ac2c7e",
+      "checkedSourceFingerprint": "646c39275bf2f33fbf220a71e90d5150d2ce6365ed391dc51052bd1eb15f5cab",
+      "deltaFromFinalSource": {
+        "docs/DEVELOPMENT.md": {
+          "checked": "593c6eca6a487fda4210e70039d261252dcefbf25ed54693ec352a3ec11e74d1",
+          "final": "a7cc82c9bb294d18a04ce91f9130af9d787d667a0f4f6d24f4b97cb941b39966"
+        },
+        "docs/releases/unreleased.md": {
+          "checked": "de95fbaa8fde6af42e061678012c531f2e243cc0010c0be7a06541bcdf076857",
+          "final": "fa2946d0f7c70dbc4c76d90167eb53efbb026253f5fdca160e0a03dccae1736d"
+        },
+        "src/bin/mhfe/serve.rs": {
+          "checked": "438df4384572e5adb106876f9732512202c8719c49f923bafb569a4fdba995f1",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 160092,
+      "rssLimitKiB": 262144,
+      "minimumMachineMemAvailableKiB": 7678964,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-standards-before-helper",
+      "argv": [
+        "bash",
+        "/home/user/Documents/bip_tools/tmp/mhfe-aud032-remediation-2026-10-19/serve-static-gates.sh"
+      ],
+      "exitCode": 1,
+      "childExitCode": 1,
+      "terminationReason": null,
+      "outcome": "copies gate found repeated setup in two new socket tests",
+      "localOnly": true,
+      "receipt": "commands/serve-standards-before-helper.command.json",
+      "receiptSha256": "0d4ea9fed155b9396e975ea9f2a90b0395d8a2b0402a5637367652b2db8d43d8",
+      "logSha256": "e0b5e7f1b7a14abe953f34075c54c635ee66bdd1c67b684f6025d1aa6b280df5",
+      "checkedSourceFingerprint": "79912b80315d85216edc0bb9d8463f986dfefabed2ab8c9fdeda3988ecb06cef",
+      "deltaFromFinalSource": {
+        "src/bin/mhfe/serve.rs": {
+          "checked": "438df4384572e5adb106876f9732512202c8719c49f923bafb569a4fdba995f1",
+          "final": "bbf410f93e6d0aa29f44a51ba850cee82ed1e3560599ed0d5f2d543e0dee9581"
+        }
+      },
+      "peakRssKiB": 368068,
+      "rssLimitKiB": 524288,
+      "minimumMachineMemAvailableKiB": 7513264,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-standards-final",
+      "argv": [
+        "bash",
+        "/home/user/Documents/bip_tools/tmp/mhfe-aud032-remediation-2026-10-19/serve-static-gates.sh"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "final format, CORE, copies, document and public-wrapper syntax checks passed",
+      "localOnly": true,
+      "receipt": "commands/serve-standards-final.command.json",
+      "receiptSha256": "56f4775eef3cf514a5f11c93024350e9a7dbc10f4aa64a572a50f16d13cf521f",
+      "logSha256": "e0f546d0638b5e6b8c5973fbd0e47dffeeecd1c52e78b3a7decf4b9aaa35b9c1",
+      "checkedSourceFingerprint": "ac0c097ef02e7ff36cffafe1a1e1a951edbbb511f2ec8ecede6e39d39a600b83",
+      "deltaFromFinalSource": {},
+      "peakRssKiB": 358556,
+      "rssLimitKiB": 524288,
+      "minimumMachineMemAvailableKiB": 7492820,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-deadline-variant-search",
+      "argv": [
+        "bash",
+        "/home/user/Documents/bip_tools/tmp/mhfe-aud032-remediation-2026-10-19/serve-variant-search.sh"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "retained targeted first-party timeout/response variant search",
+      "localOnly": true,
+      "receipt": "commands/serve-deadline-variant-search.command.json",
+      "receiptSha256": "f3c9bf0973cdc0a55b9d2c14e0e34dc965b9b15bbd3d3dc3c6374786acbbe690",
+      "logSha256": "6c7fb9dd21682760634e57785a667cf2a71c6a308225884be818d423a30691fc",
+      "checkedSourceFingerprint": "ac0c097ef02e7ff36cffafe1a1e1a951edbbb511f2ec8ecede6e39d39a600b83",
+      "deltaFromFinalSource": {},
+      "peakRssKiB": 7260,
+      "rssLimitKiB": 131072,
+      "minimumMachineMemAvailableKiB": 7826120,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-final-tests",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--bin",
+        "mhfe",
+        "serve::tests::",
+        "--",
+        "--test-threads=2"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "all 21 server tests passed on final source with two test threads",
+      "localOnly": true,
+      "receipt": "commands/serve-final-tests.command.json",
+      "receiptSha256": "0a1fb5ee6872c6e5e8737c39c665a61c416fbc4f4a2e79ce6946b0a036e5cf2c",
+      "logSha256": "d32dac4209416e82f15d72c6ee5280d9945a2685df81f76a5ef1fb0c3b8f7eae",
+      "checkedSourceFingerprint": "ac0c097ef02e7ff36cffafe1a1e1a951edbbb511f2ec8ecede6e39d39a600b83",
+      "deltaFromFinalSource": {},
+      "peakRssKiB": 414604,
+      "rssLimitKiB": 1572864,
+      "minimumMachineMemAvailableKiB": 7630124,
+      "reserveKiB": 3145728
+    },
+    {
+      "name": "serve-final-clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--bin",
+        "mhfe",
+        "--tests",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "childExitCode": 0,
+      "terminationReason": null,
+      "outcome": "final Rust binary and tests passed Clippy with all features",
+      "localOnly": true,
+      "receipt": "commands/serve-final-clippy.command.json",
+      "receiptSha256": "0d513384db54c28e14739be01563751e7041b7e37aa9983c23ad003a445f432d",
+      "logSha256": "8d7e35f15f30ecbb9230bf75e67cd92d41ff72086e3b302ff40d4661403b09ee",
+      "checkedSourceFingerprint": "ac0c097ef02e7ff36cffafe1a1e1a951edbbb511f2ec8ecede6e39d39a600b83",
+      "deltaFromFinalSource": {},
+      "peakRssKiB": 355452,
+      "rssLimitKiB": 1572864,
+      "minimumMachineMemAvailableKiB": 7618140,
+      "reserveKiB": 3145728
+    }
+  ],
+  "findings": [
+    {
+      "id": "AUD-037-FUN001",
+      "category": "FUN",
+      "kind": "finding",
+      "severity": "low",
+      "status": "fixed",
+      "title": "An expired request receives a new HTTP response budget",
+      "releaseBlocking": true,
+      "affectedFiles": [
+        "src/bin/mhfe/serve.rs"
+      ],
+      "reproduction": "Call the real answer function on an accepted loopback socket with Duration::ZERO; the new regression was observed failing before the fix.",
+      "expected": "A request-read timeout terminates the connection without further I/O or a fresh response budget.",
+      "observed": "The baseline converted every read error into HTTP 400 and returned Ok after writing it; Windows separately failed the existing peer-closure limit.",
+      "impact": "An expired public localhost request can enter a second response phase, unlike the standalone Python launcher. Connections remain capped; no secret or remote binding is introduced.",
+      "recommendedFix": "Return TimedOut or WouldBlock immediately while retaining HTTP 400 for malformed input.",
+      "implementedFix": "The match guard preserves the original timeout error; RAII closes both owned socket handles and the serving loop releases its active slot. Tests retain existing timing limits and malformed-input behavior.",
+      "requiredVerification": "Deterministic baseline/patched socket control, kernel-read timeout and malformed-response controls, adjacent Rust/Python tests and complete new native CI.",
+      "evidence": {
+        "localOnly": true,
+        "log": "commands/serve-expired-request-before.log",
+        "sha256": "e3e30a63cb430e1f0e3c295d5835bd1608d18d7ed51c3ab88fc21775b4eeac95"
+      }
+    }
+  ],
+  "observations": [],
+  "remediation": [
+    {
+      "id": "AUD-037-FUN001",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Exact source and red/green local controls; new complete native CI pending."
+    }
+  ],
+  "limitations": [
+    "The baseline Windows peer EOF delay has no retained server-side trace; its exact kernel/scheduling cause is not proved by the separate deterministic deadline regression.",
+    "Candidate Windows/macOS native acceptance remains pending. Linux component checks cannot establish Windows behavior.",
+    "No full-cost vectors, canonical packaging, universal CORE certification, complete post-patch-validation campaign or proof of absence of defects.",
+    "The first selected Python run exceeded its 128 MiB process budget; its raw child -15/wrapper 1 receipt is preserved, alongside the unchanged-source 256 MiB pass.",
+    "A preliminary unrecorded default-sandbox Node diagnostic returned spawnSync git EPERM. Recorded approved-execution gates ran subsequently; no source/gate was changed for that host restriction."
+  ],
+  "procedureHashes": {
+    "AGENTS.md": "1f2bd03825f0a0056dbf430da8b0243423ea34f130ac3dbe08b7235eb5d920d3",
+    ".github/instructions/code-core.instructions.md": "51ac92ddffea253bb7ed2f1926eb4cab6c2f52d336af95c1d63f3ebdd9fce066",
+    ".github/instructions/code-rust.instructions.md": "08bb268d4da1d1e01e93e6294b028a9471a062565eeaf7eb7355fd6592bdcc9c",
+    ".github/instructions/code-typescript.instructions.md": "5984f573d7df64ebd494f79891ce838dd518f0cf27876a2965fe46df6ace3ec1",
+    ".github/instructions/code-browser.instructions.md": "954f96b4c2c11ffd23ad6b85113e80eedfb049e2689dd5a134e45de84f130f10",
+    ".github/instructions/code-tooling.instructions.md": "ba09a6530475e8ba08cc96dbf4100b043b6c250263e62def21321f178bb631f7",
+    ".github/instructions/docs.instructions.md": "1fc9e20ab2f2dad220dc3f6b507e7372c161a05208c80ed2aa8dc28525bb33bf",
+    ".github/instructions/ci.instructions.md": "22320f16f35a530bda5839a478ca9cce59cd2d1cabe64b75f96339af470cad41",
+    ".github/instructions/audits.instructions.md": "6eed08f958c11bd530006c89489796db8efa759f8a93c501a514de262d0ab004",
+    "multi-chain-wallet-tools/docs/FULL_AUDIT_GUIDE.md": "e1b2fb641e4a25ebf292548fc1e2ef0c25dbd01faa5c2b580c6ba75df2afcab7",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_STANDARD.md": "0c80621acaf5d210f85af76de28a994e545f89f3f660a129026ac0931bb38593",
+    "multi-chain-wallet-tools/docs/audits/AUDIT_TEMPLATE.md": "8122777f8093b04119633459b9b2cc50bc6ca9258bfc6184b52136d3b8172210",
+    "multi-chain-wallet-tools/docs/audit-report.schema.json": "989bf3de974d581579c1d1c1e143d5ab9fa232dc70cc8c6f84ad00531ae698fb",
+    "GLOSSARY.md": "ef514c847fdd5fb24ab5a0bd649e29e01955190c6a0afcbf3445c14e775cc2e5",
+    "GLOSSARY-MAP.md": "a2b6c79b8279c5f98cbb62494b9aaf553e50b12be99363b6b6f09788cc64f9f6",
+    "mhfe_spec/GLOSSARY.md": "d52e50b41e2ad3fa97618c5bcdf270040d6762ee2990f4402c78fda9e976b665"
+  },
+  "repositoryAgentsSha256": "2578731c946d18af56e721b1f1a2f504c77d05eea6e343a9564a01553613c5d2",
+  "independentReviews": [
+    {
+      "path": "reviews/windows-serve-deadline-analysis.json",
+      "sha256": "788684498199daf2f10a1f38316518328e6967fbbc40b4abfd8e6e66ef367977",
+      "localOnly": true
+    },
+    {
+      "path": "reviews/serve-deadline-final-review.json",
+      "sha256": "133ca3fe644f7dbaedb9edb605e33ec3e4b6d0b8c4491223230317c1bd87ec02",
+      "localOnly": true
+    }
+  ],
+  "hostedBaseline": {
+    "runId": 39190959197,
+    "commit": "205c4547b17108ae7bf9c2b01aa803bb84a7c5c7",
+    "url": "https://github.com/hobby-eng/mhfe/actions/runs/39190959197",
+    "metadataSha256": "0e27861712e3924d6f7e820e3337e2c36040704dd68d45b99409b8dd168eb1dc",
+    "jobs": [
+      {
+        "name": "portable (windows-2025)",
+        "id": 117863435969,
+        "conclusion": "failure"
+      },
+      {
+        "name": "portable (macos-15)",
+        "id": 117863436033,
+        "conclusion": "success"
+      },
+      {
+        "name": "check",
+        "id": 117863436045,
+        "conclusion": "success"
+      },
+      {
+        "name": "macos-packages",
+        "id": 117863436715,
+        "conclusion": "skipped"
+      },
+      {
+        "name": "canonical-build",
+        "id": 117863436864,
+        "conclusion": "skipped"
+      },
+      {
+        "name": "canonical-windows",
+        "id": 117863437257,
+        "conclusion": "skipped"
+      }
+    ]
+  },
+  "retainedAcceptance": {
+    "linux": "All fast gates passed at 205c454.",
+    "macOS": "Complete native job passed at 205c454: 429 library / 205 CLI plus separate contract/vector guards/11 rustdoc cases, real paired attachment, release build, runtime signing and full reduced-cost PTY including both damaged KAT variants.",
+    "windows": "At 205c454 429 library cases and 199 CLI cases passed; exact DACL/ordinary observers/startup passed, but serve slow-client failed. Release build and pseudo-console steps did not run.",
+    "priorFinding": {
+      "id": "AUD-036-BLD002",
+      "status": "verified",
+      "verificationCommit": "205c4547b17108ae7bf9c2b01aa803bb84a7c5c7",
+      "scope": "Real runtime-preserving signing and both damaged-known-answer native PTY variants"
+    },
+    "browser": {
+      "builtSourceCommit": "804079743dd63794dfa747de0882b55c78284232",
+      "packageFiles": {
+        "dist/README.md": "0d2495ab45a515c3b92f7d9e95686f022cf2e7e373900c39eeda006333b12f8d",
+        "dist/core/argon2-mt.js": "707133f242f6506097fe5710d5c10887ac307b73e302475ab841f985ec64b57f",
+        "dist/core/argon2-st.js": "05fbf3d8dd07d866b8e23ab57012dd3f1883d8c1d9a6413d970bc611503ac6a4",
+        "dist/core/client.d.ts": "9cd68b44a6ce134c179f4a705e72c71dca524e99eb7410518ad6b97a4d599bf3",
+        "dist/core/client.js": "889d34e277d13adf83bc252adc2982487fef23803c95af8e784547828921b5f7",
+        "dist/core/mhfe-fast-mode.py": "cbab4c87720425a78567a6a5cccbc2287552bfff9a1d54de30c1b5104a85d664",
+        "dist/modules.json": "86b370a805fe3e37894419486a0384b46a5da3a851c84b5d75fed5252dfd29e0",
+        "dist/passwords/passwords.d.ts": "61ae42a721ed7a86c16caa779d5cae9f5b0b54c9aa542d07e36febcb3ded6362",
+        "dist/passwords/passwords.js": "71f60087d4a0c2f8805d11223aa64800edf9879faeb04af2e262b5d668ee4b52",
+        "dist/repair/repair.d.ts": "e015fe47d6d102cc6ae1ffa57f0de4f3ca6b6dc871970387bb3340a3eb59986b",
+        "dist/repair/repair.js": "0817259b1016637dd0d8253a712b57ff3ec770772ae9aff9e584781f80d29091",
+        "dist/runtime/mhfe.wasm": "cbb29315d56de39386fd91e05ad2fd088ac740d071722a7be697f6cbc98dac48",
+        "dist/runtime/runtime.d.ts": "002e5524bb20b0b3f9fee0e4e57aae614bb6dae04ea9f52ffbf25f6c47698448",
+        "dist/runtime/runtime.js": "6dc7c9b785fe2cdc51d7d6000fb6776d8e97b2fd5ecae4d5ae2c3507d73ac828",
+        "dist/runtime/worker.js": "736024d25ce584db40ba24dd74bc25c9bf7d3bcd9a290b31e774250401613a23",
+        "dist/wallet/wallet.d.ts": "060fc628773c698ebd1ba3865acb63af5b9a3372c8a2a97ae52ed040fd728e18",
+        "dist/wallet/wallet.js": "283cbf078c18a822e6b4d2bd7873fdad9cdf291358c5f9f52a6c59827e59607c"
+      },
+      "version": "0.6.1",
+      "buildId": "0974feefdbb10a26",
+      "nativeOnlyFollowupDoesNotRelabelPackageBuild": true
+    },
+    "precedingEvidenceManifests": {
+      "AUD-033": "f75fa8767cc8eea315932591dd6ddaf03db959b48c304841f3c514cd8872083f",
+      "AUD-034": "02d3492e41e6b593abb955c135d59eab60e5b04a0d428f709e9094cdb316cc95",
+      "AUD-035": "964874ed4bdf6c7e82a0df695dfd3cd07677eefb199ae9979b09fd98b632cab9",
+      "AUD-036": "d97ae6d8afe3c4536cb0a60880204c1f785bb7b388ed6aea5c2d5e10d2096e5b"
+    }
+  },
+  "skillsAndTools": {
+    "newlyApplied": [
+      "variant-analysis"
+    ],
+    "reused": [
+      "diagnosing-bugs",
+      "wallet-full-audit",
+      "wallet-security-review",
+      "microsoft-rust-guidelines"
+    ],
+    "newInstallations": [],
+    "skillHashes": {
+      "diagnosing-bugs": "9168404abda0967a5d32977e3498cd95fda6807018852f3de736a78357c82b40",
+      "wallet-full-audit": "5fef2f168d0d2895a469ea10be76dee1c44c55f8678162bcf5487108b2c4395d",
+      "wallet-security-review": "0039e3c1345f19948551739050269cab947eeb4d32c9c8cc8e10897a8dab3f66",
+      "microsoft-rust-guidelines": "94711a862784747fa06c47b4a088b91992b6aead0ffa4a811423f703b5da663f",
+      "variant-analysis": "7b6b78e499bcb88d05c68254ffc91ebc28edabf4e9808adcc40e2628ebb9407e",
+      "post-patch-validation": "33b604f4d7d62eab393d710edb98b18505fcbe079c07c9428daa018f29439b54"
+    },
+    "tools": [
+      "Existing bounded recorder, Cargo/Rust, Python standard-library socket tests, ripgrep, Node/pnpm gates and GitHub CLI",
+      "Post-patch-validation checklist consulted; its isolated-checkout runner was not executed under the workspace in-place-only rule. No complete campaign is claimed."
+    ],
+    "notClaimed": "No new JS, derivation, SAST, mutation, fuzzing, timing or release campaign.",
+    "newlyConsulted": [
+      "post-patch-validation"
+    ]
+  },
+  "supplementaryRustTopics": {},
+  "publicHarnesses": {
+    "docs/audits/AUD-037-harnesses/README.md": "e0906ccb500d17edade5785257e4038b506c809ad4bf545285cd93f521f75ac1",
+    "docs/audits/AUD-037-harnesses/checks.sh": "224d1bd81450c7179b63ed0b7ed5318219f96216b5454c28c81cea708d790a0f"
+  },
+  "primaryReferences": [
+    "https://learn.microsoft.com/en-us/windows/win32/winsock/sol-socket-socket-options",
+    "https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-closesocket"
+  ],
+  "evidence": {
+    "directory": "docs/audits/AUD-037-evidence",
+    "localOnly": true,
+    "manifest": "SHA256SUMS",
+    "validation": "report-validation.json"
+  },
+  "reportDocument": {
+    "path": "docs/audits/AUD-037-2026-10-19.md",
+    "sha256": "b4e2d400069993bcdfacaffa9815ac6ad2edb11bd6639e317261dc82b342124e"
+  }
+}
