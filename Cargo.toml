@@ -58,7 +58,7 @@ getrandom = "=0.4.3"
 # Hidden terminal input (termios) and, on macOS, free-memory queries before the Argon2 work area
 # is reserved.
 [target.'cfg(unix)'.dependencies]
-libc = "=0.2.190"
+libc = "=0.2.191"
 
 # Hidden console input and free-memory queries.
 [target.'cfg(windows)'.dependencies]
