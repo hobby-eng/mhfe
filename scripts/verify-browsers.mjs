@@ -2,8 +2,9 @@
 //
 //   node scripts/verify-browsers.mjs
 //
-// Build the package first with scripts/build-wasm.sh, install the tools with `npm ci` and the two
-// browsers with `npx playwright install chromium firefox`.
+// Build the package first with scripts/build-wasm.sh, install the tools with
+// `pnpm install --frozen-lockfile` and the two browsers with
+// `pnpm exec playwright install chromium firefox`.
 //
 // scripts/verify-browser-package.mjs checks the same code under Node.js with a stand-in worker.
 // This check adds what only a browser does: Blob workers under the Content-Security-Policy of the

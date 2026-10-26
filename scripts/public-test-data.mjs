@@ -82,7 +82,7 @@ export const SELF_CHECK_PARTS = {
     formats: "Formats",
     "container-facts": "Container facts",
     "keep-advice": "Keep advice",
-    "password-unicode": "Passwords (Unicode 17)",
+    "password-unicode": "Passwords (Unicode 18)",
     "bip39-words": "BIP39 words",
     "repair-words": "Repair words (MHFE-REPAIR-1)",
     "container-search": "Search for missing words",

@@ -1,6 +1,6 @@
 //! The MHFE password, encoded as the specification requires ("Password encoding"):
 //! `P_enc = UTF8(NFKD(P))`, using the Normalization Process for Stabilized Strings with the
-//! Unicode 17.0.0 character database, 1 to 1024 bytes, and without control characters or the
+//! Unicode 18.0.0 character database, 1 to 1024 bytes, and without control characters or the
 //! line and paragraph separators.
 
 use std::fmt;
@@ -32,7 +32,7 @@ pub struct Password {
 
 impl Password {
     /// Encodes `text` as NFKD in UTF-8. Fails, and never truncates, when `text` contains a
-    /// control character, a line or paragraph separator, or a code point that Unicode 17.0.0 does
+    /// control character, a line or paragraph separator, or a code point that Unicode 18.0.0 does
     /// not assign, or when the result is empty or over 1024 bytes. No case folding, trimming or
     /// other change is applied.
     pub fn new(text: &str) -> Result<Self, MhfeError> {
@@ -46,7 +46,7 @@ impl Password {
 
         // The stabilization rule: a string with an unassigned code point is not normalized at
         // all, so that a later Unicode version cannot change what the password means.
-        if !text.chars().all(is_assigned_in_unicode_17) {
+        if !text.chars().all(is_assigned_in_unicode_18) {
             return Err(MhfeError::UnassignedCharacter);
         }
 
@@ -98,9 +98,9 @@ fn is_forbidden_in_password(character: char) -> bool {
     character.is_control() || character == '\u{2028}' || character == '\u{2029}'
 }
 
-/// Whether Unicode 17.0.0 assigns `character`. `is_public_assigned` answers this except that it
+/// Whether Unicode 18.0.0 assigns `character`. `is_public_assigned` answers this except that it
 /// also rejects Private Use characters, which are assigned and therefore allowed.
-fn is_assigned_in_unicode_17(character: char) -> bool {
+fn is_assigned_in_unicode_18(character: char) -> bool {
     is_public_assigned(character) || is_private_use(character)
 }
 
@@ -148,7 +148,7 @@ mod tests {
         assert_eq!(encoded("  a b\u{a0}"), "  a b ".as_bytes());
     }
 
-    /// The refused set is General_Category Cc, 65 code points in Unicode 17, plus U+2028 and
+    /// The refused set is General_Category Cc, 65 code points in Unicode 18, plus U+2028 and
     /// U+2029: 67 in all.
     #[test]
     fn the_refused_set_has_67_code_points() {
@@ -160,7 +160,7 @@ mod tests {
     }
 
     /// The specification checks the refused characters before normalization and relies on NFKD
-    /// never producing one from another character. This checks that claim for every Unicode 17
+    /// never producing one from another character. This checks that claim for every Unicode 18
     /// scalar value.
     #[test]
     fn normalization_never_creates_a_refused_character() {
@@ -179,8 +179,8 @@ mod tests {
     }
 
     #[test]
-    fn normalization_tables_are_unicode_17() {
-        assert_eq!(unicode_normalization::UNICODE_VERSION, (17, 0, 0));
+    fn normalization_tables_are_unicode_18() {
+        assert_eq!(unicode_normalization::UNICODE_VERSION, (18, 0, 0));
     }
 
     #[test]

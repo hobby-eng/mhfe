@@ -42,16 +42,18 @@ jobs:
           if foreign:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
-      # The Node.js of the workspace for Prettier, the browser package checks and Playwright.
+      # The Node.js of the workspace for Prettier, the browser package checks and Playwright, and
+      # pnpm, in the version package.json names in packageManager.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
       # The workspace style for JavaScript, TypeScript, Markdown, JSON and YAML: double quotes,
-      # 100 columns. Prettier comes from package-lock.json, checked against its integrity hash.
+      # 100 columns. Prettier comes from pnpm-lock.yaml, checked against its integrity hash.
       - name: Check formatting
         run: |
-          npm ci --ignore-scripts
-          npm run format:check
+          pnpm install --frozen-lockfile
+          pnpm run format:check
       - name: Install Emscripten 6.0.12
         run: |
           git clone --depth 1 --branch 6.0.12 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
@@ -68,11 +70,11 @@ jobs:
           scripts/check.sh
       # The browser package that check.sh built, in real Chromium and Firefox at a reduced Argon2
       # cost: Blob workers under the wallet tools' Content-Security-Policy, standard and fast mode,
-      # cancellation and failing callbacks. The browsers are the ones Playwright 1.64.0 pins.
+      # cancellation and failing callbacks. The browsers are the ones Playwright 1.64.1 pins.
       - name: Check the browser package in Chromium and Firefox
         timeout-minutes: 20
         run: |
-          npx playwright install --with-deps chromium firefox
+          pnpm exec playwright install --with-deps chromium firefox
           node scripts/verify-browsers.mjs
 
   # The fast tests on Windows and macOS, and the hidden password input in each system's own

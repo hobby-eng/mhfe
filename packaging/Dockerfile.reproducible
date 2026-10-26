@@ -17,12 +17,12 @@ COPY vendor/phc-winner-argon2 vendor/phc-winner-argon2
 COPY scripts/build-argon2-wasm.sh scripts/remove-network-code.mjs scripts/
 RUN scripts/build-argon2-wasm.sh
 
-FROM buildpack-deps:noble@sha256:e93e9fafe026efb1c7788c98f48b04a170d81f7adfd8ca81ff76b44624e71328 AS toolchain
+FROM buildpack-deps:noble@sha256:27bdb6ab1ca0df6acfe341752ee4d9c08a341d80e3ee75ccc3b34b79af0dfaf1 AS toolchain
 
-ARG NODE_VERSION=26.10.0
-ARG NODE_ARCHIVE_SHA256=ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022
-ARG RUSTUP_VERSION=1.29.1
-ARG RUSTUP_INIT_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
+ARG NODE_VERSION=26.12.1
+ARG NODE_ARCHIVE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
+ARG RUSTUP_VERSION=1.29.2
+ARG RUSTUP_INIT_SHA256=5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4
 # Ubuntu archive snapshot for the cross compilers, so that their versions never change.
 ARG UBUNTU_SNAPSHOT=20261009T000000Z
 # Bound compilation and test concurrency on the maintainer's machine without changing Argon2.
@@ -62,12 +62,12 @@ RUN curl --fail --silent --show-error --location \
       --output /tmp/rustup-init \
     && echo "${RUSTUP_INIT_SHA256}  /tmp/rustup-init" | sha256sum --check --strict \
     && chmod 0755 /tmp/rustup-init \
-    && /tmp/rustup-init -y --profile minimal --default-toolchain 1.99.0 \
+    && /tmp/rustup-init -y --profile minimal --default-toolchain 1.99.1 \
          --target wasm32-unknown-unknown --target aarch64-unknown-linux-gnu \
          --target x86_64-pc-windows-gnu --component rustfmt --component clippy \
     && rm /tmp/rustup-init \
     && cargo install wasm-bindgen-cli --version 0.2.129 --locked \
-    && test "$(rustc --version | cut -d ' ' -f 1-2)" = "rustc 1.99.0" \
+    && test "$(rustc --version | cut -d ' ' -f 1-2)" = "rustc 1.99.1" \
     && test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.129"
 
 # Cross builds: the linkers and the C compilers the cc crate uses for the Argon2 code. The MinGW

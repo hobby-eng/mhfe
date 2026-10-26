@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes src/bin/mhfe/cell_widths.rs: the terminal cells a character takes, from Unicode 17.0.0.
+"""Writes src/bin/mhfe/cell_widths.rs: the terminal cells a character takes, from Unicode 18.0.0.
 
 The line editor of the command-line tool moves the cursor by the cells each typed character takes
 (src/bin/mhfe/typed_line.rs), so that a wide character, such as a CJK ideograph or an emoji, and a
@@ -17,7 +17,7 @@ most Linux terminals follow. Terminals that measure whole grapheme clusters (kit
 Windows Terminal) can differ for emoji sequences, such as a variation selector or a skin-tone
 modifier; the line editor shows no zero-width joiner, so such sequences stay apart.
 
-The character data come from `unicodedata2` 17.0.1, which holds the Unicode 17.0.0 database, the
+The character data come from `unicodedata2` 18.0.0, which holds the Unicode 18.0.0 database, the
 Unicode version of the password rule (scripts/independent-suite3-requirements.txt pins it with its
 hash), not from Python's own `unicodedata`, which is older. The output is deterministic: the same
 Unicode version gives the same bytes.
@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 try:
-    import unicodedata2 as unicode17
+    import unicodedata2 as unicode18
 except ImportError:
     sys.exit(
         "Needs unicodedata2: python3 -m pip install --require-hashes "
@@ -39,7 +39,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "src" / "bin" / "mhfe" / "cell_widths.rs"
-UNICODE_VERSION = "17.0.0"
+UNICODE_VERSION = "18.0.0"
 # One past the last code point.
 CODE_POINTS = 0x110000
 SURROGATES = range(0xD800, 0xE000)
@@ -52,12 +52,12 @@ HANGUL_JAMO_JOINING = (range(0x1160, 0x1200), range(0xD7B0, 0xD7C7), range(0xD7C
 
 def cells(code_point):
     character = chr(code_point)
-    category = unicode17.category(character)
+    category = unicode18.category(character)
     if category in ("Mn", "Me") or any(code_point in run for run in HANGUL_JAMO_JOINING):
         return 0
     if category == "Cf" and code_point != SOFT_HYPHEN:
         return 0
-    if unicode17.east_asian_width(character) in ("W", "F"):
+    if unicode18.east_asian_width(character) in ("W", "F"):
         return 2
     return 1
 
@@ -107,10 +107,10 @@ def render():
 
 
 def main():
-    if unicode17.unidata_version != UNICODE_VERSION:
+    if unicode18.unidata_version != UNICODE_VERSION:
         sys.exit(
             "unicodedata2 has Unicode {}, the table needs {}".format(
-                unicode17.unidata_version, UNICODE_VERSION
+                unicode18.unidata_version, UNICODE_VERSION
             )
         )
     text = render()

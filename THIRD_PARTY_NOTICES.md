@@ -433,17 +433,17 @@ is described above.
 - `cpubits` 0.1.1: `MIT OR Apache-2.0`, used under MIT; [text 15](#text-15).
 - `cpufeatures` 0.2.17: `MIT OR Apache-2.0`, used under MIT; [text 16](#text-16).
 - `cpufeatures` 0.3.1: `MIT OR Apache-2.0`, used under MIT; [text 14](#text-14).
-- `crypto-bigint` 0.7.5: `Apache-2.0 OR MIT`, used under MIT; [text 17](#text-17).
+- `crypto-bigint` 0.7.10: `Apache-2.0 OR MIT`, used under MIT; [text 17](#text-17).
 - `crypto-common` 0.1.7: `MIT OR Apache-2.0`, used under MIT; [text 18](#text-18).
 - `crypto-common` 0.2.2: `MIT OR Apache-2.0`, used under MIT; [text 19](#text-19).
 - `ctrlc` 3.5.2: `MIT/Apache-2.0`, used under MIT; [text 20](#text-20).
-- `ctutils` 0.4.3: `Apache-2.0 OR MIT`, used under MIT; [text 21](#text-21).
-- `der` 0.8.2: `Apache-2.0 OR MIT`, used under MIT; [text 14](#text-14).
+- `ctutils` 0.4.6: `Apache-2.0 OR MIT`, used under MIT; [text 21](#text-21).
+- `der` 0.8.3: `Apache-2.0 OR MIT`, used under MIT; [text 14](#text-14).
 - `digest` 0.10.7: `MIT OR Apache-2.0`, used under MIT; [text 22](#text-22).
 - `digest` 0.11.3: `MIT OR Apache-2.0`, used under MIT; [text 23](#text-23).
 - `dispatch2` 0.3.1: `Zlib OR Apache-2.0 OR MIT`, used under MIT; [text 24](#text-24).
   The crate publishes no licence file. This is the standard SPDX MIT text with the copyright holders taken from the crate's `authors`.
-- `elliptic-curve` 0.14.1: `Apache-2.0 OR MIT`, used under MIT; [text 25](#text-25).
+- `elliptic-curve` 0.14.3: `Apache-2.0 OR MIT`, used under MIT; [text 25](#text-25).
 - `ff` 0.14.0: `MIT/Apache-2.0`, used under MIT; [text 26](#text-26).
 - `futures-core` 0.3.34: `MIT OR Apache-2.0`, used under MIT; [text 27](#text-27).
 - `futures-task` 0.3.34: `MIT OR Apache-2.0`, used under MIT; [text 27](#text-27).
@@ -460,7 +460,7 @@ is described above.
 - `js-sys` 0.3.106: `MIT OR Apache-2.0`, used under MIT; [text 12](#text-12).
 - `k256` 0.14.0: `Apache-2.0 OR MIT`, used under MIT; [text 31](#text-31).
 - `keccak` 0.2.2: `Apache-2.0 OR MIT`, used under MIT; [text 32](#text-32).
-- `libc` 0.2.190: `MIT OR Apache-2.0`, used under MIT; [text 33](#text-33).
+- `libc` 0.2.191: `MIT OR Apache-2.0`, used under MIT; [text 33](#text-33).
 - `memchr` 2.8.3: `Unlicense OR MIT`, used under MIT; [text 34](#text-34).
 - `nix` 0.31.3: `MIT`, used under MIT; [text 35](#text-35).
 - `num-traits` 0.2.19: `MIT OR Apache-2.0`, used under MIT; [text 6](#text-6).
@@ -477,9 +477,9 @@ is described above.
 - `sec1` 0.8.1: `Apache-2.0 OR MIT`, used under MIT; [text 17](#text-17).
 - `serde` 1.0.229: `MIT OR Apache-2.0`, used under MIT; [text 20](#text-20).
 - `serde_core` 1.0.229: `MIT OR Apache-2.0`, used under MIT; [text 20](#text-20).
-- `serde_json` 1.0.151: `MIT OR Apache-2.0`, used under MIT; [text 20](#text-20).
+- `serde_json` 1.0.154: `MIT OR Apache-2.0`, used under MIT; [text 20](#text-20).
 - `sha2` 0.10.9: `MIT OR Apache-2.0`, used under MIT; [text 39](#text-39).
-- `sha2` 0.11.0: `MIT OR Apache-2.0`, used under MIT; [text 40](#text-40).
+- `sha2` 0.11.1: `MIT OR Apache-2.0`, used under MIT; [text 40](#text-40).
 - `sha3` 0.12.0: `MIT OR Apache-2.0`, used under MIT; [text 41](#text-41).
 - `slab` 0.4.12: `MIT`, used under MIT; [text 42](#text-42).
 - `sponge-cursor` 0.1.0: `MIT OR Apache-2.0`, used under MIT; [text 43](#text-43).
@@ -487,8 +487,8 @@ is described above.
 - `subtle` 2.6.1: `BSD-3-Clause`, used under BSD-3-Clause; [text 45](#text-45).
 - `tinyvec` 1.13.3: `Zlib OR Apache-2.0 OR MIT`, used under MIT; [text 46](#text-46).
 - `typenum` 1.20.1: `MIT OR Apache-2.0`, used under MIT; [text 47](#text-47).
-- `unicode-ident` 1.0.26: `(MIT OR Apache-2.0) AND Unicode-3.0`, used under MIT and Unicode-3.0; [text 20](#text-20), [text 48](#text-48).
-- `unicode-normalization` 0.1.25: `MIT OR Apache-2.0`, used under MIT; [text 49](#text-49).
+- `unicode-ident` 1.0.27: `(MIT OR Apache-2.0) AND Unicode-3.0`, used under MIT and Unicode-3.0; [text 20](#text-20), [text 48](#text-48).
+- `unicode-normalization` 0.1.26: `(MIT OR Apache-2.0) AND Unicode-3.0`, used under MIT and Unicode-3.0; [text 49](#text-49), [text 48](#text-48).
 - `utf8parse` 0.2.2: `Apache-2.0 OR MIT`, used under MIT; [text 50](#text-50).
 - `wasm-bindgen` 0.2.129: `MIT OR Apache-2.0`, used under MIT; [text 12](#text-12).
 - `wasm-bindgen-shared` 0.2.129: `MIT OR Apache-2.0`, used under MIT; [text 12](#text-12).
@@ -1002,7 +1002,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 14
 
-MIT, for const-oid 0.10.2, cpufeatures 0.3.1, der 0.8.2.
+MIT, for const-oid 0.10.2, cpufeatures 0.3.1, der 0.8.3.
 
 ```
 Copyright (c) 2020-2026 The RustCrypto Project Developers
@@ -1098,7 +1098,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 17
 
-MIT, for crypto-bigint 0.7.5, sec1 0.8.1.
+MIT, for crypto-bigint 0.7.10, sec1 0.8.1.
 
 ```
 Copyright (c) 2021-2026 The RustCrypto Project Developers
@@ -1194,7 +1194,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 20
 
-MIT, for ctrlc 3.5.2, group 0.14.0, itoa 1.0.18, once_cell 1.21.4, pin-project-lite 0.2.17, serde 1.0.229, serde_core 1.0.229, serde_json 1.0.151, unicode-ident 1.0.26, zmij 1.0.23.
+MIT, for ctrlc 3.5.2, group 0.14.0, itoa 1.0.18, once_cell 1.21.4, pin-project-lite 0.2.17, serde 1.0.229, serde_core 1.0.229, serde_json 1.0.154, unicode-ident 1.0.27, zmij 1.0.23.
 
 ```
 Permission is hereby granted, free of charge, to any
@@ -1224,7 +1224,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 21
 
-MIT, for ctutils 0.4.3.
+MIT, for ctutils 0.4.6.
 
 ```
 Copyright (c) 2025-2026 The RustCrypto Project Developers
@@ -1349,7 +1349,7 @@ SOFTWARE.
 
 #### Text 25
 
-MIT, for elliptic-curve 0.14.1.
+MIT, for elliptic-curve 0.14.3.
 
 ```
 Copyright (c) 2020-2026 RustCrypto Developers
@@ -1594,7 +1594,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 33
 
-MIT, for libc 0.2.190.
+MIT, for libc 0.2.191.
 
 ```
 Copyright (c) The Rust Project Developers
@@ -1812,7 +1812,7 @@ DEALINGS IN THE SOFTWARE.
 
 #### Text 40
 
-MIT, for sha2 0.11.0.
+MIT, for sha2 0.11.1.
 
 ```
 Copyright (c) 2016-2026 The RustCrypto Project Developers
@@ -2053,7 +2053,7 @@ SOFTWARE.
 
 #### Text 48
 
-Unicode-3.0, for unicode-ident 1.0.26.
+Unicode-3.0, for unicode-ident 1.0.27, unicode-normalization 0.1.26.
 
 ```
 UNICODE LICENSE V3
@@ -2099,7 +2099,7 @@ authorization of the copyright holder.
 
 #### Text 49
 
-MIT, for unicode-normalization 0.1.25.
+MIT, for unicode-normalization 0.1.26.
 
 ```
 Copyright (c) 2015 The Rust Project Developers

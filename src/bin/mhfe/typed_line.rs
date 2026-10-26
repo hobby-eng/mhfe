@@ -224,7 +224,7 @@ impl<'a> LineScreen<'a> {
 
 /// The cells a terminal gives `character`, by its first code point: none for a combining mark,
 /// which joins the character before it, two for a wide or fullwidth East Asian character or an
-/// emoji, one otherwise (cell_widths.rs, generated from Unicode 17.0.0).
+/// emoji, one otherwise (cell_widths.rs, generated from Unicode 18.0.0).
 fn cells(character: &str) -> usize {
     character.chars().next().map_or(0, char_cells)
 }
@@ -319,7 +319,7 @@ mod tests {
         assert!(written.ends_with("\x1b[23G\x1b[J|"), "{written:?}");
     }
 
-    /// Known answers of the generated table, each from the Unicode 17.0.0 character database
+    /// Known answers of the generated table, each from the Unicode 18.0.0 character database
     /// (East_Asian_Width and General_Category), so that a table generated wrongly fails.
     #[test]
     fn the_cell_table_gives_the_unicode_widths() {

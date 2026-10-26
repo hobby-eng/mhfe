@@ -71,7 +71,7 @@ pub enum MhfeError {
     /// The password contains a control character (General_Category Cc), U+2028 or U+2029, which
     /// the specification forbids.
     ControlCharacterInPassword,
-    /// The password contains a code point that Unicode 17.0.0 does not assign.
+    /// The password contains a code point that Unicode 18.0.0 does not assign.
     UnassignedCharacter,
     /// No built-in check passes where a short length was stated or needed: a wrong password,
     /// setting or container, or a 24-word original.
@@ -289,7 +289,7 @@ impl fmt::Display for MhfeError {
             ),
             Self::UnassignedCharacter => write!(
                 f,
-                "the password contains a character that Unicode 17.0.0 does not define; \
+                "the password contains a character that Unicode 18.0.0 does not define; \
                  use only defined characters so that every future version reads the \
                  password the same way"
             ),

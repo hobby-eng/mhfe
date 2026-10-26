@@ -18,7 +18,7 @@
 # The names are relative, so that no remapped path looks like a directory of some builder;
 # scripts/verify-browser-package.mjs refuses a WebAssembly with any absolute source path other than
 # rustc's own. rustc names its standard library /rustc/<commit>/ itself. Cargo's trim-paths would
-# make such paths relative on its own, but Cargo 1.99.0 still refuses it as unstable.
+# make such paths relative on its own, but Cargo 1.99.1 still refuses it as unstable.
 
 # The release targets whose rustflags get the remapping, the computer's own target among them for
 # a build without --target.

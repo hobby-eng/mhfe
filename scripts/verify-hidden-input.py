@@ -292,7 +292,7 @@ SELF_TEST_PARTS = (
     ("Formats", "as published"),
     ("Container facts", "as published"),
     ("Keep advice", "as published"),
-    ("Passwords (Unicode 17)", "as published"),
+    ("Passwords (Unicode 18)", "as published"),
     ("BIP39 words", "as published"),
     ("Repair words (MHFE-REPAIR-1)", "as published"),
     ("Search for missing words", "as published"),

@@ -261,7 +261,7 @@ dice, `--words N` sets the count. `--chars N` makes N random characters instead 
 about 93.3 bits) from 57 letters and digits without look-alikes such as 0 and O; words are easier
 to type correctly years later. Any text on one line, up to 1,024 bytes after Unicode normalization,
 can be a password. Control characters such as a tab, line and paragraph separators, and characters
-that Unicode 17.0.0 does not assign are refused, and letter case and spaces count: lowercase words
+that Unicode 18.0.0 does not assign are refused, and letter case and spaces count: lowercase words
 with single spaces are the easiest to type again years later. The password is not your wallet's
 BIP39 passphrase.
 
@@ -914,8 +914,8 @@ program and the WebAssembly (`packaging/remap-builder-paths.sh`), so they refuse
 ```bash
 cargo test --locked          # fast tests with reduced Argon2 cost
 scripts/check.sh             # lints, tests, builds, browser package; not the full-size vectors
-npm ci --ignore-scripts && npm run format:check   # Prettier for Markdown and JavaScript
-npm run check:browsers       # the browser package in Chromium and Firefox, after check.sh
+pnpm install --frozen-lockfile && pnpm run format:check   # Prettier for Markdown and JavaScript
+pnpm run check:browsers      # the browser package in Chromium and Firefox, after check.sh
 # The published vectors at full size: about an hour for suite 3, half an hour for suite 4.
 cargo test --locked --release --test suite3_vectors -- --ignored --nocapture
 cargo test --locked --release --test suite4_vectors -- --ignored --nocapture
@@ -929,7 +929,7 @@ list is written by `scripts/third-party-licenses.py`; every release archive carr
 timing records in [`docs/measurements/`](docs/measurements/).
 Test vectors are written with `mhfe test-vectors` (`--same-length` for the suite 4 set in
 `tests/fixtures/suite4-vectors`) and checked independently with `scripts/independent-suite3.py`
-and `scripts/independent-suite4.py`, which use OpenSSL's Argon2 and the Unicode 17.0.0 database of
+and `scripts/independent-suite4.py`, which use OpenSSL's Argon2 and the Unicode 18.0.0 database of
 `unicodedata2`; their packages install with
 `python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`, and
 `python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json` checks the
@@ -938,7 +938,7 @@ from `src/mhfe/published_rounds.rs`, which `scripts/generate-published-rounds.py
 those fixtures (`--check` compares without writing, as `scripts/check.sh` does); regenerate it
 whenever the vectors change. The terminal cell widths of the line editor,
 `src/bin/mhfe/cell_widths.rs`, are written by `python3 scripts/generate-cell-widths.py` from the
-same Unicode 17.0.0 database of `unicodedata2` (`--check` compares without writing, as the Test
+same Unicode 18.0.0 database of `unicodedata2` (`--check` compares without writing, as the Test
 vectors workflow does); regenerate it whenever the Unicode version of the password rule changes.
 
 Argon2 is the reference C implementation of its authors, vendored unchanged in

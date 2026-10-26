@@ -2,7 +2,7 @@
 name = "mhfe-experimental"
 version = "0.6.0"
 edition = "2021"
-rust-version = "1.99.0"
+rust-version = "1.99.1"
 authors = ["Sergei Semenov"]
 description = "Experimental Memory-Hard Feistel Encryption for BIP39 Mnemonics"
 repository = "https://github.com/hobby-eng/mhfe"
@@ -33,12 +33,12 @@ hmac = "=0.13.0"
 # secp256k1 arithmetic for BIP32 in the rehearsal check; audited by NCC Group.
 k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic"] }
 serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.151"
-sha2 = "=0.11.0"
+serde_json = "=1.0.154"
+sha2 = "=0.11.1"
 # Keccak-256 for Ethereum, EVM, Tron and Injective addresses in the rehearsal check.
 sha3 = { version = "=0.12.0", default-features = false }
-# Its UNICODE_VERSION is (17, 0, 0), the version the specification pins for passwords.
-unicode-normalization = "=0.1.25"
+# Its UNICODE_VERSION is (18, 0, 0), the version the specification pins for passwords.
+unicode-normalization = "=0.1.26"
 zeroize = { version = "=1.9.1", features = ["zeroize_derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -56,7 +56,7 @@ getrandom = "=0.4.3"
 # Hidden terminal input (termios) and, on macOS, free-memory queries before the Argon2 work area
 # is reserved.
 [target.'cfg(unix)'.dependencies]
-libc = "=0.2.190"
+libc = "=0.2.191"
 
 # Hidden console input and free-memory queries.
 [target.'cfg(windows)'.dependencies]
@@ -68,7 +68,7 @@ windows-sys = { version = "=0.61.2", features = [
 
 [build-dependencies]
 # Compiles the vendored reference Argon2 C code (build.rs).
-cc = "=1.6.0"
+cc = "=1.10.0"
 
 [dev-dependencies]
 # An independent Argon2 implementation, used only to cross-check the C engine in tests.

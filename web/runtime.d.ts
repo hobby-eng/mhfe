@@ -65,7 +65,7 @@ export type MhfeErrorCode =
   | "INVALID_PASSWORD_UTF8"
   /** The password has a control character, U+2028 or U+2029. */
   | "CONTROL_CHARACTER_IN_PASSWORD"
-  /** The password has a code point unassigned in Unicode 17.0.0. */
+  /** The password has a code point unassigned in Unicode 18.0.0. */
   | "UNASSIGNED_CHARACTER"
   /** No built-in check passes where a short length was stated or needed. */
   | "VERIFIER_MISMATCH"

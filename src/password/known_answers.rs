@@ -1,9 +1,9 @@
 //! Known answers of the password encoding: the self-check `password-unicode`.
 //!
-//! The NFKD and combining-class tables of unicode-normalization (Unicode 17.0.0), the test of
+//! The NFKD and combining-class tables of unicode-normalization (Unicode 18.0.0), the test of
 //! assigned characters, and the refusals of control characters, separators, lengths and invalid
 //! UTF-8. The cases are the `passwords` of the shared validation fixture, which
-//! `scripts/independent-suite3.py passwords` checks with Python's unicodedata2 17.0.0, and the
+//! `scripts/independent-suite3.py passwords` checks with Python's unicodedata2 18.0.0, and the
 //! password of the published vector unicode-password. The full self-test adds two scans of every
 //! Unicode scalar value: the number of refused characters, and that NFKD makes none of them.
 
@@ -22,7 +22,7 @@ use crate::MhfeError;
 const UNICODE_PASSWORD: &str = "Caf\u{e9} \u{fb01} \u{ff30}\u{212b}\u{2460} \u{1f510} \u{439}";
 const UNICODE_PASSWORD_NFKD: &str = "43616665cc81206669205041cc8a3120f09f949020d0b8cc86";
 
-/// The refused characters: the 65 of General_Category Cc in Unicode 17.0.0, U+2028 and U+2029.
+/// The refused characters: the 65 of General_Category Cc in Unicode 18.0.0, U+2028 and U+2029.
 const REFUSED_SCALARS: usize = 67;
 
 /// The `password-unicode` check.
@@ -96,15 +96,15 @@ impl ComponentCheck for PasswordUnicodeCheck {
     }
 
     fn label(&self) -> &'static str {
-        "Passwords (Unicode 17)"
+        "Passwords (Unicode 18)"
     }
 
     fn run(&mut self, tier: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
         findings.one(|| {
             expect(
-                unicode_normalization::UNICODE_VERSION == (17, 0, 0),
-                "the normalization tables are not Unicode 17.0.0",
+                unicode_normalization::UNICODE_VERSION == (18, 0, 0),
+                "the normalization tables are not Unicode 18.0.0",
             )
         });
         findings.one(|| {

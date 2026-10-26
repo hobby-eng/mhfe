@@ -11,7 +11,7 @@ as a 12- to 21-word original seed phrase. The command-line tool is described in 
 use mhfe::{CheckOutcome, Mhfe, Password, PhraseLength, Recovery, Reference, Suite, WorkFactor};
 
 let work = WorkFactor::new(0, 0)?;            // PIM 0..=1023, memory level 0..=21
-let password = Password::new("...")?;        // NFKD with Unicode 17.0.0, 1 to 1024 bytes
+let password = Password::new("...")?;        // NFKD with Unicode 18.0.0, 1 to 1024 bytes
 let mut mhfe = Mhfe::new(work)?;              // checks free memory, reserves the Argon2 work area
 
 // Suite::TwentyFourWords is the default; Suite::SameLength only on the user's own choice.
@@ -43,7 +43,7 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   memory only after the password has been encoded, the order the specification gives for creating a
   container.
 - `Password::new` rejects, never cleans or truncates: a control character (General_Category Cc, such
-  as NUL, TAB or a line break), U+2028 or U+2029, any code point that Unicode 17.0.0 does not
+  as NUL, TAB or a line break), U+2028 or U+2029, any code point that Unicode 18.0.0 does not
   assign, an empty result and more than 1024 bytes after normalization. Private Use characters are
   allowed. `Password::from_utf8` does the same for bytes.
 - `encrypt` accepts an English phrase of 12 to 24 words in any letter case and spacing, and four or
@@ -521,7 +521,7 @@ The parts, by identifier and label, and what each compares:
   containers and phrases, and the refusal of a container of 13 words or with a wrong checksum.
 - `keep-advice`, "Keep advice": the exact `keep` lists of sealed published vectors with a
   passphrase, repair words, other settings and a length that detection would not find alone.
-- `password-unicode`, "Passwords (Unicode 17)": Unicode 17.0.0, the NFKD bytes of the published
+- `password-unicode`, "Passwords (Unicode 18)": Unicode 18.0.0, the NFKD bytes of the published
   vector unicode-password and every password case of the validation fixture. The full self-test
   scans every Unicode scalar value against the refusal of control characters and separators: exactly
   67 are refused, the 65 of General_Category Cc with U+2028 and U+2029, and NFKD makes none of them
@@ -647,7 +647,7 @@ file, which the check word's check reports at start.
 | `PASSWORD_TOO_LONG`               | More than 1024 bytes after normalization                                                                                |
 | `INVALID_PASSWORD_UTF8`           | The password bytes are not UTF-8                                                                                        |
 | `CONTROL_CHARACTER_IN_PASSWORD`   | The password has a control character, U+2028 or U+2029                                                                  |
-| `UNASSIGNED_CHARACTER`            | The password has a code point unassigned in Unicode 17.0.0                                                              |
+| `UNASSIGNED_CHARACTER`            | The password has a code point unassigned in Unicode 18.0.0                                                              |
 | `VERIFIER_MISMATCH`               | No built-in check passes where a short length was stated or needed                                                      |
 | `AMBIGUOUS_LENGTH`                | Several lengths pass by rare chance: an address or a fingerprint tells them apart                                       |
 | `LENGTH_DIFFERS`                  | A rekey's built-in check finds another length than stated: confirm with the wallet                                      |

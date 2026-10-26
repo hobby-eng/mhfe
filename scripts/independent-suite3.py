@@ -2,7 +2,7 @@
 
 Written from the specification alone. It shares no code with the Rust crate: Argon2id comes from
 OpenSSL through Python `cryptography`, BLAKE2b, HMAC and SHA-256 from Python's standard library,
-and the Unicode 17.0.0 character database of the password rule from `unicodedata2`, because
+and the Unicode 18.0.0 character database of the password rule from `unicodedata2`, because
 Python's own `unicodedata` is an older Unicode version. Install the packages with
 `python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`.
 Only public test inputs belong here.
@@ -19,7 +19,7 @@ checks everything else within a second: packing, salts, masks, rounds, container
 Negative cases have no recorded keys and need the full check.
 
 `passwords` checks every password-encoding case of the validation fixture: the NFKD result or the
-error that the password rule of the specification gives, including the Unicode 17 rule for
+error that the password rule of the specification gives, including the Unicode 18 rule for
 unassigned code points.
 
 --record adds the checked files to a JSON record, normally
@@ -43,14 +43,14 @@ import re
 import sys
 
 try:
-    import unicodedata2 as unicode17
+    import unicodedata2 as unicode18
 except ImportError:
     sys.exit("Needs unicodedata2: python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt")
 
 # The password rule uses this exact Unicode version (the specification, "Password encoding").
-UNICODE_VERSION = "17.0.0"
-if unicode17.unidata_version != UNICODE_VERSION:
-    sys.exit(f"unicodedata2 has Unicode {unicode17.unidata_version}, the password rule needs {UNICODE_VERSION}")
+UNICODE_VERSION = "18.0.0"
+if unicode18.unidata_version != UNICODE_VERSION:
+    sys.exit(f"unicodedata2 has Unicode {unicode18.unidata_version}, the password rule needs {UNICODE_VERSION}")
 # Longest password after NFKD, in bytes.
 MAX_PASSWORD_BYTES = 1024
 
@@ -223,11 +223,11 @@ def encode_password(raw):
         raise PasswordRefused("INVALID_PASSWORD_UTF8") from None
     if any(map(is_refused_in_password, text)):
         raise PasswordRefused("CONTROL_CHARACTER_IN_PASSWORD")
-    # Stabilized normalization fails on a code point that Unicode 17.0.0 leaves unassigned (Cn),
+    # Stabilized normalization fails on a code point that Unicode 18.0.0 leaves unassigned (Cn),
     # the noncharacters included; Private Use (Co) is assigned.
-    if any(unicode17.category(character) == "Cn" for character in text):
+    if any(unicode18.category(character) == "Cn" for character in text):
         raise PasswordRefused("UNASSIGNED_CHARACTER")
-    encoded = unicode17.normalize("NFKD", text).encode("utf-8")
+    encoded = unicode18.normalize("NFKD", text).encode("utf-8")
     if not encoded:
         raise PasswordRefused("EMPTY_PASSWORD")
     if len(encoded) > MAX_PASSWORD_BYTES:
@@ -254,7 +254,7 @@ def check_password_cases(path):
                 f"password case {case['id']}: refused with {refusal.code}, expected {case.get('expected_error')}"
             )
             if "expected_nfkd_bytes" in case:
-                length = len(unicode17.normalize("NFKD", raw.decode("utf-8")).encode("utf-8"))
+                length = len(unicode18.normalize("NFKD", raw.decode("utf-8")).encode("utf-8"))
                 assert length == case["expected_nfkd_bytes"], f"password case {case['id']}: {length} bytes"
             continue
         assert "expected_error" not in case, f"password case {case['id']}: accepted, expected {case['expected_error']}"
@@ -287,7 +287,7 @@ def recorded_keys_by_salt(vector):
 
 def is_refused_in_password(character):
     """Control characters (General_Category Cc) and the line and paragraph separators."""
-    return unicode17.category(character) == "Cc" or character in "\u2028\u2029"
+    return unicode18.category(character) == "Cc" or character in "\u2028\u2029"
 
 
 def check_password(record):
@@ -416,7 +416,7 @@ def verifier_description():
         "cryptography": cryptography.__version__,
         # The compiled module carries no __version__; the installed package names its version.
         "unicodedata2": (
-            f"{importlib.metadata.version('unicodedata2')} (Unicode {unicode17.unidata_version})"
+            f"{importlib.metadata.version('unicodedata2')} (Unicode {unicode18.unidata_version})"
         ),
         "openssl": backend.openssl_version_text(),
     }
