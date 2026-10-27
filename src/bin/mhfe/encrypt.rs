@@ -2,8 +2,9 @@
 //! 21-word phrase, on the person's own choice, as many words as the phrase.
 
 use std::cell::RefCell;
+use std::io;
 
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use clap::Args;
 use mhfe::operation::{Encryption, Keep, KeepItem, Sealed, StageCallback, WalletPassphrase};
 use mhfe::{MhfeError, OriginalFacts, Password, Suite, WorkFactor};
@@ -15,6 +16,7 @@ use crate::exit::{refused, Failure, SUCCESS};
 use crate::flow::{self, Flow};
 use crate::length_choice;
 use crate::made_password::{self, NewPasswordOption, PasswordKind};
+use crate::raw_io::println;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED};
@@ -222,6 +224,8 @@ pub fn show_sealing(
     // reads as final, and the warning goes to standard error only (AUD-015-SEC005).
     let person_reads_output = !input.is_script() && terminal::output_on_screen();
     let mut screen = None;
+    // A failed write of the container shown before the check, returned once the sealing ends.
+    let mut shown_before = Ok(());
     let sealed = sealing(
         &mut |_, round, rounds| {
             progress.borrow_mut().round_starts(round, rounds);
@@ -237,19 +241,24 @@ pub fn show_sealing(
                 if shown.is_active() {
                     style::title(operation.title());
                 }
-                show_before_the_check(container, input);
+                shown_before = show_before_the_check(container, input);
                 screen = Some(shown);
             }
             Ok(())
         },
     );
     progress.into_inner().finish();
+    if let Err(error) = shown_before {
+        // A failed check is told first: it matters more than a container not all shown.
+        sealed?;
+        return Err(error.into());
+    }
     let Some(screen) = screen else {
         // Nothing was shown before the check: the container comes out only once it has passed.
         let sealed = sealed?;
-        println!("{}", sealed.container());
+        println!("{}", sealed.container())?;
         if let Some(card) = sealed.repair_words() {
-            println!("{card}");
+            println!("{card}")?;
         }
         if !input.is_script() {
             report_check(Ok(()));
@@ -261,7 +270,7 @@ pub fn show_sealing(
     // The card is made from the container once its check has passed (the specification's
     // MHFE-REPAIR-1), below it on the same screen.
     if let Some(card) = sealed.as_ref().ok().and_then(Sealed::repair_words) {
-        container_repair::print_card(card, input);
+        container_repair::print_card(card, input)?;
     }
     if screen.is_active() {
         terminal::wait_to_leave()?;
@@ -345,7 +354,7 @@ fn report_check(checked: Result<(), &MhfeError>) {
 }
 
 /// Shows the container after the first twelve rounds, clearly marked as not yet verified.
-fn show_before_the_check(container: &str, input: &Input) {
+fn show_before_the_check(container: &str, input: &Input) -> io::Result<()> {
     eprintln!();
     eprintln!(
         "{}",
@@ -354,7 +363,9 @@ fn show_before_the_check(container: &str, input: &Input) {
             format!("Container, {} words", container.split(' ').count())
         )
     );
-    terminal::print_phrase(container, Wallet::Container, input);
+    // The warning comes even if the container could not all be written: part of it may be on
+    // the screen.
+    let shown = terminal::print_phrase(container, Wallet::Container, input);
     eprintln!();
     style::warn_here(
         "Not verified yet: write it down, but wait for the check.",
@@ -362,6 +373,7 @@ fn show_before_the_check(container: &str, input: &Input) {
     );
     eprintln!();
     terminal::set_unverified_container_shown(true);
+    shown
 }
 
 /// Reads the original phrase on the private screen, where it is shown as it is typed. A valid

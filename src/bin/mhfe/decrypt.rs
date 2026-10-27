@@ -1,6 +1,8 @@
 //! `mhfe decrypt`: recovers the original phrase from a container.
 
-use anstream::{eprintln, println};
+use std::io;
+
+use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::{PhraseLength, RecoveredPhrase, Recovery, RecoveryStatus};
@@ -10,6 +12,7 @@ use crate::container_repair::RepairOption;
 use crate::exit::{Failure, SUCCESS};
 use crate::flow::Flow;
 use crate::phrase_length;
+use crate::raw_io::println;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, HEADING, STRONG};
@@ -300,7 +303,7 @@ fn show_single(
             format!("Recovered seed phrase, {} words", phrase.words())
         )
     );
-    print_result(phrase, input);
+    print_result(phrase, input)?;
     Ok(())
 }
 
@@ -361,20 +364,20 @@ fn show_ambiguous(
             paint(STRONG, status)
         );
         tell_source_check(candidate, passphrase)?;
-        print_result(candidate, input);
+        print_result(candidate, input)?;
     }
     Ok(())
 }
 
-fn print_result(phrase: &RecoveredPhrase, input: &Input) {
+fn print_result(phrase: &RecoveredPhrase, input: &Input) -> io::Result<()> {
     if input.is_script() {
         let status = if phrase.verified() {
             "verified"
         } else {
             "unverified"
         };
-        println!("{} {status} {}", phrase.words(), phrase.phrase());
+        println!("{} {status} {}", phrase.words(), phrase.phrase())
     } else {
-        terminal::print_phrase(phrase.phrase(), Wallet::NoPassphrase, input);
+        terminal::print_phrase(phrase.phrase(), Wallet::NoPassphrase, input)
     }
 }

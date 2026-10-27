@@ -288,7 +288,7 @@ fn show_new_phrase(input: &Input, phrase: &str, passphrase: &str) -> Result<(), 
     }
     eprintln!();
     eprintln!("{}", paint(HEADING, "New seed phrase, 24 words"));
-    terminal::print_phrase(phrase, Wallet::NewPassphrase(passphrase), input);
+    terminal::print_phrase(phrase, Wallet::NewPassphrase(passphrase), input)?;
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }

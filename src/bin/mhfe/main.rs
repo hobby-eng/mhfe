@@ -27,6 +27,7 @@ mod menu;
 mod new_wallet;
 mod phrase_length;
 mod protect;
+mod raw_io;
 mod readme;
 mod rekey;
 mod self_test;

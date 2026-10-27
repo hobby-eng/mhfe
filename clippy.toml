@@ -4,3 +4,16 @@ too-many-lines-threshold = 150
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
+# RUST-13: the standard library's buffers in front of standard input and output are statics that
+# are never wiped, so they would keep the secrets read or shown; src/bin/mhfe/raw_io.rs reads and
+# writes the descriptors past them and is the one module allowed these calls.
+disallowed-methods = [
+  { path = "std::io::stdin", reason = "keeps what it reads in a buffer that is never wiped; use raw_io::Stdin" },
+  { path = "std::io::stdout", reason = "keeps what it writes in a buffer that is never wiped; use raw_io::println" },
+  { path = "anstream::stdout", reason = "writes through std::io::stdout; use raw_io::println" },
+]
+# The same for std's println! and print!, which clippy does not see as calls of std::io::stdout.
+disallowed-macros = [
+  { path = "std::println", reason = "writes through std::io::stdout; use raw_io::println" },
+  { path = "std::print", reason = "writes through std::io::stdout; use raw_io::println" },
+]

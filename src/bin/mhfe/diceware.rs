@@ -2,9 +2,7 @@
 //! wordlist, of five words and their check word, or of random characters. What is made, and how,
 //! is the library's [`mhfe::new_password`].
 
-use std::io::IsTerminal;
-
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use clap::Args;
 use mhfe::new_password::{
     character_bits, word_bits, word_index_of_rolls, PasswordRecipe, CHARACTERS, DEFAULT_CHARACTERS,
@@ -15,6 +13,7 @@ use zeroize::Zeroizing;
 use crate::exit::{self, Failure, SUCCESS};
 use crate::flow::{self, Flow};
 use crate::made_password;
+use crate::raw_io::{self, println};
 use crate::style::{self, STRONG};
 use crate::system_random::SystemRandom;
 use crate::terminal::{self, Input};
@@ -208,11 +207,11 @@ const TITLE: &str = "Make a password";
 /// script gets the bare password.
 fn show(password: &str, strength: &str, notes: &[&str], flow: Flow) -> Result<i32, Failure> {
     flow::step();
-    if std::io::stdout().is_terminal() {
-        println!("  {STRONG}{password}{STRONG:#}");
+    if raw_io::output_is_terminal() {
+        println!("  {STRONG}{password}{STRONG:#}")?;
         eprintln!();
     } else {
-        println!("{password}");
+        println!("{password}")?;
     }
     style::ok(strength);
     for note in notes {

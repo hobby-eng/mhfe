@@ -35,7 +35,7 @@
               Rust offers only through unsafe foreign functions"
 )]
 
-use std::io::{self, BufRead, IsTerminal};
+use std::io::{self, Read};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -45,6 +45,7 @@ use mhfe::word_hints::WordList;
 use zeroize::Zeroizing;
 
 use crate::exit::Failure;
+use crate::raw_io;
 use crate::typed_line::{self, Hints, LineScreen};
 
 /// The terminal settings to restore while a hidden prompt has changed them. Whoever changes or
@@ -92,8 +93,8 @@ impl Content {
 /// line of `content` as described above, shown as it is typed when `shown` is true, and restores
 /// the terminal, also when reading fails. `None` means that the input was closed. The terminal is
 /// switched before the prompt appears, so that a key typed or text pasted as soon as the prompt
-/// shows is already read as data. On Windows the standard library turns the console's UTF-16
-/// characters into UTF-8 bytes.
+/// shows is already read as data. The bytes come straight from standard input into the locked line
+/// (raw_io.rs); on Windows the console's UTF-16 characters are turned into UTF-8 bytes there.
 pub fn read_line(
     prompt: &str,
     shown: bool,
@@ -103,7 +104,7 @@ pub fn read_line(
         crate::style::prompt(prompt);
         io::Write::flush(&mut io::stderr())?;
         if !shown {
-            return edit_line(&mut io::stdin().lock(), None, content);
+            return edit_line(&mut raw_io::Stdin::default(), None, content);
         }
         let (mut controls, mut text) = (io::stderr(), anstream::stderr());
         // The prompt's cells by the same rule as the characters typed after it.
@@ -111,7 +112,7 @@ pub fn read_line(
         // When the width cannot be read, the usual 80 columns.
         let columns = columns().unwrap_or(80);
         let mut screen = LineScreen::new(&mut controls, &mut text, width, columns, content.hints());
-        edit_line(&mut io::stdin().lock(), Some(&mut screen), content)
+        edit_line(&mut raw_io::Stdin::default(), Some(&mut screen), content)
     });
     // The terminal did not show the Enter key either.
     anstream::eprintln!();
@@ -141,7 +142,7 @@ pub fn with_keys<T>(
     choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
 ) -> Result<T, Failure> {
     with_terminal_switched(platform::single_keys, || {
-        let mut keys = TerminalKeys::new(io::stdin().lock());
+        let mut keys = TerminalKeys::new();
         choose(&mut || read_key(&mut keys))
     })
 }
@@ -224,7 +225,7 @@ impl ComponentCheck for HiddenInputCheck {
     }
 
     fn run(&mut self, _: Tier) -> ComponentOutcome {
-        if !io::stdin().is_terminal() {
+        if !raw_io::input_is_terminal() {
             return ComponentOutcome::NotAvailable("no terminal".to_owned());
         }
         match with_terminal_switched(platform::hide, || Ok(())) {
@@ -281,44 +282,42 @@ trait KeySource {
     fn more_within(&mut self, delay: Duration) -> Result<bool, Failure>;
 }
 
-/// The keys typed at the terminal. Whatever the standard library has read from the terminal is
-/// taken over at once, so that its buffer stays empty and only the operating system needs to be
-/// asked whether more is coming. Bytes still here when a choice ends are dropped with this
-/// reader: a key pressed once too often must not end up in the next answer, such as a password.
-struct TerminalKeys<'a> {
-    input: io::StdinLock<'a>,
-    /// Bytes taken over and not yet read; wiped when dropped, as they could be typed-ahead text.
+/// The keys typed at the terminal. What a read brings from standard input waits here, so that
+/// only the operating system needs to be asked whether more is coming. Bytes still here when a
+/// choice ends are dropped with this reader: a key pressed once too often must not end up in the
+/// next answer, such as a password.
+struct TerminalKeys {
+    input: raw_io::Stdin,
+    /// Bytes read and not yet taken; wiped when dropped, as they could be typed-ahead text.
     pending: Zeroizing<Vec<u8>>,
     next: usize,
 }
 
-impl<'a> TerminalKeys<'a> {
-    fn new(input: io::StdinLock<'a>) -> Self {
+impl TerminalKeys {
+    fn new() -> Self {
         Self {
-            input,
-            // Reserved at the size of the standard library's buffer, whose contents it takes
-            // whole, so that it is never reallocated and leaves no unwiped copy.
+            input: raw_io::Stdin::default(),
+            // Reserved at the largest read, so that it is never reallocated and leaves no unwiped
+            // copy.
             pending: Zeroizing::new(Vec::with_capacity(crate::terminal::LINE_CAPACITY)),
             next: 0,
         }
     }
 }
 
-impl KeySource for TerminalKeys<'_> {
+impl KeySource for TerminalKeys {
     fn next_byte(&mut self) -> Result<Option<u8>, Failure> {
         if self.next == self.pending.len() {
-            self.pending.clear();
+            self.pending.resize(crate::terminal::LINE_CAPACITY, 0);
             self.next = 0;
-            let available = loop {
-                match self.input.fill_buf() {
-                    Ok(bytes) => break bytes,
+            let read = loop {
+                match self.input.read(&mut self.pending) {
+                    Ok(read) => break read,
                     Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                     Err(error) => return Err(error.into()),
                 }
             };
-            let taken = available.len();
-            self.pending.extend_from_slice(available);
-            self.input.consume(taken);
+            self.pending.truncate(read);
         }
         let byte = self.pending.get(self.next).copied();
         self.next += usize::from(byte.is_some());
@@ -758,10 +757,12 @@ mod platform {
         }
     }
 
+    /// Restores `original` and discards what was typed and not read, as a password prompt does:
+    /// the rest of a paste must not reach the next answer or, once the tool ends, the shell.
     pub fn restore(original: &Settings) {
         // SAFETY: the settings read from this terminal before. A failure cannot be reported
         // usefully here; the shell restores the terminal when the tool ends in any case.
-        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, original) };
+        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSAFLUSH, original) };
     }
 }
 
@@ -770,11 +771,11 @@ mod platform {
     use std::time::{Duration, Instant};
 
     use windows_sys::Win32::System::Console::{
-        GetConsoleMode, GetConsoleScreenBufferInfo, GetStdHandle, PeekConsoleInputW,
-        SetConsoleMode, CONSOLE_MODE, CONSOLE_SCREEN_BUFFER_INFO, ENABLE_ECHO_INPUT,
-        ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, ENABLE_VIRTUAL_TERMINAL_INPUT,
-        ENABLE_VIRTUAL_TERMINAL_PROCESSING, INPUT_RECORD, KEY_EVENT, STD_ERROR_HANDLE,
-        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        FlushConsoleInputBuffer, GetConsoleMode, GetConsoleScreenBufferInfo, GetStdHandle,
+        PeekConsoleInputW, SetConsoleMode, CONSOLE_MODE, CONSOLE_SCREEN_BUFFER_INFO,
+        ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT,
+        ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING, INPUT_RECORD, KEY_EVENT,
+        STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
     };
 
     use super::terminal_error;
@@ -915,9 +916,14 @@ mod platform {
         Ok(typed)
     }
 
+    /// Restores `original` and discards what was typed and not read, as on Unix.
     pub fn restore(original: &Settings) {
-        // SAFETY: the mode read from this console before.
-        unsafe { SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), *original) };
+        // SAFETY: the mode read from this console before, and plain console calls.
+        unsafe {
+            let input = GetStdHandle(STD_INPUT_HANDLE);
+            SetConsoleMode(input, *original);
+            FlushConsoleInputBuffer(input);
+        }
     }
 }
 
@@ -1027,6 +1033,102 @@ mod tests {
         }
     }
 
+    /// Makes [`secrets_are_read_past_the_standard_library_buffer`] the child that reads, and says
+    /// from what.
+    #[cfg(unix)]
+    const CHILD: &str = "MHFE_TEST_READ_ONE_ANSWER";
+
+    /// RUST-13: a secret is read from standard input past the standard library's buffer, which
+    /// would read ahead of it and keep what follows, such as the rest of a paste or a script's next
+    /// answer, for as long as the tool runs. A child process of this test reads one answer as the
+    /// tool does, a password typed at a terminal and a script's line; what follows the answer must
+    /// still wait unread on the terminal or the pipe. At the terminal it is then discarded when the
+    /// terminal is restored, so that it never reaches the shell.
+    #[cfg(unix)]
+    #[test]
+    fn secrets_are_read_past_the_standard_library_buffer() {
+        use std::io::Write;
+        use std::os::fd::BorrowedFd;
+        use std::process::Stdio;
+
+        if let Ok(case) = std::env::var(CHILD) {
+            if case == "terminal" {
+                // As read_line reads a hidden line; then, before the terminal is restored, the rest
+                // must still wait on standard input.
+                let waiting = with_terminal_switched(platform::hide, || {
+                    let answer = edit_line(&mut raw_io::Stdin::default(), None, Content::Password)?;
+                    assert_eq!(answer.unwrap().to_string(), "secret");
+                    platform::input_within(Duration::ZERO)
+                });
+                assert!(waiting.unwrap(), "what follows the answer was read ahead");
+            } else {
+                let answer = crate::terminal::Input::new(true).secret("Password");
+                assert_eq!(answer.unwrap().to_string(), "first secret");
+            }
+            return;
+        }
+        let pty = Pty::open();
+        // Without echo, which nobody here reads: a restore waits for the terminal's output to be
+        // read on macOS.
+        let mut quiet = platform::current_on(pty.follower).unwrap();
+        quiet.c_lflag &= !(libc::ECHO | libc::ECHONL);
+        // SAFETY: a valid termios for this terminal.
+        let set = unsafe { libc::tcsetattr(pty.follower, libc::TCSANOW, &quiet) };
+        assert_eq!(set, 0);
+        let typed = b"secret\rnext";
+        // SAFETY: the bytes are valid for reads of their length.
+        let written = unsafe { libc::write(pty.leader, typed.as_ptr().cast(), typed.len()) };
+        assert_eq!(usize::try_from(written).unwrap(), typed.len());
+        // SAFETY: the follower stays open while it is borrowed.
+        let follower = unsafe { BorrowedFd::borrow_raw(pty.follower) };
+        read_one_answer_in_a_child("terminal", follower.try_clone_to_owned().unwrap().into());
+        assert_eq!(
+            left_on_terminal(pty.follower),
+            b"",
+            "the rest reached the shell"
+        );
+
+        let (mut pipe, mut lines) = io::pipe().unwrap();
+        lines.write_all(b"first secret\nsecond\n").unwrap();
+        drop(lines);
+        read_one_answer_in_a_child("script", Stdio::from(pipe.try_clone().unwrap()));
+        let mut left = Vec::new();
+        pipe.read_to_end(&mut left).unwrap();
+        assert_eq!(left, b"second\n");
+    }
+
+    /// Runs [`secrets_are_read_past_the_standard_library_buffer`] in a child process that reads one
+    /// answer of `case` from `input`.
+    #[cfg(unix)]
+    fn read_one_answer_in_a_child(case: &str, input: std::process::Stdio) {
+        let name = "hidden_input::tests::secrets_are_read_past_the_standard_library_buffer";
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", name])
+            .env(CHILD, case)
+            .stdin(input)
+            .output()
+            .unwrap();
+        let report = String::from_utf8_lossy(&child.stdout);
+        assert!(child.status.success(), "{case}: {report}");
+        assert!(report.contains("1 passed"), "{case}: {report}");
+    }
+
+    /// What waits unread on the terminal of `follower`, taken without waiting.
+    #[cfg(unix)]
+    fn left_on_terminal(follower: libc::c_int) -> Vec<u8> {
+        let mut settings = platform::current_on(follower).unwrap();
+        settings.c_lflag &= !libc::ICANON;
+        settings.c_cc[libc::VMIN] = 0;
+        settings.c_cc[libc::VTIME] = 0;
+        // SAFETY: a valid termios for this terminal.
+        let set = unsafe { libc::tcsetattr(follower, libc::TCSANOW, &settings) };
+        assert_eq!(set, 0);
+        let mut left = [0u8; 64];
+        // SAFETY: room for the bytes asked for.
+        let read = unsafe { libc::read(follower, left.as_mut_ptr().cast(), left.len()) };
+        left[..usize::try_from(read).unwrap()].to_vec()
+    }
+
     #[test]
     fn hidden_input_refuses_when_echo_stays_on() {
         let refusal = echo_stays_on();
@@ -1044,7 +1146,7 @@ mod tests {
         let mut check = HiddenInputCheck;
         assert!(!check.runs_at(Tier::Startup));
         assert!(check.runs_at(Tier::Full));
-        if !io::stdin().is_terminal() {
+        if !raw_io::input_is_terminal() {
             assert_eq!(check.run(Tier::Full).name(), "notAvailable");
         }
     }

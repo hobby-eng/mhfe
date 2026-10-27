@@ -25,6 +25,7 @@ use zeroize::Zeroizing;
 use crate::exit::Failure;
 use crate::flow::{self, Kind};
 use crate::hidden_input::{self, Key};
+use crate::raw_io;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 use crate::terminal;
 
@@ -85,7 +86,7 @@ pub struct Help<'a> {
 
 /// Whether a list can be shown: it reads single keys from a terminal and draws on one.
 pub fn can_run() -> bool {
-    io::stdin().is_terminal()
+    raw_io::input_is_terminal()
         && io::stderr().is_terminal()
         && std::env::var_os("TERM").is_none_or(|term| term != "dumb")
 }

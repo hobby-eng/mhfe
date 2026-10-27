@@ -534,7 +534,7 @@ fn owner_confirms(input: &mut Input, phrase: &str) -> Result<(), Failure> {
     }
     eprintln!();
     eprintln!("{}", paint(HEADING, "Recovered seed phrase"));
-    terminal::print_phrase(phrase, Wallet::NoPassphrase, input);
+    terminal::print_phrase(phrase, Wallet::NoPassphrase, input)?;
     let question = Question {
         text: "Does it match your written record, word for word?",
         explanation: OWNER_CHECKS,

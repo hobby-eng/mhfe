@@ -11,6 +11,10 @@
 // The whole file is test code. Saying so lets it unwrap and panic as tests do (clippy.toml), since
 // clippy recognises test code by this attribute or by #[test].
 #![cfg(test)]
+#![allow(
+    clippy::disallowed_macros,
+    reason = "progress lines of public vectors, which the test harness captures"
+)]
 
 use std::collections::HashSet;
 use std::fs;

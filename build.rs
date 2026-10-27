@@ -4,6 +4,12 @@
 //! (`scripts/build-argon2-wasm.sh`) and the WebAssembly core calls it through JavaScript. Both
 //! take the vendored files they share from one list, [`SOURCES`].
 
+#![allow(
+    clippy::disallowed_macros,
+    reason = "a build script answers Cargo on standard output; clippy.toml keeps println! out of \
+              the tool, whose output can hold secrets"
+)]
+
 use std::env;
 use std::error::Error;
 use std::fs;

@@ -6,14 +6,15 @@
 //! prompts, progress and advice go to standard error, so a result can be piped on without the
 //! messages.
 
-use std::io::{self, BufRead, IsTerminal, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use anstream::{eprint, eprintln, println};
-use mhfe::memory::LockedText;
+use anstream::{eprint, eprintln};
+use mhfe::memory::{LockedBytes, LockedText};
 use mhfe::word_hints::WordList;
 use mhfe::{ContainerFacts, MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
+use zeroize::Zeroizing;
 
 use crate::check_word::{self, Reviewed};
 use crate::choice::{self, Answer, Question};
@@ -22,6 +23,7 @@ use crate::exit::{self, Failure};
 use crate::flow::{self, Kind};
 use crate::hidden_input::{self, Content};
 use crate::protect;
+use crate::raw_io::{self, println};
 use crate::settings::Operation;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
@@ -51,7 +53,7 @@ pub enum Input {
     /// missing terminal names it only where it exists (AUD-010).
     Terminal { command_reads_stdin: bool },
     /// A script: one answer per line on standard input, in the order the command documents.
-    Script(io::StdinLock<'static>),
+    Script(raw_io::Stdin),
 }
 
 /// What a refusal of an answer typed at a terminal asks for.
@@ -62,7 +64,7 @@ impl Input {
     /// `from_standard_input`, a person at the terminal otherwise.
     pub fn new(from_standard_input: bool) -> Self {
         if from_standard_input {
-            Self::Script(io::stdin().lock())
+            Self::Script(raw_io::Stdin::default())
         } else {
             Self::Terminal {
                 command_reads_stdin: true,
@@ -138,7 +140,7 @@ impl Input {
             Self::Terminal { .. } => {
                 style::prompt(prompt);
                 io::stderr().flush()?;
-                match read_bounded_line(&mut io::stdin().lock())? {
+                match read_bounded_line(&mut raw_io::Stdin::default())? {
                     Some(line) => Ok(line),
                     None => Err(Failure::invalid_input("No answer was typed.")),
                 }
@@ -152,7 +154,7 @@ impl Input {
     /// completes one and Ctrl+W deletes one; elsewhere as [`Input::visible`].
     pub fn visible_words(&mut self, prompt: &str, list: WordList) -> Result<LockedText, Failure> {
         let hinted = matches!(self, Self::Terminal { .. })
-            && io::stdin().is_terminal()
+            && raw_io::input_is_terminal()
             && io::stderr().is_terminal()
             && hidden_input::control_sequences();
         if !hinted {
@@ -371,7 +373,7 @@ fn read_secret(
     command_reads_stdin: bool,
     content: Content,
 ) -> Result<LockedText, Failure> {
-    if !io::stdin().is_terminal() {
+    if !raw_io::input_is_terminal() {
         return Err(Failure::invalid_input(no_terminal_advice(
             command_reads_stdin,
         )));
@@ -403,10 +405,7 @@ fn no_terminal_advice(command_reads_stdin: bool) -> &'static str {
     }
 }
 
-fn read_script_line(
-    lines: &mut io::StdinLock<'static>,
-    prompt: &str,
-) -> Result<LockedText, Failure> {
+fn read_script_line(lines: &mut raw_io::Stdin, prompt: &str) -> Result<LockedText, Failure> {
     read_bounded_line(lines)?.ok_or_else(|| {
         Failure::invalid_input(format!(
             "Standard input ended before this answer: {}",
@@ -417,16 +416,23 @@ fn read_script_line(
 
 /// Reads one line of at most LINE_CAPACITY bytes into a buffer reserved at that size and locked,
 /// without its line break. `None` means that the input had ended. A longer line is refused, and
-/// what was read of it is wiped with the buffer, so the buffer never grows.
-///
-/// The standard library keeps its own buffer of what it read from standard input and does not
-/// wipe it; only the copies in this program's buffers are under its control.
-fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<LockedText>, Failure> {
-    let mut read = 0;
+/// what was read of it is wiped with the buffer, so the buffer never grows. The line is read one
+/// byte at a time, so that nothing after it is taken from the input and kept elsewhere
+/// (raw_io.rs).
+fn read_bounded_line(reader: &mut impl Read) -> Result<Option<LockedText>, Failure> {
+    let mut ended = false;
     // Locked before anything is read into it: a script's line may be a password or a phrase.
-    let line = LockedText::build(LINE_CAPACITY, |line| {
-        read = reader.take(LINE_CAPACITY as u64).read_line(line)?;
-        if !line.ends_with('\n') && read == LINE_CAPACITY {
+    let line = LockedBytes::build(LINE_CAPACITY, |line| {
+        let mut byte = Zeroizing::new([0u8; 1]);
+        while line.len() < LINE_CAPACITY && line.last() != Some(&b'\n') {
+            match reader.read(&mut byte[..]) {
+                Ok(0) => break,
+                Ok(_) => line.push(byte[0]),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(Failure::from(error)),
+            }
+        }
+        if line.last() != Some(&b'\n') && line.len() == LINE_CAPACITY {
             // The line break counts towards LINE_CAPACITY, so the answer itself may have one byte
             // less.
             return Err(Failure::invalid_input(format!(
@@ -434,18 +440,28 @@ fn read_bounded_line(reader: &mut impl BufRead) -> Result<Option<LockedText>, Fa
                 LINE_CAPACITY - 1
             )));
         }
+        ended = line.is_empty();
         strip_line_ending(line);
         Ok(())
     })?;
     note_unlocked(line.is_locked());
-    Ok((read > 0).then_some(line))
+    if ended {
+        return Ok(None);
+    }
+    // In the same buffer, under the same lock.
+    match line.into_text() {
+        Ok(text) => Ok(Some(text)),
+        Err(_) => Err(Failure::invalid_input(
+            "The answer is not valid UTF-8 text.",
+        )),
+    }
 }
 
 /// Removes only the line break. Spaces are part of a password and are never trimmed.
-fn strip_line_ending(line: &mut String) {
-    if line.ends_with('\n') {
+fn strip_line_ending(line: &mut Vec<u8>) {
+    if line.last() == Some(&b'\n') {
         line.pop();
-        if line.ends_with('\r') {
+        if line.last() == Some(&b'\r') {
             line.pop();
         }
     }
@@ -454,17 +470,17 @@ fn strip_line_ending(line: &mut String) {
 /// Prints a phrase to standard output. For a person: in a frame, numbered, for comparing with
 /// what was written down, and below it on one plain line, for copying. For a script: the plain
 /// line only.
-pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) {
+pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> io::Result<()> {
     if input.is_script() {
-        println!("{phrase}");
-        return;
+        return println!("{phrase}");
     }
     for line in style::boxed_words(phrase) {
-        println!("{}", *line);
+        println!("{}", *line)?;
     }
     eprintln!("{}", paint(MUTED, "On one line, for copying:"));
-    println!("{phrase}");
+    println!("{phrase}")?;
     print_fingerprint(phrase, wallet);
+    Ok(())
 }
 
 /// The wallet a phrase shown opens, whose master key fingerprint is shown under it.
@@ -627,14 +643,14 @@ pub fn private_input(refused: &str) -> Result<Input, Failure> {
 /// private screen is switched and cleared: both are terminals, and the same one. Output sent to
 /// another terminal counts as redirected (AUD-008-SEC004).
 pub fn output_on_screen() -> bool {
-    io::stdout().is_terminal()
+    raw_io::output_is_terminal()
         && io::stderr().is_terminal()
         && hidden_input::output_on_error_terminal()
 }
 
 fn terminal_screen_possible(input: &Input) -> bool {
     !input.is_script()
-        && io::stdin().is_terminal()
+        && raw_io::input_is_terminal()
         && io::stderr().is_terminal()
         && std::env::var("TERM").map_or(true, |term| term != "dumb")
 }
@@ -700,7 +716,6 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
 impl Drop for PrivateScreen {
     fn drop(&mut self) {
         if self.step {
-            let _ = io::stdout().flush();
             write_control(CLEAR_SCREEN);
         } else if self.active {
             leave_private_screen();
@@ -729,13 +744,11 @@ pub fn leave_steps() {
 
 /// Clears the screen for the next step of a command.
 pub fn clear_screen() {
-    let _ = io::stdout().flush();
     write_control(CLEAR_SCREEN);
 }
 
 fn leave_private_screen() {
     if PRIVATE_SCREEN_ACTIVE.swap(false, Ordering::SeqCst) {
-        let _ = io::stdout().flush();
         write_control(LEAVE_ALTERNATE_SCREEN);
     }
 }
@@ -983,9 +996,9 @@ mod tests {
 
     #[test]
     fn only_the_line_break_is_removed() {
-        let mut line = String::from("  pass word \r\n");
+        let mut line = b"  pass word \r\n".to_vec();
         strip_line_ending(&mut line);
-        assert_eq!(line, "  pass word ");
+        assert_eq!(line, b"  pass word ");
     }
 
     #[test]

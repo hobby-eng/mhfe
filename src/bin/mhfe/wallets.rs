@@ -5,6 +5,8 @@
 //! `mhfe self-test --vectors` on the computer before a hidden wallet is funded; it is not repeated
 //! here, as it takes minutes.
 
+use std::io;
+
 use anstream::eprintln;
 use clap::Args;
 use mhfe::{HiddenWallets, MhfeError, Password};
@@ -107,7 +109,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             Err(error) => return Err(error.into()),
         };
         number += 1;
-        show_wallet(&input, number, wallet.phrase());
+        show_wallet(&input, number, wallet.phrase())?;
         if !another(&mut input)? {
             break;
         }
@@ -141,13 +143,14 @@ const NO_PRIVATE_SCREEN: &str = "mhfe wallets shows wallets only on a private sc
                                  terminal, with no output redirected.";
 
 /// Shows a wallet below its progress, on the step's private screen.
-fn show_wallet(input: &Input, number: usize, phrase: &str) {
+fn show_wallet(input: &Input, number: usize, phrase: &str) -> io::Result<()> {
     eprintln!();
     eprintln!("{}", paint(HEADING, format!("Wallet {number}, 24 words")));
     // The main wallet's passphrase, asked only to refuse wallets that pass its check, is not the
     // hidden wallet's: a hidden wallet should have a passphrase of its own, or none.
-    terminal::print_phrase(phrase, Wallet::NoPassphrase, input);
+    terminal::print_phrase(phrase, Wallet::NoPassphrase, input)?;
     style::hint("No need to write it down: the container and this password give it again.");
+    Ok(())
 }
 
 /// Whether to open another wallet, asked below the wallet shown.

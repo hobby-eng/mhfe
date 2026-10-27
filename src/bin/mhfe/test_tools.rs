@@ -9,7 +9,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use anstream::println;
 use clap::Args;
 use mhfe::vectors::{
     self, NegativeInput, PublicInput, NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS,
@@ -20,6 +19,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::exit::{Failure, SUCCESS};
+use crate::raw_io::println;
 use crate::settings;
 use crate::style::{self, paint, MUTED};
 use crate::terminal::duration;
@@ -342,7 +342,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     };
     let text = serde_json::to_string_pretty(&record)
         .map_err(|error| Failure::internal(error.to_string()))?;
-    println!("{text}");
+    println!("{text}")?;
     Ok(SUCCESS)
 }
 

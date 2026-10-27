@@ -3,7 +3,9 @@
 //! from the container phrase, repair it when words rust away, are scratched or were copied wrongly,
 //! without the password and without Argon2.
 
-use anstream::{eprintln, println};
+use std::io;
+
+use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::repair::{self, ContainerReading, Repaired};
@@ -16,6 +18,7 @@ use crate::choice::{self, Answer, Question};
 use crate::container_search;
 use crate::exit::{refused, Failure, SUCCESS};
 use crate::flow::Flow;
+use crate::raw_io::println;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT, HEADING, MUTED, STRONG};
@@ -491,7 +494,7 @@ pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
             format!("Repaired container, {} words", container.split(' ').count())
         )
     );
-    terminal::print_phrase(container, Wallet::Container, &input);
+    terminal::print_phrase(container, Wallet::Container, &input)?;
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }
@@ -527,7 +530,7 @@ pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
     if screen.is_active() {
         style::title(WORDS_TITLE);
     }
-    print_card(&words, &input);
+    print_card(&words, &input)?;
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }
@@ -644,10 +647,9 @@ fn ask_when_creating(input: &mut Input) -> Result<Option<usize>, Failure> {
 /// The repair card as it is written down: the profile's name, then the words numbered as "1/4",
 /// as the specification advises, so that the card tells how many words it has. A script gets the
 /// bare words.
-pub fn print_card(words: &str, input: &Input) {
+pub fn print_card(words: &str, input: &Input) -> io::Result<()> {
     if input.is_script() {
-        println!("{words}");
-        return;
+        return println!("{words}");
     }
     let count = words.split(' ').count();
     eprintln!();
@@ -672,9 +674,10 @@ pub fn print_card(words: &str, input: &Input) {
                 )
             })
             .collect();
-        println!(" {}", cells.join("  "));
+        println!(" {}", cells.join("  "))?;
     }
     style::hint("Write it on a card as shown, and keep the card apart from the container phrase.");
+    Ok(())
 }
 
 /// Repair words a row of the card, as the words of a phrase are shown.

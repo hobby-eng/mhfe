@@ -42,15 +42,19 @@ Never include a real seed phrase, password, private key or wallet file.
   the C code at the end of every round (`FLAG_clear_internal_memory`, checked by a test); when a
   round fails, for example because a thread could not be started, the C code returns before that
   step and the Rust owner wipes the area instead. This is best effort: a compiler, the operating
-  system, swap or a terminal's scrollback can keep copies beyond the program's reach, and so can the
-  standard library's own buffers: that of standard input, and the line buffer of standard output,
-  which keeps the last line a phrase or a container was printed on until later output overwrites
-  it. Answers read from standard input are limited to
-  8192 bytes and read into a buffer of that size, so the program's copy never has to grow and leave
-  an unwiped copy behind. At a terminal, secrets, a new container and a recovered phrase appear on
-  the terminal's alternate screen, which is cleared before the tool returns to the main screen, so
-  they do not enter its scrollback; a terminal that logs its output or a screen recording keeps
-  them all the same.
+  system, swap or a terminal's scrollback can keep copies beyond the program's reach. Standard input
+  and standard output are read and written with the operating system's own calls (`read` and
+  `write`, and the console's UTF-16 calls on Windows), past the standard library's buffers, which
+  are never wiped and would keep the last answer read ahead or the last phrase printed;
+  `clippy.toml` keeps `io::stdin`, `io::stdout` and `println!` out of every other module. Answers
+  read from standard input are limited to 8192 bytes and read one byte at a time into a locked
+  buffer of that size, so nothing after an answer is taken and the program's copy never has to grow
+  and leave an unwiped copy behind. What was typed at the terminal and not read when a hidden
+  prompt or a list ends is discarded, so the rest of a paste never reaches the next answer or the
+  shell. At a terminal, secrets, a new container and a recovered phrase appear on the terminal's
+  alternate screen, which is cleared before the tool returns to the main screen, so they do not
+  enter its scrollback; a terminal that logs its output or a screen recording keeps them all the
+  same.
 - The tool keeps secrets out of core dumps and swap. It forbids core dumps (`RLIMIT_CORE` 0) and,
   on Linux, makes itself non-dumpable (`PR_SET_DUMPABLE` 0), which also keeps other programs of the
   same user from attaching to it or reading its memory through `/proc`, so a crash writes nothing

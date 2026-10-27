@@ -5,7 +5,7 @@
 //! is a quick, weaker check; the built-in check of a short original confirms only that the
 //! password recovers a consistent phrase.
 
-use anstream::{eprintln, println};
+use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::wallet::{
@@ -23,6 +23,7 @@ use crate::container_repair::RepairOption;
 use crate::exit::{refused, Failure, NO_MATCH, SUCCESS};
 use crate::flow::Flow;
 use crate::phrase_length;
+use crate::raw_io::println;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
 use crate::style::{self, paint, ACCENT};
@@ -326,14 +327,14 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     eprintln!();
     if input.is_script() {
         // Scripts read exactly these words.
-        println!("{}", if matches { "matches" } else { "does not match" });
+        println!("{}", if matches { "matches" } else { "does not match" })?;
     } else if matches {
-        println!("{}", paint(style::GOOD, format!("{} matches", style::TICK)));
+        println!("{}", paint(style::GOOD, format!("{} matches", style::TICK)))?;
         // Every check that passed on a line of its own: the container phrase's checksum, what
         // found missing words, the reference compared with, and the original seed phrase's own
         // checks that the same recovery shows.
         for line in matched_lines(choice, &evidence, with_passphrase, read.found_by.as_deref()) {
-            println!("  {} {line}", paint(style::GOOD, style::TICK));
+            println!("  {} {line}", paint(style::GOOD, style::TICK))?;
         }
         // Which account and address of the wallet it is; a path given with --path is shown too.
         if let Some(path) = outcome.path() {
@@ -351,7 +352,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
             style::hint(limit);
         }
     } else {
-        println!("{}", paint(style::BAD, "✗ does not match"));
+        println!("{}", paint(style::BAD, "✗ does not match"))?;
     }
     if matches {
         Ok(SUCCESS)
