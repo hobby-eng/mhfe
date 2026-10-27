@@ -234,6 +234,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_list_digest_or_vector_fails() {
+        // Fault: the list digest and two vectors, damaged as by a broken build or faulty memory.
         let mut check = WordListCheck::new();
         check.list_sha256 = "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbdb";
         assert_eq!(

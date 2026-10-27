@@ -403,12 +403,7 @@ function argon2Builds() {
  */
 function startArgon2(build, threadedScript) {
   if (build.create === undefined) throw noArgon2Build();
-  if (build.buildId !== WORKER_BUILD_ID) {
-    throw packageMismatch(
-      `the file ${build.file} is of build ${build.buildId} and runtime/worker.js of build ` +
-        WORKER_BUILD_ID,
-    );
-  }
+  if (build.buildId !== WORKER_BUILD_ID) throw buildMismatch(build.file, build.buildId);
   if (build.name === "threaded") {
     // Without cross-origin isolation the threaded build cannot share its memory with its lane
     // workers, and its start-up would wait forever instead of failing, so refuse it here.

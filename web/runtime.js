@@ -266,14 +266,7 @@ export class WorkerJob {
   #started(buildId) {
     clearTimeout(this.#startTimer);
     this.#startTimer = null;
-    if (buildId !== BUILD_ID) {
-      this.stop(
-        packageMismatch(
-          `The file runtime/worker.js is of build ${buildId} and runtime/runtime.js of build ` +
-            BUILD_ID,
-        ),
-      );
-    }
+    if (buildId !== BUILD_ID) this.stop(buildMismatch("runtime/worker.js", buildId));
   }
 
   /** Calls a page callback whose result is not awaited; a throw or a rejection stops the job. */
@@ -400,6 +393,18 @@ export function packageMismatch(what) {
   return new MhfeError(
     "PACKAGE_MISMATCH",
     `${what}: take every file of the package from one build.`,
+  );
+}
+
+/**
+ * The file `file` is of the build `build`, not of this runtime's. The worker has a deliberate copy
+ * with its own file and build (buildMismatch() in web/worker-runtime.js), as a worker script
+ * imports nothing; scripts/verify-browser-package.mjs holds both to one wording
+ * (buildMismatchMessage).
+ */
+function buildMismatch(file, build) {
+  return packageMismatch(
+    `The file ${file} is of build ${build} and runtime/runtime.js of build ${BUILD_ID}`,
   );
 }
 
@@ -934,12 +939,7 @@ export class PackageCheck {
    * the WebAssembly's and with this runtime's when it starts (WorkerJob).
    */
   #packageParts() {
-    if (this.#classBuildId !== BUILD_ID) {
-      throw packageMismatch(
-        `The file ${this.#classFile} is of build ${this.#classBuildId} and runtime/runtime.js of ` +
-          `build ${BUILD_ID}`,
-      );
-    }
+    if (this.#classBuildId !== BUILD_ID) throw buildMismatch(this.#classFile, this.#classBuildId);
     return { ...PAGE_PARTS.package, outcome: "passed" };
   }
 

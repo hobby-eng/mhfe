@@ -9,11 +9,11 @@ use anstream::eprintln;
 use clap::{Args, ValueEnum};
 use mhfe::memory::LockedText;
 use mhfe::operation::Stage;
-use mhfe::rekey::Rekey;
+use mhfe::rekey::{ConfirmedPhrase, Rekey};
 use mhfe::wallet::{fingerprint_text, master_fingerprint};
 use mhfe::{
     Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, Password,
-    PhraseLength, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
+    PhraseLength, RecoveredForRekey, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
 };
 use zeroize::Zeroizing;
 
@@ -188,70 +188,11 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     };
     let mut how = how_of(&mut input, kind, wallet_passphrase)?;
 
-    let mut mhfe = settings::reserve_memory(old_work)?;
     let mut rekey = rekey;
     // The rounds run once; a confirmation that is refused is followed by another on the same
     // recovery (AUD-017-UI002).
-    let state = {
-        let reference = how.reference();
-        let mut progress = Progress::start();
-        // The terminal shows the twelve rounds of the recovery as before; a comparison with the
-        // wallet follows them without a round of its own.
-        let state = rekey.recover_state(
-            &mut mhfe,
-            how.confirmation(reference.as_ref()),
-            &mut |stage, round, _| {
-                if stage == Stage::Recover {
-                    progress.round_starts(round, ROUNDS);
-                }
-                Ok(())
-            },
-        );
-        progress.finish();
-        state?
-    };
-    // The old memory is released before the new settings reserve theirs.
-    drop(mhfe);
-    let recovered = loop {
-        let reference = how.reference();
-        let refusal = match rekey.confirm(
-            &state,
-            how.confirmation(reference.as_ref()),
-            Some(wallet_passphrase),
-            &mut |_, _, _| Ok(()),
-        ) {
-            Ok(confirmed) => break confirmed,
-            Err(refusal) => refusal,
-        };
-        // Whether another confirmation may follow, and at which lengths the owner may give it, is
-        // the library's to say (AUD-017-ARC002); any other refusal ends the rekey.
-        let Some(owner_lengths) = rekey.owner_lengths_after(&state, &refusal)? else {
-            return Err(refusal.into());
-        };
-        style::retry_next(match refusal {
-            // The built-in check finds another length than the one stated: it takes precedence,
-            // and the wallet confirms the phrase (AUD-015-FUN001).
-            MhfeError::LengthDiffers { stated, found } => format!(
-                "{} {}, but the wallet must confirm the phrase.",
-                phrase_length::check_finds(found, stated),
-                phrase_length::MORE_RELIABLE
-            ),
-            // Several lengths pass, about once in four billion containers: the built-in check
-            // cannot tell them apart, a stated length neither (the specification's re-encryption
-            // rules). An address or the fingerprint compares every reading.
-            _ => SEVERAL_LENGTHS.to_owned(),
-        });
-        let kind = ask_how_to_confirm(&mut input, !owner_lengths.is_empty())?;
-        // The owner compares the reading of one of these lengths, stated where there is a choice.
-        if kind == Kind::Owner {
-            let stated = match owner_lengths[..] {
-                [only] => WordCount::new(only)?,
-                _ => phrase_length::ask_stated(&mut input, &owner_lengths, &[], "Phrase")?,
-            };
-            rekey.set_length(PhraseLength::Words(stated))?;
-        }
-        how = how_of(&mut input, kind, wallet_passphrase)?;
-    };
+    let state = recover(&rekey, old_work, &how)?;
+    let recovered = confirm(&mut input, &mut rekey, &state, &mut how, wallet_passphrase)?;
     drop(state);
     let phrase = recovered.phrase();
     // The 16-bit source check of a 24-word reading, which every recovery evaluates, with the
@@ -372,6 +313,79 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     );
     style::more(readme::REKEY);
     Ok(SUCCESS)
+}
+
+/// Runs the recovery's twelve rounds at the old settings. The old memory is released when it
+/// returns, before the new settings reserve theirs.
+fn recover(rekey: &Rekey, old_work: WorkFactor, how: &How) -> Result<RecoveredForRekey, Failure> {
+    let mut mhfe = settings::reserve_memory(old_work)?;
+    let reference = how.reference();
+    let mut progress = Progress::start();
+    // The terminal shows the twelve rounds of the recovery as before; a comparison with the
+    // wallet follows them without a round of its own.
+    let state = rekey.recover_state(
+        &mut mhfe,
+        how.confirmation(reference.as_ref()),
+        &mut |stage, round, _| {
+            if stage == Stage::Recover {
+                progress.round_starts(round, ROUNDS);
+            }
+            Ok(())
+        },
+    );
+    progress.finish();
+    Ok(state?)
+}
+
+/// The phrase of `state`, once a confirmation confirms it: after a refusal that the library lets
+/// another confirmation follow, the person chooses again, on the same recovery.
+fn confirm(
+    input: &mut Input,
+    rekey: &mut Rekey,
+    state: &RecoveredForRekey,
+    how: &mut How,
+    wallet_passphrase: bool,
+) -> Result<ConfirmedPhrase, Failure> {
+    loop {
+        let reference = how.reference();
+        let refusal = match rekey.confirm(
+            state,
+            how.confirmation(reference.as_ref()),
+            Some(wallet_passphrase),
+            &mut |_, _, _| Ok(()),
+        ) {
+            Ok(confirmed) => return Ok(confirmed),
+            Err(refusal) => refusal,
+        };
+        // Whether another confirmation may follow, and at which lengths the owner may give it, is
+        // the library's to say (AUD-017-ARC002); any other refusal ends the rekey.
+        let Some(owner_lengths) = rekey.owner_lengths_after(state, &refusal)? else {
+            return Err(refusal.into());
+        };
+        style::retry_next(match refusal {
+            // The built-in check finds another length than the one stated: it takes precedence,
+            // and the wallet confirms the phrase (AUD-015-FUN001).
+            MhfeError::LengthDiffers { stated, found } => format!(
+                "{} {}, but the wallet must confirm the phrase.",
+                phrase_length::check_finds(found, stated),
+                phrase_length::MORE_RELIABLE
+            ),
+            // Several lengths pass, about once in four billion containers: the built-in check
+            // cannot tell them apart, a stated length neither (the specification's re-encryption
+            // rules). An address or the fingerprint compares every reading.
+            _ => SEVERAL_LENGTHS.to_owned(),
+        });
+        let kind = ask_how_to_confirm(input, !owner_lengths.is_empty())?;
+        // The owner compares the reading of one of these lengths, stated where there is a choice.
+        if kind == Kind::Owner {
+            let stated = match owner_lengths[..] {
+                [only] => WordCount::new(only)?,
+                _ => phrase_length::ask_stated(input, &owner_lengths, &[], "Phrase")?,
+            };
+            rekey.set_length(PhraseLength::Words(stated))?;
+        }
+        *how = how_of(input, kind, wallet_passphrase)?;
+    }
 }
 
 /// How a recovery is confirmed before it is encrypted again.

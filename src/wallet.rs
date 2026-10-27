@@ -66,19 +66,29 @@ const DIP17_FEATURE: u32 = 17;
 /// Platform on DIP17 paths; they differ only in how a public key becomes an address.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Coin {
+    /// Bitcoin: "1...", "3...", "bc1q..." and "bc1p..." addresses.
     Bitcoin,
     /// Ethereum and every EVM network, which share its addresses.
     Ethereum,
+    /// XRP: "r..." addresses.
     Xrp,
+    /// Tron: "T..." addresses.
     Tron,
     /// Zcash transparent addresses; shielded ones are out of reach without its own cryptography.
     Zcash,
+    /// Dogecoin: "D..." addresses.
     Dogecoin,
+    /// Bitcoin Cash: "bitcoincash:q..." and "1..." addresses.
     BitcoinCash,
+    /// Litecoin: "L...", "M...", "3..." and "ltc1q..." addresses.
     Litecoin,
+    /// Ethereum Classic: "0x..." addresses.
     EthereumClassic,
+    /// Cosmos: "cosmos1..." addresses.
     Cosmos,
+    /// Injective: "inj1..." addresses.
     Injective,
+    /// Dash and Dash Platform: "X..." and "dash1k..." addresses.
     Dash,
 }
 
@@ -272,10 +282,12 @@ impl Address {
         Ok(address)
     }
 
+    /// The coin the address belongs to.
     pub fn coin(&self) -> Coin {
         self.coin
     }
 
+    /// The kind of address, which sets the paths it is searched on.
     pub fn address_type(&self) -> AddressType {
         self.address_type
     }
@@ -758,10 +770,12 @@ impl SearchLimits {
         Self::new(1, gap)
     }
 
+    /// The number of accounts searched, from account 0.
     pub fn accounts(self) -> u32 {
         self.accounts
     }
 
+    /// The number of addresses searched on each chain of each account, from index 0.
     pub fn indexes(self) -> u32 {
         self.indexes
     }
@@ -1091,6 +1105,7 @@ impl ExtendedKey {
     }
 
     /// Splits `HMAC-SHA512(key, parts)` into a private key and a chain code (BIP32).
+    #[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
     fn from_hmac(key: &[u8], parts: &[&[u8]]) -> Result<Self, MhfeError> {
         let mut mac = <HmacSha512 as KeyInit>::new_from_slice(key).expect("HMAC takes any key");
         for part in parts {

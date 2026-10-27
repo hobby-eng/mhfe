@@ -167,6 +167,7 @@ mod tests {
 
     #[test]
     fn corrupted_bytes_or_a_wrong_refusal_fail() {
+        // Fault: expected bytes and fixture cases, damaged as by a broken build or faulty memory.
         let mut check = PasswordUnicodeCheck {
             unicode_nfkd: "43616665cc81206669205041c3853120f09f949020d0b8cc86",
             ..PasswordUnicodeCheck::new()

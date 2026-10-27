@@ -197,6 +197,8 @@ const WALLET_CHECKS = {
 // prefix the core turns into MEMORY_ALLOCATION_FAILED. The wrapper replaces argon2For, which
 // receives the request, so that the reserve sees the container; a block keeps its names apart
 // from those of the worker and of the Argon2 build in front of it.
+// Fault: a key bit from the 13th call of FAULTY_CHECK_PASSWORD, as a fault during the work.
+// Fault: the Argon2 memory for the MEMORY_FAILURE markers, refused as by a browser without it.
 const reducedCostWrapper = `
 {
   const fullCostArgon2For = argon2For;
@@ -3256,6 +3258,7 @@ function pageScript() {
     // The package's WebAssembly with one letter of a published repair card changed, as a damaged
     // download or memory would: the repair words and the cipher's rounds, which hold the card of
     // their first vector, fail, named by their place only, and their classes stay closed.
+    // Fault: a letter of a published card in the WebAssembly, damaged as by a download or memory.
     const damaged = bytes(WASM_BASE64);
     const card = new TextEncoder().encode("shaft pupil patient jewel");
     let at = -1;
@@ -3336,6 +3339,7 @@ function pageScript() {
     const cause = fast
       ? "the stand-in threaded build does not start"
       : "the stand-in build does not start";
+    // Fault: the start of the package's Argon2 build, failing as when the browser refuses memory.
     const failingStart = (name) =>
       `\n${name} = () => Promise.reject(new Error(${JSON.stringify(cause)}));\n`;
     const client = new MhfeClient({

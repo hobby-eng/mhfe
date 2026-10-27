@@ -173,6 +173,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_vector_fails() {
+        // Fault: four expected vectors, damaged as by a broken build or faulty memory.
         let mut vectors = VECTORS;
         vectors[0].digest = "0000e86481bdfe6dbf45e6e41fba4f309fcf09d3f0af2fe3f46736c663840854";
         let mut check = WalletCheckProfile {

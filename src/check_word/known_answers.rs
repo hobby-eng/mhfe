@@ -162,6 +162,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_list_digest_or_vector_fails() {
+        // Fault: the list digest and two vectors, damaged as by a broken build or faulty memory.
         let mut check = CheckWordCheck {
             list_sha256: "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903f",
             ..CheckWordCheck::new()

@@ -12,8 +12,10 @@
 
 #include "core.h"
 
-/* Must equal MHFE_FLAG_SSSE3 in src/engine/ffi.rs. */
-#define MHFE_FLAG_SSSE3 (UINT32_C(1) << 31)
+/* build.rs defines MHFE_FLAG_SSSE3 with the value of src/engine/ssse3_flag.rs, its one source. */
+#ifndef MHFE_FLAG_SSSE3
+#error "MHFE_FLAG_SSSE3 comes from build.rs"
+#endif
 
 void mhfe_fill_segment_sse2(const argon2_instance_t *instance, argon2_position_t position);
 void mhfe_fill_segment_ssse3(const argon2_instance_t *instance, argon2_position_t position);

@@ -29,9 +29,11 @@
 //! The menu that `mhfe` shows when it starts without arguments reads single keys in the same
 //! terminal mode: [`with_keys`].
 
-// Changing the terminal settings needs the operating system's terminal calls, which Rust offers
-// only through unsafe foreign functions.
-#![allow(unsafe_code)]
+#![allow(
+    unsafe_code,
+    reason = "changing the terminal settings needs the operating system's terminal calls, which \
+              Rust offers only through unsafe foreign functions"
+)]
 
 use std::io::{self, BufRead, IsTerminal};
 use std::sync::Mutex;

@@ -56,6 +56,9 @@ impl fmt::Display for Failure {
     }
 }
 
+// The message holds the text of any error under it already, so `source` adds none.
+impl std::error::Error for Failure {}
+
 impl From<MhfeError> for Failure {
     fn from(error: MhfeError) -> Self {
         let exit_code = match error {
@@ -141,5 +144,18 @@ pub fn capitalize(text: &str) -> String {
     match characters.next() {
         Some(first) => first.to_uppercase().chain(characters).collect(),
         None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// RUST-04: a failure goes wherever a standard error is expected, and reads as its message.
+    #[test]
+    fn a_failure_is_a_standard_error() {
+        let failure = Failure::from(MhfeError::EmptyPassword);
+        let error: &dyn std::error::Error = &failure;
+        assert_eq!(error.to_string(), failure.message);
     }
 }

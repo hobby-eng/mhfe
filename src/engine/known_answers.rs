@@ -407,6 +407,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_tag_fails() {
+        // Fault: both expected tags, damaged as by a broken build or faulty memory.
         let mut small = NativeArgon2Check::default();
         small.0.small.tag[31] ^= 1;
         assert_eq!(
@@ -438,6 +439,7 @@ mod tests {
             changed.threads = 2;
             ffi::argon2id(&changed, work_area, tag)
         }
+        // Fault: the call's lane count, changed as by a broken parameter assembly.
         let mut check = NativeArgon2Check::default();
         check.0.call = two_lanes;
         assert!(check.run(Tier::Startup).is_failure());
@@ -448,6 +450,7 @@ mod tests {
         fn refused(_: &Argon2Inputs<'_>, _: &mut WorkArea, _: &mut [u8]) -> Result<(), MhfeError> {
             Err(MhfeError::Argon2("Threading failure".to_owned()))
         }
+        // Fault: an Argon2 call that fails, as when the system refuses its threads.
         let mut check = NativeArgon2Check::default();
         check.0.call = refused;
         assert_eq!(
@@ -475,6 +478,7 @@ mod tests {
             tag.fill(0);
             Ok(())
         }
+        // Fault: calls that write no key or only zeros, as a broken build would.
         let refused = ComponentOutcome::Failed(
             "Argon2id could not run: the Argon2 engine returned without writing the key".to_owned(),
         );
@@ -499,6 +503,7 @@ mod tests {
             work_area.fill_for_tests(0x5a);
             Ok(())
         }
+        // Fault: a call that leaves its work area unwiped, as a broken build would.
         let mut check = NativeArgon2Check::default();
         check.0.call = leaves_blocks;
         assert!(matches!(
@@ -513,6 +518,7 @@ mod tests {
         assert!(!check.runs_at(Tier::Startup));
         assert!(check.runs_at(Tier::Full));
         assert_eq!(check.run(Tier::Full), ComponentOutcome::Passed);
+        // Fault: the expected 256 MiB tag, damaged as by a broken build or faulty memory.
         check.0.sizes[1].tag[5] ^= 4;
         assert!(matches!(
             check.run(Tier::Full),

@@ -10,19 +10,55 @@
 # remapped as packaging/remap-builder-paths.sh describes, the same flags as the Dockerfile's, so
 # that a program the Dockerfile built is up to date. Build the browser package first with
 # scripts/build-wasm.sh, which remaps the same way. A program or WebAssembly that still names a
-# directory of the builder is refused. Needs GNU tar, gzip, zip and sha256sum.
+# directory of the builder is refused. Needs GNU tar, gzip, zip and sha256sum. An unknown package
+# or one named twice is refused with the usage and exit code 2 before anything is built or written.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+usage() {
+  echo "$1" >&2
+  echo "usage: scripts/package-release.sh <version> <output folder> [package ...]" >&2
+  exit 2
+}
+
+# Sets triple, launcher and program of the command-line package $1 as cli_package takes them, all
+# empty for the browser package. Fails for a name that is no package.
+package_parts() {
+  triple="" launcher="" program=""
+  case "$1" in
+    # Linux on x86-64 is the computer's own target, as in the Dockerfile's container.
+    linux-x86_64) launcher=packaging/mhfe-launch.sh ;;
+    linux-aarch64) triple=aarch64-unknown-linux-gnu launcher=packaging/mhfe-launch.sh ;;
+    windows-x86_64)
+      triple=x86_64-pc-windows-gnu launcher=packaging/mhfe-launch.bat program=mhfe.exe
+      ;;
+    macos-x86_64) triple=x86_64-apple-darwin launcher=packaging/mhfe-launch.command ;;
+    macos-aarch64) triple=aarch64-apple-darwin launcher=packaging/mhfe-launch.command ;;
+    browser) ;;
+    *) return 1 ;;
+  esac
+}
+
 version="$1"
-output="$(mkdir -p "$2" && cd "$2" && pwd)"
+output_folder="$2"
 shift 2
 packages=("$@")
 if [[ ${#packages[@]} -eq 0 ]]; then
   packages=(linux-x86_64 linux-aarch64 windows-x86_64 browser)
 fi
+# Every name is checked first, so that a wrong one never leaves the archives of the names before it
+# without their licence check and SHA256SUMS.
+seen=" "
+for package in "${packages[@]}"; do
+  package_parts "$package" || usage "Unknown package $package."
+  case "$seen" in
+    *" $package "*) usage "Package $package is named twice." ;;
+  esac
+  seen="$seen$package "
+done
+output="$(mkdir -p "$output_folder" && cd "$output_folder" && pwd)"
 . packaging/remap-builder-paths.sh
 remap_builder_paths "$repo_root"
 # CARGO_TARGET_DIR may move the programs out of target/.
@@ -113,21 +149,8 @@ cli_package() {
 }
 
 for package in "${packages[@]}"; do
+  package_parts "$package"
   case "$package" in
-    # Linux on x86-64 is the computer's own target, as in the Dockerfile's container.
-    linux-x86_64) cli_package "$package" "" packaging/mhfe-launch.sh ;;
-    linux-aarch64)
-      cli_package "$package" aarch64-unknown-linux-gnu packaging/mhfe-launch.sh
-      ;;
-    windows-x86_64)
-      cli_package "$package" x86_64-pc-windows-gnu packaging/mhfe-launch.bat mhfe.exe
-      ;;
-    macos-x86_64)
-      cli_package "$package" x86_64-apple-darwin packaging/mhfe-launch.command
-      ;;
-    macos-aarch64)
-      cli_package "$package" aarch64-apple-darwin packaging/mhfe-launch.command
-      ;;
     browser)
       scripts/check-release-artifacts.sh --builder-paths dist/runtime/mhfe.wasm
       folder="$staging/browser"
@@ -141,10 +164,7 @@ for package in "${packages[@]}"; do
       echo "Emscripten 6.0.12" >> "$folder/BUILD-INFO.txt"
       pack_tar "$folder" "mhfe-$version-browser.tar.gz"
       ;;
-    *)
-      echo "Unknown package $package" >&2
-      exit 1
-      ;;
+    *) cli_package "$package" "$triple" "$launcher" "$program" ;;
   esac
 done
 

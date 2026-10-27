@@ -69,10 +69,12 @@ impl SelfTest {
         })
     }
 
+    /// The name of the built-in suite 3 vector.
     pub fn suite_3_vector(&self) -> &str {
         &self.suite_3.name
     }
 
+    /// The name of the built-in suite 4 vector.
     pub fn suite_4_vector(&self) -> &str {
         &self.suite_4.name
     }
@@ -241,10 +243,16 @@ pub enum SelfTestFault {
     /// salt, or in the state the round started from, which the round before made with its mask
     /// and state update, or which the packing of the phrase or container and the encoding of the
     /// password made for the first round of an operation.
-    Argon2Input { round: u32 },
+    Argon2Input {
+        /// The round, 1 to 24.
+        round: u32,
+    },
     /// Argon2id was given the input the published vector records for this round and returned
     /// another key: the fault lies in Argon2id.
-    Argon2Key { round: u32 },
+    Argon2Key {
+        /// The round, 1 to 24.
+        round: u32,
+    },
     /// Every round gave Argon2id its published input and got its published key, yet a result
     /// differs: the fault lies after the last Argon2id call of an operation, in its last mask and
     /// state update or in writing the container or the phrase.
@@ -335,6 +343,7 @@ impl SelfTestResult {
         self.suite_4
     }
 
+    /// Whether both vectors gave their published results.
     pub fn passed(self) -> bool {
         self.suite_3 && self.suite_4
     }
@@ -473,6 +482,7 @@ mod tests {
     /// backwards.
     #[test]
     fn a_wrong_round_key_is_named() {
+        // Fault: one recorded round key, damaged as by a broken build or faulty memory.
         let test = SelfTest::published().unwrap();
         // The encryption's last round is round 12 of the self-test; the recovery runs round 11
         // of its vector first and round 0 last, which is round 24.
@@ -508,6 +518,7 @@ mod tests {
     /// gets a salt that no vector records.
     #[test]
     fn a_fault_in_argon2_is_named_as_one() {
+        // Fault: Argon2id's key, then its salt, wrong in round 4, as faulty memory would make them.
         let result = with_fault_in_the_engine(Change::Key, 4);
         assert!(!result.suite_3_as_published() && result.suite_4_as_published());
         let fault = result.fault().unwrap();
@@ -530,6 +541,7 @@ mod tests {
     /// shows: here in the encryption and in the recovery.
     #[test]
     fn a_fault_in_the_salt_is_named_as_one_before_argon2() {
+        // Fault: the salt the cipher gives Argon2id in round 4 or 15, wrong as by faulty memory.
         let result = with_fault_in_the_cipher(Change::Salt, 4);
         assert!(!result.suite_3_as_published() && result.suite_4_as_published());
         let fault = result.fault().unwrap();
@@ -555,6 +567,7 @@ mod tests {
     /// starts from: round 5 is named, as a fault before Argon2id, and never Argon2id itself.
     #[test]
     fn a_fault_in_the_mask_shows_in_the_next_rounds_input() {
+        // Fault: the key the cipher uses in round 4, wrong as by faulty memory.
         let result = with_fault_in_the_cipher(Change::Key, 4);
         assert_eq!(
             result.fault(),
@@ -566,6 +579,7 @@ mod tests {
     /// published: the fault is named as after Argon2id, with no round.
     #[test]
     fn a_fault_after_the_last_argon2_call_is_named() {
+        // Fault: the key the cipher uses in round 12, wrong as by faulty memory.
         let result = with_fault_in_the_cipher(Change::Key, 12);
         assert!(!result.suite_3_as_published() && result.suite_4_as_published());
         let fault = result.fault().unwrap();

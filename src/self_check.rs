@@ -150,14 +150,17 @@ pub struct ComponentResult {
 }
 
 impl ComponentResult {
+    /// The part's fixed identifier.
     pub fn id(&self) -> &'static str {
         self.id
     }
 
+    /// The part's name, as a person reads it.
     pub fn label(&self) -> &'static str {
         self.label
     }
 
+    /// How the part's check ended.
     pub fn outcome(&self) -> &ComponentOutcome {
         &self.outcome
     }
@@ -171,10 +174,12 @@ pub struct SelfCheckReport {
 }
 
 impl SelfCheckReport {
+    /// The tier that was run.
     pub fn tier(&self) -> Tier {
         self.tier
     }
 
+    /// The outcome of each part, in the order the checks ran.
     pub fn results(&self) -> &[ComponentResult] {
         &self.results
     }
@@ -233,6 +238,7 @@ pub struct SelfCheck<'a> {
 }
 
 impl<'a> SelfCheck<'a> {
+    /// An empty set.
     pub fn new() -> Self {
         Self { checks: Vec::new() }
     }
@@ -267,14 +273,17 @@ impl<'a> SelfCheck<'a> {
         self.checks.iter().map(|check| check.id()).collect()
     }
 
+    /// Whether the set has a check with the identifier `id`.
     pub fn contains(&self, id: &str) -> bool {
         self.checks.iter().any(|check| check.id() == id)
     }
 
+    /// The number of checks in the set.
     pub fn len(&self) -> usize {
         self.checks.len()
     }
 
+    /// Whether the set has no checks.
     pub fn is_empty(&self) -> bool {
         self.checks.is_empty()
     }
@@ -466,6 +475,10 @@ pub(crate) const fn hex<const N: usize>(text: &str) -> [u8; N] {
 }
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
+#[expect(
+    clippy::panic,
+    reason = "hex runs on literals in constants, where a wrong digit stops the build"
+)]
 const fn nibble(digit: u8) -> u8 {
     match digit {
         b'0'..=b'9' => digit - b'0',

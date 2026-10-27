@@ -71,9 +71,14 @@ pub(crate) fn zero_12_container() -> String {
     crate::self_check::ZERO_12_CONTAINER.to_owned()
 }
 
-#[test]
-fn the_zero_12_container_is_the_vectors() {
-    let json = include_str!("../tests/fixtures/suite3-vectors/zero-12.json");
-    let value: serde_json::Value = serde_json::from_str(json).unwrap();
-    assert_eq!(value["container"].as_str().unwrap(), zero_12_container());
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_zero_12_container_is_the_vectors() {
+        let json = include_str!("../tests/fixtures/suite3-vectors/zero-12.json");
+        let value: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["container"].as_str().unwrap(), zero_12_container());
+    }
 }

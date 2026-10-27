@@ -5,7 +5,13 @@
 /** Argon2id output length and lane count of MHFE suite 3. */
 const ARGON2_KEY_BYTES = 32;
 const ARGON2_LANES = 4;
-/** ARGON2_MEMORY_ALLOCATION_ERROR in vendor/phc-winner-argon2/include/argon2.h. */
+/**
+ * ARGON2_MEMORY_ALLOCATION_ERROR in vendor/phc-winner-argon2/include/argon2.h. A deliberate copy:
+ * the bridge is a classic worker script, which cannot import, and the Emscripten build exports the
+ * C code's functions, not its constants. scripts/verify-browser-package.mjs reads the value from
+ * the header and drives it through the bridge ("the bridge reads argon2.h's memory error as
+ * MEMORY_ALLOCATION_FAILED").
+ */
 const ARGON2_MEMORY_ALLOCATION_ERROR = -22;
 
 /**

@@ -266,7 +266,10 @@ fn sealed_json(
 /// After the first twelve rounds `on_unverified({ container, containerFingerprint })` receives
 /// the container, so that a page can show it, marked as not yet verified, while the check runs.
 /// The repair words come only with the result, after the check has passed.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the WebAssembly boundary takes every input as an argument of its own"
+)]
 #[wasm_bindgen]
 pub fn encrypt(
     phrase_utf8: Vec<u8>,
@@ -345,7 +348,10 @@ struct RecoveryJson<'a> {
 /// does not replace detection: a built-in check that passes takes precedence, and
 /// `statedWords` then names the length stated; 24 stated words beside a check that passes
 /// give "ambiguous", the checked reading first.
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the WebAssembly boundary takes every input as an argument of its own"
+)]
 #[wasm_bindgen]
 pub fn decrypt(
     container: &str,
@@ -484,7 +490,10 @@ impl CheckSession {
     /// "recover", then once "compare". `reference_kind` is "address", "fingerprint", "words" or
     /// "walletCheck" (the phrase and passphrase check of a 24-word container); see
     /// [`reference_target`].
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the WebAssembly boundary takes every input as an argument of its own"
+    )]
     #[wasm_bindgen(constructor)]
     pub fn new(
         container: &str,
@@ -637,7 +646,10 @@ const DECOY_REPORT_EVERY: usize = 64;
 /// Returns JSON `{ found, container, containerFingerprint, words: [{ position, word }], path,
 /// candidates }`.
 #[wasm_bindgen(js_name = searchDecoy)]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the WebAssembly boundary takes every input as an argument of its own"
+)]
 pub fn search_decoy(
     written: &str,
     reference_kind: &str,
@@ -673,7 +685,10 @@ pub fn search_decoy(
 /// `on_candidates(candidate, count)` hears of each candidate as it starts, `on_round` of its
 /// rounds. Returns JSON as [`search_decoy`].
 #[wasm_bindgen(js_name = searchWallet)]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the WebAssembly boundary takes every input as an argument of its own"
+)]
 pub fn search_wallet(
     // A deliberate copy of the arguments of CheckSession::new: the WebAssembly boundary takes
     // every input as an argument of its own, the secrets as bytes that the binding wipes.
@@ -887,7 +902,10 @@ impl RekeySession {
     /// count, 0 to detect it (a same-length container's own length). A page tells every user
     /// first that wallets other passwords open on the old container do not move to the new one,
     /// so the old container, its passwords and settings are kept until their funds are moved.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the WebAssembly boundary takes every input as an argument of its own"
+    )]
     #[wasm_bindgen(constructor)]
     pub fn new(
         container: &str,
@@ -920,7 +938,10 @@ impl RekeySession {
 
     /// The new password, typed twice, with its review choice, and the new settings and repair
     /// words. Refused before any Argon2 work when they would give the old container again.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the WebAssembly boundary takes every input as an argument of its own"
+    )]
     #[wasm_bindgen(js_name = setNew)]
     pub fn set_new(
         &mut self,
@@ -966,7 +987,10 @@ impl RekeySession {
     /// reference's passphrase or the empty one, null for other lengths. A refusal after the
     /// rounds that allows another confirmation (AMBIGUOUS_LENGTH, LENGTH_DIFFERS) keeps the
     /// recovery for `confirmAgain`; `ownerLengths` then says whether the owner may give it.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the WebAssembly boundary takes every input as an argument of its own"
+    )]
     pub fn recover(
         &mut self,
         kind: &str,
@@ -1027,7 +1051,10 @@ impl RekeySession {
     /// the owner compares, one of `ownerLengths` (INVALID_REQUEST otherwise), and 0 with every
     /// other kind. Returns what `recover` returns; a refusal that allows another keeps the
     /// recovery again, and any other failure ends the rekey.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the WebAssembly boundary takes every input as an argument of its own"
+    )]
     #[wasm_bindgen(js_name = confirmAgain)]
     pub fn confirm_again(
         &mut self,

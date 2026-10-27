@@ -68,40 +68,7 @@ if [[ "${1:-}" == "--archives" ]]; then
     echo "--archives needs at least one archive." >&2
     exit 1
   fi
-  # Python's tarfile and zipfile read both archive kinds the same way on every build machine.
-  python3 - "$@" <<'PY'
-import pathlib
-import sys
-import tarfile
-import zipfile
-
-REQUIRED = ("LICENSE", "THIRD_PARTY_NOTICES.md")
-
-
-def members(archive):
-    """The archive's files, by path without a leading "./"."""
-    if archive.endswith(".zip"):
-        with zipfile.ZipFile(archive) as packed:
-            return {name.removeprefix("./"): packed.read(name) for name in packed.namelist()}
-    with tarfile.open(archive) as packed:
-        return {
-            member.name.removeprefix("./"): packed.extractfile(member).read()
-            for member in packed.getmembers()
-            if member.isfile()
-        }
-
-
-failed = False
-for archive in sys.argv[1:]:
-    files = members(archive)
-    for name in REQUIRED:
-        if files.get(name) != pathlib.Path(name).read_bytes():
-            print(f"{archive} lacks {name} or holds another version of it.", file=sys.stderr)
-            failed = True
-if failed:
-    sys.exit(1)
-print(f"Every archive carries the licence files: {len(sys.argv) - 1} checked.")
-PY
+  python3 scripts/third-party-licenses.py --archives "$@"
   exit 0
 fi
 
@@ -115,14 +82,7 @@ release_artifacts=("$target_dir/release/mhfe" dist/runtime/mhfe.wasm)
 
 test_binary="$(
   cargo test --locked --lib --no-run --message-format=json 2>/dev/null |
-    python3 -c '
-import json, sys
-for line in sys.stdin:
-    message = json.loads(line)
-    if message.get("reason") == "compiler-artifact" and message.get("executable") \
-            and message["target"]["name"] == "mhfe":
-        print(message["executable"])
-'
+    node scripts/check-release-artifacts.mjs --test-binary
 )"
 if ! grep -q --binary-files=binary "$marker" "$test_binary"; then
   echo "The marker is missing from the test binary $test_binary, so this check proves nothing." >&2

@@ -43,6 +43,7 @@ impl WordCount {
         Ok(Self(words))
     }
 
+    /// The number of words.
     pub fn get(self) -> usize {
         self.0
     }
@@ -286,6 +287,7 @@ impl<E: Argon2Engine> Mhfe<E> {
         (self.work, &mut self.engine)
     }
 
+    /// The PIM and memory level every round of this instance runs at.
     pub fn work_factor(&self) -> WorkFactor {
         self.work
     }
@@ -396,10 +398,7 @@ impl<E: Argon2Engine> Mhfe<E> {
             ContainerFacts::read(container)?.require_length(length)?;
         }
         let (suite, x) = self.recover_state(container, password, selected, on_progress)?;
-        match suite {
-            Suite::TwentyFourWords => recover(suite_3_state(&x)?, length),
-            Suite::SameLength => Ok(Recovery::Phrase(read_same_length(&x)?)),
-        }
+        read_state(suite, &x, length)
     }
 
     /// Steps 1 and 2 of recovery: checks the container, then computes `X = Perm^-1(Y)` with the
@@ -464,6 +463,19 @@ fn geometry(suite: Suite, y: &[u8]) -> Result<Geometry, MhfeError> {
 pub(crate) fn suite_3_state(x: &[u8]) -> Result<&State, MhfeError> {
     x.try_into()
         .map_err(|_| MhfeError::Internal(format!("a suite 3 state has 32 bytes, not {}", x.len())))
+}
+
+/// Step 3 of recovery for a container of `suite`: reads its recovered state `x` under that suite's
+/// length rules, for recovery and for the readings of a rekey alike.
+pub(crate) fn read_state(
+    suite: Suite,
+    x: &[u8],
+    length: PhraseLength,
+) -> Result<Recovery, MhfeError> {
+    match suite {
+        Suite::TwentyFourWords => recover(suite_3_state(x)?, length),
+        Suite::SameLength => Ok(Recovery::Phrase(read_same_length(x)?)),
+    }
 }
 
 /// Step 3 of recovery: reads `X` as the chosen length, or tests the short layouts.
@@ -575,7 +587,7 @@ fn locked_entropy(phrase: &Mnemonic) -> LockedBytes {
 mod tests {
     use super::*;
     use crate::feistel::tests::HashEngine;
-    use crate::test_support::{reduced, test_password, wrong_password};
+    use crate::test_support::{reduced, test_password, wrong_password, NoArgon2Calls};
 
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -1134,8 +1146,8 @@ mod tests {
 
     #[test]
     fn a_fault_during_encryption_is_caught_by_the_check() {
-        // An engine that gives a different key on every call, like a memory error would: the
-        // container then does not turn back into the original and must not be shown.
+        // Fault: an engine that gives a different key on every call, as a memory error would:
+        // the container then does not turn back into the original and must not be shown.
         struct FlakyEngine(u8);
         impl Argon2Engine for FlakyEngine {
             fn derive(
@@ -1327,5 +1339,155 @@ mod tests {
         assert_eq!(standard.split(' ').count(), 24);
         assert_eq!(same_length.split(' ').count(), 12);
         assert!(!standard.starts_with(same_length.as_str()));
+    }
+
+    /// A shared validation fixture, `tests/fixtures/validation-cases.json` (suite 3) or
+    /// `tests/fixtures/suite4-vectors/validation-cases.json` (suite 4), whose expected values were
+    /// computed independently (Python `hashlib`, `hmac` and `unicodedata`).
+    fn fixture_of(json: &str) -> serde_json::Value {
+        serde_json::from_str(json).unwrap()
+    }
+
+    fn cases<'a>(fixture: &'a serde_json::Value, section: &str) -> &'a Vec<serde_json::Value> {
+        fixture[section].as_array().unwrap()
+    }
+
+    fn text<'a>(case: &'a serde_json::Value, field: &str) -> &'a str {
+        case[field].as_str().unwrap()
+    }
+
+    /// The fixture's refused phrases and containers of suite 3; [`NoArgon2Calls`] fails the test if
+    /// any case reaches Argon2: every refusal must come first.
+    #[test]
+    fn bad_phrases_and_containers_fail_before_argon2() {
+        let fixture = fixture_of(crate::validation_fixtures::SUITE_3);
+        let password = Password::new("public test password").unwrap();
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoArgon2Calls);
+        for case in cases(&fixture, "phrases") {
+            let id = text(case, "id");
+            let error = match text(case, "operation") {
+                "encrypt" => mhfe
+                    .encrypt(
+                        text(case, "phrase"),
+                        &password,
+                        Suite::TwentyFourWords,
+                        &mut |_, _| Ok(()),
+                    )
+                    .err(),
+                "decrypt" => {
+                    // A wrong word count is refused when the length is made, before decrypt runs.
+                    let length = match case.get("words") {
+                        Some(words) => WordCount::new(words.as_u64().unwrap() as usize)
+                            .map(PhraseLength::Words),
+                        None => Ok(PhraseLength::Detect),
+                    };
+                    length
+                        .and_then(|length| {
+                            // These are suite 3 cases: the suite is selected, not taken from the
+                            // word count.
+                            mhfe.decrypt_as(
+                                text(case, "container"),
+                                &password,
+                                Some(Suite::TwentyFourWords),
+                                length,
+                                &mut |_, _| Ok(()),
+                            )
+                        })
+                        .err()
+                }
+                other => panic!("{id}: unknown operation {other}"),
+            };
+            let error = error.unwrap_or_else(|| panic!("{id}: accepted"));
+            assert_eq!(error.code(), text(case, "expected_error"), "{id}");
+        }
+    }
+
+    #[test]
+    fn length_detection_matches_the_fixture() {
+        let fixture = fixture_of(crate::validation_fixtures::SUITE_3);
+        for case in cases(&fixture, "length_detection") {
+            let id = text(case, "id");
+            let state: packing::State = hex::decode(text(case, "state_hex"))
+                .unwrap()
+                .try_into()
+                .unwrap();
+            if let Some(entropy) = case.get("entropy_hex") {
+                let packed =
+                    packing::pack(&hex::decode(entropy.as_str().unwrap()).unwrap()).unwrap();
+                assert_eq!(*packed, state, "{id}");
+            }
+            let expected: Vec<usize> = case["matching_short_lengths"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|words| words.as_u64().unwrap() as usize)
+                .collect();
+            assert_eq!(
+                crate::detection::LengthDetection::of(&state).short_lengths(),
+                expected,
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_verifier_keeps_digest_byte_order() {
+        let fixture = fixture_of(crate::validation_fixtures::SUITE_3);
+        let case = &fixture["verifier_serialization"];
+        let entropy = hex::decode(text(case, "entropy_hex")).unwrap();
+        let state = packing::pack(&entropy).unwrap();
+        assert_eq!(hex::encode(&state[..]), text(case, "state_hex"));
+        assert_eq!(hex::encode(&state[28..]), text(case, "verifier_hex"));
+    }
+
+    /// The fixture's refusals of suite 4, before Argon2 as well.
+    #[test]
+    fn suite_4_refusals_come_before_argon2() {
+        let fixture = fixture_of(crate::validation_fixtures::SUITE_4);
+        let password = Password::new("public test password").unwrap();
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoArgon2Calls);
+        for case in cases(&fixture, "refusals") {
+            let id = text(case, "id");
+            assert_eq!(text(case, "expected"), "rejected", "{id}");
+            let result = match text(case, "operation") {
+                "encrypt-same-length" => mhfe
+                    .encrypt(
+                        text(case, "text"),
+                        &password,
+                        Suite::SameLength,
+                        &mut |_, _| Ok(()),
+                    )
+                    .map(|_| ()),
+                "decrypt" => {
+                    let length = match case.get("words") {
+                        Some(words) => PhraseLength::Words(
+                            WordCount::new(words.as_u64().unwrap() as usize).unwrap(),
+                        ),
+                        None => PhraseLength::Detect,
+                    };
+                    let suite = case.get("suite").map(|suite| match suite.as_u64() {
+                        Some(3) => Suite::TwentyFourWords,
+                        Some(4) => Suite::SameLength,
+                        other => panic!("{id}: unknown suite {other:?}"),
+                    });
+                    mhfe.decrypt_as(text(case, "text"), &password, suite, length, &mut |_, _| {
+                        Ok(())
+                    })
+                    .map(|_| ())
+                }
+                other => panic!("{id}: unknown operation {other}"),
+            };
+            // NoArgon2Calls panics if Argon2 is reached, so an error here came before it.
+            let error = result.err().unwrap_or_else(|| panic!("{id}: accepted"));
+            assert!(
+                matches!(
+                    error,
+                    MhfeError::SameLengthNeedsShortPhrase
+                        | MhfeError::LengthChoiceNotApplicable { .. }
+                        | MhfeError::InvalidContainer(_)
+                ),
+                "{id}: {error}"
+            );
+        }
     }
 }

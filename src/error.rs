@@ -4,6 +4,8 @@
 
 use std::fmt;
 
+/// Why an MHFE operation stopped. Each variant has a stable code ([`MhfeError::code`]) and one
+/// message, written by its `Display`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MhfeError {
     /// The original seed phrase is not a valid English BIP39 phrase.
@@ -23,20 +25,24 @@ pub enum MhfeError {
     SameLengthNeedsShortPhrase,
     /// A length was chosen for a same-length container, which keeps the length of its original.
     LengthChoiceNotApplicable {
+        /// The number of words of the container.
         container_words: usize,
     },
     /// The built-in check was asked for a same-length container, which has none.
     NoBuiltInCheck {
+        /// The number of words of the container.
         container_words: usize,
     },
     /// The wallet check was asked for a same-length container, whose phrase is never one drawn to
     /// pass it ([`crate::ContainerFacts::offers_wallet_check`]).
     NoWalletCheck {
+        /// The number of words of the container.
         container_words: usize,
     },
     /// Hidden wallets were asked of a same-length container, which opens none
     /// ([`crate::ContainerFacts::opens_hidden_wallets`]).
     NoHiddenWallets {
+        /// The number of words of the container.
         container_words: usize,
     },
     /// A recovery to re-encrypt has no built-in check, a 24-word original or a same-length
@@ -54,19 +60,26 @@ pub enum MhfeError {
     /// No repair within the bound of the repair words passes the BIP39 checksum: more damage than
     /// they repair, or a card of another container phrase, as far as the decoder can tell.
     RepairNotPossible {
+        /// The number of repair words given.
         repair_words: usize,
     },
     /// More words are missing from a container phrase than a search without its repair words
     /// looks for: each further word multiplies the candidates by about 2,048.
     TooManyMissingWords {
+        /// The number of missing words.
         missing: usize,
+        /// The most missing words the search looks for.
         limit: usize,
     },
+    /// The PIM is above [`crate::MAX_PIM`]; the value is the PIM given.
     InvalidPim(u32),
+    /// The memory level is above [`crate::MAX_MEMORY_LEVEL`]; the value is the level given.
     InvalidMemoryLevel(u32),
+    /// The password is empty.
     EmptyPassword,
     /// The normalized password is longer than 1024 bytes; the value is its length.
     PasswordTooLong(usize),
+    /// The password given as bytes is not UTF-8 text.
     InvalidPasswordUtf8,
     /// The password contains a control character (General_Category Cc), U+2028 or U+2029, which
     /// the specification forbids.
@@ -80,6 +93,7 @@ pub enum MhfeError {
     /// in four billion containers, where one phrase is needed: the length must be stated, one of
     /// `readings`, the lengths it can be read as in ascending order, 24 words last.
     AmbiguousLength {
+        /// The lengths in words the container can be read as, ascending, 24 last.
         readings: Vec<usize>,
     },
     /// A phrase to be encrypted again whose built-in check finds another length, `found`, than the
@@ -88,7 +102,9 @@ pub enum MhfeError {
     /// length is usually right (the specification's re-encryption rules). Where 24 words were
     /// stated, only they tell the readings apart.
     LengthDiffers {
+        /// The length in words that was stated.
         stated: usize,
+        /// The length in words whose built-in check passes.
         found: usize,
     },
     /// The container would equal the original phrase (see the specification, step 4 of
@@ -101,23 +117,30 @@ pub enum MhfeError {
     Cancelled,
     /// A reference address for the rehearsal check cannot be used.
     InvalidAddress(String),
+    /// A derivation path for the rehearsal check cannot be used; the text says why.
     InvalidDerivationPath(String),
+    /// A master key fingerprint for the rehearsal check cannot be used; the text says why.
     InvalidFingerprint(String),
     /// The BIP39 passphrase given as bytes is not UTF-8 text.
     InvalidPassphrase,
     /// The computer reports less free memory than the memory level needs.
     NotEnoughMemory {
+        /// The memory the level needs, in bytes.
         needed_bytes: u64,
+        /// The free memory the computer reports, in bytes.
         available_bytes: u64,
     },
     /// The operating system refused to reserve the Argon2 memory.
     MemoryAllocation {
+        /// The memory asked for, in bytes.
         bytes: u64,
     },
     /// The memory level needs more memory than this environment can address, for example a
     /// browser, where WebAssembly is limited to 4 GiB.
     MemoryLevelNotSupportedHere {
+        /// The memory level asked for.
         level: u32,
+        /// The highest memory level this environment can use.
         highest_supported: u32,
     },
     /// Argon2 itself reported an error; the text comes from the reference implementation.
@@ -154,9 +177,12 @@ pub enum MhfeError {
     /// component is its label, such as "Repair words (MHFE-REPAIR-1)", and the detail says which
     /// case differs, never with a secret, a vector's text or a coin's name.
     SelfCheckFailed {
+        /// The label of the part that failed.
         component: String,
+        /// Which case gave another answer.
         detail: String,
     },
+    /// A fault of the program itself, such as an invariant that did not hold; the text says which.
     Internal(String),
 }
 
@@ -169,6 +195,10 @@ pub(crate) fn quoted(text: &str) -> String {
 }
 
 impl fmt::Display for MhfeError {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one match over every variant: the one place the messages are written (CORE-23)"
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPhrase(reason) => {

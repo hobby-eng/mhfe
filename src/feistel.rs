@@ -255,6 +255,7 @@ pub(crate) fn round_salt(geometry: Geometry, message: &[u8]) -> [u8; SALT_BYTES]
 }
 
 /// `M_i = Trunc_h(HMAC-SHA-256(K_i, DS_MASK || message))`, as long as one half.
+#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
 pub(crate) fn round_mask(geometry: Geometry, key: &[u8; KEY_BYTES], message: &[u8]) -> Vec<u8> {
     let mut mac =
         <HmacSha256 as KeyInit>::new_from_slice(key).expect("HMAC accepts a key of any length");
@@ -531,6 +532,64 @@ pub(crate) mod tests {
             assert!(permutation
                 .forward(&[0u8; 32], &mut |_| Ok(()), None)
                 .is_err());
+        }
+    }
+
+    /// A text field of a case of the shared validation fixtures.
+    fn case_text<'a>(case: &'a serde_json::Value, field: &str) -> &'a str {
+        case[field].as_str().unwrap()
+    }
+
+    /// `BE32(ENT)` follows the settings in every suite 4 round message of the shared fixture
+    /// `tests/fixtures/suite4-vectors/validation-cases.json`, so the same settings, round and
+    /// leading half bytes give a different salt and mask for each entropy size.
+    #[test]
+    fn suite_4_round_messages_carry_the_entropy_size() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(crate::validation_fixtures::SUITE_4).unwrap();
+        assert_eq!(fixture["suite_id"], crate::SAME_LENGTH_SUITE_ID);
+        for case in fixture["ent_separation"].as_array().unwrap() {
+            let id = case_text(case, "id");
+            let bytes = case["entropy_bits"].as_u64().unwrap() as usize / 8;
+            let geometry = Geometry::same_length(bytes).unwrap();
+            let work = WorkFactor::new(
+                case["pim"].as_u64().unwrap() as u32,
+                case["memory_level"].as_u64().unwrap() as u32,
+            )
+            .unwrap();
+            let half = hex::decode(case_text(case, "half_hex")).unwrap();
+            let message = round_message(
+                geometry,
+                work,
+                case["round"].as_u64().unwrap() as u32,
+                &half,
+            );
+            let salt_input = [geometry.ds_salt(), &message].concat();
+            assert_eq!(
+                hex::encode(salt_input),
+                case_text(case, "salt_input_hex"),
+                "{id}"
+            );
+            assert_eq!(
+                hex::encode(round_salt(geometry, &message)),
+                case_text(case, "salt_hex"),
+                "{id}"
+            );
+            let key: [u8; 32] = hex::decode(case_text(case, "key_hex"))
+                .unwrap()
+                .try_into()
+                .unwrap();
+            let mask_input = [geometry.ds_mask(), &message].concat();
+            assert_eq!(
+                hex::encode(mask_input),
+                case_text(case, "mask_input_hex"),
+                "{id}"
+            );
+            assert_eq!(
+                hex::encode(round_mask(geometry, &key, &message)),
+                case_text(case, "mask_hex"),
+                "{id}"
+            );
         }
     }
 }

@@ -26,7 +26,9 @@ sed -n '/^```text$/,/^```$/p' vendor/phc-winner-argon2.md | grep -v '^```' |
 cargo fetch --locked
 python3 scripts/third-party-licenses.py --check
 # The table of published rounds that the self-checks replay must be what the fixtures give.
-python3 scripts/generate-published-rounds.py --check
+node scripts/generate-published-rounds.mjs --check
+# package-release.sh refuses an unknown or repeated package before it builds or writes anything.
+node scripts/verify-package-release.mjs
 
 cargo fmt --check
 # No code copied from one place to another in the library, the tool, the bindings or the page

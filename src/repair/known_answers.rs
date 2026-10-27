@@ -327,6 +327,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_card_or_repair_fails() {
+        // Fault: an expected card and repair, damaged as by a broken build or faulty memory.
         let mut cards = CARDS;
         cards[0].cards[1] = "shaft pupil patient jewels";
         fails_with(
@@ -353,6 +354,7 @@ mod tests {
     /// A refusal the code must give, turned into a repair it must not make, fails.
     #[test]
     fn an_accepted_wrong_card_fails() {
+        // Fault: a refusal case turned into a repair, as a damaged table would give it.
         let mut repairs = REPAIRS;
         repairs[2].card = "shaft pupil patient jewel";
         fails_with(
@@ -366,6 +368,7 @@ mod tests {
 
     #[test]
     fn the_full_tier_adds_every_row_and_repair() {
+        // Fault: a card of the full tier, damaged as by a broken build or faulty memory.
         let mut cards = CARDS;
         cards[3].cards[3] = "mirror coffee census note proof zebra begin barrels";
         let mut check = RepairWordsCheck {

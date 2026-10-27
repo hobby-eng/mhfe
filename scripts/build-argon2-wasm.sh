@@ -20,16 +20,13 @@ fi
 
 argon2="vendor/phc-winner-argon2"
 
-# ref.c is the portable implementation. The SIMD variant opt.c gave no speed-up in
-# WebAssembly and would exclude browsers without WebAssembly SIMD.
-sources=(
-  "$argon2/src/argon2.c"
-  "$argon2/src/core.c"
-  "$argon2/src/encoding.c"
-  "$argon2/src/thread.c"
-  "$argon2/src/ref.c"
-  "$argon2/src/blake2/blake2b.c"
-)
+# The files of every build and the portable core, from the list that build.rs reads too.
+sources=()
+while read -r part path; do
+  case "$part" in
+    common | portable) sources+=("$path") ;;
+  esac
+done < src/engine/argon2-sources.txt
 
 common_flags=(
   -O3

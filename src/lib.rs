@@ -59,8 +59,6 @@ pub mod strength;
 mod suite;
 #[cfg(test)]
 mod test_support;
-#[cfg(test)]
-mod validation_cases;
 #[cfg(any(
     not(target_arch = "wasm32"),
     feature = "browser-core",

@@ -156,8 +156,9 @@ assert.equal(parameters.highestBrowserMemoryLevel, 0);
 assert.deepEqual(parameters.wordCounts, [12, 15, 18, 21, 24]);
 assert.deepEqual(parameters.repairWordCounts, [2, 4, 6, 8]);
 assert.deepEqual(parameters.repairCapacities[1], { count: 4, unreadable: 4, wrong: 2 });
-// The page's runtime and the worker keep two copies that a worker script, which imports nothing,
-// cannot avoid: the fields that hold secrets, and the advice of PACKAGE_MISMATCH.
+// The page's runtime and the worker keep copies that a worker script, which imports nothing,
+// cannot avoid: the fields that hold secrets and the advice of PACKAGE_MISMATCH, compared here, and
+// the message for a file of another build, held to buildMismatchMessage by parts 2c, 3 and 4.
 {
   const source = (file) => readFileSync(new URL(`../web/${file}`, import.meta.url), "utf8");
   const secretFields = (text) =>
@@ -1192,12 +1193,30 @@ if (process.argv.includes("--full")) {
   console.log("A full-size encryption with the threaded build gives the native container.");
 }
 
+// The bridge's deliberate copy of ARGON2_MEMORY_ALLOCATION_ERROR (web/argon2-engine.js) is the
+// value in argon2.h: the reference code returns it when the browser cannot give the Argon2 memory,
+// and the bridge reports it as MEMORY_ALLOCATION_FAILED.
+{
+  const header = read("vendor/phc-winner-argon2/include/argon2.h").toString();
+  const code = Number(/^\s*ARGON2_MEMORY_ALLOCATION_ERROR = (-\d+),/mu.exec(header)[1]);
+  const module = await builds["single-threaded"]();
+  // Fault: the reference code fails as when the browser refuses the memory, which the small cost
+  // of this check cannot make it do.
+  module._argon2id_hash_raw = () => code;
+  assert.throws(
+    () => argon2Engine(module).derive(PASSWORD, new Uint8Array(16), 1024, 1, new Uint8Array(32)),
+    { message: "MEMORY_ALLOCATION_FAILED: the browser could not provide the Argon2 memory" },
+    "the bridge reads argon2.h's memory error as MEMORY_ALLOCATION_FAILED",
+  );
+}
+
 // An Argon2 build that does not give its known answer is refused before any round: a bridge that
 // leaves the key as it was or writes zeros, as a stale view of the WebAssembly's memory would, and
 // a build that gives another tag. Nothing secret reaches it, and the self-check names it.
 const realArgon2 = argon2Engine(await builds["single-threaded"]());
 const noop = () => {};
 const unwrittenKey = "Argon2id could not run: the Argon2 engine returned without writing the key";
+// Fault: the key left as it was, zeroed or flipped, as by a broken build or a stale memory view.
 const faultyBuilds = [
   ["leaves the key as it was", () => {}, unwrittenKey],
   ["writes zeros", (key) => key.fill(0), unwrittenKey],
@@ -1239,6 +1258,7 @@ for (const [fault, spoil, detail] of faultyBuilds) {
 }
 // A build that goes wrong during the work fails its known answer after the last round: the result
 // is dropped, although every round ran and the container was shown as not yet verified.
+// Fault: the key of the second 1 MiB known answer, flipped as by a fault during the work.
 let knownAnswers = 0;
 const failsLater = {
   derive: (password, salt, memoryKib, passes, key) => {
@@ -1308,6 +1328,7 @@ for (const path of Object.values(PUBLISHED_VECTOR_FILES)) {
   }
 }
 const hexOf = (bytes) => Buffer.from(bytes).toString("hex");
+// Fault: `spoil` may change a round's key, as a fault in Argon2id would.
 /** The stand-in for Argon2 at full size; `spoil(round, key)` may change the key of a round. */
 function publishedRounds(spoil = noop) {
   let rounds = 0;
@@ -1330,6 +1351,7 @@ function publishedRounds(spoil = noop) {
     reserve: noop,
   };
 }
+// Fault: one letter of a built-in vector in the WebAssembly, damaged as by a download or memory.
 /**
  * The package's WebAssembly with the last letter of `text` changed in the built-in copy of the
  * public vector `path` alone, which include_str! keeps byte for byte: the start of a JSON field,
@@ -1356,6 +1378,7 @@ assert.deepEqual(selfTestOf(core, publishedRounds()), {
   firstWrongRound: null,
   fault: null,
 });
+// Fault: the key of round 5 or 17, changed as a fault in Argon2id would change it.
 for (const [round, suite3, suite4] of [
   [5, false, true],
   [17, true, false],
@@ -1370,6 +1393,7 @@ for (const [round, suite3, suite4] of [
     fault: argon2KeyFault(round),
   });
 }
+// Fault: a letter of the built-in vector's password, damaged as by a download or memory.
 assert.deepEqual(
   selfTestOf(
     bindingsOver(damagedVector(PUBLISHED_VECTOR_FILES.suite3, '"password": "public test password')),
@@ -1387,6 +1411,7 @@ assert.deepEqual(
     },
   },
 );
+// Fault: a letter of the built-in vector's container, damaged as by a download or memory.
 assert.deepEqual(
   selfTestOf(
     bindingsOver(
@@ -1744,7 +1769,7 @@ const LIBRARY_MESSAGES = {
 };
 
 // Phrases reach the WebAssembly as UTF-8 bytes, which the bindings wipe (SecretText in
-// src/wasm_api/mod.rs), as they wipe passwords: wasm-bindgen's own copy of a text argument stays
+// src/wasm_api.rs), as they wipe passwords: wasm-bindgen's own copy of a text argument stays
 // in the module's memory after the call (AUD-010). Each case runs in a fresh instance with the
 // phrase as a person may type it, in capitals with two spaces between the words, a form the
 // library never writes itself, so that a copy found can only be the argument's. None may be left,
@@ -2151,6 +2176,7 @@ for (const [name, createModule] of Object.entries(builds)) {
   );
 }
 // A browser that cannot give the memory makes the larger sizes not available, not failed.
+// Fault: the memory above 1 MiB, refused as by a browser that cannot give it.
 const refusingMemory = {
   derive: (password, salt, memoryKib, passes, key) => {
     if (memoryKib > 1024) {
@@ -2222,6 +2248,7 @@ for (const [tier, check] of [
 // would damage them: one letter of a repair card of MHFE-REPAIR-1, then of BIP84's published
 // address, then of what an address check states it searches. Each must fail its own part, named
 // by its place only.
+// Fault: a card, an address and a search in the WebAssembly, damaged as by a download or memory.
 /** The package's WebAssembly with the last letter of every copy of `text` changed. */
 function damaged(text) {
   const bytes = Buffer.from(packageWasm);
@@ -2281,12 +2308,19 @@ const workerScript = read("dist/runtime/worker.js").toString();
 const compiledPackage = new WebAssembly.Module(packageWasm);
 const BUILD_ID = JSON.parse(read("dist/modules.json").toString()).buildId;
 /**
+ * The page's PACKAGE_MISMATCH message for the file `file` of build `build` beside `own` of this
+ * package's build. The page's buildMismatch() (web/runtime.js) and its deliberate copy in the
+ * worker (web/worker-runtime.js) are both held to this one wording.
+ */
+const buildMismatchMessage = (file, build, own) =>
+  `The file ${file} is of build ${build} and ${own} of build ${BUILD_ID}: ` +
+  "take every file of the package from one build.";
+/**
  * The worker's PACKAGE_MISMATCH message for `file` of build `build`, as it posts it. It starts
  * with a word, not the file's path, which the page's sentence() would capitalize.
  */
 const workerMismatch = (file, build) =>
-  `the file ${file} is of build ${build} and runtime/worker.js of build ${BUILD_ID}: ` +
-  "take every file of the package from one build.";
+  buildMismatchMessage(file, build, "runtime/worker.js").replace(/^The /u, "the ");
 /**
  * Runs worker `script` with `globals` (such as an Argon2 build in front of it) and returns `send`,
  * which delivers a message as the page would and resolves to what the worker posted for it.
@@ -2377,6 +2411,7 @@ const coreCheckWith = (globals, options) =>
   inProcessWorker(workerScript, globals, options)({ ...coreRequest, compiled: compiledPackage });
 // An Argon2 build that does not start gave no wrong answer: Argon2 is not available, with the
 // cause, and the report passes. A wrong answer of a build that started still fails it.
+// Fault: the start of the single-threaded build, refused as by a browser without the memory.
 const refusedStart = () => Promise.reject(new Error("the browser refused its memory"));
 assert.deepEqual(
   await coreCheckWith({ ...singleThreadedBuild, createArgon2St: refusedStart }),
@@ -2400,6 +2435,7 @@ assert.deepEqual(
   await coreCheckWith({ ...threadedBuild, ...singleThreadedBuild }),
   coreCheckMessages(part("argon2", "warning", `${notIsolated}${fellBack}`)),
 );
+// Fault: the start of the threaded build, failing as when its lane workers do not start.
 const noLanes = () => Promise.reject(new Error("the lane workers did not start"));
 const lanesFailed = "the threaded Argon2 build did not start: the lane workers did not start";
 assert.deepEqual(
@@ -2409,6 +2445,7 @@ assert.deepEqual(
   ),
   coreCheckMessages(part("argon2", "warning", `${lanesFailed}${fellBack}`)),
 );
+// Fault: one bit of each tag of the single-threaded build, flipped as by a broken build.
 const wrongTag = async () => {
   const module = await builds["single-threaded"]();
   const realHash = module._argon2id_hash_raw;
@@ -2628,6 +2665,7 @@ for (const [build, wasm] of [
 // A WebAssembly that stops inside a part (a trap, such as a Rust panic, which a release build
 // turns into "unreachable") fails that part with what came before, instead of the worker. The
 // worker's runtime and the repair module's table, unstamped, run over a stand-in of the bindings.
+// Fault: a trap of the WebAssembly inside a part, as a panic of the program would cause.
 const trapping = inProcessWorker(
   `${read("web/worker-runtime.js")}\n${read("web/repair-worker.js")}\n` +
     "serveOperations(mhfe, { repair: REPAIR_OPERATIONS });",
@@ -4498,6 +4536,7 @@ assert.deepEqual(await gatedReading, { phrase: PHRASE });
 
 // A part that fails closes the class for good: every operation rejects with SELF_CHECK_FAILED and
 // the report, without a worker, while parameters(), the checks and selfTest() still run.
+// Fault: a card in the WebAssembly of Part 2b, damaged as by a download or memory.
 StandInWorker.serveCheck = (message, worker) =>
   message.module === "repair"
     ? JSON.parse(
@@ -4638,9 +4677,7 @@ StandInWorker.serveCheck = (message, worker) => {
 };
 await assert.rejects(silent.fingerprint({ phrase: PHRASE }), {
   code: "PACKAGE_MISMATCH",
-  message:
-    "The file runtime/worker.js is of build 0123456789abcdef and runtime/runtime.js of build " +
-    `${BUILD_ID}: take every file of the package from one build.`,
+  message: buildMismatchMessage("runtime/worker.js", "0123456789abcdef", "runtime/runtime.js"),
 });
 StandInWorker.serveCheck = servedByTheWebAssembly;
 assert.ok((await silent.startupCheck()).passed, "checked again once the parts match");
@@ -4667,9 +4704,7 @@ const { MhfeRepair: OtherBuildRepair } = await import(
 );
 await assert.rejects(new OtherBuildRepair({ workerSource: "w", wasm: ownWasm() }).startupCheck(), {
   code: "PACKAGE_MISMATCH",
-  message:
-    `The file repair/repair.js is of build ${OTHER_BUILD_ID} and runtime/runtime.js of build ` +
-    `${BUILD_ID}: take every file of the package from one build.`,
+  message: buildMismatchMessage("repair/repair.js", OTHER_BUILD_ID, "runtime/runtime.js"),
 });
 // The worker's own refusals of parts of another build reach the page as sentences that keep the
 // paths as the package spells them: the first word is capitalized, never the folder of a path, as
@@ -4681,9 +4716,7 @@ for (const { file, build, error } of workerRefusals) {
   };
   await assert.rejects(new MhfeRepair({ workerSource: "w", wasm: ownWasm() }).startupCheck(), {
     code: "PACKAGE_MISMATCH",
-    message:
-      `The file ${file} is of build ${build} and runtime/worker.js of build ${BUILD_ID}: ` +
-      "take every file of the package from one build.",
+    message: buildMismatchMessage(file, build, "runtime/worker.js"),
   });
 }
 StandInWorker.serveCheck = servedByTheWebAssembly;

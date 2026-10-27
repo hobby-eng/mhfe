@@ -169,6 +169,7 @@ fn sha256(_: &[u8], message: &[u8]) -> Vec<u8> {
     sha2::Sha256::digest(message).to_vec()
 }
 
+#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
 fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
     use hmac::{KeyInit, Mac};
     let mut mac = <hmac::Hmac<sha2::Sha256> as KeyInit>::new_from_slice(key)
@@ -897,52 +898,7 @@ mod tests {
         ];
         assert_eq!(PUBLISHED.len(), files.len());
         for (name, json, same_length) in files {
-            let fixture: Value = serde_json::from_str(json).unwrap();
-            let vector = published(name).unwrap();
-            assert_eq!(fixture["name"], name);
-            assert_eq!(vector.same_length, same_length, "{name}");
-            let inputs = &fixture["inputs"];
-            assert_eq!(vector.phrase, inputs["phrase"], "{name}");
-            assert_eq!(vector.password, inputs["password"], "{name}");
-            assert_eq!(
-                hex::encode(vector.password_nfkd),
-                inputs["password_nfkd_utf8_hex"],
-                "{name}"
-            );
-            assert_eq!(u64::from(vector.pim), inputs["pim"], "{name}");
-            assert_eq!(
-                u64::from(vector.memory_level),
-                inputs["memory_level"],
-                "{name}"
-            );
-            assert_eq!(vector.container, fixture["container"], "{name}");
-            let recovery = match &fixture["recovery"] {
-                Value::Array(readings) => readings.clone(),
-                reading => vec![reading.clone()],
-            };
-            assert_eq!(vector.recovery.len(), recovery.len(), "{name}");
-            for (reading, expected) in vector.recovery.iter().zip(&recovery) {
-                assert_eq!(reading.words as u64, expected["words"], "{name}");
-                assert_eq!(reading.verified, expected["verified"], "{name}");
-                assert_eq!(reading.phrase, expected["phrase"], "{name}");
-            }
-            let encryption = fixture["encryption"]["rounds"].as_array().unwrap();
-            assert_eq!(encryption.len(), 12);
-            for (round, expected) in vector.rounds.iter().zip(encryption) {
-                assert_eq!(hex::encode(round.salt), expected["salt_hex"], "{name}");
-                assert_eq!(hex::encode(round.key), expected["argon2_key_hex"], "{name}");
-            }
-            // A recovery runs the same rounds backwards: its salts are the encryption's.
-            for entry in fixture["decryption"]["rounds"].as_array().unwrap() {
-                let salt = entry["salt_hex"].as_str().unwrap();
-                assert!(
-                    vector
-                        .rounds
-                        .iter()
-                        .any(|round| hex::encode(round.salt) == salt),
-                    "{name}: a recovery salt is not an encryption salt"
-                );
-            }
+            assert_vector_equals_fixture(name, json, same_length);
         }
         let startup: Vec<&str> = PUBLISHED
             .iter()
@@ -950,6 +906,56 @@ mod tests {
             .map(|vector| vector.name)
             .collect();
         assert_eq!(startup.len(), 10);
+    }
+
+    /// Every value of the published vector `name` against its fixture, `json`.
+    fn assert_vector_equals_fixture(name: &str, json: &str, same_length: bool) {
+        let fixture: Value = serde_json::from_str(json).unwrap();
+        let vector = published(name).unwrap();
+        assert_eq!(fixture["name"], name);
+        assert_eq!(vector.same_length, same_length, "{name}");
+        let inputs = &fixture["inputs"];
+        assert_eq!(vector.phrase, inputs["phrase"], "{name}");
+        assert_eq!(vector.password, inputs["password"], "{name}");
+        assert_eq!(
+            hex::encode(vector.password_nfkd),
+            inputs["password_nfkd_utf8_hex"],
+            "{name}"
+        );
+        assert_eq!(u64::from(vector.pim), inputs["pim"], "{name}");
+        assert_eq!(
+            u64::from(vector.memory_level),
+            inputs["memory_level"],
+            "{name}"
+        );
+        assert_eq!(vector.container, fixture["container"], "{name}");
+        let recovery = match &fixture["recovery"] {
+            Value::Array(readings) => readings.clone(),
+            reading => vec![reading.clone()],
+        };
+        assert_eq!(vector.recovery.len(), recovery.len(), "{name}");
+        for (reading, expected) in vector.recovery.iter().zip(&recovery) {
+            assert_eq!(reading.words as u64, expected["words"], "{name}");
+            assert_eq!(reading.verified, expected["verified"], "{name}");
+            assert_eq!(reading.phrase, expected["phrase"], "{name}");
+        }
+        let encryption = fixture["encryption"]["rounds"].as_array().unwrap();
+        assert_eq!(encryption.len(), 12);
+        for (round, expected) in vector.rounds.iter().zip(encryption) {
+            assert_eq!(hex::encode(round.salt), expected["salt_hex"], "{name}");
+            assert_eq!(hex::encode(round.key), expected["argon2_key_hex"], "{name}");
+        }
+        // A recovery runs the same rounds backwards: its salts are the encryption's.
+        for entry in fixture["decryption"]["rounds"].as_array().unwrap() {
+            let salt = entry["salt_hex"].as_str().unwrap();
+            assert!(
+                vector
+                    .rounds
+                    .iter()
+                    .any(|round| hex::encode(round.salt) == salt),
+                "{name}: a recovery salt is not an encryption salt"
+            );
+        }
     }
 
     #[test]
@@ -967,6 +973,7 @@ mod tests {
             use sha2::Digest;
             sha2::Sha512::digest(message)[..32].to_vec()
         }
+        // Fault: a hash function and a digest, changed as by a broken build or faulty memory.
         let mut cases = CIPHER_DIGESTS;
         cases[4].function = sha512_cut;
         let mut check = CipherHashesCheck {
@@ -999,6 +1006,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_container_or_round_key_fails() {
+        // Fault: a container and two round keys, damaged as by a broken build or faulty memory.
         let mut vectors = PUBLISHED.to_vec();
         let index = vectors.iter().position(|v| v.name == "nonzero-15").unwrap();
         vectors[index].container = vectors[index].container.replacen("a", "b", 1).leak();
@@ -1041,6 +1049,7 @@ mod tests {
 
     #[test]
     fn a_wrong_password_encoding_or_recovery_fails() {
+        // Fault: recorded NFKD bytes and readings, damaged as by a broken build or faulty memory.
         // The recorded NFKD bytes changed: the pipeline's encoding no longer finds its rounds.
         let mut vectors = PUBLISHED.to_vec();
         let index = vectors
@@ -1082,6 +1091,7 @@ mod tests {
 
     #[test]
     fn the_full_tier_replays_every_vector() {
+        // Fault: a round key of a full-tier vector, damaged as by a broken build or faulty memory.
         let mut vectors = PUBLISHED.to_vec();
         let index = vectors.iter().position(|v| v.name == "zero-21").unwrap();
         assert!(!vectors[index].startup);
@@ -1140,6 +1150,7 @@ mod tests {
 
     #[test]
     fn a_refusal_that_is_accepted_fails() {
+        // Fault: the vector zero-24 left out of the table, as a broken build would leave it out.
         // Without zero-24 in the table, the changed container's check cannot run its rounds and
         // stops with another error than VERIFICATION_FAILED.
         let vectors: Vec<PublishedVector> = PUBLISHED
@@ -1156,6 +1167,7 @@ mod tests {
 
     #[test]
     fn a_damaged_fixture_or_a_wrong_expectation_fails_the_formats() {
+        // Fault: the built-in fixture, damaged as by a broken build or faulty memory.
         let mut check = FormatsCheck {
             suite_3: "{",
             suite_4: crate::validation_fixtures::SUITE_4,
@@ -1199,6 +1211,7 @@ mod tests {
 
     #[test]
     fn the_suite_4_refusals_run_in_the_full_tier() {
+        // Fault: a refusal case of suite 4, damaged as by a broken build or faulty memory.
         // A refusal case changed into a container the suite takes: accepted only if Argon2 ran,
         // which the engine of the check refuses, so it fails with another code.
         let fixture = crate::validation_fixtures::SUITE_4;

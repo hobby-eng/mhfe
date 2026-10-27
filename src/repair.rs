@@ -272,6 +272,10 @@ pub fn require_count(count: usize) -> Result<(), MhfeError> {
 
 /// The repair words of `container`, a valid container of 12 to 24 words: `count` English BIP39
 /// words, one space apart.
+#[expect(
+    clippy::expect_used,
+    reason = "every word of a parsed container is in the BIP39 list"
+)]
 pub fn repair_words(container: &str, count: usize) -> Result<String, MhfeError> {
     require_count(count)?;
     let mnemonic = phrase::parse_container(container).map_err(MhfeError::InvalidContainer)?;
@@ -347,7 +351,10 @@ pub enum ContainerReading {
     Container,
     /// Words typed as `?`: the owner marked them as unreadable. `unreadable` lists every word that
     /// cannot be read, from 1, words outside the BIP39 list included.
-    Marked { unreadable: Vec<usize> },
+    Marked {
+        /// The places of the unreadable words, counted from 1.
+        unreadable: Vec<usize>,
+    },
     /// A container's length, but not a container: a word outside the BIP39 list or a BIP39
     /// checksum that fails, from a typing mistake or from a damaged or miscopied container phrase.
     NotAContainer,
@@ -738,6 +745,7 @@ mod tests {
         for count in REPAIR_WORD_COUNTS {
             let mut parity = field.parity(&data, count);
             assert_eq!(check_card(&field, &data, &parity), Ok(()));
+            // Fault: a computed card word, changed as by faulty memory before its read-back.
             parity[count - 1] ^= 1;
             assert_eq!(
                 check_card(&field, &data, &parity).unwrap_err().code(),

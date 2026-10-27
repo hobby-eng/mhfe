@@ -194,6 +194,7 @@ impl PhraseDraw {
         Self { wishes, ..self }
     }
 
+    /// Whether the phrase is drawn with the wallet check.
     pub fn is_checked(&self) -> bool {
         self.passphrase.is_some()
     }
@@ -360,6 +361,7 @@ pub struct NewPhrase {
 }
 
 impl NewPhrase {
+    /// The 24 words, one space apart.
     pub fn phrase(&self) -> &str {
         &self.phrase
     }

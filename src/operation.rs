@@ -119,6 +119,7 @@ pub struct Keep {
 pub enum KeepItem {
     /// The container's words, this many.
     ContainerWords(usize),
+    /// The password that opens the container.
     Password,
     /// The wallet's BIP39 passphrase, which belongs to the wallet whether checked or not.
     Passphrase,
@@ -127,7 +128,9 @@ pub enum KeepItem {
     PassphraseIfAny,
     /// The repair words, kept apart from the container phrase.
     RepairWords,
+    /// The PIM, where it is not the default 0.
     Pim(u32),
+    /// The memory level, where it is not the default 0.
     MemoryLevel(u32),
     /// The original phrase's word count, to choose at recovery.
     WordCount(usize),
@@ -166,6 +169,7 @@ impl Keep {
         Self { items }
     }
 
+    /// The things to keep, in the order they are shown.
     pub fn items(&self) -> &[KeepItem] {
         &self.items
     }
@@ -249,10 +253,12 @@ impl Sealed {
         &self.container.words
     }
 
+    /// The suite the container was made with.
     pub fn suite(&self) -> Suite {
         self.container.suite
     }
 
+    /// The number of the container's words.
     pub fn container_words(&self) -> usize {
         self.container.words.split(' ').count()
     }

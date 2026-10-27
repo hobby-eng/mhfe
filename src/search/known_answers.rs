@@ -159,6 +159,7 @@ mod tests {
 
     #[test]
     fn a_wrong_count_or_fingerprint_fails() {
+        // Fault: an expected count and fingerprint, damaged as by a broken build or faulty memory.
         let mut candidates = CANDIDATES;
         candidates[1].count = 7;
         fails_with(

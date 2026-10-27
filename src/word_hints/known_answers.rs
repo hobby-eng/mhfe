@@ -123,6 +123,7 @@ mod tests {
 
     #[test]
     fn a_damaged_case_fails() {
+        // Fault: an expected hint, damaged as by a broken build or faulty memory.
         let damaged = [HintCase {
             hint: Hint::Count(5),
             ..CASES[0]

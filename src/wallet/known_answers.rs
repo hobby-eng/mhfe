@@ -25,6 +25,7 @@ fn sha512(_: &[u8], message: &[u8]) -> Vec<u8> {
     sha2::Sha512::digest(message).to_vec()
 }
 
+#[expect(clippy::expect_used, reason = "HMAC accepts a key of any length")]
 fn hmac_sha512(key: &[u8], message: &[u8]) -> Vec<u8> {
     use hmac::{KeyInit, Mac};
     let mut mac = <hmac::Hmac<sha2::Sha512> as KeyInit>::new_from_slice(key)
@@ -998,6 +999,7 @@ mod address_search {
 
         #[test]
         fn a_search_stated_otherwise_or_accepted_fails() {
+            // Fault: stated searches and a refusal, damaged as by a broken build or faulty memory.
             let mut stated = SEARCHES_STATED;
             // Nine accounts instead of ten.
             stated[0].pattern = "m/84'/0'/0'-8'/0-1/0-99";
@@ -1064,6 +1066,7 @@ mod tests {
             use sha3::Digest;
             sha3::Sha3_256::digest(message).to_vec()
         }
+        // Fault: a hash function in place of Keccak-256, as a broken build would give it.
         let mut cases = WALLET_DIGESTS;
         cases[6].function = sha3_256;
         let mut check = WalletHashesCheck {
@@ -1077,6 +1080,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_seed_or_key_fails() {
+        // Fault: seeds and BIP32 cases, damaged as by a broken build or faulty memory.
         let mut seeds = SEEDS;
         seeds[1].passphrase = "Caf\u{e9} \u{fb01} \u{ff30}\u{c5}\u{2460} \u{1f510} \u{439}";
         let mut check = SeedCheck {
@@ -1128,6 +1132,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_or_accepted_address_fails() {
+        // Fault: two address cases, damaged as by a broken build or faulty memory.
         let mut addresses = ADDRESSES;
         // The address of the next index, where the wallet does not put the case's path.
         addresses[2].path = "m/84'/0'/0'/0/1";
@@ -1152,6 +1157,7 @@ mod tests {
     /// A self-check's detail never carries a coin's name or an address.
     #[test]
     fn details_name_no_coin() {
+        // Fault: an expected address, damaged as by a broken build or faulty memory.
         let mut addresses = ADDRESSES;
         addresses[16].address = "0x9858EfFD232B4033E47d90003D41EC34EcaEda95";
         let mut check = AddressesCheck {

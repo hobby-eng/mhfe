@@ -14,6 +14,8 @@
 FROM emscripten/emsdk:6.0.12@sha256:77638e6c215a65f25a704c0c831d5c2463a8c0468a58c6cb82489dbe621dfa05 AS argon2-wasm
 WORKDIR /workspace
 COPY vendor/phc-winner-argon2 vendor/phc-winner-argon2
+# The list of the engine's C files, which build.rs reads too.
+COPY src/engine/argon2-sources.txt src/engine/
 COPY scripts/build-argon2-wasm.sh scripts/remove-network-code.mjs scripts/
 RUN scripts/build-argon2-wasm.sh
 

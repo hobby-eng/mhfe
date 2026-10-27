@@ -223,6 +223,7 @@ mod tests {
 
     #[test]
     fn a_wrong_fact_fails() {
+        // Fault: container and original facts, damaged as by a broken build or faulty memory.
         let mut containers = CONTAINERS;
         containers[1].opens_hidden_wallets = true;
         fails_with(

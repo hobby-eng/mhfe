@@ -160,6 +160,7 @@ mod tests {
 
     #[test]
     fn a_corrupted_draw_fails() {
+        // Fault: an expected draw, damaged as by a broken build or faulty memory.
         let mut draws = DRAWS;
         draws[2].expected = "2z32";
         let mut check = GeneratorCheck {

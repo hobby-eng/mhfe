@@ -145,9 +145,7 @@ function operationOf(modules, module, name) {
 
 /**
  * Refuses a WebAssembly of another build than this script before it runs: parts of different
- * builds may call each other wrongly. One without the section has not been stamped either. The
- * message starts with a word, not the file's path, since the page makes a sentence of it
- * (sentence() in web/runtime.js), which would capitalize the path.
+ * builds may call each other wrongly. One without the section has not been stamped either.
  */
 function requireSameBuild(compiled) {
   const sections = WebAssembly.Module.customSections(compiled, BUILD_SECTION);
@@ -155,12 +153,7 @@ function requireSameBuild(compiled) {
     sections.length === 0
       ? "development"
       : sections.map((bytes) => new TextDecoder().decode(bytes)).join("+");
-  if (build !== WORKER_BUILD_ID) {
-    throw packageMismatch(
-      `the file runtime/mhfe.wasm is of build ${build} and runtime/worker.js of build ` +
-        WORKER_BUILD_ID,
-    );
-  }
+  if (build !== WORKER_BUILD_ID) throw buildMismatch("runtime/mhfe.wasm", build);
 }
 
 /**
@@ -170,6 +163,19 @@ function requireSameBuild(compiled) {
  */
 function packageMismatch(what) {
   return new Error(`PACKAGE_MISMATCH: ${what}: take every file of the package from one build.`);
+}
+
+/**
+ * The file `file` is of the build `build`, not of this worker's. A deliberate copy of
+ * buildMismatch() in web/runtime.js, with this script's own file and build: a worker script
+ * imports nothing. scripts/verify-browser-package.mjs holds both to one wording
+ * (buildMismatchMessage). The message starts with a word, not the file's path, since the page
+ * makes a sentence of it (sentence() in web/runtime.js), which would capitalize the path.
+ */
+function buildMismatch(file, build) {
+  return packageMismatch(
+    `the file ${file} is of build ${build} and runtime/worker.js of build ${WORKER_BUILD_ID}`,
+  );
 }
 
 /** The Rust core has its own copies, which it wipes; these are the copies in this worker. */

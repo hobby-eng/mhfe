@@ -20,11 +20,6 @@
 # rustc's own. rustc names its standard library /rustc/<commit>/ itself. Cargo's trim-paths would
 # make such paths relative on its own, but Cargo 1.99.1 still refuses it as unstable.
 
-# The release targets whose rustflags get the remapping, the computer's own target among them for
-# a build without --target.
-REMAPPED_TARGETS="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-gnu
-x86_64-apple-darwin aarch64-apple-darwin wasm32-unknown-unknown"
-
 # The directories of this builder that no release file may name, one per line and without a
 # trailing slash: the repository given as $1, CARGO_HOME, RUSTUP_HOME and the home directory.
 builder_directories() {
@@ -65,7 +60,10 @@ remap_builder_paths() {
     esac
     flags="${flags:+$flags }--remap-path-prefix=$remapping"
   done
-  for triple in $REMAPPED_TARGETS; do
+  # The release targets whose rustflags get the remapping, the computer's own target among them
+  # for a build without --target.
+  for triple in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-gnu \
+    x86_64-apple-darwin aarch64-apple-darwin wasm32-unknown-unknown; do
     variable="CARGO_TARGET_$(printf '%s' "$triple" | tr 'a-z-' 'A-Z_')_RUSTFLAGS"
     eval "current=\${$variable:-}"
     case " $current " in

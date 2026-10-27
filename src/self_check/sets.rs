@@ -32,6 +32,7 @@ pub struct NotChecked {
 }
 
 impl NotChecked {
+    /// A part `id`, named `label`, that this run leaves out for `reason`: reported as not run.
     pub fn new(id: &'static str, label: &'static str, reason: &'static str) -> Self {
         Self { id, label, reason }
     }

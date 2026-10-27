@@ -356,6 +356,7 @@ mod tests {
 
     #[test]
     fn a_damaged_case_fails() {
+        // Fault: an expected phrase, damaged as by a broken build or faulty memory.
         let damaged = [WishCase {
             phrase: "abandon",
             ..CASES[0]
@@ -370,6 +371,7 @@ mod tests {
 
     #[test]
     fn a_case_taken_from_another_draw_fails() {
+        // Fault: a case's draw, damaged as by a broken build or faulty memory.
         let damaged = [WishCase {
             draw: 1,
             ..CASES[1]
@@ -389,6 +391,7 @@ mod tests {
         let number = 512;
         let mut expected = WordWishesCheck::expected_bits(&before, position, number);
         assert!(WordWishesCheck::bit_case(&before, position, number, &expected).is_ok());
+        // Fault: the expected bits, damaged as by a broken build or faulty memory.
         // A neighboring bit and a chosen-word bit must each make the same startup check fail.
         expected[0] ^= 1;
         assert_eq!(
@@ -410,6 +413,7 @@ mod tests {
         let mut reference =
             WordWishesCheck::expected_bits(&[0x5a; STATE_BYTES + 1], position, number);
         assert!(WordWishesCheck::read_case(&reference, position, number).is_ok());
+        // Fault: the reader's reference bits, damaged as by a broken build or faulty memory.
         reference[1] ^= 0x08;
         assert_eq!(
             WordWishesCheck::read_case(&reference, position, number),

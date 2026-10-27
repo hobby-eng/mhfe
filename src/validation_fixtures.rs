@@ -7,10 +7,12 @@
 //! A self-check must fail, not stop the program, when a built-in table is damaged, so everything
 //! here reads them without panicking.
 
-// The passwords module of the browser package reads only the fixture's passwords.
 #![cfg_attr(
     all(target_arch = "wasm32", not(feature = "browser-core")),
-    allow(dead_code)
+    allow(
+        dead_code,
+        reason = "the passwords module of the browser package reads only the fixture's passwords"
+    )
 )]
 
 use serde_json::Value;

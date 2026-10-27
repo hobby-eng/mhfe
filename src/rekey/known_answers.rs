@@ -281,6 +281,7 @@ mod tests {
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
         let mut check = one_case("zero-12", "zero-12-memory-level-1", true);
         assert_eq!(check.run(Tier::Startup), ComponentOutcome::Passed);
+        // Fault: a case aimed at another phrase's vector, as a damaged table would give it.
         let mut check = one_case("zero-12", "nonzero-12", false);
         assert!(check.run(Tier::Startup).is_failure());
     }

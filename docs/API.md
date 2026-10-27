@@ -609,7 +609,7 @@ operation's first round and after its last.
 published vectors with `PublishedRoundKeys`, a private engine that answers only the password and
 salt pairs a published vector records, with the key it records, and refuses any other call with
 `INTERNAL_ERROR`. It cannot encrypt anything but a published vector, so a release build may hold
-it. Its table, `src/mhfe/published_rounds.rs`, is written by `scripts/generate-published-rounds.py`
+it. Its table, `src/mhfe/published_rounds.rs`, is written by `scripts/generate-published-rounds.mjs`
 from `tests/fixtures/` (`--check` compares without writing), and a unit test compares every value
 with the fixtures.
 

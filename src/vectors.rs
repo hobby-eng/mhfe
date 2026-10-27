@@ -35,8 +35,11 @@ const ARGON2_VERSION: u32 = 0x13;
 /// independent check records its own revision next to them (independent-verification.json).
 #[derive(Serialize)]
 pub struct Generator {
+    /// The program and command that wrote it.
     pub program: &'static str,
+    /// The program's version.
     pub version: &'static str,
+    /// The Argon2 implementation the program used.
     pub argon2: &'static str,
 }
 
@@ -47,46 +50,75 @@ const GENERATOR: Generator = Generator {
              f57e61e19229e23c4445b85494dbf7c07de721cb",
 };
 
+/// A suite 3 vector: one encryption and the matching recovery, with every intermediate value.
 #[derive(Serialize)]
 pub struct Vector {
+    /// The file layout, [`SCHEMA`].
     pub schema: &'static str,
+    /// The suite, [`SUITE_ID`].
     pub suite_id: &'static str,
+    /// The vector's name; its file is `<name>.json`.
     pub name: String,
+    /// That the file is public test data only.
     pub warning: &'static str,
+    /// What wrote the file.
     pub generator: Generator,
+    /// The phrase, the password and the settings.
     pub inputs: Inputs,
+    /// The parameters of every Argon2id call.
     pub argon2: Argon2Parameters,
+    /// How the phrase became the state the rounds start from.
     pub packing: Packing,
+    /// The rounds of the encryption.
     pub encryption: Pass,
+    /// The container phrase, 24 words.
     pub container: String,
+    /// The rounds of the recovery.
     pub decryption: Pass,
+    /// Every reading the recovery gives, as its length detection finds them.
     pub recovery: Vec<RecoveredCandidate>,
 }
 
+/// The public inputs of a vector.
 #[derive(Serialize)]
 pub struct Inputs {
+    /// The original seed phrase.
     pub phrase: String,
     /// The password as typed; `password_nfkd_utf8_hex` is `P_enc`, what Argon2 receives.
     pub password: String,
+    /// The password as typed, its UTF-8 bytes in hexadecimal.
     pub password_utf8_hex: String,
+    /// `P_enc`: the password after NFKD normalization, its UTF-8 bytes in hexadecimal.
     pub password_nfkd_utf8_hex: String,
+    /// The PIM.
     pub pim: u32,
+    /// The memory level.
     pub memory_level: u32,
 }
 
+/// The parameters of every Argon2 call of a vector.
 #[derive(Serialize)]
 pub struct Argon2Parameters {
+    /// The Argon2 variant, "Argon2id".
     pub variant: &'static str,
+    /// The Argon2 version as RFC 9106 numbers it, 0x13.
     pub version: u32,
+    /// Memory in KiB.
     pub memory_kib: u32,
+    /// Passes over the memory, `t`.
     pub passes: u32,
+    /// Lanes, `p`.
     pub lanes: u32,
+    /// The length of each key in bytes.
     pub output_bytes: usize,
 }
 
+/// How a suite 3 vector's phrase becomes the state the rounds start from.
 #[derive(Serialize)]
 pub struct Packing {
+    /// The phrase's word count.
     pub words: usize,
+    /// `E`, the phrase's entropy.
     pub entropy_hex: String,
     /// `V_r`; empty for a 24-word phrase.
     pub verifier_hex: String,
@@ -98,31 +130,47 @@ pub struct Packing {
 /// encrypting, 11 down to 0 when decrypting.
 #[derive(Serialize)]
 pub struct Pass {
+    /// The state before the first round.
     pub input_state_hex: String,
+    /// Every round, in the order it ran.
     pub rounds: Vec<Round>,
+    /// The state after the last round.
     pub output_state_hex: String,
 }
 
+/// Every value of one Feistel round.
 #[derive(Serialize)]
 pub struct Round {
+    /// The round number `i`, 0 to 11.
     pub round: u32,
+    /// `L` before the round.
     pub left_before_hex: String,
+    /// `R` before the round.
     pub right_before_hex: String,
     /// The BLAKE2b-256 input `DS_SALT || BE32(MEM) || BE32(PIM) || BE32(i) || R`.
     pub salt_input_hex: String,
+    /// `S_i`, the Argon2 salt.
     pub salt_hex: String,
+    /// `K_i`, the key Argon2id returned.
     pub argon2_key_hex: String,
     /// The HMAC-SHA-256 message `DS_MASK || BE32(MEM) || BE32(PIM) || BE32(i) || R`.
     pub mask_input_hex: String,
+    /// `M_i`, the mask.
     pub mask_hex: String,
+    /// `L` after the round.
     pub left_after_hex: String,
+    /// `R` after the round.
     pub right_after_hex: String,
 }
 
+/// One reading of a recovery.
 #[derive(Serialize)]
 pub struct RecoveredCandidate {
+    /// Its length in words.
     pub words: usize,
+    /// Whether a built-in check verifies it.
     pub verified: bool,
+    /// The phrase.
     pub phrase: String,
 }
 
@@ -141,24 +189,36 @@ impl RecoveredCandidate {
 /// message carries `BE32(ENT)`.
 #[derive(Serialize)]
 pub struct SameLengthVector {
+    /// The file layout, [`SAME_LENGTH_SCHEMA`].
     pub schema: &'static str,
+    /// The suite, [`SAME_LENGTH_SUITE_ID`].
     pub suite_id: &'static str,
+    /// The vector's name; its file is `<name>.json`.
     pub name: String,
+    /// That the file is public test data only.
     pub warning: &'static str,
+    /// What wrote the file.
     pub generator: Generator,
+    /// The phrase, the password and the settings.
     pub inputs: Inputs,
+    /// The parameters of every Argon2id call.
     pub argon2: Argon2Parameters,
+    /// The state the rounds start from.
     pub state: SameLengthState,
+    /// The rounds of the encryption.
     pub encryption: Pass,
     /// As many words as the phrase.
     pub container: String,
+    /// The rounds of the recovery.
     pub decryption: Pass,
     /// The one reading of a same-length container: never verified, since it has no check.
     pub recovery: RecoveredCandidate,
 }
 
+/// The state of a suite 4 vector and the geometry it gives.
 #[derive(Serialize)]
 pub struct SameLengthState {
+    /// The phrase's word count.
     pub words: usize,
     /// `ENT`, which every salt and mask message carries as `BE32(ENT)`.
     pub entropy_bits: u32,
@@ -398,14 +458,17 @@ pub struct PublicInput {
 }
 
 impl PublicInput {
+    /// The vector's name.
     pub const fn name(&self) -> &'static str {
         self.name
     }
 
+    /// The original seed phrase.
     pub const fn phrase(&self) -> &'static str {
         self.phrase
     }
 
+    /// The password, as typed.
     pub const fn password(&self) -> &'static str {
         self.password
     }
@@ -540,6 +603,7 @@ pub struct NegativeInput {
 }
 
 impl NegativeInput {
+    /// The case's name.
     pub const fn name(&self) -> &'static str {
         self.name
     }
@@ -549,6 +613,7 @@ impl NegativeInput {
         self.container_of
     }
 
+    /// The password, as typed.
     pub const fn password(&self) -> &'static str {
         self.password
     }
@@ -701,18 +766,29 @@ pub const SAME_LENGTH_NEGATIVE_INPUTS: [NegativeInput; 4] = [
 /// a case of `STATED_READING_ONLY` it keeps only the reading of the stated length.
 #[derive(Serialize)]
 pub struct NegativeCase {
+    /// The file layout, [`NEGATIVE_SCHEMA`] or [`SAME_LENGTH_NEGATIVE_SCHEMA`].
     pub schema: &'static str,
+    /// The suite, [`SUITE_ID`] or [`SAME_LENGTH_SUITE_ID`].
     pub suite_id: &'static str,
+    /// The case's name; all cases share one file.
     pub name: String,
+    /// What wrote the file.
     pub generator: Generator,
+    /// The container recovered.
     pub container: String,
+    /// The password as typed.
     pub password: String,
+    /// `P_enc`: the password after NFKD normalization, its UTF-8 bytes in hexadecimal.
     pub password_nfkd_utf8_hex: String,
+    /// The PIM.
     pub pim: u32,
+    /// The memory level.
     pub memory_level: u32,
     /// 0 for automatic detection.
     pub words: usize,
+    /// The readings the recovery gave; empty where it failed.
     pub recovery: Vec<RecoveredCandidate>,
+    /// The error code of a recovery that failed ([`MhfeError::code`]).
     pub error_code: Option<&'static str>,
 }
 

@@ -123,6 +123,7 @@ mod tests {
 
     #[test]
     fn a_wrong_fingerprint_fails() {
+        // Fault: the expected fingerprint, damaged as by a broken build or faulty memory.
         let mut check = RehearsalCheck {
             fingerprint: [0x73, 0xc5, 0xda, 0x0c],
         };

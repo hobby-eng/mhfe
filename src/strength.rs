@@ -94,6 +94,7 @@ impl Strength {
         }
     }
 
+    /// The estimate in bits.
     pub fn bits(self) -> f64 {
         self.bits
     }
@@ -128,6 +129,10 @@ fn word_lists() -> &'static [WordList; 2] {
 
 /// Adds up the parts of `text` from left to right, taking at each place the longest word of the
 /// lists, else a year, else one character.
+#[expect(
+    clippy::expect_used,
+    reason = "`at` moves by ASCII words, years and whole characters, so it stays on a boundary"
+)]
 fn read_parts(text: &str, lists: &[WordList]) -> f64 {
     let bytes = text.as_bytes();
     let mut bits = 0.0;

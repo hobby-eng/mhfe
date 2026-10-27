@@ -19,10 +19,12 @@ pub const KEY_BYTES: usize = 32;
 pub struct Argon2Cost {
     /// Memory in KiB, the unit Argon2 uses.
     pub memory_kib: u32,
+    /// Passes over the memory, Argon2's `t`.
     pub passes: u32,
 }
 
 impl Argon2Cost {
+    /// The memory in bytes.
     pub fn memory_bytes(self) -> u64 {
         u64::from(self.memory_kib) * 1024
     }
@@ -30,6 +32,8 @@ impl Argon2Cost {
 
 /// Computes `Argon2id(password, salt)` at the cost the engine was created for.
 pub trait Argon2Engine {
+    /// Writes the 32-byte Argon2id tag of `password` and `salt` into `key`; an engine that cannot
+    /// compute it returns [`MhfeError::Argon2`] or the error of its memory.
     fn derive(
         &mut self,
         password: &[u8],
@@ -77,6 +81,9 @@ mod ffi;
 pub(crate) mod known_answers;
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
+// Also included by build.rs, which hands the flag to the C code.
+#[cfg(not(target_arch = "wasm32"))]
+mod ssse3_flag;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use ffi::{lock_pages, page_size, unlock_pages};

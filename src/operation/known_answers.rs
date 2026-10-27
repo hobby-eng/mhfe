@@ -171,6 +171,7 @@ mod tests {
 
     #[test]
     fn a_list_with_a_default_setting_fails() {
+        // Fault: two expected cases, damaged as by a broken build or faulty memory.
         let mut cases = CASES;
         cases[0].expected = &[
             KeepItem::ContainerWords(24),

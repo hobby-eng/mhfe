@@ -2,6 +2,9 @@
 
     python3 scripts/third-party-licenses.py           write the part into THIRD_PARTY_NOTICES.md
     python3 scripts/third-party-licenses.py --check   fail if the committed file is out of date
+    python3 scripts/third-party-licenses.py --archives <archive> ...
+        fail unless each release archive, a .zip or a .tar.gz, carries LICENSE and
+        THIRD_PARTY_NOTICES.md byte for byte as in this checkout
 
 The crates are the union of `cargo tree --locked --offline -e normal,no-proc-macro` over every
 release target and feature set (TREES below). Build scripts, build dependencies and proc macros
@@ -32,6 +35,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tarfile
+import zipfile
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = REPO_ROOT / "THIRD_PARTY_NOTICES.md"
@@ -303,10 +308,44 @@ def render(resolved):
     return "\n".join(lines)
 
 
+def archive_members(archive):
+    """The archive's files, by path without a leading "./".
+
+    Python's tarfile and zipfile read both archive kinds the same way on every build machine; Node
+    has no reader of either (TOOL-01).
+    """
+    if archive.endswith(".zip"):
+        with zipfile.ZipFile(archive) as packed:
+            return {name.removeprefix("./"): packed.read(name) for name in packed.namelist()}
+    with tarfile.open(archive) as packed:
+        return {
+            member.name.removeprefix("./"): packed.extractfile(member).read()
+            for member in packed.getmembers()
+            if member.isfile()
+        }
+
+
+def check_archives(archives):
+    """Fails unless every archive carries the licence files of this checkout."""
+    failed = False
+    for archive in archives:
+        files = archive_members(archive)
+        for name in ("LICENSE", OUTPUT.name):
+            if files.get(name) != (REPO_ROOT / name).read_bytes():
+                print(f"{archive} lacks {name} or holds another version of it.", file=sys.stderr)
+                failed = True
+    if failed:
+        return 1
+    print(f"Every archive carries the licence files: {len(archives)} checked.")
+    return 0
+
+
 def main(arguments):
+    if arguments[:1] == ["--archives"] and len(arguments) > 1:
+        return check_archives(arguments[1:])
     check = arguments == ["--check"]
     if arguments and not check:
-        print("\n".join(__doc__.splitlines()[2:4]), file=sys.stderr)
+        print("\n".join(__doc__.splitlines()[2:7]), file=sys.stderr)
         return 2
     try:
         content = render(resolve(shipped_crates(), registry_packages()))

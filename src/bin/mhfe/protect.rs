@@ -15,9 +15,11 @@
 //! Each protection is read back before it is relied on: [`CoreDumpCheck`] and [`IsolationCheck`]
 //! are parts of the checks at start (startup.rs) and of `mhfe self-test`.
 
-// prctl, setrlimit, sigaction and the Landlock calls are operating-system calls that Rust offers
-// only through unsafe foreign functions.
-#![allow(unsafe_code)]
+#![allow(
+    unsafe_code,
+    reason = "prctl, setrlimit, sigaction and the Landlock calls are operating-system calls that \
+              Rust offers only through unsafe foreign functions"
+)]
 
 use std::cell::Cell;
 use std::fs;
@@ -90,8 +92,13 @@ pub fn interrupt_on_quit_and_suspend() -> bool {
 pub const CORE_DUMPS_ID: &str = "core-dumps";
 
 /// How one protection reads back from the kernel.
-// Windows reads nothing back: there, only the tests construct every variant.
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(
+    not(unix),
+    allow(
+        dead_code,
+        reason = "Windows reads nothing back: there, only the tests construct every variant"
+    )
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ReadBack {
     /// As [`harden_process`] set it.
@@ -555,8 +562,10 @@ pub fn lock_limit() -> Option<u64> {
         {
             return None;
         }
-        // rlim_t is u64 on Linux and macOS, but not on every Unix.
-        #[allow(clippy::useless_conversion)]
+        #[allow(
+            clippy::useless_conversion,
+            reason = "rlim_t is u64 on Linux and macOS, but not on every Unix"
+        )]
         let bytes = u64::from(limit.rlim_cur);
         Some(bytes)
     }

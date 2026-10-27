@@ -88,6 +88,7 @@ mod tests {
 
     #[test]
     fn another_wallet_fails() {
+        // Fault: the expected wallet, damaged as by a broken build or faulty memory.
         let mut check = HiddenWalletsCheck {
             wallet: "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                      abandon abandon abandon abandon abandon abandon abandon abandon abandon \

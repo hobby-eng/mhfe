@@ -9,7 +9,7 @@ use crate::detection::LengthDetection;
 use crate::engine::Argon2Engine;
 use crate::memory::LockedBytes;
 use crate::mhfe::{
-    read_as, read_same_length, recover, suite_3_state, PhraseLength, RecoveredPhrase, Recovery,
+    read_as, read_same_length, read_state, suite_3_state, PhraseLength, RecoveredPhrase, Recovery,
 };
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::packing::STATE_WORDS;
@@ -26,11 +26,17 @@ pub(crate) mod known_answers;
 /// the phrase and is given only on a match.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CheckOutcome {
-    Matches { path: Option<DerivationPath> },
+    /// The recovery matches the reference.
+    Matches {
+        /// Where the matching receiving address was found; `None` for any other reference.
+        path: Option<DerivationPath>,
+    },
+    /// The recovery does not match the reference.
     DoesNotMatch,
 }
 
 impl CheckOutcome {
+    /// Whether the outcome is [`CheckOutcome::Matches`].
     pub fn matches(&self) -> bool {
         matches!(self, Self::Matches { .. })
     }
@@ -79,18 +85,27 @@ pub enum Reference<'a> {
     /// length. It confirms that the recovery is consistent, not that it gives the same wallet, and
     /// it says nothing about a BIP39 passphrase. A 24-word original and a same-length container
     /// have no such check and are refused.
-    BuiltInCheck { words: WordCount },
+    BuiltInCheck {
+        /// The length the person states.
+        words: WordCount,
+    },
     /// A receiving address of the wallet, the strong check. The address is searched on the
     /// standard paths of its type within `limits`, or only at `path` when given.
     Address {
+        /// The receiving address.
         address: &'a Address,
+        /// The wallet's BIP39 passphrase; empty for none.
         passphrase: &'a str,
+        /// The one path to look at, in place of the standard paths.
         path: Option<&'a DerivationPath>,
+        /// How many accounts and addresses of the standard paths are searched.
         limits: SearchLimits,
     },
     /// The BIP32 master key fingerprint: quick, but only 32 bits, so a weaker check.
     Fingerprint {
+        /// The four bytes of the fingerprint.
         fingerprint: [u8; 4],
+        /// The wallet's BIP39 passphrase; empty for none.
         passphrase: &'a str,
     },
     /// The wallet check of a 24-word phrase drawn to pass it, as `mhfe new` does on request (the
@@ -100,14 +115,21 @@ pub enum Reference<'a> {
     /// ([`crate::wallet_check::verify_entropy`]). It tells a right password and passphrase from
     /// wrong ones with 16 bits, not which wallet it is, so it never confirms a recovery to encrypt
     /// again.
-    WalletCheck { passphrase: &'a str },
+    WalletCheck {
+        /// The wallet's BIP39 passphrase, not empty.
+        passphrase: &'a str,
+    },
     /// The original seed phrase's own checks, its length detected (`detection`): the
     /// built-in check of whichever 12- to 21-word length passes it, or else, with a BIP39
     /// `passphrase`, which may not be empty, the phrase + passphrase check of the 24-word reading.
     /// Like those checks it tells a right password from a wrong one, not which wallet it is, and
     /// it finds a 24-word phrase only if that phrase was drawn with the check. A same-length
     /// container has neither and is refused.
-    OwnChecks { passphrase: Option<&'a str> },
+    OwnChecks {
+        /// The wallet's BIP39 passphrase for the phrase + passphrase check, not empty; `None`
+        /// leaves that check out.
+        passphrase: Option<&'a str>,
+    },
 }
 
 /// A reference as a front end reads it, owning what [`Reference`] borrows except the BIP39
@@ -116,7 +138,9 @@ pub enum Reference<'a> {
 pub enum ReferenceTarget {
     /// A receiving address, searched on the standard paths of its type, or only at `path`.
     Address {
+        /// The receiving address.
         address: Address,
+        /// The one path to look at, in place of the standard paths.
         path: Option<DerivationPath>,
     },
     /// The BIP32 master key fingerprint.
@@ -614,11 +638,7 @@ impl RecoveredForRekey {
     /// check that passes takes precedence over a stated length.
     fn readings(&self, length: PhraseLength) -> Result<Vec<RecoveredPhrase>, MhfeError> {
         self.facts.require_length(length)?;
-        let recovery = match self.suite {
-            Suite::TwentyFourWords => recover(suite_3_state(&self.state)?, length),
-            Suite::SameLength => Ok(Recovery::Phrase(read_same_length(&self.state)?)),
-        };
-        Ok(match recovery? {
+        Ok(match read_state(self.suite, &self.state, length)? {
             Recovery::Phrase(phrase) => vec![phrase],
             Recovery::Ambiguous(readings) => readings,
         })
