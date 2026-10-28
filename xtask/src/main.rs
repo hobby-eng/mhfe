@@ -9,6 +9,9 @@
 //!   `scripts/check-release-artifacts.sh`.
 //! - `package-release-args`: checks that `scripts/package-release.sh` refuses a wrong package list
 //!   before it writes anything.
+//! - `wasm <step>`: the steps of `scripts/build-wasm.sh` between the compilers: the network
+//!   loaders replaced, the build stamped, the package manifest written, the built package
+//!   checked.
 //!
 //! A task that fails prints why and exits 1.
 
@@ -16,6 +19,7 @@ mod copies;
 mod package_release_args;
 mod published_rounds;
 mod release_artifacts;
+mod wasm;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -35,8 +39,13 @@ impl fmt::Display for Failure {
 
 impl std::error::Error for Failure {}
 
+/// A failure that names the file it concerns.
+pub(crate) fn at(path: &Path, error: impl fmt::Display) -> Failure {
+    Failure(format!("{}: {error}", path.display()))
+}
+
 const USAGE: &str = "usage: cargo xtask <copies [--tokens N] | published-rounds [--check] | \
-                     release-artifacts --test-binary | package-release-args>";
+                     release-artifacts --test-binary | package-release-args | wasm <step>>";
 
 /// The repository's root: the folder above this crate's.
 fn root() -> PathBuf {
@@ -53,6 +62,7 @@ fn run(task: &str, arguments: &[String]) -> Result<(), Failure> {
         ("published-rounds", [check]) if check == "--check" => published_rounds::run(&root, true),
         ("release-artifacts", [mode]) if mode == "--test-binary" => release_artifacts::run(&root),
         ("package-release-args", []) => package_release_args::run(&root),
+        ("wasm", arguments) => wasm::run(&root, arguments),
         _ => Err(Failure(USAGE.to_owned())),
     }
 }

@@ -118,8 +118,8 @@ Never include a real seed phrase, password, private key or wallet file.
   are wiped. The check word adds no strength and is as secret as the rest of the password.
 - Nothing connects to a network. The browser package loads no remote resources and contains no
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
-  (`scripts/remove-network-code.mjs`), and the only network code in the tool is `mhfe serve`, which
-  listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
+  (`cargo xtask wasm remove-network-code`), and the only network code in the tool is `mhfe serve`,
+  which listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
 - On Linux the kernel enforces this. A command that handles secrets (`encrypt`, `decrypt`, `check`,
   `rekey`, `new`, `wallets`, `repair`, `repair-words`, `password`) runs under a seccomp filter that
   refuses to create any socket, and refuses io_uring altogether, whose operations could create one

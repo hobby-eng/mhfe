@@ -1023,13 +1023,13 @@ The package identifies itself by its release version, `version` in every `parame
 `packageVersion()`. Earlier builds reported a separate counter instead:
 `apiVersion` 1 in v0.3.0, 6 in v0.4.0 and 7 in v0.5.0; `version` replaced it in v0.6.0. Its files
 also carry their build, `BUILD_ID` of `runtime/runtime.js` and `buildId` of `modules.json` and of
-every self-check report. `scripts/stamp-build-id.mjs` derives it from the nine files a page loads,
-read before any is stamped: `runtime/mhfe.wasm`, `runtime/runtime.js`, `runtime/worker.js`,
+every self-check report. `cargo xtask wasm stamp-build-id` derives it from the nine files a page
+loads, read before any is stamped: `runtime/mhfe.wasm`, `runtime/runtime.js`, `runtime/worker.js`,
 `core/client.js`, `core/argon2-mt.js`, `core/argon2-st.js`, `repair/repair.js`,
 `passwords/passwords.js` and `wallet/wallet.js`. The build is the first 16 hex digits of the SHA-256
 of a list with one line per file in that order, its SHA-256, two spaces and its path, as
 `sha256sum` prints it, so two builds that differ in one script alone get different identifiers. The
-script writes it into `runtime/mhfe.wasm` as the custom section `mhfe-build` and into the build
+task writes it into `runtime/mhfe.wasm` as the custom section `mhfe-build` and into the build
 constant of each of the eight scripts; each Argon2 build ends with its own,
 `ARGON2_THREADED_BUILD_ID` or `ARGON2_SINGLE_THREADED_BUILD_ID`, which `scripts/build-wasm.sh`
 appends. Files of different builds are refused with `PACKAGE_MISMATCH` before they work together:

@@ -16,7 +16,7 @@ WORKDIR /workspace
 COPY vendor/phc-winner-argon2 vendor/phc-winner-argon2
 # The list of the engine's C files, which build.rs reads too.
 COPY src/engine/argon2-sources.txt src/engine/
-COPY scripts/build-argon2-wasm.sh scripts/remove-network-code.mjs scripts/
+COPY scripts/build-argon2-wasm.sh scripts/
 RUN scripts/build-argon2-wasm.sh
 
 FROM buildpack-deps:noble@sha256:27bdb6ab1ca0df6acfe341752ee4d9c08a341d80e3ee75ccc3b34b79af0dfaf1 AS toolchain

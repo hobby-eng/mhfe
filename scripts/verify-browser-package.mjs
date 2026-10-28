@@ -2634,9 +2634,9 @@ for (const [request, phrase] of phraseRequests) {
 assert.deepEqual(phraseResults.slice(0, 2), [PHRASE_TREZOR_FINGERPRINT, true]);
 assert.equal(phraseResults[2].phrase, PHRASE);
 
-// The build handshake. scripts/stamp-build-id.mjs ends the WebAssembly with the custom section
-// "mhfe-build": id 0, 27 bytes, the 10-byte name, the 16 hex digits of the build (part 3 derives
-// them again).
+// The build handshake. `cargo xtask wasm stamp-build-id` ends the WebAssembly with the custom
+// section "mhfe-build": id 0, 27 bytes, the 10-byte name, the 16 hex digits of the build (part 3
+// derives them again).
 const stamp = Buffer.concat([Buffer.from([0, 27, 10]), Buffer.from(`mhfe-build${BUILD_ID}`)]);
 assert.deepEqual(packageWasm.subarray(-stamp.length), stamp, "the WebAssembly ends with its stamp");
 const unstamped = packageWasm.subarray(0, -stamp.length);
@@ -2756,7 +2756,7 @@ assert.match(
   "the dependencies' paths are there, remapped from CARGO_HOME to cargo/",
 );
 // No script of the package contains code that could reach the network, not even code that never
-// runs (scripts/remove-network-code.mjs removes the loaders the tools emit).
+// runs (`cargo xtask wasm remove-network-code` removes the loaders the tools emit).
 const scriptsOf = (folder, files) =>
   Object.keys(files)
     .filter((name) => name.endsWith(".js"))
@@ -2939,9 +2939,9 @@ assert.deepEqual(
 assert.equal(buildOf(unstampedFiles), BUILD_ID);
 // Two builds that differ in one script alone have different builds, so that their files are not
 // used together: the files of this package, unstamped, with a comment added to repair/repair.js,
-// stamped again by the build's own script in a folder of their own. Then every file of that build
-// carries the other build: its WebAssembly is refused by this worker, its Argon2 build too, and
-// part 4b gives its class file this runtime.
+// stamped again by `cargo xtask wasm stamp-build-id` in a folder of their own. Then every file of
+// that build carries the other build: its WebAssembly is refused by this worker, its Argon2 build
+// too, and part 4b gives its class file this runtime.
 const otherBuildDir = fileURLToPath(new URL("target/build-id-check/", root));
 /** Writes `files` into the other build's folder, as scripts/build-wasm.sh leaves them. */
 function writeBuildFiles(files) {
@@ -2952,7 +2952,7 @@ function writeBuildFiles(files) {
   }
 }
 const stampBuild = () =>
-  execFileSync(process.execPath, ["scripts/stamp-build-id.mjs", otherBuildDir], {
+  execFileSync("cargo", ["xtask", "wasm", "stamp-build-id", otherBuildDir], {
     cwd: fileURLToPath(root),
     stdio: "pipe",
   }).toString();

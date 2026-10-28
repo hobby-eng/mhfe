@@ -14,8 +14,10 @@ name = "xtask"
 path = "src/main.rs"
 
 [dependencies]
-# The version mhfe itself uses (CORE-25), so the lock file gains no crate.
+# The versions mhfe itself uses (CORE-25), so the lock file gains no crate.
+serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
+sha2 = "=0.11.1"
 
 [lints.rust]
 unsafe_code = "forbid"

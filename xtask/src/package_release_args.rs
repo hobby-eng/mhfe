@@ -9,7 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use crate::Failure;
+use crate::{Failure, at};
 
 /// The output folder in the command lines below.
 const OUTPUT: &str = "<output>";
@@ -81,11 +81,11 @@ fn package_release(
     arguments: &[&str],
     rustflags: Option<&str>,
 ) -> Result<Outcome, Failure> {
-    let at = |error: std::io::Error| Failure(format!("{}: {error}", base.display()));
+    let failed = |error: std::io::Error| at(base, error);
     if base.exists() {
-        fs::remove_dir_all(base).map_err(at)?;
+        fs::remove_dir_all(base).map_err(failed)?;
     }
-    fs::create_dir_all(base).map_err(at)?;
+    fs::create_dir_all(base).map_err(failed)?;
     let output = base.join("out");
     let mut command = Command::new("bash");
     command
@@ -109,6 +109,6 @@ fn package_release(
         stderr: String::from_utf8_lossy(&result.stderr).into_owned(),
         created: output.exists(),
     };
-    fs::remove_dir_all(base).map_err(at)?;
+    fs::remove_dir_all(base).map_err(failed)?;
     Ok(outcome)
 }

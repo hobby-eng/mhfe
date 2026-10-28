@@ -57,6 +57,9 @@ target_dir="$(cargo metadata --locked --no-deps --format-version 1 |
 python3 scripts/verify-hidden-input.py "$target_dir/release/mhfe"
 
 scripts/build-wasm.sh
+# The built package's manifest, build, WebAssembly paths and scripts, without a JavaScript
+# engine; the checks that run its code follow.
+cargo xtask wasm verify dist
 node scripts/verify-argon2-wasm.mjs
 node scripts/verify-browser-package.mjs
 # The program and the package give the same results, as both call the same library.

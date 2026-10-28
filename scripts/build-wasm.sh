@@ -15,12 +15,12 @@
 #                 SHA-256
 #   README.md     how to use the package, with the same SHA-256
 #
-# scripts/stamp-build-id.mjs derives one build identity from every file a page loads (mhfe.wasm,
-# runtime.js, worker.js, each class and both Argon2 builds) before any is stamped, and stamps it
-# into each of them. The classes, the runtime and the worker compare these stamps before they use
-# the files together, so that files of two builds mixed by accident, even ones that differ in a
-# script alone, are refused with PACKAGE_MISMATCH. Deliberate tampering is not caught this way;
-# SHA256SUMS and its signature cover that.
+# `cargo xtask wasm stamp-build-id` derives one build identity from every file a page loads
+# (mhfe.wasm, runtime.js, worker.js, each class and both Argon2 builds) before any is stamped, and
+# stamps it into each of them. The classes, the runtime and the worker compare these stamps before
+# they use the files together, so that files of two builds mixed by accident, even ones that
+# differ in a script alone, are refused with PACKAGE_MISMATCH. Deliberate tampering is not caught
+# this way; SHA256SUMS and its signature cover that.
 #
 # One WebAssembly rather than one per module: the modules share most of their code (the word list,
 # Unicode tables, hashing, BIP39), so separate files were together more than twice the size of the
@@ -71,7 +71,7 @@ wasm-bindgen "$target_dir/wasm32-unknown-unknown/release/mhfe.wasm" \
   --out-dir "$bindgen_dir" \
   --out-name mhfe
 # The glue's asynchronous loader fetches the WebAssembly by URL; the worker uses initSync instead.
-node scripts/remove-network-code.mjs glue "$bindgen_dir/mhfe.js"
+cargo xtask wasm remove-network-code glue "$bindgen_dir/mhfe.js"
 
 classes=(core repair passwords wallet)
 rm -rf dist
@@ -83,8 +83,12 @@ else
   scripts/build-argon2-wasm.sh
   mv dist/argon2-mt.js dist/argon2-st.js dist/core/
 fi
-# Each Argon2 build ends with its build constant, which scripts/stamp-build-id.mjs stamps and
-# web/core-worker.js compares with the worker's before the build runs. The names differ, as a
+# Emscripten always emits loaders that fetch a WebAssembly file; these builds embed theirs, so the
+# loaders are replaced by stubs and no network code is left in the package. This happens here,
+# after the copy, so that PREBUILT_ARGON2_DIR holds Emscripten's own output.
+cargo xtask wasm remove-network-code argon2 dist/core/argon2-mt.js dist/core/argon2-st.js
+# Each Argon2 build ends with its build constant, which `cargo xtask wasm stamp-build-id` stamps
+# and web/core-worker.js compares with the worker's before the build runs. The names differ, as a
 # self-check worker may have both builds in front of it.
 printf '\nconst ARGON2_THREADED_BUILD_ID = "development";\n' >> dist/core/argon2-mt.js
 printf '\nconst ARGON2_SINGLE_THREADED_BUILD_ID = "development";\n' >> dist/core/argon2-st.js
@@ -101,13 +105,10 @@ for class in repair passwords wallet; do
   cp "web/$class.js" "web/$class.d.ts" "dist/$class/"
 done
 
-node scripts/stamp-build-id.mjs dist
-for script in dist/*/*.js; do
-  node --check "$script"
-done
+cargo xtask wasm stamp-build-id dist
 # A syntax check that, unlike py_compile, writes no bytecode into the package.
 python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' \
   dist/core/mhfe-fast-mode.py
 
-node scripts/write-package-manifest.mjs dist
+cargo xtask wasm package-manifest dist
 echo "Built the browser package in $repo_root/dist"

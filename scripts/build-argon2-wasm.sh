@@ -72,7 +72,6 @@ single_threaded_flags=(
 mkdir -p dist
 emcc "${common_flags[@]}" "${threaded_flags[@]}" "${sources[@]}" -o dist/argon2-mt.js
 emcc "${common_flags[@]}" "${single_threaded_flags[@]}" "${sources[@]}" -o dist/argon2-st.js
-# Emscripten always emits loaders that fetch a WebAssembly file; these builds embed theirs, so the
-# loaders are replaced by stubs and no network code is left in the package.
-node scripts/remove-network-code.mjs argon2 dist/argon2-mt.js dist/argon2-st.js
+# Emscripten always emits loaders that fetch a WebAssembly file; scripts/build-wasm.sh replaces
+# them by stubs, so that this output is the same here and in the reproducible build's own stage.
 echo "Built dist/argon2-mt.js and dist/argon2-st.js with Emscripten $actual_emscripten"

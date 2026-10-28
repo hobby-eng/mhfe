@@ -9,13 +9,12 @@
 //! bytes. The unit test `published_round_table_equals_the_fixtures` compares every value with the
 //! fixtures again.
 
-use std::fmt::Display;
 use std::fs;
 use std::path::Path;
 
 use serde_json::Value;
 
-use crate::Failure;
+use crate::{Failure, at};
 
 /// The file the task writes, from the repository's root.
 const OUTPUT: &str = "src/mhfe/published_rounds.rs";
@@ -65,11 +64,6 @@ pub(crate) fn run(root: &Path, check: bool) -> Result<(), Failure> {
         )));
     }
     Ok(())
-}
-
-/// A failure that names the file it concerns.
-fn at(path: &Path, error: impl Display) -> Failure {
-    Failure(format!("{}: {error}", path.display()))
 }
 
 /// The text of `path`.
