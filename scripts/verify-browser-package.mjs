@@ -18,7 +18,7 @@
 // folder of the machine that built it, and its build against another one.
 // Part 4 checks the page-side classes against a stand-in worker, whose self-checks run the real
 // WebAssembly in this process. The real worker runs in a browser test
-// (scripts/verify-browsers.mjs).
+// (`cargo xtask browsers`).
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -3042,9 +3042,8 @@ console.log(
 );
 
 // Part 4: the page-side classes, with a stand-in worker.
-// The classes are ES modules that import "../runtime/runtime.js". The nearest package.json, the
-// repository's tooling, cannot declare "type": "module" (the Emscripten builds are CommonJS), so
-// each is imported as text with that import pointed at the runtime's text.
+// The classes are ES modules that import "../runtime/runtime.js"; each is imported as text with
+// that import pointed at the runtime's text.
 const runtimeUrl = `data:text/javascript;base64,${read("dist/runtime/runtime.js").toString("base64")}`;
 const importClass = (path) => {
   const text = read(path).toString().replaceAll('"../runtime/runtime.js"', `"${runtimeUrl}"`);

@@ -13,7 +13,6 @@
     "docs/audits/",
     "docs/measurements/",
     "node_modules/",
-    "pnpm-lock.yaml",
     "target/",
     "tests/fixtures/",
     "THIRD_PARTY_NOTICES.md",

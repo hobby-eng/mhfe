@@ -1,5 +1,6 @@
 //! The tools of the mhfe repository (TOOL-01), run from anywhere in it as `cargo xtask <task>`:
 //!
+//! - `browsers`: the browser package in the pinned Chrome and Firefox, through WebDriver.
 //! - `copies [--tokens N]`: code copied from one place to another (CORE-10) in `src/`, `web/` and
 //!   `xtask/src/`.
 //! - `published-rounds [--check]`: writes `src/mhfe/published_rounds.rs` from the published
@@ -15,6 +16,7 @@
 //!
 //! A task that fails prints why and exits 1.
 
+mod browser;
 mod copies;
 mod package_release_args;
 mod published_rounds;
@@ -44,8 +46,9 @@ pub(crate) fn at(path: &Path, error: impl fmt::Display) -> Failure {
     Failure(format!("{}: {error}", path.display()))
 }
 
-const USAGE: &str = "usage: cargo xtask <copies [--tokens N] | published-rounds [--check] | \
-                     release-artifacts --test-binary | package-release-args | wasm <step>>";
+const USAGE: &str = "usage: cargo xtask <browsers | copies [--tokens N] | \
+                     published-rounds [--check] | release-artifacts --test-binary | \
+                     package-release-args | wasm <step>>";
 
 /// The repository's root: the folder above this crate's.
 fn root() -> PathBuf {
@@ -57,6 +60,7 @@ fn root() -> PathBuf {
 fn run(task: &str, arguments: &[String]) -> Result<(), Failure> {
     let root = root();
     match (task, arguments) {
+        ("browsers", []) => browser::run(&root),
         ("copies", arguments) => copies::run(&root, arguments),
         ("published-rounds", []) => published_rounds::run(&root, false),
         ("published-rounds", [check]) if check == "--check" => published_rounds::run(&root, true),

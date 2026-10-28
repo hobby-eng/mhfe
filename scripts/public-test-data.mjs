@@ -1,6 +1,7 @@
-// The public test data that the checks of the browser package, the browser tests and the
-// comparison of the command-line tool with the package share. Only public data: BIP39's all-zero
-// phrases and containers of them under the public test password, and the self-checks' parts.
+// The public test data that the checks of the browser package and the comparison of the
+// command-line tool with the package share. Only public data: BIP39's all-zero phrases and
+// containers of them under the public test password, and the self-checks' parts. The browser
+// checks hold a deliberate copy in xtask/pages/page-data.js: a change goes to both.
 
 /** BIP39's all-zero 12-word phrase. */
 export const PHRASE =
