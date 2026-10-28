@@ -27,7 +27,7 @@ jobs:
         run: rustup show
       - name: Verify tag and repository
         run: |
-          package_version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          package_version="$(cargo metadata --locked --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "mhfe-experimental"))')"
           test "$GITHUB_REF_NAME" = "v$package_version"
           # The release text comes from curated notes; a tag without them fails this job here,
           # before the canonical build, and no draft is made. The macOS and CI jobs of this run,

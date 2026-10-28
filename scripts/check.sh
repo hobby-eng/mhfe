@@ -26,16 +26,17 @@ sed -n '/^```text$/,/^```$/p' vendor/phc-winner-argon2.md | grep -v '^```' |
 cargo fetch --locked
 python3 scripts/third-party-licenses.py --check
 # The table of published rounds that the self-checks replay must be what the fixtures give.
-node scripts/generate-published-rounds.mjs --check
+cargo xtask published-rounds --check
 # package-release.sh refuses an unknown or repeated package before it builds or writes anything.
-node scripts/verify-package-release.mjs
+cargo xtask package-release-args
 
-cargo fmt --check
-# No code copied from one place to another in the library, the tool, the bindings or the page
-# classes: each rule lives in one function that every front end calls (AGENTS.md).
-node scripts/verify-no-copies.mjs --self-test
-node scripts/verify-no-copies.mjs
+cargo fmt --all --check
+# No code copied from one place to another in the library, the tool, the bindings, the page
+# classes or the repository's tools: each rule lives in one function that every front end calls
+# (AGENTS.md). The checker's own controls are unit tests of xtask, run below.
+cargo xtask copies
 cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo clippy --locked --package xtask --all-targets -- -D warnings
 cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings
 # Each browser module builds alone, so that another program can take one part without the rest.
 for module in browser-core browser-repair browser-passwords browser-wallet; do
@@ -44,6 +45,7 @@ for module in browser-core browser-repair browser-passwords browser-wallet; do
 done
 # On x86-64 the tests run both the SSE2 and the SSSE3 copy of the Argon2 core.
 cargo test --locked
+cargo test --locked --package xtask
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps
 cargo build --locked --release
 # The terminal in a pseudo-terminal: hidden input (control characters refused, editing keys,

@@ -8,12 +8,18 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 <p align="center">
-  <img src="assets/mhfe-mascot.png" alt="MHFE penguin mascot carrying a cold-storage metal backup" width="240">
+  <img
+    src="assets/mhfe-mascot.png"
+    alt="MHFE penguin mascot carrying a cold-storage metal backup"
+    width="240"
+  >
 </p>
 
-<p align="center"><sub>The penguin lives in the cold, like the backups MHFE is made for. It holds a
-steel backup with 24 words and waddles from side to side, much as a Feistel network swaps its two
-halves in every round.</sub></p>
+<p align="center">
+  <sub>The penguin lives in the cold, like the backups MHFE is made for. It holds a
+    steel backup with 24 words and waddles from side to side, much as a Feistel network swaps its two
+    halves in every round.</sub>
+</p>
 
 MHFE turns the seed phrase of a Bitcoin or other BIP39 wallet (12, 15, 18, 21 or 24 English words)
 into a password-protected **container of 24 words**. For a phrase of 12 to 21 words you can instead
@@ -937,7 +943,8 @@ program and the WebAssembly (`packaging/remap-builder-paths.sh`), so they refuse
 ```bash
 cargo test --locked          # fast tests with reduced Argon2 cost
 scripts/check.sh             # lints, tests, builds, browser package; not the full-size vectors
-pnpm install --frozen-lockfile && pnpm run format:check   # Prettier for Markdown and JavaScript
+dprint check                 # dprint 0.63.0: Markdown, JSON, TOML and YAML (dprint.json)
+pnpm install --frozen-lockfile && pnpm exec playwright install chromium firefox
 pnpm run check:browsers      # the browser package in Chromium and Firefox, after check.sh
 # The published vectors at full size: about an hour for suite 3, half an hour for suite 4.
 cargo test --locked --release --test suite3_vectors -- --ignored --nocapture
@@ -960,7 +967,7 @@ and `scripts/independent-suite4.py`, which use OpenSSL's Argon2 and the Unicode 
 password rule on every case of the specification.
 
 The tests at start replay the published vectors from `src/mhfe/published_rounds.rs`, which
-`scripts/generate-published-rounds.mjs` writes from the vector fixtures (`--check` compares without
+`cargo xtask published-rounds` writes from the vector fixtures (`--check` compares without
 writing, as `scripts/check.sh` does); regenerate it whenever the vectors change. The terminal cell
 widths of the line editor, `src/bin/mhfe/cell_widths.rs`, are written by
 `python3 scripts/generate-cell-widths.py` from the same Unicode 18.0.0 database of `unicodedata2`

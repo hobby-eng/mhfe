@@ -84,6 +84,7 @@ ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
 FROM toolchain AS dependencies
 WORKDIR /workspace
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY xtask/Cargo.toml xtask/
 RUN cargo fetch --locked
 
 FROM dependencies AS verified
@@ -123,7 +124,7 @@ ARG SOURCE_COMMIT
 ARG SOURCE_STATE
 RUN test -n "${RELEASE_VERSION}" \
     && package_version="$(cargo metadata --locked --offline --no-deps --format-version 1 | \
-         python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')" \
+         python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "mhfe-experimental"))')" \
     && test "${RELEASE_VERSION}" = "v${package_version}" \
     && scripts/package-release.sh "${RELEASE_VERSION}" /release
 

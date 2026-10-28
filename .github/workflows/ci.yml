@@ -22,6 +22,9 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-24.04
+    env:
+      DPRINT: "0.63.0"
+      DPRINT_SHA256: f58b5d7c13ccd613cfa264f1ae82d4e5db1373f8fe20462bc1126051d111b0ce
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,27 +36,39 @@ jobs:
           cargo metadata --locked --format-version 1 | python3 -c '
           import json, sys
           data = json.load(sys.stdin)
-          root_manifest = data["workspace_root"] + "/Cargo.toml"
+          # The package and its tools (xtask), and no other package from a local path.
+          root = data["workspace_root"]
+          own = {root + "/Cargo.toml", root + "/xtask/Cargo.toml"}
           foreign = [
               p["manifest_path"]
               for p in data["packages"]
-              if p["source"] is None and p["manifest_path"] != root_manifest
+              if p["source"] is None and p["manifest_path"] not in own
           ]
           if foreign:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
-      # The Node.js of the workspace for Prettier, the browser package checks and Playwright, and
-      # pnpm, in the version package.json names in packageManager.
+      # The Node.js of the workspace for the browser package checks and Playwright, and pnpm, in the
+      # version package.json names in packageManager.
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-      # The workspace style for JavaScript, TypeScript, Markdown, JSON and YAML: double quotes,
-      # 100 columns. Prettier comes from pnpm-lock.yaml, checked against its integrity hash.
-      - name: Check formatting
+      # Playwright comes from pnpm-lock.yaml, checked against its integrity hash.
+      - name: Install the Node packages
+        run: pnpm install --frozen-lockfile
+      # dprint formats the Markdown, JSON, TOML and YAML (CORE-21); dprint.json pins its plugins
+      # with their SHA-256.
+      - name: Install dprint, checked against its SHA-256
         run: |
-          pnpm install --frozen-lockfile
-          pnpm run format:check
+          archive="dprint-x86_64-unknown-linux-gnu.zip"
+          curl --fail --silent --show-error --location --proto '=https' \
+            --output "$RUNNER_TEMP/$archive" \
+            "https://github.com/dprint/dprint/releases/download/$DPRINT/$archive"
+          echo "$DPRINT_SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP/dprint"
+          echo "$RUNNER_TEMP/dprint" >> "$GITHUB_PATH"
+      - name: Check formatting
+        run: dprint check
       - name: Install Emscripten 6.0.12
         run: |
           git clone --depth 1 --branch 6.0.12 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"

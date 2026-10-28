@@ -114,3 +114,10 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# The repository's tools, run as `cargo xtask <task>` (xtask/src/main.rs). The root stays the
+# default member, so cargo without --package or --workspace builds only mhfe-experimental. The
+# audits' probe crates under docs/audits build alone.
+[workspace]
+members = ["xtask"]
+exclude = ["docs/audits"]

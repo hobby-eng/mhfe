@@ -1,0 +1,9 @@
+# For the tools, in place of the repository's clippy.toml: its bans on std's standard input and
+# output keep the secrets that the program reads and shows out of buffers (RUST-13), and the tools
+# handle no secret.
+# CORE-15: at most 150 lines of code per function.
+too-many-lines-threshold = 150
+# Tests may unwrap, expect and panic (RUST-01, RUST-05); the tasks return errors.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

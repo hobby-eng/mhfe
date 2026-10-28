@@ -80,10 +80,7 @@ target_dir="$(
 )"
 release_artifacts=("$target_dir/release/mhfe" dist/runtime/mhfe.wasm)
 
-test_binary="$(
-  cargo test --locked --lib --no-run --message-format=json 2>/dev/null |
-    node scripts/check-release-artifacts.mjs --test-binary
-)"
+test_binary="$(cargo xtask release-artifacts --test-binary)"
 if ! grep -q --binary-files=binary "$marker" "$test_binary"; then
   echo "The marker is missing from the test binary $test_binary, so this check proves nothing." >&2
   exit 1

@@ -1,0 +1,32 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99.1"
+description = "The tools of the mhfe repository, run as `cargo xtask <task>`"
+license = "MIT"
+publish = false
+
+# Explicit, so that the workspace loads where only the manifests are copied (the dependencies stage
+# of packaging/Dockerfile.reproducible).
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+# The version mhfe itself uses (CORE-25), so the lock file gains no crate.
+serde_json = "=1.0.154"
+
+[lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "deny"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+too_many_lines = "deny" # at 150 lines, CORE-15
+mod_module_files = "deny" # RUST-03
+undocumented_unsafe_blocks = "deny" # RUST-07
+allow_attributes_without_reason = "deny" # a lint exception gives its reason (code-core)
