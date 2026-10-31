@@ -77,8 +77,9 @@ for (const tier of ["startup", "full"]) {
     REPAIR_PARTS,
   );
   expectReport(
-    timed("passwords", (start, end) =>
-      bindings.selfCheckPasswords(tier, [], liveRandom, start, end),
+    timed(
+      "passwords",
+      (start, end) => bindings.selfCheckPasswords(tier, [], liveRandom, start, end),
     ),
     tier,
     PASSWORD_PARTS,
@@ -93,8 +94,9 @@ for (const tier of ["startup", "full"]) {
   // Two probes and the spread for each of the two modules that draw.
   assert.equal(liveCalls, tier === "startup" ? 0 : 6, `the live source at ${tier}`);
   expectReport(
-    timed("core without Argon2", (start, end) =>
-      bindings.selfCheckCore(tier, [], undefined, start, end),
+    timed(
+      "core without Argon2",
+      (start, end) => bindings.selfCheckCore(tier, [], undefined, start, end),
     ),
     tier,
     CORE_PARTS,
@@ -157,7 +159,7 @@ expectReport(
       liveRandom,
       start,
       end,
-    ),
+    )
   ),
   "startup",
   WALLET_PARTS.filter((id) => id !== "bip39-words" && id !== "addresses"),
@@ -185,11 +187,13 @@ expectReport(
   },
 );
 // Only "startup" and "full" are tiers, refused before any part runs.
-for (const [tier, check] of [
-  ["nightly", (start) => bindings.selfCheckRepair("nightly", [], start, noop)],
-  ["Startup", (start) => bindings.selfCheckCore("Startup", [], undefined, start, noop)],
-  ["", (start) => bindings.selfCheckArgon2("", [], realArgon2, start, noop)],
-]) {
+for (
+  const [tier, check] of [
+    ["nightly", (start) => bindings.selfCheckRepair("nightly", [], start, noop)],
+    ["Startup", (start) => bindings.selfCheckCore("Startup", [], undefined, start, noop)],
+    ["", (start) => bindings.selfCheckArgon2("", [], realArgon2, start, noop)],
+  ]
+) {
   const started = [];
   expectMessage(
     `INVALID_REQUEST: invalid request: a self-check tier is "startup" or "full", not "${tier}"`,

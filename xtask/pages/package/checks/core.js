@@ -42,12 +42,13 @@ const NOT_BOOLEAN_ANSWERS = ["no", "true", 1, 0, {}];
 const argon2KeyFault = (round) => ({
   kind: "argon2-key",
   round,
-  message: `first wrong round ${round} of 24: Argon2id returned another key for the published input, so the fault is in Argon2id`,
+  message:
+    `first wrong round ${round} of 24: Argon2id returned another key for the published input, so the fault is in Argon2id`,
 });
 /** The error of an operation whose Argon2 build gave another answer (src/error.rs). */
 const argon2Refused = (detail) =>
-  `SELF_CHECK_FAILED: the self-test failed: Argon2id: ${detail}. ` +
-  "Do not use this program on this computer";
+  `SELF_CHECK_FAILED: the self-test failed: Argon2id: ${detail}. `
+  + "Do not use this program on this computer";
 const SUITE_3 = "MHFE-BIP39-256-EXPERIMENTAL-3";
 const SUITE_4 = "MHFE-BIP39-LP-EXPERIMENTAL-4";
 const VERSION = /^version = "([^"]+)"/mu.exec(read("Cargo.toml").toString())[1];
@@ -97,8 +98,8 @@ assert.deepEqual(parameters.wordCounts, [12, 15, 18, 21, 24]);
 assert.deepEqual(parameters.repairWordCounts, [2, 4, 6, 8]);
 assert.deepEqual(parameters.repairCapacities[1], { count: 4, unreadable: 4, wrong: 2 });
 assert.ok(
-  parameters.hiddenWalletRefusals.includes("PASSWORD_ALREADY_USED") &&
-    parameters.hiddenWalletRefusals.includes("HIDDEN_WALLET_PASSES_CHECK"),
+  parameters.hiddenWalletRefusals.includes("PASSWORD_ALREADY_USED")
+    && parameters.hiddenWalletRefusals.includes("HIDDEN_WALLET_PASSES_CHECK"),
   "the core names the refusals that keep a session of hidden wallets open",
 );
 

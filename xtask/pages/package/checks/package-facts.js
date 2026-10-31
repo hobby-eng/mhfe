@@ -25,7 +25,7 @@ for (const script of scripts) {
 // The labels and details of every self-check report, failures included, name no coin and carry
 // no vector.
 const reportTexts = reports.flatMap((report) =>
-  report.components.flatMap(({ label, detail }) => [label, detail ?? ""]),
+  report.components.flatMap(({ label, detail }) => [label, detail ?? ""])
 );
 assert.ok(reportTexts.includes("address 3 of 18 stops with INVALID_ADDRESS"));
 for (const text of reportTexts) {

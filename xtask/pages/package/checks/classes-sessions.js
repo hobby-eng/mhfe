@@ -270,14 +270,16 @@ assert.equal(worker.terminated, true);
 await assert.rejects(repairClient.repairWords({ container: "c", count: "4" }), TypeError);
 // A reply or a question named after an Object.prototype member, or unknown to the page, reaches
 // no page code: it ends the job as a fault of the package, and no answer is sent (AUD-015-SEC007).
-for (const reply of [
-  { type: "valueOf", value: null },
-  { type: "constructor", value: null },
-  { type: "__proto__", value: null },
-  { type: "notAKnownType", value: null },
-  { type: "ask", question: "toString", value: null },
-  { type: "ask", question: "notAKnownQuestion", value: null },
-]) {
+for (
+  const reply of [
+    { type: "valueOf", value: null },
+    { type: "constructor", value: null },
+    { type: "__proto__", value: null },
+    { type: "notAKnownType", value: null },
+    { type: "ask", question: "toString", value: null },
+    { type: "ask", question: "notAKnownQuestion", value: null },
+  ]
+) {
   const asking = repairClient.repairWords({ container: "c", count: 4 });
   worker = await started();
   worker.reply(reply);
@@ -292,19 +294,21 @@ for (const reply of [
 // A reply that the page cannot read, as from a faulty worker or one of another build, ends the job
 // the same way, also after the worker said it was ready: nothing throws from the worker's event
 // handler, the worker stops, and the slot is free for the next operation (AUD-016-API002).
-for (const reply of [
-  null,
-  5,
-  "result",
-  {},
-  { type: 3 },
-  { type: "ready", buildId: 5 },
-  { type: "error" },
-  { type: "error", error: null },
-  { type: "error", error: { code: "INTERNAL_ERROR" } },
-  { type: "error", error: { code: "INTERNAL_ERROR", message: 3 } },
-  { type: "error", error: { code: 3, message: "the worker failed" } },
-]) {
+for (
+  const reply of [
+    null,
+    5,
+    "result",
+    {},
+    { type: 3 },
+    { type: "ready", buildId: 5 },
+    { type: "error" },
+    { type: "error", error: null },
+    { type: "error", error: { code: "INTERNAL_ERROR" } },
+    { type: "error", error: { code: "INTERNAL_ERROR", message: 3 } },
+    { type: "error", error: { code: 3, message: "the worker failed" } },
+  ]
+) {
   const description = JSON.stringify(reply);
   const decrypting = client.decrypt({ container: "c", password: "p" });
   worker = await started();
@@ -342,8 +346,8 @@ for (const count of [7, 5, 0]) {
   await assert.rejects(passwordsClient.make({ kind: "checkWord", count }), {
     name: "TypeError",
     message:
-      'count belongs only to the kinds "words" and "characters": "checkWord" always gives five ' +
-      "words and their check word.",
+      'count belongs only to the kinds "words" and "characters": "checkWord" always gives five '
+      + "words and their check word.",
   });
 }
 assert.equal(StandInWorker.started.length, workersBeforeCount, "no worker was started");
@@ -360,10 +364,12 @@ assert.deepEqual(await makingCheckWord, { checkWord: true });
 const walletClient = new MhfeWallet({ workerSource: "wallet worker", wasm });
 // A phrase goes to the wallet's worker as bytes, transferred with the passphrase, so that the
 // worker and the WebAssembly wipe it (AUD-010).
-for (const [method, operation] of [
-  ["fingerprint", "fingerprint"],
-  ["walletCheck", "walletCheck"],
-]) {
+for (
+  const [method, operation] of [
+    ["fingerprint", "fingerprint"],
+    ["walletCheck", "walletCheck"],
+  ]
+) {
   const asked = walletClient[method]({ phrase: PHRASE, passphrase: "TREZOR" });
   worker = await started(({ operation: sent }) => sent === operation);
   assert.equal(new TextDecoder().decode(worker.messages[0].phrase), PHRASE, method);
@@ -447,12 +453,14 @@ assert.deepEqual(Array.from(wishWorker.messages[0].places), [0]);
 assert.equal(wishWorker.messages[0].neverUse, "abandon");
 wishWorker.reply({ type: "result", result: { phrase: "found", words: 24 } });
 assert.deepEqual(await wishedDraw, { phrase: "found", words: 24, workers: 1 });
-for (const chosen of [
-  [{ word: "zoo", position: 0 }],
-  [{ word: "zoo", position: "first" }],
-  [{ position: 1 }],
-  "zoo",
-]) {
+for (
+  const chosen of [
+    [{ word: "zoo", position: 0 }],
+    [{ word: "zoo", position: "first" }],
+    [{ position: 1 }],
+    "zoo",
+  ]
+) {
   await assert.rejects(walletClient.drawPhrase({ chosen }), TypeError, JSON.stringify(chosen));
 }
 await assert.rejects(walletClient.drawPhrase({ neverUse: "abandon" }), TypeError);
@@ -464,10 +472,12 @@ assert.deepEqual(Array.from(describeWorker.messages[0].places), [24]);
 describeWorker.reply({ type: "result", result: { randomness: "ample" } });
 assert.deepEqual(await describing, { randomness: "ample" });
 // A line for a hint reaches the worker as a secret of its own, with the module's list.
-for (const [client, operation] of [
-  [walletClient, "wordHints"],
-  [passwordsClient, "wordHints"],
-]) {
+for (
+  const [client, operation] of [
+    [walletClient, "wordHints"],
+    [passwordsClient, "wordHints"],
+  ]
+) {
   const hinting = client.wordHints({ typed: "abandon ab" });
   const hintWorker = await started((message) => message.operation === operation);
   assert.equal(new TextDecoder().decode(hintWorker.messages[0].typed), "abandon ab");
@@ -539,21 +549,23 @@ assert.equal(drawCopies.length, 0, "a refused count copies no passphrase");
 // The type of walletCheck and the count of workers are checked whatever the passphrase, before
 // any worker starts (AUD-015-API001).
 StandInWorker.started.length = 0;
-for (const [options, message] of [
-  [{ walletCheck: "yes" }, "walletCheck must be true or false."],
-  [{ walletCheck: 1 }, "walletCheck must be true or false."],
-  [{ workers: 0 }, "workers must be a whole number from 1 to 256."],
-  [{ workers: "many" }, "workers must be a whole number from 1 to 256."],
-  [
-    {
-      passphrase: TEST_PASSPHRASE,
-      passphraseRepeat: TEST_PASSPHRASE,
-      walletCheck: false,
-      workers: -1,
-    },
-    "workers must be a whole number from 1 to 256.",
-  ],
-]) {
+for (
+  const [options, message] of [
+    [{ walletCheck: "yes" }, "walletCheck must be true or false."],
+    [{ walletCheck: 1 }, "walletCheck must be true or false."],
+    [{ workers: 0 }, "workers must be a whole number from 1 to 256."],
+    [{ workers: "many" }, "workers must be a whole number from 1 to 256."],
+    [
+      {
+        passphrase: TEST_PASSPHRASE,
+        passphraseRepeat: TEST_PASSPHRASE,
+        walletCheck: false,
+        workers: -1,
+      },
+      "workers must be a whole number from 1 to 256.",
+    ],
+  ]
+) {
   await assert.rejects(walletClient.drawPhrase(options), { name: "TypeError", message });
 }
 assert.equal(StandInWorker.started.length, 0, "a refused draw starts no worker");
@@ -563,18 +575,21 @@ const notSecret = (name) => ({
   name: "TypeError",
   message: `${name} must be a string or a Uint8Array.`,
 });
-for (const [call, expected] of [
-  [() => passwordsClient.review({ password: "", passwordRepeat: null }), "repeated password"],
-  [() => passwordsClient.review({ password: null }), "password"],
-  [() => walletClient.walletCheck({ phrase: PHRASE, passphrase: null }), "passphrase"],
-  [() => walletClient.fingerprint({ phrase: PHRASE, passphrase: null }), "passphrase"],
-  [
-    () => walletClient.drawPhrase({ passphrase: "x", passphraseRepeat: null, walletCheck: false }),
-    "repeated passphrase",
-  ],
-  [() => walletClient.drawPhrase({ passphrase: null, walletCheck: false }), "passphrase"],
-  [() => walletClient.drawPhrase({ passphraseRepeat: null }), "repeated passphrase"],
-]) {
+for (
+  const [call, expected] of [
+    [() => passwordsClient.review({ password: "", passwordRepeat: null }), "repeated password"],
+    [() => passwordsClient.review({ password: null }), "password"],
+    [() => walletClient.walletCheck({ phrase: PHRASE, passphrase: null }), "passphrase"],
+    [() => walletClient.fingerprint({ phrase: PHRASE, passphrase: null }), "passphrase"],
+    [
+      () =>
+        walletClient.drawPhrase({ passphrase: "x", passphraseRepeat: null, walletCheck: false }),
+      "repeated passphrase",
+    ],
+    [() => walletClient.drawPhrase({ passphrase: null, walletCheck: false }), "passphrase"],
+    [() => walletClient.drawPhrase({ passphraseRepeat: null }), "repeated passphrase"],
+  ]
+) {
   await assert.rejects(call(), notSecret(expected));
 }
 assert.equal(StandInWorker.started.length, 0, "a secret of a wrong type starts no worker");
@@ -598,7 +613,7 @@ await assert.rejects(checkedWithout, { code: "WALLET_CHECK_NEEDS_PASSPHRASE" });
 const RealSlice = Uint8Array.prototype.slice;
 const passphraseBytes = new TextDecoder();
 let passphraseSlices = 0;
-Uint8Array.prototype.slice = function (...range) {
+Uint8Array.prototype.slice = function(...range) {
   if (passphraseBytes.decode(this) === TEST_PASSPHRASE) {
     passphraseSlices += 1;
     // The third copy, the second worker's passphrase, cannot be made.

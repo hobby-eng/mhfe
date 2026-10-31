@@ -55,8 +55,9 @@ const review = JSON.parse(
 assert.equal(review.reading, "restorable");
 assert.deepEqual(review.repairs, [{ position: 3, word: "chokehold", typed: null }]);
 assert.equal(review.repairsFirst, true);
-expectCode("PASSWORDS_DIFFER", () =>
-  passwords.reviewPassword(encode("jovial"), encode("Jovial"), true),
+expectCode(
+  "PASSWORDS_DIFFER",
+  () => passwords.reviewPassword(encode("jovial"), encode("Jovial"), true),
 );
 // An empty repetition differs; it is not a missing one.
 expectCode("PASSWORDS_DIFFER", () => passwords.reviewPassword(encode("jovial"), noBytes(), true));
@@ -99,14 +100,16 @@ assert.equal(made.bits, 64.625, "five words and their check word");
 // The check word takes no count, as `mhfe password` refuses --check-word with --words: a page
 // that asked for seven words never gets five instead. Five, the count it makes, is refused too, and
 // so is a count with dice.
-for (const [count, rolls] of [
-  [7, noBytes()],
-  [5, noBytes()],
-  [5, encode("11111 11112 11113 11114 11115")],
-]) {
+for (
+  const [count, rolls] of [
+    [7, noBytes()],
+    [5, noBytes()],
+    [5, encode("11111 11112 11113 11114 11115")],
+  ]
+) {
   expectMessage(
-    "INVALID_REQUEST: invalid request: checkWord takes no count: it always makes five words and " +
-      "their check word",
+    "INVALID_REQUEST: invalid request: checkWord takes no count: it always makes five words and "
+      + "their check word",
     () => passwords.makePassword("checkWord", count, rolls, testRandom),
     `checkWord with count ${count} is refused`,
   );
@@ -126,11 +129,13 @@ assert.equal(
   JSON.parse(passwords.makePassword("words", 2, encode("11111 66666"), testRandom)).password,
   "abacus zoom",
 );
-expectCode("RANDOM_FAILED", () =>
-  passwords.makePassword("words", 5, noBytes(), { fill: () => {} }),
+expectCode(
+  "RANDOM_FAILED",
+  () => passwords.makePassword("words", 5, noBytes(), { fill: () => {} }),
 );
-expectCode("INVALID_PASSWORD_SIZE", () =>
-  passwords.makePassword("characters", 65, noBytes(), testRandom),
+expectCode(
+  "INVALID_PASSWORD_SIZE",
+  () => passwords.makePassword("characters", 65, noBytes(), testRandom),
 );
 console.log("The passwords module passes its checks.");
 
@@ -164,8 +169,9 @@ assert.equal(wallet.walletFingerprint(encode(PHRASE), encode("TREZOR")), PHRASE_
 const checkedPhrase = `${"abandon ".repeat(21)}above proof fatigue`;
 assert.equal(wallet.walletCheck(encode(checkedPhrase), encode("TREZOR")), true);
 assert.equal(wallet.walletCheck(encode(checkedPhrase), encode("trezor")), false);
-expectCode("WALLET_CHECK_NEEDS_PASSPHRASE", () =>
-  wallet.walletCheck(encode(checkedPhrase), noBytes()),
+expectCode(
+  "WALLET_CHECK_NEEDS_PASSPHRASE",
+  () => wallet.walletCheck(encode(checkedPhrase), noBytes()),
 );
 expectCode("INVALID_WORD_COUNT", () => wallet.walletCheck(encode(PHRASE), encode("TREZOR")));
 const search = JSON.parse(wallet.describeAddress(BIP84_ADDRESS, "bitcoin", "", 0));
@@ -176,15 +182,18 @@ assert.equal(JSON.parse(wallet.describeAddress(BIP84_ADDRESS, "bitcoin", "", 20)
 const drawn = JSON.parse(drawWithoutWishes(wallet, noBytes(), noBytes(), false, testRandom));
 assert.equal(drawn.words, 24);
 assert.equal(drawn.walletCheck, false);
-expectCode("WALLET_CHECK_NEEDS_PASSPHRASE", () =>
-  drawWithoutWishes(wallet, noBytes(), noBytes(), true, testRandom),
+expectCode(
+  "WALLET_CHECK_NEEDS_PASSPHRASE",
+  () => drawWithoutWishes(wallet, noBytes(), noBytes(), true, testRandom),
 );
-expectCode("RANDOM_FAILED", () =>
-  drawWithoutWishes(wallet, noBytes(), noBytes(), false, { fill: () => {} }),
+expectCode(
+  "RANDOM_FAILED",
+  () => drawWithoutWishes(wallet, noBytes(), noBytes(), false, { fill: () => {} }),
 );
 // A passphrase is typed twice, and the binding compares the two, whatever the page did before.
-expectCode("PASSPHRASES_DIFFER", () =>
-  drawWithoutWishes(wallet, encode("TREZOR"), encode("trezor"), false, testRandom),
+expectCode(
+  "PASSPHRASES_DIFFER",
+  () => drawWithoutWishes(wallet, encode("TREZOR"), encode("trezor"), false, testRandom),
 );
 const drawnWithPassphrase = JSON.parse(
   drawWithoutWishes(wallet, encode("TREZOR"), encode("TREZOR"), false, testRandom),
@@ -225,8 +234,8 @@ assert.ok(worst.randomBits > 228.98 && worst.randomBits < 228.99, `${worst.rando
 assert.equal(describeDraw("", [], "abandon", false).recognisable, false);
 assert.equal(describeDraw("zoo", [24], "", false).expectedDraws, 256);
 expectMessage(
-  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: the chosen word is not an " +
-    "English BIP39 word",
+  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: the chosen word is not an "
+    + "English BIP39 word",
   () => describeDraw("notaword", [1], "", false),
 );
 expectMessage(
@@ -234,8 +243,8 @@ expectMessage(
   () => describeDraw("happy zoo", [1, 2], "", false),
 );
 expectMessage(
-  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: name at most 1 word never " +
-    "to use",
+  "INVALID_WORD_WISH: the wishes for the new phrase cannot be used: name at most 1 word never "
+    + "to use",
   () => describeDraw("", [], "abandon zoo", false),
 );
 expectCode("INVALID_WORD_WISH", () => describeDraw("happy", [25], "", false));
@@ -290,17 +299,21 @@ const noArgon2 = knownAnswersOnly(argon2Engine(await builds["single-threaded"]()
 // The classes give these refusals of the library early, before a secret reaches a worker; they
 // must give them with the library's code and in its words, as the command-line tool does.
 const LIBRARY_MESSAGES = {
-  MEMORY_LEVEL_NOT_SUPPORTED_HERE: pageMessageOf("MEMORY_LEVEL_NOT_SUPPORTED_HERE", () =>
-    operations.encrypt(PHRASE, encode("p"), noArgon2, { memoryLevel: 1 }),
+  MEMORY_LEVEL_NOT_SUPPORTED_HERE: pageMessageOf(
+    "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
+    () => operations.encrypt(PHRASE, encode("p"), noArgon2, { memoryLevel: 1 }),
   ),
-  WALLET_CHECK_NEEDS_PASSPHRASE: pageMessageOf("WALLET_CHECK_NEEDS_PASSPHRASE", () =>
-    drawWithoutWishes(wallet, noBytes(), noBytes(), true, testRandom),
+  WALLET_CHECK_NEEDS_PASSPHRASE: pageMessageOf(
+    "WALLET_CHECK_NEEDS_PASSPHRASE",
+    () => drawWithoutWishes(wallet, noBytes(), noBytes(), true, testRandom),
   ),
-  PASSPHRASES_DIFFER: pageMessageOf("PASSPHRASES_DIFFER", () =>
-    drawWithoutWishes(wallet, encode("p"), encode("q"), true, testRandom),
+  PASSPHRASES_DIFFER: pageMessageOf(
+    "PASSPHRASES_DIFFER",
+    () => drawWithoutWishes(wallet, encode("p"), encode("q"), true, testRandom),
   ),
-  NO_BUILT_IN_CHECK_AT_24: pageMessageOf("INVALID_WORD_COUNT", () =>
-    operations.check(FULL_SIZE_CONTAINER, encode("p"), noArgon2, "words", "24"),
+  NO_BUILT_IN_CHECK_AT_24: pageMessageOf(
+    "INVALID_WORD_COUNT",
+    () => operations.check(FULL_SIZE_CONTAINER, encode("p"), noArgon2, "words", "24"),
   ),
 };
 
@@ -547,13 +560,15 @@ const refusingSource = {
     throw new Error("QuotaExceededError: the browser refused");
   },
 };
-for (const draw of [
-  () => passwords.makePassword("checkWord", undefined, noBytes(), refusingSource),
-  () => drawWithoutWishes(wallet, noBytes(), noBytes(), false, refusingSource),
-]) {
+for (
+  const draw of [
+    () => passwords.makePassword("checkWord", undefined, noBytes(), refusingSource),
+    () => drawWithoutWishes(wallet, noBytes(), noBytes(), false, refusingSource),
+  ]
+) {
   expectMessage(
-    "RANDOM_FAILED: the random generator failed: the page's random source failed: " +
-      "QuotaExceededError: the browser refused",
+    "RANDOM_FAILED: the random generator failed: the page's random source failed: "
+      + "QuotaExceededError: the browser refused",
     draw,
   );
 }

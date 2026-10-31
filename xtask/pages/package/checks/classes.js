@@ -19,13 +19,15 @@ const { MhfeWallet } = await importClass("dist/wallet/wallet.js");
 // Every value a declaration file exports exists in its module, so that a named import that
 // TypeScript accepts also links.
 const runtimeNamespace = await import(runtimeUrl);
-for (const [declarations, namespace] of [
-  ["dist/runtime/runtime.d.ts", runtimeNamespace],
-  ["dist/core/client.d.ts", await importClass("dist/core/client.js")],
-  ["dist/repair/repair.d.ts", await importClass("dist/repair/repair.js")],
-  ["dist/passwords/passwords.d.ts", await importClass("dist/passwords/passwords.js")],
-  ["dist/wallet/wallet.d.ts", await importClass("dist/wallet/wallet.js")],
-]) {
+for (
+  const [declarations, namespace] of [
+    ["dist/runtime/runtime.d.ts", runtimeNamespace],
+    ["dist/core/client.d.ts", await importClass("dist/core/client.js")],
+    ["dist/repair/repair.d.ts", await importClass("dist/repair/repair.js")],
+    ["dist/passwords/passwords.d.ts", await importClass("dist/passwords/passwords.js")],
+    ["dist/wallet/wallet.d.ts", await importClass("dist/wallet/wallet.js")],
+  ]
+) {
   const text = read(declarations).toString();
   const declared = [
     ...[...text.matchAll(/^export (?:declare )?(?:class|const|function) (\w+)/gmu)].map(
@@ -35,7 +37,7 @@ for (const [declarations, namespace] of [
       match[1]
         .split(",")
         .map((name) => name.trim())
-        .filter((name) => name !== "" && !name.startsWith("type ")),
+        .filter((name) => name !== "" && !name.startsWith("type "))
     ),
   ];
   for (const name of declared) {
@@ -227,10 +229,12 @@ assert.equal(worker.terminated, true, "each worker ends with its operation");
 
 // Without an answer, left out or null, the client sends none, and the core names any passphrase
 // of the wallet in what to keep.
-for (const [description, options] of [
-  ["left out", {}],
-  ["null", { walletHasPassphrase: null }],
-]) {
+for (
+  const [description, options] of [
+    ["left out", {}],
+    ["null", { walletHasPassphrase: null }],
+  ]
+) {
   const unanswered = client.encrypt({
     phrase: PHRASE,
     password: "p",
@@ -393,7 +397,7 @@ const refusals = [
     ["TREZOR", encode("TREZOR")].map((passphrase) => [
       () => rekeyWith({ confirmation, passphrase, walletHasPassphrase: true }),
       passphraseOnlyWithReference,
-    ]),
+    ])
   ),
   [() => client.openHiddenWallets({ container: "c" }), TypeError],
   [() => client.readPhrase(42), TypeError],
@@ -464,10 +468,12 @@ assert.deepEqual(shown, ["c"]);
 
 // A callback of the page that throws stops the operation: the worker ends, the promise rejects
 // with CALLBACK_FAILED and the page's error as the cause, and later messages are ignored.
-for (const [name, message] of [
-  ["onProgress", { type: "progress", value: { stage: "encrypt", round: 1, rounds: 24 } }],
-  ["onUnverified", { type: "unverified", value: { container: "c", containerFingerprint: "0" } }],
-]) {
+for (
+  const [name, message] of [
+    ["onProgress", { type: "progress", value: { stage: "encrypt", round: 1, rounds: 24 } }],
+    ["onUnverified", { type: "unverified", value: { container: "c", containerFingerprint: "0" } }],
+  ]
+) {
   const pageError = new Error(`page bug in ${name}`);
   const calls = [];
   const broken = encrypt({
@@ -595,22 +601,28 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(worker.messages[1], { type: "answer", value: null });
 worker.reply({ type: "error", error: { code: "LENGTH_DIFFERS", message: "the check finds 12" } });
 await assert.rejects(stopsAgain, { code: "LENGTH_DIFFERS" });
-for (const [answer, ownerLengths, message] of [
-  [{ owner: () => true, words: 12 }, [15], "words must name the reading the owner compares: 15."],
-  [
-    { owner: () => true },
-    [],
-    "the owner cannot confirm this phrase: give an address or the fingerprint.",
-  ],
-  [{ owner: () => true }, [12, 21], "words must name the reading the owner compares: 12 or 21."],
-  [{ fingerprint: "00000000", words: 15 }, [15], "words belongs only to the owner's confirmation."],
-  [{ owner: () => true, passphrase: "TREZOR" }, [15], PASSPHRASE_ONLY_WITH_REFERENCE],
-  [
-    { walletCheck: true },
-    [15],
-    "a rekey is confirmed by an address or a fingerprint, not by the wallet check.",
-  ],
-]) {
+for (
+  const [answer, ownerLengths, message] of [
+    [{ owner: () => true, words: 12 }, [15], "words must name the reading the owner compares: 15."],
+    [
+      { owner: () => true },
+      [],
+      "the owner cannot confirm this phrase: give an address or the fingerprint.",
+    ],
+    [{ owner: () => true }, [12, 21], "words must name the reading the owner compares: 12 or 21."],
+    [
+      { fingerprint: "00000000", words: 15 },
+      [15],
+      "words belongs only to the owner's confirmation.",
+    ],
+    [{ owner: () => true, passphrase: "TREZOR" }, [15], PASSPHRASE_ONLY_WITH_REFERENCE],
+    [
+      { walletCheck: true },
+      [15],
+      "a rekey is confirmed by an address or a fingerprint, not by the wallet check.",
+    ],
+  ]
+) {
   const refused = rekeyWith({
     confirmation: { builtInCheck: true },
     walletHasPassphrase: false,
@@ -625,9 +637,9 @@ for (const [answer, ownerLengths, message] of [
   await assert.rejects(
     refused,
     (error) =>
-      error.code === "CALLBACK_FAILED" &&
-      error.cause instanceof TypeError &&
-      error.cause.message === message,
+      error.code === "CALLBACK_FAILED"
+      && error.cause instanceof TypeError
+      && error.cause.message === message,
     message,
   );
   assert.equal(worker.terminated, true, `${message}: the worker stops`);

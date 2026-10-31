@@ -39,10 +39,12 @@ const card = JSON.parse(mhfe.repairWords(FULL_SIZE_CONTAINER, 4)).words;
 const damaged = FULL_SIZE_CONTAINER.split(" ");
 damaged[2] = "?";
 damaged[16] = "?";
-for (const [what, typed, expected] of [
-  ["two unreadable words", damaged.join(" "), FULL_SIZE_CONTAINER],
-  ["nothing to repair", FULL_SIZE_CONTAINER, ""],
-]) {
+for (
+  const [what, typed, expected] of [
+    ["two unreadable words", damaged.join(" "), FULL_SIZE_CONTAINER],
+    ["nothing to repair", FULL_SIZE_CONTAINER, ""],
+  ]
+) {
   const repaired = JSON.parse(mhfe.repairContainer(typed, card));
   const prints = repaired.unchanged ? "" : repaired.container;
   assert.equal(prints, expected, what);
@@ -156,10 +158,12 @@ sameRefusal(
 // The other lengths detection could read: warned of for a 24-word container, as the first
 // container of readPhrase() lists them, and not for a same-length one, as the second does not.
 const facts = JSON.parse(mhfe.describePhrase(encode(AMBIGUOUS_12_WORDS)));
-for (const [args, choice] of [
-  [["encrypt", "--stdin"], facts.containers[0]],
-  [["encrypt", "--stdin", "--same-length"], facts.containers[1]],
-]) {
+for (
+  const [args, choice] of [
+    [["encrypt", "--stdin"], facts.containers[0]],
+    [["encrypt", "--stdin", "--same-length"], facts.containers[1]],
+  ]
+) {
   // Standard input ends at the password: the warning comes before it.
   expect(`mhfe ${args.join(" ")}`, args, [AMBIGUOUS_12_WORDS], { warns: choice.otherLengths });
 }
@@ -167,4 +171,3 @@ assert.deepEqual(
   facts.containers.map((choice) => choice.otherLengths),
   [[21], []],
 );
-

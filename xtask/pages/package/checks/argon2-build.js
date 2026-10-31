@@ -111,8 +111,9 @@ async function checkEncryptAnswers(created, onRound, reduced, steps) {
   // An answer given is a boolean and nothing else, refused before any Argon2 round: no other value
   // is read as a truth value.
   for (const value of NOT_BOOLEAN_ANSWERS) {
-    expectMessage(PASSPHRASE_ANSWER_NOT_BOOLEAN, () =>
-      operations.encrypt(PHRASE, PASSWORD, reduced, { walletHasPassphrase: value, onRound }),
+    expectMessage(
+      PASSPHRASE_ANSWER_NOT_BOOLEAN,
+      () => operations.encrypt(PHRASE, PASSWORD, reduced, { walletHasPassphrase: value, onRound }),
     );
   }
   assert.deepEqual(steps, [], "encrypt refuses an answer that is not a boolean before Argon2");
@@ -157,8 +158,8 @@ async function checkEncryptAnswers(created, onRound, reduced, steps) {
   );
   assert.equal(stated24.kind, "ambiguous");
   expectMessage(
-    "VERIFIER_MISMATCH: the recovered phrase passes no built-in check: the password, PIM, " +
-      "memory level or container is probably wrong, or the original seed phrase has 24 words",
+    "VERIFIER_MISMATCH: the recovered phrase passes no built-in check: the password, PIM, "
+      + "memory level or container is probably wrong, or the original seed phrase has 24 words",
     () => operations.decrypt(created.container, encode("wrong"), reduced, { words: 12 }),
   );
   const wrong = operations.decrypt(created.container, encode("wrong"), reduced);
@@ -286,11 +287,13 @@ async function checkRecoveryLengths(created, onRound, reduced, steps) {
 async function checkReferences(created, missingLast, reduced) {
   // The owner's fingerprint, and the original seed phrase's own checks without and with its
   // passphrase: a 12-word phrase passes its built-in check either way.
-  for (const [kind, reference, passphrase] of [
-    ["fingerprint", PHRASE_FINGERPRINT, ""],
-    ["builtInCheck", "", ""],
-    ["walletCheck", "", "TREZOR"],
-  ]) {
+  for (
+    const [kind, reference, passphrase] of [
+      ["fingerprint", PHRASE_FINGERPRINT, ""],
+      ["builtInCheck", "", ""],
+      ["walletCheck", "", "TREZOR"],
+    ]
+  ) {
     const seen = [];
     const searched = JSON.parse(
       core.searchWallet(
@@ -330,8 +333,7 @@ async function checkReferences(created, missingLast, reduced) {
       reduced,
       () => {},
       () => {},
-    ),
-  );
+    ));
   expectCode("INVALID_REQUEST", () => core.searchCandidates(REDUCED_COST_CONTAINER));
   // An Ethereum address of the same wallet, on Ethereum's path.
   assert.deepEqual(
@@ -351,14 +353,18 @@ async function checkReferences(created, missingLast, reduced) {
     }).matches,
     false,
   );
-  expectCode("INVALID_COIN", () =>
-    operations.check(created.container, PASSWORD, reduced, "address", "bc1q", { coin: "doge" }),
+  expectCode(
+    "INVALID_COIN",
+    () =>
+      operations.check(created.container, PASSWORD, reduced, "address", "bc1q", { coin: "doge" }),
   );
   // The library's refusal, before any round: the binding has none of its own.
-  expectCode("WALLET_CHECK_NEEDS_PASSPHRASE", () =>
-    operations.check(created.container, PASSWORD, reduced, "walletCheck", "", {
-      onRound: noRoundExpected,
-    }),
+  expectCode(
+    "WALLET_CHECK_NEEDS_PASSPHRASE",
+    () =>
+      operations.check(created.container, PASSWORD, reduced, "walletCheck", "", {
+        onRound: noRoundExpected,
+      }),
   );
 }
 
@@ -368,34 +374,41 @@ async function checkReferences(created, missingLast, reduced) {
  */
 async function checkEarlyRefusals(created, reduced) {
   // Refusals happen before any Argon2 call.
-  expectCode("MEMORY_LEVEL_NOT_SUPPORTED_HERE", () =>
-    operations.encrypt(PHRASE, PASSWORD, reduced, { memoryLevel: 1 }),
+  expectCode(
+    "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
+    () => operations.encrypt(PHRASE, PASSWORD, reduced, { memoryLevel: 1 }),
   );
   expectCode("INVALID_PIM", () => operations.encrypt(PHRASE, PASSWORD, reduced, { pim: 1024 }));
   expectCode("INVALID_PHRASE", () => operations.encrypt("abandon about", PASSWORD, reduced));
-  expectCode("INVALID_REPAIR_WORDS", () =>
-    operations.encrypt(PHRASE, PASSWORD, reduced, { repairWordCount: 3 }),
+  expectCode(
+    "INVALID_REPAIR_WORDS",
+    () => operations.encrypt(PHRASE, PASSWORD, reduced, { repairWordCount: 3 }),
   );
-  expectCode("PASSWORDS_DIFFER", () =>
-    operations.encrypt(PHRASE, PASSWORD, reduced, { repeat: encode("other") }),
+  expectCode(
+    "PASSWORDS_DIFFER",
+    () => operations.encrypt(PHRASE, PASSWORD, reduced, { repeat: encode("other") }),
   );
   // Numbers the raw API gets straight from JavaScript are refused unless they are whole numbers
   // in range; a u32 parameter would have turned 2^32 into 0 and -1 into 4294967295.
   for (const value of [2 ** 32, 2 ** 32 + 1, -1, 0.5, NaN, Infinity]) {
     expectCode("INVALID_PIM", () => operations.encrypt(PHRASE, PASSWORD, reduced, { pim: value }));
-    expectCode("INVALID_MEMORY_LEVEL", () =>
-      operations.decrypt(created.container, PASSWORD, reduced, { memoryLevel: value }),
+    expectCode(
+      "INVALID_MEMORY_LEVEL",
+      () => operations.decrypt(created.container, PASSWORD, reduced, { memoryLevel: value }),
     );
-    expectCode("INVALID_WORD_COUNT", () =>
-      operations.decrypt(created.container, PASSWORD, reduced, { words: value }),
+    expectCode(
+      "INVALID_WORD_COUNT",
+      () => operations.decrypt(created.container, PASSWORD, reduced, { words: value }),
     );
   }
   // A refused password must not leave the separately given BIP39 passphrase in the core's memory.
   const sentinel = encode("public sentinel passphrase 7f3a9c");
-  expectCode("EMPTY_PASSWORD", () =>
-    operations.check(created.container, noBytes(), reduced, "fingerprint", PHRASE_FINGERPRINT, {
-      passphrase: sentinel.slice(),
-    }),
+  expectCode(
+    "EMPTY_PASSWORD",
+    () =>
+      operations.check(created.container, noBytes(), reduced, "fingerprint", PHRASE_FINGERPRINT, {
+        passphrase: sentinel.slice(),
+      }),
   );
   assert.equal(
     Buffer.from(coreMemory.buffer).indexOf(Buffer.from(sentinel)),
@@ -445,8 +458,7 @@ async function checkEarlyRefusals(created, reduced) {
       onRound: () => {
         throw new Error("stop");
       },
-    }),
-  );
+    }));
   // A container of the phrase's own length, only when asked for.
   const sameLength = operations.encrypt(PHRASE, PASSWORD, reduced, { sameLength: true });
   assert.equal(sameLength.container, REDUCED_COST_SAME_LENGTH_CONTAINER);
@@ -456,23 +468,28 @@ async function checkEarlyRefusals(created, reduced) {
     operations.decrypt(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, reduced).candidates[0].status,
     "noBuiltInCheck",
   );
-  expectCode("NO_BUILT_IN_CHECK", () =>
-    operations.check(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, reduced, "words", "12"),
+  expectCode(
+    "NO_BUILT_IN_CHECK",
+    () => operations.check(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, reduced, "words", "12"),
   );
   // A same-length container has no wallet check, with a passphrase or without one: the library's
   // order, the same as through the command line, puts this refusal before the empty passphrase's.
   for (const passphrase of [encode("TREZOR"), noBytes()]) {
-    expectCode("NO_WALLET_CHECK", () =>
-      operations.check(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, reduced, "walletCheck", "", {
-        passphrase,
-        onRound: noRoundExpected,
-      }),
+    expectCode(
+      "NO_WALLET_CHECK",
+      () =>
+        operations.check(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, reduced, "walletCheck", "", {
+          passphrase,
+          onRound: noRoundExpected,
+        }),
     );
   }
-  expectCode("SAME_LENGTH_NEEDS_SHORT_PHRASE", () =>
-    operations.encrypt(ZERO_24, PASSWORD, reduced, { sameLength: true }),
+  expectCode(
+    "SAME_LENGTH_NEEDS_SHORT_PHRASE",
+    () => operations.encrypt(ZERO_24, PASSWORD, reduced, { sameLength: true }),
   );
-  expectCode("LENGTH_CHOICE_NOT_APPLICABLE", () =>
-    operations.decrypt(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, reduced, { words: 15 }),
+  expectCode(
+    "LENGTH_CHOICE_NOT_APPLICABLE",
+    () => operations.decrypt(REDUCED_COST_SAME_LENGTH_CONTAINER, PASSWORD, reduced, { words: 15 }),
   );
 }

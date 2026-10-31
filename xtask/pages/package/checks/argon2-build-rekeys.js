@@ -10,11 +10,13 @@ async function checkRekeyAnswers(created, onRound, reduced, steps) {
     { choice: "repair", position: 3 },
   );
   assert.equal(repaired.candidates[0].phrase, PHRASE, "the restored word opens the container");
-  expectCode("PASSWORD_REPAIR_NOT_OFFERED", () =>
-    operations.decrypt(withCheckWord.container, encode(checkWordPassword), reduced, {
-      choice: "repair",
-      position: 2,
-    }),
+  expectCode(
+    "PASSWORD_REPAIR_NOT_OFFERED",
+    () =>
+      operations.decrypt(withCheckWord.container, encode(checkWordPassword), reduced, {
+        choice: "repair",
+        position: 2,
+      }),
   );
 
   // A rekey: recovered with the built-in check (rounds 1-12 of 36), sealed again (13-36).
@@ -69,8 +71,8 @@ async function checkRekeyAnswers(created, onRound, reduced, steps) {
   const contradicted = () => rekeyStating(15);
   const refusedLength = contradicted();
   expectMessage(
-    "LENGTH_DIFFERS: the built-in check finds a 12-word original seed phrase, not the 15 words " +
-      "stated: confirm it with a receiving address or the master key fingerprint of the wallet",
+    "LENGTH_DIFFERS: the built-in check finds a 12-word original seed phrase, not the 15 words "
+      + "stated: confirm it with a receiving address or the master key fingerprint of the wallet",
     () => refusedLength.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
   );
   // The refusal keeps the recovery (AUD-017-UI002): the owner may compare at the stated length,
@@ -99,11 +101,13 @@ async function checkRekeyAnswers(created, onRound, reduced, steps) {
   // The owner compares the reading the check found at the stated length; the built-in check again
   // is refused again and keeps the recovery, and the answer about the passphrase holds.
   const ownerAgain = contradicted();
-  expectCode("LENGTH_DIFFERS", () =>
-    ownerAgain.recover("builtInCheck", "", "", "", noBytes(), true, () => {}),
+  expectCode(
+    "LENGTH_DIFFERS",
+    () => ownerAgain.recover("builtInCheck", "", "", "", noBytes(), true, () => {}),
   );
-  expectCode("LENGTH_DIFFERS", () =>
-    ownerAgain.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, noRoundExpected),
+  expectCode(
+    "LENGTH_DIFFERS",
+    () => ownerAgain.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, noRoundExpected),
   );
   return { rekeyStating, contradicted, ownerAgain };
 }
@@ -153,21 +157,24 @@ async function checkRekeyEndings(contradicted, ownerAgain, reduced, rekeyStating
   ];
   for (const { confirm, message, code } of endsAfterRefusal) {
     const session = contradicted();
-    expectCode("LENGTH_DIFFERS", () =>
-      session.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
+    expectCode(
+      "LENGTH_DIFFERS",
+      () => session.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
     );
     if (message === undefined) expectCode(code, () => confirm(session));
     else expectMessage(message, () => confirm(session));
     assert.equal(session.ownerLengths(), "null", `${message ?? code}: the rekey ended`);
-    expectMessage("INVALID_REQUEST: invalid request: a rekey step out of its order", () =>
-      session.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, () => {}),
+    expectMessage(
+      "INVALID_REQUEST: invalid request: a rekey step out of its order",
+      () => session.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, () => {}),
     );
     session.free();
   }
   const notRefused = rekeyStating(12);
   assert.equal(notRefused.ownerLengths(), "null");
-  expectMessage("INVALID_REQUEST: invalid request: a rekey step out of its order", () =>
-    notRefused.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, noRoundExpected),
+  expectMessage(
+    "INVALID_REQUEST: invalid request: a rekey step out of its order",
+    () => notRefused.confirmAgain("builtInCheck", "", "", "", noBytes(), 0, noRoundExpected),
   );
   notRefused.free();
   // Several lengths that pass by accident: the owner states the one to compare among those the
@@ -175,8 +182,9 @@ async function checkRekeyEndings(contradicted, ownerAgain, reduced, rekeyStating
   const ambiguousContainer = operations.encrypt(AMBIGUOUS_12_WORDS, PASSWORD, reduced).container;
   const several = new core.RekeySession(ambiguousContainer, 12, PASSWORD, "", 0, 0, 0, reduced);
   several.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
-  expectCode("AMBIGUOUS_LENGTH", () =>
-    several.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
+  expectCode(
+    "AMBIGUOUS_LENGTH",
+    () => several.recover("builtInCheck", "", "", "", noBytes(), false, () => {}),
   );
   assert.equal(several.ownerLengths(), "[12,21]");
   const shownOfSeveral = JSON.parse(
@@ -273,8 +281,8 @@ function rekeyConfirmations(created, reduced) {
     return { session, recover };
   };
   const describe = ({ words, kind, passphrase = "" }, answer) =>
-    `${kind} of ${words} words, passphrase ${JSON.stringify(passphrase)}, ` +
-    `answer ${String(JSON.stringify(answer))}`;
+    `${kind} of ${words} words, passphrase ${JSON.stringify(passphrase)}, `
+    + `answer ${String(JSON.stringify(answer))}`;
   return {
     builtInCheck,
     ownerCheck,
@@ -345,7 +353,7 @@ async function checkSameLengthRekeys(created, onRound, reduced, steps) {
         confirmation,
         answer,
         message: PASSPHRASE_UNSTATED,
-      })),
+      }))
     ),
     // A wallet said to have a passphrase, but a reference compared without it.
     ...[plainFingerprint, plainAddress].map((confirmation) => ({
@@ -365,7 +373,7 @@ async function checkSameLengthRekeys(created, onRound, reduced, steps) {
         confirmation,
         answer,
         message: PASSPHRASE_ANSWER_NOT_BOOLEAN,
-      })),
+      }))
     ),
     // A passphrase belongs only to an address or a fingerprint, whatever the answer.
     ...[true, false].flatMap((answer) =>
@@ -373,7 +381,7 @@ async function checkSameLengthRekeys(created, onRound, reduced, steps) {
         confirmation: { ...confirmation, passphrase: "TREZOR" },
         answer,
         message: PASSPHRASE_WITHOUT_REFERENCE,
-      })),
+      }))
     ),
     // A length without a built-in check refuses that check first, before the answer is judged:
     // the 24-word reading, the same-length container's own length, and the length detected on a
@@ -384,7 +392,7 @@ async function checkSameLengthRekeys(created, onRound, reduced, steps) {
         { ...builtInCheck, words: 24 },
         { ...onSameLength, kind: "builtInCheck" },
         { ...builtInCheck, words: 0 },
-      ].map((confirmation) => ({ confirmation, answer, message: REFERENCE_REQUIRED })),
+      ].map((confirmation) => ({ confirmation, answer, message: REFERENCE_REQUIRED }))
     ),
   ];
   for (const { confirmation, answer, message } of rekeyRefusals) {
@@ -405,8 +413,9 @@ async function checkSameLengthRekeys(created, onRound, reduced, steps) {
     session.free();
   }
   const same = new core.RekeySession(created.container, 12, PASSWORD, "", 0, 0, 0, reduced);
-  expectCode("NEW_PASSWORD_SAME_AS_OLD", () =>
-    same.setNew(PASSWORD, PASSWORD.slice(), "", 0, 0, 0, 0),
+  expectCode(
+    "NEW_PASSWORD_SAME_AS_OLD",
+    () => same.setNew(PASSWORD, PASSWORD.slice(), "", 0, 0, 0, 0),
   );
   return same;
 }
@@ -417,8 +426,7 @@ async function checkOwnerComparison(name, created, derives, onRound, reduced, sa
     same.seal(
       () => {},
       () => {},
-    ),
-  );
+    ));
   same.free();
   // The owner confirms a phrase by comparing it; a no ends the rekey. With the length detected
   // nothing was stated, so the check names no stated length.
@@ -460,13 +468,14 @@ async function checkOwnerComparison(name, created, derives, onRound, reduced, sa
   // only an address or the fingerprint confirms it (AUD-015-FUN001).
   const ownerOf24 = new core.RekeySession(created.container, 24, PASSWORD, "", 0, 0, 0, reduced);
   ownerOf24.setNew(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, 0, 0, 0);
-  expectCode("LENGTH_DIFFERS", () =>
-    ownerOf24.recover("owner", "", "", "", noBytes(), false, () => {}),
+  expectCode(
+    "LENGTH_DIFFERS",
+    () => ownerOf24.recover("owner", "", "", "", noBytes(), false, () => {}),
   );
   assert.equal(ownerOf24.ownerLengths(), "[]", "only an address or the fingerprint is left");
   expectMessage(
-    "INVALID_REQUEST: invalid request: the owner cannot confirm this phrase: an address or the " +
-      "fingerprint does",
+    "INVALID_REQUEST: invalid request: the owner cannot confirm this phrase: an address or the "
+      + "fingerprint does",
     () => ownerOf24.confirmAgain("owner", "", "", "", noBytes(), 24, () => {}),
   );
   ownerOf24.free();
@@ -489,8 +498,9 @@ async function checkOwnerComparison(name, created, derives, onRound, reduced, sa
       .phrase,
     "a hidden wallet is the container read as 24 words with that password",
   );
-  expectCode("PASSWORD_ALREADY_USED", () =>
-    wallets.open(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, () => {}),
+  expectCode(
+    "PASSWORD_ALREADY_USED",
+    () => wallets.open(NEW_PASSWORD, NEW_PASSWORD.slice(), "", 0, () => {}),
   );
   wallets.free();
   expectCode(

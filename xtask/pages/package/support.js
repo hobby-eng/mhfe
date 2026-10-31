@@ -41,8 +41,8 @@ function ownKeys(object) {
 function isDeepStrictEqual(actual, expected) {
   if (Object.is(actual, expected)) return true;
   if (
-    typeof actual !== "object" || typeof expected !== "object" || actual === null ||
-    expected === null
+    typeof actual !== "object" || typeof expected !== "object" || actual === null
+    || expected === null
   ) {
     return false;
   }
@@ -69,8 +69,8 @@ function sameKeys(actual, expected, kept) {
   const right = ownKeys(expected).filter(kept);
   if (left.length !== right.length) return false;
   return left.every((key) =>
-    Object.prototype.propertyIsEnumerable.call(expected, key) &&
-    isDeepStrictEqual(actual[key], expected[key])
+    Object.prototype.propertyIsEnumerable.call(expected, key)
+    && isDeepStrictEqual(actual[key], expected[key])
   );
 }
 

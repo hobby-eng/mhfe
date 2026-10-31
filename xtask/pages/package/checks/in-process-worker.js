@@ -9,8 +9,8 @@ const BUILD_ID = JSON.parse(read("dist/modules.json").toString()).buildId;
  * worker (web/worker-runtime.js) are both held to this one wording.
  */
 const buildMismatchMessage = (file, build, own) =>
-  `The file ${file} is of build ${build} and ${own} of build ${BUILD_ID}: ` +
-  "take every file of the package from one build.";
+  `The file ${file} is of build ${build} and ${own} of build ${BUILD_ID}: `
+  + "take every file of the package from one build.";
 /**
  * The worker's PACKAGE_MISMATCH message for `file` of build `build`, as it posts it. It starts
  * with a word, not the file's path, which the page's sentence() would capitalize.
@@ -115,8 +115,8 @@ assert.deepEqual(
     part(
       "argon2",
       "notAvailable",
-      "Argon2id could not run: the single-threaded Argon2 build did not start: the browser " +
-        "refused its memory",
+      "Argon2id could not run: the single-threaded Argon2 build did not start: the browser "
+        + "refused its memory",
     ),
   ),
 );
@@ -124,8 +124,8 @@ assert.deepEqual(
 // does not start, here because the page is not cross-origin isolated or its lane workers do not
 // start, the check runs the single-threaded build instead and says so.
 const notIsolated =
-  "the threaded Argon2 build did not start: the page is not cross-origin isolated, so the build " +
-  "cannot share its memory with its lane workers";
+  "the threaded Argon2 build did not start: the page is not cross-origin isolated, so the build "
+  + "cannot share its memory with its lane workers";
 const fellBack = "; the check ran the single-threaded build of the standard mode instead";
 assert.deepEqual(
   await coreCheckWith({ ...threadedBuild, ...singleThreadedBuild }),
@@ -179,8 +179,8 @@ assert.deepEqual(
     part(
       "argon2",
       "notAvailable",
-      `Argon2id could not run: ${lanesFailed}; the single-threaded Argon2 build did not start: ` +
-        "the browser refused its memory",
+      `Argon2id could not run: ${lanesFailed}; the single-threaded Argon2 build did not start: `
+        + "the browser refused its memory",
     ),
   ),
 );
@@ -223,19 +223,21 @@ assert.deepEqual(await coreCheckWith({}), [
 // a check and for the self-test, which waits for no check, alike. Part 4b gives the page the
 // worker's refusals as it posts them.
 const workerRefusals = [];
-for (const [file, globals, build] of [
-  [
-    "core/argon2-st.js",
-    { ...singleThreadedBuild, ARGON2_SINGLE_THREADED_BUILD_ID: "0123456789abcdef" },
-    "0123456789abcdef",
-  ],
-  ["core/argon2-st.js", { createArgon2St: builds["single-threaded"] }, "development"],
-  [
-    "core/argon2-mt.js",
-    { ...threadedBuild, ARGON2_THREADED_BUILD_ID: "0123456789abcdef", ...singleThreadedBuild },
-    "0123456789abcdef",
-  ],
-]) {
+for (
+  const [file, globals, build] of [
+    [
+      "core/argon2-st.js",
+      { ...singleThreadedBuild, ARGON2_SINGLE_THREADED_BUILD_ID: "0123456789abcdef" },
+      "0123456789abcdef",
+    ],
+    ["core/argon2-st.js", { createArgon2St: builds["single-threaded"] }, "development"],
+    [
+      "core/argon2-mt.js",
+      { ...threadedBuild, ARGON2_THREADED_BUILD_ID: "0123456789abcdef", ...singleThreadedBuild },
+      "0123456789abcdef",
+    ],
+  ]
+) {
   const mismatch = {
     type: "error",
     error: { code: "PACKAGE_MISMATCH", message: workerMismatch(file, build) },
@@ -270,17 +272,19 @@ assert.deepEqual(
 // Object.prototype is no operation: it is refused like any other unknown name, rather than called
 // with the request, whose secrets it would post back (AUD-010). The worker wipes the request's
 // secrets either way.
-for (const [module, operation] of [
-  ["core", "constructor"],
-  ["repair", "toString"],
-  ["passwords", "hasOwnProperty"],
-  ["wallet", "__proto__"],
-  ["__proto__", "constructor"],
-  ["constructor", "keys"],
-  ["toString", "call"],
-  ["core", "encrypt "],
-  ["Core", "encrypt"],
-]) {
+for (
+  const [module, operation] of [
+    ["core", "constructor"],
+    ["repair", "toString"],
+    ["passwords", "hasOwnProperty"],
+    ["wallet", "__proto__"],
+    ["__proto__", "constructor"],
+    ["constructor", "keys"],
+    ["toString", "call"],
+    ["core", "encrypt "],
+    ["Core", "encrypt"],
+  ]
+) {
   const request = { module, operation, password: encode(TEST_PASSWORD) };
   assert.deepEqual(
     await inProcessWorker(workerScript)({ ...request, compiled: compiledPackage }),
@@ -336,13 +340,15 @@ const stamp = Buffer.concat([Buffer.from([0, 27, 10]), Buffer.from(`mhfe-build${
 assert.deepEqual(packageWasm.subarray(-stamp.length), stamp, "the WebAssembly ends with its stamp");
 const unstamped = packageWasm.subarray(0, -stamp.length);
 // A WebAssembly of another build, or not stamped at all, is refused before it runs: no "ready".
-for (const [build, wasm] of [
-  [
-    "0123456789abcdef",
-    Buffer.concat([unstamped, stamp.subarray(0, 13), Buffer.from("0123456789abcdef")]),
-  ],
-  ["development", unstamped],
-]) {
+for (
+  const [build, wasm] of [
+    [
+      "0123456789abcdef",
+      Buffer.concat([unstamped, stamp.subarray(0, 13), Buffer.from("0123456789abcdef")]),
+    ],
+    ["development", unstamped],
+  ]
+) {
   const posted = await inProcessWorker(workerScript)({
     ...repairRequest,
     compiled: new WebAssembly.Module(wasm),
@@ -361,8 +367,8 @@ for (const [build, wasm] of [
 // worker's runtime and the repair module's table, unstamped, run over a stand-in of the bindings.
 // Fault: a trap of the WebAssembly inside a part, as a panic of the program would cause.
 const trapping = inProcessWorker(
-  `${read("web/worker-runtime.js")}\n${read("web/repair-worker.js")}\n` +
-    "serveOperations(mhfe, { repair: REPAIR_OPERATIONS });",
+  `${read("web/worker-runtime.js")}\n${read("web/repair-worker.js")}\n`
+    + "serveOperations(mhfe, { repair: REPAIR_OPERATIONS });",
   {
     mhfe: {
       initSync: noop,

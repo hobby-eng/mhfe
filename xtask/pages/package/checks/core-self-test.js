@@ -60,8 +60,7 @@ for (const [fault, spoil, detail] of faultyBuilds) {
   expectMessage(argon2Refused(detail), () =>
     operations.encrypt(PHRASE, PASSWORD, faulty, {
       onRound: (round) => rounds.push(round),
-    }),
-  );
+    }));
   expectMessage(
     argon2Refused(detail),
     () => new core.HiddenWalletSession(ZERO_24, 0, 0, noBytes(), faulty),
@@ -86,11 +85,13 @@ const failsLater = {
 };
 const lateRounds = [];
 const shownUnverified = [];
-expectMessage(argon2Refused("the page's Argon2 build gives another tag"), () =>
-  operations.encrypt(PHRASE, PASSWORD, failsLater, {
-    onRound: (round) => lateRounds.push(round),
-    onUnverified: (json) => shownUnverified.push(JSON.parse(json).container),
-  }),
+expectMessage(
+  argon2Refused("the page's Argon2 build gives another tag"),
+  () =>
+    operations.encrypt(PHRASE, PASSWORD, failsLater, {
+      onRound: (round) => lateRounds.push(round),
+      onUnverified: (json) => shownUnverified.push(JSON.parse(json).container),
+    }),
 );
 assert.equal(lateRounds.length, 24, "every round ran before the known answer failed");
 assert.deepEqual(shownUnverified, [REDUCED_COST_CONTAINER]);
@@ -112,8 +113,8 @@ assert.equal(
 const residue = nonZeroBytes(freshArgon2.HEAPU8) - nonZeroBefore;
 assert.ok(residue < WIPED_RESIDUE_BYTES, `the Argon2 memory was wiped: ${residue} bytes remain`);
 console.log(
-  `Argon2 builds that fail their known answer are refused before round 1 and after the last; ` +
-    `${residue} non-zero bytes remain after a known answer.`,
+  `Argon2 builds that fail their known answer are refused before round 1 and after the last; `
+    + `${residue} non-zero bytes remain after a known answer.`,
 );
 
 // The self-test tells where it first left the published path, and how. Argon2 at full size takes
@@ -201,10 +202,12 @@ assert.deepEqual(selfTestOf(core, publishedRounds()), {
   fault: null,
 });
 // Fault: the key of round 5 or 17, changed as a fault in Argon2id would change it.
-for (const [round, suite3, suite4] of [
-  [5, false, true],
-  [17, true, false],
-]) {
+for (
+  const [round, suite3, suite4] of [
+    [5, false, true],
+    [17, true, false],
+  ]
+) {
   const spoiled = publishedRounds((at, key) => {
     if (at === round) key[0] ^= 1;
   });
@@ -254,6 +257,6 @@ assert.deepEqual(
   },
 );
 console.log(
-  "The self-test passes with the published round keys and names a fault in Argon2id, before it " +
-    "and after it.",
+  "The self-test passes with the published round keys and names a fault in Argon2id, before it "
+    + "and after it.",
 );

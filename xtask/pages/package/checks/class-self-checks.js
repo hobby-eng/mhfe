@@ -11,13 +11,13 @@ const pagePart = (id, outcome = "passed", detail = undefined) => {
   return detail === undefined ? { id, label, outcome } : { id, label, outcome, detail };
 };
 const PAGE_PARTS_OF_SECRETS = ["browser-features", "package-parts", "page-encoding"].map((id) =>
-  pagePart(id),
+  pagePart(id)
 );
 /** The self-check workers started from here on. */
 const checksFrom = (start) => StandInWorker.checks.slice(start);
 const firstMessages = (workers) =>
   workers.map(({ messages: [message] }) =>
-    fieldsOf(message, ["module", "operation", "tier", "skip"]),
+    fieldsOf(message, ["module", "operation", "tier", "skip"])
   );
 
 // Each class runs its parts once per page, the page's own first; a part that another class passed
@@ -91,10 +91,10 @@ assert.deepEqual(firstMessages(startupChecks), [
       ...PASSWORD_PARTS.filter((id) => !WALLET_PARTS.includes(id)),
       ...CORE_PARTS.filter(
         (id) =>
-          !WALLET_PARTS.includes(id) &&
-          !PASSWORD_PARTS.includes(id) &&
-          id !== "repair-words" &&
-          id !== "argon2",
+          !WALLET_PARTS.includes(id)
+          && !PASSWORD_PARTS.includes(id)
+          && id !== "repair-words"
+          && id !== "argon2",
       ),
     ],
   },
@@ -139,13 +139,13 @@ assert.deepEqual(await gatedReading, { phrase: PHRASE });
 StandInWorker.serveCheck = (message, worker) =>
   message.module === "repair"
     ? JSON.parse(
-        damagedCard.selfCheckRepair(
-          message.tier,
-          message.skip,
-          (id, label) => worker.reply({ type: "componentStart", value: { id, label } }),
-          (json) => worker.reply({ type: "component", value: JSON.parse(json) }),
-        ),
-      )
+      damagedCard.selfCheckRepair(
+        message.tier,
+        message.skip,
+        (id, label) => worker.reply({ type: "componentStart", value: { id, label } }),
+        (json) => worker.reply({ type: "component", value: JSON.parse(json) }),
+      ),
+    )
     : servedByTheWebAssembly(message, worker);
 const brokenRepair = new MhfeRepair({ workerSource: "repair worker", wasm: ownWasm() });
 const brokenReport = await brokenRepair.startupCheck();
@@ -163,15 +163,17 @@ assert.deepEqual(brokenReport, {
   ],
 });
 const SELF_CHECK_FAILED_MESSAGE =
-  "The self-test failed: Repair words (MHFE-REPAIR-1): card 1 of 1 gives other words. " +
-  "Do not use this program on this computer";
+  "The self-test failed: Repair words (MHFE-REPAIR-1): card 1 of 1 gives other words. "
+  + "Do not use this program on this computer";
 let workersBefore = StandInWorker.started.length;
 checksBefore = StandInWorker.checks.length;
-for (const call of [
-  () => brokenRepair.repairWords({ container: FULL_SIZE_CONTAINER, count: 4 }),
-  () => brokenRepair.repairContainer({ container: FULL_SIZE_CONTAINER, card: "labor extra" }),
-  () => brokenRepair.inspectContainer({ container: FULL_SIZE_CONTAINER }),
-]) {
+for (
+  const call of [
+    () => brokenRepair.repairWords({ container: FULL_SIZE_CONTAINER, count: 4 }),
+    () => brokenRepair.repairContainer({ container: FULL_SIZE_CONTAINER, card: "labor extra" }),
+    () => brokenRepair.inspectContainer({ container: FULL_SIZE_CONTAINER }),
+  ]
+) {
   await assert.rejects(call(), (error) => {
     assert.equal(error.code, "SELF_CHECK_FAILED");
     assert.equal(error.message, SELF_CHECK_FAILED_MESSAGE);
@@ -196,10 +198,10 @@ assert.ok((await fullyBroken.startupCheck()).passed);
 StandInWorker.serveCheck = (message, worker) =>
   message.tier === "full"
     ? {
-        ...servedByTheWebAssembly(message, worker),
-        passed: false,
-        components: [part("bip39-words", "failed", "case 3 of 24 differs")],
-      }
+      ...servedByTheWebAssembly(message, worker),
+      passed: false,
+      components: [part("bip39-words", "failed", "case 3 of 24 differs")],
+    }
     : servedByTheWebAssembly(message, worker);
 assert.equal((await fullyBroken.fullCheck()).passed, false);
 StandInWorker.serveCheck = servedByTheWebAssembly;
@@ -288,8 +290,8 @@ StandInWorker.serveCheck = (message, worker) => ({
 await assert.rejects(new MhfeClient({ ...sources, wasm: ownWasm() }).startupCheck(), {
   code: "PACKAGE_MISMATCH",
   message:
-    "The files core/client.js and runtime/mhfe.wasm have different limits: take every file of " +
-    "the package from one build.",
+    "The files core/client.js and runtime/mhfe.wasm have different limits: take every file of "
+    + "the package from one build.",
 });
 StandInWorker.serveCheck = servedByTheWebAssembly;
 // A class file of another build than the runtime: the other build of part 3, which differs from
@@ -465,7 +467,9 @@ for (const fast of [false, true]) {
       progressEvents.push(running ? `start ${id}` : `end ${id} ${outcome}`),
   });
   console.log(
-    `  MhfeClient.fullCheck() in ${fast ? "fast" : "standard"} mode: ${(performance.now() - started).toFixed(0)} ms`,
+    `  MhfeClient.fullCheck() in ${fast ? "fast" : "standard"} mode: ${
+      (performance.now() - started).toFixed(0)
+    } ms`,
   );
   const threadedRow = fast
     ? { ...SIZES_THREADED, outcome: "passed" }
@@ -519,18 +523,17 @@ for (const fast of [false, true]) {
 // again, and an operation goes to its worker and gets its own error.
 const ARGON2_NOT_STARTED = {
   notAvailable:
-    "Argon2id could not run: the single-threaded Argon2 build did not start: the browser " +
-    "refused its memory",
-  warning:
-    "the threaded Argon2 build did not start: the lane workers did not start; the check ran " +
-    "the single-threaded build of the standard mode instead",
+    "Argon2id could not run: the single-threaded Argon2 build did not start: the browser "
+    + "refused its memory",
+  warning: "the threaded Argon2 build did not start: the lane workers did not start; the check ran "
+    + "the single-threaded build of the standard mode instead",
 };
 /** Serves the self-checks, the Argon2 part of the core's as `argon2` when it runs Argon2. */
 const servedWithArgon2 = (argon2) => (message, worker) => {
   const report = servedByTheWebAssembly(message, worker);
   if (message.argon2 !== true) return report;
   const components = report.components.map((component) =>
-    component.id === "argon2" ? argon2 : component,
+    component.id === "argon2" ? argon2 : component
   );
   return {
     ...report,
@@ -603,8 +606,8 @@ await assert.rejects(wrongArgon2.readPhrase(PHRASE), (error) => {
   assert.equal(error.code, "SELF_CHECK_FAILED");
   assert.equal(
     error.message,
-    "The self-test failed: Argon2id: the page's Argon2 build gives another tag. " +
-      "Do not use this program on this computer",
+    "The self-test failed: Argon2id: the page's Argon2 build gives another tag. "
+      + "Do not use this program on this computer",
   );
   assert.equal(error.report, wrongArgon2Report);
   return true;

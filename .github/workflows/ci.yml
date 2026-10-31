@@ -47,8 +47,8 @@ jobs:
           if foreign:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
-      # dprint formats the Markdown, JSON, TOML and YAML (CORE-21); dprint.json pins its plugins
-      # with their SHA-256.
+      # dprint formats the Markdown, JSON, TOML, YAML and the JavaScript of the check pages
+      # (CORE-21); dprint.json pins its plugins with their SHA-256.
       - name: Install dprint, checked against its SHA-256
         run: |
           archive="dprint-x86_64-unknown-linux-gnu.zip"
