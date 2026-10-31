@@ -60,6 +60,12 @@ jobs:
           echo "$RUNNER_TEMP/dprint" >> "$GITHUB_PATH"
       - name: Check formatting
         run: dprint check
+      # The terminal cell table of the line editor, from the Unicode 18.0.0 database.
+      - name: Check the terminal cell table
+        run: |
+          # Only the exact files listed with their SHA-256 in the requirements file are accepted.
+          python3 -m pip install --user --require-hashes -r scripts/independent-suite3-requirements.txt
+          python3 scripts/generate-cell-widths.py --check
       - name: Install Emscripten 6.0.12
         run: |
           git clone --depth 1 --branch 6.0.12 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
@@ -69,7 +75,7 @@ jobs:
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
       # Formatting, clippy for native and WebAssembly, the fast tests (including the C/Rust
       # Argon2 cross-check), the build and static checks of the browser package and the
-      # release-artifact check. The full-size vector replay runs in vectors.yml.
+      # release-artifact check.
       - name: Run all checks
         run: |
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"

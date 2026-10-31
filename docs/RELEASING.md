@@ -6,15 +6,11 @@ then runs every CI check again on the tagged commit (it calls `ci.yml`: `scripts
 Windows and macOS tests with their terminal suites), builds the four canonical Docker archives and
 both macOS archives, runs the Chrome/Firefox checks on the canonical browser and Linux archives,
 audits dependencies, and creates a draft only once all of these jobs pass. Finish the draft locally so
-the OpenPGP private key never enters GitHub Actions. The same tag starts the Test vectors workflow
-on its own: it replays every full-cost suite 3 and suite 4 vector with the native and independent
-implementations in about three hours, and its result shows on the tag and in the README's badge;
-the draft does not wait for it.
+the OpenPGP private key never enters GitHub Actions.
 
 Before tagging, publish curated notes in `docs/releases/v<version>.md`, check all new commit
 signatures and create a signed annotated tag matching `Cargo.toml`. Run the repository's
 `scripts/check.sh` and a cached/uncached canonical comparison locally; keep heavy builds sequential.
-The long vector replays run on GitHub for the tag rather than being duplicated locally.
 
 ## Sign the downloaded files
 

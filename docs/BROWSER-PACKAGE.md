@@ -767,8 +767,8 @@ The page should say why these are missing where a user would look for them:
 - the decoy search on every processor core: the package's WebAssembly has no threads for it and
   compares the candidates one after another, so two missing words take longer than on the command
   line;
-- reading from standard input, exit codes and the long vector replays and benchmarks of
-  `test-vectors` and `test-benchmark`: they serve scripts and development, not a page;
+- reading from standard input, exit codes and the benchmarks of `test-benchmark`: they serve
+  scripts and development, not a page;
 - `mhfe serve` and the menu entry that serves a tool: they are the launcher that gives a page its
   fast mode, not something a page runs; the package's launcher is `core/mhfe-fast-mode.py` (see
   [Fast and standard mode](#fast-and-standard-mode));

@@ -1,261 +1,22 @@
-//! Test-only commands: `mhfe test-vectors` and `mhfe test-benchmark`.
+//! The test-only command `mhfe test-benchmark`.
 //!
-//! They use only the fixed public inputs in `mhfe::vectors`; nothing a user types is ever
-//! used. Vector files contain the password and every round key by design.
+//! It uses only the fixed public inputs below; nothing a user types is ever used.
 
-use std::collections::HashMap;
-use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::Args;
-use mhfe::vectors::{
-    self, NegativeInput, PublicInput, NEGATIVE_INPUTS, PUBLIC_INPUTS, SAME_LENGTH_INPUTS,
-    SAME_LENGTH_NEGATIVE_INPUTS,
-};
 use mhfe::{Password, PhraseLength, Suite};
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 use crate::exit::{Failure, SUCCESS};
 use crate::raw_io::println;
 use crate::settings;
-use crate::style::{self, paint, MUTED};
-use crate::terminal::duration;
+use crate::style;
 
-/// The negative cases file without its ".json" extension; also the --only text that selects it.
-const NEGATIVE_CASES_STEM: &str = "negative-cases";
-
-#[derive(Args)]
-pub struct VectorOptions {
-    /// Folder for the JSON files and SHA256SUMS
-    #[arg(long, value_name = "DIR", long_help = output_help())]
-    output: PathBuf,
-
-    /// Only names that contain TEXT, or "negative-cases"
-    #[arg(long, value_name = "TEXT", long_help = only_help())]
-    only: Option<String>,
-
-    /// Suite 4, of same-length containers, instead of suite 3
-    #[arg(long)]
-    same_length: bool,
-}
-
-/// The inputs and negative cases of one suite's vector set.
-struct VectorSet {
-    suite: &'static str,
-    inputs: &'static [PublicInput],
-    negative: &'static [NegativeInput],
-}
-
-const SUITE_3_SET: VectorSet = VectorSet {
-    suite: "suite 3",
-    inputs: &PUBLIC_INPUTS,
-    negative: &NEGATIVE_INPUTS,
-};
-
-const SUITE_4_SET: VectorSet = VectorSet {
-    suite: "suite 4",
-    inputs: &SAME_LENGTH_INPUTS,
-    negative: &SAME_LENGTH_NEGATIVE_INPUTS,
-};
-
-fn output_help() -> String {
-    style::option_help(&[
-        "Folder for the JSON files and SHA256SUMS.",
-        "Created when missing. A file of the same name in it is replaced.",
-    ])
-}
-
-fn only_help() -> String {
-    style::option_help(&[
-        "Only names that contain TEXT, or \"negative-cases\".",
-        "The names are those of the files in tests/fixtures/suite3-vectors and \
-         tests/fixtures/suite4-vectors without .json, such as zero-12 or unicode-password; \
-         zero-12 also selects zero-12-pim-1 and the other names that contain it.",
-    ])
-}
-
-/// The end of `mhfe test-vectors -h` and `--help`.
-pub fn vectors_help() -> String {
-    style::examples_with_note(
-        &[
-            (
-                "mhfe test-vectors --output vectors",
-                "Write every public vector and SHA256SUMS into ./vectors",
-            ),
-            (
-                "mhfe test-vectors --output vectors --only zero-12",
-                "Only the vectors whose names contain zero-12",
-            ),
-            (
-                "mhfe test-vectors --output vectors --only negative-cases",
-                "Only the negative cases (wrong passwords, settings and lengths), from the \
-                 containers of the vectors already in ./vectors",
-            ),
-            (
-                "mhfe test-vectors --same-length --output vectors4",
-                "The suite 4 vectors of same-length containers",
-            ),
-        ],
-        "Vector files hold the public test password and every round key by design. They use \
-         only fixed public inputs; nothing typed is ever used.",
-    )
-}
-
-pub fn write_vectors(options: VectorOptions) -> Result<i32, Failure> {
-    let set = if options.same_length {
-        &SUITE_4_SET
-    } else {
-        &SUITE_3_SET
-    };
-    style::warn(
-        &format!("TEST ONLY: writing the public {} test vectors.", set.suite),
-        "Each takes about two minutes or more at full size.",
-    );
-    fs::create_dir_all(&options.output)?;
-    let selected = |name: &str| {
-        options
-            .only
-            .as_deref()
-            .is_none_or(|text| name.contains(text))
-    };
-
-    let mut written = 0;
-    let mut containers = HashMap::new();
-    for input in set.inputs.iter().filter(|input| selected(input.name())) {
-        let work = input.work()?;
-        let mut mhfe = settings::reserve_memory(work)?;
-        let started = Instant::now();
-        let file = format!("{}.json", input.name());
-        if options.same_length {
-            let vector = vectors::generate_same_length(&mut mhfe, input)?;
-            containers.insert(input.name(), vector.container.clone());
-            write_json(&options.output, &file, &vector)?;
-        } else {
-            let vector = vectors::generate(&mut mhfe, input)?;
-            containers.insert(input.name(), vector.container.clone());
-            write_json(&options.output, &file, &vector)?;
-        }
-        written += 1;
-        style::ok(format!(
-            "{} {}",
-            input.name(),
-            paint(MUTED, duration(started.elapsed().as_secs()))
-        ));
-    }
-
-    // All negative cases share one file, so they are written together: with no --only, or with
-    // an --only that matches "negative-cases".
-    if selected(NEGATIVE_CASES_STEM) {
-        let mut negative_cases = Vec::new();
-        for input in set.negative {
-            let container = match containers.get(input.container_of()) {
-                Some(container) => container.clone(),
-                None => recorded_container(&options.output, input.container_of())?,
-            };
-            let work = input.work()?;
-            let mut mhfe = settings::reserve_memory(work)?;
-            let started = Instant::now();
-            negative_cases.push(if options.same_length {
-                vectors::same_length_negative_case(&mut mhfe, input, &container)?
-            } else {
-                vectors::negative_case(&mut mhfe, input, &container)?
-            });
-            style::ok(format!(
-                "{} {}",
-                input.name(),
-                paint(MUTED, duration(started.elapsed().as_secs()))
-            ));
-        }
-        write_json(
-            &options.output,
-            &format!("{NEGATIVE_CASES_STEM}.json"),
-            &negative_cases,
-        )?;
-        written += 1;
-    }
-
-    write_checksums(&options.output, set)?;
-    style::ok(format!(
-        "Wrote {written} files and SHA256SUMS to {}",
-        style::shown_path(&options.output)
-    ));
-    Ok(SUCCESS)
-}
-
-/// The container of a vector written by an earlier run, for negative cases run without it.
-fn recorded_container(folder: &Path, name: &str) -> Result<String, Failure> {
-    let path = folder.join(format!("{name}.json"));
-    let missing = || {
-        Failure::internal(format!(
-            "The negative cases need {}; write that vector first.",
-            style::shown_path(&path)
-        ))
-    };
-    let text = fs::read_to_string(&path).map_err(|_| missing())?;
-    let vector: serde_json::Value = serde_json::from_str(&text).map_err(|_| missing())?;
-    vector["container"]
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(missing)
-}
-
-/// Lists every file of the full set that is present in the folder, read back from disk, so that
-/// a run with --only, or several runs side by side, still leave a complete SHA256SUMS.
-///
-/// Runs side by side take turns: each holds a lock on SHA256SUMS while it reads the folder and
-/// writes the list, so a later list always includes what an earlier one saw. The file is rewritten
-/// in place rather than replaced, because a replaced file would carry a different lock. A crash
-/// in the middle leaves a short list, which the vector tests report; the next run writes it again.
-fn write_checksums(folder: &Path, set: &VectorSet) -> Result<(), Failure> {
-    let mut list = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(folder.join("SHA256SUMS"))?;
-    list.lock()?;
-    let names = set
-        .inputs
-        .iter()
-        .map(|input| input.name())
-        .chain([NEGATIVE_CASES_STEM])
-        .map(|stem| format!("{stem}.json"));
-    let mut sums = String::new();
-    for name in names {
-        match fs::read(folder.join(&name)) {
-            Ok(bytes) => sums += &format!("{}  {name}\n", hex::encode(Sha256::digest(&bytes))),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error.into()),
-        }
-    }
-    list.set_len(0)?;
-    list.write_all(sums.as_bytes())?;
-    list.sync_all()?;
-    // Closing the file releases the lock.
-    Ok(())
-}
-
-/// Writes pretty JSON with a final newline.
-fn write_json(folder: &Path, name: &str, value: &impl Serialize) -> Result<(), Failure> {
-    let mut bytes = serde_json::to_vec_pretty(value)
-        .map_err(|error| Failure::internal(format!("Could not write {name}: {error}")))?;
-    bytes.push(b'\n');
-    write_atomically(&folder.join(name), &bytes)
-}
-
-/// Writes a temporary file, flushes it to disk and renames it over `path`, so that a crash or a
-/// parallel run never leaves a half-written file behind.
-fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), Failure> {
-    let temporary = path.with_extension(format!("tmp{}", std::process::id()));
-    let mut file = fs::File::create(&temporary)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    fs::rename(&temporary, path)?;
-    Ok(())
-}
+/// The phrase and password it times: public test data, the specification's vector zero-12.
+const PUBLIC_PHRASE: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const PUBLIC_PASSWORD: &str = "public test password";
 
 #[derive(Args)]
 pub struct BenchmarkOptions {
@@ -305,8 +66,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
         "",
     );
     let work = options.settings.work_factor()?;
-    let input = &PUBLIC_INPUTS[0];
-    let password = Password::new(input.password())?;
+    let password = Password::new(PUBLIC_PASSWORD)?;
 
     let started = Instant::now();
     let mut mhfe = settings::reserve_memory(work)?;
@@ -314,7 +74,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
 
     let started = Instant::now();
     let container = mhfe.encrypt(
-        input.phrase(),
+        PUBLIC_PHRASE,
         &password,
         Suite::TwentyFourWords,
         &mut |_, _| Ok(()),

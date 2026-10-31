@@ -65,7 +65,6 @@ mod test_support;
     feature = "browser-passwords"
 ))]
 mod validation_fixtures;
-pub mod vectors;
 pub mod wallet;
 pub mod wallet_check;
 #[cfg(all(feature = "wasm-bindings", target_arch = "wasm32"))]

@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# The full check of the repository, for release-level verification on request. It does not
-# replay the full-size test vectors (tests/suite3_vectors.rs, about an hour, and
-# tests/suite4_vectors.rs, about half an hour) or check them with the independent scripts;
-# vectors.yml does that, in about three hours. Nor does it run the browser checks, which need the
-# pinned browsers (AGENTS.md).
+# The full check of the repository, for release-level verification on request. It runs neither the
+# full-size tests nor the browser checks, which need the pinned browsers (AGENTS.md).
 #
 # Needs the pinned Rust toolchain, wasm-bindgen 0.2.129, Emscripten 6.0.12 and Python 3.
 set -euo pipefail

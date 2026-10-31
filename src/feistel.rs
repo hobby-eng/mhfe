@@ -18,7 +18,7 @@ use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
@@ -81,35 +81,15 @@ impl Geometry {
         })
     }
 
-    pub fn half_bytes(self) -> usize {
-        self.half_bytes
-    }
-
     pub fn state_bytes(self) -> usize {
         2 * self.half_bytes
     }
 
+    /// The salt's domain string, for the self-checks of the cipher (mhfe/known_answers.rs).
+    #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
     pub fn ds_salt(self) -> &'static [u8] {
         self.ds_salt
     }
-
-    pub fn ds_mask(self) -> &'static [u8] {
-        self.ds_mask
-    }
-}
-
-/// All values of one round, for test vectors. States are `L || R` before and after the round.
-#[derive(Clone, Zeroize, ZeroizeOnDrop)]
-pub struct RoundTrace {
-    pub round: u32,
-    pub state_before: Vec<u8>,
-    /// `BE32(MEM) || BE32(PIM) || [BE32(ENT)] || BE32(i) || R`, which follows DS_SALT in the
-    /// salt input and DS_MASK in the mask message.
-    pub message: Vec<u8>,
-    pub salt: [u8; SALT_BYTES],
-    pub key: [u8; KEY_BYTES],
-    pub mask: Vec<u8>,
-    pub state_after: Vec<u8>,
 }
 
 /// The permutation for one password, one work factor and one suite's geometry.
@@ -126,14 +106,13 @@ impl Permutation<'_> {
         &mut self,
         x: &[u8],
         on_round: RoundCallback<'_>,
-        mut trace: Option<&mut Vec<RoundTrace>>,
     ) -> Result<LockedBytes, MhfeError> {
         let mut halves = self.split(x)?;
         for round in 0..ROUNDS {
             on_round(round + 1)?;
             let values = self.round_values(round, &halves.1)?;
             // L_{i+1} = R_i and R_{i+1} = L_i XOR M_i: the left half takes the mask.
-            apply_round(&mut halves, Side::Left, values, round, trace.as_deref_mut());
+            apply_round(&mut halves, Side::Left, values);
         }
         Ok(locked_join(&halves.0, &halves.1))
     }
@@ -143,7 +122,6 @@ impl Permutation<'_> {
         &mut self,
         y: &[u8],
         on_round: RoundCallback<'_>,
-        mut trace: Option<&mut Vec<RoundTrace>>,
     ) -> Result<LockedBytes, MhfeError> {
         let mut halves = self.split(y)?;
         for (step, round) in (0..ROUNDS).rev().enumerate() {
@@ -151,13 +129,7 @@ impl Permutation<'_> {
             // R_i = L_{i+1}, so the mask comes from the current left half;
             // then L_i = R_{i+1} XOR M_i: the right half takes the mask.
             let values = self.round_values(round, &halves.0)?;
-            apply_round(
-                &mut halves,
-                Side::Right,
-                values,
-                round,
-                trace.as_deref_mut(),
-            );
+            apply_round(&mut halves, Side::Right, values);
         }
         Ok(locked_join(&halves.0, &halves.1))
     }
@@ -201,21 +173,6 @@ struct RoundValues {
     salt: [u8; SALT_BYTES],
     key: [u8; KEY_BYTES],
     mask: Vec<u8>,
-}
-
-impl RoundValues {
-    fn into_trace(mut self, round: u32, before: &[u8], after: &[u8]) -> RoundTrace {
-        RoundTrace {
-            round,
-            state_before: before.to_vec(),
-            // A trace is a test vector of public inputs: its copies need no lock.
-            message: self.message.to_vec(),
-            salt: self.salt,
-            key: self.key,
-            mask: std::mem::take(&mut self.mask),
-            state_after: after.to_vec(),
-        }
-    }
 }
 
 /// The message shared by salt and mask: `BE32(MEM) || BE32(PIM) || BE32(i) || R`, with
@@ -278,14 +235,6 @@ fn locked_join(left: &[u8], right: &[u8]) -> LockedBytes {
     state
 }
 
-/// A state for a trace alone, never needed otherwise: a copy outside the locked halves.
-fn join(left: &[u8], right: &[u8]) -> Zeroizing<Vec<u8>> {
-    let mut state = Zeroizing::new(Vec::with_capacity(left.len() + right.len()));
-    state.extend_from_slice(left);
-    state.extend_from_slice(right);
-    state
-}
-
 /// `half ^= mask`, in the half's own buffer.
 /// The half of the state that takes a round's mask: the left one going forward, the right one
 /// going back.
@@ -296,26 +245,15 @@ enum Side {
 }
 
 /// One round in place, in either direction: the `masked` half takes the round's mask, then the two
-/// halves trade places, each in its own locked buffer. `trace` records the round with the state
-/// before and after it.
-fn apply_round(
-    halves: &mut Halves,
-    masked: Side,
-    values: RoundValues,
-    round: u32,
-    trace: Option<&mut Vec<RoundTrace>>,
-) {
+/// halves trade places, each in its own locked buffer.
+fn apply_round(halves: &mut Halves, masked: Side, values: RoundValues) {
     let (left, right) = halves;
-    let before = trace.is_some().then(|| join(left, right));
     let half = match masked {
         Side::Left => &mut *left,
         Side::Right => &mut *right,
     };
     xor_in_place(half, &values.mask);
     std::mem::swap(left, right);
-    if let (Some(trace), Some(before)) = (trace, before) {
-        trace.push(values.into_trace(round, &before, &join(left, right)));
-    }
 }
 
 fn xor_in_place(half: &mut [u8], mask: &[u8]) {
@@ -360,11 +298,11 @@ pub(crate) mod tests {
         let mut engine = HashEngine;
         let x: [u8; STATE_BYTES] = std::array::from_fn(|index| index as u8);
         let y = permutation(&mut engine, &password)
-            .forward(&x, &mut |_| Ok(()), None)
+            .forward(&x, &mut |_| Ok(()))
             .unwrap();
         assert_ne!(*y, x);
         let back = permutation(&mut engine, &password)
-            .inverse(&y, &mut |_| Ok(()), None)
+            .inverse(&y, &mut |_| Ok(()))
             .unwrap();
         assert_eq!(*back, x);
     }
@@ -385,45 +323,11 @@ pub(crate) mod tests {
         );
         let values = permutation.round_values(0, &right).unwrap();
         assert_eq!(values.message.is_locked(), cfg!(unix));
-        let y = permutation.forward(&x, &mut |_| Ok(()), None).unwrap();
+        let y = permutation.forward(&x, &mut |_| Ok(())).unwrap();
         assert_eq!(y.is_locked(), cfg!(unix));
-        let back = permutation.inverse(&y, &mut |_| Ok(()), None).unwrap();
+        let back = permutation.inverse(&y, &mut |_| Ok(())).unwrap();
         assert_eq!(*back, x);
         assert_eq!(back.is_locked(), cfg!(unix));
-    }
-
-    #[test]
-    fn traces_record_every_round_in_both_directions() {
-        let password = Password::new("public test password").unwrap();
-        let mut engine = HashEngine;
-        let x: [u8; STATE_BYTES] = std::array::from_fn(|index| 255 - index as u8);
-        let mut forward_trace = Vec::new();
-        let y = permutation(&mut engine, &password)
-            .forward(&x, &mut |_| Ok(()), Some(&mut forward_trace))
-            .unwrap();
-        let mut inverse_trace = Vec::new();
-        permutation(&mut engine, &password)
-            .inverse(&y, &mut |_| Ok(()), Some(&mut inverse_trace))
-            .unwrap();
-
-        assert_eq!(forward_trace.len(), 12);
-        assert_eq!(forward_trace[0].state_before, x);
-        assert_eq!(forward_trace[11].state_after, *y);
-        for (index, round) in forward_trace.iter().enumerate() {
-            assert_eq!(round.round, index as u32);
-            if index > 0 {
-                assert_eq!(round.state_before, forward_trace[index - 1].state_after);
-            }
-        }
-        // The inverse runs the same rounds backwards with the same salts, keys and masks.
-        for (inverse_round, forward_round) in inverse_trace.iter().zip(forward_trace.iter().rev()) {
-            assert_eq!(inverse_round.round, forward_round.round);
-            assert_eq!(inverse_round.salt, forward_round.salt);
-            assert_eq!(inverse_round.key, forward_round.key);
-            assert_eq!(inverse_round.mask, forward_round.mask);
-            assert_eq!(inverse_round.state_before, forward_round.state_after);
-            assert_eq!(inverse_round.state_after, forward_round.state_before);
-        }
     }
 
     #[test]
@@ -431,18 +335,15 @@ pub(crate) mod tests {
         let password = Password::new("public test password").unwrap();
         let mut engine = HashEngine;
         let mut seen = Vec::new();
-        let result = permutation(&mut engine, &password).forward(
-            &[7u8; STATE_BYTES],
-            &mut |round| {
+        let result =
+            permutation(&mut engine, &password).forward(&[7u8; STATE_BYTES], &mut |round| {
                 seen.push(round);
                 if round == 4 {
                     Err(MhfeError::Cancelled)
                 } else {
                     Ok(())
                 }
-            },
-            None,
-        );
+            });
         assert_eq!(result.unwrap_err(), MhfeError::Cancelled);
         assert_eq!(seen, vec![1, 2, 3, 4]);
     }
@@ -487,7 +388,7 @@ pub(crate) mod tests {
         let work = WorkFactor::new(0x0102, 3).unwrap();
         for (bytes, half) in [(16, 8), (20, 10), (24, 12), (28, 14)] {
             let geometry = Geometry::same_length(bytes).unwrap();
-            assert_eq!(geometry.half_bytes(), half);
+            assert_eq!(geometry.half_bytes, half);
             let right = vec![9u8; half];
             let message = round_message(geometry, work, 0x0a, &right);
             let bits = (8 * bytes as u32).to_be_bytes();
@@ -524,14 +425,12 @@ pub(crate) mod tests {
                 geometry: Geometry::same_length(bytes).unwrap(),
             };
             let x: Vec<u8> = (0..bytes).map(|index| index as u8).collect();
-            let y = permutation.forward(&x, &mut |_| Ok(()), None).unwrap();
+            let y = permutation.forward(&x, &mut |_| Ok(())).unwrap();
             assert_eq!(y.len(), bytes);
             assert_ne!(*y, x);
-            assert_eq!(*permutation.inverse(&y, &mut |_| Ok(()), None).unwrap(), x);
+            assert_eq!(*permutation.inverse(&y, &mut |_| Ok(())).unwrap(), x);
             // A state of another size is refused, not cut or padded.
-            assert!(permutation
-                .forward(&[0u8; 32], &mut |_| Ok(()), None)
-                .is_err());
+            assert!(permutation.forward(&[0u8; 32], &mut |_| Ok(())).is_err());
         }
     }
 
@@ -564,7 +463,7 @@ pub(crate) mod tests {
                 case["round"].as_u64().unwrap() as u32,
                 &half,
             );
-            let salt_input = [geometry.ds_salt(), &message].concat();
+            let salt_input = [geometry.ds_salt, &message].concat();
             assert_eq!(
                 hex::encode(salt_input),
                 case_text(case, "salt_input_hex"),
@@ -579,7 +478,7 @@ pub(crate) mod tests {
                 .unwrap()
                 .try_into()
                 .unwrap();
-            let mask_input = [geometry.ds_mask(), &message].concat();
+            let mask_input = [geometry.ds_mask, &message].concat();
             assert_eq!(
                 hex::encode(mask_input),
                 case_text(case, "mask_input_hex"),

@@ -424,9 +424,6 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   limits, such as `SearchLimits::first_account(gap)`, the decoy search's scope for two missing
   words. The browser package's `describeAddress` calls `describe_within`, with the default limits
   for `scanGap` 0. The module's documentation has a compiled example.
-- `vectors` writes test vectors from the fixed public inputs: `PUBLIC_INPUTS` and `NEGATIVE_INPUTS`
-  for suite 3, `SAME_LENGTH_INPUTS` and `SAME_LENGTH_NEGATIVE_INPUTS` for suite 4. Vectors contain
-  the password and every round key by design.
 
 Every buffer and binding this crate owns that holds a password, phrase, passphrase, state, key,
 private scalar or mask is wiped when dropped. Short-lived working buffers inside dependencies, such

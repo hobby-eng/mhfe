@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/hobby-eng/mhfe/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hobby-eng/mhfe/actions/workflows/ci.yml)
 [![Release](https://github.com/hobby-eng/mhfe/actions/workflows/release.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/release.yml)
-[![Test vectors](https://github.com/hobby-eng/mhfe/actions/workflows/vectors.yml/badge.svg?event=push)](https://github.com/hobby-eng/mhfe/actions/workflows/vectors.yml)
 [![RustSec audit](https://github.com/hobby-eng/mhfe/actions/workflows/audit.yml/badge.svg)](https://github.com/hobby-eng/mhfe/actions/workflows/audit.yml)
 [![Build provenance: GitHub attestations](https://img.shields.io/badge/build%20provenance-GitHub%20attestations-2ea44f)](https://github.com/hobby-eng/mhfe/attestations)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -733,8 +732,8 @@ so a crash could write your secrets to a disk.
 
 `mhfe serve`, which handles no secret, tests only the hashes, SHA-256 among them, before it compares
 a page with its checksum. `mhfe self-test` runs these tests itself and shows each one. The test
-tools `mhfe test-vectors` and `mhfe test-benchmark`, which handle public test data only, and
-`--help`, `mhfe help` and `--version` run no test at start.
+tool `mhfe test-benchmark`, which handles public test data only, and `--help`, `mhfe help` and
+`--version` run no test at start.
 
 **On request.** `mhfe self-test` runs every test of the start together with slower ones, in a few
 seconds and with about 256 MiB of memory: Argon2id also at 64 and 256 MiB, all 27 published MHFE
@@ -942,16 +941,15 @@ program and the WebAssembly (`packaging/remap-builder-paths.sh`), so they refuse
 
 ```bash
 cargo test --locked          # fast tests with reduced Argon2 cost
-scripts/check.sh             # lints, tests, builds, browser package; not the full-size vectors
+scripts/check.sh             # lints, tests, builds, browser package; not the full-size tests
 dprint check                 # dprint 0.63.0: documents, YAML and the check pages (dprint.json)
 # After check.sh: the browser package in the pinned Chrome and Firefox, unpacked in DIR as
 # .github/actions/browser-checks does (the versions are in xtask/src/browser.rs).
 MHFE_BROWSERS=DIR cargo xtask package-check
 MHFE_BROWSERS=DIR cargo xtask browsers
 MHFE_BROWSERS=DIR cargo xtask parity
-# The published vectors at full size: about an hour for suite 3, half an hour for suite 4.
-cargo test --locked --release --test suite3_vectors -- --ignored --nocapture
-cargo test --locked --release --test suite4_vectors -- --ignored --nocapture
+# The full-size tests.
+cargo test --locked --release --lib full_size -- --ignored
 scripts/build-reproducible.sh
 ```
 
@@ -961,21 +959,18 @@ the bundled Argon2 code, EFF word list, browser JavaScript runtime and Rust crat
 is written by `scripts/third-party-licenses.py`, and every release archive carries the file. Timing
 records are in [`docs/measurements/`](docs/measurements/).
 
-Test vectors are written with `mhfe test-vectors` (`--same-length` for the suite 4 set in
-`tests/fixtures/suite4-vectors`) and checked independently with `scripts/independent-suite3.py`
-and `scripts/independent-suite4.py`, which use OpenSSL's Argon2 and the Unicode 18.0.0 database of
-`unicodedata2`. Their packages install with
-`python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`, and
-`python3 scripts/independent-suite3.py passwords tests/fixtures/validation-cases.json` checks the
-password rule on every case of the specification.
+The test vectors and their independent checks live in the
+[specification's repository](https://github.com/hobby-eng/mhfe-spec).
 
 The tests at start replay the published vectors from `src/mhfe/published_rounds.rs`, which
 `cargo xtask published-rounds` writes from the vector fixtures (`--check` compares without
 writing, as `scripts/check.sh` does); regenerate it whenever the vectors change. The terminal cell
 widths of the line editor, `src/bin/mhfe/cell_widths.rs`, are written by
-`python3 scripts/generate-cell-widths.py` from the same Unicode 18.0.0 database of `unicodedata2`
-(`--check` compares without writing, as the Test vectors workflow does); regenerate it whenever the
-Unicode version of the password rule changes.
+`python3 scripts/generate-cell-widths.py` from the Unicode 18.0.0 database of `unicodedata2`, which
+installs with
+`python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`
+(`--check` compares without writing, as `ci.yml` does); regenerate it whenever the Unicode version
+of the password rule changes.
 
 Argon2 is the reference C implementation of its authors, vendored unchanged in
 [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) and used by both the native tool and the

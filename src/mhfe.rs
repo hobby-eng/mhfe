@@ -328,11 +328,9 @@ impl<E: Argon2Engine> Mhfe<E> {
             // Suite 4 encrypts the entropy itself: there is no room for a check value.
             Suite::SameLength => (Geometry::same_length(entropy.len())?, entropy),
         };
-        let y = self.permutation(password, geometry).forward(
-            &x,
-            &mut |round| on_progress(round, ENCRYPTION_ROUNDS),
-            None,
-        )?;
+        let y = self
+            .permutation(password, geometry)
+            .forward(&x, &mut |round| on_progress(round, ENCRYPTION_ROUNDS))?;
         reject_fixed_point(&x, &y)?;
         Ok(NewContainer {
             words: phrase_from_entropy(&y)?,
@@ -357,11 +355,11 @@ impl<E: Argon2Engine> Mhfe<E> {
         if suite != new.suite {
             return Err(MhfeError::VerificationFailed);
         }
-        let recovered = self.permutation(password, geometry(suite, &y)?).inverse(
-            &y,
-            &mut |round| on_progress(ROUNDS + round, ENCRYPTION_ROUNDS),
-            None,
-        )?;
+        let recovered = self
+            .permutation(password, geometry(suite, &y)?)
+            .inverse(&y, &mut |round| {
+                on_progress(ROUNDS + round, ENCRYPTION_ROUNDS)
+            })?;
         if recovered[..] == new.source[..] {
             Ok(())
         } else {
@@ -428,15 +426,13 @@ impl<E: Argon2Engine> Mhfe<E> {
             }
             _ => {}
         }
-        let x = self.permutation(password, geometry(suite, &y)?).inverse(
-            &y,
-            &mut |round| on_progress(round, ROUNDS),
-            None,
-        )?;
+        let x = self
+            .permutation(password, geometry(suite, &y)?)
+            .inverse(&y, &mut |round| on_progress(round, ROUNDS))?;
         Ok((suite, x))
     }
 
-    pub(crate) fn permutation<'a>(
+    fn permutation<'a>(
         &'a mut self,
         password: &'a Password,
         geometry: Geometry,
@@ -482,7 +478,7 @@ pub(crate) fn read_state(
 /// Reads the state `x` of a 24-word container as the specification's recovery does (step 3 and
 /// the stated length after it). Every short length's built-in check is tested, also when the
 /// person stated a length, and a check that passes takes precedence over the stated length.
-pub(crate) fn recover(x: &State, length: PhraseLength) -> Result<Recovery, MhfeError> {
+fn recover(x: &State, length: PhraseLength) -> Result<Recovery, MhfeError> {
     let detection = LengthDetection::of(x);
     let short = detection.short_lengths();
     let stated = match length {
@@ -515,7 +511,7 @@ pub(crate) fn recover(x: &State, length: PhraseLength) -> Result<Recovery, MhfeE
 /// Refuses a container equal to the original. A working implementation meets `Y = X` with
 /// probability 2^-256 (2^-ENT for a same-length container); the check stops a broken engine that
 /// returns its input from exposing the original phrase.
-pub(crate) fn reject_fixed_point(x: &[u8], y: &[u8]) -> Result<(), MhfeError> {
+fn reject_fixed_point(x: &[u8], y: &[u8]) -> Result<(), MhfeError> {
     if x == y {
         Err(MhfeError::FixedPoint)
     } else {
@@ -940,7 +936,7 @@ mod tests {
             let x = packing::tests::state_from_hex(text);
             let y = mhfe
                 .permutation(&password, Geometry::SUITE_3)
-                .forward(&x, &mut |_| Ok(()), None)
+                .forward(&x, &mut |_| Ok(()))
                 .unwrap();
             let container = phrase_from_entropy(&y[..]).unwrap();
 

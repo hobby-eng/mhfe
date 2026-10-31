@@ -121,9 +121,6 @@ enum Command {
     /// Serve a browser tool on this computer in fast mode
     #[command(long_about = serve::about(), after_help = serve::help())]
     Serve(serve::Options),
-    /// [test only] Write the public suite 3 or suite 4 test vectors
-    #[command(after_help = test_tools::vectors_help())]
-    TestVectors(test_tools::VectorOptions),
     /// [test only] Time one encryption and one recovery
     #[command(after_help = test_tools::benchmark_help())]
     TestBenchmark(test_tools::BenchmarkOptions),
@@ -310,10 +307,6 @@ fn startup_checks_of(command: &Command) -> startup::Checks {
         Command::SelfTest(_) => Checks::Nothing,
         // It compares a page with its SHA-256 before serving it, and handles no secret.
         Command::Serve(_) => Checks::Hashes,
-        // It writes the fixtures that the checks embed: after a deliberate change of the algorithm
-        // the checks would fail until the new fixtures are written and built in, so it must run
-        // without them. It handles public test data only.
-        Command::TestVectors(_) => Checks::Nothing,
         // It times public test data only.
         Command::TestBenchmark(_) => Checks::Nothing,
     }
@@ -326,11 +319,6 @@ fn needs_of(command: &Command) -> protect::Needs {
         // handles no secret itself.
         Command::Serve(_) => protect::Needs {
             network: true,
-            writes: true,
-        },
-        // Writes the vector files into the folder it is given.
-        Command::TestVectors(_) => protect::Needs {
-            network: false,
             writes: true,
         },
         _ => protect::Needs::NOTHING,
@@ -350,7 +338,6 @@ fn run(command: Command) -> Result<i32, Failure> {
         Command::Password(options) => diceware::run(options),
         Command::SelfTest(options) => self_test::run(options),
         Command::Serve(options) => serve::run(options),
-        Command::TestVectors(options) => test_tools::write_vectors(options),
         Command::TestBenchmark(options) => test_tools::benchmark(options),
     }
 }
@@ -396,7 +383,7 @@ mod tests {
     }
 
     /// Every command that reads a secret checks every part first; the self-test checks them
-    /// itself, the fast mode its hashes, and the test tools none.
+    /// itself, the fast mode its hashes, and the test tool none.
     #[test]
     fn every_secret_command_checks_every_part_at_start() {
         use startup::Checks;
@@ -427,7 +414,7 @@ mod tests {
             Checks::Hashes
         );
         assert_eq!(
-            startup_checks_of(&command(&["test-vectors", "--output", "folder"])),
+            startup_checks_of(&command(&["test-benchmark"])),
             Checks::Nothing
         );
     }

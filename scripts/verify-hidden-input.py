@@ -380,7 +380,7 @@ WALLET_CHECK_REFUSED = b"Type the passphrase: the phrase + passphrase check need
 # tool, each of whose help must end with examples.
 HELP_WIDTH = 80
 COMMANDS = ("new", "encrypt", "decrypt", "check", "rekey", "wallets", "repair", "repair-words",
-            "password", "self-test", "serve", "test-vectors", "test-benchmark")
+            "password", "self-test", "serve", "test-benchmark")
 # The first Ethereum address of the public zero-12 phrase without a passphrase (BIP44, m/44'/60'/
 # 0'/0/0), as every Ethereum wallet shows it for that phrase.
 PUBLIC_ETHEREUM_ADDRESS = b"0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
