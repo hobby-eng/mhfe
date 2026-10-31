@@ -18,10 +18,10 @@ release.
 
 ## EFF large wordlist
 
-- Source: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt, included unchanged in
-  `vendor/eff-large-wordlist/`. It is built into the `mhfe` program and into the browser package's
-  WebAssembly (`runtime/mhfe.wasm`), which make passwords from it, read their check word and
-  estimate their strength.
+- Source: https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt, included unchanged in the
+  `mhfe-core` crate. It is built into the `mhfe` program and into the browser package's WebAssembly
+  (`runtime/mhfe.wasm`), which make passwords from it, read their check word and estimate their
+  strength.
 - "EFF large wordlist" by the Electronic Frontier Foundation (Joseph Bonneau), licensed under the
   Creative Commons Attribution 4.0 International licence (CC BY 4.0):
   https://creativecommons.org/licenses/by/4.0/. See `vendor/eff-large-wordlist.md`.

@@ -2,10 +2,11 @@
 //! (MHFE-PASSWORD-CHECK-1), or random characters. Words come from a [`RandomSource`] or from real
 //! dice; characters only from a random source.
 
+use mhfe_core::password_check::{check_word, EFF_WORDS};
 use zeroize::Zeroizing;
 
-use crate::check_word::{check_index, PasswordReview, Reading, DRAWN_WORDS};
-use crate::eff::{index_of_rolls, EffList, LIST_SIZE, LONGEST_WORD, MILLIBITS_PER_WORD};
+use crate::check_word::{PasswordReview, Reading, DRAWN_WORDS};
+use crate::eff::{index_of_rolls, LIST_SIZE, LONGEST_WORD, MILLIBITS_PER_WORD};
 use crate::memory::LockedText;
 use crate::random::{check_source, uniform_below, RandomSource};
 use crate::MhfeError;
@@ -167,7 +168,6 @@ impl PasswordRecipe {
                 "a character password is not made of words".to_owned(),
             ));
         }
-        let list = EffList::get();
         let drawn_words = self.drawn_words();
         let all_words = drawn_words + usize::from(self.has_check_word());
         // The indexes the check word is computed from, wiped when done.
@@ -184,14 +184,20 @@ impl PasswordRecipe {
                 if number > 1 {
                     text.push(' ');
                 }
-                text.push_str(list.word(index));
+                text.push_str(EFF_WORDS[index]);
                 if let Some(slot) = drawn.get_mut(number - 1) {
-                    *slot = index;
+                    // Below 7,776, as just checked.
+                    *slot = index as u16;
                 }
             }
             if self.has_check_word() {
                 text.push(' ');
-                text.push_str(list.word(check_index(&drawn)));
+                #[expect(
+                    clippy::expect_used,
+                    reason = "every drawn index was checked against the list above"
+                )]
+                let check = check_word(*drawn).expect("the drawn indexes are on the list");
+                text.push_str(EFF_WORDS[usize::from(check)]);
             }
             Ok(())
         })?;
@@ -279,6 +285,7 @@ mod tests {
     }
 
     use super::*;
+    use crate::eff::index_of;
     use crate::random::tests::counter_source;
 
     #[test]
@@ -298,11 +305,7 @@ mod tests {
         let mut source = counter_source(9);
         let words = PasswordRecipe::words(6).unwrap().make(&mut source).unwrap();
         assert_eq!(words.text().split(' ').count(), 6);
-        let list = EffList::get();
-        assert!(words
-            .text()
-            .split(' ')
-            .all(|word| list.index_of(word).is_some()));
+        assert!(words.text().split(' ').all(|word| index_of(word).is_some()));
         let characters = PasswordRecipe::characters(16)
             .unwrap()
             .make(&mut source)
@@ -319,10 +322,9 @@ mod tests {
         let password = PasswordRecipe::check_word()
             .make_from_rolls("11111 11112 11113 11114 11115")
             .unwrap();
-        let list = EffList::get();
         let words: Vec<&str> = password.text().split(' ').collect();
         assert_eq!(words.len(), 6);
-        assert_eq!(words[5], list.word(check_index(&[0, 1, 2, 3, 4])));
+        assert_eq!(words[5], "aids");
     }
 
     #[test]

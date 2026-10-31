@@ -1,9 +1,8 @@
 //! Known answers of the word hints: the self-check `word-hints`.
 //!
 //! The words were listed with JavaScript's startsWith over two other copies of the lists: the
-//! English list of @scure/bip39 2.4.0 and the published EFF large wordlist file
-//! (vendor/eff-large-wordlist, whose SHA-256 src/eff.rs checks). A word no list has must give no
-//! word.
+//! English list of @scure/bip39 2.4.0 and the published EFF large wordlist file, whose SHA-256
+//! src/check_word/known_answers.rs checks. A word no list has must give no word.
 
 use super::{Hint, WordList};
 use crate::self_check::{expect, ComponentCheck, ComponentOutcome, Findings, Tier};

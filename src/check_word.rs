@@ -12,9 +12,8 @@
 use std::convert::Infallible;
 use std::ops::Range;
 
-use zeroize::Zeroizing;
+use mhfe_core::password_check::Check;
 
-use crate::eff::{EffList, LIST_SIZE};
 use crate::memory::LockedText;
 use crate::{MhfeError, Password};
 
@@ -29,23 +28,9 @@ pub(crate) mod known_answers;
 pub const PROFILE: &str = "MHFE-PASSWORD-CHECK-1";
 /// The words drawn at random, before the check word.
 pub const DRAWN_WORDS: usize = 5;
-/// The weights of the five drawn words, each coprime to 7,776, which is what makes one erased word
-/// recoverable and one wrong word noticeable.
-const WEIGHTS: [usize; DRAWN_WORDS] = [1, 5, 7, 11, 13];
 /// What a person types for a word they cannot read; any other word outside the list counts the
 /// same, but this one says it on purpose.
 pub const UNREADABLE: &str = "?";
-
-/// The index of the check word for the indexes of the five drawn words:
-/// (d1 + 5 d2 + 7 d3 + 11 d4 + 13 d5) mod 7776.
-pub fn check_index(drawn: &[usize; DRAWN_WORDS]) -> usize {
-    drawn
-        .iter()
-        .zip(WEIGHTS)
-        .map(|(&index, weight)| index * weight % LIST_SIZE)
-        .sum::<usize>()
-        % LIST_SIZE
-}
 
 /// What a password is under the profile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -129,9 +114,8 @@ pub struct PasswordReview {
 impl PasswordReview {
     /// Reviews `typed`. The text is copied once, locked, and wiped with the review.
     pub fn of(typed: &str) -> Self {
-        let list = EffList::get();
         let typed = LockedText::copy_of(typed);
-        let (reading, repairs) = read(list, &typed);
+        let (reading, repairs) = read(&typed);
         if reading != Reading::NotThisShape {
             return Self {
                 typed,
@@ -142,7 +126,7 @@ impl PasswordReview {
         }
         match written_form(&typed) {
             Some((form, correction)) => {
-                let (reading, repairs) = read(list, &form);
+                let (reading, repairs) = read(&form);
                 let written = (reading != Reading::NotThisShape).then_some((form, correction));
                 Self {
                     typed,
@@ -260,43 +244,30 @@ pub fn typed_password(
     Password::new(&chosen_password(typed, choice)?)
 }
 
-/// Reads a password. It is split at single spaces and each word is compared with the list exactly
-/// as written, hyphens included: the prefix rules of seed phrases do not apply, since the list has
-/// both "yo-yo" and "yoyo". A word not in the list, such as "?", is a gap.
-fn read(list: &EffList, text: &str) -> (Reading, Vec<Repair>) {
+/// The reading of a password, with each repair told where the word it replaces lies in `text`,
+/// which the core does not say.
+fn read(text: &str) -> (Reading, Vec<Repair>) {
     let ranges = token_ranges(text);
-    if ranges.len() != DRAWN_WORDS + 1 {
-        return (Reading::NotThisShape, Vec::new());
-    }
-    // The positions in the list reveal the password: wiped when done.
-    let found: Zeroizing<Vec<Option<usize>>> = Zeroizing::new(
-        ranges
-            .iter()
-            .map(|range| list.index_of(&text[range.clone()]))
-            .collect(),
-    );
-    let gaps: Vec<usize> = (0..ranges.len()).filter(|&i| found[i].is_none()).collect();
-    let known: Zeroizing<Vec<usize>> =
-        Zeroizing::new(found.iter().map(|index| index.unwrap_or(0)).collect());
-    let repair_at = |position: usize| Repair {
-        position: position + 1,
-        word: list.word(restored_index(&known, position)),
-        typed: ranges[position].clone(),
+    let repair = |position: usize, word| Repair {
+        position,
+        word,
+        typed: ranges[position - 1].clone(),
     };
-    match gaps.as_slice() {
-        [] if restored_index(&known, DRAWN_WORDS) == known[DRAWN_WORDS] => {
-            (Reading::Fits, Vec::new())
-        }
-        [] => (
+    match Check::of(text) {
+        Check::Fits => (Reading::Fits, Vec::new()),
+        Check::OneErased { position, word } => (Reading::Restorable, vec![repair(position, word)]),
+        Check::Mismatch { candidates } => (
             Reading::Mismatch,
-            (0..ranges.len()).map(repair_at).collect(),
+            (1..)
+                .zip(candidates)
+                .map(|(position, word)| repair(position, word))
+                .collect(),
         ),
-        [gap] => (Reading::Restorable, vec![repair_at(*gap)]),
-        _ => (Reading::NotThisShape, Vec::new()),
+        Check::NotApplicable => (Reading::NotThisShape, Vec::new()),
     }
 }
 
-/// The byte ranges of the words of `text` split at single spaces.
+/// The byte ranges of the words of `text` split at single spaces, as [`Check::of`] splits it.
 fn token_ranges(text: &str) -> Vec<Range<usize>> {
     let mut ranges = Vec::new();
     let mut start = 0;
@@ -305,30 +276,6 @@ fn token_ranges(text: &str) -> Vec<Range<usize>> {
         start += token.len() + 1;
     }
     ranges
-}
-
-/// The index at `position` that makes the six fit, the other five as given.
-fn restored_index(indexes: &[usize], position: usize) -> usize {
-    let mut drawn = Zeroizing::new([0usize; DRAWN_WORDS]);
-    drawn.copy_from_slice(&indexes[..DRAWN_WORDS]);
-    if position == DRAWN_WORDS {
-        return check_index(&drawn);
-    }
-    // weight * d = check - (the weighted sum of the others): d is that times the weight's inverse.
-    drawn[position] = 0;
-    let wanted = (indexes[DRAWN_WORDS] + LIST_SIZE - check_index(&drawn)) % LIST_SIZE;
-    wanted * inverse(WEIGHTS[position]) % LIST_SIZE
-}
-
-/// The inverse of `weight` modulo 7,776, which exists because the weight is coprime to it.
-#[expect(
-    clippy::expect_used,
-    reason = "every weight is coprime to 7,776, so its inverse exists"
-)]
-fn inverse(weight: usize) -> usize {
-    (1..LIST_SIZE)
-        .find(|&candidate| weight * candidate % LIST_SIZE == 1)
-        .expect("every weight is coprime to 7,776")
 }
 
 /// `text` with one word replaced, built at its final size and locked, so that no unwiped copy is
@@ -371,30 +318,31 @@ fn written_form(typed: &str) -> Option<(LockedText, Correction)> {
 
 #[cfg(test)]
 mod tests {
+    use mhfe_core::password_check::{check_word, EFF_WORDS};
+
     use super::*;
     use crate::eff::index_of_rolls;
 
-    fn drawn(rolls: &str) -> [usize; DRAWN_WORDS] {
-        let indexes: Vec<usize> = rolls
+    fn drawn(rolls: &str) -> [u16; DRAWN_WORDS] {
+        let indexes: Vec<u16> = rolls
             .split(' ')
-            .map(|roll| index_of_rolls(roll).unwrap())
+            .map(|roll| index_of_rolls(roll).unwrap() as u16)
             .collect();
         indexes.try_into().unwrap()
     }
 
     /// The password of five drawn word indexes and their check word.
-    fn password(drawn: &[usize; DRAWN_WORDS]) -> String {
-        let list = EffList::get();
+    fn password(drawn: [u16; DRAWN_WORDS]) -> String {
         drawn
-            .iter()
-            .chain(std::iter::once(&check_index(drawn)))
-            .map(|&index| list.word(index))
+            .into_iter()
+            .chain(check_word(drawn))
+            .map(|index| EFF_WORDS[usize::from(index)])
             .collect::<Vec<_>>()
             .join(" ")
     }
 
     /// The public vectors of the specification.
-    const VECTORS: [(&str, usize, &str); 4] = [
+    const VECTORS: [(&str, u16, &str); 4] = [
         (
             "11111 11112 11113 11114 11115",
             104,
@@ -420,8 +368,8 @@ mod tests {
     #[test]
     fn the_public_vectors_are_reproduced() {
         for (rolls, check, expected) in VECTORS {
-            assert_eq!(check_index(&drawn(rolls)), check, "{rolls}");
-            assert_eq!(password(&drawn(rolls)), expected);
+            assert_eq!(check_word(drawn(rolls)), Some(check), "{rolls}");
+            assert_eq!(password(drawn(rolls)), expected);
             assert_eq!(PasswordReview::of(expected).reading(), Reading::Fits);
         }
     }

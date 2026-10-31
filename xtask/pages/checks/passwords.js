@@ -71,8 +71,8 @@ async function checkPasswords(passwords) {
   );
   // The six repairs follow from the profile alone: the check word is the EFF list word at
   // (d1 + 5 d2 + 7 d3 + 11 d4 + 13 d5) mod 7776 for the list indexes d of the five words
-  // (src/check_word.rs), and each repair solves that for the word at its place. They were
-  // computed so from vendor/eff-large-wordlist, independently of mhfe.
+  // (mhfe_core::password_check), and each repair solves that for the word at its place. They
+  // were computed so from the file the EFF publishes, independently of mhfe.
   expectEqual(
     await passwords.review({
       password: encode("abacus abdomen abdominal zoom abiding aids"),

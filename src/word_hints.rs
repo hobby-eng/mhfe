@@ -8,9 +8,10 @@
 //! itself is shown. Tab completes a word as far as the words that begin with it agree.
 
 use bip39::Language;
+use mhfe_core::password_check::EFF_WORDS;
 use zeroize::Zeroizing;
 
-use crate::eff::{self, EffList};
+use crate::eff;
 use crate::phrase;
 use crate::MhfeError;
 
@@ -94,7 +95,7 @@ impl WordList {
     fn words(self) -> &'static [&'static str] {
         match self {
             Self::Bip39 => Language::English.word_list(),
-            Self::Eff => EffList::get().words(),
+            Self::Eff => &EFF_WORDS,
         }
     }
 

@@ -7,7 +7,9 @@
 
 use std::sync::OnceLock;
 
-use crate::eff::{EffList, MILLIBITS_PER_WORD};
+use mhfe_core::password_check::EFF_WORDS;
+
+use crate::eff::{different_dice_words, MILLIBITS_PER_WORD};
 
 /// About 50 bits, a little under four different dice words (51.7 bits), the least the README
 /// recommends: a weaker password gets a warning before it protects a phrase.
@@ -106,7 +108,7 @@ impl Strength {
 }
 
 fn estimated_bits(password: &str) -> f64 {
-    let dice_words = EffList::get().different_dice_words(password);
+    let dice_words = different_dice_words(password);
     if dice_words > 0 {
         return (dice_words * MILLIBITS_PER_WORD) as f64 / 1000.0;
     }
@@ -121,7 +123,7 @@ fn estimated_bits(password: &str) -> f64 {
 fn word_lists() -> &'static [WordList; 2] {
     static LISTS: OnceLock<[WordList; 2]> = OnceLock::new();
     LISTS.get_or_init(|| {
-        let mut dictionary = EffList::get().words().to_vec();
+        let mut dictionary = EFF_WORDS.to_vec();
         dictionary.extend(bip39::Language::English.word_list());
         [WordList::new(COMMON.to_vec()), WordList::new(dictionary)]
     })

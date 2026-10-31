@@ -362,13 +362,13 @@ let outcome: CheckOutcome =
   reading comes out. A pass makes a right password very likely; a failure means something only if
   the wallet was made with the check. `CheckEvidence::wallet_check` is the same check of a
   rehearsal, with the reference's passphrase or none, where the 24-word reading comes out.
-- `check_word` (the optional profile MHFE-PASSWORD-CHECK-1): `check_index` computes the check word,
-  `PasswordReview::of(typed)` reads a typed password, in its written form when only that fits, with
-  the repairs it offers and their order (`repairs_first`), and `apply(ReviewChoice)` gives the
-  chosen password; `chosen_password(typed, choice)` applies a review choice, `check_typed_twice`
-  checks a new password's rules and then its repetition, and `typed_password(typed, repeat, choice)`
-  does both and gives the `Password`. `eff::EffList` is the EFF large wordlist the password tools
-  share.
+- `check_word` (the optional profile MHFE-PASSWORD-CHECK-1): `PasswordReview::of(typed)` reads a
+  typed password, in its written form when only that fits, with the repairs it offers and their
+  order (`repairs_first`), and `apply(ReviewChoice)` gives the chosen password;
+  `chosen_password(typed, choice)` applies a review choice, `check_typed_twice` checks a new
+  password's rules and then its repetition, and `typed_password(typed, repeat, choice)` does both
+  and gives the `Password`. `mhfe_core::password_check` computes the check word and holds the EFF
+  large wordlist the password tools share, `EFF_WORDS`.
 - `new_password::PasswordRecipe` makes a password of 1 to 32 words, of five words and their check
   word, or of 1 to 64 characters (`INVALID_PASSWORD_SIZE` otherwise), from a `random::RandomSource`
   or, for words, from real dice (`INVALID_DICE_ROLLS`). `random::check_source` refuses a source that
@@ -547,8 +547,9 @@ The parts, by identifier and label, and what each compares:
   container phrase, the repair of two unreadable words, and too much damage and a card of another
   container phrase refused (`REPAIR_NOT_POSSIBLE`). Full: the cards of all four published container
   phrases and more repairs, of wrong words too and at the code's bound.
-- `password-check-word`, "Password check word (MHFE-PASSWORD-CHECK-1)": the EFF list's SHA-256 and
-  shape, the four published vectors, a forgotten word restored and six words that do not fit.
+- `password-check-word`, "Password check word (MHFE-PASSWORD-CHECK-1)": the SHA-256 of the EFF list
+  rebuilt as its file, the four published vectors, a forgotten word restored and six words that do
+  not fit.
 - `wallet-hashes`, "Wallet hashes": SHA-512, HMAC-SHA-512, RIPEMD-160, SHA-256 and Keccak-256.
 - `bip39-seed`, "BIP39 seeds": seeds with the passphrase "TREZOR" and with one that NFKD changes,
   and a master key fingerprint with a passphrase. Full: the 24 Trezor seeds.
@@ -626,9 +627,7 @@ value with the fixtures.
 `random::RandomSourceCheck::new(live)` is the `random-source` check. `random::check_spread(source)`
 refuses 1,024 bytes with fewer than 200 different values or one value more than 40 times
 (`RANDOM_FAILED`); a working source fails it less than once in 2^70. No test can see a source that
-is deterministic but looks random. `memory::LockProbe` is the `memory-locking` check, and
-`eff::EffList::try_get()` reads the vendored EFF list or gives `INTERNAL_ERROR` for a damaged
-file, which the check word's check reports at start.
+is deterministic but looks random. `memory::LockProbe` is the `memory-locking` check.
 
 ### Errors
 

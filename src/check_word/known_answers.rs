@@ -1,27 +1,28 @@
 //! Known answers of the password check word (MHFE-PASSWORD-CHECK-1): the self-check
 //! `password-check-word`.
 //!
-//! The EFF list's bytes, the weights modulo 7,776, the dice digits of each word, the review that
+//! The EFF list's words, the weights modulo 7,776, the dice digits of each word, the review that
 //! restores a word left out, and the refusal of six words that do not fit. The known answers are
 //! the specification's four public vectors (vectors/profiles/README.md).
 
+use mhfe_core::password_check::{check_word, EFF_WORDS};
 use sha2::Digest;
 
-use super::{check_index, PasswordReview, Reading, DRAWN_WORDS};
-use crate::eff::{EffList, EFF_LIST, LIST_SIZE};
+use super::{PasswordReview, Reading, DRAWN_WORDS};
+use crate::eff::index_of;
 use crate::new_password::PasswordRecipe;
 use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
 
-/// SHA-256 of the vendored eff_large_wordlist.txt, as vendor/eff-large-wordlist.md records it for
-/// the file the EFF publishes. It confirms that the embedded bytes are that file; it is not an
-/// independent answer of the code.
+/// SHA-256 of eff_large_wordlist.txt, as vendor/eff-large-wordlist.md records it for the file the
+/// EFF publishes. It confirms that the built-in words are that file; it is not an independent
+/// answer of the code.
 const EFF_LIST_SHA256: &str = "addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e";
 
 /// One public vector: five dice rolls, the check index and the password.
 #[derive(Clone, Copy)]
 struct CheckWordVector {
     rolls: &'static str,
-    check_index: usize,
+    check_index: u16,
     password: &'static str,
 }
 
@@ -53,6 +54,21 @@ const ERASED: (&str, usize, &str) = ("jovial trailing ? pavilion cresting ninth"
 /// The third row with its check word replaced: all six words are in the list but do not fit.
 const MISMATCH: &str = "jovial trailing chokehold pavilion cresting zoom";
 
+/// The SHA-256 of the list file rebuilt from the words: each index's five dice digits from 1 in
+/// base 6, a tab, the word and a line feed. A deliberate copy of mhfe_core's test
+/// the_words_rebuild_the_published_list, which a program cannot import; a change goes to both.
+fn rebuilt_list_sha256() -> String {
+    let mut file = sha2::Sha256::new();
+    for (index, word) in EFF_WORDS.iter().enumerate() {
+        let dice: String = (0..5u32)
+            .rev()
+            .map(|place| char::from(b'1' + (index / 6usize.pow(place) % 6) as u8))
+            .collect();
+        file.update(format!("{dice}\t{word}\n"));
+    }
+    hex::encode(file.finalize())
+}
+
 /// The `password-check-word` check.
 pub(crate) struct CheckWordCheck {
     list_sha256: &'static str,
@@ -72,21 +88,19 @@ impl CheckWordCheck {
             .make_from_rolls(vector.rolls)
             .map_err(stopped)?;
         expect(made.text() == vector.password, "gives other words")?;
-        let list = EffList::try_get().map_err(stopped)?;
-        let drawn: Vec<usize> = vector
+        let drawn: Vec<u16> = vector
             .password
             .split(' ')
             .take(DRAWN_WORDS)
             .map(|word| {
-                list.index_of(word)
-                    .ok_or_else(|| "a built-in word is not in the list".to_owned())
+                index_of(word).ok_or_else(|| "a built-in word is not in the list".to_owned())
             })
             .collect::<Result<_, _>>()?;
-        let drawn: [usize; DRAWN_WORDS] = drawn
+        let drawn: [u16; DRAWN_WORDS] = drawn
             .try_into()
             .map_err(|_| "the built-in cases are damaged".to_owned())?;
         expect(
-            check_index(&drawn) == vector.check_index,
+            check_word(drawn) == Some(vector.check_index),
             "gives another check index",
         )?;
         expect(
@@ -109,17 +123,8 @@ impl ComponentCheck for CheckWordCheck {
         let mut findings = Findings::new();
         findings.one(|| {
             expect(
-                hex::encode(sha2::Sha256::digest(EFF_LIST.as_bytes())) == self.list_sha256,
+                rebuilt_list_sha256() == self.list_sha256,
                 "the EFF list differs from the vendored file",
-            )
-        });
-        findings.one(|| {
-            let list = EffList::try_get().map_err(stopped)?;
-            expect(
-                list.words().len() == LIST_SIZE
-                    && list.word(0) == "abacus"
-                    && list.word(LIST_SIZE - 1) == "zoom",
-                "the EFF list is read wrongly",
             )
         });
         findings.each("vector", self.vectors, Self::vector);
