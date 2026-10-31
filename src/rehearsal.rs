@@ -789,7 +789,13 @@ mod tests {
 
         // A 12-word original in a 24-word container: its built-in check at the stated length.
         let container = mhfe
-            .encrypt(ABANDON, &password, Suite::TwentyFourWords, none)
+            .encrypt(
+                ABANDON,
+                &password,
+                Suite::TwentyFourWords,
+                none,
+                &mut |_| Ok(()),
+            )
             .unwrap();
         let phrase = mhfe
             .recover_confirmed(
@@ -811,7 +817,13 @@ mod tests {
             abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
             abandon abandon abandon abandon abandon art";
         let container = mhfe
-            .encrypt(ART, &password, Suite::TwentyFourWords, none)
+            .encrypt(
+                ART,
+                &password,
+                Suite::TwentyFourWords,
+                none,
+                &mut |_| Ok(()),
+            )
             .unwrap();
         let mut rounds = 0;
         assert!(matches!(
@@ -883,7 +895,7 @@ mod tests {
 
         // A same-length container: its own length, and a reference.
         let container = mhfe
-            .encrypt(ABANDON, &password, Suite::SameLength, none)
+            .encrypt(ABANDON, &password, Suite::SameLength, none, &mut |_| Ok(()))
             .unwrap();
         assert!(matches!(
             mhfe.recover_confirmed(
@@ -934,7 +946,13 @@ mod tests {
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
         let phrase = phrase_from_entropy(&entropy).unwrap();
         let container = mhfe
-            .encrypt(&phrase, &password, Suite::TwentyFourWords, none)
+            .encrypt(
+                &phrase,
+                &password,
+                Suite::TwentyFourWords,
+                none,
+                &mut |_| Ok(()),
+            )
             .unwrap();
         let reference = Reference::WalletCheck {
             passphrase: "TREZOR",
@@ -994,7 +1012,13 @@ mod tests {
         let wrong = wrong_password();
         let own = |passphrase| Reference::OwnChecks { passphrase };
         let short = mhfe
-            .encrypt(ABANDON, &password, Suite::TwentyFourWords, none)
+            .encrypt(
+                ABANDON,
+                &password,
+                Suite::TwentyFourWords,
+                none,
+                &mut |_| Ok(()),
+            )
             .unwrap();
         for passphrase in [None, Some("TREZOR")] {
             let evidence = mhfe
@@ -1014,7 +1038,9 @@ mod tests {
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
         let drawn = phrase_from_entropy(&entropy).unwrap();
         let full = mhfe
-            .encrypt(&drawn, &password, Suite::TwentyFourWords, none)
+            .encrypt(&drawn, &password, Suite::TwentyFourWords, none, &mut |_| {
+                Ok(())
+            })
             .unwrap();
         let evidence = mhfe
             .recover_for_check(&full, &password, &own(Some("TREZOR")), none)
@@ -1037,7 +1063,7 @@ mod tests {
             Err(MhfeError::WalletCheckNeedsPassphrase)
         );
         let same_length = mhfe
-            .encrypt(ABANDON, &password, Suite::SameLength, none)
+            .encrypt(ABANDON, &password, Suite::SameLength, none, &mut |_| Ok(()))
             .unwrap();
         assert_eq!(
             mhfe.check(&same_length, &password, &own(None), none),
@@ -1091,9 +1117,13 @@ mod tests {
         let password = test_password();
         let phrase = phrase_from_entropy(&[7u8; 32]).unwrap();
         let container = mhfe
-            .encrypt(&phrase, &password, Suite::TwentyFourWords, &mut |_, _| {
-                Ok(())
-            })
+            .encrypt(
+                &phrase,
+                &password,
+                Suite::TwentyFourWords,
+                &mut |_, _| Ok(()),
+                &mut |_| Ok(()),
+            )
             .unwrap();
         let own = Reference::OwnChecks { passphrase: None };
         let mut rounds = 0;
@@ -1130,7 +1160,13 @@ mod tests {
         let password = test_password();
         assert!(wallet_check::phrase_passes(ABANDON, SHORT_READING_PASSPHRASE).unwrap());
         let container = mhfe
-            .encrypt(ABANDON, &password, Suite::TwentyFourWords, none)
+            .encrypt(
+                ABANDON,
+                &password,
+                Suite::TwentyFourWords,
+                none,
+                &mut |_| Ok(()),
+            )
             .unwrap();
         // The recovery reads as the 12-word phrase, which the built-in check confirms.
         let built_in = Reference::BuiltInCheck {
@@ -1259,9 +1295,13 @@ mod tests {
         let original = "legal winner thank year wave sausage worth useful legal winner thank year \
                         wave sausage worth useful legal winner thank year wave sausage worth title";
         let container = mhfe
-            .encrypt(original, &password, Suite::TwentyFourWords, &mut |_, _| {
-                Ok(())
-            })
+            .encrypt(
+                original,
+                &password,
+                Suite::TwentyFourWords,
+                &mut |_, _| Ok(()),
+                &mut |_| Ok(()),
+            )
             .unwrap();
         let fingerprint = wallet::master_fingerprint(original, "").unwrap();
         let reference = Reference::Fingerprint {

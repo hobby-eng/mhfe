@@ -15,10 +15,16 @@ let password = Password::new("...")?;        // NFKD with Unicode 18.0.0, 1 to 1
 let mut mhfe = Mhfe::new(work)?;              // checks free memory, reserves the Argon2 work area
 
 // Suite::TwentyFourWords is the default; Suite::SameLength only on the user's own choice.
-let container = mhfe.encrypt(original, &password, Suite::TwentyFourWords, &mut |round, rounds| {
-    println!("Round {round}/{rounds}");       // return Err(MhfeError::Cancelled) to stop
-    Ok(())
-})?;
+let container = mhfe.encrypt(
+    original,
+    &password,
+    Suite::TwentyFourWords,
+    &mut |round, rounds| {
+        println!("Round {round}/{rounds}");   // return Err(MhfeError::Cancelled) to stop
+        Ok(())
+    },
+    &mut |_unchecked| Ok(()),                 // the container, before its check
+)?;
 
 match mhfe.decrypt(&container, &password, PhraseLength::Detect, &mut |_, _| Ok(()))? {
     Recovery::Phrase(phrase) => { /* phrase.words(), verified(), phrase(), suite() */ }
@@ -61,10 +67,10 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   application to show `Suite::id()`, the suite identifier, after creating a container. A 24-word
   original seed phrase has no same-length form (`MhfeError::SameLengthNeedsShortPhrase`, before any
   Argon2 work).
-- `encrypt` is `encrypt_unchecked` (rounds 1 to 12, returns a `NewContainer`) followed by
-  `check_new_container` (rounds 13 to 24). A program that shows the container to a person between
-  the two must mark it as not yet verified and report the outcome of the check, as the specification
-  requires; a result for another program should come from `encrypt`.
+- `encrypt` runs rounds 1 to 12, gives the container to its `on_unchecked` callback and checks it in
+  rounds 13 to 24. A program that shows the container to a person from that callback must mark it as
+  not yet verified and report the outcome of the check, as the specification requires; a result for
+  another program should be what `encrypt` returns. An error from the callback stops it there.
 - The progress callback receives the round that starts and the number of rounds: 1 to 24 for
   `encrypt`, 1 to 12 for `decrypt` and `check`. An error it returns stops the operation before the
   next round.
@@ -509,8 +515,8 @@ The parts, by identifier and label, and what each compares:
   length rules on zero-12's container: with 15 words stated it gives its checked 12-word reading,
   which names the 15 stated, and with 24 stated that reading first, naming the 24 stated, and the
   unverified 24-word reading after it; a length whose check does not match (`VERIFIER_MISMATCH`), a
-  new container checked against other words (`VERIFICATION_FAILED`) and settings no vector has; and
-  suite 4's entropy separation. The full self-test replays all 27 vectors.
+  wrong key in the last round of an encryption's check (`VERIFICATION_FAILED`) and settings no
+  vector has; and suite 4's entropy separation. The full self-test replays all 27 vectors.
 - `formats`, "Formats": the suite 3 validation fixture, with its settings, length detection,
   verifier byte order and the refusals of phrases and containers before any Argon2 work. The full
   self-test adds the 63 refusals of suite 4.

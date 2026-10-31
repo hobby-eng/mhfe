@@ -126,7 +126,13 @@ mod tests {
         let main = test_password();
         let hidden = Password::new("another public test password").unwrap();
         let container = mhfe
-            .encrypt(ABANDON, &main, Suite::TwentyFourWords, none)
+            .encrypt(
+                ABANDON,
+                &main,
+                Suite::TwentyFourWords,
+                none,
+                &mut |_| Ok(()),
+            )
             .unwrap();
 
         let wallet = mhfe.derive_wallet(&container, &hidden, "", none).unwrap();
@@ -158,7 +164,13 @@ mod tests {
         let mut mhfe = reduced();
         let main = test_password();
         let container = mhfe
-            .encrypt(ABANDON, &main, Suite::TwentyFourWords, none)
+            .encrypt(
+                ABANDON,
+                &main,
+                Suite::TwentyFourWords,
+                none,
+                &mut |_| Ok(()),
+            )
             .unwrap();
         assert!(matches!(
             mhfe.derive_wallet(&container, &main, "", none),
@@ -172,7 +184,7 @@ mod tests {
         let mut mhfe = reduced();
         let main = test_password();
         let container = mhfe
-            .encrypt(ABANDON, &main, Suite::SameLength, none)
+            .encrypt(ABANDON, &main, Suite::SameLength, none, &mut |_| Ok(()))
             .unwrap();
         assert!(matches!(
             mhfe.derive_wallet(&container, &main, "", none),

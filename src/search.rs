@@ -585,7 +585,13 @@ mod tests {
             .unwrap();
         assert_eq!(found.container.as_str(), container.as_str());
         let same_length = mhfe
-            .encrypt(original, &password, Suite::SameLength, &mut |_, _| Ok(()))
+            .encrypt(
+                original,
+                &password,
+                Suite::SameLength,
+                &mut |_, _| Ok(()),
+                &mut |_| Ok(()),
+            )
             .unwrap();
         let short = ContainerSearch::new(&with(&same_length, &[(1, "?")])).unwrap();
         let refused = short.search_own_checks(&mut mhfe, &password, None, &mut |_, _, _, _| Ok(()));

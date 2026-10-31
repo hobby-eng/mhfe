@@ -150,8 +150,14 @@ pub(crate) fn container_of(
     phrase: &str,
     suite: Suite,
 ) -> Zeroizing<String> {
-    mhfe.encrypt(phrase, &test_password(), suite, &mut |_, _| Ok(()))
-        .unwrap()
+    mhfe.encrypt(
+        phrase,
+        &test_password(),
+        suite,
+        &mut |_, _| Ok(()),
+        &mut |_| Ok(()),
+    )
+    .unwrap()
 }
 
 /// The public container of the suite 3 vector zero-12: [`ABANDON_12`] under [`TEST_PASSWORD`] at

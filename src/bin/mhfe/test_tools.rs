@@ -78,6 +78,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
         &password,
         Suite::TwentyFourWords,
         &mut |_, _| Ok(()),
+        &mut |_| Ok(()),
     )?;
     let encryption_seconds = started.elapsed().as_secs_f64();
 

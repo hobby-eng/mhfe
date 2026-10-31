@@ -3,10 +3,12 @@
 //! to and the round's number in the whole operation, so that a front end can show a bar for each
 //! stage and stop the operation between any two rounds.
 
+use zeroize::Zeroizing;
+
 use crate::engine::Argon2Engine;
-use crate::mhfe::{Mhfe, NewContainer};
+use crate::mhfe::Mhfe;
 use crate::repair::{self, repair_words};
-use crate::{check_phrase, MhfeError, OriginalFacts, Password, Suite, WorkFactor};
+use crate::{check_phrase, MhfeError, OriginalFacts, Password, Suite, WorkFactor, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -205,7 +207,7 @@ impl Encryption {
     /// Encrypts `original` (rounds 1 to 12, [`Stage::Encrypt`]), makes the repair words, gives the
     /// container to `on_unverified` so that a person can write it down while the check runs, and
     /// checks it (rounds 13 to 24, [`Stage::Check`]). The repair words come out only with the
-    /// checked result: a card is made only for a container whose check passed.
+    /// checked result: a card is given out only for a container whose check passed.
     pub fn run<E: Argon2Engine>(
         &self,
         mhfe: &mut Mhfe<E>,
@@ -218,30 +220,41 @@ impl Encryption {
         let other_lengths = OriginalFacts::read(original)?
             .other_lengths_in(self.suite)
             .to_vec();
-        let container =
-            mhfe.encrypt_unchecked(original, password, self.suite, &mut |round, rounds| {
-                progress(Stage::Encrypt, round, rounds)
-            })?;
-        let repair_words = self
-            .repair_word_count
-            .map(|count| repair_words(&container.words, count))
-            .transpose()?;
-        on_unverified(&container.words)?;
-        mhfe.check_new_container(&container, password, &mut |round, rounds| {
-            progress(Stage::Check, round, rounds)
-        })?;
+        let mut card = None;
+        let container = mhfe.encrypt(
+            original,
+            password,
+            self.suite,
+            &mut |round, rounds| {
+                let stage = if round <= ROUNDS {
+                    Stage::Encrypt
+                } else {
+                    Stage::Check
+                };
+                progress(stage, round, rounds)
+            },
+            &mut |container| {
+                card = self
+                    .repair_word_count
+                    .map(|count| repair_words(container, count))
+                    .transpose()?;
+                on_unverified(container)
+            },
+        )?;
         Ok(Sealed {
             container,
+            suite: self.suite,
             original_words,
             other_lengths,
-            repair_words,
+            repair_words: card,
         })
     }
 }
 
 /// A new container whose check has passed, with its repair words if made.
 pub struct Sealed {
-    container: NewContainer,
+    container: Zeroizing<String>,
+    suite: Suite,
     original_words: usize,
     other_lengths: Vec<usize>,
     repair_words: Option<String>,
@@ -250,20 +263,20 @@ pub struct Sealed {
 impl Sealed {
     /// The container's words.
     pub fn container(&self) -> &str {
-        &self.container.words
+        &self.container
     }
 
     /// The suite the container was made with.
     pub fn suite(&self) -> Suite {
-        self.container.suite
+        self.suite
     }
 
     /// The number of the container's words.
     pub fn container_words(&self) -> usize {
-        self.container.words.split(' ').count()
+        self.container.split(' ').count()
     }
 
-    /// The repair words, made only once the check has passed.
+    /// The repair words, given out only once the check has passed.
     pub fn repair_words(&self) -> Option<&str> {
         self.repair_words.as_deref()
     }
@@ -272,8 +285,7 @@ impl Sealed {
     /// in a 24-word container carries a built-in check; a 24-word phrase and a same-length
     /// container do not.
     pub fn built_in_check(&self) -> bool {
-        self.container
-            .suite
+        self.suite
             .built_in_check_lengths()
             .contains(&self.original_words)
     }
@@ -300,6 +312,7 @@ impl Sealed {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{test_password, HashEngine, ABANDON_12};
 
     #[test]
     fn stages_have_the_names_of_the_browser_api() {
@@ -348,6 +361,28 @@ mod tests {
                 (Stage::Check, 36, 36),
             ]
         );
+    }
+
+    /// Rounds 1 to 12 encrypt and rounds 13 to 24 check, of 24.
+    #[test]
+    fn an_encryption_reports_its_rounds_in_two_stages() {
+        let mut reports = Vec::new();
+        Encryption::new(ABANDON_12, Suite::TwentyFourWords, None)
+            .unwrap()
+            .run(
+                &mut Mhfe::with_engine(WorkFactor::default(), HashEngine),
+                ABANDON_12,
+                &test_password(),
+                &mut |stage, round, rounds| {
+                    reports.push((stage, round, rounds));
+                    Ok(())
+                },
+                &mut |_| Ok(()),
+            )
+            .unwrap();
+        let encrypting = (1..=12).map(|round| (Stage::Encrypt, round, 24));
+        let checking = (13..=24).map(|round| (Stage::Check, round, 24));
+        assert_eq!(reports, encrypting.chain(checking).collect::<Vec<_>>());
     }
 
     /// The wallet's passphrase is named as far as it is known, always after the container's words

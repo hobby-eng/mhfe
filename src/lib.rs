@@ -18,10 +18,16 @@
 //! let mut mhfe = Mhfe::new(WorkFactor::default())?; // reserves 2 GiB
 //! let original = "abandon abandon abandon abandon abandon abandon \
 //!                 abandon abandon abandon abandon abandon about";
-//! let container = mhfe.encrypt(original, &password, Suite::TwentyFourWords, &mut |round, rounds| {
-//!     println!("Round {round}/{rounds}");
-//!     Ok(())
-//! })?;
+//! let container = mhfe.encrypt(
+//!     original,
+//!     &password,
+//!     Suite::TwentyFourWords,
+//!     &mut |round, rounds| {
+//!         println!("Round {round}/{rounds}");
+//!         Ok(())
+//!     },
+//!     &mut |_| Ok(()),
+//! )?;
 //! let recovery = mhfe.decrypt(&container, &password, PhraseLength::Detect, &mut |_, _| Ok(()))?;
 //! if let Recovery::Phrase(phrase) = recovery {
 //!     assert_eq!(phrase.phrase(), original);
@@ -78,8 +84,8 @@ pub use container::{
 pub use error::MhfeError;
 pub use hidden::HiddenWallets;
 pub use mhfe::{
-    other_detected_lengths, Mhfe, NewContainer, PhraseLength, ProgressCallback, RecoveredPhrase,
-    Recovery, RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
+    other_detected_lengths, Mhfe, PhraseLength, ProgressCallback, RecoveredPhrase, Recovery,
+    RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
 };
 pub use password::{Password, MAX_PASSWORD_BYTES};
 pub use phrase::{check_container, check_phrase, phrase_from_entropy, read_phrase, WORD_COUNTS};

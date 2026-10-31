@@ -94,7 +94,8 @@ impl SelfTest {
     }
 
     /// The encryption of suite 3 and the recovery of suite 4 with `mhfe`: whether each gave the
-    /// published result.
+    /// published result. The encryption stops at its container, before its check: the witness has
+    /// the rounds of the recovery next.
     fn replay<E: Argon2Engine>(
         &self,
         mhfe: &mut Mhfe<E>,
@@ -102,13 +103,23 @@ impl SelfTest {
     ) -> Result<(bool, bool), MhfeError> {
         let rounds = RoundCounter::starting_after(0, ENCRYPTION_ROUNDS);
         let password = Password::new(&self.suite_3.password)?;
-        let encrypted = mhfe.encrypt_unchecked(
+        let mut suite_3 = false;
+        let mut compared = false;
+        let encrypted = mhfe.encrypt(
             &self.suite_3.phrase,
             &password,
             Suite::TwentyFourWords,
             &mut |round, _| rounds.report(Stage::Encrypt, round, &mut *progress),
-        )?;
-        let suite_3 = *encrypted.words == self.suite_3.container;
+            &mut |container| {
+                suite_3 = container == self.suite_3.container;
+                compared = true;
+                Err(MhfeError::Cancelled)
+            },
+        );
+        // That stop is the self-test's own. An error before it is a person's cancel or a failure.
+        if !compared {
+            encrypted?;
+        }
 
         let rounds = RoundCounter::starting_after(ROUNDS, ENCRYPTION_ROUNDS);
         let password = Password::new(&self.suite_4.password)?;
@@ -485,6 +496,27 @@ mod tests {
         assert_eq!(rounds[23], (Stage::Recover, 24, 24));
         // The stand-in gives the recorded keys too.
         assert!(with_fault_in_the_engine(Change::Key, 0).passed());
+    }
+
+    /// A person's cancel stops the self-test in either operation, unlike the self-test's own stop
+    /// at the end of its encryption.
+    #[test]
+    fn a_cancel_stops_the_self_test() {
+        let test = SelfTest::published().unwrap();
+        for at in [1, 12, 13, 24] {
+            let mut mhfe = Mhfe::with_engine(
+                WorkFactor::default(),
+                PublishedRoundKeys::of(published_table()),
+            );
+            let result = test.run(&mut mhfe, &mut |_, round, _| {
+                if round == at {
+                    Err(MhfeError::Cancelled)
+                } else {
+                    Ok(())
+                }
+            });
+            assert_eq!(result.err(), Some(MhfeError::Cancelled), "round {at}");
+        }
     }
 
     /// An engine that gives a wrong key in one round: the witness names that round as a fault in

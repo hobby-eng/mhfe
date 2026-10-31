@@ -166,6 +166,34 @@ impl Argon2Engine for PublishedRoundKeys {
     }
 }
 
+/// [`PublishedRoundKeys`] with the key of an encryption's last round changed, as a memory error
+/// would change it: the last key of its check, since an earlier one would change the next round's
+/// salt, which no vector records, and the check would stop before it compares.
+struct LastKeyChanged {
+    keys: PublishedRoundKeys,
+    calls: u32,
+}
+
+// A deliberate copy of the trait's signature, which an implementation repeats.
+impl Argon2Engine for LastKeyChanged {
+    fn argon2id(
+        &mut self,
+        password: &[u8],
+        salt: &[u8; SALT_BYTES],
+        memory_kib: u32,
+        passes: u32,
+        key: &mut [u8; KEY_BYTES],
+    ) -> Result<(), MhfeError> {
+        self.keys
+            .argon2id(password, salt, memory_kib, passes, key)?;
+        self.calls += 1;
+        if self.calls == crate::ENCRYPTION_ROUNDS {
+            key[0] ^= 1;
+        }
+        Ok(())
+    }
+}
+
 fn sha256(_: &[u8], message: &[u8]) -> Vec<u8> {
     use sha2::Digest;
     sha2::Sha256::digest(message).to_vec()
@@ -423,8 +451,8 @@ impl CipherRoundsCheck {
         findings.each("length rule", &cases, |case| case(table));
     }
 
-    /// Refusals the cipher must give: a short length whose verifier does not match, a container
-    /// changed before its check, and a round at settings no vector has.
+    /// Refusals the cipher must give: a short length whose verifier does not match, a fault in the
+    /// rounds of an encryption's check, and a round at settings no vector has.
     fn refusals(&self, findings: &mut Findings) {
         /// One refusal, given the table of round keys to replay with.
         type Refusal = fn(&'static [PublishedVector]) -> Result<(), String>;
@@ -435,26 +463,20 @@ impl CipherRoundsCheck {
                 let result = find(table, "zero-24")?.recovery_at(table, 12)?;
                 expect_refusal(result.map(|_| ()), "VERIFIER_MISMATCH")
             },
-            // zero-12's new container with its words replaced by zero-24's container, which has
-            // the same password and settings: the check recovers another state and refuses it.
+            // zero-12's encryption with the last key of its check changed: the check recovers
+            // another state and refuses it.
             |table| {
                 let vector = find(table, "zero-12")?;
-                let other = find(table, "zero-24")?;
-                let password = vector.password()?;
-                let mut mhfe = vector.mhfe(table)?;
-                let mut new = mhfe
-                    .encrypt_unchecked(
-                        vector.phrase,
-                        &password,
-                        Suite::TwentyFourWords,
-                        &mut |_, _| Ok(()),
-                    )
-                    .map_err(stopped)?;
-                new.words = zeroize::Zeroizing::new(other.container.to_owned());
-                expect_refusal(
-                    mhfe.check_new_container(&new, &password, &mut |_, _| Ok(())),
-                    "VERIFICATION_FAILED",
-                )
+                let keys = PublishedRoundKeys::of(table);
+                let mut mhfe = Mhfe::with_engine(vector.work()?, LastKeyChanged { keys, calls: 0 });
+                let result = mhfe.encrypt(
+                    vector.phrase,
+                    &vector.password()?,
+                    Suite::TwentyFourWords,
+                    &mut |_, _| Ok(()),
+                    &mut |_| Ok(()),
+                );
+                expect_refusal(result, "VERIFICATION_FAILED")
             },
             // zero-12's container at PIM 1: the settings reach the salt, so no recorded round
             // matches and the engine refuses the first call.
@@ -482,6 +504,19 @@ fn find(table: &'static [PublishedVector], name: &str) -> Result<&'static Publis
         .iter()
         .find(|vector| vector.name == name)
         .ok_or_else(|| "a built-in vector is missing".to_owned())
+}
+
+/// The result of encrypting `original`, for a case that expects a refusal and reads no container.
+fn encryption_result(
+    mhfe: &mut Mhfe<PublishedRoundKeys>,
+    original: &str,
+    password: &Password,
+    suite: Suite,
+) -> Result<(), MhfeError> {
+    mhfe.encrypt(original, password, suite, &mut |_, _| Ok(()), &mut |_| {
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 /// Whether a recovery gives exactly the published readings, in order.
@@ -650,14 +685,12 @@ impl FormatsCheck {
         findings.each("phrase case", fixture.cases("phrases")?, |case| {
             let expected = fixtures::text(case, "expected_error")?;
             let result = match fixtures::text(case, "operation")? {
-                "encrypt" => mhfe
-                    .encrypt(
-                        fixtures::text(case, "phrase")?,
-                        &password,
-                        Suite::TwentyFourWords,
-                        &mut |_, _| Ok(()),
-                    )
-                    .map(|_| ()),
+                "encrypt" => encryption_result(
+                    &mut mhfe,
+                    fixtures::text(case, "phrase")?,
+                    &password,
+                    Suite::TwentyFourWords,
+                ),
                 "decrypt" => {
                     let length = match case.get("words") {
                         Some(_) => usize::try_from(fixtures::number(case, "words")?)
@@ -697,9 +730,9 @@ impl FormatsCheck {
             )?;
             let text = fixtures::text(case, "text")?;
             let result = match fixtures::text(case, "operation")? {
-                "encrypt-same-length" => mhfe
-                    .encrypt(text, &password, Suite::SameLength, &mut |_, _| Ok(()))
-                    .map(|_| ()),
+                "encrypt-same-length" => {
+                    encryption_result(&mut mhfe, text, &password, Suite::SameLength)
+                }
                 "decrypt" => {
                     let length = match case.get("words") {
                         Some(_) => {
@@ -1123,6 +1156,7 @@ mod tests {
             &zero_12.password().unwrap(),
             Suite::TwentyFourWords,
             &mut |_, _| Ok(()),
+            &mut |_| Ok(()),
         );
         assert_eq!(result.unwrap_err().code(), "INTERNAL_ERROR");
     }
@@ -1130,8 +1164,8 @@ mod tests {
     #[test]
     fn a_refusal_that_is_accepted_fails() {
         // Fault: the vector zero-24 left out of the table, as a broken build would leave it out.
-        // Without zero-24 in the table, the changed container's check cannot run its rounds and
-        // stops with another error than VERIFICATION_FAILED.
+        // Without zero-24 in the table, its container cannot be read as 12 words, and no
+        // VERIFIER_MISMATCH comes.
         let vectors: Vec<PublishedVector> = PUBLISHED
             .iter()
             .filter(|vector| vector.name != "zero-24")
