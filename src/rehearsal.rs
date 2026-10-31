@@ -5,12 +5,9 @@
 //! encrypted again comes out only once it is confirmed.
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
-use crate::detection::LengthDetection;
+use crate::detection;
 use crate::engine::Argon2Engine;
-use crate::memory::LockedBytes;
-use crate::mhfe::{
-    read_as, read_same_length, read_state, suite_3_state, PhraseLength, RecoveredPhrase, Recovery,
-};
+use crate::mhfe::{PhraseLength, RecoveredPhrase, RecoveredState};
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::packing::STATE_WORDS;
 use crate::suite::{Suite, ROUNDS};
@@ -112,7 +109,7 @@ pub enum Reference<'a> {
     /// draft profile MHFE-WALLET-CHECK-SEED-1, [`crate::wallet_check`]), with its BIP39
     /// `passphrase`, which may not be empty (`WALLET_CHECK_NEEDS_PASSPHRASE`). Only the 24-word
     /// reading of the recovery is compared, as the profile defines the check for it alone
-    /// ([`crate::wallet_check::verify_entropy`]). It tells a right password and passphrase from
+    /// ([`crate::wallet_check::verify`]). It tells a right password and passphrase from
     /// wrong ones with 16 bits, not which wallet it is, so it never confirms a recovery to encrypt
     /// again.
     WalletCheck {
@@ -236,11 +233,10 @@ impl<E: Argon2Engine> Mhfe<E> {
         reference: &Reference<'_>,
         on_progress: ProgressCallback<'_>,
     ) -> Result<RecoveredForCheck, MhfeError> {
-        let (suite, state) = self.recover_to_check(container, password, reference, on_progress)?;
+        let recovery = self.recover_to_check(container, password, reference, on_progress)?;
         Ok(RecoveredForCheck {
             container_words: container.split_whitespace().count(),
-            suite,
-            state,
+            recovery,
         })
     }
 
@@ -264,14 +260,14 @@ impl<E: Argon2Engine> Mhfe<E> {
     }
 
     /// The first part of a check: refuses a reference the container cannot be checked with, before
-    /// any Argon2 work, then recovers the suite and the state `X` of `container`.
+    /// any Argon2 work, then recovers the state `X` of `container`.
     fn recover_to_check(
         &mut self,
         container: &str,
         password: &Password,
         reference: &Reference<'_>,
         on_progress: ProgressCallback<'_>,
-    ) -> Result<(Suite, LockedBytes), MhfeError> {
+    ) -> Result<RecoveredState, MhfeError> {
         refuse_impossible(container.split_whitespace().count(), reference)?;
         self.recover_state(container, password, None, on_progress)
     }
@@ -283,8 +279,7 @@ impl<E: Argon2Engine> Mhfe<E> {
 /// only whether a reference matches, and the state is wiped when it is dropped.
 pub struct RecoveredForCheck {
     container_words: usize,
-    suite: Suite,
-    state: LockedBytes,
+    recovery: RecoveredState,
 }
 
 impl RecoveredForCheck {
@@ -292,7 +287,7 @@ impl RecoveredForCheck {
     /// as [`Mhfe::check`] refuses it, with what the recovery shows beside it ([`CheckEvidence`]).
     pub fn compare(&self, reference: &Reference<'_>) -> Result<CheckEvidence, MhfeError> {
         refuse_impossible(self.container_words, reference)?;
-        evidence_of(self.suite, &self.state, reference)
+        evidence_of(&self.recovery, reference)
     }
 }
 
@@ -338,38 +333,35 @@ pub(crate) fn refuse_impossible(
     Ok(())
 }
 
-/// The reference's outcome and the checks of the original seed phrase itself, from the state `x`
-/// recovered from a container of `suite`.
+/// The reference's outcome and the checks of the original seed phrase itself, from `recovery`.
 fn evidence_of(
-    suite: Suite,
-    x: &[u8],
+    recovery: &RecoveredState,
     reference: &Reference<'_>,
 ) -> Result<CheckEvidence, MhfeError> {
-    let (outcome, matched_words) = compare_state(suite, x, reference)?;
-    if suite == Suite::SameLength {
+    let (outcome, matched_words) = compare_state(recovery, reference)?;
+    if recovery.suite() == Suite::SameLength {
         return Ok(CheckEvidence {
             outcome,
             built_in_check: None,
             wallet_check: None,
         });
     }
-    let detection = LengthDetection::of(suite_3_state(x)?);
+    let short = recovery.detected_lengths();
     // The 16-bit source check on the 24-word reading, with the passphrase compared or the empty
     // one, wherever that reading comes out: no short length passes, several do, or a reference
     // matched the 24-word reading beside one that passes (AUD-017). A built-in check states a
     // short length, and no passphrase.
-    let reads_24_words = detection.short_lengths().len() != 1 || matched_words == Some(STATE_WORDS);
+    let reads_24_words = short.len() != 1 || matched_words == Some(STATE_WORDS);
     let wallet_check = match reference {
         Reference::BuiltInCheck { .. } => None,
         _ if !reads_24_words => None,
-        other => Some(detection.source_check(other.passphrase().unwrap_or(""))?),
+        other => detection::twenty_four_word_reading(recovery)?
+            .passes_wallet_check(other.passphrase().unwrap_or(""))?,
     };
     // A stated length whose check passes is named, also among others that pass by chance.
     let built_in_check = match reference {
-        Reference::BuiltInCheck { words } if detection.passes_built_in_check(words.get()) => {
-            Some(words.get())
-        }
-        _ => detection.short_lengths().first().copied(),
+        Reference::BuiltInCheck { words } if short.contains(&words.get()) => Some(words.get()),
+        _ => short.first().copied(),
     };
     Ok(CheckEvidence {
         outcome,
@@ -378,42 +370,37 @@ fn evidence_of(
     })
 }
 
-/// The second part of a check: compares the state `x` recovered from a container of `suite` with
-/// `reference`, with the length of the reading that an address or the fingerprint matched.
+/// The second part of a check: compares `recovery` with `reference`, with the length of the
+/// reading that an address or the fingerprint matched.
 fn compare_state(
-    suite: Suite,
-    x: &[u8],
+    recovery: &RecoveredState,
     reference: &Reference<'_>,
 ) -> Result<(CheckOutcome, Option<usize>), MhfeError> {
-    if suite == Suite::SameLength {
-        // The container's own length is the only reading.
-        return Ok((compare(read_same_length(x)?.phrase(), reference)?, None));
-    }
-    let x = suite_3_state(x)?;
-    let detection = LengthDetection::of(x);
     match reference {
         // The length rules of recovery: a short length whose check passes takes precedence over
         // the stated one, which the evidence then names (AUD-015-FUN001).
         Reference::BuiltInCheck { .. } => Ok((
-            CheckOutcome::of(!detection.short_lengths().is_empty()),
+            CheckOutcome::of(!recovery.detected_lengths().is_empty()),
             None,
         )),
         Reference::WalletCheck { passphrase } => Ok((
-            CheckOutcome::of(detection.passes_wallet_check(passphrase)?),
+            CheckOutcome::of(detection::passes_wallet_check(recovery, passphrase)?),
             None,
         )),
         Reference::OwnChecks { passphrase } => Ok((
-            CheckOutcome::of(detection.passes_own_checks(*passphrase)?),
+            CheckOutcome::of(detection::passes_own_checks(recovery, *passphrase)?),
             None,
         )),
         Reference::Address { .. } | Reference::Fingerprint { .. } => {
-            // Every reading the detection gives is compared, whatever length the person has.
-            for words in detection.readings() {
-                // Held in locked memory while it is compared: an address search can take seconds.
-                let reading = read_as(x, words)?;
+            // Every reading is compared, whatever length the person has, so that no accidental
+            // match hides the real phrase: 24 stated words give each short length that passes and
+            // then the 24-word reading. A same-length container has its own length alone.
+            let stated = recovery.suite().holds_full_state().then_some(STATE_WORDS);
+            // Held in locked memory while they are compared: an address search can take seconds.
+            for reading in recovery.readings(stated)? {
                 let outcome = compare(reading.phrase(), reference)?;
                 if outcome.matches() {
-                    return Ok((outcome, Some(words)));
+                    return Ok((outcome, Some(reading.words())));
                 }
             }
             Ok((CheckOutcome::DoesNotMatch, None))
@@ -526,12 +513,8 @@ impl<E: Argon2Engine> Mhfe<E> {
     ) -> Result<RecoveredForRekey, MhfeError> {
         let facts = ContainerFacts::read(container)?;
         confirmation.refuse_for(facts.confirmation_needed(length)?)?;
-        let (suite, state) = self.recover_state(container, password, None, on_progress)?;
-        Ok(RecoveredForRekey {
-            facts,
-            suite,
-            state,
-        })
+        let recovery = self.recover_state(container, password, None, on_progress)?;
+        Ok(RecoveredForRekey { facts, recovery })
     }
 }
 
@@ -541,8 +524,7 @@ impl<E: Argon2Engine> Mhfe<E> {
 /// without the rounds again (AUD-017-UI002). The state is wiped when it is dropped.
 pub struct RecoveredForRekey {
     facts: ContainerFacts,
-    suite: Suite,
-    state: LockedBytes,
+    recovery: RecoveredState,
 }
 
 impl RecoveredForRekey {
@@ -638,10 +620,7 @@ impl RecoveredForRekey {
     /// check that passes takes precedence over a stated length.
     fn readings(&self, length: PhraseLength) -> Result<Vec<RecoveredPhrase>, MhfeError> {
         self.facts.require_length(length)?;
-        Ok(match read_state(self.suite, &self.state, length)? {
-            Recovery::Phrase(phrase) => vec![phrase],
-            Recovery::Ambiguous(readings) => readings,
-        })
+        self.recovery.readings(length.stated())
     }
 }
 
@@ -714,8 +693,8 @@ mod tests {
     use super::*;
     use crate::phrase_from_entropy;
     use crate::test_support::{
-        container_of, reduced, test_password, wrong_password, ABANDON_12 as ABANDON,
-        ABANDON_12_FINGERPRINT,
+        container_of, reduced, state_from_hex, test_password, wrong_password,
+        ABANDON_12 as ABANDON, ABANDON_12_FINGERPRINT, AMBIGUOUS_STATES,
     };
 
     /// A check of `container` against `reference` with no progress to report.
@@ -742,7 +721,8 @@ mod tests {
 
     /// A check tells beside its reference the original seed phrase's own checks: the built-in
     /// check of a 12-word original, and for a 24-word one the 16-bit source check with the
-    /// reference's passphrase or none, which a phrase drawn without it fails.
+    /// reference's passphrase or none, which a phrase drawn without it fails. The 24-word reading
+    /// is not hidden by short lengths that pass beside it (AUD-017).
     #[test]
     fn a_check_lists_the_checks_of_the_phrase_itself() {
         let mut mhfe = reduced();
@@ -764,17 +744,27 @@ mod tests {
         assert!(evidence.outcome.matches());
         // A 12-word phrase: the 24-word reading does not come out, so it is not checked.
         assert_eq!(evidence.wallet_check, None);
-        // A 24-word phrase drawn without the check fails it, with no passphrase as with one.
-        let phrase = crate::phrase_from_entropy(&[7u8; 32]).unwrap();
-        let container = container_of(&mut mhfe, &phrase, Suite::TwentyFourWords);
-        let reference = Reference::Fingerprint {
-            fingerprint: wallet::master_fingerprint(&phrase, "").unwrap(),
-            passphrase: "",
-        };
-        let evidence = evidence_for(&mut mhfe, &container, &reference);
-        assert!(evidence.outcome.matches());
-        assert_eq!(evidence.built_in_check, None);
-        assert_eq!(evidence.wallet_check, Some(false));
+        // A 24-word phrase drawn without the check fails it, with no passphrase as with one, also
+        // one that passes a short check by chance, whose reading a reference still finds. So does
+        // the 24-word reading of a short original that passes two checks.
+        let packed = crate::packing::pack(&[0; 16]).unwrap();
+        let ambiguous = state_from_hex(AMBIGUOUS_STATES[0].0);
+        for (entropy, built_in_check) in [
+            (&[7u8; 32][..], None),
+            (&packed[..], Some(12)),
+            (&ambiguous[..16], Some(12)),
+        ] {
+            let phrase = crate::phrase_from_entropy(entropy).unwrap();
+            let container = container_of(&mut mhfe, &phrase, Suite::TwentyFourWords);
+            let reference = Reference::Fingerprint {
+                fingerprint: wallet::master_fingerprint(&phrase, "").unwrap(),
+                passphrase: "",
+            };
+            let evidence = evidence_for(&mut mhfe, &container, &reference);
+            assert!(evidence.outcome.matches());
+            assert_eq!(evidence.built_in_check, built_in_check);
+            assert_eq!(evidence.wallet_check, Some(false));
+        }
     }
 
     /// The re-encryption guard: a phrase comes out only once confirmed.

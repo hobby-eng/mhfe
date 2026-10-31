@@ -147,9 +147,9 @@ pub fn verify(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
     verify_entropy(&entropy, passphrase)
 }
 
-/// [`verify`] for the entropy of the 24-word phrase, 256 bits, as the rehearsal reads it from a
-/// recovered state: the profile's `BE32(256)` and nothing shorter. An empty passphrase is refused
-/// ([`require_passphrase`]), and so is entropy of another length, by the words it would have.
+/// [`verify`] for the entropy of the 24-word phrase, 256 bits: the profile's `BE32(256)` and
+/// nothing shorter. An empty passphrase is refused ([`require_passphrase`]), and so is entropy of
+/// another length, by the words it would have.
 pub fn verify_entropy(entropy: &[u8], passphrase: &str) -> Result<bool, MhfeError> {
     require_passphrase(passphrase)?;
     if entropy.len() != NEW_ENTROPY_BYTES {

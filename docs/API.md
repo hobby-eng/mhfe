@@ -136,8 +136,8 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   (`with(passphrase)`); `Reference::own_checks(passphrase)` takes an empty passphrase as none, and
   `Reference::identifies_wallet()` says whether it is an address or a fingerprint, the only kind
   that confirms a rekey or tells a search's candidates apart.
-- Length detection lives in one module, `detection` (crate-private, `LengthDetection`), which every
-  operation that reads a length from the recovered state takes: `decrypt` with
+- Length detection lives in one module, `detection` (crate-private), which every operation that
+  reads a length from the recovered state takes: `decrypt` with
   `PhraseLength::Detect`, the readings a check compares with an address or a fingerprint, the
   evidence beside a reference, `Reference::OwnChecks`, the search for missing words, a rekey with
   its length detected, the guard of hidden wallets and `other_detected_lengths`.

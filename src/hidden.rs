@@ -4,10 +4,10 @@
 //! nothing about them.
 
 use crate::container::ContainerFacts;
-use crate::detection::LengthDetection;
+use crate::detection;
 use crate::engine::Argon2Engine;
 use crate::memory::LockedText;
-use crate::mhfe::{read_as, suite_3_state, RecoveredPhrase};
+use crate::mhfe::RecoveredPhrase;
 use crate::suite::Suite;
 use crate::{Mhfe, MhfeError, Password, ProgressCallback};
 
@@ -31,18 +31,17 @@ impl<E: Argon2Engine> Mhfe<E> {
         on_progress: ProgressCallback<'_>,
     ) -> Result<RecoveredPhrase, MhfeError> {
         ContainerFacts::read(container)?.require_hidden_wallets()?;
-        let (_, x) = self.recover_state(
+        let recovery = self.recover_state(
             container,
             password,
             Some(Suite::TwentyFourWords),
             on_progress,
         )?;
-        let x = suite_3_state(&x)?;
-        if LengthDetection::of(x).reads_as_checked(passphrase)? {
+        if detection::reads_as_checked(&recovery, passphrase)? {
             return Err(MhfeError::HiddenWalletPassesCheck);
         }
         // Read at the whole state's width, as 24 words.
-        read_as(x, crate::packing::STATE_WORDS)
+        detection::twenty_four_word_reading(&recovery)
     }
 }
 

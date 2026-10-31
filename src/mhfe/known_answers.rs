@@ -14,7 +14,7 @@
 
 use super::published_rounds::PUBLISHED;
 use super::RecoveredPhrase;
-use crate::detection::LengthDetection;
+use crate::detection::detected_lengths;
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::feistel::{round_mask, round_message, round_salt, Geometry};
 use crate::operation::Encryption;
@@ -666,8 +666,7 @@ impl FormatsCheck {
                     expect(*packed == state, "packs another state")?;
                 }
                 expect(
-                    LengthDetection::of(&state).short_lengths()
-                        == fixtures::numbers(case, "matching_short_lengths")?,
+                    detected_lengths(&state) == fixtures::numbers(case, "matching_short_lengths")?,
                     "differs",
                 )
             },
