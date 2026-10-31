@@ -18,8 +18,10 @@
 //! it and its version, as `.github/actions/browser-checks` unpacks the archives it checks by their
 //! SHA-256.
 
+pub(crate) mod full_size;
 pub(crate) mod package;
 mod page;
+pub(crate) mod parity;
 mod server;
 mod webdriver;
 
@@ -89,9 +91,9 @@ impl Browser {
                         "binary": path(format!("chrome-{CHROME}/chrome-linux64/chrome")),
                         // The unpacked Chrome for Testing has no AppArmor profile, and Ubuntu
                         // 24.04 and later can refuse it the user namespaces that its sandbox
-                        // needs, as on CI runners: it runs without one, as Playwright ran it. The
-                        // page is this repository's own, with public test data, opened as a file
-                        // or served from 127.0.0.1.
+                        // needs, as on CI runners, so it runs without one. The page is this
+                        // repository's own, with public test data, opened as a file or served
+                        // from 127.0.0.1.
                         "args": ["--headless=new", "--no-sandbox"],
                     },
                     "timeouts": timeouts,
@@ -132,7 +134,7 @@ pub(crate) fn run(root: &Path) -> Result<(), Failure> {
     let server = PageServer::start(page.into_bytes())?;
     let fast_url = format!("http://127.0.0.1:{}/", server.port);
     let modes = [("standard", file_url(&page_file)), ("fast", fast_url)];
-    if !check_pages(&folder, &work, &server, &modes)? {
+    if check_pages(&folder, &work, &server, &modes)?.is_none() {
         return Err(Failure("The browser check failed.".to_owned()));
     }
     println!("The browser package passes its checks in Chrome and Firefox, in both modes.");
@@ -152,14 +154,15 @@ fn browsers_folder() -> Result<PathBuf, Failure> {
 /// Opens each page of `modes`, a mode and its URL, in each browser of `folder` and prints its
 /// results and failures: those the page reports, the events its recorder caught, a mode other
 /// than the one the page was opened in, and in fast mode a request but the page's own. Returns
-/// whether every page passed.
+/// the result lines of each page, if every page passed.
 fn check_pages(
     folder: &Path,
     work: &Path,
     server: &PageServer,
     modes: &[(&str, String)],
-) -> Result<bool, Failure> {
+) -> Result<Option<Vec<Vec<String>>>, Failure> {
     let mut passed = true;
+    let mut pages = Vec::new();
     for browser in [Browser::Chrome, Browser::Firefox] {
         let (driver, capabilities) = browser.driver_and_capabilities(folder);
         let driver = Driver::start(&driver, work)?;
@@ -195,16 +198,18 @@ fn check_pages(
             failures
                 .extend(stray.map(|request| format!("a request reached the server: {request}")));
             println!("{} {version}, {mode} mode:", browser.name());
-            for line in strings(&check["results"]) {
+            let results = strings(&check["results"]);
+            for line in &results {
                 println!("  {line}");
             }
+            pages.push(results);
             for failure in &failures {
                 println!("  FAIL {failure}");
             }
             passed &= failures.is_empty();
         }
     }
-    Ok(passed)
+    Ok(passed.then_some(pages))
 }
 
 /// The `file:` URL of `path`, its bytes percent-encoded but for the unreserved characters and

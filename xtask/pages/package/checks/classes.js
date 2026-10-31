@@ -185,7 +185,7 @@ assert.equal(client.mode(), "standard");
 assert.equal(client.maxSupportedMemLevel(), 0);
 
 const progress = [];
-const password = encode("public test password");
+const password = encode(TEST_PASSWORD);
 const pending = client.encrypt({
   phrase: PHRASE,
   password,
@@ -249,7 +249,7 @@ for (const [description, options] of [
 
 globalThis.crossOriginIsolated = true;
 assert.equal(client.mode(), "fast");
-const fast = client.decrypt({ container: "c", password: "public test password" });
+const fast = client.decrypt({ container: "c", password: TEST_PASSWORD });
 await assert.rejects(client.decrypt({ container: "c", password: "x" }), { code: "BUSY" });
 worker = await started();
 assert.equal(await worker.script.text(), "threaded source\n;\nworker source");

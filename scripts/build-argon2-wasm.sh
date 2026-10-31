@@ -36,7 +36,8 @@ common_flags=(
   # Embed the WebAssembly as base64: nothing is fetched and the file stays plain ASCII.
   -sSINGLE_FILE=1
   -sSINGLE_FILE_BINARY_ENCODE=0
-  # Runs in a Web Worker in the browser and in Node.js for the tests.
+  # Runs in a Web Worker in the browser. No test runs it in Node.js any more; `node` goes at the
+  # next change of the package, as it changes the package's bytes.
   -sENVIRONMENT=worker,node
   # The default memory level needs 2 GiB; WebAssembly can address at most 4 GiB.
   -sALLOW_MEMORY_GROWTH=1

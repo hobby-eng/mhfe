@@ -70,7 +70,7 @@ fn write(path: &Path, bytes: impl AsRef<[u8]>) -> Result<(), Failure> {
 }
 
 /// The SHA-256 of `bytes` in lowercase hex, as `sha256sum` prints it.
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
         .map(|byte| format!("{byte:02x}"))

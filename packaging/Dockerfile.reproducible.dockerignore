@@ -7,7 +7,6 @@ release
 canonical-output*
 dist
 *.log
-node_modules
 **/__pycache__
 *.tmp
 # Audit evidence is local and never part of a build.

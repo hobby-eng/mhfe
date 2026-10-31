@@ -50,9 +50,11 @@ const WORKER: &str = include_str!("../../pages/package/worker.js");
 /// The page that starts the worker and keeps what it posts.
 const PAGE: &str = include_str!("../../pages/package/page.js");
 /// The fixed `const` lines of `xtask/pages/page-data.js` that the checks use.
-const DATA: [&str; 7] = [
+const DATA: [&str; 9] = [
     "SELF_CHECK",
     "PHRASE",
+    "TEST_PASSWORD",
+    "BIP84_ADDRESS",
     "ZERO_24",
     "REDUCED_COST_CONTAINER",
     "REDUCED_COST_SAME_LENGTH_CONTAINER",
@@ -77,17 +79,32 @@ pub(crate) fn run(root: &Path, full: bool) -> Result<(), Failure> {
     let other_build = wasm::stamp_other_build(root, &dist)?;
     let server = PageServer::start(page(root, &other_build, full)?.into_bytes())?;
     let fast_url = format!("http://127.0.0.1:{}/", server.port);
-    if !check_pages(&folder, &work_folder(root)?, &server, &[("fast", fast_url)])? {
+    let pages = check_pages(&folder, &work_folder(root)?, &server, &[("fast", fast_url)])?;
+    if pages.is_none() {
         return Err(Failure("The package check failed.".to_owned()));
     }
     println!("The browser package passes its package checks in Chrome and Firefox.");
     Ok(())
 }
 
-/// The page: the checks' module and the worker as text, and the script that starts them. Its policy
-/// is the wallet tools' but for what the checks do that no page of the package does: they evaluate
-/// the glue and the Argon2 builds, and import the classes from `blob:` URLs.
+/// The page of the checks: what they are handed, with the other build's files, and their text.
 fn page(root: &Path, other_build: &str, full: bool) -> Result<String, Failure> {
+    let mut other_files = Map::new();
+    files_of(&root.join(wasm::OTHER_BUILD), "", &mut other_files)?;
+    let dist = root.join("dist");
+    let mut lines = handed_over(root)?;
+    lines.extend([
+        constant("OTHER_BUILD_FILES", &Value::Object(other_files)),
+        constant("OTHER_BUILD_ID", &Value::from(other_build)),
+        constant("VECTOR_TEXTS", &Value::from(wasm::vector_texts(root)?)),
+        constant("JOINED_CLASSES", &Value::from(classes(&dist)?)),
+        constant("FULL", &Value::from(full)),
+    ]);
+    Ok(worker_page(&lines.join("\n"), &CHECKS.concat()))
+}
+
+/// The `const` lines of what any module of the page reads: the files, the glue and the data.
+pub(super) fn handed_over(root: &Path) -> Result<Vec<String>, Failure> {
     let dist = root.join("dist");
     let mut files = Map::new();
     files_of(&dist, "dist/", &mut files)?;
@@ -96,21 +113,21 @@ fn page(root: &Path, other_build: &str, full: bool) -> Result<String, Failure> {
         let bytes = std::fs::read(&file).map_err(|error| at(&file, error))?;
         files.insert(path.to_owned(), Value::from(base64(&bytes)));
     }
-    let mut other_files = Map::new();
-    files_of(&root.join(wasm::OTHER_BUILD), "", &mut other_files)?;
     let mut lines = vec![
         constant("FILES", &Value::Object(files)),
-        constant("OTHER_BUILD_FILES", &Value::Object(other_files)),
-        constant("OTHER_BUILD_ID", &Value::from(other_build)),
         constant("GLUE", &Value::from(glue(root, &dist)?)),
-        constant("VECTOR_TEXTS", &Value::from(wasm::vector_texts(root)?)),
-        constant("JOINED_CLASSES", &Value::from(classes(&dist)?)),
-        constant("FULL", &Value::from(full)),
     ];
     for name in DATA {
         lines.push(data_line(name)?.to_owned());
     }
-    let module = format!("{}\n{SUPPORT}\n{}", lines.join("\n"), CHECKS.concat());
+    Ok(lines)
+}
+
+/// The page that runs `checks` in a module worker, after `constants` and SUPPORT. Its policy is the
+/// wallet tools' but for what the checks do that no page of the package does: they evaluate the
+/// glue and the Argon2 builds, and import the classes from `blob:` URLs.
+pub(super) fn worker_page(constants: &str, checks: &str) -> String {
+    let module = format!("{constants}\n{SUPPORT}\n{checks}");
     let script = format!(
         "{}\n{}\n{PAGE}",
         constant("CHECKS", &Value::from(module)),
@@ -120,7 +137,7 @@ fn page(root: &Path, other_build: &str, full: bool) -> Result<String, Failure> {
         "'sha256-{}' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
         hash(&script)
     );
-    Ok(document(&sources, "<script>", &script))
+    document(&sources, "<script>", &script)
 }
 
 /// The wasm-bindgen glue of the package: what scripts/build-wasm.sh put in front of the Argon2

@@ -1,7 +1,4 @@
-const encode = (text) => new TextEncoder().encode(text);
-const noBytes = () => new Uint8Array();
-
-const PASSWORD = encode("public test password");
+const PASSWORD = encode(TEST_PASSWORD);
 const NEW_PASSWORD = encode("another public test password");
 /** Four Argon2 lanes need at least 32 KiB; 256 KiB and one pass match the native test. */
 const REDUCED_MEMORY_KIB = 256;
@@ -10,8 +7,6 @@ const REDUCED_PASSES = 1;
 const PHRASE_FINGERPRINT = "73c5da0a";
 /** The same with the BIP39 test passphrase "TREZOR" (src/wallet.rs). */
 const PHRASE_TREZOR_FINGERPRINT = "b4e3f5ed";
-/** BIP84's published first address of PHRASE without a passphrase. */
-const PHRASE_ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
 /** BIP84's first address of PHRASE with the passphrase "TREZOR" (src/wallet.rs). */
 const PHRASE_TREZOR_ADDRESS = "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu";
 // The core's refusals of the answer whether the wallet has a BIP39 passphrase, exactly as the
@@ -43,12 +38,6 @@ const PASSPHRASE_ONLY_WITH_REFERENCE =
   "passphrase belongs only to an address or fingerprint confirmation.";
 /** Values that are not a boolean, which no answer whether the wallet has a passphrase may be. */
 const NOT_BOOLEAN_ANSWERS = ["no", "true", 1, 0, {}];
-/**
- * The cost of the known answer of the page's Argon2 build, which every Argon2 operation runs before
- * its first round and after its last (src/engine/known_answers.rs), and of its larger ones at 64
- * and 256 MiB in the full self-check: these reach the real build unchanged.
- */
-const KNOWN_ANSWER_COSTS = ["1024/1", "65536/3", "262144/2"];
 /** The self-test's fault where a round's published input gave another key (src/self_test.rs). */
 const argon2KeyFault = (round) => ({
   kind: "argon2-key",

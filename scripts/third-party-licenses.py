@@ -311,8 +311,7 @@ def render(resolved):
 def archive_members(archive):
     """The archive's files, by path without a leading "./".
 
-    Python's tarfile and zipfile read both archive kinds the same way on every build machine; Node
-    has no reader of either (TOOL-01).
+    Python's tarfile and zipfile read both archive kinds the same way on every build machine.
     """
     if archive.endswith(".zip"):
         with zipfile.ZipFile(archive) as packed:

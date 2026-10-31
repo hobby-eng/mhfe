@@ -1,6 +1,6 @@
-// The page of the package checks: it starts their module worker and keeps what the worker posts
-// for `cargo xtask package-check`, which waits for self.mhfeCheck. The task gives CHECKS (the
-// checks' module) and WORKER (xtask/pages/package/worker.js) in front of this script.
+// The page of `cargo xtask package-check` and `cargo xtask parity`: it starts their module worker
+// and keeps what the worker posts for the task, which waits for self.mhfeCheck. The task gives
+// CHECKS (the module) and WORKER (xtask/pages/package/worker.js) in front of this script.
 (() => {
   const results = [];
   const failures = [];

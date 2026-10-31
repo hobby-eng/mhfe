@@ -948,6 +948,7 @@ dprint check                 # dprint 0.63.0: Markdown, JSON, TOML and YAML (dpr
 # .github/actions/browser-checks does (the versions are in xtask/src/browser.rs).
 MHFE_BROWSERS=DIR cargo xtask package-check
 MHFE_BROWSERS=DIR cargo xtask browsers
+MHFE_BROWSERS=DIR cargo xtask parity
 # The published vectors at full size: about an hour for suite 3, half an hour for suite 4.
 cargo test --locked --release --test suite3_vectors -- --ignored --nocapture
 cargo test --locked --release --test suite4_vectors -- --ignored --nocapture

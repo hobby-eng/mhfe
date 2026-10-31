@@ -1,8 +1,8 @@
-// The parts of Node.js's API that the package checks were written with, for the module worker of
-// `cargo xtask package-check`: `assert` as "node:assert/strict" gives it, `Buffer`,
-// `resolveObjectURL`, the files the task hands over as `read`, and the Argon2 builds as `require`
-// gave them. Each covers only what the checks use, with Node's meaning, and what would otherwise
-// pass by mistake fails loudly.
+// The parts of Node.js's API that the checks were written with, for the module worker of `cargo
+// xtask package-check` and `cargo xtask parity`: `assert` as "node:assert/strict" gives it,
+// `Buffer`, `resolveObjectURL`, the files the task hands over as `read`, and the Argon2 builds as
+// `require` gave them. Each covers only what the checks use, with Node's meaning, and what would
+// otherwise pass by mistake fails loudly.
 
 /** A failed check, with what was expected and what came. */
 class AssertionError extends Error {
@@ -225,10 +225,10 @@ class Buffer extends Uint8Array {
   }
 }
 
-/** The file at `path` of `files`, as `cargo xtask package-check` handed it over. */
+/** The file at `path` of `files`, as the page's task handed it over. */
 function read(path, files = FILES) {
   const base64 = files[path];
-  if (base64 === undefined) throw new Error(`cargo xtask package-check did not hand over ${path}`);
+  if (base64 === undefined) throw new Error(`the page's task did not hand over ${path}`);
   return Buffer.from(base64, "base64");
 }
 
@@ -260,3 +260,42 @@ function argon2Build(path, name) {
   const lanes = new Blob([script], { type: "text/javascript" });
   return () => create({ mainScriptUrlOrBlob: lanes });
 }
+
+// What the package checks and the parity check share.
+const encode = (text) => new TextEncoder().encode(text);
+const noBytes = () => new Uint8Array();
+/**
+ * The cost of the known answer of the page's Argon2 build, which every Argon2 operation runs before
+ * its first round and after its last (src/engine/known_answers.rs), and of its larger ones at 64
+ * and 256 MiB in the full self-check: these reach the real build unchanged.
+ */
+const KNOWN_ANSWER_COSTS = ["1024/1", "65536/3", "262144/2"];
+
+/**
+ * The message a page reads for a refusal of the WebAssembly: its text after the code, begun with a
+ * capital letter as sentence() in web/runtime.js writes it. `what` names the refusal in a failure.
+ */
+function pageMessageOf(code, action, what = code) {
+  let message = "";
+  assert.throws(
+    action,
+    (error) => {
+      message = error.message;
+      return message.startsWith(`${code}: `);
+    },
+    what,
+  );
+  const text = message.slice(code.length + 2);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** An Argon2 engine for refusals: the known answer that a call checks first, and no round. */
+const knownAnswersOnly = (engine) => ({
+  derive: (password, salt, memoryKib, passes, key) => {
+    assert.ok(
+      KNOWN_ANSWER_COSTS.includes(`${memoryKib}/${passes}`),
+      "a refusal came after the first round started",
+    );
+    engine.derive(password, salt, memoryKib, passes, key);
+  },
+});

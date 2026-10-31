@@ -1,5 +1,5 @@
 name: Browser checks
-description: The browser package in dist/ in the pinned Chrome and Firefox, at a reduced Argon2 cost.
+description: The browser package in dist/ in the pinned browsers, and its comparison with the program.
 runs:
   using: composite
   steps:
@@ -7,6 +7,7 @@ runs:
     # and unpacked as it expects. `cargo xtask package-check` runs the package's code with a
     # stand-in worker, `cargo xtask browsers` with the real one: Blob workers under the wallet
     # tools' Content-Security-Policy, standard and fast mode, cancellation and failing callbacks.
+    # `cargo xtask parity` compares it with the program.
     - name: Check the browser package in Chrome and Firefox
       shell: bash
       run: |
@@ -36,5 +37,5 @@ runs:
         tar -xzf geckodriver-0.37.1/geckodriver-v0.37.1-linux64.tar.gz -C geckodriver-0.37.1
         cd "$GITHUB_WORKSPACE"
         # The drivers' own messages tell why a browser did not start.
-        cargo xtask package-check && cargo xtask browsers ||
+        cargo xtask package-check && cargo xtask browsers && cargo xtask parity ||
           { tail -n 50 target/browser-check/*.log; exit 1; }

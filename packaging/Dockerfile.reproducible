@@ -84,7 +84,7 @@ COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
 # Some of the checks of scripts/check.sh, those this stage needs before it builds, then the release
 # builds; the release workflow runs the whole of check.sh through ci.yml on the tagged
 # commit before it publishes (AUD-015-BLD002), and the checks that run the browser package, which
-# need browsers, on the archive this stage makes. No network from here on. Clippy also runs
+# need browsers, on the archives this stage makes. No network from here on. Clippy also runs
 # for both cross targets: the native run never sees code for Windows or ARM64 alone. Every build
 # writes the directories of the container under fixed names (packaging/remap-builder-paths.sh),
 # as a local build does, and scripts/check-release-artifacts.sh refuses a program or WebAssembly

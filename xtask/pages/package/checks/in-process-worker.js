@@ -281,7 +281,7 @@ for (const [module, operation] of [
   ["core", "encrypt "],
   ["Core", "encrypt"],
 ]) {
-  const request = { module, operation, password: encode("public test password") };
+  const request = { module, operation, password: encode(TEST_PASSWORD) };
   assert.deepEqual(
     await inProcessWorker(workerScript)({ ...request, compiled: compiledPackage }),
     [
@@ -297,7 +297,7 @@ for (const [module, operation] of [
 const inheritedRequest = {
   module: "core",
   operation: "constructor",
-  password: encode("public test password"),
+  password: encode(TEST_PASSWORD),
   compiled: compiledPackage,
 };
 await inProcessWorker(workerScript)(inheritedRequest);

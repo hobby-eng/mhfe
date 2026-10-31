@@ -260,7 +260,7 @@ function rekeyConfirmations(created, reduced) {
   const plainAddress = {
     ...onSameLength,
     kind: "address",
-    reference: PHRASE_ADDRESS,
+    reference: BIP84_ADDRESS,
     coin: "bitcoin",
   };
   /** A rekey of the confirmation's container, ready for its recovery with the answer `answer`. */

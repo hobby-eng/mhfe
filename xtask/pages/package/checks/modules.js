@@ -168,11 +168,11 @@ expectCode("WALLET_CHECK_NEEDS_PASSPHRASE", () =>
   wallet.walletCheck(encode(checkedPhrase), noBytes()),
 );
 expectCode("INVALID_WORD_COUNT", () => wallet.walletCheck(encode(PHRASE), encode("TREZOR")));
-const search = JSON.parse(wallet.describeAddress(PHRASE_ADDRESS, "bitcoin", "", 0));
+const search = JSON.parse(wallet.describeAddress(BIP84_ADDRESS, "bitcoin", "", 0));
 assert.equal(search.onlyPath, false);
 assert.equal(search.addresses, 2000);
 // A scan gap states the decoy search of two missing words: the first account, 20 of each chain.
-assert.equal(JSON.parse(wallet.describeAddress(PHRASE_ADDRESS, "bitcoin", "", 20)).addresses, 40);
+assert.equal(JSON.parse(wallet.describeAddress(BIP84_ADDRESS, "bitcoin", "", 20)).addresses, 40);
 const drawn = JSON.parse(drawWithoutWishes(wallet, noBytes(), noBytes(), false, testRandom));
 assert.equal(drawn.words, 24);
 assert.equal(drawn.walletCheck, false);
@@ -286,33 +286,7 @@ expectCode("INVALID_REQUEST", () => wallet.wordHints("BIP39", encode("ab")));
 expectCode("INVALID_REQUEST", () => wallet.wordHints("bip39", new Uint8Array([0xff])));
 console.log("The wallet module passes its checks.");
 
-/**
- * The message a page reads for a refusal of the WebAssembly: its text after the code, begun with a
- * capital letter as sentence() in web/runtime.js writes it.
- */
-function pageMessageOf(code, action) {
-  let message = "";
-  assert.throws(
-    action,
-    (error) => {
-      message = error.message;
-      return message.startsWith(`${code}: `);
-    },
-    code,
-  );
-  const text = message.slice(code.length + 2);
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-/** An Argon2 engine for refusals: the known answer that a call checks first, and no round. */
-const knownAnswerEngine = argon2Engine(await builds["single-threaded"]());
-const noArgon2 = {
-  derive: (password, salt, memoryKib, passes, key) => {
-    if (!KNOWN_ANSWER_COSTS.includes(`${memoryKib}/${passes}`)) {
-      assert.fail("a refusal came after the first round started");
-    }
-    knownAnswerEngine.derive(password, salt, memoryKib, passes, key);
-  },
-};
+const noArgon2 = knownAnswersOnly(argon2Engine(await builds["single-threaded"]()));
 // The classes give these refusals of the library early, before a secret reaches a worker; they
 // must give them with the library's code and in its words, as the command-line tool does.
 const LIBRARY_MESSAGES = {

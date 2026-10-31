@@ -1,4 +1,4 @@
-  const PASSWORD = "public test password";
+  const PASSWORD = TEST_PASSWORD;
   const NEW_PASSWORD = "another public test password";
   const THIRD_PASSWORD = "a third public test password";
   // "abandon" 23 times and "art": the 24-word phrase of zero entropy.
@@ -8,9 +8,8 @@
   const CHECK_WORD_DICE = "35214 62431 15543 44126 21365";
   const CHECK_WORD_MISSING = "jovial trailing ? pavilion cresting ninth";
   const CHECK_WORD_CAPITALS = "JOVIAL Trailing chokehold pavilion cresting ninth";
-  // Addresses of PHRASE's wallet (src/wallet.rs): BIP84's published first address, the change
-  // address 7 of account 3, the first address with the passphrase "TREZOR" and Ethereum's first.
-  const BIP84_ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
+  // More addresses of PHRASE's wallet (src/wallet.rs): the change address 7 of account 3, the first
+  // address with the passphrase "TREZOR" and Ethereum's first.
   const BIP84_PATH = "m/84'/0'/0'/0/0";
   const BIP84_ACCOUNT_3_CHANGE_7 = "bc1q8r4wsa3nye5qypv80vpfg4sh99uf02u5mmh5ry";
   const BIP84_TREZOR_ADDRESS = "bc1qv5rmq0kt9yz3pm36wvzct7p3x6mtgehjul0feu";

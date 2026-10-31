@@ -81,7 +81,6 @@ assert.equal(worker.terminated, true, "a close during an open stops the worker")
 await assert.rejects(interrupted, (error) => error instanceof MhfeCancelledError);
 
 // The client's byte copies of secrets are wiped when an operation cannot start.
-const TEST_PASSWORD = "public test password";
 const TEST_PASSPHRASE = "public test passphrase";
 const copies = [];
 const RealTextEncoder = globalThis.TextEncoder;

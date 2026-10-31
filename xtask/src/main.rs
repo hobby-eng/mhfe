@@ -1,8 +1,11 @@
 //! The tools of the mhfe repository (TOOL-01), run from anywhere in it as `cargo xtask <task>`:
 //!
+//! - `browser-check-page`: writes a page that runs the browser package at full size in any browser.
 //! - `browsers`: the browser package in the pinned Chrome and Firefox, through WebDriver.
 //! - `package-check [--full]`: the checks of the browser package that run its code, in the pinned
 //!   browsers.
+//! - `parity [PROGRAM]`: the command-line tool and the browser package give the same results, in the
+//!   pinned browsers.
 //! - `copies [--tokens N]`: code copied from one place to another (CORE-10) in `src/`, `web/` and
 //!   `xtask/src/`.
 //! - `published-rounds [--check]`: writes `src/mhfe/published_rounds.rs` from the published
@@ -48,8 +51,9 @@ pub(crate) fn at(path: &Path, error: impl fmt::Display) -> Failure {
     Failure(format!("{}: {error}", path.display()))
 }
 
-const USAGE: &str = "usage: cargo xtask <browsers | copies [--tokens N] | package-check [--full] | \
-                     published-rounds [--check] | release-artifacts --test-binary | \
+const USAGE: &str = "usage: cargo xtask <browser-check-page | browsers | copies [--tokens N] | \
+                     package-check [--full] | parity [PROGRAM] | published-rounds [--check] | \
+                     release-artifacts --test-binary | \
                      package-release-args | wasm <step>>";
 
 /// The repository's root: the folder above this crate's.
@@ -62,10 +66,13 @@ fn root() -> PathBuf {
 fn run(task: &str, arguments: &[String]) -> Result<(), Failure> {
     let root = root();
     match (task, arguments) {
+        ("browser-check-page", []) => browser::full_size::run(&root),
         ("browsers", []) => browser::run(&root),
         ("copies", arguments) => copies::run(&root, arguments),
         ("package-check", []) => browser::package::run(&root, false),
         ("package-check", [full]) if full == "--full" => browser::package::run(&root, true),
+        ("parity", []) => browser::parity::run(&root, &browser::parity::built_program(&root)),
+        ("parity", [program]) => browser::parity::run(&root, Path::new(program)),
         ("published-rounds", []) => published_rounds::run(&root, false),
         ("published-rounds", [check]) if check == "--check" => published_rounds::run(&root, true),
         ("release-artifacts", [mode]) if mode == "--test-binary" => release_artifacts::run(&root),

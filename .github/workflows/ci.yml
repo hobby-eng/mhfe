@@ -47,10 +47,6 @@ jobs:
           if foreign:
               raise SystemExit(f"unexpected local/path packages: {foreign}")
           '
-      # The Node.js of the workspace for the browser package checks that still run in it.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .node-version
       # dprint formats the Markdown, JSON, TOML and YAML (CORE-21); dprint.json pins its plugins
       # with their SHA-256.
       - name: Install dprint, checked against its SHA-256
@@ -78,8 +74,8 @@ jobs:
         run: |
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           scripts/check.sh
-      # The browser package that check.sh built, in real browsers: by hand only. A release runs
-      # these checks on its canonical archive (release.yml).
+      # The browser package that check.sh built in real browsers, and its comparison with the
+      # program: by hand only. A release runs these checks on its canonical archives (release.yml).
       - name: Check the browser package in Chrome and Firefox
         if: ${{ github.event_name == 'workflow_dispatch' }}
         timeout-minutes: 30

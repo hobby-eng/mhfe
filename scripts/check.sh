@@ -2,9 +2,10 @@
 # The full check of the repository, for release-level verification on request. It does not
 # replay the full-size test vectors (tests/suite3_vectors.rs, about an hour, and
 # tests/suite4_vectors.rs, about half an hour) or check them with the independent scripts;
-# vectors.yml does that, in about three hours.
+# vectors.yml does that, in about three hours. Nor does it run the browser checks, which need the
+# pinned browsers (AGENTS.md).
 #
-# Needs the pinned Rust toolchain, wasm-bindgen 0.2.129, Emscripten 6.0.12, Node.js and Python 3.
+# Needs the pinned Rust toolchain, wasm-bindgen 0.2.129, Emscripten 6.0.12 and Python 3.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -58,11 +59,9 @@ python3 scripts/verify-hidden-input.py "$target_dir/release/mhfe"
 
 scripts/build-wasm.sh
 # The built package's manifest, build, WebAssembly paths and scripts, without a JavaScript
-# engine. `cargo xtask package-check` and `cargo xtask browsers` run its code in real browsers, by
-# hand and for a release.
+# engine. `cargo xtask package-check`, `cargo xtask browsers` and `cargo xtask parity` run its code
+# in real browsers, by hand and for a release.
 cargo xtask wasm verify dist
-# The program and the package give the same results, as both call the same library.
-node scripts/verify-cli-browser-parity.mjs "$target_dir/release/mhfe"
 python3 scripts/verify-fast-mode-script.py
 scripts/check-release-artifacts.sh
 echo "All checks passed."

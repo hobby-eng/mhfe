@@ -12,7 +12,6 @@
     "dist/",
     "docs/audits/",
     "docs/measurements/",
-    "node_modules/",
     "target/",
     "tests/fixtures/",
     "THIRD_PARTY_NOTICES.md",

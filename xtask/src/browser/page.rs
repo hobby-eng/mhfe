@@ -1,11 +1,10 @@
 //! The check page of the browser package: the package's classes, the page's data and its checks
 //! (`xtask/pages/`) in one module script, under the Content-Security-Policy of the offline wallet
-//! tools, which allows that script, WebAssembly and Blob workers alone, and here the page's event
-//! recorder too: a classic script before the module that records what the page throws or the
-//! policy blocks. The
-//! page calls every method of the four classes with each of its options and compares the results,
-//! or the refusals, with known values: public vectors, values computed independently, or the
-//! results of another method or class. Only public test data is used.
+//! tools, which allows that script, WebAssembly, Blob workers and inline styles alone, and here the
+//! page's event recorder too: a classic script before the module that records what the page throws
+//! or the policy blocks. The page calls every method of the four classes with each of its options
+//! and compares the results, or the refusals, with known values: public vectors, values computed
+//! independently, or the results of another method or class. Only public test data is used.
 //!
 //! So that Argon2 takes seconds, a test-only wrapper in the page's copy of the worker runs it with
 //! 256 KiB and one pass instead of the 2 GiB and twelve passes of suite 3, after checking that the
@@ -106,16 +105,7 @@ pub(super) fn page(dist: &Path) -> Result<String, Failure> {
 /// The page whose body runs the event recorder and then `script`, opened by `opening`, under the
 /// Content-Security-Policy of the offline wallet tools, its scripts the recorder and `sources`.
 pub(super) fn document(sources: &str, opening: &str, script: &str) -> String {
-    let policy = [
-        "default-src 'none'".to_owned(),
-        format!("script-src 'sha256-{}' {sources}", hash(EVENTS)),
-        "connect-src 'none'".to_owned(),
-        "worker-src blob:".to_owned(),
-        "object-src 'none'".to_owned(),
-        "base-uri 'none'".to_owned(),
-        "form-action 'none'".to_owned(),
-    ]
-    .join("; ");
+    let policy = policy(&format!("'sha256-{}' {sources}", hash(EVENTS)));
     format!(
         "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    \
          <meta http-equiv=\"Content-Security-Policy\" content=\"{policy}\" />\n    \
@@ -123,6 +113,24 @@ pub(super) fn document(sources: &str, opening: &str, script: &str) -> String {
          <script>{EVENTS}</script>\n    \
          {opening}{script}</script>\n  </body>\n</html>\n"
     )
+}
+
+/// The Content-Security-Policy of the offline wallet tools, with `scripts` as its script sources.
+pub(super) fn policy(scripts: &str) -> String {
+    [
+        "default-src 'none'".to_owned(),
+        format!("script-src {scripts}"),
+        "style-src 'unsafe-inline'".to_owned(),
+        "img-src 'none'".to_owned(),
+        "font-src 'none'".to_owned(),
+        "connect-src 'none'".to_owned(),
+        "worker-src blob:".to_owned(),
+        "object-src 'none'".to_owned(),
+        "frame-src 'none'".to_owned(),
+        "base-uri 'none'".to_owned(),
+        "form-action 'none'".to_owned(),
+    ]
+    .join("; ")
 }
 
 /// The runtime and the class files as one module's text: each class file without its lists that
@@ -136,8 +144,7 @@ pub(super) fn classes(dist: &Path) -> Result<String, Failure> {
 }
 
 /// `text` without the lists that start a line with `import {` or `export {` and whose first `}`
-/// ends RUNTIME_LIST_END. A deliberate copy of the rule of scripts/bundle-browser-classes.mjs,
-/// which scripts/build-browser-check.mjs uses until it is ported: a change goes to both.
+/// ends RUNTIME_LIST_END.
 fn without_runtime_lists(text: &str) -> String {
     let mut kept = String::with_capacity(text.len());
     let mut at = 0;
@@ -171,27 +178,31 @@ fn sources(dist: &Path) -> Result<String, Failure> {
         wrapper = wrapper.replace(&format!("${{inline({name})}}"), value);
     }
     let worker = format!("{}\n{wrapper}", text(&dist.join("runtime/worker.js"))?);
-    let wasm = std::fs::read(dist.join("runtime/mhfe.wasm"))
-        .map_err(|error| at(&dist.join("runtime/mhfe.wasm"), error))?;
     let mut lines = vec![
         constant("VERSION", &manifest["version"]),
         constant("PACKAGE_BUILD_ID", &manifest["buildId"]),
         data_line("SELF_CHECK")?.replace('<', "\\u003c"),
-        constant("WORKER_SOURCE", &Value::from(worker)),
-        constant("WASM_BASE64", &Value::from(base64(&wasm))),
-        constant(
-            "ARGON2_THREADED",
-            &Value::from(text(&dist.join("core/argon2-mt.js"))?),
-        ),
-        constant(
-            "ARGON2_SINGLE_THREADED",
-            &Value::from(text(&dist.join("core/argon2-st.js"))?),
-        ),
     ];
+    lines.extend(package_constants(dist, worker)?);
     // The fixed lines as safe in a script element as the computed ones: "</script" cannot appear.
     let rest = data_lines().filter(|(name, _)| *name != "SELF_CHECK");
     lines.extend(rest.map(|(_, line)| line.replace('<', "\\u003c")));
     Ok(format!("\n{}\n", lines.join("\n")))
+}
+
+/// The `const` lines of the package's files that a page starts its client with, `worker` being the
+/// text of its worker.
+pub(super) fn package_constants(dist: &Path, worker: String) -> Result<[String; 4], Failure> {
+    let wasm_path = dist.join("runtime/mhfe.wasm");
+    let wasm = std::fs::read(&wasm_path).map_err(|error| at(&wasm_path, error))?;
+    let script =
+        |path: &str| -> Result<Value, Failure> { Ok(Value::from(text(&dist.join(path))?)) };
+    Ok([
+        constant("WORKER_SOURCE", &Value::from(worker)),
+        constant("WASM_BASE64", &Value::from(base64(&wasm))),
+        constant("ARGON2_THREADED", &script("core/argon2-mt.js")?),
+        constant("ARGON2_SINGLE_THREADED", &script("core/argon2-st.js")?),
+    ])
 }
 
 /// The `const` lines of PAGE_DATA with their names.

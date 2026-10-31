@@ -1,6 +1,6 @@
-// The module worker that runs the package checks: it posts each line they print, then whether they
-// passed, and anything they throw or leave unhandled. The page puts the object URL of the checks'
-// module in the import below.
+// The module worker that runs the checks of a task: it posts each line they print, then whether
+// they passed, and anything they throw or leave unhandled. The page puts the object URL of the
+// checks' module in the import below.
 
 console.log = (...values) => postMessage({ type: "line", text: values.join(" ") });
 // The checks were written for Node.js, which has no crossOriginIsolated: they set it to stand for

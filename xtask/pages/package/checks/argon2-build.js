@@ -199,7 +199,7 @@ async function checkRecoveryLengths(created, onRound, reduced, steps) {
     true,
   );
   assert.deepEqual(
-    operations.check(created.container, PASSWORD, reduced, "address", PHRASE_ADDRESS, {
+    operations.check(created.container, PASSWORD, reduced, "address", BIP84_ADDRESS, {
       coin: "bitcoin",
     }),
     { matches: true, path: "m/84'/0'/0'/0/0", evidence: { builtInCheck: 12, walletCheck: null } },

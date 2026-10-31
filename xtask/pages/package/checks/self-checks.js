@@ -231,7 +231,7 @@ expectReport(
   REPAIR_PARTS,
   cardFailed("card 1 of 4 gives other words"),
 );
-const damagedAddress = bindingsOver(damaged(PHRASE_ADDRESS));
+const damagedAddress = bindingsOver(damaged(BIP84_ADDRESS));
 expectReport(
   runCheck((start, end) => damagedAddress.selfCheckWallet("startup", [], liveRandom, start, end)),
   "startup",

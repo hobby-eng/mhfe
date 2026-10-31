@@ -88,8 +88,9 @@ jobs:
             macos-output/${{ matrix.package }}.sha256
           if-no-files-found: error
 
-  # The browser package as it is published, the archive of the canonical job, in real browsers,
-  # which the canonical container does not have.
+  # The browser checks on what is published, the archives of the canonical job: the browser package
+  # in real browsers, which the canonical container does not have, and its comparison with the
+  # Linux program.
   browser-package:
     needs: canonical
     runs-on: ubuntu-24.04
@@ -104,10 +105,14 @@ jobs:
         with:
           name: canonical
           path: canonical
-      - name: Unpack the canonical browser package
+      - name: Unpack the canonical browser package and program
         run: |
           mkdir dist
-          tar --extract --gzip --file "canonical/mhfe-$GITHUB_REF_NAME-browser.tar.gz" --directory dist
+          tar --extract --gzip --file "canonical/mhfe-$GITHUB_REF_NAME-browser.tar.gz" \
+            --directory dist
+          mkdir -p target/release
+          tar --extract --gzip --file "canonical/mhfe-$GITHUB_REF_NAME-linux-x86_64.tar.gz" \
+            --directory target/release ./mhfe
       - uses: ./.github/actions/browser-checks
 
   # Every check of CI on the tagged commit, scripts/check.sh and the terminal suites of Windows and
