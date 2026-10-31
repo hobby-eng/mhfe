@@ -2,10 +2,11 @@
 //! code path of every release at full cost, the stand-ins for it, and the public test phrases,
 //! states and password, so that each test builds its setting from one place.
 
+use mhfe_core::NativeArgon2;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
-use crate::engine::{Argon2Cost, Argon2Engine, NativeEngine, KEY_BYTES, SALT_BYTES};
+use crate::engine::{Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
 use crate::packing::State;
 use crate::{encrypt, Mhfe, MhfeError, Password, Suite, WorkFactor};
@@ -105,7 +106,7 @@ static REDUCED_COST_MARKER: &str = "MHFE-TEST-ONLY-REDUCED-ARGON2-COST";
 /// The real C engine for fast unit tests: every call runs at [`REDUCED_COST`], whatever cost it
 /// asks for. It exists only in test builds; the release check
 /// `scripts/check-release-artifacts.sh` looks for [`REDUCED_COST_MARKER`] to prove it.
-pub(crate) struct ReducedEngine(NativeEngine);
+pub(crate) struct ReducedEngine(NativeArgon2);
 
 // A deliberate copy of the trait's signature, which an implementation repeats.
 impl Argon2Engine for ReducedEngine {
@@ -125,7 +126,7 @@ impl Argon2Engine for ReducedEngine {
 /// The real C engine at [`REDUCED_COST`] under the settings `work`.
 pub(crate) fn reduced_at(work: WorkFactor) -> Mhfe<ReducedEngine> {
     assert!(!REDUCED_COST_MARKER.is_empty());
-    let engine = NativeEngine::allocate(REDUCED_COST.memory_bytes()).unwrap();
+    let engine = NativeArgon2::new(REDUCED_COST.memory_kib).unwrap();
     Mhfe::with_engine(work, ReducedEngine(engine))
 }
 

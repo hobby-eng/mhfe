@@ -2,8 +2,8 @@
 //! of a program to its swap space on disk, where it can outlast the program by years; a locked
 //! page stays in memory (mlock on Unix). Locking is best effort: a refusal, such as a low
 //! RLIMIT_MEMLOCK, leaves the secret as it was, and the browser and Windows builds lock nothing.
-//! Argon2's work area is far too large to lock; the program warns instead when swap is not
-//! encrypted.
+//! Argon2's work area is locked only where the limit on locked memory holds all of it; the program
+//! warns when swap is not encrypted.
 
 use std::convert::Infallible;
 use std::fmt;

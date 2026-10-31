@@ -143,7 +143,7 @@ pub enum MhfeError {
         /// The highest memory level this environment can use.
         highest_supported: u32,
     },
-    /// Argon2 itself reported an error; the text comes from the reference implementation.
+    /// Argon2 itself reported an error; the text gives the reference implementation's return value.
     Argon2(String),
     /// A call that the API does not take, such as an unknown choice or a step out of its order;
     /// the text says which. The browser bindings report it for what a page passed them.

@@ -20,7 +20,7 @@ fi
 
 argon2="vendor/phc-winner-argon2"
 
-# The files of every build and the portable core, from the list that build.rs reads too.
+# The files of the build, from the one list of them.
 sources=()
 while read -r part path; do
   case "$part" in

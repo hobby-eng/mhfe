@@ -53,17 +53,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "argon2"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "134c52ddac6d63c576bef8168db10c83c49c26444ecbc68060fef078925a901c"
-dependencies = [
- "base64ct",
- "blake2",
- "cpufeatures 0.3.1",
-]
-
-[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -80,12 +69,6 @@ name = "base16ct"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd307490d624467aa6f74b0eabb77633d1f758a7b25f12bceb0b22e08d9726f6"
-
-[[package]]
-name = "base64ct"
-version = "1.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "bech32"
@@ -145,6 +128,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
 dependencies = [
  "hybrid-array",
+ "zeroize",
 ]
 
 [[package]]
@@ -362,6 +346,7 @@ dependencies = [
  "const-oid",
  "crypto-common 0.2.2",
  "ctutils",
+ "zeroize",
 ]
 
 [[package]]
@@ -565,18 +550,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "mhfe-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d44e15ab9e3f25c1c787a0b10f6b8467441463dd57b137940a97a1deb390247d"
+dependencies = [
+ "bip39",
+ "blake2",
+ "cc",
+ "hmac",
+ "libc",
+ "sha2 0.11.1",
+ "unicode-normalization",
+ "windows-sys",
+ "zeroize",
+]
+
+[[package]]
 name = "mhfe-experimental"
 version = "0.6.0"
 dependencies = [
  "anstream",
  "anstyle",
- "argon2",
  "bech32",
  "bip39",
  "bitcoin_hashes",
  "blake2",
  "bs58",
- "cc",
  "clap",
  "ctrlc",
  "getrandom",
@@ -585,6 +585,7 @@ dependencies = [
  "js-sys",
  "k256",
  "libc",
+ "mhfe-core",
  "serde",
  "serde_json",
  "sha2 0.11.1",

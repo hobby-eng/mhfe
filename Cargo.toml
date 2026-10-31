@@ -32,6 +32,8 @@ hex = "=0.4.3"
 hmac = "=0.13.0"
 # secp256k1 arithmetic for BIP32 in the rehearsal check; audited by NCC Group.
 k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic"] }
+# The native Argon2id engine: the reference C code, which the crate compiles.
+mhfe-core = "=0.1.0"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 sha2 = "=0.11.1"
@@ -65,14 +67,6 @@ windows-sys = { version = "=0.61.2", features = [
   "Win32_System_Console",
   "Win32_System_SystemInformation",
 ] }
-
-[build-dependencies]
-# Compiles the vendored reference Argon2 C code (build.rs).
-cc = "=1.10.0"
-
-[dev-dependencies]
-# An independent Argon2 implementation, used only to cross-check the C engine in tests.
-argon2 = { version = "=0.6.0", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = { version = "=0.2.129", optional = true }

@@ -3,9 +3,10 @@
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::engine::{check_can_run, highest_available_level, NativeEngine};
+use mhfe::engine::{check_can_run, highest_available_level};
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
 use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, MAX_MEMORY_LEVEL, ROUNDS};
+use mhfe_core::NativeArgon2;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
@@ -402,8 +403,8 @@ fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
 /// Whether typed secrets are kept in locked memory, out of swap, as the library's memory-locking
 /// check finds it on a buffer of one typed line's size (mhfe::memory::LockProbe), with the most
 /// memory the process may lock when it is refused. A later buffer that cannot be locked is said
-/// when it is read (terminal::note_unlocked). The Argon2 work area is far too large to lock; the
-/// warning about unencrypted swap covers it.
+/// when it is read (terminal::note_unlocked). The Argon2 work area is locked only where the limit
+/// holds all of it; the warning about unencrypted swap covers it.
 fn locked_memory_text(outcome: ComponentOutcome, lock_limit: Option<u64>) -> String {
     match outcome {
         ComponentOutcome::Passed => "kept in locked memory, out of swap".to_owned(),
@@ -437,7 +438,7 @@ fn check_resources(work: WorkFactor) -> Result<(), Failure> {
 }
 
 /// Reserves the Argon2 memory, after the inputs have been read and checked.
-pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeEngine>, Failure> {
+pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeArgon2>, Failure> {
     Mhfe::new(work).map_err(with_level_hint)
 }
 

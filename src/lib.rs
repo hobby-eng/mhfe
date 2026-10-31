@@ -42,7 +42,7 @@
 //! # Ok::<(), mhfe::MhfeError>(())
 //! ```
 
-// Unsafe code is allowed in one module only, src/engine/ffi.rs, which calls the C code.
+// Unsafe code is allowed in one module only, src/engine/ffi.rs, which calls the operating system.
 #![deny(unsafe_code)]
 
 pub mod check_word;

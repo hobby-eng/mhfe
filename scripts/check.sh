@@ -41,7 +41,6 @@ for module in browser-core browser-repair browser-passwords browser-wallet; do
   cargo clippy --locked --lib --target wasm32-unknown-unknown --no-default-features \
     --features "$module" -- -D warnings
 done
-# On x86-64 the tests run both the SSE2 and the SSSE3 copy of the Argon2 core.
 cargo test --locked
 cargo test --locked --package xtask
 RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps

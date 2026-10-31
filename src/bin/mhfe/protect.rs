@@ -2,9 +2,9 @@
 //!
 //! - no core dumps, and no reading of its memory by other programs of the same user;
 //! - Ctrl+\ and Ctrl+Z end the tool as Ctrl+C does, so that no key leaves a secret on the screen;
-//! - a warning when swap could write memory to a disk without encryption. Argon2's work area is far
-//!   too large to keep out of swap (src/memory.rs), and from its blocks a password guess can be
-//!   tested cheaply, so unencrypted swap matters;
+//! - a warning when swap could write memory to a disk without encryption. Argon2's work area is
+//!   kept out of swap only where the limit on locked memory holds all of it (src/memory.rs), and
+//!   from its blocks a password guess can be tested cheaply, so unencrypted swap matters;
 //! - on Linux, seccomp refuses new sockets and io_uring, and Landlock restricts opening files for
 //!   writing. Both cover the calling thread and workers it starts, including Argon2's, and cannot
 //!   be undone. Already-open descriptors remain usable, so a trusted offline host is required;

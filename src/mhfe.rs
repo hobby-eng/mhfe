@@ -7,8 +7,6 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::container::ContainerFacts;
 use crate::detection::detected_lengths;
 use crate::engine::Argon2Engine;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::engine::NativeEngine;
 use crate::feistel::{Geometry, Permutation};
 use crate::memory::{LockedBytes, LockedText};
 use crate::packing::{self, State, STATE_WORDS};
@@ -309,13 +307,13 @@ pub struct Mhfe<E: Argon2Engine> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl Mhfe<NativeEngine> {
+impl Mhfe<mhfe_core::NativeArgon2> {
     /// Checks that the computer has the memory the settings need and reserves it once for all
     /// twelve rounds.
     pub fn new(work: WorkFactor) -> Result<Self, MhfeError> {
         Ok(Self {
             work,
-            engine: NativeEngine::new(work)?,
+            engine: crate::engine::reserve(work)?,
         })
     }
 }

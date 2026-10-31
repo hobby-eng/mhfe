@@ -1,14 +1,13 @@
-# The vendored C files of the Argon2 engine that build.rs and scripts/build-argon2-wasm.sh both
-# compile, the one list of them: one file per line as "<part> <path>", the path from the repository
-# root. packaging/Dockerfile.reproducible copies this file for the browser build. The parts:
+# The vendored C files that scripts/build-argon2-wasm.sh compiles for the browser, the one list of
+# them: one file per line as "<part> <path>", the path from the repository root.
+# packaging/Dockerfile.reproducible copies this file for that build. Native builds compile the
+# copy in mhfe-core. The parts:
 #
-#   common    every build
-#   portable  the portable core: native builds off x86-64, and the browser build, where the SIMD
-#             core opt.c gave no speed-up and would exclude browsers without WebAssembly SIMD
+#   common    the code around the Argon2 core
+#   portable  the portable core, as the SIMD core opt.c gave no speed-up in a browser and would
+#             exclude browsers without WebAssembly SIMD
 #
-# The browser build takes the files in the order of these lines, the native builds those of each
-# part; another order would change the bytes of a build. On x86-64, build.rs compiles opt.c and
-# src/engine/argon2_simd.c in place of the portable core.
+# The build takes the files in the order of these lines; another order would change its bytes.
 common vendor/phc-winner-argon2/src/argon2.c
 common vendor/phc-winner-argon2/src/core.c
 common vendor/phc-winner-argon2/src/encoding.c

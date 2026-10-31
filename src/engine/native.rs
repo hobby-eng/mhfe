@@ -1,15 +1,10 @@
-//! Argon2id on the vendored reference C code, with one work area for all twelve rounds.
+//! Argon2id on the reference C code of mhfe-core, with one work area for all twelve rounds, and the
+//! checks of the computer's memory before it is reserved.
 
-use super::ffi::{self, Argon2Inputs, WorkArea, ARGON2_VERSION_13};
-use super::{Argon2Cost, Argon2Engine, KEY_BYTES, LANES, SALT_BYTES};
+use mhfe_core::NativeArgon2;
+
+use super::{ffi, Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::{MhfeError, WorkFactor};
-
-// A native 32-bit build cannot run even level 0: Rust refuses an allocation of 2 GiB or more
-// there (a layout may not exceed isize::MAX), and the reference C code would stop at 2 GiB anyway.
-// Such a build is refused here rather than failing at the first operation. The browser build is a
-// 32-bit WebAssembly one too, but it uses its own Emscripten allocator (see engine/browser.rs).
-#[cfg(not(target_pointer_width = "64"))]
-compile_error!("the native MHFE engine needs a 64-bit target: suite 3 needs at least 2 GiB");
 
 /// The highest memory level this build supports: every level, since native builds are 64-bit.
 pub const HIGHEST_MEMORY_LEVEL: u32 = crate::MAX_MEMORY_LEVEL;
@@ -19,22 +14,6 @@ pub const HIGHEST_MEMORY_LEVEL: u32 = crate::MAX_MEMORY_LEVEL;
 /// such as a container's memory limit.
 pub fn available_memory_bytes() -> Option<u64> {
     ffi::available_memory_bytes()
-}
-
-/// Argon2id on the reference C code with its four lanes in parallel threads.
-pub struct NativeEngine {
-    work_area: WorkArea,
-    /// Whether the Argon2 core runs its SSSE3 copy; see src/engine/argon2_simd.c.
-    ssse3: bool,
-}
-
-/// Whether this processor can run the SSSE3 copy of the Argon2 core, which only x86-64 builds
-/// have. Without SSSE3 the SSE2 copy runs, which every 64-bit x86 processor can.
-pub(super) fn processor_has_ssse3() -> bool {
-    #[cfg(target_arch = "x86_64")]
-    return std::arch::is_x86_feature_detected!("ssse3");
-    #[cfg(not(target_arch = "x86_64"))]
-    false
 }
 
 /// Checks, without allocating anything, that this build and computer can run `work`: the memory
@@ -56,21 +35,12 @@ pub fn highest_available_level() -> Option<u32> {
         .map(WorkFactor::memory_level)
 }
 
-impl NativeEngine {
-    /// Checks that the computer can run `work` and reserves its memory once; every round of the
-    /// operation then reuses it.
-    pub fn new(work: WorkFactor) -> Result<Self, MhfeError> {
-        check_can_run(work)?;
-        Self::allocate(work.memory_bytes())
-    }
-
-    /// Reserves `bytes` once, for every call, without the checks of [`NativeEngine::new`].
-    pub(crate) fn allocate(bytes: u64) -> Result<Self, MhfeError> {
-        Ok(Self {
-            work_area: WorkArea::allocate(bytes)?,
-            ssse3: processor_has_ssse3(),
-        })
-    }
+/// Checks that the computer can run `work` and reserves its memory once; every round of the
+/// operation then reuses it. Errors: those of [`check_can_run`], then
+/// [`MhfeError::MemoryAllocation`] when the system refuses the memory.
+pub fn reserve(work: WorkFactor) -> Result<NativeArgon2, MhfeError> {
+    check_can_run(work)?;
+    NativeArgon2::new(work.memory_kib()).map_err(|error| error_of(error, work.memory_bytes()))
 }
 
 fn check_free_memory(needed_bytes: u64) -> Result<(), MhfeError> {
@@ -86,7 +56,7 @@ fn check_free_memory(needed_bytes: u64) -> Result<(), MhfeError> {
 }
 
 // A deliberate copy of the trait's signature, which an implementation repeats.
-impl Argon2Engine for NativeEngine {
+impl Argon2Engine for NativeArgon2 {
     fn argon2id(
         &mut self,
         password: &[u8],
@@ -95,77 +65,27 @@ impl Argon2Engine for NativeEngine {
         passes: u32,
         key: &mut [u8; KEY_BYTES],
     ) -> Result<(), MhfeError> {
-        let cost = Argon2Cost { memory_kib, passes };
-        let inputs = mhfe_inputs(password, salt, cost, self.ssse3);
-        guarded_call(ffi::argon2id, &inputs, &mut self.work_area, key)
+        mhfe_core::Argon2Engine::argon2id(self, password, salt, memory_kib, passes, key)
+            .map_err(|error| error_of(error, Argon2Cost { memory_kib, passes }.memory_bytes()))
     }
 }
 
-/// One Argon2 call of the C code into a work area: [`ffi::argon2id`], or a stand-in in the tests
-/// of the known-answer checks.
-pub(super) type Call = fn(&Argon2Inputs<'_>, &mut WorkArea, &mut [u8]) -> Result<(), MhfeError>;
-
-/// Runs `call` into `key` behind the guard every engine puts around its Argon2 call: the key is
-/// marked unwritten first, and a call that leaves it so or gives only zeros is refused
-/// ([`super::check_key_written`]). The engine and its known-answer checks (known_answers.rs) both
-/// call Argon2 through here, so that the checks run the guard the engine runs.
-pub(super) fn guarded_call(
-    call: Call,
-    inputs: &Argon2Inputs<'_>,
-    work_area: &mut WorkArea,
-    key: &mut [u8; KEY_BYTES],
-) -> Result<(), MhfeError> {
-    super::mark_key_unwritten(key);
-    call(inputs, work_area, key)?;
-    super::check_key_written(key)
-}
-
-/// The inputs of one Argon2id call as MHFE makes it: version 1.3, four lanes on four threads, an
-/// empty secret and empty associated data, at `cost`. The engine and its known-answer check
-/// (known_answers.rs) both build their calls here, so the check runs the call the engine runs.
-pub(super) fn mhfe_inputs<'a>(
-    password: &'a [u8],
-    salt: &'a [u8; SALT_BYTES],
-    cost: Argon2Cost,
-    ssse3: bool,
-) -> Argon2Inputs<'a> {
-    Argon2Inputs {
-        password,
-        salt,
-        secret: &[],
-        associated_data: &[],
-        passes: cost.passes,
-        memory_kib: cost.memory_kib,
-        lanes: LANES,
-        threads: LANES,
-        version: ARGON2_VERSION_13,
-        ssse3,
+/// The error of a refusal of the core's engine for `bytes` of memory, in the wording of the
+/// browser's bridge (web/argon2-engine.js).
+pub(super) fn error_of(error: mhfe_core::Error, bytes: u64) -> MhfeError {
+    match error {
+        mhfe_core::Error::OutOfMemory => MhfeError::MemoryAllocation { bytes },
+        mhfe_core::Error::Argon2Failed { code } => {
+            MhfeError::Argon2(format!("the reference code returned error {code}"))
+        }
+        // The engine refuses with those two; the core's error type is open to others.
+        other => MhfeError::Internal(other.to_string()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn derives_the_same_key_as_the_c_reference_at_a_small_cost() {
-        let mut engine = NativeEngine::allocate(1 << 20).unwrap();
-        let mut key = [0u8; KEY_BYTES];
-        engine
-            .argon2id(
-                b"public test password",
-                b"0123456789abcdef",
-                1024,
-                1,
-                &mut key,
-            )
-            .unwrap();
-        // Same inputs as `cargo xtask package-check`, tag computed with OpenSSL.
-        assert_eq!(
-            hex::encode(key),
-            "e0e8eba33f1404a83c911a324d9b49db83dae755f2bdfb4b63043ca5b7125df2"
-        );
-    }
 
     #[test]
     fn refuses_more_memory_than_the_computer_reports() {
@@ -179,13 +99,34 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_refusals_of_the_core_engine_become_mhfe_errors() {
+        let mut engine = NativeArgon2::new(64).unwrap();
+        let mut key = [0u8; KEY_BYTES];
+        assert_eq!(
+            Argon2Engine::argon2id(
+                &mut engine,
+                b"password",
+                b"0123456789abcdef",
+                128,
+                1,
+                &mut key
+            ),
+            Err(MhfeError::MemoryAllocation { bytes: 128 << 10 })
+        );
+        assert_eq!(
+            error_of(mhfe_core::Error::Argon2Failed { code: -33 }, 0),
+            MhfeError::Argon2("the reference code returned error -33".to_owned())
+        );
+    }
+
     /// The sanity tag from the implementation brief: one full-size Argon2id call at suite 3
     /// defaults. It takes several seconds and 2 GiB, so it runs only on request.
     #[test]
     #[ignore = "full-size Argon2id: 2 GiB and several seconds"]
     fn full_size_call_matches_openssl() {
         let work = WorkFactor::default();
-        let mut engine = NativeEngine::new(work).unwrap();
+        let mut engine = reserve(work).unwrap();
         let mut key = [0u8; KEY_BYTES];
         engine
             .argon2id(
