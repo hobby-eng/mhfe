@@ -440,7 +440,7 @@ pub(crate) mod tests {
     }
 
     /// `BE32(ENT)` follows the settings in every suite 4 round message of the shared fixture
-    /// `tests/fixtures/suite4-vectors/validation-cases.json`, so the same settings, round and
+    /// `tests/spec/vectors/suite4/validation-cases.json`, so the same settings, round and
     /// leading half bytes give a different salt and mask for each entropy size.
     #[test]
     fn suite_4_round_messages_carry_the_entropy_size() {

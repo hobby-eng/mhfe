@@ -18,9 +18,9 @@ Windows Terminal) can differ for emoji sequences, such as a variation selector o
 modifier; the line editor shows no zero-width joiner, so such sequences stay apart.
 
 The character data come from `unicodedata2` 18.0.0, which holds the Unicode 18.0.0 database, the
-Unicode version of the password rule (scripts/independent-suite3-requirements.txt pins it with its
-hash), not from Python's own `unicodedata`, which is older. The output is deterministic: the same
-Unicode version gives the same bytes.
+Unicode version of the password rule (tests/spec/scripts/independent-suite3-requirements.txt pins
+it with its hash), not from Python's own `unicodedata`, which is older. The output is
+deterministic: the same Unicode version gives the same bytes.
 
 Usage: python3 scripts/generate-cell-widths.py [--check]
 With --check the script writes nothing and fails when the file differs from its output.
@@ -34,7 +34,7 @@ try:
 except ImportError:
     sys.exit(
         "Needs unicodedata2: python3 -m pip install --require-hashes "
-        "-r scripts/independent-suite3-requirements.txt"
+        "-r tests/spec/scripts/independent-suite3-requirements.txt"
     )
 
 ROOT = Path(__file__).resolve().parent.parent

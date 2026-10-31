@@ -2,15 +2,15 @@
 
 This repository is part of the `bip_tools` workspace. If a workspace `AGENTS.md` exists one directory above this repository, read and follow it first. Its core rules: edit only this checkout in place, never create another copy or worktree, never delete project directories, use the toolchains it names, use only public test data, do not commit or push without an explicit request, and write everything in English only (code, comments, commits, documentation).
 
-The specification and vectors for this implementation live in `../mhfe_spec`; an algorithm or vector change must be checked against both.
+The specification and vectors for this implementation live in `../mhfe_spec`; an algorithm or vector change must be checked against both. The repository keeps no vector files of its own: the program and the tests read them through the submodule `tests/spec`, pinned at the specification's tag v0.7.0. Clone with `--recurse-submodules`, or run `git submodule update --init`.
 
 ## Commands
 
 - Toolchain: Rust 1.99.1 from `rust-toolchain.toml`, with the `CARGO_HOME` and `RUSTUP_HOME` set in the environment (never the home-directory defaults). Emscripten 6.0.12 from `../workingspace/emsdk` (`source ../workingspace/emsdk/emsdk_env.sh`) for the browser builds.
 - Targeted: `cargo test --locked <name>` (fast: the tests use a reduced Argon2 cost); `cargo clippy --locked --all-targets --all-features -- -D warnings`; for the tools in `xtask/`, `cargo clippy --locked --package xtask --all-targets -- -D warnings` and `cargo test --locked --package xtask`; `cargo xtask copies` (code copied from one place to another); `cargo clippy --locked --lib --target wasm32-unknown-unknown --features wasm -- -D warnings`; `cargo fmt --all --check`; `dprint check` (dprint 0.63.0 for Markdown, JSON, TOML and YAML; `dprint.json` pins its plugins).
 - Browser package: `scripts/build-wasm.sh`, then `cargo xtask wasm verify dist`; `MHFE_BROWSERS=DIR cargo xtask package-check` and `MHFE_BROWSERS=DIR cargo xtask browsers` run it in the pinned Chrome for Testing and Firefox at a reduced cost (DIR holds them unpacked, as `.github/actions/browser-checks` lays them out); `MHFE_BROWSERS=DIR cargo xtask parity` compares it with `target/release/mhfe`; `cargo xtask browser-check-page` writes a full-size page for a real browser.
-- The terminal cell table `src/bin/mhfe/cell_widths.rs` is generated: `python3 scripts/generate-cell-widths.py` (`--check` compares), with `unicodedata2` 18.0.0, which holds the Unicode 18.0.0 database, from `scripts/independent-suite3-requirements.txt`; `ci.yml` checks it.
-- The table of published rounds `src/mhfe/published_rounds.rs`, which the self-checks replay, is generated from `tests/fixtures/`: `cargo xtask published-rounds` (`--check` compares; `scripts/check.sh` runs it).
+- The terminal cell table `src/bin/mhfe/cell_widths.rs` is generated: `python3 scripts/generate-cell-widths.py` (`--check` compares), with `unicodedata2` 18.0.0, which holds the Unicode 18.0.0 database, from `tests/spec/scripts/independent-suite3-requirements.txt`; `ci.yml` checks it.
+- The table of published rounds `src/mhfe/published_rounds.rs`, which the self-checks replay, is generated from `tests/spec/vectors/`: `cargo xtask published-rounds` (`--check` compares; `scripts/check.sh` runs it).
 - Full-size runs (announce first; the user runs full suites): `cargo test --release --lib full_size -- --ignored`; `MHFE_BROWSERS=DIR cargo xtask package-check --full`.
 - Release-level (explicit request only): `scripts/check.sh`; `scripts/check-release-artifacts.sh`; `scripts/build-reproducible.sh` (`packaging/Dockerfile.reproducible`) and `canonical-output/release/SHA256SUMS`.
 - Workflows: `.github/workflows/ci.yml`, `audit.yml`, `release.yml`.

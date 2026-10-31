@@ -36,7 +36,7 @@ from winpty import PtyProcess
 
 ROOT = Path(__file__).resolve().parent.parent
 PROGRAM = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "target" / "debug" / "mhfe.exe")
-CONTAINER = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-12.json").read_text())["container"]
+CONTAINER = json.loads((ROOT / "tests/spec/vectors/suite3/zero-12.json").read_text())["container"]
 # Exit code of the tool when the person cancels (src/bin/mhfe/exit.rs).
 CANCELLED = 130
 # A refused password is asked again ("Please type it again"); an accepted one leads to the

@@ -64,8 +64,8 @@ const DATA: [&str; 9] = [
 /// The files that the checks read beside the package, from the root.
 const FILES_BESIDE: [&str; 7] = [
     "Cargo.toml",
-    "tests/fixtures/suite3-vectors/zero-12.json",
-    "tests/fixtures/suite4-vectors/same-length-zero-12.json",
+    "tests/spec/vectors/suite3/zero-12.json",
+    "tests/spec/vectors/suite4/same-length-zero-12.json",
     "vendor/phc-winner-argon2/include/argon2.h",
     "web/argon2-engine.js",
     "web/repair-worker.js",

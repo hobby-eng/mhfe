@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          submodules: true
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Verify standalone dependency graph
@@ -64,7 +65,7 @@ jobs:
       - name: Check the terminal cell table
         run: |
           # Only the exact files listed with their SHA-256 in the requirements file are accepted.
-          python3 -m pip install --user --require-hashes -r scripts/independent-suite3-requirements.txt
+          python3 -m pip install --user --require-hashes -r tests/spec/scripts/independent-suite3-requirements.txt
           python3 scripts/generate-cell-widths.py --check
       - name: Install Emscripten 6.0.12
         run: |
@@ -105,6 +106,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          submodules: true
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Run the fast tests
@@ -134,6 +136,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          submodules: true
       - name: Build and verify canonical release assets
         run: scripts/build-reproducible.sh
       - name: Print canonical checksums

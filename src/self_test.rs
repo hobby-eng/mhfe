@@ -19,10 +19,9 @@ use crate::mhfe::known_answers::{published_table, PublishedRound, PublishedVecto
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::{Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, ENCRYPTION_ROUNDS, ROUNDS};
 
-/// The public vectors, as the repository and the specification publish them.
-const SUITE_3_VECTOR: &str = include_str!("../tests/fixtures/suite3-vectors/zero-12.json");
-const SUITE_4_VECTOR: &str =
-    include_str!("../tests/fixtures/suite4-vectors/same-length-zero-12.json");
+/// The public vectors, as the specification publishes them.
+const SUITE_3_VECTOR: &str = include_str!("../tests/spec/vectors/suite3/zero-12.json");
+const SUITE_4_VECTOR: &str = include_str!("../tests/spec/vectors/suite4/same-length-zero-12.json");
 
 /// What a vector gives: its name, phrase, password and container.
 struct Vector {

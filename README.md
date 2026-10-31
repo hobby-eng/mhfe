@@ -933,7 +933,9 @@ pairs each with the commit its tag names now.
 
 ## For developers
 
-To build from source, install Rust and run `cargo build --release --locked`; the program is then
+To build from source, clone with `--recurse-submodules`, or run `git submodule update --init`, as
+the program's self-tests are built from the specification's vectors in the submodule `tests/spec`.
+Then install Rust and run `cargo build --release --locked`; the program is then
 `target/release/mhfe`. Release builds and the scripts below replace the builder's own paths in the
 program and the WebAssembly (`packaging/remap-builder-paths.sh`), so they refuse `RUSTFLAGS` and
 `CARGO_ENCODED_RUSTFLAGS`. Give extra flags per target instead, such as
@@ -963,12 +965,12 @@ The test vectors and their independent checks live in the
 [specification's repository](https://github.com/hobby-eng/mhfe-spec).
 
 The tests at start replay the published vectors from `src/mhfe/published_rounds.rs`, which
-`cargo xtask published-rounds` writes from the vector fixtures (`--check` compares without
+`cargo xtask published-rounds` writes from the vectors in `tests/spec` (`--check` compares without
 writing, as `scripts/check.sh` does); regenerate it whenever the vectors change. The terminal cell
 widths of the line editor, `src/bin/mhfe/cell_widths.rs`, are written by
 `python3 scripts/generate-cell-widths.py` from the Unicode 18.0.0 database of `unicodedata2`, which
 installs with
-`python3 -m pip install --require-hashes -r scripts/independent-suite3-requirements.txt`
+`python3 -m pip install --require-hashes -r tests/spec/scripts/independent-suite3-requirements.txt`
 (`--check` compares without writing, as `ci.yml` does); regenerate it whenever the Unicode version
 of the password rule changes.
 

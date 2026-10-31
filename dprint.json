@@ -20,7 +20,7 @@
     "docs/audits/",
     "docs/measurements/",
     "target/",
-    "tests/fixtures/",
+    "tests/spec/",
     "THIRD_PARTY_NOTICES.md",
     "vendor/",
     "web/",

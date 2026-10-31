@@ -1337,9 +1337,9 @@ mod tests {
         assert!(!standard.starts_with(same_length.as_str()));
     }
 
-    /// A shared validation fixture, `tests/fixtures/validation-cases.json` (suite 3) or
-    /// `tests/fixtures/suite4-vectors/validation-cases.json` (suite 4), whose expected values were
-    /// computed independently (Python `hashlib`, `hmac` and `unicodedata`).
+    /// A shared validation fixture, `tests/spec/vectors/suite3/validation-cases.json` or
+    /// `tests/spec/vectors/suite4/validation-cases.json`, whose expected values were computed
+    /// independently (Python `hashlib`, `hmac` and `unicodedata`).
     fn fixture_of(json: &str) -> serde_json::Value {
         serde_json::from_str(json).unwrap()
     }

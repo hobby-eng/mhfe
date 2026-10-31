@@ -127,8 +127,8 @@ console.log(
 // at the first round; and a result that differs when every input and key was as published, here
 // the built-in suite 3 container with one letter changed, is a fault after the last Argon2id call.
 const PUBLISHED_VECTOR_FILES = {
-  suite3: "tests/fixtures/suite3-vectors/zero-12.json",
-  suite4: "tests/fixtures/suite4-vectors/same-length-zero-12.json",
+  suite3: "tests/spec/vectors/suite3/zero-12.json",
+  suite4: "tests/spec/vectors/suite4/same-length-zero-12.json",
 };
 const publishedKeys = new Map();
 for (const path of Object.values(PUBLISHED_VECTOR_FILES)) {

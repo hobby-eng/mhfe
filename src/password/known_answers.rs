@@ -2,7 +2,7 @@
 //!
 //! The NFKD and combining-class tables of unicode-normalization (Unicode 18.0.0), the test of
 //! assigned characters, and the refusals of control characters, separators, lengths and invalid
-//! UTF-8. The cases are the `passwords` of the shared validation fixture, which
+//! UTF-8. The cases are the `passwords` of the shared validation fixture, which the specification's
 //! `scripts/independent-suite3.py passwords` checks with Python's unicodedata2 18.0.0, and the
 //! password of the published vector unicode-password. The full self-test adds two scans of every
 //! Unicode scalar value: the number of refused characters, and that NFKD makes none of them.

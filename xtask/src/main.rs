@@ -8,8 +8,8 @@
 //!   browsers.
 //! - `copies`: code copied from one place to another (CORE-10) in `src/`, `web/` and `xtask/src/`.
 //! - `published-rounds [--check]`: writes `src/mhfe/published_rounds.rs` from the published
-//!   vectors in `tests/fixtures`; with `--check` it writes nothing and fails when the file differs
-//!   from what the fixtures give.
+//!   vectors in `tests/spec/vectors`; with `--check` it writes nothing and fails when the file
+//!   differs from what the fixtures give.
 //! - `release-artifacts --test-binary`: prints the library's test binary, for
 //!   `scripts/check-release-artifacts.sh`.
 //! - `package-release-args`: checks that `scripts/package-release.sh` refuses a wrong package list

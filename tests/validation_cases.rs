@@ -1,9 +1,9 @@
 //! Runs the passwords and settings of the shared fast fixture
-//! `tests/fixtures/validation-cases.json` of suite 3 against the library's public interface. Its
+//! `tests/spec/vectors/suite3/validation-cases.json` against the library's public interface. Its
 //! expected values were computed independently (Python `hashlib`, `hmac` and `unicodedata`). The
 //! fixture cases that need the library's own modules run with their unit tests: the refusals
 //! before Argon2 of both suites, length detection and the verifier's byte order in src/mhfe.rs,
-//! and the suite 4 round messages of `tests/fixtures/suite4-vectors/validation-cases.json` in
+//! and the suite 4 round messages of `tests/spec/vectors/suite4/validation-cases.json` in
 //! src/feistel.rs.
 
 // The whole file is test code. Saying so lets it unwrap and panic as tests do (clippy.toml), since
@@ -14,7 +14,7 @@ use mhfe::{MhfeError, Password, WorkFactor};
 use serde_json::Value;
 
 fn fixture() -> Value {
-    serde_json::from_str(include_str!("fixtures/validation-cases.json")).unwrap()
+    serde_json::from_str(include_str!("spec/vectors/suite3/validation-cases.json")).unwrap()
 }
 
 fn cases<'a>(fixture: &'a Value, section: &str) -> &'a Vec<Value> {

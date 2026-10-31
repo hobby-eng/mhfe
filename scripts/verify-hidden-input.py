@@ -153,7 +153,7 @@ import time
 
 ROOT = Path(__file__).resolve().parent.parent
 PROGRAM = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "target/debug/mhfe")
-ZERO_12 = json.loads((ROOT / "tests/fixtures/suite3-vectors/zero-12.json").read_text())
+ZERO_12 = json.loads((ROOT / "tests/spec/vectors/suite3/zero-12.json").read_text())
 CONTAINER, PHRASE = ZERO_12["container"], ZERO_12["inputs"]["phrase"]
 # Exit codes of the tool when the person cancels, when an answer or the setup is refused, when
 # the memory for Argon2 cannot be reserved and when a part of the program fails its known answers

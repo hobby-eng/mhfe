@@ -581,9 +581,7 @@ mod tests {
     fn repair_words_match_the_independent_vectors() {
         let cases = [
             (
-                fixture_container(include_str!(
-                    "../tests/fixtures/suite3-vectors/zero-12.json"
-                )),
+                fixture_container(include_str!("../tests/spec/vectors/suite3/zero-12.json")),
                 [
                     "labor extra",
                     "shaft pupil patient jewel",
@@ -593,7 +591,7 @@ mod tests {
             ),
             (
                 fixture_container(include_str!(
-                    "../tests/fixtures/suite4-vectors/same-length-nonzero-12.json"
+                    "../tests/spec/vectors/suite4/same-length-nonzero-12.json"
                 )),
                 [
                     "motor renew",
@@ -604,7 +602,7 @@ mod tests {
             ),
             (
                 fixture_container(include_str!(
-                    "../tests/fixtures/suite4-vectors/same-length-nonzero-21.json"
+                    "../tests/spec/vectors/suite4/same-length-nonzero-21.json"
                 )),
                 [
                     "glove blossom",
@@ -683,7 +681,7 @@ mod tests {
             assert_eq!(repaired.card_words, card_words, "{card}");
         }
         let nonzero_21 = fixture_container(include_str!(
-            "../tests/fixtures/suite4-vectors/same-length-nonzero-21.json"
+            "../tests/spec/vectors/suite4/same-length-nonzero-21.json"
         ));
         let repaired = repair(
             "seat govern run ? flag fragile horse night simple luggage vacuum warfare ? permit gym \

@@ -607,8 +607,8 @@ published vectors with `PublishedRoundKeys`, a private engine that answers only 
 salt pairs a published vector records, with the key it records, and refuses any other call with
 `INTERNAL_ERROR`. It cannot encrypt anything but a published vector, so a release build may hold
 it. Its table, `src/mhfe/published_rounds.rs`, is written by `cargo xtask published-rounds`
-from `tests/fixtures/` (`--check` compares without writing), and a unit test compares every value
-with the fixtures.
+from `tests/spec/vectors/` (`--check` compares without writing), and a unit test compares every
+value with the fixtures.
 
 `random::RandomSourceCheck::new(live)` is the `random-source` check. `random::check_spread(source)`
 refuses 1,024 bytes with fewer than 200 different values or one value more than 40 times
@@ -1039,6 +1039,5 @@ signature cover.
 
 A change to any value the specification freezes (suite identifier, rounds, packing, password
 encoding, salt or mask derivation, Argon2 parameters, the PIM or memory-level mapping) needs a new
-suite identifier. The test vectors in `tests/fixtures/suite3-vectors/` and
-`tests/fixtures/suite4-vectors/` and the fast fixtures `tests/fixtures/validation-cases.json` and
-`tests/fixtures/suite4-vectors/validation-cases.json` catch such a change.
+suite identifier. The specification's test vectors and fast fixtures in
+`tests/spec/vectors/suite3/` and `tests/spec/vectors/suite4/` catch such a change.

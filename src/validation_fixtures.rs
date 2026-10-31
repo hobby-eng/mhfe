@@ -1,8 +1,7 @@
 //! The shared validation fixtures, built into the program for its self-checks and read by the unit
-//! tests too: `tests/fixtures/validation-cases.json` (suite 3) and
-//! `tests/fixtures/suite4-vectors/validation-cases.json` (suite 4), the specification's
-//! `vectors/suite3/validation-cases.json` and `vectors/suite4/validation-cases.json`. Their
-//! expected values were computed independently with Python's hashlib, hmac and unicodedata.
+//! tests too: the specification's `vectors/suite3/validation-cases.json` and
+//! `vectors/suite4/validation-cases.json`, in the submodule `tests/spec`. Their expected values
+//! were computed independently with Python's hashlib, hmac and unicodedata.
 //!
 //! A self-check must fail, not stop the program, when a built-in table is damaged, so everything
 //! here reads them without panicking.
@@ -18,11 +17,10 @@
 use serde_json::Value;
 
 /// Passwords, settings, phrases, length detection and the verifier's byte order of suite 3.
-pub(crate) const SUITE_3: &str = include_str!("../tests/fixtures/validation-cases.json");
+pub(crate) const SUITE_3: &str = include_str!("../tests/spec/vectors/suite3/validation-cases.json");
 /// The round messages of suite 4 for each entropy size, and its refusals before Argon2.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
-pub(crate) const SUITE_4: &str =
-    include_str!("../tests/fixtures/suite4-vectors/validation-cases.json");
+pub(crate) const SUITE_4: &str = include_str!("../tests/spec/vectors/suite4/validation-cases.json");
 
 /// What a damaged built-in table gives as the detail of a failure.
 const DAMAGED: &str = "the built-in cases are damaged";
