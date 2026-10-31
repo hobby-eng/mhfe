@@ -593,10 +593,10 @@ with every call, and every operation asks for the cost of its work factor; no re
 the test-only engine that runs below the cost it is asked for (`scripts/check-release-artifacts.sh`
 looks for its marker). `engine::NativeArgon2Check::default()` starts four threads per call and
 joins them before it returns. A process can enter its own network namespace only while it has a
-single thread, so a command started directly runs its checks at start after it has entered its own
-namespace, where the system allows one. The start menu runs them once before it opens, in its own
-thread and with no network namespace: the menu enters none, and its commands, which run in threads
-of it, cannot. `engine::NativeArgon2SizesCheck::default()` takes about 1.5 s and 256 MiB. Both
+single thread, so a command runs its checks at start after it has entered its own namespace, where
+the system allows one. The start menu runs them before it opens, with no network namespace: it
+handles no secret, and each of its commands is a process of its own that runs them again.
+`engine::NativeArgon2SizesCheck::default()` takes about 1.5 s and 256 MiB. Both
 native checks call Argon2 through the engine's written-key guard. In a browser,
 `engine::BrowserArgon2Check::new(&argon2)` also offers `verify()`, which gives `SelfCheckFailed`,
 and `engine::BrowserArgon2SizesCheck::new(&argon2)` checks one build at a time.

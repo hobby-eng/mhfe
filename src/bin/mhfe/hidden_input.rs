@@ -48,6 +48,9 @@ use crate::exit::Failure;
 use crate::raw_io;
 use crate::typed_line::{self, Hints, LineScreen};
 
+// For the start menu, around a command that may die with the terminal switched (menu.rs).
+pub(crate) use platform::{current as terminal_settings, restore as restore_terminal};
+
 /// The terminal settings to restore while a hidden prompt has changed them. Whoever changes or
 /// restores the terminal holds this lock, so the Ctrl+C handler and a prompt never interleave.
 static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);

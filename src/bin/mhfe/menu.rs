@@ -8,16 +8,24 @@
 //! its result has been read. Password generation instead repeats on Enter and returns to the menu
 //! on Escape, with each password shown on the private screen. The self-test asks first whether to
 //! run the published vectors too, which take minutes.
+//!
+//! A command runs as a process of its own on the same terminal, so that it is isolated as a typed
+//! one is, with its own empty network, which only a process of one thread can enter. Isolation
+//! cannot be undone, and the menu must stay free to start the fast mode later. The menu itself
+//! reads only keys and the kind of a password.
 
 use std::ffi::OsString;
 use std::io::{self, Write};
+use std::process::Command;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 use anstream::eprintln;
-use clap::{CommandFactory, Parser};
+use clap::CommandFactory;
 
 use crate::choice::{self, draw_entries, redraw_from, write_control, Answer, Question};
 use crate::container_repair;
-use crate::exit::{Failure, SUCCESS};
+use crate::exit::{self, Failure, SUCCESS};
 use crate::hidden_input::{self, Key};
 use crate::made_password::PasswordKind;
 use crate::readme;
@@ -64,11 +72,9 @@ impl Entry {
     }
 }
 
-/// The checks at start, once for every command of the menu, then the menu. They run in the menu's
-/// own thread before anything is isolated, so with no network namespace: the menu never enters
-/// one, and a command of the menu, which runs in a thread of it, is isolated without one
-/// (protect.rs). When a check fails, the window that a double-click opened stays until Enter, so
-/// that the failure can be read.
+/// The checks at start, then the menu; each of its commands runs them again in its own process.
+/// When a check fails, the window that a double-click opened stays until Enter, so that the failure
+/// can be read.
 pub fn start() -> Result<i32, Failure> {
     if let Err(failure) = startup::check(startup::Checks::EveryPart) {
         // Ctrl+C at the wait restores the terminal, which the wait switches to single keys.
@@ -249,8 +255,6 @@ fn draw(entries: &[Entry], selected: usize) -> usize {
     entry_lines + 1 + hint_lines
 }
 
-/// Runs a command in a thread of its own, isolated as a command started directly would be: the
-/// isolation cannot be undone, and the menu must stay free to start the fast mode later.
 /// Runs the command a question of the menu chose, or shows why it could not ask; false when the
 /// person went back with Escape and no command runs.
 fn run_asked(asked: Result<Option<Vec<OsString>>, Failure>) -> bool {
@@ -269,28 +273,61 @@ fn run_shown(arguments: &[OsString]) {
     }
 }
 
+/// The process of the command that the menu waits for, or one of the two values below.
+static COMMAND: AtomicU32 = AtomicU32::new(NO_COMMAND);
+/// The menu waits for no command.
+const NO_COMMAND: u32 = 0;
+/// In place of the process: what ends the tool came while the command ran. No process has this
+/// number.
+const COMMAND_STOPPED: u32 = u32::MAX;
+/// How long [`run_command`] gives that handler after a command has ended; a person does not see it.
+const HANDLER_DELAY: Duration = Duration::from_millis(50);
+
+/// Runs `mhfe` with `arguments` as a process of its own on this terminal and returns its exit code,
+/// once it has shown what it had to show. A command that crashed or was killed could not put the
+/// terminal back or leave its screen, so that is done here. A stop of the whole tool ends it here,
+/// silently, as the command has said so: exit codes cannot tell it from q in a list, which ends the
+/// command alone.
 fn run_command(arguments: &[OsString]) -> Result<i32, Failure> {
-    let typed = std::iter::once(OsString::from("mhfe")).chain(arguments.iter().cloned());
-    let cli = Cli::try_parse_from(typed)
-        .map_err(|error| Failure::internal(format!("The menu built a wrong command: {error}")))?;
-    std::thread::scope(|scope| {
-        let worker = scope.spawn(|| {
-            protect::isolate(crate::needs_of(&cli.command));
-            // The checks at start ran once before the menu, in its own thread, which is not
-            // isolated; what isolate() reports for this thread is probed here.
-            protect::verify_isolation();
-            crate::run(cli.command)
-        });
-        worker
-            .join()
-            .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
-    })
+    let settings = hidden_input::terminal_settings()?;
+    let mut command = Command::new(std::env::current_exe()?)
+        .args(arguments)
+        .spawn()?;
+    COMMAND.store(command.id(), Ordering::SeqCst);
+    let ended = command.wait();
+    // Ctrl+C reached this process too, but on a busy computer its handler, on a thread of its own,
+    // can come after the end of the command that it stopped.
+    std::thread::sleep(HANDLER_DELAY);
+    let stopped = COMMAND.swap(NO_COMMAND, Ordering::SeqCst) == COMMAND_STOPPED;
+    let code = ended?.code().filter(|code| exit::is_own(*code));
+    if code.is_none() {
+        hidden_input::restore_terminal(&settings);
+        terminal::leave_screen_of_killed_command();
+    }
+    if stopped {
+        std::process::exit(exit::CANCELLED);
+    }
+    code.ok_or_else(|| Failure::internal("The command crashed or was killed."))
 }
 
-/// Runs `mhfe password` on the private screen, of the kind the person chooses first, again on
-/// every Enter, until Escape returns to the menu. Each password replaces the one before on the
-/// screen, which is cleared when the person leaves; the generator wipes its own copy as soon as it
-/// has shown it, before a key is read.
+/// For the handler of Ctrl+C and of the signals that end the tool like it: whether a command runs,
+/// which then stops by itself, and [`run_command`] ends the tool after it. Ctrl+C reaches the
+/// command from the terminal; SIGTERM reaches the menu alone, and the handler cannot tell them
+/// apart. A signal later than [`HANDLER_DELAY`] after the command's end shows a second "Cancelled".
+pub fn pass_on_stop() -> bool {
+    let running = |process| (process != NO_COMMAND).then_some(COMMAND_STOPPED);
+    match COMMAND.try_update(Ordering::SeqCst, Ordering::SeqCst, running) {
+        Err(_) => false,
+        Ok(COMMAND_STOPPED) => true,
+        Ok(process) => {
+            protect::pass_on_termination(process);
+            true
+        }
+    }
+}
+
+/// Asks which kind of password to make and runs `mhfe password --repeat`, which makes it again on
+/// every Enter until Escape returns to the menu.
 fn make_passwords() -> Result<(), Failure> {
     let question = Question {
         text: "What kind of password?",
@@ -303,21 +340,15 @@ fn make_passwords() -> Result<(), Failure> {
     let Some(chosen) = choice::choose(&question, &answers, None)? else {
         return Ok(());
     };
-    let mut arguments = vec![OsString::from("password")];
+    let mut arguments = vec![OsString::from("password"), OsString::from("--repeat")];
     arguments.extend(
         PasswordKind::MADE[chosen]
             .password_option()
             .map(OsString::from),
     );
-    let input = terminal::Input::terminal_only();
-    let screen = terminal::PrivateScreen::enter_to_show(&input);
-    loop {
-        run_command(&arguments)?;
-        eprintln!();
-        if !wait_for_enter("Press Enter for another password (Esc returns to the menu).")? {
-            return Ok(());
-        }
-        screen.clear();
+    match run_command(&arguments)? {
+        SUCCESS => Ok(()),
+        code => Err(Failure::shown(code)),
     }
 }
 
@@ -373,7 +404,7 @@ fn which_self_test() -> Result<Option<Vec<OsString>>, Failure> {
 }
 
 /// Waits for Enter; false on Escape or its aliases. The caller decides where those keys lead.
-fn wait_for_enter(prompt: &str) -> Result<bool, Failure> {
+pub fn wait_for_enter(prompt: &str) -> Result<bool, Failure> {
     // Switched before the question appears, as in choose().
     let back = hidden_input::with_keys(|next_key| {
         style::prompt(prompt);
@@ -395,6 +426,7 @@ fn wait_for_enter(prompt: &str) -> Result<bool, Failure> {
 mod tests {
     use super::*;
     use crate::choice::LINE_WIDTH;
+    use clap::Parser;
 
     #[test]
     fn every_entry_is_a_valid_command() {
@@ -405,7 +437,7 @@ mod tests {
                     assert!(Cli::try_parse_from(typed).is_ok(), "{}", entry.command);
                 }
                 Action::Password => {
-                    assert!(Cli::try_parse_from(["mhfe", "password"]).is_ok());
+                    assert!(Cli::try_parse_from(["mhfe", "password", "--repeat"]).is_ok());
                 }
                 Action::Repair => {
                     assert!(Cli::try_parse_from(["mhfe", "repair"]).is_ok());

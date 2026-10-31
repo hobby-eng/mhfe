@@ -8,8 +8,8 @@
 //! - on Linux, seccomp refuses new sockets and io_uring, and Landlock restricts opening files for
 //!   writing. Both cover the calling thread and workers it starts, including Argon2's, and cannot
 //!   be undone. Already-open descriptors remain usable, so a trusted offline host is required;
-//! - a command started directly also enters its own network namespace, where permitted, with only
-//!   inactive loopback and no external routes. Previously opened sockets keep their original
+//! - a command also enters its own network namespace, where permitted, with only inactive
+//!   loopback and no external routes. Previously opened sockets keep their original
 //!   namespace. The localhost browser server stays outside these secret-command restrictions.
 //!
 //! Each protection is read back before it is relied on: [`CoreDumpCheck`] and [`IsolationCheck`]
@@ -17,8 +17,8 @@
 
 #![allow(
     unsafe_code,
-    reason = "prctl, setrlimit, sigaction and the Landlock calls are operating-system calls that \
-              Rust offers only through unsafe foreign functions"
+    reason = "prctl, setrlimit, sigaction, kill and the Landlock calls are operating-system calls \
+              that Rust offers only through unsafe foreign functions"
 )]
 
 use std::cell::Cell;
@@ -86,6 +86,18 @@ pub fn interrupt_on_quit_and_suspend() -> bool {
         }
         set
     }
+}
+
+/// Passes on to `process`, a command of the start menu, a request to end that reached the menu
+/// alone, as SIGTERM does. A console's events reach every process on it, so Windows needs nothing.
+pub fn pass_on_termination(process: u32) {
+    #[cfg(unix)]
+    // SAFETY: kill takes integers and touches no memory of this process.
+    unsafe {
+        libc::kill(process as libc::pid_t, libc::SIGTERM);
+    }
+    #[cfg(not(unix))]
+    let _ = process;
 }
 
 /// The identifier of [`CoreDumpCheck`] in a self-check report.
@@ -600,9 +612,8 @@ fn isolate_thread(needs: Needs) -> Isolation {
 /// down and no external routes. Previously opened sockets remain in their original namespace;
 /// this supplements the socket-creation filter rather than revoking inherited descriptors.
 /// An unprivileged process may create one only together with a user namespace of its
-/// own, which the kernel allows only while the process has a single thread, as a command started
-/// directly has at this point, and only where the system allows user namespaces. A command of the
-/// start menu, which runs in a thread of the menu, does not get one.
+/// own, which the kernel allows only while the process has a single thread, as a command has at
+/// this point, and only where the system allows user namespaces.
 #[cfg(target_os = "linux")]
 mod namespace {
     /// Whether the process now runs in the empty network; a refusal changes nothing.

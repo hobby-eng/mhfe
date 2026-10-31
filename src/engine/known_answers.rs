@@ -172,10 +172,9 @@ fn cores() -> Vec<(bool, &'static str)> {
 /// shaped as MHFE makes it at 1 MiB (four lanes on four threads, version 1.3, no secret or
 /// associated data, built by the engine's own code), each in the same 1 MiB work area, which must
 /// be wiped after every call. About two to three milliseconds. It starts four threads per call and
-/// joins them before it returns: the command-line tool runs it after a command started directly
-/// has entered its own network namespace, which needs a process of a single thread, and, for the
-/// start menu, before the menu opens, with no network namespace (a command of the menu runs in a
-/// thread of the menu).
+/// joins them before it returns: the command-line tool runs it after a command has entered its
+/// own network namespace, which needs a process of a single thread, and before the start menu
+/// opens, which enters none.
 ///
 /// In the full self-test ([`NativeArgon2SizesCheck`]), the same at 64 and 256 MiB, on each copy of
 /// the core, with four threads and, once, with one: indexing over many segments and the threads.

@@ -19,6 +19,15 @@ pub const NOT_ENOUGH_RESOURCES: i32 = 4;
 /// SIGTERM or a closed terminal, Escape or q at a question, or Ctrl+D at an empty prompt.
 pub const CANCELLED: i32 = 130;
 
+/// Whether `code` is one of the above, with which this tool ends by itself. A process of it that
+/// crashed or was killed gives none of them, or on Unix no code at all.
+pub fn is_own(code: i32) -> bool {
+    matches!(
+        code,
+        SUCCESS | INTERNAL_ERROR | INVALID_INPUT | NO_MATCH | NOT_ENOUGH_RESOURCES | CANCELLED
+    )
+}
+
 /// A reason to stop, with the text to show and the exit code to return.
 #[derive(Debug)]
 pub struct Failure {
@@ -157,5 +166,13 @@ mod tests {
         let failure = Failure::from(MhfeError::EmptyPassword);
         let error: &dyn std::error::Error = &failure;
         assert_eq!(error.to_string(), failure.message);
+    }
+
+    /// A panic in a debug build, then a crash and an abort on Windows.
+    #[test]
+    fn the_exit_codes_of_a_crash_are_not_the_tools_own() {
+        assert!([0, 1, 2, 3, 4, 130].into_iter().all(is_own));
+        let crashes = [101, 0xC000_0005_u32 as i32, 0xC000_0409_u32 as i32];
+        assert!(!crashes.into_iter().any(is_own));
     }
 }

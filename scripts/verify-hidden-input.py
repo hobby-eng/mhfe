@@ -27,10 +27,10 @@ repair as the first answer, also after a stray leading space, which the repair r
 gets the question with the password as typed first, and "Type the password again" asks for it
 again. The summary records how the check word came out and none of the words.
 
-A command started directly runs in a network namespace with only inactive loopback where the
-system allows user namespaces. Its summary says "isolated network, no new sockets or file writes";
-elsewhere it says "no new sockets or file writes" for seccomp and Landlock alone. Previously opened
-descriptors are not revoked by these restrictions.
+A command, started directly or from the menu, runs in a network namespace with only inactive
+loopback where the system allows user namespaces. Its summary says "isolated network, no new sockets
+or file writes"; elsewhere it says "no new sockets or file writes" for seccomp and Landlock alone.
+Previously opened descriptors are not revoked by these restrictions.
 
 It also drives the menu that `mhfe` shows when it starts without arguments: the arrow keys and Enter
 choose an entry, its number chooses it at once, other escape sequences (Ctrl+Up) and keys do
@@ -38,6 +38,11 @@ nothing and are not shown, q and a lone Escape quit with exit code 0 and Ctrl+C 
 terminal settings are restored either way. The `mhfe password` entry shows each password on one
 private screen, which it clears for the next one on Enter and when Escape or q returns to the menu;
 the help entry returns on Enter. Neither needs secret input.
+
+A command of the menu is a process of its own. q in its list ends that command and the menu comes
+back. Ctrl+C in it, and SIGTERM, which reaches the menu alone, end both, with one "Cancelled", exit
+code 130, its screen left and the terminal restored. When the command is killed, the menu leaves
+its screen, restores the terminal, says so and comes back.
 
 `mhfe rekey` asks nothing about other wallets on the container: every user gets a warning at the
 top of the container prompt that they do not move to the new container and that the old one and its
@@ -170,9 +175,9 @@ CLEAR = b"\x1b[2J\x1b[H"
 BACKSPACE, CTRL_U, CTRL_C = b"\x7f", b"\x15", b"\x03"
 # The keys of the menu, as a terminal sends them. Ctrl+Up carries a 5, which must not choose entry 5.
 UP, DOWN, ENTER, CTRL_UP, ESCAPE = b"\x1b[A", b"\x1b[B", b"\r", b"\x1b[1;5A", b"\x1b"
-# The menu entry of `mhfe password` when no browser tool lies next to the program, and the entry
-# of `mhfe self-test` right below it.
-PASSWORD_ENTRY = 8
+# The menu entries of `mhfe encrypt` and `mhfe password` when no browser tool lies next to the
+# program, and the entry of `mhfe self-test` right below the second.
+ENCRYPT_ENTRY, PASSWORD_ENTRY = 2, 8
 SELF_TEST_ENTRY = PASSWORD_ENTRY + 1
 # The entry that shows the help, two below the password entry with mhfe self-test between: it is
 # the tenth, past the number keys, so it is reached with the arrows from the password entry.
@@ -699,26 +704,39 @@ def user_namespaces_allowed():
     return os.waitstatus_to_exitcode(status) == 0
 
 
+def menu_command(entry, *shown):
+    """A menu whose `entry` was chosen, up to what its command, a process of its own, has `shown`.
+    """
+    session = Session(arguments=())
+    session.wait_for(MENU_SHOWN)
+    session.answer(str(entry).encode(), *shown)
+    return session
+
+
 def check_empty_network():
-    """A command started directly runs in an empty network where the system allows it, and says
-    so in its summary; elsewhere it runs on with the seccomp filter alone."""
+    """A command runs in an empty network where the system allows it, started directly or from the
+    menu, and says so in its summary; elsewhere it runs on with the seccomp filter alone."""
     if sys.platform != "linux":
         return
-    session = Session()
+    direct = Session()
+    menu = menu_command(ENCRYPT_ENTRY, SETTINGS_QUESTION, LIST_SHOWN)
     try:
-        session.at_password_prompt()
+        direct.at_password_prompt()
+        menu.answer(ENTER, b"seed phrase: ")
     finally:
-        session.close()
-    shown = re.sub(CONTROL_SEQUENCE, b"", session.output)
+        direct.close()
+        menu.close()
     allowed = user_namespaces_allowed()
     expected = (
         b"isolated network, no new sockets or file writes"
         if allowed
         else b"Isolation  no new sockets or file writes"
     )
-    assert expected in shown, f"empty network: {expected!r} not in the summary"
+    for session in (direct, menu):
+        shown = re.sub(CONTROL_SEQUENCE, b"", session.output)
+        assert expected in shown, f"empty network: {expected!r} not in the summary"
     state = "an empty network" if allowed else "seccomp alone, as this system allows no namespace"
-    print(f"isolation: a command started directly runs with {state}")
+    print(f"isolation: a command, started directly or from the menu, runs with {state}")
 
 
 def check_menu():
@@ -774,6 +792,57 @@ def check_menu():
     assert code == CANCELLED, f"menu: Ctrl+C gave exit code {code}"
     assert settings == session.original, "menu: Ctrl+C did not restore the terminal settings"
     print("menu: Ctrl+C, exit code 130, terminal restored")
+
+
+def check_menu_commands():
+    """A command of the menu is a process of its own: what stops it alone brings the menu back,
+    what stops the tool ends both, and the menu puts right what a killed command left."""
+    session = menu_command(ENCRYPT_ENTRY, SETTINGS_QUESTION, LIST_SHOWN)
+    session.answer(b"q", b"Cancelled", BACK_TO_MENU)
+    session.answer(ENTER, MENU_SHOWN)
+    session.type(b"q")
+    assert session.drain_until_exit(10), "menu: q after a command did not end the tool"
+    code, settings = session.close()
+    assert code == 0, f"menu: q after a command gave exit code {code}"
+    assert settings == session.original, "menu: q in a command changed the terminal settings"
+    print("menu: q in a command's list ends that command; the menu comes back")
+
+    def at_password_wait():
+        session = menu_command(PASSWORD_ENTRY, PASSWORD_KIND)
+        session.answer(ENTER, PASSWORD_AGAIN)
+        return session
+
+    def at_list():
+        return menu_command(ENCRYPT_ENTRY, SETTINGS_QUESTION, LIST_SHOWN)
+
+    for label, start, stop in (("Ctrl+C in a list", at_list, lambda s: s.type(CTRL_C)),
+                               ("Ctrl+C at the passwords", at_password_wait,
+                                lambda s: s.type(CTRL_C)),
+                               ("SIGTERM", at_list, lambda s: s.process.terminate())):
+        session = start()
+        stop(session)
+        assert session.drain_until_exit(10), f"menu: {label} did not end the tool"
+        # A second "Cancelled" of the menu would come as it ends.
+        session.idle(b"")
+        code, settings = session.close()
+        assert code == CANCELLED, f"menu: {label} gave exit code {code}"
+        assert settings == session.original, f"menu: {label} did not restore the terminal"
+        assert session.output.count(b"Cancelled") == 1, f"menu: {label}: not one Cancelled"
+        assert session.output.count(LEAVE_PRIVATE) == 1, f"menu: {label}: its screen was not left"
+        print(f"menu: {label} ends the command and the tool, one Cancelled, exit code 130")
+
+    session = at_list()
+    process = subprocess.run(["pgrep", "-P", str(session.process.pid)], capture_output=True,
+                             check=True)
+    os.kill(int(process.stdout), signal.SIGKILL)
+    session.answer(b"", LEAVE_PRIVATE, b"crashed or was killed", BACK_TO_MENU)
+    session.answer(ENTER, MENU_SHOWN)
+    session.type(b"q")
+    assert session.drain_until_exit(10), "menu: q after a killed command did not end the tool"
+    code, settings = session.close()
+    assert code == 0, f"menu: q after a killed command gave exit code {code}"
+    assert settings == session.original, "menu: a killed command left the terminal switched"
+    print("menu: a killed command's screen left, terminal restored, the menu comes back")
 
 
 # The warning of `mhfe rekey` about other wallets on the old container (src/bin/mhfe/rekey.rs).
@@ -2092,6 +2161,7 @@ def main():
     check_word_hints()
     check_empty_network()
     check_menu()
+    check_menu_commands()
     check_rekey_warns_about_other_wallets()
     check_rekey_asks_about_the_passphrase()
     check_encrypt_lists()

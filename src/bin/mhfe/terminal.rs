@@ -22,6 +22,7 @@ use crate::container_repair::{self, CardAsked};
 use crate::exit::{self, Failure};
 use crate::flow::{self, Kind};
 use crate::hidden_input::{self, Content};
+use crate::menu;
 use crate::protect;
 use crate::raw_io::{self, println};
 use crate::settings::Operation;
@@ -332,9 +333,14 @@ pub fn set_unverified_container_shown(shown: bool) {
 /// a high PIM. The operating system then discards all of the tool's memory, including the
 /// Argon2 work area and every secret. If a hidden prompt has switched the echo off, the terminal
 /// is restored first, and a private screen is left. Ctrl+\, Ctrl+Z, a closed terminal (SIGHUP) and
-/// SIGTERM end it the same way, so that none leaves a secret on the screen (AUD-015-SEC004).
+/// SIGTERM end it the same way, so that none leaves a secret on the screen (AUD-015-SEC004). While
+/// a command of the start menu runs, that command stops in this way and says so, not the menu.
 pub fn stop_on_ctrl_c() {
-    let handler = || hidden_input::restore_and_exit(exit_cancelled);
+    let handler = || {
+        if !menu::pass_on_stop() {
+            hidden_input::restore_and_exit(exit_cancelled);
+        }
+    };
     if ctrlc::set_handler(handler).is_err() {
         // Without the handler the default Ctrl+C behaviour still ends the tool at once.
         style::hint("Note: Ctrl+C will end the tool without a message.");
@@ -740,6 +746,13 @@ pub fn enter_steps(input: &Input) -> bool {
 /// Returns from the steps of a command to the main screen, clearing what they showed.
 pub fn leave_steps() {
     leave_private_screen();
+}
+
+/// Leaves the alternate screen after a command of the start menu was killed: this process never
+/// entered it, so [`PRIVATE_SCREEN_ACTIVE`] does not know whether the command was on it. The clear
+/// comes first, as ever, so a command killed on the main screen costs what that screen shows.
+pub fn leave_screen_of_killed_command() {
+    write_control(LEAVE_ALTERNATE_SCREEN);
 }
 
 /// Clears the screen for the next step of a command.

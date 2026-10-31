@@ -215,12 +215,12 @@ Use it on a trusted computer that stays offline while the phrase and the passwor
 a Linux system started from a USB stick with the network off. On Linux MHFE also applies kernel
 restrictions against creating sockets and opening files for writing. MHFE confirms each restriction
 by trying what it forbids; the command's summary shows which ones took effect and warns when one
-that the kernel reported does not hold. Where the system allows it, a command started directly, not
-from the start menu, also runs in its own network namespace, with only an inactive loopback and no
-external routes. Descriptors already open remain usable, including sockets and redirected output, so
-these restrictions do not replace a trusted offline environment. On Windows, Windows PE from a USB
-stick is better than your everyday system; `mhfe.exe` needs nothing beyond Windows itself, though it
-has not been tested in Windows PE yet.
+that the kernel reported does not hold. Where the system allows it, a command also runs in its own
+network namespace, with only an inactive loopback and no external routes. Descriptors already open
+remain usable, including sockets and redirected output, so these restrictions do not replace a
+trusted offline environment. On Windows, Windows PE from a USB stick is better than your everyday
+system; `mhfe.exe` needs nothing beyond Windows itself, though it has not been tested in Windows PE
+yet.
 
 Swap matters too. The system may write memory to a swap area on a disk, including Argon2's work
 area, from which a password guess can be tested cheaply, and the data can stay there for years. On

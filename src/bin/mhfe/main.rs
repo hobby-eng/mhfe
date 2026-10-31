@@ -223,10 +223,9 @@ fn main() {
     // Before anything else, so that no secret can ever be in a core dump.
     protect::harden_process();
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
-    // menu, which runs the same commands, each in an isolated thread of its own. The checks at
-    // start run once, before the menu and before any isolation: the menu enters no network
-    // namespace of its own, and its commands, which run in threads of it, cannot. --help and
-    // --version, which clap answers in Cli::try_parse, handle nothing secret and run none.
+    // menu, which runs the same commands, each as a process of its own that comes through the
+    // other branch. --help and --version, which clap answers in Cli::try_parse, handle nothing
+    // secret and run no checks.
     let result = if std::env::args_os().len() == 1 && choice::can_run() {
         menu::start()
     } else {
@@ -280,10 +279,10 @@ fn exit_unparsed(error: clap::Error) -> ! {
     std::process::exit(exit::INVALID_INPUT);
 }
 
-/// Isolates a command started directly and runs its checks at start, before it reads anything.
-/// The order matters (G10 of the self-check plan): a process enters its own network namespace
-/// only while it has a single thread, and the Argon2 check at start runs on four threads. The
-/// start menu runs the same checks before it opens, with no network namespace (menu.rs).
+/// Isolates a command and runs its checks at start, before it reads anything. The order matters
+/// (G10 of the self-check plan): a process enters its own network namespace only while it has a
+/// single thread, and the Argon2 check at start runs on four threads. The start menu, which is no
+/// command, isolates nothing and runs the same checks before it opens (menu.rs).
 fn prepare(command: &Command) -> Result<(), Failure> {
     protect::isolate(needs_of(command));
     startup::check(startup_checks_of(command))

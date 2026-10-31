@@ -23,7 +23,8 @@ It also drives the menu that `mhfe` shows when it starts without arguments, whic
 for VT input so that the arrow keys arrive as on Unix: Down, Up and Enter choose `mhfe password`,
 its number chooses it at once, Ctrl+Up's 5 chooses nothing, q and a lone Escape quit with exit
 code 0 and Ctrl+C with 130. The password entry regenerates on Enter and returns on Escape/q;
-help still returns to the menu on Enter.
+help still returns to the menu on Enter. A command of the menu is a process of its own: q in its
+list ends that command and the menu comes back, and Ctrl+C in it ends both with exit code 130.
 """
 
 import json
@@ -46,8 +47,10 @@ ACCEPTED = "ingerprint"
 BACKSPACE, CTRL_U, CTRL_C = "\x08", "\x15", "\x03"
 # The keys of the menu as VT input; the pseudo-console turns them into key presses.
 UP, DOWN, ENTER, CTRL_UP = "\x1b[A", "\x1b[B", "\r", "\x1b[1;5A"
-# The menu entry of `mhfe password` when no browser tool lies next to the program.
-PASSWORD_ENTRY = 8
+# The menu entries of `mhfe encrypt` and `mhfe password` when no browser tool lies next to the
+# program, and the first question of the first.
+ENCRYPT_ENTRY, PASSWORD_ENTRY = 2, 8
+SETTINGS_QUESTION = "Which settings should protect the phrase?"
 # The entry that shows the help, two below the password entry with mhfe self-test between: it is
 # the tenth, past the number keys, so it is reached with the arrows from the password entry.
 HELP_FROM_PASSWORD = 2
@@ -185,6 +188,23 @@ def check_menu():
     code = session.close()
     assert code == CANCELLED, f"menu: Ctrl+C gave exit code {code}"
     print("menu: Ctrl+C, exit code 130")
+
+    session = Session(arguments=())
+    session.wait_for(MENU_SHOWN)
+    session.type(str(ENCRYPT_ENTRY))
+    session.wait_for(SETTINGS_QUESTION)
+    session.type("q")
+    session.wait_for(BACK_TO_MENU)
+    print("menu: q in a command's list ends that command; the menu comes back")
+    session.type(ENTER)
+    session.wait_for(MENU_SHOWN)
+    session.type(str(ENCRYPT_ENTRY))
+    session.wait_for(SETTINGS_QUESTION)
+    session.type(CTRL_C)
+    session.wait_for("Cancelled")
+    code = session.close()
+    assert code == CANCELLED, f"menu: Ctrl+C in a command gave exit code {code}"
+    print("menu: Ctrl+C in a command ends it and the tool, exit code 130")
 
 
 def main():

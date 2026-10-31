@@ -13,10 +13,11 @@ use zeroize::Zeroizing;
 use crate::exit::{self, Failure, SUCCESS};
 use crate::flow::{self, Flow};
 use crate::made_password;
+use crate::menu;
 use crate::raw_io::{self, println};
 use crate::style::{self, STRONG};
 use crate::system_random::SystemRandom;
-use crate::terminal::{self, Input};
+use crate::terminal::{self, Input, PrivateScreen};
 
 #[derive(Args)]
 pub struct Options {
@@ -48,6 +49,10 @@ pub struct Options {
         long_help = chars_help()
     )]
     chars: Option<usize>,
+
+    /// Another password on each Enter, until Escape: the entry of the start menu
+    #[arg(long, hide = true)]
+    repeat: bool,
 }
 
 /// What --chars alone means, DEFAULT_CHARACTERS as clap takes it: text written out here, which a
@@ -135,6 +140,24 @@ pub fn help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
+    if !options.repeat {
+        return make_one(&options);
+    }
+    // A private screen belongs to the process that entered it, so the loop of the menu's entry lies
+    // here. Each password replaces the one before, and the screen is cleared when the person
+    // leaves; the generator wipes its own copy as soon as it has shown it, before a key is read.
+    let screen = PrivateScreen::enter_to_show(&Input::terminal_only());
+    loop {
+        make_one(&options)?;
+        eprintln!();
+        if !menu::wait_for_enter("Press Enter for another password (Esc returns to the menu).")? {
+            return Ok(SUCCESS);
+        }
+        screen.clear();
+    }
+}
+
+fn make_one(options: &Options) -> Result<i32, Failure> {
     if let Some(count) = options.chars {
         return run_characters(count);
     }
