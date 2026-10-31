@@ -27,8 +27,8 @@ const BIP84_ADDRESS = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
 const CHECKED_PHRASE = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon above proof fatigue";
 // Passes the wallet check without a passphrase (EMPTY_COUNTER in src/wallet_check.rs).
 const EMPTY_CHECKED_PHRASE = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon absorb another spoil";
-// Packs to the first state of AMBIGUOUS_STATES in src/packing.rs, which also passes the 21-word
-// check.
+// Packs to the first state of AMBIGUOUS_STATES in src/test_support.rs, which also passes the
+// 21-word check.
 const AMBIGUOUS_12_WORDS = "essence drama mule dolphin bitter rain abandon abandon able human mule relax";
 // The wrong password of the page, one letter off PASSWORD.
 const WRONG_PASSWORD = "public test passwore";

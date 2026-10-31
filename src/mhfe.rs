@@ -267,7 +267,7 @@ impl Mhfe<NativeEngine> {
 }
 
 impl<E: Argon2Engine> Mhfe<E> {
-    /// Uses `engine`, which must compute Argon2id at `work.argon2_cost()`: the browser engine,
+    /// Uses `engine`, which computes Argon2id at the cost each round asks for: the browser engine,
     /// the engine of the self-checks that answers only published rounds, or a cheaper one in tests.
     #[cfg(any(test, not(target_arch = "wasm32"), feature = "browser-core"))]
     pub(crate) fn with_engine(work: WorkFactor, engine: E) -> Self {
@@ -582,8 +582,10 @@ fn locked_entropy(phrase: &Mnemonic) -> LockedBytes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::feistel::tests::HashEngine;
-    use crate::test_support::{reduced, test_password, wrong_password, NoArgon2Calls};
+    use crate::test_support::{
+        reduced, state_from_hex, test_password, wrong_password, HashEngine, NoArgon2Calls,
+        ReducedEngine, AMBIGUOUS_STATES,
+    };
 
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -592,7 +594,6 @@ mod tests {
 
     #[test]
     fn creation_warns_when_detection_would_accept_another_length() {
-        use crate::packing::tests::{state_from_hex, AMBIGUOUS_STATES};
         assert!(other_detected_lengths(ZERO_12).unwrap().is_empty());
         assert!(other_detected_lengths(LEGAL_24).unwrap().is_empty());
         for (text, [short, long]) in AMBIGUOUS_STATES {
@@ -621,7 +622,7 @@ mod tests {
 
     /// The recovery of `container` at the stated length `words`.
     fn decrypt_as(
-        mhfe: &mut Mhfe<NativeEngine>,
+        mhfe: &mut Mhfe<ReducedEngine>,
         container: &str,
         password: &Password,
         words: WordCount,
@@ -931,9 +932,9 @@ mod tests {
     fn ambiguity_lists_every_candidate_and_the_24_word_reading() {
         let password = test_password();
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), HashEngine);
-        for (text, lengths) in packing::tests::AMBIGUOUS_STATES {
+        for (text, lengths) in AMBIGUOUS_STATES {
             // Encrypt the ambiguous state X directly, as if a phrase had packed into it.
-            let x = packing::tests::state_from_hex(text);
+            let x = state_from_hex(text);
             let y = mhfe
                 .permutation(&password, Geometry::SUITE_3)
                 .forward(&x, &mut |_| Ok(()))
@@ -1002,19 +1003,8 @@ mod tests {
 
     #[test]
     fn invalid_inputs_fail_before_any_argon2_call() {
-        struct NoCallsEngine;
-        impl Argon2Engine for NoCallsEngine {
-            fn derive(
-                &mut self,
-                _: &[u8],
-                _: &[u8; 16],
-                _: &mut [u8; 32],
-            ) -> Result<(), MhfeError> {
-                panic!("Argon2 was called for an invalid input");
-            }
-        }
         let password = test_password();
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoCallsEngine);
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoArgon2Calls);
         let bad_checksum = LEGAL_24.replace("title", "thank");
 
         assert!(matches!(
@@ -1146,13 +1136,15 @@ mod tests {
         // the container then does not turn back into the original and must not be shown.
         struct FlakyEngine(u8);
         impl Argon2Engine for FlakyEngine {
-            fn derive(
+            fn argon2id(
                 &mut self,
                 password: &[u8],
                 salt: &[u8; 16],
+                memory_kib: u32,
+                passes: u32,
                 key: &mut [u8; 32],
             ) -> Result<(), MhfeError> {
-                HashEngine.derive(password, salt, key)?;
+                HashEngine.argon2id(password, salt, memory_kib, passes, key)?;
                 self.0 = self.0.wrapping_add(1);
                 key[0] ^= self.0;
                 Ok(())

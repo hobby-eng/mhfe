@@ -126,7 +126,7 @@ pub(crate) fn published_table() -> &'static [PublishedVector] {
 
 /// An engine that answers only the rounds of published vectors, with the keys they record. It
 /// computes no Argon2: the salt and the password after NFKD must be a recorded pair, and anything
-/// else is refused with [`MhfeError::Internal`].
+/// else is refused with [`MhfeError::Internal`]. It reads no cost, as the salt binds the settings.
 pub(crate) struct PublishedRoundKeys {
     vectors: &'static [PublishedVector],
 }
@@ -144,10 +144,12 @@ impl PublishedRoundKeys {
 }
 
 impl Argon2Engine for PublishedRoundKeys {
-    fn derive(
+    fn argon2id(
         &mut self,
         password: &[u8],
         salt: &[u8; SALT_BYTES],
+        _: u32,
+        _: u32,
         key: &mut [u8; KEY_BYTES],
     ) -> Result<(), MhfeError> {
         let round = self
@@ -1089,22 +1091,23 @@ mod tests {
     fn the_engine_answers_only_recorded_rounds() {
         let mut keys = PublishedRoundKeys::of(published_table());
         let zero_12 = published("zero-12").unwrap();
+        let salt = &zero_12.rounds[3].salt;
         let mut key = [0u8; KEY_BYTES];
-        keys.derive(zero_12.password_nfkd, &zero_12.rounds[3].salt, &mut key)
+        keys.argon2id(zero_12.password_nfkd, salt, 0, 0, &mut key)
             .unwrap();
         assert_eq!(key, zero_12.rounds[3].key);
         // The right salt with another password, and an unknown salt, are refused.
         assert_eq!(
-            keys.derive(b"public test passwore", &zero_12.rounds[3].salt, &mut key)
+            keys.argon2id(b"public test passwore", salt, 0, 0, &mut key)
                 .unwrap_err()
                 .code(),
             "INTERNAL_ERROR"
         );
         assert!(keys
-            .derive(zero_12.password_nfkd, &[0u8; SALT_BYTES], &mut key)
+            .argon2id(zero_12.password_nfkd, &[0u8; SALT_BYTES], 0, 0, &mut key)
             .is_err());
         assert!(PublishedRoundKeys::none()
-            .derive(zero_12.password_nfkd, &zero_12.rounds[3].salt, &mut key)
+            .argon2id(zero_12.password_nfkd, salt, 0, 0, &mut key)
             .is_err());
     }
 

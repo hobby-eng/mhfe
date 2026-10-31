@@ -34,29 +34,26 @@ extern "C" {
     fn reserve(this: &JsArgon2, memory_kib: u32) -> Result<(), JsValue>;
 }
 
-/// The [`Argon2Engine`] of the browser package: every round through the page's Argon2 build, at
-/// the cost of one work factor.
+/// The [`Argon2Engine`] of the browser package: every round through the page's Argon2 build.
 pub struct BrowserEngine {
     argon2: JsArgon2,
-    cost: Argon2Cost,
+    /// Read by [`BrowserEngine::reserve`] alone: a round takes its cost with its call.
+    work: WorkFactor,
 }
 
 impl BrowserEngine {
     /// Refuses memory levels a browser cannot provide before any memory is used.
     pub fn new(argon2: JsArgon2, work: WorkFactor) -> Result<Self, MhfeError> {
         work.require_level(HIGHEST_BROWSER_MEMORY_LEVEL)?;
-        Ok(Self {
-            argon2,
-            cost: work.argon2_cost(),
-        })
+        Ok(Self { argon2, work })
     }
 
     /// Reserves the Argon2 work area now rather than at the first round: a session of several
     /// operations then fails at once, before anything is asked, when the browser cannot give it.
     pub fn reserve(&self) -> Result<(), MhfeError> {
         self.argon2
-            .reserve(self.cost.memory_kib)
-            .map_err(|error| error_of(error, self.cost))
+            .reserve(self.work.memory_kib())
+            .map_err(|error| error_of(error, self.work.memory_bytes()))
     }
 
     /// Runs the known answer of the page's Argon2 build ([`BrowserArgon2Check::verify`]): an
@@ -82,33 +79,36 @@ pub(super) fn derive_with(
     super::mark_key_unwritten(key);
     argon2
         .derive(password, salt, cost.memory_kib, cost.passes, key)
-        .map_err(|error| error_of(error, cost))?;
+        .map_err(|error| error_of(error, cost.memory_bytes()))?;
     // A bridge that wrote into a stale view of this module's memory, or not at all, leaves the
     // key as it was.
     super::check_key_written(key)
 }
 
-/// The error of a failed call of the Argon2 build: "MEMORY_ALLOCATION_FAILED: …" becomes
-/// [`MhfeError::MemoryAllocation`], anything else [`MhfeError::Argon2`].
-fn error_of(error: JsValue, cost: Argon2Cost) -> MhfeError {
+/// The error of a failed call of the Argon2 build for `bytes` of memory:
+/// "MEMORY_ALLOCATION_FAILED: …" becomes [`MhfeError::MemoryAllocation`], anything else
+/// [`MhfeError::Argon2`].
+fn error_of(error: JsValue, bytes: u64) -> MhfeError {
     let message = crate::wasm_api::js_message(&error)
         .unwrap_or_else(|| "the browser Argon2 engine failed".to_owned());
     if message.starts_with("MEMORY_ALLOCATION_FAILED") {
-        MhfeError::MemoryAllocation {
-            bytes: cost.memory_bytes(),
-        }
+        MhfeError::MemoryAllocation { bytes }
     } else {
         MhfeError::Argon2(message)
     }
 }
 
+// A deliberate copy of the trait's signature, which an implementation repeats.
 impl Argon2Engine for BrowserEngine {
-    fn derive(
+    fn argon2id(
         &mut self,
         password: &[u8],
         salt: &[u8; SALT_BYTES],
+        memory_kib: u32,
+        passes: u32,
         key: &mut [u8; KEY_BYTES],
     ) -> Result<(), MhfeError> {
-        derive_with(&self.argon2, password, salt, self.cost, key)
+        let cost = Argon2Cost { memory_kib, passes };
+        derive_with(&self.argon2, password, salt, cost, key)
     }
 }

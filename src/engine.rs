@@ -15,29 +15,34 @@ pub const SALT_BYTES: usize = 16;
 pub const KEY_BYTES: usize = 32;
 
 /// Memory and passes of one Argon2id call.
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Argon2Cost {
+pub(crate) struct Argon2Cost {
     /// Memory in KiB, the unit Argon2 uses.
-    pub memory_kib: u32,
+    pub(crate) memory_kib: u32,
     /// Passes over the memory, Argon2's `t`.
-    pub passes: u32,
+    pub(crate) passes: u32,
 }
 
+#[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 impl Argon2Cost {
     /// The memory in bytes.
-    pub fn memory_bytes(self) -> u64 {
+    pub(crate) fn memory_bytes(self) -> u64 {
         u64::from(self.memory_kib) * 1024
     }
 }
 
-/// Computes `Argon2id(password, salt)` at the cost the engine was created for.
+/// Computes `Argon2id(password, salt)` at the cost each call asks for.
 pub trait Argon2Engine {
-    /// Writes the 32-byte Argon2id tag of `password` and `salt` into `key`; an engine that cannot
-    /// compute it returns [`MhfeError::Argon2`] or the error of its memory.
-    fn derive(
+    /// Writes the 32-byte Argon2id tag of `password` and `salt` at `memory_kib` KiB and `passes`
+    /// passes into `key`; an engine that cannot compute it returns [`MhfeError::Argon2`] or the
+    /// error of its memory, never a tag of another cost.
+    fn argon2id(
         &mut self,
         password: &[u8],
         salt: &[u8; SALT_BYTES],
+        memory_kib: u32,
+        passes: u32,
         key: &mut [u8; KEY_BYTES],
     ) -> Result<(), MhfeError>;
 }

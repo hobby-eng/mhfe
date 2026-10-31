@@ -6,7 +6,7 @@
 # proves that the cheap Argon2 engine for fast unit tests is absent from the release binary and the
 # browser package's WebAssembly, and that neither names a directory of the builder. The test engine
 # exists only under #[cfg(test)] and carries a marker text (REDUCED_COST_MARKER in
-# src/engine/native.rs). The marker must be present in the library's test binary, which shows that
+# src/test_support.rs). The marker must be present in the library's test binary, which shows that
 # the search works, and absent from <cargo target directory>/release/mhfe and
 # dist/runtime/mhfe.wasm. Build them first as scripts/check.sh does: `cargo build --release` after
 # remap_builder_paths of packaging/remap-builder-paths.sh, and scripts/build-wasm.sh, which remaps

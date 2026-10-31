@@ -214,14 +214,18 @@ impl<'a, E: Argon2Engine> RoundKeyWitness<'a, E> {
     }
 }
 
+// A deliberate copy of the trait's signature, which an implementation repeats.
 impl<E: Argon2Engine> Argon2Engine for RoundKeyWitness<'_, E> {
-    fn derive(
+    fn argon2id(
         &mut self,
         password: &[u8],
         salt: &[u8; SALT_BYTES],
+        memory_kib: u32,
+        passes: u32,
         key: &mut [u8; KEY_BYTES],
     ) -> Result<(), MhfeError> {
-        self.engine.derive(password, salt, key)?;
+        self.engine
+            .argon2id(password, salt, memory_kib, passes, key)?;
         self.calls += 1;
         if self.first_fault.is_none() {
             self.first_fault = self.judge(self.calls, password, salt, key);
@@ -362,15 +366,18 @@ mod tests {
     /// other input, a hash of it, as Argon2id gives some key for any input.
     struct StandIn;
 
+    // A deliberate copy of the trait's signature, which an implementation repeats.
     impl Argon2Engine for StandIn {
-        fn derive(
+        fn argon2id(
             &mut self,
             password: &[u8],
             salt: &[u8; SALT_BYTES],
+            memory_kib: u32,
+            passes: u32,
             key: &mut [u8; KEY_BYTES],
         ) -> Result<(), MhfeError> {
             if PublishedRoundKeys::of(published_table())
-                .derive(password, salt, key)
+                .argon2id(password, salt, memory_kib, passes, key)
                 .is_err()
             {
                 use sha2::Digest;
@@ -409,11 +416,14 @@ mod tests {
         }
     }
 
+    // A deliberate copy of the trait's signature, which an implementation repeats.
     impl<E: Argon2Engine> Argon2Engine for Fault<E> {
-        fn derive(
+        fn argon2id(
             &mut self,
             password: &[u8],
             salt: &[u8; SALT_BYTES],
+            memory_kib: u32,
+            passes: u32,
             key: &mut [u8; KEY_BYTES],
         ) -> Result<(), MhfeError> {
             self.calls += 1;
@@ -422,7 +432,8 @@ mod tests {
             if here && matches!(self.change, Change::Salt) {
                 salt[0] ^= 1;
             }
-            self.engine.derive(password, &salt, key)?;
+            self.engine
+                .argon2id(password, &salt, memory_kib, passes, key)?;
             if here && matches!(self.change, Change::Key) {
                 key[0] ^= 1;
             }

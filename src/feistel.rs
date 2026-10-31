@@ -143,8 +143,13 @@ impl Permutation<'_> {
             key: [0u8; KEY_BYTES],
             mask: Vec::new(),
         };
-        self.engine
-            .derive(self.password.as_bytes(), &values.salt, &mut values.key)?;
+        self.engine.argon2id(
+            self.password.as_bytes(),
+            &values.salt,
+            self.work.memory_kib(),
+            self.work.passes(),
+            &mut values.key,
+        )?;
         values.mask = round_mask(self.geometry, &values.key, &values.message);
         Ok(values)
     }
@@ -263,25 +268,9 @@ fn xor_in_place(half: &mut [u8], mask: &[u8]) {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
-
-    /// A stand-in for Argon2 in structural tests: a key that depends on password and salt.
-    pub(crate) struct HashEngine;
-
-    impl Argon2Engine for HashEngine {
-        fn derive(
-            &mut self,
-            password: &[u8],
-            salt: &[u8; SALT_BYTES],
-            key: &mut [u8; KEY_BYTES],
-        ) -> Result<(), MhfeError> {
-            // sha2 implements an older `Digest` trait than blake2, so name it explicitly.
-            let digest = <Sha256 as sha2::Digest>::digest([password, &salt[..]].concat());
-            key.copy_from_slice(&digest);
-            Ok(())
-        }
-    }
+    use crate::test_support::{test_password, HashEngine};
 
     fn permutation<'a>(engine: &'a mut HashEngine, password: &'a Password) -> Permutation<'a> {
         Permutation {
@@ -305,6 +294,41 @@ pub(crate) mod tests {
             .inverse(&y, &mut |_| Ok(()))
             .unwrap();
         assert_eq!(*back, x);
+    }
+
+    /// Every round asks for the memory and the passes of the work factor. The other test engines
+    /// ignore what is asked, so no other fast test sees a wrong cost.
+    #[test]
+    fn every_round_asks_for_the_cost_of_the_work_factor() {
+        struct Costs(Vec<(u32, u32)>);
+        // A deliberate copy of the trait's signature, which an implementation repeats.
+        impl Argon2Engine for Costs {
+            fn argon2id(
+                &mut self,
+                password: &[u8],
+                salt: &[u8; SALT_BYTES],
+                memory_kib: u32,
+                passes: u32,
+                key: &mut [u8; KEY_BYTES],
+            ) -> Result<(), MhfeError> {
+                self.0.push((memory_kib, passes));
+                HashEngine.argon2id(password, salt, memory_kib, passes, key)
+            }
+        }
+        let password = test_password();
+        let mut engine = Costs(Vec::new());
+        let mut permutation = Permutation {
+            engine: &mut engine,
+            password: &password,
+            work: WorkFactor::new(2, 1).unwrap(),
+            geometry: Geometry::SUITE_3,
+        };
+        let y = permutation
+            .forward(&[7u8; STATE_BYTES], &mut |_| Ok(()))
+            .unwrap();
+        permutation.inverse(&y, &mut |_| Ok(())).unwrap();
+        // Memory level 1 is 3 GiB, and PIM 2 is three times the 12 passes.
+        assert_eq!(engine.0, [(3 << 20, 36); 24]);
     }
 
     /// The halves, the message of each round, which holds R through its Argon2 call, and the

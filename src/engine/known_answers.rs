@@ -2,12 +2,13 @@
 //! (full self-test only).
 //!
 //! The checks are closed. Their inputs are private constants, they take no cost and no password,
-//! and they give only an outcome, so that no release build holds an engine that computes Argon2
-//! below MHFE's own cost (scripts/check-release-artifacts.sh looks for the marker of the one test
-//! engine that does). Natively they run the vendored C code on this processor, on each copy of its
-//! core that the processor can run, behind the guard the engine puts around every call (a key
-//! left unwritten or set to zeros is refused), and confirm that the C code wiped its memory after
-//! each call.
+//! and they give only an outcome, so that they add no way to Argon2 at another cost. An engine
+//! takes its cost with every call, and every operation asks for the cost of its work factor; the
+//! one engine that runs below the cost it is asked for is a test engine, in no release build
+//! (scripts/check-release-artifacts.sh looks for its marker). Natively they run the vendored C
+//! code on this processor, on each copy of its core that the processor can run, behind the guard
+//! the engine puts around every call (a key left unwritten or set to zeros is refused), and
+//! confirm that the C code wiped its memory after each call.
 //! In a browser they run the page's Emscripten build of the same code through the bridge every
 //! operation uses.
 

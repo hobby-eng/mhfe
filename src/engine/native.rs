@@ -23,7 +23,6 @@ pub fn available_memory_bytes() -> Option<u64> {
 
 /// Argon2id on the reference C code with its four lanes in parallel threads.
 pub struct NativeEngine {
-    cost: Argon2Cost,
     work_area: WorkArea,
     /// Whether the Argon2 core runs its SSSE3 copy; see src/engine/argon2_simd.c.
     ssse3: bool,
@@ -62,23 +61,13 @@ impl NativeEngine {
     /// operation then reuses it.
     pub fn new(work: WorkFactor) -> Result<Self, MhfeError> {
         check_can_run(work)?;
-        Self::allocate(work.argon2_cost())
+        Self::allocate(work.memory_bytes())
     }
 
-    /// A much cheaper engine for fast unit tests. It exists only in test builds; the release
-    /// check `scripts/check-release-artifacts.sh` looks for [`REDUCED_COST_MARKER`] to prove it.
-    #[cfg(test)]
-    pub(crate) fn reduced_for_tests(cost: Argon2Cost) -> Result<Self, MhfeError> {
-        assert!(!REDUCED_COST_MARKER.is_empty());
-        check_free_memory(cost.memory_bytes())?;
-        Self::allocate(cost)
-    }
-
-    fn allocate(cost: Argon2Cost) -> Result<Self, MhfeError> {
-        let work_area = WorkArea::allocate(cost.memory_bytes())?;
+    /// Reserves `bytes` once, for every call, without the checks of [`NativeEngine::new`].
+    pub(crate) fn allocate(bytes: u64) -> Result<Self, MhfeError> {
         Ok(Self {
-            cost,
-            work_area,
+            work_area: WorkArea::allocate(bytes)?,
             ssse3: processor_has_ssse3(),
         })
     }
@@ -96,14 +85,18 @@ fn check_free_memory(needed_bytes: u64) -> Result<(), MhfeError> {
     }
 }
 
+// A deliberate copy of the trait's signature, which an implementation repeats.
 impl Argon2Engine for NativeEngine {
-    fn derive(
+    fn argon2id(
         &mut self,
         password: &[u8],
         salt: &[u8; SALT_BYTES],
+        memory_kib: u32,
+        passes: u32,
         key: &mut [u8; KEY_BYTES],
     ) -> Result<(), MhfeError> {
-        let inputs = mhfe_inputs(password, salt, self.cost, self.ssse3);
+        let cost = Argon2Cost { memory_kib, passes };
+        let inputs = mhfe_inputs(password, salt, cost, self.ssse3);
         guarded_call(ffi::argon2id, &inputs, &mut self.work_area, key)
     }
 }
@@ -150,26 +143,22 @@ pub(super) fn mhfe_inputs<'a>(
     }
 }
 
-/// Present only in test builds. A release binary or WebAssembly module that contains this text
-/// would contain the reduced test engine, and the release check fails.
-#[cfg(test)]
-#[used]
-pub(crate) static REDUCED_COST_MARKER: &str = "MHFE-TEST-ONLY-REDUCED-ARGON2-COST";
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn derives_the_same_key_as_the_c_reference_at_a_small_cost() {
-        let cost = Argon2Cost {
-            memory_kib: 1024,
-            passes: 1,
-        };
-        let mut engine = NativeEngine::reduced_for_tests(cost).unwrap();
+        let mut engine = NativeEngine::allocate(1 << 20).unwrap();
         let mut key = [0u8; KEY_BYTES];
         engine
-            .derive(b"public test password", b"0123456789abcdef", &mut key)
+            .argon2id(
+                b"public test password",
+                b"0123456789abcdef",
+                1024,
+                1,
+                &mut key,
+            )
             .unwrap();
         // Same inputs as `cargo xtask package-check`, tag computed with OpenSSL.
         assert_eq!(
@@ -183,15 +172,10 @@ mod tests {
         let Some(available) = available_memory_bytes() else {
             return; // This platform reports no figure; nothing to check.
         };
-        let too_much = Argon2Cost {
-            memory_kib: u32::try_from((available / 1024).saturating_add(1024 * 1024))
-                .unwrap_or(u32::MAX),
-            passes: 1,
-        };
-        match NativeEngine::reduced_for_tests(too_much) {
+        match check_free_memory(available.saturating_add(1 << 30)) {
             Err(MhfeError::NotEnoughMemory { .. }) => {}
             Err(other) => panic!("unexpected error: {other}"),
-            Ok(_) => panic!("more memory than available was accepted"),
+            Ok(()) => panic!("more memory than available was accepted"),
         }
     }
 
@@ -200,10 +184,17 @@ mod tests {
     #[test]
     #[ignore = "full-size Argon2id: 2 GiB and several seconds"]
     fn full_size_call_matches_openssl() {
-        let mut engine = NativeEngine::new(WorkFactor::default()).unwrap();
+        let work = WorkFactor::default();
+        let mut engine = NativeEngine::new(work).unwrap();
         let mut key = [0u8; KEY_BYTES];
         engine
-            .derive(b"public test password", b"0123456789abcdef", &mut key)
+            .argon2id(
+                b"public test password",
+                b"0123456789abcdef",
+                work.memory_kib(),
+                work.passes(),
+                &mut key,
+            )
             .unwrap();
         assert_eq!(
             hex::encode(key),

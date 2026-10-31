@@ -98,42 +98,9 @@ pub fn unpack(state: &State, words: usize) -> Result<&[u8], MhfeError> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
-
-    /// Public states that pass two short checks at once. Each packs a short phrase whose state
-    /// happens to carry a valid 21-word verifier too, which occurs for about one state in 2^32;
-    /// they were found by searching counters after the ASCII text "MHFE ambiguous".
-    pub(crate) const AMBIGUOUS_STATES: [(&str, [usize; 2]); 3] = [
-        (
-            "4d48464520616d62000000004dda455a85b22f09e43e0ae5de9322dce19210ad",
-            [12, 21],
-        ),
-        (
-            "4d48464520616d626967756f00000000d7215b3cc350c32cc955fd4e3e272edf",
-            [15, 21],
-        ),
-        (
-            "4d48464520616d626967756f7573207400000000643a0b3e565fd3c1659f6749",
-            [18, 21],
-        ),
-    ];
-
-    pub(crate) fn state_from_hex(text: &str) -> State {
-        hex::decode(text).unwrap().try_into().unwrap()
-    }
-
-    /// A packed state as the fixed array that `unpack` and detection read.
-    pub(crate) fn state_of(packed: &LockedBytes) -> &State {
-        packed[..].try_into().unwrap()
-    }
-
-    /// Public test entropy of `length` bytes, every byte different.
-    pub(crate) fn entropy(length: usize) -> Vec<u8> {
-        (0..length)
-            .map(|index| (index as u8).wrapping_mul(17).wrapping_add(3))
-            .collect()
-    }
+    use crate::test_support::{entropy, state_of};
 
     #[test]
     fn short_phrases_get_a_sha256_verifier() {

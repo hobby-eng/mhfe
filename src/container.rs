@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn an_original_names_the_other_lengths_detection_would_take() {
-        use crate::packing::tests::{state_from_hex, AMBIGUOUS_STATES};
+        use crate::test_support::{state_from_hex, AMBIGUOUS_STATES};
         for (text, [short, long]) in AMBIGUOUS_STATES {
             let state = state_from_hex(text);
             let bytes = packing::entropy_bytes(short).unwrap();

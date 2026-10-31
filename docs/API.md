@@ -588,9 +588,10 @@ The parts, by identifier and label, and what each compares:
   not available in WebAssembly and outside Unix.
 
 The Argon2 checks are closed: their inputs are private constants, they take no cost and no password
-and give only an outcome, so they cannot encrypt anything, and no release build holds an engine
-that computes Argon2 below MHFE's cost (`scripts/check-release-artifacts.sh` looks for the marker
-of the test-only engine). `engine::NativeArgon2Check::default()` starts four threads per call and
+and give only an outcome, so they cannot encrypt anything. An `engine::Argon2Engine` takes its cost
+with every call, and every operation asks for the cost of its work factor; no release build holds
+the test-only engine that runs below the cost it is asked for (`scripts/check-release-artifacts.sh`
+looks for its marker). `engine::NativeArgon2Check::default()` starts four threads per call and
 joins them before it returns. A process can enter its own network namespace only while it has a
 single thread, so a command started directly runs its checks at start after it has entered its own
 namespace, where the system allows one. The start menu runs them once before it opens, in its own

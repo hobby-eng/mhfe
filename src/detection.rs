@@ -101,8 +101,8 @@ impl<'a> LengthDetection<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::packing::tests::{entropy, state_from_hex, state_of, AMBIGUOUS_STATES};
     use crate::packing::{pack, STATE_BYTES};
+    use crate::test_support::{entropy, state_from_hex, state_of, AMBIGUOUS_STATES};
 
     #[test]
     fn detection_finds_the_packed_length() {

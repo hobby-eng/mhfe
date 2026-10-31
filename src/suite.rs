@@ -1,7 +1,6 @@
 //! The two suites and their two settings (specification: "Suite parameters", "Suite 4" and
 //! "Work factor").
 
-use crate::engine::Argon2Cost;
 use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
 use crate::MhfeError;
 
@@ -186,14 +185,6 @@ impl WorkFactor {
             DEFAULT_SECONDS_LOW * scale / default_memory_kib,
             DEFAULT_SECONDS_HIGH * scale / default_memory_kib,
         )
-    }
-
-    /// Memory and passes of every Argon2id call at these settings.
-    pub fn argon2_cost(self) -> Argon2Cost {
-        Argon2Cost {
-            memory_kib: self.memory_kib(),
-            passes: self.passes(),
-        }
     }
 }
 
