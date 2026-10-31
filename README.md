@@ -944,8 +944,9 @@ program and the WebAssembly (`packaging/remap-builder-paths.sh`), so they refuse
 cargo test --locked          # fast tests with reduced Argon2 cost
 scripts/check.sh             # lints, tests, builds, browser package; not the full-size vectors
 dprint check                 # dprint 0.63.0: Markdown, JSON, TOML and YAML (dprint.json)
-# After check.sh: the browser package in the pinned Chrome and Firefox, unpacked in DIR as CI's
-# browser step does (the versions are in xtask/src/browser.rs).
+# After check.sh: the browser package in the pinned Chrome and Firefox, unpacked in DIR as
+# .github/actions/browser-checks does (the versions are in xtask/src/browser.rs).
+MHFE_BROWSERS=DIR cargo xtask package-check
 MHFE_BROWSERS=DIR cargo xtask browsers
 # The published vectors at full size: about an hour for suite 3, half an hour for suite 4.
 cargo test --locked --release --test suite3_vectors -- --ignored --nocapture

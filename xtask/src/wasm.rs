@@ -13,6 +13,7 @@
 
 mod manifest;
 mod network;
+mod other_build;
 mod stamp;
 mod verify;
 
@@ -21,6 +22,9 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 
 use crate::{Failure, at};
+
+pub(crate) use other_build::{OTHER_BUILD, stamp_other_build};
+pub(crate) use verify::vector_texts;
 
 /// The custom section of `runtime/mhfe.wasm` that names the build; web/worker-runtime.js reads it.
 const BUILD_SECTION: &str = "mhfe-build";
@@ -39,7 +43,11 @@ pub(crate) fn run(root: &Path, arguments: &[String]) -> Result<(), Failure> {
         [step, kind, files @ ..] if step == "remove-network-code" && !files.is_empty() => {
             network::run(kind, files)
         }
-        [step, folder] if step == "stamp-build-id" => stamp::run(Path::new(folder)),
+        [step, folder] if step == "stamp-build-id" => {
+            let build = stamp::run(Path::new(folder))?;
+            println!("Stamped build {build} into the package.");
+            Ok(())
+        }
         [step, folder] if step == "package-manifest" => manifest::run(root, Path::new(folder)),
         [step, folder] if step == "verify" => verify::run(root, Path::new(folder)),
         _ => Err(Failure(USAGE.to_owned())),

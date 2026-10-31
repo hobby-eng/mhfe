@@ -55,8 +55,7 @@ target_dir="${CARGO_TARGET_DIR:-target}"
 # the canonical build. A caller that already remapped, as scripts/check.sh and the Dockerfile do,
 # gets nothing twice. It refuses RUSTFLAGS and CARGO_ENCODED_RUSTFLAGS, which would replace the
 # remapping; extra flags go into CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS instead.
-# scripts/verify-browser-package.mjs refuses a WebAssembly that names any other absolute source
-# path.
+# `cargo xtask wasm verify` refuses a WebAssembly that names any other absolute source path.
 . packaging/remap-builder-paths.sh
 remap_builder_paths "$repo_root"
 

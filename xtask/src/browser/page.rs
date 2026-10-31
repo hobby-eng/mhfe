@@ -10,7 +10,7 @@
 //! So that Argon2 takes seconds, a test-only wrapper in the page's copy of the worker runs it with
 //! 256 KiB and one pass instead of the 2 GiB and twelve passes of suite 3, after checking that the
 //! core asked for those. The container must then be REDUCED_COST_CONTAINER, which the native tests
-//! (src/mhfe.rs) and scripts/verify-browser-package.mjs check at the same cost; the same-length
+//! (src/mhfe.rs) and `cargo xtask package-check` check at the same cost; the same-length
 //! container must be REDUCED_COST_SAME_LENGTH_CONTAINER of src/mhfe.rs at that cost. The same
 //! wrapper stands for a browser that cannot give the memory, for one marker password and one marker
 //! container. A run takes a few minutes, mostly for the two phrases per page drawn to pass the
@@ -99,13 +99,16 @@ pub(super) fn page(dist: &Path) -> Result<String, Failure> {
         classes(dist)?,
         sources(dist)?
     );
+    let sources = format!("'sha256-{}' 'wasm-unsafe-eval'", hash(&module));
+    Ok(document(&sources, "<script type=\"module\">", &module))
+}
+
+/// The page whose body runs the event recorder and then `script`, opened by `opening`, under the
+/// Content-Security-Policy of the offline wallet tools, its scripts the recorder and `sources`.
+pub(super) fn document(sources: &str, opening: &str, script: &str) -> String {
     let policy = [
         "default-src 'none'".to_owned(),
-        format!(
-            "script-src 'sha256-{}' 'sha256-{}' 'wasm-unsafe-eval'",
-            hash(EVENTS),
-            hash(&module)
-        ),
+        format!("script-src 'sha256-{}' {sources}", hash(EVENTS)),
         "connect-src 'none'".to_owned(),
         "worker-src blob:".to_owned(),
         "object-src 'none'".to_owned(),
@@ -113,18 +116,18 @@ pub(super) fn page(dist: &Path) -> Result<String, Failure> {
         "form-action 'none'".to_owned(),
     ]
     .join("; ");
-    Ok(format!(
+    format!(
         "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    \
          <meta http-equiv=\"Content-Security-Policy\" content=\"{policy}\" />\n    \
          <title>MHFE browser check</title>\n  </head>\n  <body>\n    \
          <script>{EVENTS}</script>\n    \
-         <script type=\"module\">{module}</script>\n  </body>\n</html>\n"
-    ))
+         {opening}{script}</script>\n  </body>\n</html>\n"
+    )
 }
 
 /// The runtime and the class files as one module's text: each class file without its lists that
 /// import or export from the runtime, whose names are in the same module then.
-fn classes(dist: &Path) -> Result<String, Failure> {
+pub(super) fn classes(dist: &Path) -> Result<String, Failure> {
     let mut parts = vec![text(&dist.join("runtime/runtime.js"))?];
     for path in CLASSES {
         parts.push(without_runtime_lists(&text(&dist.join(path))?));
@@ -134,8 +137,7 @@ fn classes(dist: &Path) -> Result<String, Failure> {
 
 /// `text` without the lists that start a line with `import {` or `export {` and whose first `}`
 /// ends RUNTIME_LIST_END. A deliberate copy of the rule of scripts/bundle-browser-classes.mjs,
-/// which the package checks still running in Node use until they are ported: a change goes to
-/// both.
+/// which scripts/build-browser-check.mjs uses until it is ported: a change goes to both.
 fn without_runtime_lists(text: &str) -> String {
     let mut kept = String::with_capacity(text.len());
     let mut at = 0;
@@ -158,21 +160,11 @@ fn without_runtime_lists(text: &str) -> String {
 /// The page's `const` lines: the version and the build of the package, its WebAssembly and
 /// Argon2 builds, the worker with the reduced-cost wrapper, and the fixed data in between.
 fn sources(dist: &Path) -> Result<String, Failure> {
-    let data: Vec<(&str, &str)> = PAGE_DATA
-        .lines()
-        .filter_map(|line| Some((line.strip_prefix("const ")?.split_once(" = ")?.0, line)))
-        .collect();
-    let line_of = |name: &str| {
-        data.iter()
-            .find(|(own, _)| *own == name)
-            .map(|(_, line)| *line)
-            .ok_or_else(|| Failure(format!("xtask/pages/page-data.js holds no {name}")))
-    };
     let manifest: Value = serde_json::from_str(&text(&dist.join("modules.json"))?)
         .map_err(|error| at(&dist.join("modules.json"), error))?;
     let mut wrapper = WRAPPER.to_owned();
     for name in WRAPPER_VALUES {
-        let value = line_of(name)?
+        let value = data_line(name)?
             .split_once(" = ")
             .map_or("", |(_, value)| value);
         let value = value.strip_suffix(';').unwrap_or(value);
@@ -184,7 +176,7 @@ fn sources(dist: &Path) -> Result<String, Failure> {
     let mut lines = vec![
         constant("VERSION", &manifest["version"]),
         constant("PACKAGE_BUILD_ID", &manifest["buildId"]),
-        line_of("SELF_CHECK")?.replace('<', "\\u003c"),
+        data_line("SELF_CHECK")?.replace('<', "\\u003c"),
         constant("WORKER_SOURCE", &Value::from(worker)),
         constant("WASM_BASE64", &Value::from(base64(&wasm))),
         constant(
@@ -197,14 +189,29 @@ fn sources(dist: &Path) -> Result<String, Failure> {
         ),
     ];
     // The fixed lines as safe in a script element as the computed ones: "</script" cannot appear.
-    let rest = data.iter().filter(|(name, _)| *name != "SELF_CHECK");
+    let rest = data_lines().filter(|(name, _)| *name != "SELF_CHECK");
     lines.extend(rest.map(|(_, line)| line.replace('<', "\\u003c")));
     Ok(format!("\n{}\n", lines.join("\n")))
 }
 
+/// The `const` lines of PAGE_DATA with their names.
+fn data_lines() -> impl Iterator<Item = (&'static str, &'static str)> {
+    PAGE_DATA
+        .lines()
+        .filter_map(|line| Some((line.strip_prefix("const ")?.split_once(" = ")?.0, line)))
+}
+
+/// The `const` line of PAGE_DATA that sets `name`.
+pub(super) fn data_line(name: &str) -> Result<&'static str, Failure> {
+    data_lines()
+        .find(|(own, _)| *own == name)
+        .map(|(_, line)| line)
+        .ok_or_else(|| Failure(format!("xtask/pages/page-data.js holds no {name}")))
+}
+
 /// The line `const NAME = value;`, the value as JSON that is safe in a script element: `<` is
 /// escaped, so that "</script" cannot appear.
-fn constant(name: &str, value: &Value) -> String {
+pub(super) fn constant(name: &str, value: &Value) -> String {
     format!(
         "const {name} = {};",
         value.to_string().replace('<', "\\u003c")
@@ -212,17 +219,17 @@ fn constant(name: &str, value: &Value) -> String {
 }
 
 /// The text of `path`.
-fn text(path: &Path) -> Result<String, Failure> {
+pub(super) fn text(path: &Path) -> Result<String, Failure> {
     std::fs::read_to_string(path).map_err(|error| at(path, error))
 }
 
 /// The SHA-256 of `script` in base64, as a Content-Security-Policy names a script.
-fn hash(script: &str) -> String {
+pub(super) fn hash(script: &str) -> String {
     base64(&Sha256::digest(script.as_bytes()))
 }
 
 /// `bytes` in base64 with padding, as RFC 4648 writes it.
-fn base64(bytes: &[u8]) -> String {
+pub(super) fn base64(bytes: &[u8]) -> String {
     let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         let bits = chunk

@@ -9,7 +9,9 @@
 //!   rehearsal's known answers;
 //! - one build: the WebAssembly's one `mhfe-build` section and the build constant of every script
 //!   name the build of `modules.json`, the one derived again from the files with their stamps
-//!   taken out;
+//!   taken out, and the WebAssembly without its stamp is what wasm-bindgen wrote;
+//! - the stamp changes the build for a change of one script, and refuses a package stamped already
+//!   and a script without its build constant;
 //! - the sources that the page and the worker share by copy agree: the secret fields they wipe,
 //!   the advice of PACKAGE_MISMATCH and the news that the worker scripts post.
 //!
@@ -18,8 +20,10 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use super::stamp::{BUILD_ID_DIGITS, SCRIPTS, WASM_FILE, build_id, section};
-use super::{BUILD_SECTION, custom_sections, manifest, network::network_code, read, text};
+use super::stamp::{BUILD_ID_DIGITS, SCRIPTS, UNSTAMPED, WASM_FILE, build_id, section};
+use super::{
+    BUILD_SECTION, custom_sections, manifest, network::network_code, read, stamp_other_build, text,
+};
 use crate::Failure;
 
 /// Where rustc puts the standard library's sources and its dependencies' itself.
@@ -75,8 +79,9 @@ pub(super) fn run(root: &Path, folder: &Path) -> Result<(), Failure> {
         }
     }
     let build = manifest::build_of(folder)?;
-    check_build(folder, &build)?;
+    check_build(root, folder, &build)?;
     check_sources(root)?;
+    stamp_other_build(root, folder)?;
     println!(
         "The browser package's manifest, build, WebAssembly paths and scripts pass their checks."
     );
@@ -95,7 +100,7 @@ fn scripts(folder: &Path) -> Result<Vec<String>, Failure> {
 }
 
 /// Fails with `message` when `condition` does not hold.
-fn ensure(condition: bool, message: impl FnOnce() -> String) -> Result<(), Failure> {
+pub(super) fn ensure(condition: bool, message: impl FnOnce() -> String) -> Result<(), Failure> {
     if condition {
         Ok(())
     } else {
@@ -105,7 +110,7 @@ fn ensure(condition: bool, message: impl FnOnce() -> String) -> Result<(), Failu
 
 /// Checks that the WebAssembly's one build section and every script's build constant name
 /// `build`, and that `build` is the build of the files with their stamps taken out.
-fn check_build(folder: &Path, build: &str) -> Result<(), Failure> {
+fn check_build(root: &Path, folder: &Path, build: &str) -> Result<(), Failure> {
     let hex = build.len() == BUILD_ID_DIGITS
         && build
             .bytes()
@@ -113,6 +118,21 @@ fn check_build(folder: &Path, build: &str) -> Result<(), Failure> {
     ensure(hex, || {
         format!("the build {build} is not {BUILD_ID_DIGITS} hex digits")
     })?;
+    let (wasm, scripts) = unstamped(folder, build)?;
+    let bindgen = root.join("target/wasm-bindgen/mhfe_bg.wasm");
+    ensure(read(&bindgen)? == wasm, || {
+        format!("{WASM_FILE} without its build is not {}", bindgen.display())
+    })?;
+    let derived = build_id(&wasm, &scripts);
+    ensure(derived == build, || {
+        format!("the files give the build {derived}, not {build}")
+    })
+}
+
+/// The WebAssembly and the scripts of SCRIPTS of the package in `folder` as they were before
+/// `build` was stamped into them, after checking that the WebAssembly's one build section and every
+/// script's build constant name `build`.
+pub(super) fn unstamped(folder: &Path, build: &str) -> Result<(Vec<u8>, Vec<String>), Failure> {
     let wasm_path = folder.join(WASM_FILE);
     let wasm = read(&wasm_path)?;
     let sections = custom_sections(&wasm, BUILD_SECTION, &wasm_path)?;
@@ -135,13 +155,10 @@ fn check_build(folder: &Path, build: &str) -> Result<(), Failure> {
         })?;
         let last = path.contains("argon2") && !script.ends_with(&format!("\n{stamped}\n"));
         ensure(!last, || format!("{path} does not end with its build"))?;
-        let development = format!("{constant} = \"development\";");
+        let development = format!("{constant} = {UNSTAMPED}");
         scripts.push(script.replacen(&stamped, &development, 1));
     }
-    let derived = build_id(unstamped, &scripts);
-    ensure(derived == build, || {
-        format!("the files give the build {derived}, not {build}")
-    })
+    Ok((unstamped.to_vec(), scripts))
 }
 
 /// Checks that `wasm` names no folder of this machine and no absolute source path but rustc's
@@ -270,7 +287,7 @@ fn registry_path(wasm: &[u8]) -> bool {
 
 /// The vector texts of KNOWN_ANSWERS: their strings of 8 characters or more that hold a digit and
 /// no space (an address, a digest, a seed or a path) or 12 words or more (a phrase).
-fn vector_texts(root: &Path) -> Result<Vec<String>, Failure> {
+pub(crate) fn vector_texts(root: &Path) -> Result<Vec<String>, Failure> {
     let mut vectors = Vec::new();
     for file in KNOWN_ANSWERS {
         for string in rust_strings(&text(&root.join(file))?) {

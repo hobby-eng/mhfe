@@ -709,7 +709,7 @@ mod tests {
     }
 
     /// The same container must come out of every engine at this reduced cost: the native build
-    /// here, and both Emscripten builds in scripts/verify-browser-package.mjs.
+    /// here, and both Emscripten builds in `cargo xtask package-check`.
     pub(crate) const REDUCED_COST_CONTAINER: &str =
         "slush crime nose carry menu cabbage already cart \
         lock intact focus siren filter crouch buyer toward topple cup holiday avoid mango envelope \

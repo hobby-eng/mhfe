@@ -21,8 +21,6 @@ RUN scripts/build-argon2-wasm.sh
 
 FROM buildpack-deps:noble@sha256:27bdb6ab1ca0df6acfe341752ee4d9c08a341d80e3ee75ccc3b34b79af0dfaf1 AS toolchain
 
-ARG NODE_VERSION=26.12.1
-ARG NODE_ARCHIVE_SHA256=6170b2d474e1c626f43cff3adc118df9fe3b573258a4fc3d850c8dbc6b079bbd
 ARG RUSTUP_VERSION=1.29.2
 ARG RUSTUP_INIT_SHA256=5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4
 # Ubuntu archive snapshot for the cross compilers, so that their versions never change.
@@ -50,14 +48,6 @@ RUN for suite in noble noble-updates noble-security; do \
     && apt-get install --yes --no-install-recommends \
          gcc-aarch64-linux-gnu libc6-dev-arm64-cross gcc-mingw-w64-x86-64 zip \
     && rm -rf /var/lib/apt/lists/*
-
-RUN curl --fail --silent --show-error --location \
-      "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
-      --output /tmp/node.tar.xz \
-    && echo "${NODE_ARCHIVE_SHA256}  /tmp/node.tar.xz" | sha256sum --check --strict \
-    && tar --extract --xz --file /tmp/node.tar.xz --directory /usr/local --strip-components=1 \
-    && rm /tmp/node.tar.xz \
-    && test "$(node --version)" = "v${NODE_VERSION}"
 
 RUN curl --fail --silent --show-error --location \
       "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/x86_64-unknown-linux-gnu/rustup-init" \
@@ -93,7 +83,8 @@ COPY . .
 COPY --from=argon2-wasm /workspace/dist /prebuilt-argon2
 # Some of the checks of scripts/check.sh, those this stage needs before it builds, then the release
 # builds; the release workflow runs the whole of check.sh through ci.yml on the tagged
-# commit before it publishes (AUD-015-BLD002). No network from here on. Clippy also runs
+# commit before it publishes (AUD-015-BLD002), and the checks that run the browser package, which
+# need browsers, on the archive this stage makes. No network from here on. Clippy also runs
 # for both cross targets: the native run never sees code for Windows or ARM64 alone. Every build
 # writes the directories of the container under fixed names (packaging/remap-builder-paths.sh),
 # as a local build does, and scripts/check-release-artifacts.sh refuses a program or WebAssembly
@@ -112,8 +103,7 @@ RUN --network=none . packaging/remap-builder-paths.sh \
     && cargo build --locked --offline --release --target aarch64-unknown-linux-gnu \
     && cargo build --locked --offline --release --target x86_64-pc-windows-gnu \
     && PREBUILT_ARGON2_DIR=/prebuilt-argon2 scripts/build-wasm.sh \
-    && node scripts/verify-argon2-wasm.mjs \
-    && node scripts/verify-browser-package.mjs \
+    && cargo xtask wasm verify dist \
     && python3 scripts/verify-fast-mode-script.py \
     && scripts/check-release-artifacts.sh
 

@@ -1,14 +1,15 @@
 # Preparing and signing a release
 
-The branch CI must pass for the exact release commit, including Linux, Windows, macOS and the
-Chrome/Firefox browser checks. The tag workflow then runs every CI check again on the tagged
-commit (it calls `ci.yml`: `scripts/check.sh`, the Chrome/Firefox checks and the Windows and macOS
-tests with their terminal suites), builds the four canonical Docker archives and both macOS
-archives, audits dependencies, and creates a draft only once all of these jobs pass. Finish the
-draft locally so the OpenPGP private key never enters GitHub Actions. The same tag starts the Test
-vectors workflow on its own: it replays every full-cost suite 3 and suite 4 vector with the native
-and independent implementations in about three hours, and its result shows on the tag and in the
-README's badge; the draft does not wait for it.
+The branch CI must pass for the exact release commit, including Linux, Windows and macOS; the
+Chrome/Firefox checks run only by hand (a manual run of `ci.yml`) and for a tag. The tag workflow
+then runs every CI check again on the tagged commit (it calls `ci.yml`: `scripts/check.sh` and the
+Windows and macOS tests with their terminal suites), builds the four canonical Docker archives and
+both macOS archives, runs the Chrome/Firefox checks on the canonical browser archive, audits
+dependencies, and creates a draft only once all of these jobs pass. Finish the draft locally so
+the OpenPGP private key never enters GitHub Actions. The same tag starts the Test vectors workflow
+on its own: it replays every full-cost suite 3 and suite 4 vector with the native and independent
+implementations in about three hours, and its result shows on the tag and in the README's badge;
+the draft does not wait for it.
 
 Before tagging, publish curated notes in `docs/releases/v<version>.md`, check all new commit
 signatures and create a signed annotated tag matching `Cargo.toml`. Run the repository's

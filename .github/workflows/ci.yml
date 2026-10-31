@@ -72,47 +72,18 @@ jobs:
       - name: Install pinned wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
       # Formatting, clippy for native and WebAssembly, the fast tests (including the C/Rust
-      # Argon2 cross-check), both Emscripten builds under Node.js, the browser package and the
+      # Argon2 cross-check), the build and static checks of the browser package and the
       # release-artifact check. The full-size vector replay runs in vectors.yml.
       - name: Run all checks
         run: |
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           scripts/check.sh
-      # The browser package that check.sh built, in real Chrome and Firefox at a reduced Argon2
-      # cost: Blob workers under the wallet tools' Content-Security-Policy, standard and fast mode,
-      # cancellation and failing callbacks. The browsers are the archives that
-      # xtask/src/browser.rs names, checked against their SHA-256 and unpacked as it expects.
+      # The browser package that check.sh built, in real browsers: by hand only. A release runs
+      # these checks on its canonical archive (release.yml).
       - name: Check the browser package in Chrome and Firefox
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         timeout-minutes: 30
-        env:
-          MHFE_BROWSERS: ${{ runner.temp }}/browsers
-        run: |
-          mkdir -p "$MHFE_BROWSERS"
-          cd "$MHFE_BROWSERS"
-          get() {
-            mkdir -p "$1"
-            curl --fail --silent --show-error --location --proto '=https' --output "$1/$2" "$3"
-          }
-          chrome="https://storage.googleapis.com/chrome-for-testing-public/155.0.8059.79/linux64"
-          get chrome-155.0.8059.79 chrome-linux64.zip "$chrome/chrome-linux64.zip"
-          get chromedriver-155.0.8059.79 chromedriver-linux64.zip "$chrome/chromedriver-linux64.zip"
-          get firefox-158.0 firefox-158.0.tar.xz \
-            https://ftp.mozilla.org/pub/firefox/releases/158.0/linux-x86_64/en-US/firefox-158.0.tar.xz
-          get geckodriver-0.37.1 geckodriver-v0.37.1-linux64.tar.gz \
-            https://github.com/mozilla/geckodriver/releases/download/v0.37.1/geckodriver-v0.37.1-linux64.tar.gz
-          sha256sum --check --strict <<'SUMS'
-          bcd9a79130d7e44d70f93be87042e9bcee7fe0f0b3898e06b8c9bed5fb619dcd  chrome-155.0.8059.79/chrome-linux64.zip
-          876f0ea4095237bb3e93321d95758d38c9195989935d7bdc9f51d8e26bc6a3a1  chromedriver-155.0.8059.79/chromedriver-linux64.zip
-          9549b054ec4cf85f50f6a19d8c6fb79580312e71ebc4ec2cb217ec9af09dc12a  firefox-158.0/firefox-158.0.tar.xz
-          e815130ea95983e162ae91843b48d3a3ce991735635fce83a647afde21e09f7e  geckodriver-0.37.1/geckodriver-v0.37.1-linux64.tar.gz
-          SUMS
-          unzip -q chrome-155.0.8059.79/chrome-linux64.zip -d chrome-155.0.8059.79
-          unzip -q chromedriver-155.0.8059.79/chromedriver-linux64.zip -d chromedriver-155.0.8059.79
-          tar -xJf firefox-158.0/firefox-158.0.tar.xz -C firefox-158.0
-          tar -xzf geckodriver-0.37.1/geckodriver-v0.37.1-linux64.tar.gz -C geckodriver-0.37.1
-          cd "$GITHUB_WORKSPACE"
-          # The drivers' own messages tell why a browser did not start.
-          cargo xtask browsers || { tail -n 50 target/browser-check/*.log; exit 1; }
+        uses: ./.github/actions/browser-checks
 
   # The fast tests on Windows and macOS, and the hidden password input in each system's own
   # pseudo-terminal, with public test data only. The release builds for these systems come from

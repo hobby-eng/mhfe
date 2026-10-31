@@ -58,10 +58,9 @@ python3 scripts/verify-hidden-input.py "$target_dir/release/mhfe"
 
 scripts/build-wasm.sh
 # The built package's manifest, build, WebAssembly paths and scripts, without a JavaScript
-# engine; the checks that run its code follow.
+# engine. `cargo xtask package-check` and `cargo xtask browsers` run its code in real browsers, by
+# hand and for a release.
 cargo xtask wasm verify dist
-node scripts/verify-argon2-wasm.mjs
-node scripts/verify-browser-package.mjs
 # The program and the package give the same results, as both call the same library.
 node scripts/verify-cli-browser-parity.mjs "$target_dir/release/mhfe"
 python3 scripts/verify-fast-mode-script.py

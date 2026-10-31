@@ -1,6 +1,6 @@
 //! `cargo xtask browsers`: the browser package in real browsers, the pinned Chrome for Testing and
-//! Firefox, driven through WebDriver (`browser/webdriver.rs`). `scripts/verify-browser-package.mjs`
-//! checks the same code with a stand-in worker; this check adds what only a browser does: Blob
+//! Firefox, driven through WebDriver (`browser/webdriver.rs`). `cargo xtask package-check` checks
+//! the same code with a stand-in worker; this check adds what only the real worker does: Blob
 //! workers under the Content-Security-Policy of the offline wallet tools, the transfer of secrets
 //! to them, the threaded Argon2 build in a cross-origin isolated page, cancellation and the page's
 //! failing callbacks. Each browser opens the check page (`browser/page.rs`) twice: as a file
@@ -15,8 +15,10 @@
 //! before this check runs.
 //!
 //! MHFE_BROWSERS names the folder of the pinned browsers and drivers, each in a folder named after
-//! it and its version, as CI's browser step unpacks the archives it checks by their SHA-256.
+//! it and its version, as `.github/actions/browser-checks` unpacks the archives it checks by their
+//! SHA-256.
 
+pub(crate) mod package;
 mod page;
 mod server;
 mod webdriver;
@@ -113,24 +115,54 @@ impl Browser {
     }
 }
 
+/// The folder of the browser checks' files, made if it is not there.
+fn work_folder(root: &Path) -> Result<PathBuf, Failure> {
+    let work = root.join(WORK);
+    std::fs::create_dir_all(&work).map_err(|error| at(&work, error))?;
+    Ok(work)
+}
+
 /// Runs the browser checks.
 pub(crate) fn run(root: &Path) -> Result<(), Failure> {
-    let folder = std::env::var_os("MHFE_BROWSERS")
+    let folder = browsers_folder()?;
+    let page = page::page(&root.join("dist"))?;
+    let work = work_folder(root)?;
+    let page_file = work.join(PAGE_FILE);
+    std::fs::write(&page_file, &page).map_err(|error| at(&page_file, error))?;
+    let server = PageServer::start(page.into_bytes())?;
+    let fast_url = format!("http://127.0.0.1:{}/", server.port);
+    let modes = [("standard", file_url(&page_file)), ("fast", fast_url)];
+    if !check_pages(&folder, &work, &server, &modes)? {
+        return Err(Failure("The browser check failed.".to_owned()));
+    }
+    println!("The browser package passes its checks in Chrome and Firefox, in both modes.");
+    Ok(())
+}
+
+/// The folder of the pinned browsers and drivers, from MHFE_BROWSERS.
+fn browsers_folder() -> Result<PathBuf, Failure> {
+    std::env::var_os("MHFE_BROWSERS")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .ok_or_else(|| {
             Failure("MHFE_BROWSERS must name the folder of the pinned browsers".to_owned())
-        })?;
-    let page = page::page(&root.join("dist"))?;
-    let work = root.join(WORK);
-    std::fs::create_dir_all(&work).map_err(|error| at(&work, error))?;
-    let page_file = work.join(PAGE_FILE);
-    std::fs::write(&page_file, &page).map_err(|error| at(&page_file, error))?;
-    let server = PageServer::start(page.into_bytes())?;
-    let mut failed = false;
+        })
+}
+
+/// Opens each page of `modes`, a mode and its URL, in each browser of `folder` and prints its
+/// results and failures: those the page reports, the events its recorder caught, a mode other
+/// than the one the page was opened in, and in fast mode a request but the page's own. Returns
+/// whether every page passed.
+fn check_pages(
+    folder: &Path,
+    work: &Path,
+    server: &PageServer,
+    modes: &[(&str, String)],
+) -> Result<bool, Failure> {
+    let mut passed = true;
     for browser in [Browser::Chrome, Browser::Firefox] {
-        let (driver, capabilities) = browser.driver_and_capabilities(&folder);
-        let driver = Driver::start(&driver, &work)?;
+        let (driver, capabilities) = browser.driver_and_capabilities(folder);
+        let driver = Driver::start(&driver, work)?;
         let session = driver.session(capabilities).map_err(|failure| {
             Failure(format!(
                 "{failure}; the driver's messages are in {}",
@@ -141,10 +173,9 @@ pub(crate) fn run(root: &Path) -> Result<(), Failure> {
             .as_str()
             .unwrap_or("?")
             .to_owned();
-        let fast_url = format!("http://127.0.0.1:{}/", server.port);
-        for (mode, url) in [("standard", file_url(&page_file)), ("fast", fast_url)] {
+        for (mode, url) in modes {
             let before = server.requests().len();
-            session.navigate(&url)?;
+            session.navigate(url)?;
             let outcome = session.execute_async(WAIT)?;
             let check = &outcome["check"];
             let mut failures = strings(&check["failures"]);
@@ -170,14 +201,10 @@ pub(crate) fn run(root: &Path) -> Result<(), Failure> {
             for failure in &failures {
                 println!("  FAIL {failure}");
             }
-            failed |= !failures.is_empty();
+            passed &= failures.is_empty();
         }
     }
-    if failed {
-        return Err(Failure("The browser check failed.".to_owned()));
-    }
-    println!("The browser package passes its checks in Chrome and Firefox, in both modes.");
-    Ok(())
+    Ok(passed)
 }
 
 /// The `file:` URL of `path`, its bytes percent-encoded but for the unreserved characters and

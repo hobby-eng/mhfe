@@ -171,7 +171,7 @@ mod tests {
         engine
             .derive(b"public test password", b"0123456789abcdef", &mut key)
             .unwrap();
-        // Same inputs as scripts/verify-argon2-wasm.mjs, tag computed with OpenSSL.
+        // Same inputs as `cargo xtask package-check`, tag computed with OpenSSL.
         assert_eq!(
             hex::encode(key),
             "e0e8eba33f1404a83c911a324d9b49db83dae755f2bdfb4b63043ca5b7125df2"

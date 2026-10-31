@@ -20,7 +20,7 @@ use crate::self_check::{hex, ComponentCheck, ComponentOutcome, Tier};
 use crate::MhfeError;
 
 /// The public password and salt of the known answers below, the inputs that
-/// scripts/verify-argon2-wasm.mjs gives both Emscripten builds too.
+/// `cargo xtask package-check` gives both Emscripten builds too.
 const PASSWORD: &[u8] = b"public test password";
 const SALT: &[u8; SALT_BYTES] = b"0123456789abcdef";
 
@@ -38,7 +38,7 @@ impl KnownTag {
 }
 
 /// The tags were computed with OpenSSL through Python cryptography 46.0.5, an implementation
-/// independent of the reference C code (scripts/verify-argon2-wasm.mjs, lines 19 to 33).
+/// independent of the reference C code (knownTags in xtask/pages/package/checks/core.js).
 const SMALL: KnownTag = KnownTag {
     cost: Argon2Cost {
         memory_kib: 1024,

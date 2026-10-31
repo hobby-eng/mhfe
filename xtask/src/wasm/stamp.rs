@@ -38,12 +38,12 @@ pub(super) const SCRIPTS: [(&str, &str); 8] = [
     ("wallet/wallet.js", "const WALLET_BUILD_ID"),
 ];
 /// The value of a build constant before stamping, as in `const CLIENT_BUILD_ID = "development";`.
-const UNSTAMPED: &str = "\"development\";";
+pub(super) const UNSTAMPED: &str = "\"development\";";
 /// The characters that end a line, as for JavaScript's `^` and `$` in a multiline pattern.
 const LINE_ENDS: [char; 4] = ['\n', '\r', '\u{2028}', '\u{2029}'];
 
-/// Stamps the package in `folder`.
-pub(super) fn run(folder: &Path) -> Result<(), Failure> {
+/// Stamps the package in `folder` and returns its build.
+pub(super) fn run(folder: &Path) -> Result<String, Failure> {
     let wasm_path = folder.join(WASM_FILE);
     let mut wasm = read(&wasm_path)?;
     if !custom_sections(&wasm, BUILD_SECTION, &wasm_path)?.is_empty() {
@@ -73,8 +73,7 @@ pub(super) fn run(folder: &Path) -> Result<(), Failure> {
     }
     wasm.extend(section(&build_id));
     write(&wasm_path, wasm)?;
-    println!("Stamped build {build_id} into the package.");
-    Ok(())
+    Ok(build_id)
 }
 
 /// The build of a package whose files before stamping are `wasm` and `scripts`, in the order of
