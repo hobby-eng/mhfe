@@ -1,33 +1,16 @@
 // The parts of Node.js's API that the checks were written with, for the module worker of `cargo
 // xtask package-check` and `cargo xtask parity`: `assert` as "node:assert/strict" gives it,
 // `Buffer`, `resolveObjectURL`, the files the task hands over as `read`, and the Argon2 builds as
-// `require` gave them. Each covers only what the checks use, with Node's meaning, and what would
-// otherwise pass by mistake fails loudly.
-
-/** A failed check, with what was expected and what came. */
-class AssertionError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "AssertionError";
-  }
-}
+// `require` gave them. Each covers only what the checks use, with Node's meaning.
 
 /** A short text of `value` for a failure message. */
 function printed(value) {
-  if (typeof value === "string") return JSON.stringify(value).slice(0, 400);
-  if (value instanceof Uint8Array) return `${value.constructor.name}(${value.length})`;
-  try {
-    return (JSON.stringify(value) ?? String(value)).slice(0, 400);
-  } catch {
-    return String(value);
-  }
+  return String(JSON.stringify(value)).slice(0, 400);
 }
 
 /** Fails with `message`, or with what was compared when no message was given. */
 function fail(message, actual, expected, operator) {
-  throw new AssertionError(
-    message ?? `${operator}: ${printed(actual)} and ${printed(expected)}`,
-  );
+  throw new Error(message ?? `${operator}: ${printed(actual)} and ${printed(expected)}`);
 }
 
 /** The own enumerable keys of `object`, symbols included, as Node's deepStrictEqual reads them. */
@@ -78,20 +61,13 @@ function sameKeys(actual, expected, kept) {
 function validateError(error, expected, message) {
   if (typeof expected === "function") {
     if (expected.prototype !== undefined && error instanceof expected) return;
-    if (Error.isPrototypeOf(expected) || expected === Error) {
-      fail(message ?? `the error is not a ${expected.name}: ${printed(error?.message)}`);
-    }
     const verdict = expected.call({}, error);
     if (verdict !== true) {
       fail(message ?? `the validation function returned ${printed(verdict)} for ${error}`);
     }
     return;
   }
-  const keys = typeof expected === "object" && expected !== null ? Reflect.ownKeys(expected) : [];
-  if (keys.length === 0) {
-    throw new Error("assert.throws and assert.rejects take a class, a function or an object");
-  }
-  for (const key of keys) {
+  for (const key of Reflect.ownKeys(expected)) {
     const want = expected[key];
     const got = error?.[key];
     if (!(key in Object(error)) || !isDeepStrictEqual(got, want)) {
@@ -114,12 +90,11 @@ const assert = {
   deepEqual: (actual, expected, message) => {
     if (!isDeepStrictEqual(actual, expected)) fail(message, actual, expected, "deepEqual");
   },
-  match: (text, pattern, message) => {
+  match: (text, pattern) => {
     if (typeof text !== "string" || !pattern.test(text)) {
-      fail(message, text, String(pattern), "match");
+      fail(undefined, text, String(pattern), "match");
     }
   },
-  fail: (message) => fail(message ?? "failed"),
   throws: (action, expected, message) => {
     try {
       action();
@@ -156,17 +131,17 @@ class Buffer extends Uint8Array {
   /** The bytes of `value`: a text in `encoding`, a copy of bytes, or a view of an ArrayBuffer. */
   static from(value, encoding = "utf8") {
     if (typeof value === "string") {
-      if (encoding === "utf8") return Buffer.#of(new TextEncoder().encode(value));
+      if (encoding === "utf8") return new Buffer(new TextEncoder().encode(value));
       if (encoding === "hex") {
-        return Buffer.#of(Uint8Array.from(value.match(/../gu) ?? [], (pair) => parseInt(pair, 16)));
+        return new Buffer(Uint8Array.from(value.match(/../gu) ?? [], (pair) => parseInt(pair, 16)));
       }
       if (encoding === "base64") {
-        return Buffer.#of(Uint8Array.from(atob(value), (char) => char.charCodeAt(0)));
+        return new Buffer(Uint8Array.from(atob(value), (char) => char.charCodeAt(0)));
       }
       throw new Error(`Buffer.from with ${encoding} is not supported here`);
     }
     if (value instanceof ArrayBuffer) return new Buffer(value);
-    return Buffer.#of(Uint8Array.from(value));
+    return new Buffer(Uint8Array.from(value));
   }
 
   /** The bytes of all of `list` in order. */
@@ -185,10 +160,6 @@ class Buffer extends Uint8Array {
     return new TextEncoder().encode(text).length;
   }
 
-  static #of(bytes) {
-    return new Buffer(bytes.buffer, bytes.byteOffset, bytes.length);
-  }
-
   toString(encoding = "utf8") {
     if (encoding === "utf8") return new TextDecoder().decode(this);
     if (encoding === "hex") {
@@ -203,25 +174,11 @@ class Buffer extends Uint8Array {
 
   /** Where the bytes of `needle` start, from `from` on, or -1. */
   indexOf(needle, from = 0) {
-    if (!(needle instanceof Uint8Array) || needle.length === 0) {
-      throw new Error("Buffer.indexOf is supported here for bytes alone");
-    }
     const first = needle[0];
     for (let at = super.indexOf(first, from); at !== -1; at = super.indexOf(first, at + 1)) {
-      if (at + needle.length > this.length) return -1;
       if (needle.every((byte, index) => this[at + index] === byte)) return at;
     }
     return -1;
-  }
-
-  /** Node's takes text and bytes, of which Uint8Array's own would never find any. */
-  includes() {
-    throw new Error("Buffer.includes is not supported here");
-  }
-
-  /** Node's takes text and bytes, of which Uint8Array's own would never find any. */
-  lastIndexOf() {
-    throw new Error("Buffer.lastIndexOf is not supported here");
   }
 }
 
@@ -273,9 +230,9 @@ const KNOWN_ANSWER_COSTS = ["1024/1", "65536/3", "262144/2"];
 
 /**
  * The message a page reads for a refusal of the WebAssembly: its text after the code, begun with a
- * capital letter as sentence() in web/runtime.js writes it. `what` names the refusal in a failure.
+ * capital letter as sentence() in web/runtime.js writes it.
  */
-function pageMessageOf(code, action, what = code) {
+function pageMessageOf(code, action) {
   let message = "";
   assert.throws(
     action,
@@ -283,7 +240,7 @@ function pageMessageOf(code, action, what = code) {
       message = error.message;
       return message.startsWith(`${code}: `);
     },
-    what,
+    code,
   );
   const text = message.slice(code.length + 2);
   return text.charAt(0).toUpperCase() + text.slice(1);

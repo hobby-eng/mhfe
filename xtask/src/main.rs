@@ -4,10 +4,9 @@
 //! - `browsers`: the browser package in the pinned Chrome and Firefox, through WebDriver.
 //! - `package-check [--full]`: the checks of the browser package that run its code, in the pinned
 //!   browsers.
-//! - `parity [PROGRAM]`: the command-line tool and the browser package give the same results, in the
-//!   pinned browsers.
-//! - `copies [--tokens N]`: code copied from one place to another (CORE-10) in `src/`, `web/` and
-//!   `xtask/src/`.
+//! - `parity`: the command-line tool and the browser package give the same results, in the pinned
+//!   browsers.
+//! - `copies`: code copied from one place to another (CORE-10) in `src/`, `web/` and `xtask/src/`.
 //! - `published-rounds [--check]`: writes `src/mhfe/published_rounds.rs` from the published
 //!   vectors in `tests/fixtures`; with `--check` it writes nothing and fails when the file differs
 //!   from what the fixtures give.
@@ -51,8 +50,8 @@ pub(crate) fn at(path: &Path, error: impl fmt::Display) -> Failure {
     Failure(format!("{}: {error}", path.display()))
 }
 
-const USAGE: &str = "usage: cargo xtask <browser-check-page | browsers | copies [--tokens N] | \
-                     package-check [--full] | parity [PROGRAM] | published-rounds [--check] | \
+const USAGE: &str = "usage: cargo xtask <browser-check-page | browsers | copies | \
+                     package-check [--full] | parity | published-rounds [--check] | \
                      release-artifacts --test-binary | \
                      package-release-args | wasm <step>>";
 
@@ -68,11 +67,10 @@ fn run(task: &str, arguments: &[String]) -> Result<(), Failure> {
     match (task, arguments) {
         ("browser-check-page", []) => browser::full_size::run(&root),
         ("browsers", []) => browser::run(&root),
-        ("copies", arguments) => copies::run(&root, arguments),
+        ("copies", []) => copies::run(&root),
         ("package-check", []) => browser::package::run(&root, false),
         ("package-check", [full]) if full == "--full" => browser::package::run(&root, true),
-        ("parity", []) => browser::parity::run(&root, &browser::parity::built_program(&root)),
-        ("parity", [program]) => browser::parity::run(&root, Path::new(program)),
+        ("parity", []) => browser::parity::run(&root),
         ("published-rounds", []) => published_rounds::run(&root, false),
         ("published-rounds", [check]) if check == "--check" => published_rounds::run(&root, true),
         ("release-artifacts", [mode]) if mode == "--test-binary" => release_artifacts::run(&root),

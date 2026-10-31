@@ -7,7 +7,7 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 
 use crate::{Failure, at};
 
@@ -23,8 +23,7 @@ const LEGAL: &[&str] = &["v0.0.0", OUTPUT, "browser", "linux-x86_64"];
 
 /// How one run of the script ended.
 struct Outcome {
-    /// The exit code, or `None` when a signal stopped the script.
-    code: Option<i32>,
+    status: ExitStatus,
     stderr: String,
     /// Whether the script created the output folder.
     created: bool,
@@ -35,23 +34,25 @@ pub(crate) fn run(root: &Path) -> Result<(), Failure> {
     let base = root.join("target").join("package-release-args");
     let mut failures = Vec::new();
     for arguments in REFUSED {
-        let outcome = package_release(root, &base, arguments, None)?;
-        if outcome.code != Some(2) || !outcome.stderr.contains("usage: ") || outcome.created {
+        let outcome = package_release(root, &base, arguments)?;
+        if outcome.status.code() != Some(2)
+            || !outcome.stderr.contains("usage: ")
+            || outcome.created
+        {
             failures.push(format!(
                 "{}: {}, output created: {}\n{}",
                 arguments.join(" "),
-                ended(outcome.code),
+                outcome.status,
                 outcome.created,
                 outcome.stderr
             ));
         }
     }
-    let legal = package_release(root, &base, LEGAL, Some("-C debuginfo=0"))?;
+    let legal = package_release(root, &base, LEGAL)?;
     if !legal.created || !legal.stderr.contains("RUSTFLAGS") {
         failures.push(format!(
             "a legal command line did not get past the check: {}\n{}",
-            ended(legal.code),
-            legal.stderr
+            legal.status, legal.stderr
         ));
     }
     if !failures.is_empty() {
@@ -64,23 +65,9 @@ pub(crate) fn run(root: &Path) -> Result<(), Failure> {
     Ok(())
 }
 
-/// How a run of the script ended, as a failure says it: its exit code, or that a signal stopped
-/// it.
-fn ended(code: Option<i32>) -> String {
-    code.map_or_else(
-        || "stopped by a signal".to_owned(),
-        |code| format!("exit {code}"),
-    )
-}
-
 /// Runs the script with `arguments`, `OUTPUT` replaced by a folder in a fresh `base`, and with
-/// RUSTFLAGS set to `rustflags` when given; `base` is removed afterwards.
-fn package_release(
-    root: &Path,
-    base: &Path,
-    arguments: &[&str],
-    rustflags: Option<&str>,
-) -> Result<Outcome, Failure> {
+/// RUSTFLAGS set.
+fn package_release(root: &Path, base: &Path, arguments: &[&str]) -> Result<Outcome, Failure> {
     let failed = |error: std::io::Error| at(base, error);
     if base.exists() {
         fs::remove_dir_all(base).map_err(failed)?;
@@ -98,17 +85,13 @@ fn package_release(
             command.arg(argument);
         }
     }
-    if let Some(flags) = rustflags {
-        command.env("RUSTFLAGS", flags);
-    }
     let result = command
+        .env("RUSTFLAGS", "-C debuginfo=0")
         .output()
         .map_err(|error| Failure(format!("bash scripts/package-release.sh: {error}")))?;
-    let outcome = Outcome {
-        code: result.status.code(),
+    Ok(Outcome {
+        status: result.status,
         stderr: String::from_utf8_lossy(&result.stderr).into_owned(),
         created: output.exists(),
-    };
-    fs::remove_dir_all(base).map_err(failed)?;
-    Ok(outcome)
+    })
 }

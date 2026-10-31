@@ -19,10 +19,9 @@
 //! `import(…)` and `import.meta` are code and are read.
 //!
 //! The same rule as mhfe-core's `cargo xtask copies` and MnemoCode's: a change of the rule goes to
-//! all three.
+//! all three. Those two also take `--tokens N`; here the threshold is MIN_TOKENS alone.
 //!
-//! Usage: `cargo xtask copies [--tokens N]`, N a whole number from 2, 50 by default. The controls
-//! that the checker must decide right are its unit tests.
+//! Usage: `cargo xtask copies`. The controls that the checker must decide right are its unit tests.
 
 mod tokens;
 
@@ -38,8 +37,6 @@ use tokens::{Language, Tokens};
 /// The shortest run of tokens that counts as a copy, about four to six lines of code: jscpd's
 /// default, below which the same few lines of ordinary code meet by chance.
 const MIN_TOKENS: usize = 50;
-/// The smallest threshold `--tokens` takes: with one token, every word used twice is a copy.
-const FEWEST_TOKENS: usize = 2;
 /// The folders read, from the root, and the endings of the files read in each.
 const SOURCES: [(&str, &[&str]); 3] = [
     ("src", &[".rs"]),
@@ -50,8 +47,6 @@ const SOURCES: [(&str, &[&str]); 3] = [
 const DATA_FILES: [&str; 1] = ["src/mhfe/published_rounds.rs"];
 /// Lines above a copy in which its marker may stand.
 const MARKER_LINES_ABOVE: usize = 3;
-/// The usage, said with a refused command line.
-const USAGE: &str = "usage: cargo xtask copies [--tokens N]";
 
 /// A source file: its path from the root, with `/` between its names, and its text.
 struct Source {
@@ -97,34 +92,14 @@ struct Copied<'a> {
     tokens: usize,
 }
 
-/// Runs the gate with its command line.
-pub(crate) fn run(root: &Path, arguments: &[String]) -> Result<(), Failure> {
-    let min_tokens = min_tokens(arguments)?;
+/// Runs the gate.
+pub(crate) fn run(root: &Path) -> Result<(), Failure> {
     let mut sources = Vec::new();
     for (folder, endings) in SOURCES {
         read_sources(root, folder, endings, &mut sources)?;
     }
-    println!("{}", verdict(&sources, min_tokens)?);
+    println!("{}", verdict(&sources)?);
     Ok(())
-}
-
-/// The threshold of the command line: `--tokens N` with N a whole number from 2, or nothing.
-/// Anything else is refused, so that a mistyped threshold never passes a check that looked at
-/// nothing.
-fn min_tokens(arguments: &[String]) -> Result<usize, Failure> {
-    let refused = || Failure(format!("{USAGE}: N is a whole number from {FEWEST_TOKENS}"));
-    match arguments {
-        [] => Ok(MIN_TOKENS),
-        // Digits only: Rust's own parsing also takes a leading `+`.
-        [option, number] if option == "--tokens" && number.bytes().all(|b| b.is_ascii_digit()) => {
-            number
-                .parse()
-                .ok()
-                .filter(|&tokens| tokens >= FEWEST_TOKENS)
-                .ok_or_else(refused)
-        }
-        _ => Err(refused()),
-    }
 }
 
 /// Adds every source file under `folder` with one of `endings` to `sources`, but the data files,
@@ -157,17 +132,12 @@ fn read_sources(
 
 /// The summary of a check that finds no copy among `sources`, or a failure that lists the copies
 /// it finds and says what to do with them.
-fn verdict(sources: &[Source], min_tokens: usize) -> Result<String, Failure> {
-    let copies = find_copies(sources, min_tokens);
+fn verdict(sources: &[Source]) -> Result<String, Failure> {
+    let copies = find_copies(sources);
     if copies.is_empty() {
         let files = sources.len();
-        let folders = SOURCES.map(|(folder, _)| format!("{folder}/"));
-        let folders = match folders.split_last() {
-            Some((last, others)) => format!("{} and {last}", others.join(", ")),
-            None => String::new(),
-        };
         return Ok(format!(
-            "No copies of {min_tokens} tokens or more in {files} files of {folders}."
+            "No copies of {MIN_TOKENS} tokens or more in {files} files."
         ));
     }
     let list: String = copies
@@ -175,28 +145,28 @@ fn verdict(sources: &[Source], min_tokens: usize) -> Result<String, Failure> {
         .map(|copy| format!("{} = {} ({} tokens)\n", copy.place, copy.other, copy.tokens))
         .collect();
     Err(Failure(format!(
-        "{list}{} copies of {min_tokens} tokens or more: move each into one function that both \
+        "{list}{} copies of {MIN_TOKENS} tokens or more: move each into one function that both \
          places call, or mark a deliberate one (see the top of {}).",
         copies.len(),
         file!(),
     )))
 }
 
-/// The copies of `min_tokens` tokens or more among `sources`, the longest first, with the
-/// deliberate ones left out.
-fn find_copies(sources: &[Source], min_tokens: usize) -> Vec<Copied<'_>> {
+/// The copies of MIN_TOKENS tokens or more among `sources`, the longest first, with the deliberate
+/// ones left out.
+fn find_copies(sources: &[Source]) -> Vec<Copied<'_>> {
     let files: Vec<Tokens> = sources
         .iter()
         .map(|source| tokens::read(&source.text, Language::of(&source.path)))
         .collect();
     let mut copies = Vec::new();
-    for ((a, b), mut starts) in runs(&files, min_tokens) {
+    for ((a, b), mut starts) in runs(&files) {
         starts.sort_unstable();
         // Consecutive windows that match at the same distance are one copy.
         for run in starts.chunk_by(|start, next| next.0 == start.0 + 1) {
             let (from, other_from) = run[0];
             let (last, other_last) = run[run.len() - 1];
-            let (to, other_to) = (last + min_tokens - 1, other_last + min_tokens - 1);
+            let (to, other_to) = (last + MIN_TOKENS - 1, other_last + MIN_TOKENS - 1);
             let place = Place::of(&sources[a].path, &files[a], from, to);
             let other = Place::of(&sources[b].path, &files[b], other_from, other_to);
             if !place.deliberate(&files[a]) && !other.deliberate(&files[b]) {
@@ -221,13 +191,13 @@ fn find_copies(sources: &[Source], min_tokens: usize) -> Vec<Copied<'_>> {
 /// distance from the first file to the second, each as the first token of both places.
 type Run = ((usize, usize), Vec<(usize, usize)>);
 
-/// Every pair of places of the same window of `min_tokens` tokens, by diagonal, in the order in
-/// which the windows and then the diagonals are first met: that order decides which place a place
-/// copied several times is named against. Every pair, not each place against the first, so that a
-/// first place marked as deliberate does not hide copies among the others.
-fn runs(files: &[Tokens], min_tokens: usize) -> Vec<Run> {
+/// Every pair of places of the same window of MIN_TOKENS tokens, by diagonal, in the order in which
+/// the windows and then the diagonals are first met: that order decides which place a place copied
+/// several times is named against. Every pair, not each place against the first, so that a first
+/// place marked as deliberate does not hide copies among the others.
+fn runs(files: &[Tokens]) -> Vec<Run> {
     let keys = numbered(files);
-    let mut windows: Vec<_> = windows(&keys, min_tokens).into_values().collect();
+    let mut windows: Vec<_> = windows(&keys).into_values().collect();
     windows.sort_unstable_by_key(|places| places.first().copied());
     let mut diagonals: HashMap<(usize, usize, isize), usize> = HashMap::new();
     let mut runs: Vec<Run> = Vec::new();
@@ -235,7 +205,7 @@ fn runs(files: &[Tokens], min_tokens: usize) -> Vec<Run> {
         for (index, &(file, start)) in places.iter().enumerate() {
             for &(other_file, other_start) in &places[index + 1..] {
                 // Overlapping windows of one file are one run of repeated tokens, not a copy.
-                if file == other_file && other_start - start < min_tokens {
+                if file == other_file && other_start - start < MIN_TOKENS {
                     continue;
                 }
                 let distance = other_start as isize - start as isize;
@@ -267,12 +237,12 @@ fn numbered(files: &[Tokens]) -> Vec<Vec<usize>> {
     numbered
 }
 
-/// Where every window of `min_tokens` tokens occurs, by its text: as (file, first token), in the
+/// Where every window of MIN_TOKENS tokens occurs, by its text: as (file, first token), in the
 /// order of the files and of their tokens.
-fn windows(keys: &[Vec<usize>], min_tokens: usize) -> HashMap<&[usize], Vec<(usize, usize)>> {
+fn windows(keys: &[Vec<usize>]) -> HashMap<&[usize], Vec<(usize, usize)>> {
     let mut windows: HashMap<&[usize], Vec<_>> = HashMap::new();
     for (file, keys) in keys.iter().enumerate() {
-        for (start, window) in keys.windows(min_tokens).enumerate() {
+        for (start, window) in keys.windows(MIN_TOKENS).enumerate() {
             windows.entry(window).or_default().push((file, start));
         }
     }
@@ -316,11 +286,7 @@ mod tests {
     }
 
     fn found(files: &[(&str, String)]) -> bool {
-        !find_copies(&sources(files), MIN_TOKENS).is_empty()
-    }
-
-    fn arguments(list: &[&str]) -> Vec<String> {
-        list.iter().map(|&argument| argument.to_owned()).collect()
+        !find_copies(&sources(files)).is_empty()
     }
 
     #[test]
@@ -473,13 +439,13 @@ mod tests {
             ("src/b.rs", function("b")),
             ("src/c.rs", function("c")),
         ];
-        assert_eq!(find_copies(&sources(&files), MIN_TOKENS).len(), 2);
+        assert_eq!(find_copies(&sources(&files)).len(), 2);
     }
 
     #[test]
     fn a_copy_is_reported_with_its_places_and_what_to_do() {
         let files = sources(&[("src/a.rs", function("a")), ("src/b.rs", function("b"))]);
-        let Err(Failure(message)) = verdict(&files, MIN_TOKENS) else {
+        let Err(Failure(message)) = verdict(&files) else {
             panic!("the copy is not found");
         };
         assert_eq!(
@@ -497,8 +463,8 @@ mod tests {
             ("xtask/src/b.rs", long_body(3, 12)),
         ]);
         assert_eq!(
-            verdict(&files, MIN_TOKENS).ok().as_deref(),
-            Some("No copies of 50 tokens or more in 2 files of src/, web/ and xtask/src/.")
+            verdict(&files).ok().as_deref(),
+            Some("No copies of 50 tokens or more in 2 files.")
         );
     }
 
@@ -567,42 +533,6 @@ mod tests {
                 ("web/a.js", a),
                 ("web/b.js", javascript_function("b"))
             ]));
-        }
-    }
-
-    #[test]
-    fn the_threshold_is_50_by_default_or_any_whole_number_from_2() {
-        assert_eq!(min_tokens(&[]).ok(), Some(50));
-        assert_eq!(min_tokens(&arguments(&["--tokens", "2"])).ok(), Some(2));
-        assert_eq!(min_tokens(&arguments(&["--tokens", "120"])).ok(), Some(120));
-    }
-
-    #[test]
-    fn a_bad_threshold_or_another_argument_is_refused() {
-        for list in [
-            &["--tokens", "NaN"][..],
-            &["--tokens", "Infinity"],
-            &["--tokens", "0"],
-            &["--tokens", "1"],
-            &["--tokens", "-5"],
-            &["--tokens", "+5"],
-            &["--tokens", "1.5"],
-            &["--tokens", ""],
-            &["--tokens"],
-            // Past the largest whole number the threshold can hold.
-            &["--tokens", "99999999999999999999999999"],
-            &["--tokens", "50", "--tokens", "50"],
-            // The script's self-test, now the unit tests.
-            &["--self-test"],
-            &["--other"],
-        ] {
-            let Err(Failure(message)) = min_tokens(&arguments(list)) else {
-                panic!("{} is accepted", list.join(" "));
-            };
-            assert_eq!(
-                message,
-                "usage: cargo xtask copies [--tokens N]: N is a whole number from 2"
-            );
         }
     }
 }

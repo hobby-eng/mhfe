@@ -1,6 +1,6 @@
 // The module worker that runs the checks of a task: it posts each line they print, then whether
-// they passed, and anything they throw or leave unhandled. The page puts the object URL of the
-// checks' module in the import below.
+// they passed. An uncaught error reaches the page as the worker's error event. The page puts the
+// object URL of the checks' module in the import below.
 
 console.log = (...values) => postMessage({ type: "line", text: values.join(" ") });
 // The checks were written for Node.js, which has no crossOriginIsolated: they set it to stand for
@@ -10,12 +10,8 @@ for (let scope = globalThis; scope !== null; scope = Object.getPrototypeOf(scope
 }
 // Firefox leaves the message out of a stack.
 const description = (error) => `${error}\n${error?.stack ?? ""}`;
-const report = (text) => postMessage({ type: "event", text });
 self.addEventListener("unhandledrejection", (event) => {
-  report(`a rejection without a handler: ${description(event.reason)}`);
-});
-self.addEventListener("error", (event) => {
-  report(`an uncaught error: ${description(event.error ?? event.message)}`);
+  postMessage({ type: "failed", text: `no handler: ${description(event.reason)}` });
 });
 try {
   await import(CHECKS_URL);

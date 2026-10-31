@@ -7,7 +7,6 @@ use std::io::{Read as _, Write as _};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
-use std::time::Duration;
 
 use crate::Failure;
 
@@ -16,10 +15,6 @@ const PAGE_HEADERS: &str = "Content-Type: text/html; charset=utf-8\r\n\
                             Cross-Origin-Opener-Policy: same-origin\r\n\
                             Cross-Origin-Embedder-Policy: require-corp\r\n\
                             Cache-Control: no-store\r\n";
-/// How long a connection may take to send its request.
-const REQUEST_TIME: Duration = Duration::from_secs(10);
-/// The most bytes of a request's head that are read.
-const MOST_HEAD_BYTES: usize = 16 * 1024;
 
 /// A server that runs on its own thread as long as the program.
 pub(crate) struct PageServer {
@@ -60,12 +55,9 @@ impl PageServer {
 
 /// Reads one request from `stream`, records its first line and answers it.
 fn answer(mut stream: TcpStream, page: &[u8], requests: &Mutex<Vec<String>>) {
-    if stream.set_read_timeout(Some(REQUEST_TIME)).is_err() {
-        return;
-    }
     let mut head = Vec::new();
     let mut byte = [0];
-    while !head.ends_with(b"\r\n\r\n") && head.len() < MOST_HEAD_BYTES {
+    while !head.ends_with(b"\r\n\r\n") {
         match stream.read(&mut byte) {
             Ok(1) => head.push(byte[0]),
             _ => break,
@@ -78,14 +70,10 @@ fn answer(mut stream: TcpStream, page: &[u8], requests: &Mutex<Vec<String>>) {
         .to_owned();
     let reply = if line.starts_with("GET / ") {
         let head = format!(
-            "HTTP/1.1 200 OK\r\n{PAGE_HEADERS}Content-Length: {}\r\n",
+            "HTTP/1.1 200 OK\r\n{PAGE_HEADERS}Content-Length: {}\r\nConnection: close\r\n\r\n",
             page.len()
         );
-        [
-            format!("{head}Connection: close\r\n\r\n").into_bytes(),
-            page.to_vec(),
-        ]
-        .concat()
+        [head.as_bytes(), page].concat()
     } else {
         b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec()
     };

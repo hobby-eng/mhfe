@@ -32,12 +32,11 @@ pub(crate) fn run(root: &Path) -> Result<(), Failure> {
         return Err(failed(&output.status));
     }
     let messages = String::from_utf8(output.stdout).map_err(|error| failed(&error))?;
-    for line in messages.lines().filter(|line| !line.trim().is_empty()) {
+    for line in messages.lines() {
         let message: Value = serde_json::from_str(line).map_err(|error| failed(&error))?;
         if message["reason"] == "compiler-artifact"
             && message["target"]["name"] == "mhfe"
             && let Some(executable) = message["executable"].as_str()
-            && !executable.is_empty()
         {
             println!("{executable}");
         }

@@ -9,10 +9,10 @@
 
 use std::path::Path;
 
-use super::page::{classes, data_line, hash, package_constants, policy, text};
+use super::page::{classes, data_line, hash, package_constants, policy};
 use super::work_folder;
-use crate::wasm::sha256_hex;
-use crate::{Failure, at};
+use crate::Failure;
+use crate::wasm::{sha256_hex, text, write};
 
 /// The page's checks.
 const CHECKS: &str = include_str!("../../pages/full-size-check.js");
@@ -32,14 +32,10 @@ const DIGEST_FILE: &str = "mhfe-fast-mode.sha256";
 pub(crate) fn run(root: &Path) -> Result<(), Failure> {
     let page = page(&root.join("dist"))?;
     let work = work_folder(root)?;
-    let write = |name: &str, content: &str| {
-        let path = work.join(name);
-        std::fs::write(&path, content).map_err(|error| at(&path, error))
-    };
-    write(PAGE_FILE, &page)?;
+    write(&work.join(PAGE_FILE), &page)?;
     // The fast-mode launchers serve only the page named in this file, with this exact digest.
     let digest = sha256_hex(page.as_bytes());
-    write(DIGEST_FILE, &format!("{digest}  {PAGE_FILE}\n"))?;
+    write(&work.join(DIGEST_FILE), format!("{digest}  {PAGE_FILE}\n"))?;
     println!(
         "Wrote {} ({} bytes) and {DIGEST_FILE}",
         work.join(PAGE_FILE).display(),

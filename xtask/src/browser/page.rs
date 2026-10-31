@@ -29,6 +29,7 @@ use std::path::Path;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::wasm::text;
 use crate::{Failure, at};
 
 /// The checks: the body of the function that the page calls, in its files' order. They share the
@@ -165,7 +166,7 @@ fn without_runtime_lists(text: &str) -> String {
 }
 
 /// The page's `const` lines: the version and the build of the package, its WebAssembly and
-/// Argon2 builds, the worker with the reduced-cost wrapper, and the fixed data in between.
+/// Argon2 builds, the worker with the reduced-cost wrapper, and the fixed data.
 fn sources(dist: &Path) -> Result<String, Failure> {
     let manifest: Value = serde_json::from_str(&text(&dist.join("modules.json"))?)
         .map_err(|error| at(&dist.join("modules.json"), error))?;
@@ -181,12 +182,9 @@ fn sources(dist: &Path) -> Result<String, Failure> {
     let mut lines = vec![
         constant("VERSION", &manifest["version"]),
         constant("PACKAGE_BUILD_ID", &manifest["buildId"]),
-        data_line("SELF_CHECK")?.replace('<', "\\u003c"),
     ];
     lines.extend(package_constants(dist, worker)?);
-    // The fixed lines as safe in a script element as the computed ones: "</script" cannot appear.
-    let rest = data_lines().filter(|(name, _)| *name != "SELF_CHECK");
-    lines.extend(rest.map(|(_, line)| line.replace('<', "\\u003c")));
+    lines.extend(data_lines().map(|(_, line)| line.to_owned()));
     Ok(format!("\n{}\n", lines.join("\n")))
 }
 
@@ -227,11 +225,6 @@ pub(super) fn constant(name: &str, value: &Value) -> String {
         "const {name} = {};",
         value.to_string().replace('<', "\\u003c")
     )
-}
-
-/// The text of `path`.
-pub(super) fn text(path: &Path) -> Result<String, Failure> {
-    std::fs::read_to_string(path).map_err(|error| at(path, error))
 }
 
 /// The SHA-256 of `script` in base64, as a Content-Security-Policy names a script.

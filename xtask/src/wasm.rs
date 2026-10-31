@@ -60,12 +60,12 @@ fn read(path: &Path) -> Result<Vec<u8>, Failure> {
 }
 
 /// The text of `path`, which must be UTF-8.
-fn text(path: &Path) -> Result<String, Failure> {
+pub(crate) fn text(path: &Path) -> Result<String, Failure> {
     String::from_utf8(read(path)?).map_err(|error| at(path, error))
 }
 
 /// Writes `bytes` into `path`.
-fn write(path: &Path, bytes: impl AsRef<[u8]>) -> Result<(), Failure> {
+pub(crate) fn write(path: &Path, bytes: impl AsRef<[u8]>) -> Result<(), Failure> {
     std::fs::write(path, bytes).map_err(|error| at(path, error))
 }
 

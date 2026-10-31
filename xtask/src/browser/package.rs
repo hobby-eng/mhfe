@@ -24,7 +24,7 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use super::page::{base64, classes, constant, data_line, document, hash, text};
+use super::page::{base64, classes, constant, data_line, document, hash};
 use super::server::PageServer;
 use super::{browsers_folder, check_pages, work_folder};
 use crate::{Failure, at, wasm};
@@ -79,10 +79,7 @@ pub(crate) fn run(root: &Path, full: bool) -> Result<(), Failure> {
     let other_build = wasm::stamp_other_build(root, &dist)?;
     let server = PageServer::start(page(root, &other_build, full)?.into_bytes())?;
     let fast_url = format!("http://127.0.0.1:{}/", server.port);
-    let pages = check_pages(&folder, &work_folder(root)?, &server, &[("fast", fast_url)])?;
-    if pages.is_none() {
-        return Err(Failure("The package check failed.".to_owned()));
-    }
+    check_pages(&folder, &work_folder(root)?, &server, &[("fast", fast_url)])?;
     println!("The browser package passes its package checks in Chrome and Firefox.");
     Ok(())
 }
@@ -143,8 +140,8 @@ pub(super) fn worker_page(constants: &str, checks: &str) -> String {
 /// The wasm-bindgen glue of the package: what scripts/build-wasm.sh put in front of the Argon2
 /// bridge in its worker. A release checks the published archive, where no build left `target/`.
 fn glue(root: &Path, dist: &Path) -> Result<String, Failure> {
-    let worker = text(&dist.join("runtime/worker.js"))?;
-    let bridge = text(&root.join("web/argon2-engine.js"))?;
+    let worker = wasm::text(&dist.join("runtime/worker.js"))?;
+    let bridge = wasm::text(&root.join("web/argon2-engine.js"))?;
     let (glue, _) = worker
         .split_once(&bridge)
         .ok_or_else(|| Failure("runtime/worker.js does not hold the Argon2 bridge".to_owned()))?;

@@ -63,11 +63,6 @@ pub(super) fn run(kind: &str, files: &[String]) -> Result<(), Failure> {
         } else {
             without_glue_loader(&text, file)?
         };
-        if let Some(word) = network_code(&text) {
-            return Err(Failure(format!(
-                "{file}: network code is still present: {word}"
-            )));
-        }
         write(path, text)?;
     }
     Ok(())

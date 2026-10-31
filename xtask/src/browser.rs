@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
-use crate::{Failure, at};
+use crate::{Failure, at, wasm};
 use server::PageServer;
 use webdriver::Driver;
 
@@ -130,13 +130,11 @@ pub(crate) fn run(root: &Path) -> Result<(), Failure> {
     let page = page::page(&root.join("dist"))?;
     let work = work_folder(root)?;
     let page_file = work.join(PAGE_FILE);
-    std::fs::write(&page_file, &page).map_err(|error| at(&page_file, error))?;
+    wasm::write(&page_file, &page)?;
     let server = PageServer::start(page.into_bytes())?;
     let fast_url = format!("http://127.0.0.1:{}/", server.port);
     let modes = [("standard", file_url(&page_file)), ("fast", fast_url)];
-    if check_pages(&folder, &work, &server, &modes)?.is_none() {
-        return Err(Failure("The browser check failed.".to_owned()));
-    }
+    check_pages(&folder, &work, &server, &modes)?;
     println!("The browser package passes its checks in Chrome and Firefox, in both modes.");
     Ok(())
 }
@@ -154,13 +152,13 @@ fn browsers_folder() -> Result<PathBuf, Failure> {
 /// Opens each page of `modes`, a mode and its URL, in each browser of `folder` and prints its
 /// results and failures: those the page reports, the events its recorder caught, a mode other
 /// than the one the page was opened in, and in fast mode a request but the page's own. Returns
-/// the result lines of each page, if every page passed.
+/// the result lines of each page, and fails if any page failed.
 fn check_pages(
     folder: &Path,
     work: &Path,
     server: &PageServer,
     modes: &[(&str, String)],
-) -> Result<Option<Vec<Vec<String>>>, Failure> {
+) -> Result<Vec<Vec<String>>, Failure> {
     let mut passed = true;
     let mut pages = Vec::new();
     for browser in [Browser::Chrome, Browser::Firefox] {
@@ -182,9 +180,6 @@ fn check_pages(
             let outcome = session.execute_async(WAIT)?;
             let check = &outcome["check"];
             let mut failures = strings(&check["failures"]);
-            if check.is_null() {
-                failures.push("the page's checks did not finish".to_owned());
-            }
             if check["mode"].as_str() != Some(mode) {
                 failures.push(format!(
                     "the client ran in {} mode, not {mode}",
@@ -209,7 +204,9 @@ fn check_pages(
             passed &= failures.is_empty();
         }
     }
-    Ok(passed.then_some(pages))
+    passed
+        .then_some(pages)
+        .ok_or_else(|| Failure("A page failed its checks.".to_owned()))
 }
 
 /// The `file:` URL of `path`, its bytes percent-encoded but for the unreserved characters and

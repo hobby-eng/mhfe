@@ -21,7 +21,7 @@ use super::{
 use crate::Failure;
 
 /// Hex digits of the SHA-256 kept: 64 bits tell builds apart well beyond any need.
-pub(super) const BUILD_ID_DIGITS: usize = 16;
+const BUILD_ID_DIGITS: usize = 16;
 /// The WebAssembly, which carries its build in BUILD_SECTION.
 pub(super) const WASM_FILE: &str = "runtime/mhfe.wasm";
 /// The scripts a page loads, by path in the package, in the order of the list the build is
@@ -39,8 +39,6 @@ pub(super) const SCRIPTS: [(&str, &str); 8] = [
 ];
 /// The value of a build constant before stamping, as in `const CLIENT_BUILD_ID = "development";`.
 pub(super) const UNSTAMPED: &str = "\"development\";";
-/// The characters that end a line, as for JavaScript's `^` and `$` in a multiline pattern.
-const LINE_ENDS: [char; 4] = ['\n', '\r', '\u{2028}', '\u{2029}'];
 
 /// Stamps the package in `folder` and returns its build.
 pub(super) fn run(folder: &Path) -> Result<String, Failure> {
@@ -100,13 +98,12 @@ pub(super) fn section(build_id: &str) -> Vec<u8> {
 
 /// `text` with its build constant stamped with `build_id`, or the number of build constants when
 /// it holds not exactly one. A build constant is a line `const NAME = "development";`, with
-/// `export ` allowed before it, whose NAME is capitals, digits and `_` and ends in `BUILD_ID`. A
-/// line ends where JavaScript's `$` ends one: at LINE_ENDS.
+/// `export ` allowed before it, whose NAME is capitals, digits and `_` and ends in `BUILD_ID`.
 fn stamp(text: &str, build_id: &str) -> Result<String, usize> {
     let mut count = 0;
     let mut stamped = String::with_capacity(text.len());
-    for piece in text.split_inclusive(LINE_ENDS) {
-        let line = piece.strip_suffix(LINE_ENDS).unwrap_or(piece);
+    for piece in text.split_inclusive('\n') {
+        let line = piece.strip_suffix('\n').unwrap_or(piece);
         match constant(line) {
             Some(start) => {
                 count += 1;
@@ -146,20 +143,6 @@ mod tests {
             stamp("const BUILD_ID = \"development\";", "x"),
             Ok("const BUILD_ID = \"x\";".to_owned())
         );
-    }
-
-    #[test]
-    fn a_line_ends_where_javascript_ends_one() {
-        let constant = "const A_BUILD_ID = \"development\";";
-        let crlf = stamp(&format!("{constant}\r\n"), "x");
-        assert_eq!(crlf, Ok("const A_BUILD_ID = \"x\";\r\n".to_owned()));
-        let other = constant.replace('A', "B");
-        assert_eq!(stamp(&format!("{constant}\nx\r{other}"), "x"), Err(2));
-        for end in ["\u{2028}", "\u{2029}"] {
-            assert_eq!(stamp(&format!("{constant}{end}{other}"), "x"), Err(2));
-        }
-        // U+0085 ends no line for JavaScript.
-        assert_eq!(stamp(&format!("x\u{85}{constant}"), "x"), Err(0));
     }
 
     #[test]

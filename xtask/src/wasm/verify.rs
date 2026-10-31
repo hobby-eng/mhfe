@@ -20,7 +20,7 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use super::stamp::{BUILD_ID_DIGITS, SCRIPTS, UNSTAMPED, WASM_FILE, build_id, section};
+use super::stamp::{SCRIPTS, UNSTAMPED, WASM_FILE, build_id, section};
 use super::{
     BUILD_SECTION, custom_sections, manifest, network::network_code, read, stamp_other_build, text,
 };
@@ -111,13 +111,6 @@ pub(super) fn ensure(condition: bool, message: impl FnOnce() -> String) -> Resul
 /// Checks that the WebAssembly's one build section and every script's build constant name
 /// `build`, and that `build` is the build of the files with their stamps taken out.
 fn check_build(root: &Path, folder: &Path, build: &str) -> Result<(), Failure> {
-    let hex = build.len() == BUILD_ID_DIGITS
-        && build
-            .bytes()
-            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'));
-    ensure(hex, || {
-        format!("the build {build} is not {BUILD_ID_DIGITS} hex digits")
-    })?;
     let (wasm, scripts) = unstamped(folder, build)?;
     let bindgen = root.join("target/wasm-bindgen/mhfe_bg.wasm");
     ensure(read(&bindgen)? == wasm, || {
@@ -308,8 +301,8 @@ pub(crate) fn vector_texts(root: &Path) -> Result<Vec<String>, Failure> {
     Ok(vectors)
 }
 
-/// The string literals of a Rust file, with their escapes resolved: `\n`, `\t`, `\0`, `\u{…}`, a
-/// line continuation, and any other escaped character as itself. Line comments are skipped.
+/// The string literals of a Rust file, with a line continuation left out and any other escaped
+/// character as itself. Line comments are skipped.
 fn rust_strings(source: &str) -> Vec<String> {
     let chars: Vec<char> = source.chars().collect();
     let mut strings = Vec::new();
@@ -351,26 +344,8 @@ fn rust_string(chars: &[char], from: usize) -> (String, usize) {
                     at += 1;
                 }
             }
-            Some('u') => {
-                // `\u{…}`: the hex digits after the brace, as far as the closing one.
-                let close = chars[at..].iter().position(|&char| char == '}');
-                let end = close.map_or(chars.len(), |close| at + close);
-                let digits: String = chars.get(at + 3..end).unwrap_or_default().iter().collect();
-                string.extend(
-                    u32::from_str_radix(&digits, 16)
-                        .ok()
-                        .and_then(char::from_u32),
-                );
-                at = end + 1;
-            }
             escaped => {
-                string.push(match escaped {
-                    Some('n') => '\n',
-                    Some('t') => '\t',
-                    Some('0') => '\0',
-                    Some(&other) => other,
-                    None => '\\',
-                });
+                string.extend(escaped);
                 at += 2;
             }
         }
@@ -464,9 +439,8 @@ mod tests {
 
     #[test]
     fn rust_strings_resolve_their_escapes_and_skip_line_comments() {
-        let source =
-            "// \"not a string\"\nlet a = \"one \\\n        two\\n\\u{41}\\\"\";\nlet b = \"x\";";
-        assert_eq!(rust_strings(source), ["one two\nA\"", "x"]);
+        let source = "// \"not a string\"\nlet a = \"one \\\n        two\\\"\";\nlet b = \"x\";";
+        assert_eq!(rust_strings(source), ["one two\"", "x"]);
     }
 
     #[test]

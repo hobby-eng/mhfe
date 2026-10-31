@@ -15,7 +15,7 @@ const expect = (what, args, lines, expected) =>
 
 /** Both refuse with the same words; the program may add what it did not do after them. */
 const sameRefusal = (what, args, lines, code, packageCall) =>
-  expect(what, args, lines, { refuses: pageMessageOf(code, packageCall, what) });
+  expect(what, args, lines, { refuses: pageMessageOf(code, packageCall) });
 
 // Repair words, at every count, and a count no card has.
 for (const count of JSON.parse(mhfe.repairParameters()).repairWordCounts) {

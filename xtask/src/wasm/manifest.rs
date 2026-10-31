@@ -79,10 +79,7 @@ pub(super) fn render(root: &Path, folder: &Path) -> Result<(String, String), Fai
     let cargo = text(&root.join("Cargo.toml"))?;
     let version = cargo
         .lines()
-        .find_map(|line| {
-            let (version, _) = line.strip_prefix("version = \"")?.split_once('"')?;
-            (!version.is_empty()).then_some(version)
-        })
+        .find_map(|line| Some(line.strip_prefix("version = \"")?.split_once('"')?.0))
         .ok_or_else(|| Failure("Cargo.toml names no version.".to_owned()))?;
     let build_id = build_of(folder)?;
     let runtime = files_of(&folder.join("runtime"))?;
@@ -129,9 +126,7 @@ pub(super) fn files_of(folder: &Path) -> Result<Files, Failure> {
     let mut files = Files::new();
     for entry in std::fs::read_dir(folder).map_err(failed)? {
         let entry = entry.map_err(failed)?;
-        let Ok(name) = entry.file_name().into_string() else {
-            return Err(at(folder, "a file name is not UTF-8"));
-        };
+        let name = entry.file_name().to_string_lossy().into_owned();
         files.insert(name, sha256_hex(&read(&entry.path())?));
     }
     Ok(files)

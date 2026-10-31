@@ -157,12 +157,11 @@ impl Drop for Session<'_> {
 
 /// The body of the HTTP response that `reader` gives: as long as its Content-Length says, or else
 /// up to the end. A driver may keep the connection open after the body, so the length counts.
-fn response_body(reader: &mut impl BufRead) -> Result<Vec<u8>, String> {
-    let failed = |error: std::io::Error| error.to_string();
+fn response_body(reader: &mut impl BufRead) -> std::io::Result<Vec<u8>> {
     let mut head = String::new();
     loop {
         let mut line = String::new();
-        if reader.read_line(&mut line).map_err(failed)? == 0 || line == "\r\n" {
+        if reader.read_line(&mut line)? == 0 || line == "\r\n" {
             break;
         }
         head.push_str(&line.to_ascii_lowercase());
@@ -175,10 +174,10 @@ fn response_body(reader: &mut impl BufRead) -> Result<Vec<u8>, String> {
     match length {
         Some(length) => {
             body.resize(length, 0);
-            reader.read_exact(&mut body).map_err(failed)?;
+            reader.read_exact(&mut body)?;
         }
         None => {
-            reader.read_to_end(&mut body).map_err(failed)?;
+            reader.read_to_end(&mut body)?;
         }
     }
     Ok(body)

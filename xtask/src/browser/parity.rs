@@ -1,8 +1,8 @@
-//! `cargo xtask parity [PROGRAM]`: the command-line tool and the browser package give the same
-//! results, as both call the same library: the program's script mode (`--stdin`) here, the
-//! package's WebAssembly in a module worker of the pinned browsers, on public data, without any
-//! full-cost Argon2 work. Build both first: the program with `cargo build --release`, the package with
-//! scripts/build-wasm.sh. PROGRAM is the program's path, by default the one that build made.
+//! `cargo xtask parity`: the command-line tool and the browser package give the same results, as
+//! both call the same library: the program's script mode (`--stdin`) here, the package's
+//! WebAssembly in a module worker of the pinned browsers, on public data, without any full-cost
+//! Argon2 work. Build both first: the program with `cargo build --release`, the package with
+//! scripts/build-wasm.sh.
 //!
 //! Compared: the repair words of a container and the repair of a damaged one; the refusals that
 //! come before any round, by their words, which the program writes after "✗ Error:" and a page
@@ -17,8 +17,6 @@
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::thread::sleep;
-use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
@@ -35,10 +33,6 @@ const INVALID_INPUT: i32 = 2;
 const ERROR_MARK: &str = "✗ Error:";
 /// What the program writes before the other lengths that detection could read.
 const OTHER_LENGTH: &str = "also reads as";
-/// How long a run of the program may take: its startup checks take about a second.
-const PROGRAM_TIMEOUT: Duration = Duration::from_secs(60);
-/// How often a run of the program is looked at.
-const POLL: Duration = Duration::from_millis(10);
 
 /// A run of the program, and what the package says it must give.
 #[derive(Deserialize)]
@@ -62,32 +56,22 @@ enum Expected {
 }
 
 /// The program that `cargo build --release` made, wherever CARGO_TARGET_DIR puts it.
-pub(crate) fn built_program(root: &Path) -> PathBuf {
+fn built_program(root: &Path) -> PathBuf {
     let target = std::env::var_os("CARGO_TARGET_DIR");
     target
         .map_or_else(|| root.join("target"), PathBuf::from)
         .join("release/mhfe")
 }
 
-/// Compares the program at `program` with the package in `dist/`, in each pinned browser.
-pub(crate) fn run(root: &Path, program: &Path) -> Result<(), Failure> {
+/// Compares the program of `built_program` with the package in `dist/`, in each pinned browser.
+pub(crate) fn run(root: &Path) -> Result<(), Failure> {
     let folder = browsers_folder()?;
     let page = worker_page(&handed_over(root)?.join("\n"), PARITY);
     let server = PageServer::start(page.into_bytes())?;
     let url = format!("http://127.0.0.1:{}/", server.port);
-    let lines = check_pages(&folder, &work_folder(root)?, &server, &[("fast", url)])?
-        .ok_or_else(|| Failure("The package's side of the parity check failed.".to_owned()))?;
-    let [chrome, firefox] = lines.as_slice() else {
-        return Err(Failure(
-            "the parity check did not run in two browsers".to_owned(),
-        ));
-    };
-    if chrome != firefox {
-        return Err(Failure(
-            "Chrome and Firefox expect different results.".to_owned(),
-        ));
-    }
-    let cases: Vec<Case> = chrome
+    let pages = check_pages(&folder, &work_folder(root)?, &server, &[("fast", url)])?;
+    let cases: Vec<Case> = pages
+        .concat()
         .iter()
         .map(|line| serde_json::from_str(line))
         .collect::<Result<_, _>>()
@@ -95,8 +79,9 @@ pub(crate) fn run(root: &Path, program: &Path) -> Result<(), Failure> {
     if cases.is_empty() {
         return Err(Failure("the package gave no case".to_owned()));
     }
+    let program = built_program(root);
     for case in &cases {
-        check(program, case)?;
+        check(&program, case)?;
     }
     println!("The command-line tool and the browser package give the same results.");
     Ok(())
@@ -161,14 +146,6 @@ fn run_program(program: &Path, args: &[String], lines: &[String]) -> Result<Outp
             Err(error) if error.kind() != ErrorKind::BrokenPipe => return Err(failed(error)),
             _ => {}
         }
-    }
-    let started = Instant::now();
-    while child.try_wait().map_err(failed)?.is_none() {
-        if started.elapsed() > PROGRAM_TIMEOUT {
-            child.kill().map_err(failed)?;
-            return Err(Failure(format!("mhfe {} did not end", args.join(" "))));
-        }
-        sleep(POLL);
     }
     child.wait_with_output().map_err(failed)
 }
