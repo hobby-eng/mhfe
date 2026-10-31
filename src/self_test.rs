@@ -17,7 +17,10 @@ use serde_json::Value;
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::mhfe::known_answers::{published_table, PublishedRound, PublishedVector};
 use crate::operation::{RoundCounter, Stage, StageCallback};
-use crate::{Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, ENCRYPTION_ROUNDS, ROUNDS};
+use crate::{
+    decrypt, encrypt, Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WorkFactor,
+    ENCRYPTION_ROUNDS, ROUNDS,
+};
 
 /// The public vectors, as the specification publishes them.
 const SUITE_3_VECTOR: &str = include_str!("../tests/spec/vectors/suite3/zero-12.json");
@@ -79,15 +82,15 @@ impl SelfTest {
     }
 
     /// Encrypts the suite 3 vector (rounds 1 to 12 of 24, [`Stage::Encrypt`]) and recovers the
-    /// suite 4 vector (rounds 13 to 24, [`Stage::Recover`]) with `mhfe`, which must be at
+    /// suite 4 vector (rounds 13 to 24, [`Stage::Recover`]) on `engine` at `work`, which must be
     /// the default settings, and compares both results with the published ones.
     pub fn run<E: Argon2Engine>(
         &self,
-        mhfe: &mut Mhfe<E>,
+        work: WorkFactor,
+        engine: &mut E,
         progress: StageCallback<'_>,
     ) -> Result<SelfTestResult, MhfeError> {
         let expected = self.expected_calls(published_table())?;
-        let (work, engine) = mhfe.parts_mut();
         let mut watched = Mhfe::with_engine(work, RoundKeyWitness::new(engine, expected));
         let (suite_3, suite_4) = self.replay(&mut watched, progress)?;
         Ok(watched.engine().verdict(suite_3, suite_4))
@@ -105,7 +108,8 @@ impl SelfTest {
         let password = Password::new(&self.suite_3.password)?;
         let mut suite_3 = false;
         let mut compared = false;
-        let encrypted = mhfe.encrypt(
+        let encrypted = encrypt(
+            mhfe,
             &self.suite_3.phrase,
             &password,
             Suite::TwentyFourWords,
@@ -123,7 +127,8 @@ impl SelfTest {
 
         let rounds = RoundCounter::starting_after(ROUNDS, ENCRYPTION_ROUNDS);
         let password = Password::new(&self.suite_4.password)?;
-        let recovered = mhfe.decrypt(
+        let recovered = decrypt(
+            mhfe,
             &self.suite_4.container,
             &password,
             PhraseLength::Detect,
@@ -367,7 +372,6 @@ impl SelfTestResult {
 mod tests {
     use super::*;
     use crate::mhfe::known_answers::{published, PublishedRoundKeys};
-    use crate::WorkFactor;
 
     fn leaked(vectors: Vec<PublishedVector>) -> &'static [PublishedVector] {
         Box::leak(vectors.into_boxed_slice())
@@ -455,8 +459,9 @@ mod tests {
     /// The self-test with a fault behind the witness, in what the engine computes.
     fn with_fault_in_the_engine(change: Change, at: u32) -> SelfTestResult {
         let test = SelfTest::published().unwrap();
-        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), Fault::new(StandIn, change, at));
-        test.run(&mut mhfe, &mut |_, _, _| Ok(())).unwrap()
+        let mut engine = Fault::new(StandIn, change, at);
+        test.run(WorkFactor::default(), &mut engine, &mut |_, _, _| Ok(()))
+            .unwrap()
     }
 
     /// The self-test with a fault before the witness, in what the cipher hands to Argon2id or
@@ -476,16 +481,17 @@ mod tests {
     #[test]
     fn the_self_test_reports_as_published_with_the_recorded_keys() {
         let test = SelfTest::published().unwrap();
-        let mut mhfe = Mhfe::with_engine(
-            WorkFactor::default(),
-            PublishedRoundKeys::of(published_table()),
-        );
+        let mut engine = PublishedRoundKeys::of(published_table());
         let mut rounds = Vec::new();
         let result = test
-            .run(&mut mhfe, &mut |stage, round, total| {
-                rounds.push((stage, round, total));
-                Ok(())
-            })
+            .run(
+                WorkFactor::default(),
+                &mut engine,
+                &mut |stage, round, total| {
+                    rounds.push((stage, round, total));
+                    Ok(())
+                },
+            )
             .unwrap();
         assert!(result.passed());
         assert!(result.suite_3_as_published() && result.suite_4_as_published());
@@ -504,11 +510,8 @@ mod tests {
     fn a_cancel_stops_the_self_test() {
         let test = SelfTest::published().unwrap();
         for at in [1, 12, 13, 24] {
-            let mut mhfe = Mhfe::with_engine(
-                WorkFactor::default(),
-                PublishedRoundKeys::of(published_table()),
-            );
-            let result = test.run(&mut mhfe, &mut |_, round, _| {
+            let mut engine = PublishedRoundKeys::of(published_table());
+            let result = test.run(WorkFactor::default(), &mut engine, &mut |_, round, _| {
                 if round == at {
                     Err(MhfeError::Cancelled)
                 } else {
@@ -538,11 +541,10 @@ mod tests {
                 .position(|vector| vector.name == name)
                 .unwrap();
             vectors[index].rounds[round].key[0] ^= 1;
-            let mut mhfe = Mhfe::with_engine(
-                WorkFactor::default(),
-                PublishedRoundKeys::of(leaked(vectors)),
-            );
-            let result = test.run(&mut mhfe, &mut |_, _, _| Ok(())).unwrap();
+            let mut engine = PublishedRoundKeys::of(leaked(vectors));
+            let result = test
+                .run(WorkFactor::default(), &mut engine, &mut |_, _, _| Ok(()))
+                .unwrap();
             assert!(!result.passed(), "{name}");
             assert_eq!(result.suite_3_as_published(), suite_3, "{name}");
             assert_eq!(result.suite_4_as_published(), suite_4, "{name}");

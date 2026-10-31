@@ -9,7 +9,7 @@ use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
-use crate::rehearsal::{Confirmation, RecoveredForRekey};
+use crate::rehearsal::{recover_for_rekey, Confirmation, RecoveredForRekey};
 use crate::{Mhfe, MhfeError, Password, PhraseLength, WorkFactor, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
@@ -203,7 +203,8 @@ impl Rekey {
             ));
         }
         let rounds = RoundCounter::starting_after(0, REKEY_ROUNDS);
-        mhfe.recover_for_rekey(
+        recover_for_rekey(
+            mhfe,
             self.container.words(),
             &self.old_password,
             self.length,
@@ -317,6 +318,7 @@ fn wallet_passphrase(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encrypt;
     use crate::rehearsal::Reference;
 
     fn container_24() -> String {
@@ -387,15 +389,15 @@ mod tests {
         let none = &mut |_, _| Ok(());
         let old = password("public test password");
         let old_work = WorkFactor::default();
-        let container = reduced(old_work)
-            .encrypt(
-                ABANDON,
-                &old,
-                crate::Suite::TwentyFourWords,
-                none,
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut reduced(old_work),
+            ABANDON,
+            &old,
+            crate::Suite::TwentyFourWords,
+            none,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let rekey = Rekey::new(
             &container,
             words(12),
@@ -558,15 +560,15 @@ mod tests {
                                abandon abandon abandon about";
         let work = WorkFactor::default();
         let old = password("public test password");
-        let container = reduced(work)
-            .encrypt(
-                ABANDON,
-                &old,
-                crate::Suite::SameLength,
-                &mut |_, _| Ok(()),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut reduced(work),
+            ABANDON,
+            &old,
+            crate::Suite::SameLength,
+            &mut |_, _| Ok(()),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let rekey = Rekey::new(&container, PhraseLength::Detect, old, work).unwrap();
         let fingerprint = crate::wallet::master_fingerprint(ABANDON, "TREZOR").unwrap();
         let reference = Reference::Fingerprint {
@@ -613,15 +615,15 @@ mod tests {
     /// rekey of it for `length`, stated or detected.
     fn rekey_of(phrase: &str, length: PhraseLength) -> Rekey {
         let old = password("public test password");
-        let container = reduced(WorkFactor::default())
-            .encrypt(
-                phrase,
-                &old,
-                crate::Suite::TwentyFourWords,
-                &mut |_, _| Ok(()),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut reduced(WorkFactor::default()),
+            phrase,
+            &old,
+            crate::Suite::TwentyFourWords,
+            &mut |_, _| Ok(()),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         Rekey::new(&container, length, old, WorkFactor::default()).unwrap()
     }
 
@@ -822,15 +824,15 @@ mod tests {
     #[test]
     fn a_length_set_later_must_fit_the_container() {
         let old = password("public test password");
-        let container = reduced(WorkFactor::default())
-            .encrypt(
-                ABANDON_12,
-                &old,
-                crate::Suite::SameLength,
-                &mut |_, _| Ok(()),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut reduced(WorkFactor::default()),
+            ABANDON_12,
+            &old,
+            crate::Suite::SameLength,
+            &mut |_, _| Ok(()),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let mut rekey =
             Rekey::new(&container, PhraseLength::Detect, old, WorkFactor::default()).unwrap();
         assert!(rekey.set_length(words(12)).is_ok());

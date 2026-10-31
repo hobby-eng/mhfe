@@ -4,7 +4,7 @@
 //! wallet a password opens is read at the state's full width, a password is not taken twice, and
 //! a reading that passes the built-in check of a shorter phrase is refused (rule I29).
 
-use super::HiddenWallets;
+use super::{derive_wallet, HiddenWallets};
 use crate::mhfe::known_answers::{published, published_table};
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
@@ -66,7 +66,9 @@ impl ComponentCheck for HiddenWalletsCheck {
             let vector = published("zero-12")?;
             let mut mhfe = vector.mhfe(published_table())?;
             let password: Password = vector.password()?;
-            let result = mhfe.derive_wallet(vector.container, &password, "", &mut |_, _| Ok(()));
+            let result = derive_wallet(&mut mhfe, vector.container, &password, "", &mut |_, _| {
+                Ok(())
+            });
             expect_refusal(result.map(|_| ()), "HIDDEN_WALLET_PASSES_CHECK")
                 .map_err(|what| format!("a reading that passes a check {what}"))
         });

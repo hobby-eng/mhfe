@@ -347,7 +347,8 @@ fn make_passwords() -> Result<(), Failure> {
             .map(OsString::from),
     );
     match run_command(&arguments)? {
-        SUCCESS => Ok(()),
+        // A command that was cancelled alone has said so itself.
+        SUCCESS | exit::CANCELLED => Ok(()),
         code => Err(Failure::shown(code)),
     }
 }

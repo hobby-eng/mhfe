@@ -1,8 +1,8 @@
 //! Known answers of the cipher: the self-checks `cipher-hashes`, `cipher-rounds` and `formats`.
 //!
 //! `cipher-rounds` replays the published vectors through the operations the front ends call,
-//! [`Encryption::run`], [`Mhfe::decrypt`] and [`Mhfe::decrypt_as`], with [`PublishedRoundKeys`] in
-//! place of Argon2: an engine that computes nothing and answers only the salts a published vector
+//! [`Encryption::run`], [`decrypt`] and [`decrypt_as`], with [`PublishedRoundKeys`] in place of
+//! Argon2: an engine that computes nothing and answers only the salts a published vector
 //! records, with the key it records. Everything around Argon2 runs as in a real operation: the
 //! phrase parsing, the packing, the BLAKE2b salts with their settings, the HMAC masks, the twelve
 //! rounds in both directions, the container encoding, the encryption's own check, the length
@@ -13,7 +13,7 @@
 //! engine: a release build may hold it.
 
 use super::published_rounds::PUBLISHED;
-use super::RecoveredPhrase;
+use super::{decrypt, decrypt_as, encrypt, RecoveredPhrase};
 use crate::detection::detected_lengths;
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::feistel::{round_mask, round_message, round_salt, Geometry};
@@ -91,7 +91,8 @@ impl PublishedVector {
         words: usize,
     ) -> Result<Result<Recovery, MhfeError>, String> {
         let words = WordCount::new(words).map_err(stopped)?;
-        Ok(self.mhfe(table)?.decrypt(
+        Ok(decrypt(
+            &mut self.mhfe(table)?,
             self.container,
             &self.password()?,
             PhraseLength::Words(words),
@@ -350,27 +351,27 @@ impl CipherRoundsCheck {
             )?;
         }
 
-        let detected = mhfe
-            .decrypt(
-                vector.container,
-                &password,
-                PhraseLength::Detect,
-                &mut |_, _| Ok(()),
-            )
-            .map_err(stopped)?;
+        let detected = decrypt(
+            &mut mhfe,
+            vector.container,
+            &password,
+            PhraseLength::Detect,
+            &mut |_, _| Ok(()),
+        )
+        .map_err(stopped)?;
         expect(
             same_readings(&detected, vector.recovery),
             "recovers another phrase",
         )?;
-        let selected = mhfe
-            .decrypt_as(
-                vector.container,
-                &password,
-                Some(suite),
-                PhraseLength::Detect,
-                &mut |_, _| Ok(()),
-            )
-            .map_err(stopped)?;
+        let selected = decrypt_as(
+            &mut mhfe,
+            vector.container,
+            &password,
+            Some(suite),
+            PhraseLength::Detect,
+            &mut |_, _| Ok(()),
+        )
+        .map_err(stopped)?;
         expect(
             same_readings(&selected, vector.recovery),
             "recovers another phrase with its suite selected",
@@ -386,14 +387,14 @@ impl CipherRoundsCheck {
                     std::slice::from_ref(reading)
                 };
                 let words = WordCount::new(reading.words).map_err(stopped)?;
-                let chosen = mhfe
-                    .decrypt(
-                        vector.container,
-                        &password,
-                        PhraseLength::Words(words),
-                        &mut |_, _| Ok(()),
-                    )
-                    .map_err(stopped)?;
+                let chosen = decrypt(
+                    &mut mhfe,
+                    vector.container,
+                    &password,
+                    PhraseLength::Words(words),
+                    &mut |_, _| Ok(()),
+                )
+                .map_err(stopped)?;
                 expect(
                     same_readings(&chosen, expected),
                     "recovers another phrase at a stated length",
@@ -469,7 +470,8 @@ impl CipherRoundsCheck {
                 let vector = find(table, "zero-12")?;
                 let keys = PublishedRoundKeys::of(table);
                 let mut mhfe = Mhfe::with_engine(vector.work()?, LastKeyChanged { keys, calls: 0 });
-                let result = mhfe.encrypt(
+                let result = encrypt(
+                    &mut mhfe,
                     vector.phrase,
                     &vector.password()?,
                     Suite::TwentyFourWords,
@@ -484,7 +486,8 @@ impl CipherRoundsCheck {
                 let vector = find(table, "zero-12")?;
                 let work = WorkFactor::new(1, vector.memory_level).map_err(stopped)?;
                 let mut mhfe = Mhfe::with_engine(work, PublishedRoundKeys::of(table));
-                let result = mhfe.decrypt(
+                let result = decrypt(
+                    &mut mhfe,
                     vector.container,
                     &vector.password()?,
                     PhraseLength::Detect,
@@ -513,9 +516,14 @@ fn encryption_result(
     password: &Password,
     suite: Suite,
 ) -> Result<(), MhfeError> {
-    mhfe.encrypt(original, password, suite, &mut |_, _| Ok(()), &mut |_| {
-        Ok(())
-    })
+    encrypt(
+        mhfe,
+        original,
+        password,
+        suite,
+        &mut |_, _| Ok(()),
+        &mut |_| Ok(()),
+    )
     .map(|_| ())
 }
 
@@ -701,7 +709,8 @@ impl FormatsCheck {
                     let container = fixtures::text(case, "container")?;
                     length
                         .and_then(|length| {
-                            mhfe.decrypt_as(
+                            decrypt_as(
+                                &mut mhfe,
                                 container,
                                 &password,
                                 Some(Suite::TwentyFourWords),
@@ -747,8 +756,15 @@ impl FormatsCheck {
                         Some(Ok(4)) => Some(Suite::SameLength),
                         Some(_) => return Err("the built-in cases are damaged".to_owned()),
                     };
-                    mhfe.decrypt_as(text, &password, suite, length, &mut |_, _| Ok(()))
-                        .map(|_| ())
+                    decrypt_as(
+                        &mut mhfe,
+                        text,
+                        &password,
+                        suite,
+                        length,
+                        &mut |_, _| Ok(()),
+                    )
+                    .map(|_| ())
                 }
                 _ => return Err("the built-in cases are damaged".to_owned()),
             };
@@ -1150,7 +1166,8 @@ mod tests {
         let zero_12 = published("zero-12").unwrap();
         let mut mhfe = zero_12.mhfe(published_table()).unwrap();
         let other = "legal winner thank year wave sausage worth useful legal winner thank yellow";
-        let result = mhfe.encrypt(
+        let result = encrypt(
+            &mut mhfe,
             other,
             &zero_12.password().unwrap(),
             Suite::TwentyFourWords,

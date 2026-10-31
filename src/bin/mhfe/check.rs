@@ -13,8 +13,8 @@ use mhfe::wallet::{
 };
 use mhfe::wallet_check::{self, WALLET_CHECK_BITS};
 use mhfe::{
-    CheckEvidence, ContainerFacts, MhfeError, PhraseLength, RecoveredForCheck, Reference,
-    ReferenceTarget, WordCount, BUILT_IN_CHECK_WORD_COUNTS, WORD_COUNTS,
+    recover_for_check, CheckEvidence, ContainerFacts, MhfeError, PhraseLength, RecoveredForCheck,
+    Reference, ReferenceTarget, WordCount, BUILT_IN_CHECK_WORD_COUNTS, WORD_COUNTS,
 };
 use zeroize::Zeroizing;
 
@@ -295,7 +295,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     let mut mhfe = settings::reserve_memory(work)?;
     let mut progress = Progress::start();
-    let recovered = mhfe.recover_for_check(
+    let recovered = recover_for_check(
+        &mut mhfe,
         container.words(),
         &password,
         &reference,

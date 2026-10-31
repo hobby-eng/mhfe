@@ -334,39 +334,22 @@ impl<E: Argon2Engine> Mhfe<E> {
         &self.engine
     }
 
-    /// The settings and the engine, for a wrapper that watches the engine's calls without
-    /// changing them, as the self-test's witness of the round keys does.
-    #[cfg(any(test, not(target_arch = "wasm32"), feature = "browser-core"))]
-    pub(crate) fn parts_mut(&mut self) -> (WorkFactor, &mut E) {
-        (self.work, &mut self.engine)
-    }
-
     /// The PIM and memory level every round of this instance runs at.
     pub fn work_factor(&self) -> WorkFactor {
         self.work
     }
 
-    /// Encrypts an original phrase and checks the result (creation steps 1 to 6), 24 rounds in
-    /// all. With [`Suite::TwentyFourWords`], the default, any original of 12 to 24 words becomes a
-    /// 24-word container; with [`Suite::SameLength`], which only the user's own choice may select,
-    /// a 12- to 21-word original becomes a container of its own length.
-    ///
-    /// `on_round` comes before each round. `on_unchecked` comes once with the container, after
-    /// round 12 and before the check of rounds 13 to 24: it may be shown to a person during the
-    /// check, clearly marked as not verified, while a program that receives it for further use
-    /// should wait for the check. An error from either stops the encryption there.
-    pub fn encrypt(
+    /// Creation from the packing on ([`encrypt`]), for the `entropy` of an original already read.
+    /// It takes the entropy rather than the read phrase, which the caller would hold through the
+    /// rounds outside locked memory (AUD-010).
+    pub(crate) fn encrypt(
         &mut self,
-        original: &str,
+        entropy: LockedBytes,
         password: &Password,
         suite: Suite,
         on_round: ProgressCallback<'_>,
         on_unchecked: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
     ) -> Result<Zeroizing<String>, MhfeError> {
-        // The entropy and the state are phrase in all but form: both are locked before they are
-        // written, and stay locked through the rounds, while the work area of Argon2 puts the most
-        // pressure on memory. The state is what the check must get back.
-        let entropy = locked_entropy(&phrase::parse(original).map_err(MhfeError::InvalidPhrase)?);
         suite.require_original(packing::words_of_entropy(entropy.len()))?;
         let x = match suite {
             Suite::TwentyFourWords => packing::pack(&entropy)?,
@@ -399,56 +382,17 @@ impl<E: Argon2Engine> Mhfe<E> {
         }
     }
 
-    /// Recovers the original phrase from a container. Its word count selects the suite: 24 words
-    /// are suite 3, and 12 to 21 words a same-length container, which gives a phrase of the same
-    /// length that nothing confirms.
-    pub fn decrypt(
-        &mut self,
-        container: &str,
-        password: &Password,
-        length: PhraseLength,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<Recovery, MhfeError> {
-        self.decrypt_as(container, password, None, length, on_progress)
-    }
-
-    /// [`Mhfe::decrypt`] for a suite the user selected: a container of the other suite's word
-    /// count is refused before any Argon2 work instead of being read with the other suite.
-    pub fn decrypt_as(
-        &mut self,
-        container: &str,
-        password: &Password,
-        selected: Option<Suite>,
-        length: PhraseLength,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<Recovery, MhfeError> {
-        // Every input is checked before the first Argon2 call; a WordCount is valid already. A
-        // suite selected against the container's words is refused as the container is read.
-        if selected != Some(Suite::TwentyFourWords) {
-            ContainerFacts::read(container)?.require_length(length)?;
-        }
-        let mut readings = self
-            .recover_state(container, password, selected, on_progress)?
-            .readings(length.stated())?;
-        if readings.len() == 1 {
-            Ok(Recovery::Phrase(readings.remove(0)))
-        } else {
-            Ok(Recovery::Ambiguous(readings))
-        }
-    }
-
-    /// Steps 1 and 2 of recovery: checks the container, then computes `X = Perm^-1(Y)` with the
-    /// suite its word count selects. `X` is written into locked memory, which the caller holds
+    /// Steps 1 and 2 of recovery, for a `container` already read: computes `X = Perm^-1(Y)` with
+    /// the suite its word count selects. `X` is written into locked memory, which the caller holds
     /// while it reads it.
     pub(crate) fn recover_state(
         &mut self,
-        container: &str,
+        container: &Mnemonic,
         password: &Password,
         selected: Option<Suite>,
         on_progress: ProgressCallback<'_>,
     ) -> Result<RecoveredState, MhfeError> {
-        let container = phrase::parse_container(container).map_err(MhfeError::InvalidContainer)?;
-        let (suite, y) = container_state(&container)?;
+        let (suite, y) = container_state(container)?;
         match selected {
             Some(Suite::TwentyFourWords) if suite != Suite::TwentyFourWords => {
                 return Err(MhfeError::InvalidContainer(format!(
@@ -482,6 +426,81 @@ impl<E: Argon2Engine> Mhfe<E> {
             geometry,
         }
     }
+}
+
+/// Encrypts an original phrase and checks the result (creation steps 1 to 6), 24 rounds in
+/// all. With [`Suite::TwentyFourWords`], the default, any original of 12 to 24 words becomes a
+/// 24-word container; with [`Suite::SameLength`], which only the user's own choice may select,
+/// a 12- to 21-word original becomes a container of its own length.
+///
+/// `on_round` comes before each round. `on_unchecked` comes once with the container, after
+/// round 12 and before the check of rounds 13 to 24: it may be shown to a person during the
+/// check, clearly marked as not verified, while a program that receives it for further use
+/// should wait for the check. An error from either stops the encryption there.
+pub fn encrypt<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    original: &str,
+    // A deliberate copy of the other parameters of Mhfe::encrypt, which it passes on.
+    password: &Password,
+    suite: Suite,
+    on_round: ProgressCallback<'_>,
+    on_unchecked: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
+) -> Result<Zeroizing<String>, MhfeError> {
+    // The entropy and the state are phrase in all but form: both are locked before they are
+    // written, and stay locked through the rounds, while the work area of Argon2 puts the most
+    // pressure on memory. The state is what the check must get back.
+    let entropy = locked_entropy(&phrase::parse(original).map_err(MhfeError::InvalidPhrase)?);
+    mhfe.encrypt(entropy, password, suite, on_round, on_unchecked)
+}
+
+/// Recovers the original phrase from a container. Its word count selects the suite: 24 words
+/// are suite 3, and 12 to 21 words a same-length container, which gives a phrase of the same
+/// length that nothing confirms.
+pub fn decrypt<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    length: PhraseLength,
+    on_progress: ProgressCallback<'_>,
+) -> Result<Recovery, MhfeError> {
+    decrypt_as(mhfe, container, password, None, length, on_progress)
+}
+
+/// [`decrypt`] for a suite the user selected: a container of the other suite's word count is
+/// refused before any Argon2 work instead of being read with the other suite.
+pub fn decrypt_as<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    selected: Option<Suite>,
+    length: PhraseLength,
+    on_progress: ProgressCallback<'_>,
+) -> Result<Recovery, MhfeError> {
+    // Every input is checked before the first Argon2 call; a WordCount is valid already. A
+    // suite selected against the container's words is refused as the container is read.
+    if selected != Some(Suite::TwentyFourWords) {
+        ContainerFacts::read(container)?.require_length(length)?;
+    }
+    let mut readings = recover_state(mhfe, container, password, selected, on_progress)?
+        .readings(length.stated())?;
+    if readings.len() == 1 {
+        Ok(Recovery::Phrase(readings.remove(0)))
+    } else {
+        Ok(Recovery::Ambiguous(readings))
+    }
+}
+
+/// [`Mhfe::recover_state`] of a container as typed: every operation that recovers one reads it
+/// here.
+pub(crate) fn recover_state<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    selected: Option<Suite>,
+    on_progress: ProgressCallback<'_>,
+) -> Result<RecoveredState, MhfeError> {
+    let container = phrase::parse_container(container).map_err(MhfeError::InvalidContainer)?;
+    mhfe.recover_state(&container, password, selected, on_progress)
 }
 
 /// The permutation of a suite for a state of the container's size.
@@ -632,17 +651,14 @@ mod tests {
     }
 
     /// The recovery of `container` at the stated length `words`.
-    fn decrypt_as(
+    fn recovery_at(
         mhfe: &mut Mhfe<ReducedEngine>,
         container: &str,
         password: &Password,
         words: WordCount,
     ) -> RecoveredPhrase {
         let length = PhraseLength::Words(words);
-        only_phrase(
-            mhfe.decrypt(container, password, length, &mut no_progress())
-                .unwrap(),
-        )
+        only_phrase(decrypt(mhfe, container, password, length, &mut no_progress()).unwrap())
     }
 
     fn only_phrase(recovery: Recovery) -> RecoveredPhrase {
@@ -665,14 +681,17 @@ mod tests {
             (Suite::SameLength, &entropy),
         ] {
             assert_eq!(source.is_locked(), cfg!(unix));
-            let container = mhfe
-                .encrypt(ZERO_12, &password, suite, &mut no_progress(), &mut |_| {
-                    Ok(())
-                })
-                .unwrap();
-            let recovered = mhfe
-                .recover_state(&container, &password, None, &mut no_progress())
-                .unwrap();
+            let container = encrypt(
+                &mut mhfe,
+                ZERO_12,
+                &password,
+                suite,
+                &mut no_progress(),
+                &mut |_| Ok(()),
+            )
+            .unwrap();
+            let recovered =
+                recover_state(&mut mhfe, &container, &password, None, &mut no_progress()).unwrap();
             assert_eq!(recovered.state[..], source[..]);
             assert_eq!(recovered.state.is_locked(), cfg!(unix));
         }
@@ -687,19 +706,20 @@ mod tests {
         let mut mhfe = reduced();
         for words in [12, 15, 18, 21, 24] {
             let original = varied_phrase(words);
-            let container = mhfe
-                .encrypt(
-                    &original,
-                    &password,
-                    Suite::TwentyFourWords,
-                    &mut no_progress(),
-                    &mut |_| Ok(()),
-                )
-                .unwrap();
+            let container = encrypt(
+                &mut mhfe,
+                &original,
+                &password,
+                Suite::TwentyFourWords,
+                &mut no_progress(),
+                &mut |_| Ok(()),
+            )
+            .unwrap();
             assert_eq!(container.split(' ').count(), 24);
 
             let detected = only_phrase(
-                mhfe.decrypt(
+                decrypt(
+                    &mut mhfe,
                     &container,
                     &password,
                     PhraseLength::Detect,
@@ -712,7 +732,7 @@ mod tests {
             assert_eq!(detected.verified, words < 24);
 
             // Stating the length gives the same phrase.
-            let chosen = decrypt_as(
+            let chosen = recovery_at(
                 &mut mhfe,
                 &container,
                 &password,
@@ -732,15 +752,15 @@ mod tests {
     #[test]
     fn the_reduced_cost_container_is_the_same_everywhere() {
         let password = test_password();
-        let container = reduced()
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut reduced(),
+            ZERO_12,
+            &password,
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(*container, REDUCED_COST_CONTAINER);
     }
 
@@ -749,24 +769,31 @@ mod tests {
         let password = test_password();
         let wrong = wrong_password();
         let mut mhfe = reduced();
-        let container = mhfe
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
 
         let detected = only_phrase(
-            mhfe.decrypt(&container, &wrong, PhraseLength::Detect, &mut no_progress())
-                .unwrap(),
+            decrypt(
+                &mut mhfe,
+                &container,
+                &wrong,
+                PhraseLength::Detect,
+                &mut no_progress(),
+            )
+            .unwrap(),
         );
         assert_eq!(detected.words, 24);
         assert!(!detected.verified);
         assert_eq!(
-            mhfe.decrypt(
+            decrypt(
+                &mut mhfe,
                 &container,
                 &wrong,
                 PhraseLength::Words(WordCount::new(12).unwrap()),
@@ -784,22 +811,23 @@ mod tests {
         let password = test_password();
         let mut mhfe = reduced();
         let mut stated = |container: &str, words: usize| {
-            mhfe.decrypt(
+            decrypt(
+                &mut mhfe,
                 container,
                 &password,
                 PhraseLength::Words(WordCount::new(words).unwrap()),
                 &mut no_progress(),
             )
         };
-        let twelve = reduced()
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let twelve = encrypt(
+            &mut reduced(),
+            ZERO_12,
+            &password,
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         // Another short length stated: the 12-word reading, which says what was stated.
         for words in [15, 18, 21] {
             let found = only_phrase(stated(&twelve, words).unwrap());
@@ -826,15 +854,15 @@ mod tests {
             .starts_with("abandon abandon abandon abandon abandon abandon"));
         // A 24-word original passes no short check: a stated short length is refused, as a
         // wrong password or setting would be, and 24 stated words give its reading alone.
-        let twenty_four = reduced()
-            .encrypt(
-                LEGAL_24,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let twenty_four = encrypt(
+            &mut reduced(),
+            LEGAL_24,
+            &password,
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(
             stated(&twenty_four, 12).err(),
             Some(MhfeError::VerifierMismatch)
@@ -859,17 +887,18 @@ mod tests {
         assert!(phrase.ends_with("abandon above proof fatigue"));
         let password = test_password();
         let mut mhfe = reduced();
-        let container = mhfe
-            .encrypt(
-                &phrase,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut mhfe,
+            &phrase,
+            &password,
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let read = only_phrase(
-            mhfe.decrypt(
+            decrypt(
+                &mut mhfe,
                 &container,
                 &password,
                 PhraseLength::Detect,
@@ -880,18 +909,24 @@ mod tests {
         assert!(read.offers_wallet_check());
         assert_eq!(read.passes_wallet_check("TREZOR"), Ok(Some(true)));
         assert_eq!(read.passes_wallet_check(""), Ok(Some(false)));
-        let short = reduced()
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let short = encrypt(
+            &mut reduced(),
+            ZERO_12,
+            &password,
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let read = only_phrase(
-            mhfe.decrypt(&short, &password, PhraseLength::Detect, &mut no_progress())
-                .unwrap(),
+            decrypt(
+                &mut mhfe,
+                &short,
+                &password,
+                PhraseLength::Detect,
+                &mut no_progress(),
+            )
+            .unwrap(),
         );
         assert!(!read.offers_wallet_check());
         assert_eq!(read.passes_wallet_check("TREZOR"), Ok(None));
@@ -907,17 +942,18 @@ mod tests {
         let decoy = Password::new("another public test password").unwrap();
         let mut mhfe = reduced();
         for original in [ZERO_12, LEGAL_24] {
-            let container = mhfe
-                .encrypt(
-                    original,
-                    &password,
-                    Suite::TwentyFourWords,
-                    &mut no_progress(),
-                    &mut |_| Ok(()),
-                )
-                .unwrap();
+            let container = encrypt(
+                &mut mhfe,
+                original,
+                &password,
+                Suite::TwentyFourWords,
+                &mut no_progress(),
+                &mut |_| Ok(()),
+            )
+            .unwrap();
             let opened = only_phrase(
-                mhfe.decrypt(
+                decrypt(
+                    &mut mhfe,
                     &container,
                     &decoy,
                     PhraseLength::Words(WordCount::new(24).unwrap()),
@@ -934,21 +970,27 @@ mod tests {
             // Automatic detection gives the same unverified 24-word reading, just as for an
             // honest 24-word original.
             let detected = only_phrase(
-                mhfe.decrypt(&container, &decoy, PhraseLength::Detect, &mut no_progress())
-                    .unwrap(),
+                decrypt(
+                    &mut mhfe,
+                    &container,
+                    &decoy,
+                    PhraseLength::Detect,
+                    &mut no_progress(),
+                )
+                .unwrap(),
             );
             assert_eq!((detected.words, detected.verified), (24, false));
             assert_eq!(detected.phrase(), opened.phrase());
 
-            let again = mhfe
-                .encrypt(
-                    &opened.phrase,
-                    &decoy,
-                    Suite::TwentyFourWords,
-                    &mut no_progress(),
-                    &mut |_| Ok(()),
-                )
-                .unwrap();
+            let again = encrypt(
+                &mut mhfe,
+                &opened.phrase,
+                &decoy,
+                Suite::TwentyFourWords,
+                &mut no_progress(),
+                &mut |_| Ok(()),
+            )
+            .unwrap();
             assert_eq!(*again, *container);
         }
     }
@@ -966,15 +1008,14 @@ mod tests {
                 .unwrap();
             let container = phrase_from_entropy(&y[..]).unwrap();
 
-            let Recovery::Ambiguous(candidates) = mhfe
-                .decrypt(
-                    &container,
-                    &password,
-                    PhraseLength::Detect,
-                    &mut no_progress(),
-                )
-                .unwrap()
-            else {
+            let Recovery::Ambiguous(candidates) = decrypt(
+                &mut mhfe,
+                &container,
+                &password,
+                PhraseLength::Detect,
+                &mut no_progress(),
+            )
+            .unwrap() else {
                 panic!("expected an ambiguous result for {lengths:?}");
             };
             let found: Vec<_> = candidates.iter().map(|candidate| candidate.words).collect();
@@ -991,7 +1032,8 @@ mod tests {
 
             // A length stated among those that pass resolves the ambiguity, and names the other.
             let chosen = only_phrase(
-                mhfe.decrypt(
+                decrypt(
+                    &mut mhfe,
                     &container,
                     &password,
                     PhraseLength::Words(WordCount::new(lengths[0]).unwrap()),
@@ -1007,15 +1049,14 @@ mod tests {
                 .into_iter()
                 .find(|words| !lengths.contains(words))
                 .unwrap();
-            let Recovery::Ambiguous(readings) = mhfe
-                .decrypt(
-                    &container,
-                    &password,
-                    PhraseLength::Words(WordCount::new(other).unwrap()),
-                    &mut no_progress(),
-                )
-                .unwrap()
-            else {
+            let Recovery::Ambiguous(readings) = decrypt(
+                &mut mhfe,
+                &container,
+                &password,
+                PhraseLength::Words(WordCount::new(other).unwrap()),
+                &mut no_progress(),
+            )
+            .unwrap() else {
                 panic!("a stated length that fails leaves the ambiguity");
             };
             let found: Vec<_> = readings.iter().map(|reading| reading.words).collect();
@@ -1033,7 +1074,8 @@ mod tests {
         let bad_checksum = LEGAL_24.replace("title", "thank");
 
         assert!(matches!(
-            mhfe.encrypt(
+            encrypt(
+                &mut mhfe,
                 "abandon abandon",
                 &password,
                 Suite::TwentyFourWords,
@@ -1043,7 +1085,8 @@ mod tests {
             Err(MhfeError::InvalidPhrase(_))
         ));
         assert!(matches!(
-            mhfe.decrypt(
+            decrypt(
+                &mut mhfe,
                 &bad_checksum,
                 &password,
                 PhraseLength::Detect,
@@ -1052,7 +1095,8 @@ mod tests {
             Err(MhfeError::InvalidContainer(_))
         ));
         assert!(matches!(
-            mhfe.decrypt(
+            decrypt(
+                &mut mhfe,
                 "abandon abandon abandon",
                 &password,
                 PhraseLength::Detect,
@@ -1061,7 +1105,8 @@ mod tests {
             Err(MhfeError::InvalidContainer(_))
         ));
         assert_eq!(
-            mhfe.encrypt(
+            encrypt(
+                &mut mhfe,
                 LEGAL_24,
                 &password,
                 Suite::SameLength,
@@ -1072,7 +1117,8 @@ mod tests {
             Some(MhfeError::SameLengthNeedsShortPhrase)
         );
         assert_eq!(
-            mhfe.decrypt(
+            decrypt(
+                &mut mhfe,
                 ZERO_12,
                 &password,
                 PhraseLength::Words(WordCount::new(24).unwrap()),
@@ -1095,7 +1141,8 @@ mod tests {
                 let entropy = vec![7u8; packing::entropy_bytes(container_words).unwrap()];
                 let container = phrase_from_entropy(&entropy).unwrap();
                 assert_eq!(
-                    mhfe.decrypt(
+                    decrypt(
+                        &mut mhfe,
                         &container,
                         &password,
                         PhraseLength::Words(WordCount::new(chosen).unwrap()),
@@ -1119,7 +1166,8 @@ mod tests {
         for (container, selected) in &cases {
             let (container, selected) = (container.as_str(), *selected);
             assert!(matches!(
-                mhfe.decrypt_as(
+                decrypt_as(
+                    &mut mhfe,
                     container,
                     &password,
                     Some(selected),
@@ -1147,18 +1195,18 @@ mod tests {
     fn encryption_checks_its_result_in_24_rounds() {
         let password = test_password();
         let mut steps = Vec::new();
-        reduced()
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::TwentyFourWords,
-                &mut |round, rounds| {
-                    steps.push((round, rounds));
-                    Ok(())
-                },
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        encrypt(
+            &mut reduced(),
+            ZERO_12,
+            &password,
+            Suite::TwentyFourWords,
+            &mut |round, rounds| {
+                steps.push((round, rounds));
+                Ok(())
+            },
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let expected: Vec<(u32, u32)> = (1..=24).map(|round| (round, 24)).collect();
         assert_eq!(steps, expected);
     }
@@ -1186,7 +1234,8 @@ mod tests {
         let password = test_password();
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), FlakyEngine(0));
         assert_eq!(
-            mhfe.encrypt(
+            encrypt(
+                &mut mhfe,
                 ZERO_12,
                 &password,
                 Suite::TwentyFourWords,
@@ -1204,21 +1253,21 @@ mod tests {
         let password = test_password();
         let last_round = std::cell::Cell::new(0);
         let mut shown = Vec::new();
-        let container = reduced()
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::TwentyFourWords,
-                &mut |round, _| {
-                    last_round.set(round);
-                    Ok(())
-                },
-                &mut |container| {
-                    shown.push((last_round.get(), container.to_owned()));
-                    Ok(())
-                },
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut reduced(),
+            ZERO_12,
+            &password,
+            Suite::TwentyFourWords,
+            &mut |round, _| {
+                last_round.set(round);
+                Ok(())
+            },
+            &mut |container| {
+                shown.push((last_round.get(), container.to_owned()));
+                Ok(())
+            },
+        )
+        .unwrap();
         assert_eq!(*container, REDUCED_COST_CONTAINER);
         assert_eq!(shown, [(12, REDUCED_COST_CONTAINER.to_owned())]);
     }
@@ -1227,7 +1276,8 @@ mod tests {
     fn cancellation_stops_between_rounds() {
         let password = test_password();
         let mut mhfe = reduced();
-        let result = mhfe.encrypt(
+        let result = encrypt(
+            &mut mhfe,
             ZERO_12,
             &password,
             Suite::TwentyFourWords,
@@ -1244,7 +1294,8 @@ mod tests {
 
         // The container's callback stops it too: the check never starts.
         let mut last_round = 0;
-        let result = mhfe.encrypt(
+        let result = encrypt(
+            &mut mhfe,
             ZERO_12,
             &password,
             Suite::TwentyFourWords,
@@ -1269,20 +1320,21 @@ mod tests {
         let mut mhfe = reduced();
         for words in [12, 15, 18, 21] {
             let original = varied_phrase(words);
-            let container = mhfe
-                .encrypt(
-                    &original,
-                    &password,
-                    Suite::SameLength,
-                    &mut no_progress(),
-                    &mut |_| Ok(()),
-                )
-                .unwrap();
+            let container = encrypt(
+                &mut mhfe,
+                &original,
+                &password,
+                Suite::SameLength,
+                &mut no_progress(),
+                &mut |_| Ok(()),
+            )
+            .unwrap();
             assert_eq!(container.split(' ').count(), words);
             assert_ne!(*container, *original);
 
             let recovered = only_phrase(
-                mhfe.decrypt(
+                decrypt(
+                    &mut mhfe,
                     &container,
                     &password,
                     PhraseLength::Detect,
@@ -1297,7 +1349,7 @@ mod tests {
             assert!(!recovered.verified);
             // Choosing the container's own length changes nothing.
             // Stating the length gives the same phrase.
-            let chosen = decrypt_as(
+            let chosen = recovery_at(
                 &mut mhfe,
                 &container,
                 &password,
@@ -1310,15 +1362,15 @@ mod tests {
     #[test]
     fn the_reduced_cost_same_length_container_is_the_same_everywhere() {
         let password = test_password();
-        let container = reduced()
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::SameLength,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut reduced(),
+            ZERO_12,
+            &password,
+            Suite::SameLength,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(*container, REDUCED_COST_SAME_LENGTH_CONTAINER);
     }
 
@@ -1330,31 +1382,37 @@ mod tests {
         let password = test_password();
         let decoy = Password::new("another public test password").unwrap();
         let mut mhfe = reduced();
-        let container = mhfe
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::SameLength,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            Suite::SameLength,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let opened = only_phrase(
-            mhfe.decrypt(&container, &decoy, PhraseLength::Detect, &mut no_progress())
-                .unwrap(),
+            decrypt(
+                &mut mhfe,
+                &container,
+                &decoy,
+                PhraseLength::Detect,
+                &mut no_progress(),
+            )
+            .unwrap(),
         );
         assert_eq!((opened.words, opened.verified), (12, false));
         assert_ne!(opened.phrase(), ZERO_12);
         assert_eq!(phrase::check_phrase(&opened.phrase).unwrap(), 12);
-        let again = mhfe
-            .encrypt(
-                &opened.phrase,
-                &decoy,
-                Suite::SameLength,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let again = encrypt(
+            &mut mhfe,
+            &opened.phrase,
+            &decoy,
+            Suite::SameLength,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(*again, *container);
     }
 
@@ -1362,24 +1420,24 @@ mod tests {
     fn the_two_suites_give_different_containers() {
         let password = test_password();
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), HashEngine);
-        let standard = mhfe
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::TwentyFourWords,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
-        let same_length = mhfe
-            .encrypt(
-                ZERO_12,
-                &password,
-                Suite::SameLength,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let standard = encrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        let same_length = encrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            Suite::SameLength,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(standard.split(' ').count(), 24);
         assert_eq!(same_length.split(' ').count(), 12);
         assert!(!standard.starts_with(same_length.as_str()));
@@ -1410,15 +1468,15 @@ mod tests {
         for case in cases(&fixture, "phrases") {
             let id = text(case, "id");
             let error = match text(case, "operation") {
-                "encrypt" => mhfe
-                    .encrypt(
-                        text(case, "phrase"),
-                        &password,
-                        Suite::TwentyFourWords,
-                        &mut |_, _| Ok(()),
-                        &mut |_| Ok(()),
-                    )
-                    .err(),
+                "encrypt" => encrypt(
+                    &mut mhfe,
+                    text(case, "phrase"),
+                    &password,
+                    Suite::TwentyFourWords,
+                    &mut |_, _| Ok(()),
+                    &mut |_| Ok(()),
+                )
+                .err(),
                 "decrypt" => {
                     // A wrong word count is refused when the length is made, before decrypt runs.
                     let length = match case.get("words") {
@@ -1430,7 +1488,8 @@ mod tests {
                         .and_then(|length| {
                             // These are suite 3 cases: the suite is selected, not taken from the
                             // word count.
-                            mhfe.decrypt_as(
+                            decrypt_as(
+                                &mut mhfe,
                                 text(case, "container"),
                                 &password,
                                 Some(Suite::TwentyFourWords),
@@ -1491,15 +1550,15 @@ mod tests {
             let id = text(case, "id");
             assert_eq!(text(case, "expected"), "rejected", "{id}");
             let result = match text(case, "operation") {
-                "encrypt-same-length" => mhfe
-                    .encrypt(
-                        text(case, "text"),
-                        &password,
-                        Suite::SameLength,
-                        &mut no_progress(),
-                        &mut |_| Ok(()),
-                    )
-                    .map(|_| ()),
+                "encrypt-same-length" => encrypt(
+                    &mut mhfe,
+                    text(case, "text"),
+                    &password,
+                    Suite::SameLength,
+                    &mut no_progress(),
+                    &mut |_| Ok(()),
+                )
+                .map(|_| ()),
                 "decrypt" => {
                     let length = match case.get("words") {
                         Some(words) => PhraseLength::Words(
@@ -1512,9 +1571,14 @@ mod tests {
                         Some(4) => Suite::SameLength,
                         other => panic!("{id}: unknown suite {other:?}"),
                     });
-                    mhfe.decrypt_as(text(case, "text"), &password, suite, length, &mut |_, _| {
-                        Ok(())
-                    })
+                    decrypt_as(
+                        &mut mhfe,
+                        text(case, "text"),
+                        &password,
+                        suite,
+                        length,
+                        &mut |_, _| Ok(()),
+                    )
                     .map(|_| ())
                 }
                 other => panic!("{id}: unknown operation {other}"),

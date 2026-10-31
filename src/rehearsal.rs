@@ -7,7 +7,7 @@
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::detection;
 use crate::engine::Argon2Engine;
-use crate::mhfe::{PhraseLength, RecoveredPhrase, RecoveredState};
+use crate::mhfe::{recover_state, PhraseLength, RecoveredPhrase, RecoveredState};
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::packing::STATE_WORDS;
 use crate::suite::{Suite, ROUNDS};
@@ -209,68 +209,54 @@ impl<'a> Reference<'a> {
     }
 }
 
-impl<E: Argon2Engine> Mhfe<E> {
-    /// Runs a full recovery and compares it with `reference`. Returns whether it matches, and for
-    /// an address the path where it was found.
-    pub fn check(
-        &mut self,
-        container: &str,
-        password: &Password,
-        reference: &Reference<'_>,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<CheckOutcome, MhfeError> {
-        let recovered = self.recover_for_check(container, password, reference, on_progress)?;
-        Ok(recovered.compare(reference)?.outcome)
-    }
+/// Runs a full recovery and compares it with `reference`. Returns whether it matches, and for
+/// an address the path where it was found.
+pub fn check<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    reference: &Reference<'_>,
+    on_progress: ProgressCallback<'_>,
+) -> Result<CheckOutcome, MhfeError> {
+    let recovered = recover_for_check(mhfe, container, password, reference, on_progress)?;
+    Ok(recovered.compare(reference)?.outcome)
+}
 
-    /// Recovers `container` for a check against `reference` and any reference after it, such as
-    /// an address once detection found no length ([`RecoveredForCheck`]). A `reference` the
-    /// container cannot be checked with is refused first, before any Argon2 work.
-    pub fn recover_for_check(
-        &mut self,
-        container: &str,
-        password: &Password,
-        reference: &Reference<'_>,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<RecoveredForCheck, MhfeError> {
-        let recovery = self.recover_to_check(container, password, reference, on_progress)?;
-        Ok(RecoveredForCheck {
-            container_words: container.split_whitespace().count(),
-            recovery,
-        })
-    }
+/// Recovers `container` for a check against `reference` and any reference after it, such as
+/// an address once detection found no length ([`RecoveredForCheck`]). A `reference` the
+/// container cannot be checked with is refused first, before any Argon2 work.
+pub fn recover_for_check<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    reference: &Reference<'_>,
+    on_progress: ProgressCallback<'_>,
+) -> Result<RecoveredForCheck, MhfeError> {
+    let container_words = container.split_whitespace().count();
+    refuse_impossible(container_words, reference)?;
+    let recovery = recover_state(mhfe, container, password, None, on_progress)?;
+    Ok(RecoveredForCheck {
+        container_words,
+        recovery,
+    })
+}
 
-    /// [`Mhfe::recover_for_check`], reporting its two stages: the twelve rounds of the recovery as
-    /// [`Stage::Recover`], then [`Stage::Compare`] once more at round 12 of 12, before the
-    /// recovery is compared, which for an address can take seconds.
-    pub fn recover_for_check_in_stages(
-        &mut self,
-        container: &str,
-        password: &Password,
-        reference: &Reference<'_>,
-        on_progress: StageCallback<'_>,
-    ) -> Result<RecoveredForCheck, MhfeError> {
-        let rounds = RoundCounter::starting_after(0, ROUNDS);
-        let recovered =
-            self.recover_for_check(container, password, reference, &mut |round, _| {
-                rounds.report(Stage::Recover, round, on_progress)
-            })?;
-        rounds.report(Stage::Compare, ROUNDS, on_progress)?;
-        Ok(recovered)
-    }
-
-    /// The first part of a check: refuses a reference the container cannot be checked with, before
-    /// any Argon2 work, then recovers the state `X` of `container`.
-    fn recover_to_check(
-        &mut self,
-        container: &str,
-        password: &Password,
-        reference: &Reference<'_>,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<RecoveredState, MhfeError> {
-        refuse_impossible(container.split_whitespace().count(), reference)?;
-        self.recover_state(container, password, None, on_progress)
-    }
+/// [`recover_for_check`], reporting its two stages: the twelve rounds of the recovery as
+/// [`Stage::Recover`], then [`Stage::Compare`] once more at round 12 of 12, before the
+/// recovery is compared, which for an address can take seconds.
+pub fn recover_for_check_in_stages<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    reference: &Reference<'_>,
+    on_progress: StageCallback<'_>,
+) -> Result<RecoveredForCheck, MhfeError> {
+    let rounds = RoundCounter::starting_after(0, ROUNDS);
+    let recovered = recover_for_check(mhfe, container, password, reference, &mut |round, _| {
+        rounds.report(Stage::Recover, round, on_progress)
+    })?;
+    rounds.report(Stage::Compare, ROUNDS, on_progress)?;
+    Ok(recovered)
 }
 
 /// A container recovered for a check: its suite and state `X` in locked memory, which a front end
@@ -284,7 +270,7 @@ pub struct RecoveredForCheck {
 
 impl RecoveredForCheck {
     /// Compares the recovery with `reference`, refusing one the container cannot be checked with,
-    /// as [`Mhfe::check`] refuses it, with what the recovery shows beside it ([`CheckEvidence`]).
+    /// as [`check`] refuses it, with what the recovery shows beside it ([`CheckEvidence`]).
     pub fn compare(&self, reference: &Reference<'_>) -> Result<CheckEvidence, MhfeError> {
         refuse_impossible(self.container_words, reference)?;
         evidence_of(&self.recovery, reference)
@@ -457,65 +443,45 @@ impl<'a> Confirmation<'a> {
     }
 }
 
-impl<E: Argon2Engine> Mhfe<E> {
-    /// Recovers the phrase of `container` to encrypt it again under a new password or settings,
-    /// and gives it only once it is confirmed (the re-encryption guard), as `confirmation` says:
-    /// a 12- to 21-word original of a 24-word container passes its built-in check at the length
-    /// `words` the owner states in every case, and a 24-word original or a same-length container,
-    /// which have none, need a wallet reference or the owner. Encrypting the phrase again under the
-    /// old password and comparing proves nothing, as that gives the same container for every
-    /// password, so it is not a confirmation. Everything is checked before the first Argon2 call.
-    pub fn recover_confirmed(
-        &mut self,
-        container: &str,
-        password: &Password,
-        words: WordCount,
-        confirmation: Confirmation<'_>,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<RecoveredPhrase, MhfeError> {
-        self.recover_confirmed_reporting(
-            container,
-            password,
-            PhraseLength::Words(words),
-            confirmation,
-            on_progress,
-            &mut || Ok(()),
-        )
-    }
+/// Recovers the phrase of `container` to encrypt it again under a new password or settings,
+/// and gives it only once it is confirmed (the re-encryption guard), as `confirmation` says:
+/// a 12- to 21-word original of a 24-word container passes its built-in check at the length
+/// `words` the owner states in every case, and a 24-word original or a same-length container,
+/// which have none, need a wallet reference or the owner. Encrypting the phrase again under the
+/// old password and comparing proves nothing, as that gives the same container for every
+/// password, so it is not a confirmation. Everything is checked before the first Argon2 call.
+pub fn recover_confirmed<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    words: WordCount,
+    confirmation: Confirmation<'_>,
+    on_progress: ProgressCallback<'_>,
+) -> Result<RecoveredPhrase, MhfeError> {
+    let length = PhraseLength::Words(words);
+    recover_for_rekey(mhfe, container, password, length, confirmation, on_progress)?.confirm(
+        length,
+        confirmation,
+        &mut || Ok(()),
+    )
+}
 
-    /// [`Mhfe::recover_confirmed`] for a `length` that may be detected, calling `before_compare`
-    /// once the recovery's rounds are done and before a wallet reference is compared, which for an
-    /// address can take seconds ([`RecoveredForRekey::confirm`]).
-    pub(crate) fn recover_confirmed_reporting(
-        &mut self,
-        container: &str,
-        password: &Password,
-        length: PhraseLength,
-        confirmation: Confirmation<'_>,
-        on_progress: ProgressCallback<'_>,
-        before_compare: &mut dyn FnMut() -> Result<(), MhfeError>,
-    ) -> Result<RecoveredPhrase, MhfeError> {
-        self.recover_for_rekey(container, password, length, confirmation, on_progress)?
-            .confirm(length, confirmation, before_compare)
-    }
-
-    /// Recovers the state of `container` to confirm a phrase from it, once or again after a
-    /// confirmation was refused, without the rounds again ([`RecoveredForRekey`]). `length` and
-    /// `confirmation` are those of the first confirmation, which is refused here, before any
-    /// Argon2 work, if it cannot confirm a phrase of that length.
-    pub(crate) fn recover_for_rekey(
-        &mut self,
-        container: &str,
-        password: &Password,
-        length: PhraseLength,
-        confirmation: Confirmation<'_>,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<RecoveredForRekey, MhfeError> {
-        let facts = ContainerFacts::read(container)?;
-        confirmation.refuse_for(facts.confirmation_needed(length)?)?;
-        let recovery = self.recover_state(container, password, None, on_progress)?;
-        Ok(RecoveredForRekey { facts, recovery })
-    }
+/// Recovers the state of `container` to confirm a phrase from it, once or again after a
+/// confirmation was refused, without the rounds again ([`RecoveredForRekey`]). `length` and
+/// `confirmation` are those of the first confirmation, which is refused here, before any
+/// Argon2 work, if it cannot confirm a phrase of that length.
+pub(crate) fn recover_for_rekey<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    length: PhraseLength,
+    confirmation: Confirmation<'_>,
+    on_progress: ProgressCallback<'_>,
+) -> Result<RecoveredForRekey, MhfeError> {
+    let facts = ContainerFacts::read(container)?;
+    confirmation.refuse_for(facts.confirmation_needed(length)?)?;
+    let recovery = recover_state(mhfe, container, password, None, on_progress)?;
+    Ok(RecoveredForRekey { facts, recovery })
 }
 
 /// A container recovered to be encrypted again: its facts and state `X` in locked memory, from
@@ -661,7 +627,6 @@ pub(crate) fn compare_until(
     stopped: &dyn Fn() -> bool,
 ) -> Result<CheckOutcome, MhfeError> {
     match reference {
-        Reference::BuiltInCheck { .. } => Ok(CheckOutcome::DoesNotMatch),
         Reference::Address {
             address,
             passphrase,
@@ -680,31 +645,31 @@ pub(crate) fn compare_until(
         } => Ok(CheckOutcome::of(
             wallet::master_fingerprint(phrase, passphrase)? == *fingerprint,
         )),
-        Reference::WalletCheck { passphrase } => {
-            Ok(CheckOutcome::of(wallet_check::verify(phrase, passphrase)?))
-        }
-        // The phrase's own checks are read from the recovered state, never from one reading.
-        Reference::OwnChecks { .. } => Ok(CheckOutcome::DoesNotMatch),
+        // Every caller holds an address or a fingerprint: the other references are read from the
+        // recovered state, never from one reading.
+        Reference::BuiltInCheck { .. }
+        | Reference::WalletCheck { .. }
+        | Reference::OwnChecks { .. } => Ok(CheckOutcome::DoesNotMatch),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::phrase_from_entropy;
     use crate::test_support::{
         container_of, reduced, state_from_hex, test_password, wrong_password,
         ABANDON_12 as ABANDON, ABANDON_12_FINGERPRINT, AMBIGUOUS_STATES,
     };
+    use crate::{encrypt, phrase_from_entropy};
 
     /// A check of `container` against `reference` with no progress to report.
-    fn check<E: Argon2Engine>(
+    fn quiet_check<E: Argon2Engine>(
         mhfe: &mut Mhfe<E>,
         container: &str,
         password: &Password,
         reference: &Reference<'_>,
     ) -> Result<CheckOutcome, MhfeError> {
-        mhfe.check(container, password, reference, &mut |_, _| Ok(()))
+        check(mhfe, container, password, reference, &mut |_, _| Ok(()))
     }
 
     /// What a check of `container` against `reference` shows, with no progress to report.
@@ -713,10 +678,12 @@ mod tests {
         container: &str,
         reference: &Reference<'_>,
     ) -> CheckEvidence {
-        mhfe.recover_for_check(container, &test_password(), reference, &mut |_, _| Ok(()))
-            .unwrap()
-            .compare(reference)
-            .unwrap()
+        recover_for_check(mhfe, container, &test_password(), reference, &mut |_, _| {
+            Ok(())
+        })
+        .unwrap()
+        .compare(reference)
+        .unwrap()
     }
 
     /// A check tells beside its reference the original seed phrase's own checks: the built-in
@@ -778,27 +745,26 @@ mod tests {
         let twenty_four = WordCount::new(24).unwrap();
 
         // A 12-word original in a 24-word container: its built-in check at the stated length.
-        let container = mhfe
-            .encrypt(
-                ABANDON,
-                &password,
-                Suite::TwentyFourWords,
-                none,
-                &mut |_| Ok(()),
-            )
-            .unwrap();
-        let phrase = mhfe
-            .recover_confirmed(
-                &container,
-                &password,
-                twelve,
-                Confirmation::BuiltInCheck,
-                none,
-            )
-            .unwrap();
+        let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
+        let phrase = recover_confirmed(
+            &mut mhfe,
+            &container,
+            &password,
+            twelve,
+            Confirmation::BuiltInCheck,
+            none,
+        )
+        .unwrap();
         assert_eq!(phrase.phrase(), ABANDON);
         assert!(matches!(
-            mhfe.recover_confirmed(&container, &wrong, twelve, Confirmation::BuiltInCheck, none),
+            recover_confirmed(
+                &mut mhfe,
+                &container,
+                &wrong,
+                twelve,
+                Confirmation::BuiltInCheck,
+                none
+            ),
             Err(MhfeError::VerifierMismatch)
         ));
 
@@ -806,18 +772,11 @@ mod tests {
         const ART: &str = "abandon abandon abandon abandon abandon abandon abandon abandon \
             abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
             abandon abandon abandon abandon abandon art";
-        let container = mhfe
-            .encrypt(
-                ART,
-                &password,
-                Suite::TwentyFourWords,
-                none,
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = container_of(&mut mhfe, ART, Suite::TwentyFourWords);
         let mut rounds = 0;
         assert!(matches!(
-            mhfe.recover_confirmed(
+            recover_confirmed(
+                &mut mhfe,
                 &container,
                 &password,
                 twenty_four,
@@ -835,19 +794,20 @@ mod tests {
             fingerprint,
             passphrase: "",
         };
-        let phrase = mhfe
-            .recover_confirmed(
-                &container,
-                &password,
-                twenty_four,
-                Confirmation::Wallet(&right),
-                none,
-            )
-            .unwrap();
+        let phrase = recover_confirmed(
+            &mut mhfe,
+            &container,
+            &password,
+            twenty_four,
+            Confirmation::Wallet(&right),
+            none,
+        )
+        .unwrap();
         assert_eq!(phrase.phrase(), ART);
         // The wrong password gives another valid phrase, which the reference refuses.
         assert!(matches!(
-            mhfe.recover_confirmed(
+            recover_confirmed(
+                &mut mhfe,
                 &container,
                 &wrong,
                 twenty_four,
@@ -861,7 +821,8 @@ mod tests {
             passphrase: "TREZOR",
         };
         assert!(matches!(
-            mhfe.recover_confirmed(
+            recover_confirmed(
+                &mut mhfe,
                 &container,
                 &password,
                 twenty_four,
@@ -872,23 +833,22 @@ mod tests {
         ));
 
         // The owner may confirm a 24-word original instead: the phrase comes out for showing.
-        let phrase = mhfe
-            .recover_confirmed(
-                &container,
-                &password,
-                twenty_four,
-                Confirmation::Owner,
-                none,
-            )
-            .unwrap();
+        let phrase = recover_confirmed(
+            &mut mhfe,
+            &container,
+            &password,
+            twenty_four,
+            Confirmation::Owner,
+            none,
+        )
+        .unwrap();
         assert_eq!(phrase.phrase(), ART);
 
         // A same-length container: its own length, and a reference.
-        let container = mhfe
-            .encrypt(ABANDON, &password, Suite::SameLength, none, &mut |_| Ok(()))
-            .unwrap();
+        let container = container_of(&mut mhfe, ABANDON, Suite::SameLength);
         assert!(matches!(
-            mhfe.recover_confirmed(
+            recover_confirmed(
+                &mut mhfe,
                 &container,
                 &password,
                 twelve,
@@ -898,7 +858,8 @@ mod tests {
             Err(MhfeError::ReferenceRequired)
         ));
         assert!(matches!(
-            mhfe.recover_confirmed(
+            recover_confirmed(
+                &mut mhfe,
                 &container,
                 &password,
                 twenty_four,
@@ -913,15 +874,15 @@ mod tests {
             fingerprint: ABANDON_12_FINGERPRINT,
             passphrase: "",
         };
-        let phrase = mhfe
-            .recover_confirmed(
-                &container,
-                &password,
-                twelve,
-                Confirmation::Wallet(&abandon),
-                none,
-            )
-            .unwrap();
+        let phrase = recover_confirmed(
+            &mut mhfe,
+            &container,
+            &password,
+            twelve,
+            Confirmation::Wallet(&abandon),
+            none,
+        )
+        .unwrap();
         assert_eq!(phrase.phrase(), ABANDON);
     }
 
@@ -935,38 +896,36 @@ mod tests {
         let mut entropy = [0u8; 32];
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
         let phrase = phrase_from_entropy(&entropy).unwrap();
-        let container = mhfe
-            .encrypt(
-                &phrase,
-                &password,
-                Suite::TwentyFourWords,
-                none,
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut mhfe,
+            &phrase,
+            &password,
+            Suite::TwentyFourWords,
+            none,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let reference = Reference::WalletCheck {
             passphrase: "TREZOR",
         };
-        assert!(mhfe
-            .check(&container, &password, &reference, none)
+        assert!(check(&mut mhfe, &container, &password, &reference, none)
             .unwrap()
             .matches());
-        assert!(!mhfe
-            .check(&container, &wrong, &reference, none)
+        assert!(!check(&mut mhfe, &container, &wrong, &reference, none)
             .unwrap()
             .matches());
         let other = Reference::WalletCheck {
             passphrase: "trezor",
         };
-        assert!(!mhfe
-            .check(&container, &password, &other, none)
+        assert!(!check(&mut mhfe, &container, &password, &other, none)
             .unwrap()
             .matches());
         // Without a passphrase the check is not offered: refused before any Argon2 work, as the
         // browser and wallet_check::verify refuse it (AUD-010).
         let mut rounds = 0;
         assert_eq!(
-            mhfe.check(
+            check(
+                &mut mhfe,
                 &container,
                 &password,
                 &Reference::WalletCheck { passphrase: "" },
@@ -979,7 +938,8 @@ mod tests {
         );
         assert_eq!(rounds, 0);
         assert!(matches!(
-            mhfe.recover_confirmed(
+            recover_confirmed(
+                &mut mhfe,
                 &container,
                 &password,
                 WordCount::new(24).unwrap(),
@@ -1001,39 +961,40 @@ mod tests {
         let password = test_password();
         let wrong = wrong_password();
         let own = |passphrase| Reference::OwnChecks { passphrase };
-        let short = mhfe
-            .encrypt(
-                ABANDON,
-                &password,
-                Suite::TwentyFourWords,
-                none,
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let short = encrypt(
+            &mut mhfe,
+            ABANDON,
+            &password,
+            Suite::TwentyFourWords,
+            none,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         for passphrase in [None, Some("TREZOR")] {
-            let evidence = mhfe
-                .recover_for_check(&short, &password, &own(passphrase), none)
+            let evidence = recover_for_check(&mut mhfe, &short, &password, &own(passphrase), none)
                 .unwrap()
                 .compare(&own(passphrase))
                 .unwrap();
             assert!(evidence.outcome.matches());
             assert_eq!(evidence.built_in_check, Some(12));
         }
-        assert!(!mhfe
-            .check(&short, &wrong, &own(None), none)
+        assert!(!check(&mut mhfe, &short, &wrong, &own(None), none)
             .unwrap()
             .matches());
         // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
         let mut entropy = [0u8; 32];
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
         let drawn = phrase_from_entropy(&entropy).unwrap();
-        let full = mhfe
-            .encrypt(&drawn, &password, Suite::TwentyFourWords, none, &mut |_| {
-                Ok(())
-            })
-            .unwrap();
-        let evidence = mhfe
-            .recover_for_check(&full, &password, &own(Some("TREZOR")), none)
+        let full = encrypt(
+            &mut mhfe,
+            &drawn,
+            &password,
+            Suite::TwentyFourWords,
+            none,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        let evidence = recover_for_check(&mut mhfe, &full, &password, &own(Some("TREZOR")), none)
             .unwrap()
             .compare(&own(Some("TREZOR")))
             .unwrap();
@@ -1043,20 +1004,25 @@ mod tests {
             (None, Some(true))
         );
         for passphrase in [None, Some("trezor")] {
-            assert!(!mhfe
-                .check(&full, &password, &own(passphrase), none)
+            assert!(!check(&mut mhfe, &full, &password, &own(passphrase), none)
                 .unwrap()
                 .matches());
         }
         assert_eq!(
-            mhfe.check(&full, &password, &own(Some("")), none),
+            check(&mut mhfe, &full, &password, &own(Some("")), none),
             Err(MhfeError::WalletCheckNeedsPassphrase)
         );
-        let same_length = mhfe
-            .encrypt(ABANDON, &password, Suite::SameLength, none, &mut |_| Ok(()))
-            .unwrap();
+        let same_length = encrypt(
+            &mut mhfe,
+            ABANDON,
+            &password,
+            Suite::SameLength,
+            none,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         assert_eq!(
-            mhfe.check(&same_length, &password, &own(None), none),
+            check(&mut mhfe, &same_length, &password, &own(None), none),
             Err(MhfeError::NoBuiltInCheck {
                 container_words: 12
             })
@@ -1106,23 +1072,22 @@ mod tests {
         let mut mhfe = reduced();
         let password = test_password();
         let phrase = phrase_from_entropy(&[7u8; 32]).unwrap();
-        let container = mhfe
-            .encrypt(
-                &phrase,
-                &password,
-                Suite::TwentyFourWords,
-                &mut |_, _| Ok(()),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut mhfe,
+            &phrase,
+            &password,
+            Suite::TwentyFourWords,
+            &mut |_, _| Ok(()),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let own = Reference::OwnChecks { passphrase: None };
         let mut rounds = 0;
-        let recovered = mhfe
-            .recover_for_check(&container, &password, &own, &mut |_, _| {
-                rounds += 1;
-                Ok(())
-            })
-            .unwrap();
+        let recovered = recover_for_check(&mut mhfe, &container, &password, &own, &mut |_, _| {
+            rounds += 1;
+            Ok(())
+        })
+        .unwrap();
         assert_eq!(rounds, ROUNDS);
         assert!(!recovered.compare(&own).unwrap().outcome.matches());
         let fingerprint = Reference::Fingerprint {
@@ -1149,33 +1114,37 @@ mod tests {
         let mut mhfe = reduced();
         let password = test_password();
         assert!(wallet_check::phrase_passes(ABANDON, SHORT_READING_PASSPHRASE).unwrap());
-        let container = mhfe
-            .encrypt(
-                ABANDON,
-                &password,
-                Suite::TwentyFourWords,
-                none,
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut mhfe,
+            ABANDON,
+            &password,
+            Suite::TwentyFourWords,
+            none,
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         // The recovery reads as the 12-word phrase, which the built-in check confirms.
         let built_in = Reference::BuiltInCheck {
             words: WordCount::new(12).unwrap(),
         };
-        assert!(mhfe
-            .check(&container, &password, &built_in, none)
+        assert!(check(&mut mhfe, &container, &password, &built_in, none)
             .unwrap()
             .matches());
         let reference = Reference::WalletCheck {
             passphrase: SHORT_READING_PASSPHRASE,
         };
         assert_eq!(
-            mhfe.check(&container, &password, &reference, none),
+            check(&mut mhfe, &container, &password, &reference, none),
             Ok(CheckOutcome::DoesNotMatch)
         );
-        let staged = mhfe
-            .recover_for_check_in_stages(&container, &password, &reference, &mut |_, _, _| Ok(()))
-            .unwrap();
+        let staged = recover_for_check_in_stages(
+            &mut mhfe,
+            &container,
+            &password,
+            &reference,
+            &mut |_, _, _| Ok(()),
+        )
+        .unwrap();
         assert_eq!(
             staged.compare(&reference).unwrap().outcome,
             CheckOutcome::DoesNotMatch
@@ -1210,16 +1179,16 @@ mod tests {
             },
         ];
         for reference in &references {
-            assert!(check(&mut mhfe, &container, &password, reference)
+            assert!(quiet_check(&mut mhfe, &container, &password, reference)
                 .unwrap()
                 .matches());
-            assert!(!check(&mut mhfe, &container, &wrong, reference)
+            assert!(!quiet_check(&mut mhfe, &container, &wrong, reference)
                 .unwrap()
                 .matches());
         }
 
         // A matched address names its path: the first native SegWit receiving address.
-        let found = check(&mut mhfe, &container, &password, &references[1]).unwrap();
+        let found = quiet_check(&mut mhfe, &container, &password, &references[1]).unwrap();
         assert_eq!(
             found.path().map(ToString::to_string).as_deref(),
             Some("m/84'/0'/0'/0/0")
@@ -1230,9 +1199,11 @@ mod tests {
             fingerprint: ABANDON_12_FINGERPRINT,
             passphrase: "TREZOR",
         };
-        assert!(!check(&mut mhfe, &container, &password, &with_passphrase)
-            .unwrap()
-            .matches());
+        assert!(
+            !quiet_check(&mut mhfe, &container, &password, &with_passphrase)
+                .unwrap()
+                .matches()
+        );
     }
 
     /// The twelve rounds of the recovery, then the comparison, which can be stopped as well.
@@ -1246,24 +1217,25 @@ mod tests {
             passphrase: "",
         };
         let mut reports = Vec::new();
-        let recovered = mhfe
-            .recover_for_check_in_stages(
-                &container,
-                &password,
-                &reference,
-                &mut |stage, round, rounds| {
-                    reports.push((stage, round, rounds));
-                    Ok(())
-                },
-            )
-            .unwrap();
+        let recovered = recover_for_check_in_stages(
+            &mut mhfe,
+            &container,
+            &password,
+            &reference,
+            &mut |stage, round, rounds| {
+                reports.push((stage, round, rounds));
+                Ok(())
+            },
+        )
+        .unwrap();
         assert!(recovered.compare(&reference).unwrap().outcome.matches());
         let mut expected: Vec<(Stage, u32, u32)> =
             (1..=12).map(|round| (Stage::Recover, round, 12)).collect();
         expected.push((Stage::Compare, 12, 12));
         assert_eq!(reports, expected);
 
-        let stopped = mhfe.recover_for_check_in_stages(
+        let stopped = recover_for_check_in_stages(
+            &mut mhfe,
             &container,
             &password,
             &reference,
@@ -1284,25 +1256,25 @@ mod tests {
         let mut mhfe = reduced();
         let original = "legal winner thank year wave sausage worth useful legal winner thank year \
                         wave sausage worth useful legal winner thank year wave sausage worth title";
-        let container = mhfe
-            .encrypt(
-                original,
-                &password,
-                Suite::TwentyFourWords,
-                &mut |_, _| Ok(()),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = encrypt(
+            &mut mhfe,
+            original,
+            &password,
+            Suite::TwentyFourWords,
+            &mut |_, _| Ok(()),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let fingerprint = wallet::master_fingerprint(original, "").unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
             passphrase: "",
         };
-        assert!(check(&mut mhfe, &container, &password, &reference)
+        assert!(quiet_check(&mut mhfe, &container, &password, &reference)
             .unwrap()
             .matches());
         assert_eq!(
-            check(
+            quiet_check(
                 &mut mhfe,
                 &container,
                 &password,
@@ -1326,14 +1298,14 @@ mod tests {
             fingerprint: ABANDON_12_FINGERPRINT,
             passphrase: "",
         };
-        assert!(check(&mut mhfe, &container, &password, &reference)
+        assert!(quiet_check(&mut mhfe, &container, &password, &reference)
             .unwrap()
             .matches());
-        assert!(!check(&mut mhfe, &container, &wrong, &reference)
+        assert!(!quiet_check(&mut mhfe, &container, &wrong, &reference)
             .unwrap()
             .matches());
         assert_eq!(
-            check(
+            quiet_check(
                 &mut mhfe,
                 &container,
                 &password,
@@ -1347,7 +1319,7 @@ mod tests {
             })
         );
         assert_eq!(
-            check(
+            quiet_check(
                 &mut mhfe,
                 &container,
                 &password,

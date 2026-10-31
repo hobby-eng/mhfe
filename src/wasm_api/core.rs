@@ -28,10 +28,11 @@ use crate::self_check::{sets, ComponentCheck, SelfCheck};
 use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
 use crate::{
-    Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets, Mhfe, MhfeError,
-    OriginalFacts, Password, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
-    RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS,
-    MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
+    recover_for_check_in_stages, Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets,
+    Mhfe, MhfeError, OriginalFacts, Password, PhraseLength, RecoveredForCheck, RecoveredForRekey,
+    Recovery, RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor,
+    BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
+    WORD_COUNTS,
 };
 
 #[derive(Serialize)]
@@ -371,10 +372,14 @@ pub fn decrypt(
     let length = word_count(words)?;
     let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
     let (mut mhfe, _) = mhfe_for(pim, memory_level, argon2)?;
-    let recovery = mhfe.decrypt(container, &password, length, &mut |round, rounds| {
-        report(on_round, Stage::Recover, round, rounds)
-    });
-    let recovery = verified(&mhfe, recovery)?;
+    let recovery = crate::decrypt(
+        &mut mhfe,
+        container,
+        &password,
+        length,
+        &mut |round, rounds| report(on_round, Stage::Recover, round, rounds),
+    );
+    let recovery = verified(mhfe.engine(), recovery)?;
     let (kind, phrases) = match recovery {
         Recovery::Phrase(phrase) => ("phrase", vec![phrase]),
         Recovery::Ambiguous(candidates) => ("ambiguous", candidates),
@@ -520,13 +525,14 @@ impl CheckSession {
         // among them, before any round, in the same order for every front end. The work area is
         // freed when this engine is dropped, before the page is asked anything.
         let (mut mhfe, _) = mhfe_for(pim, memory_level, argon2)?;
-        let recovered = mhfe.recover_for_check_in_stages(
+        let recovered = recover_for_check_in_stages(
+            &mut mhfe,
             container,
             &password,
             &wallet.with(passphrase),
             &mut |stage, round, rounds| report(on_round, stage, round, rounds),
         );
-        let recovered = verified(&mhfe, recovered)?;
+        let recovered = verified(mhfe.engine(), recovered)?;
         Ok(Self { recovered })
     }
 
@@ -743,7 +749,7 @@ pub fn search_wallet(
             &mut progress,
         ),
     };
-    let found = verified(&mhfe, found)?;
+    let found = verified(mhfe.engine(), found)?;
     search_json(&search, found)
 }
 
@@ -1024,7 +1030,7 @@ impl RekeySession {
                     confirmation,
                     &mut |stage, round, rounds| report(on_round, stage, round, rounds),
                 );
-                Ok((verified(&mhfe, recovered)?, has_passphrase))
+                Ok((verified(mhfe.engine(), recovered)?, has_passphrase))
             },
         )
         // A refusal of the confirmation as named, or else the recovery's own outcome.
@@ -1301,8 +1307,7 @@ impl HiddenWalletSession {
         let passphrase = passphrase.text(MhfeError::InvalidPassphrase)?;
         let wallets = HiddenWallets::new(container, passphrase).map_err(js_error)?;
         let work = work_from(pim, memory_level)?;
-        let engine = BrowserEngine::new(argon2, work).map_err(js_error)?;
-        engine.verify_known_answer().map_err(js_error)?;
+        let engine = engine_with(work, argon2)?;
         engine.reserve().map_err(js_error)?;
         Ok(Self {
             wallets,
@@ -1333,7 +1338,7 @@ impl HiddenWalletSession {
             .open(&mut self.mhfe, password, &mut |round, rounds| {
                 report(on_round, Stage::Recover, round, rounds)
             });
-        let wallet = verified(&self.mhfe, wallet)?;
+        let wallet = verified(self.mhfe.engine(), wallet)?;
         secret_json(&PhraseJson::of(&wallet)?)
     }
 }
@@ -1388,11 +1393,12 @@ struct SelfTestJson<'a> {
 #[wasm_bindgen(js_name = selfTest)]
 pub fn self_test(argon2: JsArgon2, on_round: &js_sys::Function) -> Result<String, JsError> {
     let test = SelfTest::published().map_err(js_error)?;
-    let (mut mhfe, _) = mhfe_with(WorkFactor::default(), argon2)?;
-    let result = test.run(&mut mhfe, &mut |stage, round, rounds| {
+    let work = WorkFactor::default();
+    let mut engine = engine_with(work, argon2)?;
+    let result = test.run(work, &mut engine, &mut |stage, round, rounds| {
         report(on_round, stage, round, rounds)
     });
-    let result = verified(&mhfe, result)?;
+    let result = verified(&engine, result)?;
     json(&SelfTestJson {
         first_wrong_round: result.first_wrong_round(),
         fault: result.fault().map(FaultJson::of),
@@ -1524,20 +1530,19 @@ fn mhfe_for(
 
 /// The engine of an operation, once the page's Argon2 build has given its known answer: before
 /// round 1, so that no secret meets a build that computes something else.
+fn engine_with(work: WorkFactor, argon2: JsArgon2) -> Result<BrowserEngine, JsError> {
+    let engine = BrowserEngine::new(argon2, work).map_err(js_error)?;
+    engine.verify_known_answer().map_err(js_error)?;
+    Ok(engine)
+}
+
 fn mhfe_with(
     work: WorkFactor,
     argon2: JsArgon2,
 ) -> Result<(Mhfe<BrowserEngine>, WorkFactor), JsError> {
-    let engine = BrowserEngine::new(argon2, work).map_err(js_error)?;
-    engine.verify_known_answer().map_err(js_error)?;
-    Ok((Mhfe::with_engine(work, engine), work))
+    Ok((Mhfe::with_engine(work, engine_with(work, argon2)?), work))
 }
 
-/// The outcome of an operation once the page's Argon2 build has given its known answer again after
-/// the last round. A build that went wrong during the work, such as in the optimized code the
-/// browser made of it, fails here with SELF_CHECK_FAILED, and the result is dropped instead of
-/// returned. The answer is checked after a failed operation too, since a fault of the build is the
-/// more fundamental cause.
 /// Seals a phrase with `seal`, an encryption or a rekey: its rounds reported to `on_round`, the
 /// container before its check to `on_unverified`, and the Argon2 build's known answer checked
 /// after the last round ([`verified`]).
@@ -1556,11 +1561,16 @@ fn sealed_for_page(
         &mut |stage, round, rounds| report(on_round, stage, round, rounds),
         &mut |container| unverified(on_unverified, container),
     );
-    verified(mhfe, sealed)
+    verified(mhfe.engine(), sealed)
 }
 
-fn verified<T>(mhfe: &Mhfe<BrowserEngine>, outcome: Result<T, MhfeError>) -> Result<T, JsError> {
-    mhfe.engine().verify_known_answer().map_err(js_error)?;
+/// The outcome of an operation once the page's Argon2 build has given its known answer again after
+/// the last round. A build that went wrong during the work, such as in the optimized code the
+/// browser made of it, fails here with SELF_CHECK_FAILED, and the result is dropped instead of
+/// returned. The answer is checked after a failed operation too, since a fault of the build is the
+/// more fundamental cause.
+fn verified<T>(engine: &BrowserEngine, outcome: Result<T, MhfeError>) -> Result<T, JsError> {
+    engine.verify_known_answer().map_err(js_error)?;
     outcome.map_err(js_error)
 }
 

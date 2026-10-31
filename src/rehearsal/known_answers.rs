@@ -36,15 +36,14 @@ impl RehearsalCheck {
     /// Runs the rehearsal of zero-12 against `reference`.
     fn check(reference: &Reference<'_>) -> Result<CheckOutcome, String> {
         let vector = published("zero-12")?;
-        vector
-            .mhfe(published_table())?
-            .check(
-                vector.container,
-                &vector.password()?,
-                reference,
-                &mut |_, _| Ok(()),
-            )
-            .map_err(stopped)
+        crate::check(
+            &mut vector.mhfe(published_table())?,
+            vector.container,
+            &vector.password()?,
+            reference,
+            &mut |_, _| Ok(()),
+        )
+        .map_err(stopped)
     }
 }
 

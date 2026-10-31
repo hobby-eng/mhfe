@@ -1,6 +1,6 @@
 //! `mhfe rekey`: the same seed phrase in a new container, under a new password or new settings.
 //! The old container is recovered and the phrase is confirmed before it is encrypted again (the
-//! re-encryption guard, `Mhfe::recover_confirmed`): by its built-in check at the length the owner
+//! re-encryption guard, `recover_confirmed`): by its built-in check at the length the owner
 //! states, by an address or the fingerprint of the wallet, or, if the owner chooses it, by the
 //! owner comparing the phrase, shown on a private screen, with their backup. Encrypting under the
 //! old password and comparing would prove nothing.

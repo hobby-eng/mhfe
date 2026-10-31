@@ -152,7 +152,7 @@ impl ContainerSearch {
     }
 
     /// Recovers every candidate with `password`, a full recovery each, until one matches
-    /// `reference` as [`Mhfe::check`] compares it: an address or a fingerprint of the wallet, or
+    /// `reference` as [`crate::check`] compares it: an address or a fingerprint of the wallet, or
     /// the original seed phrase's own checks ([`ContainerSearch::search_own_checks`]). Only
     /// [`MAX_MISSING_FOR_WALLET`] missing word is searched (`TOO_MANY_MISSING_WORDS`), and a
     /// reference that cannot tell the candidates apart is refused, both before any work.
@@ -176,9 +176,13 @@ impl ContainerSearch {
         let count = self.count();
         for (index, missing) in self.candidates.iter().enumerate() {
             let container = self.container(missing);
-            let outcome = mhfe.check(&container, password, reference, &mut |round, rounds| {
-                on_progress(index + 1, count, round, rounds)
-            })?;
+            let outcome = rehearsal::check(
+                mhfe,
+                &container,
+                password,
+                reference,
+                &mut |round, rounds| on_progress(index + 1, count, round, rounds),
+            )?;
             if outcome.matches() {
                 return Ok(Some(self.found(container, missing, outcome)));
             }
@@ -473,7 +477,7 @@ mod tests {
     use super::*;
     use crate::test_support::{container_of, reduced, test_password, zero_12_container, LEGAL_12};
     use crate::wallet;
-    use crate::Suite;
+    use crate::{encrypt, Suite};
 
     fn with(container: &str, changes: &[(usize, &'static str)]) -> String {
         let mut words: Vec<&str> = container.split(' ').collect();
@@ -584,15 +588,15 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(found.container.as_str(), container.as_str());
-        let same_length = mhfe
-            .encrypt(
-                original,
-                &password,
-                Suite::SameLength,
-                &mut |_, _| Ok(()),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let same_length = encrypt(
+            &mut mhfe,
+            original,
+            &password,
+            Suite::SameLength,
+            &mut |_, _| Ok(()),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
         let short = ContainerSearch::new(&with(&same_length, &[(1, "?")])).unwrap();
         let refused = short.search_own_checks(&mut mhfe, &password, None, &mut |_, _, _, _| Ok(()));
         assert_eq!(refused.err().unwrap().code(), "NO_BUILT_IN_CHECK");

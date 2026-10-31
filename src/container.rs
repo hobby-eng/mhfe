@@ -27,7 +27,7 @@ pub struct ContainerFacts {
 }
 
 /// How a phrase recovered to be encrypted again is confirmed before it is (the re-encryption
-/// guard of [`crate::Mhfe::recover_confirmed`]).
+/// guard of [`crate::recover_confirmed`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConfirmationNeeded {
     /// Its built-in check at the length the owner states: a 12- to 21-word original of a 24-word
@@ -86,7 +86,7 @@ impl ContainerFacts {
     }
 
     /// Whether other passwords open hidden wallets on this container
-    /// ([`crate::Mhfe::derive_wallet`]): on a 24-word container only, for now.
+    /// ([`crate::derive_wallet`]): on a 24-word container only, for now.
     pub fn opens_hidden_wallets(&self) -> bool {
         self.suite.holds_full_state()
     }

@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 use anstream::{eprint, eprintln};
 use anstyle::Style;
 use clap::Args;
+use mhfe::engine::NativeEngine;
 use mhfe::operation::Stage;
 use mhfe::self_check::{ComponentOutcome, ComponentResult, SelfCheckReport, Tier};
 use mhfe::self_test::SelfTest;
@@ -295,10 +296,10 @@ fn run_vectors(flow: Flow) -> Result<bool, Failure> {
     );
     style::fact("Cost", vectors_cost());
     let mut progress = Progress::start();
-    let mut mhfe = settings::reserve_memory(work)?;
+    let mut engine = NativeEngine::new(work).map_err(settings::with_level_hint)?;
     let mut recovering = false;
     // The terminal shows the encryption's rounds of 24, then the recovery's of 12, as two parts.
-    let result = test.run(&mut mhfe, &mut |stage, round, rounds| {
+    let result = test.run(work, &mut engine, &mut |stage, round, rounds| {
         if stage == Stage::Recover {
             if !recovering {
                 recovering = true;

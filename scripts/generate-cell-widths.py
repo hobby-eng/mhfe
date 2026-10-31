@@ -19,8 +19,9 @@ modifier; the line editor shows no zero-width joiner, so such sequences stay apa
 
 The character data come from `unicodedata2` 18.0.0, which holds the Unicode 18.0.0 database, the
 Unicode version of the password rule (tests/spec/scripts/independent-suite3-requirements.txt pins
-it with its hash), not from Python's own `unicodedata`, which is older. The output is
-deterministic: the same Unicode version gives the same bytes.
+it with its hash), not from Python's own `unicodedata`, which is older. That file stays in the
+specification and not next to this script, as TOOL-03 would have it, so that one list holds the
+pins. The output is deterministic: the same Unicode version gives the same bytes.
 
 Usage: python3 scripts/generate-cell-widths.py [--check]
 With --check the script writes nothing and fails when the file differs from its output.

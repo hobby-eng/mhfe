@@ -8,14 +8,18 @@ as a 12- to 21-word original seed phrase. The command-line tool is described in 
 ## Rust library
 
 ```rust
-use mhfe::{CheckOutcome, Mhfe, Password, PhraseLength, Recovery, Reference, Suite, WorkFactor};
+use mhfe::{
+    check, decrypt, encrypt, CheckOutcome, Mhfe, Password, PhraseLength, Recovery, Reference, Suite,
+    WorkFactor,
+};
 
 let work = WorkFactor::new(0, 0)?;            // PIM 0..=1023, memory level 0..=21
 let password = Password::new("...")?;        // NFKD with Unicode 18.0.0, 1 to 1024 bytes
 let mut mhfe = Mhfe::new(work)?;              // checks free memory, reserves the Argon2 work area
 
 // Suite::TwentyFourWords is the default; Suite::SameLength only on the user's own choice.
-let container = mhfe.encrypt(
+let container = encrypt(
+    &mut mhfe,
     original,
     &password,
     Suite::TwentyFourWords,
@@ -26,12 +30,13 @@ let container = mhfe.encrypt(
     &mut |_unchecked| Ok(()),                 // the container, before its check
 )?;
 
-match mhfe.decrypt(&container, &password, PhraseLength::Detect, &mut |_, _| Ok(()))? {
+match decrypt(&mut mhfe, &container, &password, PhraseLength::Detect, &mut |_, _| Ok(()))? {
     Recovery::Phrase(phrase) => { /* phrase.words(), verified(), phrase(), suite() */ }
     Recovery::Ambiguous(candidates) => { /* show every candidate; the last one is 24 words */ }
 }
 
-let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |_, _| Ok(()))?;
+let outcome: CheckOutcome =
+    check(&mut mhfe, &container, &password, &reference, &mut |_, _| Ok(()))?;
 ```
 
 - `WorkFactor` holds the two settings and computes the Argon2 cost with integers only:
@@ -114,9 +119,9 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   (12), `ENCRYPTION_ROUNDS` (24), `MAX_PIM` (1023), `MAX_MEMORY_LEVEL` (21), `MAX_PASSWORD_BYTES`
   (1024), the callback type `ProgressCallback` and `memory_text(bytes)`, which writes a memory size
   as every front end shows it, such as "2 GiB".
-- `recover_confirmed(container, password, words, confirmation, on_progress)` recovers a phrase to
-  encrypt it again under a new password or settings, and returns it only once it is confirmed (the
-  re-encryption guard). A 12- to 21-word original seed phrase of a 24-word container passes its
+- `recover_confirmed(mhfe, container, password, words, confirmation, on_progress)` recovers a phrase
+  to encrypt it again under a new password or settings, and returns it only once it is confirmed
+  (the re-encryption guard). A 12- to 21-word original seed phrase of a 24-word container passes its
   built-in check at the stated length `words`; where the check finds another length, which takes
   precedence, the built-in check alone is refused (`LENGTH_DIFFERS`), and an address or a
   fingerprint compares every reading, or the owner compares the one found. A 24-word original seed
@@ -125,11 +130,12 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `Confirmation::Owner`: the caller then shows the phrase and goes on only if the owner confirms it
   against their backup. Encrypting under the old password and comparing proves nothing, so it is not
   offered.
-- `recover_for_check(container, password, reference, on_progress)` recovers once for a check and
-  gives a `RecoveredForCheck`, which holds the recovered state in locked memory and wipes it when
-  dropped: `compare(reference)` gives the `CheckEvidence` of one reference after another without
-  the rounds again, such as an address once detection found no length, and refuses a reference the
-  container cannot be checked with as `check` does. No part of the phrase comes out of it.
+- `recover_for_check(mhfe, container, password, reference, on_progress)` recovers once for a check
+  and gives a `RecoveredForCheck`, which holds the recovered state in locked memory and wipes it
+  when dropped: `compare(reference)` gives the `CheckEvidence` of one reference after another
+  without the rounds again, such as an address once detection found no length, and refuses a
+  reference the container cannot be checked with as `check` does. No part of the phrase comes out
+  of it.
   `recover_for_check_in_stages` reports the stages "recover" and "compare". A front end reads a
   reference into a `ReferenceTarget` (an address with its path, a fingerprint, a length, 0 to detect
   it, or the wallet check), which gives the `Reference` with the passphrase it holds apart
@@ -141,7 +147,7 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `PhraseLength::Detect`, the readings a check compares with an address or a fingerprint, the
   evidence beside a reference, `Reference::OwnChecks`, the search for missing words, a rekey with
   its length detected, the guard of hidden wallets and `other_detected_lengths`.
-- `derive_wallet(container, password, passphrase, on_progress)` gives the hidden wallet that
+- `derive_wallet(mhfe, container, password, passphrase, on_progress)` gives the hidden wallet that
   `password` opens on a 24-word container, read as 24 words, unverified (a hidden wallet behind an
   honest disclosure). A password whose reading passes the built-in check of a 12- to 21-word phrase,
   or the wallet check with the main wallet's `passphrase` or without a passphrase, is refused
@@ -259,7 +265,7 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   the first `scan_gap` receiving and as many change addresses of the first account
   (`decoy_address_limits(scan_gap)`), `DECOY_SCAN_GAP` = 20 being the usual gap of a wallet.
   `search_wallet(mhfe, password, reference, on_progress)` recovers each candidate, a full recovery
-  each, and compares it as `Mhfe::check` does, with an address or a fingerprint.
+  each, and compares it as `check` does, with an address or a fingerprint.
   `search_own_checks(mhfe, password, passphrase, on_progress)` takes the candidate whose recovery
   passes a check of the original seed phrase itself: the built-in check of a 12- to 21-word one, and
   with its BIP39 `passphrase` also the phrase + passphrase check of a 24-word one made by `mhfe new`
@@ -373,8 +379,8 @@ let outcome: CheckOutcome = mhfe.check(&container, &password, &reference, &mut |
   `PasswordRecipe::summary()` says what a recipe makes ("5 words from the EFF list, about 64.6
   bits"), and `word_bits` and `character_bits` the strength of a count, so that no front end types
   a number of bits.
-- `self_test::SelfTest::published().run(mhfe, progress)` encrypts the public suite 3 vector and
-  recovers the public suite 4 vector at full cost and says whether each came out as published
+- `self_test::SelfTest::published().run(work, engine, progress)` encrypts the public suite 3 vector
+  and recovers the public suite 4 vector at full cost and says whether each came out as published
   (`suite_3_as_published()`, `suite_4_as_published()`, `passed()`). A witness compares every
   Argon2id call, without changing its cost or its key, with the round the published vectors record
   at that place, rounds 1 to 12 being the encryption and 13 to 24 the recovery. `fault()` of the
@@ -511,7 +517,7 @@ The parts, by identifier and label, and what each compares:
   give the memory makes it not available rather than failed.
 - `cipher-rounds`, "Cipher rounds": 10 of the published vectors of suites 3 and 4 replayed with
   their recorded round keys through `Encryption::run`, with its check and repair words,
-  `Mhfe::decrypt`, also at each stated length, and `Mhfe::decrypt_as` with the suite selected; the
+  `decrypt`, also at each stated length, and `decrypt_as` with the suite selected; the
   length rules on zero-12's container: with 15 words stated it gives its checked 12-word reading,
   which names the 15 stated, and with 24 stated that reading first, naming the 24 stated, and the
   unverified 24-word reading after it; a length whose check does not match (`VERIFIER_MISMATCH`), a
@@ -578,7 +584,7 @@ The parts, by identifier and label, and what each compares:
   that the built-in check contradicts (`LENGTH_DIFFERS`) are refused. The last, 15 words stated,
   is then confirmed on the same recovery by its fingerprint, with the stated length left to the
   owner, and must give the published container of unicode-password.
-- `rehearsal`, "Rehearsal": `Mhfe::check` of a published container with a fingerprint, an address at
+- `rehearsal`, "Rehearsal": `check` of a published container with a fingerprint, an address at
   its path and the built-in check, and a fingerprint one bit off that must not match.
 - `password-generator`, "Password generator": scripted bytes through the unbiased draw, the
   characters, words and check word of new passwords, and a stuck source refused. Full: the strength

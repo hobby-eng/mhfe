@@ -5,7 +5,7 @@
 use std::time::Instant;
 
 use clap::Args;
-use mhfe::{Password, PhraseLength, Suite};
+use mhfe::{decrypt, encrypt, Password, PhraseLength, Suite};
 use serde::Serialize;
 
 use crate::exit::{Failure, SUCCESS};
@@ -73,7 +73,8 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     let work_area_seconds = started.elapsed().as_secs_f64();
 
     let started = Instant::now();
-    let container = mhfe.encrypt(
+    let container = encrypt(
+        &mut mhfe,
         PUBLIC_PHRASE,
         &password,
         Suite::TwentyFourWords,
@@ -83,9 +84,13 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     let encryption_seconds = started.elapsed().as_secs_f64();
 
     let started = Instant::now();
-    mhfe.decrypt(&container, &password, PhraseLength::Detect, &mut |_, _| {
-        Ok(())
-    })?;
+    decrypt(
+        &mut mhfe,
+        &container,
+        &password,
+        PhraseLength::Detect,
+        &mut |_, _| Ok(()),
+    )?;
     let decryption_seconds = started.elapsed().as_secs_f64();
 
     let record = Measurement {

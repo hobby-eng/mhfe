@@ -445,7 +445,7 @@ pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeEngine>, Failure> {
 /// Only that refusal rests on the reported free memory. After a failed reservation that figure has
 /// just proved too high, and a level above the highest this build runs is refused whatever memory
 /// is free, so neither gets a level to try (AUD-005-UI001).
-fn with_level_hint(error: mhfe::MhfeError) -> Failure {
+pub fn with_level_hint(error: mhfe::MhfeError) -> Failure {
     let lower_level_helps = matches!(error, mhfe::MhfeError::NotEnoughMemory { .. });
     let mut failure = Failure::from(error);
     if let Some(highest) = highest_available_level().filter(|_| lower_level_helps) {

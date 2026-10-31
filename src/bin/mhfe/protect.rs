@@ -95,6 +95,9 @@ pub fn pass_on_termination(process: u32) {
     // SAFETY: kill takes integers and touches no memory of this process.
     unsafe {
         libc::kill(process as libc::pid_t, libc::SIGTERM);
+        // A command that Ctrl+Z stopped before it set its handlers takes the signal only once it
+        // runs, and the menu would wait for it for ever: a wait does not see a stop.
+        libc::kill(process as libc::pid_t, libc::SIGCONT);
     }
     #[cfg(not(unix))]
     let _ = process;

@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use crate::engine::{Argon2Cost, Argon2Engine, NativeEngine, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
 use crate::packing::State;
-use crate::{Mhfe, MhfeError, Password, Suite, WorkFactor};
+use crate::{encrypt, Mhfe, MhfeError, Password, Suite, WorkFactor};
 
 /// 256 KiB and one pass: four Argon2 lanes need at least 32 KiB. The reduced-cost containers of
 /// src/mhfe.rs and of the browser tests are made at the same cost.
@@ -150,7 +150,8 @@ pub(crate) fn container_of(
     phrase: &str,
     suite: Suite,
 ) -> Zeroizing<String> {
-    mhfe.encrypt(
+    encrypt(
+        mhfe,
         phrase,
         &test_password(),
         suite,

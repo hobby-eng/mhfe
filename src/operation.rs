@@ -6,7 +6,7 @@
 use zeroize::Zeroizing;
 
 use crate::engine::Argon2Engine;
-use crate::mhfe::Mhfe;
+use crate::mhfe::{encrypt, Mhfe};
 use crate::repair::{self, repair_words};
 use crate::{check_phrase, MhfeError, OriginalFacts, Password, Suite, WorkFactor, ROUNDS};
 
@@ -221,7 +221,8 @@ impl Encryption {
             .other_lengths_in(self.suite)
             .to_vec();
         let mut card = None;
-        let container = mhfe.encrypt(
+        let container = encrypt(
+            mhfe,
             original,
             password,
             self.suite,

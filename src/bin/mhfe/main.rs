@@ -232,10 +232,7 @@ fn main() {
         let command = Cli::try_parse()
             .unwrap_or_else(|error| exit_unparsed(error))
             .command;
-        prepare(&command).and_then(|()| {
-            terminal::stop_on_ctrl_c();
-            run(command)
-        })
+        prepare(&command).and_then(|()| run(command))
     };
     let exit_code = match result {
         Ok(code) => code,
@@ -279,12 +276,15 @@ fn exit_unparsed(error: clap::Error) -> ! {
     std::process::exit(exit::INVALID_INPUT);
 }
 
-/// Isolates a command and runs its checks at start, before it reads anything. The order matters
-/// (G10 of the self-check plan): a process enters its own network namespace only while it has a
-/// single thread, and the Argon2 check at start runs on four threads. The start menu, which is no
-/// command, isolates nothing and runs the same checks before it opens (menu.rs).
+/// Isolates a command, sets what ends it and runs its checks at start, before it reads anything.
+/// The order matters (G10 of the self-check plan): a process enters its own network namespace only
+/// while it has a single thread, the handler of Ctrl+C has a thread of its own, and the Argon2
+/// check at start runs on four. The handler comes before the checks, which take a moment, so that
+/// a key pressed in them ends the command as it does later. The start menu, which is no command,
+/// isolates nothing and runs the same checks before it opens (menu.rs).
 fn prepare(command: &Command) -> Result<(), Failure> {
     protect::isolate(needs_of(command));
+    terminal::stop_on_ctrl_c();
     startup::check(startup_checks_of(command))
 }
 

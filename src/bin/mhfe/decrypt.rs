@@ -5,7 +5,7 @@ use std::io;
 use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
-use mhfe::{PhraseLength, RecoveredPhrase, Recovery, RecoveryStatus};
+use mhfe::{decrypt, PhraseLength, RecoveredPhrase, Recovery, RecoveryStatus};
 
 use crate::check;
 use crate::container_repair::RepairOption;
@@ -167,7 +167,8 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     );
 
     let mut progress = Progress::start();
-    let recovery = mhfe.decrypt(
+    let recovery = decrypt(
+        &mut mhfe,
         container.words(),
         &password,
         length,

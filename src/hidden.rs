@@ -7,42 +7,41 @@ use crate::container::ContainerFacts;
 use crate::detection;
 use crate::engine::Argon2Engine;
 use crate::memory::LockedText;
-use crate::mhfe::RecoveredPhrase;
+use crate::mhfe::{recover_state, RecoveredPhrase};
 use crate::suite::Suite;
 use crate::{Mhfe, MhfeError, Password, ProgressCallback};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
 
-impl<E: Argon2Engine> Mhfe<E> {
-    /// The wallet that `password` opens on a 24-word container, read as 24 words. It has no
-    /// built-in check. A password whose reading passes the check of a 12- to 21-word phrase, about
-    /// once in a billion, is refused (rule I29): recovery would take the hidden wallet for that
-    /// short phrase and call it verified. So is one whose reading passes the wallet check with
-    /// `passphrase`, the main wallet's BIP39 passphrase, or without a passphrase, each once in
-    /// 65,536, which would make it look like the main wallet or a checked one. Only 24-word
-    /// containers are taken for now; the same derivation on a same-length container would give
-    /// wallets of its length.
-    pub fn derive_wallet(
-        &mut self,
-        container: &str,
-        password: &Password,
-        passphrase: &str,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<RecoveredPhrase, MhfeError> {
-        ContainerFacts::read(container)?.require_hidden_wallets()?;
-        let recovery = self.recover_state(
-            container,
-            password,
-            Some(Suite::TwentyFourWords),
-            on_progress,
-        )?;
-        if detection::reads_as_checked(&recovery, passphrase)? {
-            return Err(MhfeError::HiddenWalletPassesCheck);
-        }
-        // Read at the whole state's width, as 24 words.
-        detection::twenty_four_word_reading(&recovery)
+/// The wallet that `password` opens on a 24-word container, read as 24 words. It has no
+/// built-in check. A password whose reading passes the check of a 12- to 21-word phrase, about
+/// once in a billion, is refused (rule I29): recovery would take the hidden wallet for that
+/// short phrase and call it verified. So is one whose reading passes the wallet check with
+/// `passphrase`, the main wallet's BIP39 passphrase, or without a passphrase, each once in
+/// 65,536, which would make it look like the main wallet or a checked one. Only 24-word
+/// containers are taken for now; the same derivation on a same-length container would give
+/// wallets of its length.
+pub fn derive_wallet<E: Argon2Engine>(
+    mhfe: &mut Mhfe<E>,
+    container: &str,
+    password: &Password,
+    passphrase: &str,
+    on_progress: ProgressCallback<'_>,
+) -> Result<RecoveredPhrase, MhfeError> {
+    ContainerFacts::read(container)?.require_hidden_wallets()?;
+    let recovery = recover_state(
+        mhfe,
+        container,
+        password,
+        Some(Suite::TwentyFourWords),
+        on_progress,
+    )?;
+    if detection::reads_as_checked(&recovery, passphrase)? {
+        return Err(MhfeError::HiddenWalletPassesCheck);
     }
+    // Read at the whole state's width, as 24 words.
+    detection::twenty_four_word_reading(&recovery)
 }
 
 /// A session of hidden wallets on one 24-word container: each password opens its own wallet, none
@@ -105,8 +104,13 @@ impl HiddenWallets {
         if self.was_used(&password) {
             return Err(MhfeError::PasswordAlreadyUsed);
         }
-        let wallet =
-            mhfe.derive_wallet(&self.container, &password, &self.passphrase, on_progress)?;
+        let wallet = derive_wallet(
+            mhfe,
+            &self.container,
+            &password,
+            &self.passphrase,
+            on_progress,
+        )?;
         self.used.push(password);
         Ok(wallet)
     }
@@ -115,33 +119,23 @@ impl HiddenWallets {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{reduced, test_password, ABANDON_12 as ABANDON};
-    use crate::{PhraseLength, Recovery};
+    use crate::test_support::{container_of, reduced, test_password, ABANDON_12 as ABANDON};
+    use crate::{decrypt, PhraseLength, Recovery};
 
     #[test]
     fn another_password_opens_another_24_word_wallet() {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
-        let main = test_password();
         let hidden = Password::new("another public test password").unwrap();
-        let container = mhfe
-            .encrypt(
-                ABANDON,
-                &main,
-                Suite::TwentyFourWords,
-                none,
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
 
-        let wallet = mhfe.derive_wallet(&container, &hidden, "", none).unwrap();
+        let wallet = derive_wallet(&mut mhfe, &container, &hidden, "", none).unwrap();
         assert_eq!(wallet.words(), 24);
         assert!(!wallet.verified());
         assert_ne!(wallet.phrase(), ABANDON);
         // Recovery with the hidden password gives the same wallet, unverified.
-        let Recovery::Phrase(recovered) = mhfe
-            .decrypt(&container, &hidden, PhraseLength::Detect, none)
-            .unwrap()
+        let Recovery::Phrase(recovered) =
+            decrypt(&mut mhfe, &container, &hidden, PhraseLength::Detect, none).unwrap()
         else {
             panic!("one reading expected");
         };
@@ -149,7 +143,7 @@ mod tests {
         assert!(!recovered.verified());
         // The same password gives the same wallet again: nothing needs to be written down.
         assert_eq!(
-            mhfe.derive_wallet(&container, &hidden, "", none)
+            derive_wallet(&mut mhfe, &container, &hidden, "", none)
                 .unwrap()
                 .phrase(),
             wallet.phrase()
@@ -162,17 +156,9 @@ mod tests {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
         let main = test_password();
-        let container = mhfe
-            .encrypt(
-                ABANDON,
-                &main,
-                Suite::TwentyFourWords,
-                none,
-                &mut |_| Ok(()),
-            )
-            .unwrap();
+        let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
         assert!(matches!(
-            mhfe.derive_wallet(&container, &main, "", none),
+            derive_wallet(&mut mhfe, &container, &main, "", none),
             Err(MhfeError::HiddenWalletPassesCheck)
         ));
     }
@@ -182,11 +168,9 @@ mod tests {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
         let main = test_password();
-        let container = mhfe
-            .encrypt(ABANDON, &main, Suite::SameLength, none, &mut |_| Ok(()))
-            .unwrap();
+        let container = container_of(&mut mhfe, ABANDON, Suite::SameLength);
         assert!(matches!(
-            mhfe.derive_wallet(&container, &main, "", none),
+            derive_wallet(&mut mhfe, &container, &main, "", none),
             Err(MhfeError::NoHiddenWallets {
                 container_words: 12
             })

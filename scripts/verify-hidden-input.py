@@ -40,9 +40,10 @@ private screen, which it clears for the next one on Enter and when Escape or q r
 the help entry returns on Enter. Neither needs secret input.
 
 A command of the menu is a process of its own. q in its list ends that command and the menu comes
-back. Ctrl+C in it, and SIGTERM, which reaches the menu alone, end both, with one "Cancelled", exit
-code 130, its screen left and the terminal restored. When the command is killed, the menu leaves
-its screen, restores the terminal, says so and comes back.
+back. Ctrl+C in it, and SIGTERM, which reaches the menu alone, also while the command is stopped,
+end both, with one "Cancelled", exit code 130, its screen left and the terminal restored. SIGTERM
+to the command alone ends it with one "Cancelled", and the menu comes back. When the command is
+killed, the menu leaves its screen, restores the terminal, says so and comes back.
 
 `mhfe rekey` asks nothing about other wallets on the container: every user gets a warning at the
 top of the container prompt that they do not move to the new container and that the old one and its
@@ -138,7 +139,8 @@ menu, and the first runs the same report. Copies of the program with one bit fli
 answer of the checks at start, a repair card and a check-word vector, stop `mhfe encrypt` before
 it asks anything, and the menu before it is shown, with "✗ Error: Self-test at start failed", the
 part and what differed, and exit code 1; their self-test names the part too. The copies are made
-in a temporary folder (TMPDIR), signed again on macOS, and deleted afterwards.
+in a temporary folder (TMPDIR), signed again on macOS, and deleted afterwards. Ctrl+C during the
+checks at start ends a command with "Cancelled" and exit code 130.
 """
 
 import fcntl
@@ -172,6 +174,10 @@ ACCEPTED = b"ingerprint"
 # (src/bin/mhfe/terminal.rs).
 ENTER_PRIVATE, LEAVE_PRIVATE = b"\x1b[?1049h", b"\x1b[2J\x1b[H\x1b[?1049l"
 CLEAR = b"\x1b[2J\x1b[H"
+# Seconds after its start when a command is in its checks at start: its handlers are set within
+# milliseconds, and the checks end after a quarter of a second in a release build, later in a debug
+# build. Should they be over, Ctrl+C says the same at the first question.
+IN_THE_CHECKS = 0.1
 BACKSPACE, CTRL_U, CTRL_C = b"\x7f", b"\x15", b"\x03"
 # The keys of the menu, as a terminal sends them. Ctrl+Up carries a 5, which must not choose entry 5.
 UP, DOWN, ENTER, CTRL_UP, ESCAPE = b"\x1b[A", b"\x1b[B", b"\r", b"\x1b[1;5A", b"\x1b"
@@ -815,10 +821,22 @@ def check_menu_commands():
     def at_list():
         return menu_command(ENCRYPT_ENTRY, SETTINGS_QUESTION, LIST_SHOWN)
 
+    def command_of(session):
+        process = subprocess.run(["pgrep", "-P", str(session.process.pid)], capture_output=True,
+                                 check=True)
+        return int(process.stdout)
+
+    def terminate_stopped(session):
+        # As Ctrl+Z leaves a command in the milliseconds before its handlers are set, under a shell
+        # with job control: here the kernel would drop that stop, and the time is too short to hit.
+        os.kill(command_of(session), signal.SIGSTOP)
+        session.process.terminate()
+
     for label, start, stop in (("Ctrl+C in a list", at_list, lambda s: s.type(CTRL_C)),
                                ("Ctrl+C at the passwords", at_password_wait,
                                 lambda s: s.type(CTRL_C)),
-                               ("SIGTERM", at_list, lambda s: s.process.terminate())):
+                               ("SIGTERM", at_list, lambda s: s.process.terminate()),
+                               ("SIGTERM to a stopped command", at_list, terminate_stopped)):
         session = start()
         stop(session)
         assert session.drain_until_exit(10), f"menu: {label} did not end the tool"
@@ -831,10 +849,19 @@ def check_menu_commands():
         assert session.output.count(LEAVE_PRIVATE) == 1, f"menu: {label}: its screen was not left"
         print(f"menu: {label} ends the command and the tool, one Cancelled, exit code 130")
 
+    session = at_password_wait()
+    os.kill(command_of(session), signal.SIGTERM)
+    session.answer(b"", b"Cancelled", MENU_SHOWN)
+    session.type(b"q")
+    assert session.drain_until_exit(10), "menu: q after a command ended alone did not end the tool"
+    code, settings = session.close()
+    assert code == 0, f"menu: q after a command ended alone gave exit code {code}"
+    assert settings == session.original, "menu: a command ended alone left the terminal switched"
+    assert session.output.count(b"Cancelled") == 1, "menu: a command ended alone: not one Cancelled"
+    print("menu: SIGTERM to the command alone, one Cancelled; the menu comes back")
+
     session = at_list()
-    process = subprocess.run(["pgrep", "-P", str(session.process.pid)], capture_output=True,
-                             check=True)
-    os.kill(int(process.stdout), signal.SIGKILL)
+    os.kill(command_of(session), signal.SIGKILL)
     session.answer(b"", LEAVE_PRIVATE, b"crashed or was killed", BACK_TO_MENU)
     session.answer(ENTER, MENU_SHOWN)
     session.type(b"q")
@@ -2019,7 +2046,15 @@ def check_self_test():
 
 def check_quiet_start():
     """The checks at start show nothing when they pass: `mhfe encrypt`, which handles a secret,
-    writes its first step first, and the menu its title."""
+    writes its first step first, and the menu its title. Ctrl+C in them says "Cancelled"."""
+    session = Session(("encrypt",))
+    time.sleep(IN_THE_CHECKS)
+    session.type(CTRL_C)
+    session.wait_for(b"Cancelled")
+    code, _ = session.close()
+    assert code == CANCELLED, f"encrypt: Ctrl+C in the checks at start gave exit code {code}"
+    print("encrypt: Ctrl+C in the checks at start says Cancelled, exit code 130")
+
     session = Session(("encrypt",))
     session.answer(b"", SETTINGS_QUESTION, LIST_SHOWN)
     before = session.output[:session.output.find(SETTINGS_QUESTION)]
