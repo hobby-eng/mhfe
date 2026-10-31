@@ -204,7 +204,7 @@ const knownTags = [
 
 const hexOf = (bytes) => Buffer.from(bytes).toString("hex");
 
-// Minimal caller of argon2id_hash_raw: copy the inputs into the C heap, run, read the tag.
+// Minimal caller of mhfe_argon2id_hash_raw: copy the inputs into the C heap, run, read the tag.
 function argon2id(argon2, memoryKib, passes) {
   const passwordPtr = argon2._malloc(PASSWORD.length) >>> 0;
   const saltPtr = argon2._malloc(tagSalt.length) >>> 0;
@@ -212,7 +212,7 @@ function argon2id(argon2, memoryKib, passes) {
   try {
     argon2.HEAPU8.set(PASSWORD, passwordPtr);
     argon2.HEAPU8.set(tagSalt, saltPtr);
-    const code = argon2._argon2id_hash_raw(
+    const code = argon2._mhfe_argon2id_hash_raw(
       passes,
       memoryKib,
       LANES,

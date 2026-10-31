@@ -373,8 +373,8 @@ function afterFallback(result, failures) {
 
 /**
  * The Emscripten builds of the reference Argon2 code that may be placed in front of this file:
- * the factory each defines, and its build, which scripts/stamp-build-id.mjs stamps into it. A
- * build that is not in front leaves its names undefined, hence typeof.
+ * the factory each defines, and its build, which `cargo xtask wasm stamp-build-id` stamps into
+ * it. A build that is not in front leaves its names undefined, hence typeof.
  */
 function argon2Builds() {
   return {

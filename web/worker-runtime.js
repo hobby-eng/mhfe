@@ -7,11 +7,13 @@
 "use strict";
 
 /**
- * The build of this worker script, which scripts/stamp-build-id.mjs writes here and into
+ * The build of this worker script, which `cargo xtask wasm stamp-build-id` writes here and into
  * runtime/mhfe.wasm, runtime/runtime.js and each class; "development" before the build stamps it.
  */
 const WORKER_BUILD_ID = "development";
-/** The custom section of runtime/mhfe.wasm that names its build (scripts/stamp-build-id.mjs). */
+/**
+ * The custom section of runtime/mhfe.wasm that names its build (`cargo xtask wasm stamp-build-id`).
+ */
 const BUILD_SECTION = "mhfe-build";
 /** The detail of a part in which the WebAssembly stopped: a Rust panic or a fault of the computer. */
 const STOPPED_DETAIL = "the WebAssembly stopped";
@@ -168,7 +170,7 @@ function packageMismatch(what) {
 /**
  * The file `file` is of the build `build`, not of this worker's. A deliberate copy of
  * buildMismatch() in web/runtime.js, with this script's own file and build: a worker script
- * imports nothing. scripts/verify-browser-package.mjs holds both to one wording
+ * imports nothing. `cargo xtask package-check` holds both to one wording
  * (buildMismatchMessage). The message starts with a word, not the file's path, since the page
  * makes a sentence of it (sentence() in web/runtime.js), which would capitalize the path.
  */

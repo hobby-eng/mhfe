@@ -1,5 +1,6 @@
 // The bridge from the Rust core to the Emscripten build of the reference Argon2 code. It is
-// joined into runtime/worker.js by scripts/build-wasm.sh, and the Node.js tests load the same file.
+// joined into runtime/worker.js by scripts/build-wasm.sh, and `cargo xtask package-check` loads
+// the same file.
 "use strict";
 
 /** Argon2id output length and lane count of MHFE suite 3. */
@@ -8,7 +9,7 @@ const ARGON2_LANES = 4;
 /**
  * ARGON2_MEMORY_ALLOCATION_ERROR in vendor/phc-winner-argon2/include/argon2.h. A deliberate copy:
  * the bridge is a classic worker script, which cannot import, and the Emscripten build exports the
- * C code's functions, not its constants. scripts/verify-browser-package.mjs reads the value from
+ * C code's functions, not its constants. `cargo xtask package-check` reads the value from
  * the header and drives it through the bridge ("the bridge reads argon2.h's memory error as
  * MEMORY_ALLOCATION_FAILED").
  */
@@ -33,7 +34,7 @@ function argon2Engine(module) {
         }
         module.HEAPU8.set(password, passwordPointer);
         module.HEAPU8.set(salt, saltPointer);
-        const code = module._argon2id_hash_raw(
+        const code = module._mhfe_argon2id_hash_raw(
           passes,
           memoryKib,
           ARGON2_LANES,

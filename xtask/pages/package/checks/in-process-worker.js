@@ -144,8 +144,8 @@ assert.deepEqual(
 // Fault: one bit of each tag of the single-threaded build, flipped as by a broken build.
 const wrongTag = async () => {
   const module = await builds["single-threaded"]();
-  const realHash = module._argon2id_hash_raw;
-  module._argon2id_hash_raw = (...args) => {
+  const realHash = module._mhfe_argon2id_hash_raw;
+  module._mhfe_argon2id_hash_raw = (...args) => {
     const code = realHash(...args);
     module.HEAPU8[args[7]] ^= 1;
     return code;

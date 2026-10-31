@@ -36,7 +36,7 @@ const PASSWORDS_MODULE = "passwords";
 const CHECK_WORD_TAKES_NO_COUNT =
   'count belongs only to the kinds "words" and "characters": "checkWord" always gives five ' +
   "words and their check word.";
-/** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
+/** The build of this file, from `cargo xtask wasm stamp-build-id`; see BUILD_ID in the runtime. */
 const PASSWORDS_BUILD_ID = "development";
 
 export class MhfePasswords extends MhfeModuleClass {

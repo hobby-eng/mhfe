@@ -42,7 +42,7 @@ const HIGHEST_DRAW_WORKERS = 256;
 
 /** The name of this module's operations in the package's worker. */
 const WALLET_MODULE = "wallet";
-/** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
+/** The build of this file, from `cargo xtask wasm stamp-build-id`; see BUILD_ID in the runtime. */
 const WALLET_BUILD_ID = "development";
 
 export class MhfeWallet extends MhfeModuleClass {
@@ -186,7 +186,7 @@ export class MhfeWallet extends MhfeModuleClass {
     if (workers !== undefined) requireWorkers(workers);
     // A page that asked for the check must never get a phrase without it. The rule is the
     // library's (wallet_check::require_passphrase), asked here before any worker starts, with its
-    // code and message; scripts/verify-browser-package.mjs keeps the two in step.
+    // code and message; `cargo xtask package-check` keeps the two in step.
     if (!hasPassphrase && walletCheck === true) {
       throw new MhfeError(
         "WALLET_CHECK_NEEDS_PASSPHRASE",
@@ -217,7 +217,7 @@ export class MhfeWallet extends MhfeModuleClass {
       if (hasPassphrase) {
         // The library's rule (wallet_check::require_same_passphrase), which every worker applies
         // again, is compared here first, so that a refused passphrase never reaches a worker; its
-        // code and message are the library's, and scripts/verify-browser-package.mjs keeps them
+        // code and message are the library's, and `cargo xtask package-check` keeps them
         // in step.
         repeat = encodeSecret(passphraseRepeat, "repeated passphrase");
         const same = repeat.length === first.length && repeat.every((byte, i) => byte === first[i]);

@@ -14,7 +14,7 @@ if (FULL) {
   const module = await builds["single-threaded"]();
   // Fault: the reference code fails as when the browser refuses the memory, which the small cost
   // of this check cannot make it do.
-  module._argon2id_hash_raw = () => code;
+  module._mhfe_argon2id_hash_raw = () => code;
   assert.throws(
     () => argon2Engine(module).derive(PASSWORD, new Uint8Array(16), 1024, 1, new Uint8Array(32)),
     { message: "MEMORY_ALLOCATION_FAILED: the browser could not provide the Argon2 memory" },
@@ -97,12 +97,13 @@ assert.equal(lateRounds.length, 24, "every round ran before the known answer fai
 assert.deepEqual(shownUnverified, [REDUCED_COST_CONTAINER]);
 assert.equal(knownAnswers, 2);
 
-// The reference code wipes its work area before it frees it, and the bridge its copies of the
-// password, salt and key: after the 1 MiB known answer, a fresh single-threaded build's memory holds
-// about 2 KiB more non-zero bytes than before (allocator records and the stack of the last block
-// computation), where a work area left as it was would add 1 MiB. Fragile by nature: it depends
-// on where the allocator puts things, so its bound is generous.
-const WIPED_RESIDUE_BYTES = 16 * 1024;
+// The reference code wipes its work area before it frees it, src/engine/argon2_browser.c clears the
+// stack it used, and the bridge wipes its copies of the password, salt and key: after the 1 MiB
+// known answer, a fresh single-threaded build's memory holds about 200 more non-zero bytes than
+// before, allocator records, where a stack left as it was would add about 2 KiB and a work area
+// 1 MiB. Fragile by nature: it depends on where the allocator puts things, so its bound is
+// generous.
+const WIPED_RESIDUE_BYTES = 1024;
 const freshArgon2 = await builds["single-threaded"]();
 const nonZeroBytes = (heap) => heap.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
 const nonZeroBefore = nonZeroBytes(freshArgon2.HEAPU8);

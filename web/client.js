@@ -53,7 +53,7 @@ export const FAST_MODE = "fast";
 export const STANDARD_MODE = "standard";
 
 // These limits are checked here, before any secret is copied, so that a refusal never waits for a
-// worker. scripts/verify-browser-package.mjs checks that each equals the core's suiteParameters();
+// worker. `cargo xtask package-check` checks that each equals the core's suiteParameters();
 // a repair word count of 0 means none.
 /** The reference Argon2 code allows 2 GiB when pointers are 32 bits wide, as in WebAssembly: memory level 0 only. */
 const HIGHEST_BROWSER_MEMORY_LEVEL = 0;
@@ -66,11 +66,11 @@ const DECOY_SCAN_GAP = 20;
 const REFERENCE_KINDS = ["address", "fingerprint", "words", "walletCheck"];
 /** The name of this module's operations in the package's worker. */
 const CORE_MODULE = "core";
-/** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
+/** The build of this file, from `cargo xtask wasm stamp-build-id`; see BUILD_ID in the runtime. */
 const CLIENT_BUILD_ID = "development";
 
 // The parts of the self-check that run Argon2: its known answer at 1 MiB, and at 64 and 256 MiB.
-// The page names them before any worker runs; scripts/verify-browser-package.mjs checks that they
+// The page names them before any worker runs; `cargo xtask package-check` checks that they
 // are the core's parameters().argon2Parts.
 const ARGON2_PART = "argon2";
 const ARGON2_SIZES_PART = "argon2-sizes";
@@ -962,7 +962,7 @@ export class MhfeClient {
 
 /**
  * The core's fixed values must be the limits this file checks before any secret is copied
- * (scripts/verify-browser-package.mjs compares them too); otherwise the files come from different
+ * (`cargo xtask package-check` compares them too); otherwise the files come from different
  * builds.
  */
 function requireSameLimits(parameters) {
@@ -1004,7 +1004,7 @@ function requireSettings(pim, memoryLevel) {
   requireSetting(pim, MAX_PIM, "INVALID_PIM", "pim");
   requireSetting(memoryLevel, MAX_MEMORY_LEVEL, "INVALID_MEMORY_LEVEL", "memoryLevel");
   // The library's refusal (WorkFactor::require_level), with its code and message, before any
-  // secret reaches a worker; scripts/verify-browser-package.mjs keeps the two in step.
+  // secret reaches a worker; `cargo xtask package-check` keeps the two in step.
   if (memoryLevel > HIGHEST_BROWSER_MEMORY_LEVEL) {
     throw new MhfeError(
       "MEMORY_LEVEL_NOT_SUPPORTED_HERE",
@@ -1103,7 +1103,7 @@ function describeReference(reference) {
       // 0 detects the length (the library's detection).
       requireWordCount(reference.words);
       // The library's refusal (rehearsal::require_built_in_check_length), with its code and
-      // message, before any secret reaches a worker; scripts/verify-browser-package.mjs keeps the
+      // message, before any secret reaches a worker; `cargo xtask package-check` keeps the
       // two in step.
       if (reference.words !== 0 && !BUILT_IN_CHECK_WORD_COUNTS.includes(reference.words)) {
         throw new MhfeError(

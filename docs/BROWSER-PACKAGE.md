@@ -695,13 +695,12 @@ loop. Every round also refuses a key that the build left unwritten or set to zer
 - Memory levels above 0, which a browser does not support. Their rounds are still replayed by
   `cipher-rounds` with the keys the published vectors record.
 - The RFC 9106 Argon2 vector, which sets a secret and associated data: the browser's Argon2 builds
-  export only `argon2id_hash_raw`, which has neither. The page compares OpenSSL's tags at 1, 64 and
-  256 MiB instead.
+  export only `mhfe_argon2id_hash_raw`, which has neither. The page compares OpenSSL's tags at 1,
+  64 and 256 MiB instead.
 - That Argon2 wiped its memory after a call: where the allocator put the freed work area in the
-  Emscripten heap is not reliably known, so the page does not scan for it. The package's Node
-  checks (`scripts/verify-browser-package.mjs`) confirm it for the single-threaded build: about
-  2 KiB of allocator records and of the stack of the last block computation stay non-zero after a
-  1 MiB call.
+  Emscripten heap is not reliably known, so the page does not scan for it. The package's checks
+  (`cargo xtask package-check`) confirm it for the single-threaded build, the stack the reference
+  code used included: about 200 bytes of allocator records stay non-zero after a 1 MiB call.
 - The threaded Argon2 build on a page that is not cross-origin isolated, such as one opened as a
   file: without `SharedArrayBuffer` it cannot run, and its part is not run.
 - Free memory, which a page cannot measure (see [Memory](#memory)).

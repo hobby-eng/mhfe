@@ -1,11 +1,16 @@
-# The vendored C files that scripts/build-argon2-wasm.sh compiles for the browser, the one list of
-# them: one file per line as "<part> <path>", the path from the repository root.
+# The C files that scripts/build-argon2-wasm.sh compiles for the browser, the one list of them: one
+# file per line as "<part> <path>", the path from the repository root.
 # packaging/Dockerfile.reproducible copies this file for that build. Native builds compile the
 # copy in mhfe-core. The parts:
 #
 #   common    the code around the Argon2 core
 #   portable  the portable core, as the SIMD core opt.c gave no speed-up in a browser and would
 #             exclude browsers without WebAssembly SIMD
+#   wrap      MHFE's own wrapper: mhfe_argon2id_hash_raw(), the only function the bridge calls, and
+#             the fill_segment() that core.c calls
+#
+# The renaming rule: the portable core is compiled with -Dfill_segment=mhfe_fill_segment_ref, so
+# that the wrapper's fill_segment() is the only one.
 #
 # The build takes the files in the order of these lines; another order would change its bytes.
 common vendor/phc-winner-argon2/src/argon2.c
@@ -14,3 +19,4 @@ common vendor/phc-winner-argon2/src/encoding.c
 common vendor/phc-winner-argon2/src/thread.c
 portable vendor/phc-winner-argon2/src/ref.c
 common vendor/phc-winner-argon2/src/blake2/blake2b.c
+wrap src/engine/argon2_browser.c

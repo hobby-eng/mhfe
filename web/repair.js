@@ -20,7 +20,7 @@ export { MhfeError } from "../runtime/runtime.js";
 
 /** The name of this module's operations in the package's worker. */
 const REPAIR_MODULE = "repair";
-/** The build of this file, which scripts/stamp-build-id.mjs writes; see BUILD_ID in the runtime. */
+/** The build of this file, from `cargo xtask wasm stamp-build-id`; see BUILD_ID in the runtime. */
 const REPAIR_BUILD_ID = "development";
 
 export class MhfeRepair extends MhfeModuleClass {

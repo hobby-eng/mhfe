@@ -12,11 +12,11 @@
 // runs in the same WebAssembly, runtime/mhfe.wasm; a request names its module and operation.
 
 /**
- * The build of the package these files come from, which scripts/stamp-build-id.mjs derives from
- * every file a page loads before it stamps any: runtime/mhfe.wasm, this file, runtime/worker.js,
- * each class file and both Argon2 builds. It writes it into each of these, the WebAssembly's
- * custom section "mhfe-build" included; the classes and the worker compare them, so that parts of
- * different builds, even ones that differ in a script alone, are never used together.
+ * The build of the package these files come from, which `cargo xtask wasm stamp-build-id` derives
+ * from every file a page loads before it stamps any: runtime/mhfe.wasm, this file,
+ * runtime/worker.js, each class file and both Argon2 builds. It writes it into each of these, the
+ * WebAssembly's custom section "mhfe-build" included; the classes and the worker compare them, so
+ * that parts of different builds, even ones that differ in a script alone, are never used together.
  * "development" before the build stamps it.
  */
 export const BUILD_ID = "development";
@@ -399,7 +399,7 @@ export function packageMismatch(what) {
 /**
  * The file `file` is of the build `build`, not of this runtime's. The worker has a deliberate copy
  * with its own file and build (buildMismatch() in web/worker-runtime.js), as a worker script
- * imports nothing; scripts/verify-browser-package.mjs holds both to one wording
+ * imports nothing; `cargo xtask package-check` holds both to one wording
  * (buildMismatchMessage).
  */
 function buildMismatch(file, build) {
@@ -411,7 +411,7 @@ function buildMismatch(file, build) {
 /**
  * The news a worker posts besides its result, error and questions, which go to the page's
  * handlers of the same name: web/worker-runtime.js (progress and the self-check's parts),
- * web/core-worker.js (unverified) and web/wallet-worker.js (draws). scripts/verify-browser-package.mjs
+ * web/core-worker.js (unverified) and web/wallet-worker.js (draws). `cargo xtask wasm verify`
  * keeps this list equal to the types the worker scripts post.
  */
 const WORKER_NEWS = ["progress", "componentStart", "component", "draws", "unverified"];
