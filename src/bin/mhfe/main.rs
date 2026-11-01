@@ -306,7 +306,8 @@ fn refusal_of(error: &clap::Error) -> String {
 /// Isolates a command, sets what ends it and runs its checks at start, before it reads anything.
 /// The order matters: a process enters its own network namespace only
 /// while it has a single thread, the handler of Ctrl+C has a thread of its own, and the Argon2
-/// check at start runs on four. The handler comes before the checks, which take a moment, so that
+/// check at start runs on four, which inherit the isolation from this thread when mhfe-core's
+/// engine starts them. The handler comes before the checks, which take a moment, so that
 /// a key pressed in them ends the command as it does later. The start menu, which is no command,
 /// isolates nothing and runs the same checks but those of isolation before it opens (menu.rs).
 fn prepare(command: &Command) -> Result<(), Failure> {

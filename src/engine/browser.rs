@@ -1,4 +1,4 @@
-//! Argon2id in the browser: the Emscripten build of the same reference C code, which the worker
+//! Argon2id in the browser: the Emscripten build of the reference C code, which the worker
 //! (web/core-worker.js) hands to the WebAssembly core as a JavaScript object.
 
 use std::cell::Cell;

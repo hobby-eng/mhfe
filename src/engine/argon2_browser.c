@@ -5,10 +5,6 @@
  * renamed copy of the vendored one (src/engine/argon2-sources.txt). Both then clear the stack the
  * vendored code used: it holds values derived from the password, such as H0, the BLAKE2b state of
  * initial_hash() and the blocks a segment computes on the stack.
- *
- * mhfe_clear_stack() and fill_segment() are a deliberate copy of src/engine/argon2_wrap.c of
- * mhfe-core: the Emscripten stage of the canonical build runs before Cargo fetches that package,
- * and a later core drops the file. A change goes to both.
  */
 
 #include <stddef.h>

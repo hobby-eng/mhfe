@@ -1,9 +1,9 @@
 //! Argon2id as MHFE uses it: version 1.3, four lanes, a 16-byte salt, an empty secret and empty
 //! associated data, and a 32-byte output. Only the memory and the number of passes change.
 //!
-//! One engine runs everywhere: the reference C implementation. Native builds call the copy in
-//! mhfe-core ([`mhfe_core::NativeArgon2`]); the WebAssembly build calls an Emscripten build of the
-//! vendored copy through JavaScript.
+//! Native builds call mhfe-core's engine on RustCrypto's `argon2` ([`mhfe_core::NativeArgon2`]);
+//! the WebAssembly build calls an Emscripten build of the vendored reference C code through
+//! JavaScript.
 
 use crate::MhfeError;
 

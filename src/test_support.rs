@@ -1,4 +1,4 @@
-//! What the unit tests of several modules share: the real C engine at a tiny cost, which is the
+//! What the unit tests of several modules share: the real engine at a tiny cost, which is the
 //! code path of every release at full cost, the stand-ins for it, and the public test phrases,
 //! states and password, so that each test builds its setting from one place.
 
@@ -96,7 +96,7 @@ impl Argon2Engine for HashEngine {
 #[used]
 static REDUCED_COST_MARKER: &str = "MHFE-TEST-ONLY-REDUCED-ARGON2-COST";
 
-/// The real C engine for fast unit tests: every call runs at [`REDUCED_COST`], whatever cost it
+/// The real engine for fast unit tests: every call runs at [`REDUCED_COST`], whatever cost it
 /// asks for. It exists only in test builds; the release check
 /// `scripts/check-release-artifacts.sh` looks for [`REDUCED_COST_MARKER`] to prove it.
 pub(crate) struct ReducedEngine(NativeArgon2);
@@ -116,7 +116,7 @@ impl Argon2Engine for ReducedEngine {
     }
 }
 
-/// The real C engine at [`REDUCED_COST`] under the settings `work`.
+/// The real engine at [`REDUCED_COST`] under the settings `work`.
 pub(crate) fn reduced_at(work: WorkFactor) -> Mhfe<ReducedEngine> {
     assert!(!REDUCED_COST_MARKER.is_empty());
     let engine = NativeArgon2::new(REDUCED_COST.memory_kib).unwrap();

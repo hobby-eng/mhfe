@@ -9,7 +9,7 @@ check word, the password generator and strength estimate, the wallet check, mast
 fingerprints and the self-test. What only a terminal or the operating
 system can give is listed
 [further down](#what-the-command-line-tool-has-and-the-browser-does-not). All the logic is the
-same Rust code as in the command-line tool; Argon2 is the same reference C code, compiled to
+same Rust code as in the command-line tool; Argon2 is the reference C code, compiled to
 WebAssembly.
 
 It is experimental and has not been independently reviewed. Do not use it to protect real funds. A

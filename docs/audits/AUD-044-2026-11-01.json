@@ -3162,7 +3162,7 @@
       "kind": "finding",
       "title": "mhfe-core 0.1.0 ends a command with a bus error below a low RLIMIT_MEMLOCK",
       "severity": "medium",
-      "status": "open",
+      "status": "fixed",
       "releaseBlocking": true,
       "releaseBlockingReason": "A release must take mhfe-core 0.2.0, which falls back to anonymous pages.",
       "evidence": "Runs at ulimit -l 64 on 0.1.0 and 0.2.0.",
@@ -4173,6 +4173,13 @@
       "fixCommit": null,
       "verificationCommit": null,
       "evidence": "A record of procedure edits, with the next audit."
+    },
+    {
+      "id": "AUD-044-SEC011",
+      "status": "fixed",
+      "fixCommit": null,
+      "verificationCommit": null,
+      "evidence": "Fixed by the move to mhfe-core 0.2.0: the same runs exit 0."
     }
   ],
   "limitations": [

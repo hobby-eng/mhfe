@@ -47,13 +47,16 @@ let outcome: CheckOutcome =
   `memory_kib()`, `passes()`. This crate adds `memory_bytes(work)` and `estimated_seconds(work)`.
 - `mhfe_core::Mhfe` is the cipher, which this crate's functions take. `engine::reserve`, in native
   builds only, gives its engine: it refuses a memory level the computer cannot provide
-  (`MhfeError::NotEnoughMemory`) and reserves the work area once (`MEMORY_ALLOCATION_FAILED` when
-  the system refuses it); every round of every operation reuses it. A native build is always 64-bit
+  (`MhfeError::NotEnoughMemory`), reserves the work area once (`MEMORY_ALLOCATION_FAILED` when the
+  system refuses it) and starts the engine's four threads (`ARGON2_FAILED` when it refuses one);
+  every round of every operation reuses them. A program calls
+  `mhfe_core::protect::Isolation::enter` before it, since the threads inherit that isolation from
+  the thread that makes the engine. A native build is always 64-bit
   and supports every level (`engine::HIGHEST_MEMORY_LEVEL` is `WorkFactor::MAX_MEMORY_LEVEL`). The
   browser build has no `engine::reserve`: its engine, `engine::browser::BrowserEngine::new`, refuses
   a level above `engine::browser::HIGHEST_BROWSER_MEMORY_LEVEL` (0) with
   `MhfeError::MemoryLevelNotSupportedHere`.
-  The native engine is `mhfe_core::NativeArgon2`, the reference C code inside that crate. The
+  The native engine is `mhfe_core::NativeArgon2`, RustCrypto's `argon2` inside that crate. The
   browser's engine fills each round's key with a marker before its Argon2 build runs and refuses a
   key left so or set to zeros (`ARGON2_FAILED`). `Mhfe::engine()` gives the engine.
   `engine::check_can_run` makes the same checks as `engine::reserve` without allocating, so a
@@ -505,17 +508,16 @@ The parts, by identifier and label, and what each compares:
 
 - `cipher-hashes`, "Cipher hashes": SHA-256 (FIPS 180-4, two messages), HMAC-SHA-256 (RFC 4231 test
   cases 2 and 6) and BLAKE2b-256, as the rounds use them.
-- `argon2`, "Argon2id": a call shaped as MHFE makes it at 1 MiB, natively on the copy of the core
-  an operation runs on this processor, in a browser through the page's Argon2 build. The tag comes
+- `argon2`, "Argon2id": a call shaped as MHFE makes it at 1 MiB, natively on the code an operation
+  runs on this processor, in a browser through the page's Argon2 build. The tag comes
   from OpenSSL. A call that returns an error gives "Argon2id could not run: …", told apart from a
   wrong tag ("… gives another tag …"), and so in a browser does one that returns without writing
   its key or writes zeros, which the written-key guard around each round refuses. Natively that
   fails the part, so a command stops at start; in a browser an Argon2 build that does not start
-  makes the part not available instead (see [Browser package](#browser-package)). The RFC 9106
-  vector, the run on each copy of the core and on one thread, and the wipe of the work area are
-  tests of mhfe-core: they do not run on the user's computer.
+  makes the part not available instead (see [Browser package](#browser-package)). The wipe of the
+  work area is a test of mhfe-core: it does not run on the user's computer.
 - `argon2-sizes`, "Argon2id at 64 and 256 MiB", full self-test only: 64 MiB with 3 passes and
-  256 MiB with 2 passes, on the same copy of the core. A computer that cannot give the memory makes
+  256 MiB with 2 passes, on the same code. A computer that cannot give the memory makes
   it not available rather than failed.
 - `cipher-rounds`, "Cipher rounds": 10 of the published vectors of suites 3 and 4 replayed with
   their recorded round keys through `Encryption::run`, with its check and repair words,
@@ -605,8 +607,8 @@ The Argon2 checks are closed: their inputs are private constants, they take no c
 and give only an outcome, so they cannot encrypt anything. The core's `Argon2Engine` takes its cost
 with every call, and every operation asks for the cost of its work factor; no release build holds
 the test-only engine that runs below the cost it is asked for (`scripts/check-release-artifacts.sh`
-looks for its marker). `engine::NativeArgon2Check::default()` starts four threads per call and
-joins them before it returns. A process can enter its own network namespace only while it has a
+looks for its marker). `engine::NativeArgon2Check::default()` starts four threads per call, which
+end soon after it returns. A process can enter its own network namespace only while it has a
 single thread, so a command runs its checks at start after it has entered its own namespace, where
 the system allows one. The start menu runs them before it opens, with no network namespace: it
 handles no secret, and each of its commands is a process of its own that runs them again.

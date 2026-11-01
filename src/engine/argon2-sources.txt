@@ -1,7 +1,6 @@
 # The C files that scripts/build-argon2-wasm.sh compiles for the browser, the one list of them: one
 # file per line as "<part> <path>", the path from the repository root.
-# packaging/Dockerfile.reproducible copies this file for that build. Native builds compile the
-# copy in mhfe-core. The parts:
+# packaging/Dockerfile.reproducible copies this file for that build. The parts:
 #
 #   common    the code around the Argon2 core
 #   portable  the portable core, as the SIMD core opt.c gave no speed-up in a browser and would

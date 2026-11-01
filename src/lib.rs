@@ -5,9 +5,9 @@
 //! 24-word container that is itself a valid BIP39 phrase, or, with `Suite::SameLength`, a 12- to
 //! 21-word phrase into a container of its own length; [`decrypt`] turns the container back into
 //! the original, the container's word count selecting the suite. Every one of the twelve
-//! Feistel rounds runs Argon2id with 2 GiB of memory by default, using the reference C
-//! implementation of Argon2. The cipher is [`mhfe_core`]'s; this crate adds the front ends' rules
-//! and refusals around it.
+//! Feistel rounds runs Argon2id with 2 GiB of memory by default, on RustCrypto's `argon2`
+//! natively and on the reference C implementation in a browser. The cipher is [`mhfe_core`]'s;
+//! this crate adds the front ends' rules and refusals around it.
 //!
 //! The construction is experimental and has not been independently reviewed. Do not use it to
 //! protect real funds.

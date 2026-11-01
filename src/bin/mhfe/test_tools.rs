@@ -113,15 +113,16 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     Ok(SUCCESS)
 }
 
-/// The Argon2 code that ran, chosen as the engine of mhfe-core chooses it (its
-/// `processor_has_ssse3`): x86-64 runs the SSSE3 copy of opt.c where the processor has SSSE3.
+/// The Argon2 code that ran, chosen as RustCrypto's `argon2` chooses it: x86-64 runs the AVX2 code
+/// where the processor has AVX2.
 fn argon2_engine() -> &'static str {
     #[cfg(target_arch = "x86_64")]
-    return if std::arch::is_x86_feature_detected!("ssse3") {
-        "reference C, opt.c with SSSE3, 4 threads"
-    } else {
-        "reference C, opt.c with SSE2, 4 threads"
-    };
+    let avx2 = std::arch::is_x86_feature_detected!("avx2");
     #[cfg(not(target_arch = "x86_64"))]
-    "reference C, ref.c, 4 threads"
+    let avx2 = false;
+    if avx2 {
+        "RustCrypto argon2, AVX2, 4 threads"
+    } else {
+        "RustCrypto argon2, plain, 4 threads"
+    }
 }

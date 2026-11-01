@@ -5,7 +5,8 @@ not use it to protect real funds. A passing test or a matching vector does not s
 construction is secure. The protocol and its limits are described in the
 [specification](https://github.com/hobby-eng/mhfe-spec).
 
-Report a suspected vulnerability privately through GitHub's security advisories for this repository.
+Report a suspected vulnerability privately through
+[GitHub's security advisory form](https://github.com/hobby-eng/mhfe/security/advisories/new).
 Never include a real seed phrase, password, private key or wallet file.
 
 ## Secrets
@@ -40,11 +41,9 @@ Never include a real seed phrase, password, private key or wallet file.
 - Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
   key or mask is wiped when it is dropped; what a dependency keeps on the stack is not, such as the
   parsing states of the `bip39` crate. mhfe-core therefore overwrites 128 KiB of the stack after
-  each call that computes with a secret, and 16 KiB after every segment and call of the Argon2 C
-  code. The Argon2 work area is wiped by the C code at the end of every round
-  (`FLAG_clear_internal_memory`, checked by a test of mhfe-core); when a round fails, for example
-  because a thread could not be started, the C code returns before that step and mhfe-core wipes
-  the area instead. This is best effort: a compiler, the operating system, swap or a terminal's
+  each call that computes with a secret, and each of the four threads of its Argon2 engine does
+  the same after every call of that engine, which also wipes the Argon2 work area, whether the
+  call succeeded or not. This is best effort: a compiler, the operating system, swap or a terminal's
   scrollback can keep copies beyond the program's reach. Standard input and standard output are
   read and written with the operating system's own calls (`read` and `write`, and the console's
   UTF-16 calls on Windows), past the standard library's buffers, which are never wiped and would
@@ -108,15 +107,6 @@ Never include a real seed phrase, password, private key or wallet file.
   reaches a disk needs no erasing: TRIM and overwriting do not guarantee that an SSD forgets.
   Hibernation writes locked memory and the work area to disk: on Linux the kernel refuses to
   hibernate while secret memory exists, and elsewhere only an encrypted disk protects them.
-- A known limit of mhfe-core 0.1.0: since the Linux change "mm/secretmem: properly account locked
-  pages" (commit 97d34aa65c29, September 2026, in Ubuntu's kernels from 7.0.0-39), the kernel grants
-  secret memory beyond `RLIMIT_MEMLOCK` and refuses only the first write to it, so the core cannot
-  fall back to locked memory, and below about 512 KiB of the limit a command ends with a bus error
-  (exit code 135). The kernel counts the limit per user, so the figure varies a little and depends
-  on the command. At the lowest limits this comes at the first secret, in the checks at start,
-  before anything is read; a search for two missing words, which runs on every processor core, can
-  end this way after the words were typed. Either way the command stops and writes no core dump.
-  The default limit, 8 MiB, is far above this, and the core's next version fixes it.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original seed phrase: a typing mistake or a
   hardware fault that does not repeat cannot silently produce a container that no password opens. At a terminal the
@@ -194,13 +184,13 @@ Never include a real seed phrase, password, private key or wallet file.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 
-## The C engine and its boundary
+## The Argon2 engines and their boundary
 
-Natively, Argon2 is the reference C implementation inside mhfe-core, which also makes the calls
+Natively, Argon2 is RustCrypto's `argon2` crate inside mhfe-core, which also makes the calls
 that lock secrets, isolate a process and keep the work area out of core dumps. The
-[security notes of mhfe-core](https://github.com/hobby-eng/mhfe_core/blob/v0.1.0/SECURITY.md)
-give the invariants of its C code and what each system offers and leaves open. The browser
-package compiles the same reference code from
+[security notes of mhfe-core](https://github.com/hobby-eng/mhfe_core/blob/v0.2.0/SECURITY.md)
+give what its engine leaves and clears and what each system offers and leaves open. The browser
+package compiles the reference C implementation from
 [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) with Emscripten, with one C file of
 MHFE's own, `src/engine/argon2_browser.c`, which clears the stack behind the reference code.
 
@@ -272,7 +262,7 @@ tab.
 ## The browser
 
 The browser package ([`docs/BROWSER-PACKAGE.md`](docs/BROWSER-PACKAGE.md)) runs the same Rust code
-and the same Argon2 C code in a web page, as independent classes: `MhfeClient` (encryption,
+and the reference Argon2 C code in a web page, as independent classes: `MhfeClient` (encryption,
 recovery, the check, rekey, hidden wallets, the search for missing words of a container phrase and
 the self-test), `MhfeRepair`, `MhfePasswords` and `MhfeWallet`. A page has none of the
 protections of the operating system described above: no private screen, no locked memory, no

@@ -5,9 +5,9 @@
 //! and they give only an outcome, so that they add no way to Argon2 at another cost. An engine
 //! takes its cost with every call, and every operation asks for the cost of its work factor; the
 //! one engine that runs below the cost it is asked for is a test engine, in no release build
-//! (scripts/check-release-artifacts.sh looks for its marker). Natively they run the C code of
-//! mhfe-core on this processor, on the copy of its core that an operation runs here. In a browser
-//! they run the page's Emscripten build of the same code through the bridge every operation uses.
+//! (scripts/check-release-artifacts.sh looks for its marker). Natively they run the engine of
+//! mhfe-core on this processor, on the code that an operation runs here. In a browser they run
+//! the page's Emscripten build of the reference C code through the bridge every operation uses.
 
 #[cfg(not(target_arch = "wasm32"))]
 use mhfe_core::{Argon2Engine, NativeArgon2};
@@ -37,7 +37,7 @@ impl KnownTag {
 }
 
 /// The tags were computed with OpenSSL through Python cryptography 46.0.5, an implementation
-/// independent of the reference C code (knownTags in xtask/pages/package/checks/core.js).
+/// independent of both engines (knownTags in xtask/pages/package/checks/core.js).
 const SMALL: KnownTag = KnownTag {
     cost: Argon2Cost {
         memory_kib: 1024,
@@ -170,9 +170,9 @@ type Call = fn(Argon2Cost, &mut [u8; KEY_BYTES]) -> Result<(), MhfeError>;
 ///
 /// At startup ([`NativeArgon2Check`]) a call shaped as MHFE makes it at 1 MiB (four lanes on four
 /// threads, version 1.3, no secret or associated data). About a millisecond. It starts four threads
-/// and joins them before it returns: the command-line tool runs it after a command has entered its
-/// own network namespace, which needs a process of a single thread, and before the start menu
-/// opens, which enters none.
+/// which end soon after it returns: the command-line tool runs it after a command has entered its
+/// isolation, which needs a process of a single thread and which the threads inherit, and before
+/// the start menu opens, which enters none.
 ///
 /// In the full self-test ([`NativeArgon2SizesCheck`]), the same at 64 and 256 MiB: indexing over
 /// many segments. About a quarter of a second and 256 MiB. A computer that cannot reserve the

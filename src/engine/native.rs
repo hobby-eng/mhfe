@@ -1,5 +1,5 @@
-//! Argon2id on the reference C code of mhfe-core, with one work area for all twelve rounds, and the
-//! checks of the computer's memory before it is reserved.
+//! Argon2id on the engine of mhfe-core, with one work area for all twelve rounds, and the checks
+//! of the computer's memory before it is reserved.
 
 use mhfe_core::{NativeArgon2, WorkFactor};
 
@@ -49,9 +49,11 @@ pub fn highest_available_level() -> Option<u32> {
         .map(WorkFactor::memory_level)
 }
 
-/// Checks that the computer can run `work` and reserves its memory once; every round of the
-/// operation then reuses it. Errors: those of [`check_can_run`], then
-/// [`MhfeError::MemoryAllocation`] when the system refuses the memory.
+/// Checks that the computer can run `work`, reserves its memory once and starts the engine's four
+/// threads; every round of the operation then reuses them. A program enters mhfe-core's isolation
+/// first, which the threads inherit from the thread that calls this. Errors: those of
+/// [`check_can_run`], then [`MhfeError::MemoryAllocation`] when the system refuses the memory and
+/// [`MhfeError::Argon2`] when it refuses a thread.
 pub fn reserve(work: WorkFactor) -> Result<NativeArgon2, MhfeError> {
     check_can_run(work)?;
     NativeArgon2::new(work.memory_kib()).map_err(|error| error_of(error, memory_bytes(work)))

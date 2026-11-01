@@ -35,8 +35,8 @@ ENV CARGO_HOME=/root/.cargo \
     CARGO_BUILD_JOBS=${BUILD_JOBS} \
     RUST_TEST_THREADS=2
 
-# C cross compilers for ARM64 Linux and for Windows (MinGW-w64); the native C compiler comes with
-# the pinned base image. The update and security suites of the same snapshot are needed too: the
+# Cross linkers for ARM64 Linux and for Windows (MinGW-w64); the native one comes with the pinned
+# base image. The update and security suites of the same snapshot are needed too: the
 # base image already carries updated packages, such as binutils-common, that the cross binutils
 # must match.
 RUN for suite in noble noble-updates noble-security; do \
@@ -62,14 +62,12 @@ RUN curl --fail --silent --show-error --location \
     && test "$(rustc --version | cut -d ' ' -f 1-2)" = "rustc 1.99.1" \
     && test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.129"
 
-# Cross builds: the linkers and the C compilers the cc crate uses for the Argon2 code. The MinGW
-# linker writes the build time into every Windows executable's header, and the header checksum
-# with it; --no-insert-timestamp writes zero instead, so that two builds give the same bytes.
+# Cross builds: the linkers. The MinGW linker writes the build time into every Windows
+# executable's header, and the header checksum with it; --no-insert-timestamp writes zero
+# instead, so that two builds give the same bytes.
 ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
-    CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc \
     CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
-    CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-arg=-Wl,--no-insert-timestamp" \
-    CC_x86_64_pc_windows_gnu=x86_64-w64-mingw32-gcc
+    CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-arg=-Wl,--no-insert-timestamp"
 
 FROM toolchain AS dependencies
 WORKDIR /workspace

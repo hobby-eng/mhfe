@@ -2,8 +2,8 @@
 
 `vendor/phc-winner-argon2/` holds the reference C implementation of Argon2 by Daniel Dinu, Dmitry
 Khovratovich, Jean-Philippe Aumasson and Samuel Neves. The browser package compiles this copy with
-Emscripten through `scripts/build-argon2-wasm.sh`. The native command-line tool runs the same commit
-through the crate mhfe-core, which vendors and compiles it itself.
+Emscripten through `scripts/build-argon2-wasm.sh`. The native command-line tool does not use it: it
+runs RustCrypto's `argon2` crate through the crate mhfe-core.
 
 ## Source
 
@@ -98,8 +98,7 @@ links. The points that matter for MHFE:
   to avoid a `libgcc_s` dependency on minimal systems. Both work; MHFE keeps upstream's code.
 - **CPU instructions.** #308 is a crash with an invalid instruction after `opt.c` was compiled for a
   newer processor than the one running it; the failing virtual machine offered SSE2 and SSE3 but not
-  SSSE3. This is why mhfe-core's native `x86_64` build never assumes SSSE3: it checks the processor
-  and falls back to the SSE2 copy of `opt.c`.
+  SSSE3. MHFE does not compile `opt.c`.
 
 ## Limits worth knowing
 

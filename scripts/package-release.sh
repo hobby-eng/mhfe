@@ -81,8 +81,8 @@ if [[ -z "$source_state" ]]; then
     source_state=modified
   fi
 fi
-# The crate whose C code a native program runs, for BUILD-INFO.txt; the browser package names the
-# vendored commit instead.
+# The crate whose Argon2 engine a native program runs, for BUILD-INFO.txt; the browser package
+# names the vendored commit instead.
 core_version="$(sed -n 's/^mhfe-core = "=\(.*\)"$/\1/p' Cargo.toml)"
 
 # Documents and licence texts that every archive carries. An archive that brings its own

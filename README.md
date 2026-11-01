@@ -29,7 +29,7 @@ which MHFE makes deliberately slow. Your wallet, its addresses and any BIP39 pas
 are.
 
 Each recovery deliberately takes about one to two minutes and 2 GiB of memory. You wait once;
-someone guessing your password pays that for every guess. An encryption takes twice as long, because
+someone guessing your password pays nearly that for every guess. An encryption takes twice as long, because
 MHFE then recovers your phrase from the new container once to make sure the container works.
 
 This repository is the implementation: a command-line tool, a Rust library and a browser package,
@@ -58,7 +58,7 @@ stored.
 gives a container of 24 words. Inside, the original seed phrase becomes a 256-bit number that twelve
 rounds of a Feistel cipher scramble. Each round derives its key from the password with Argon2id,
 using 2 GiB of memory, and needs the result of the previous round, so every guess of the password
-costs the full work. The result is written out as 24 words with an ordinary BIP39 checksum: a valid
+costs nearly the full work. The result is written out as 24 words with an ordinary BIP39 checksum: a valid
 seed phrase in which nothing shows that MHFE made it. No salt, version or length is stored; with the
 default settings, the 24 words and the password are all you need.
 
@@ -923,8 +923,8 @@ command that crashed or was killed: it restores the terminal, leaves the private
 
 A release has archives for Linux (x86-64 and ARM64), macOS (Intel and Apple silicon) and Windows
 (x86-64), each with the `mhfe` program, its launcher and the licences. It also has the browser
-package. A single x86-64 program runs on every 64-bit x86 processor: it uses SSSE3 where the
-processor has it, 7 to 10% faster ([measured](docs/measurements/README.md)), and SSE2 otherwise.
+package. A single x86-64 program runs on every 64-bit x86 processor: it uses AVX2 where the
+processor has it, and plain code otherwise.
 
 Check a download against the release's `SHA256SUMS` before you use it and, from v0.5.0 on, check
 the OpenPGP signature of that file too: import `RELEASE-SIGNING-KEY.asc` from the release, compare
@@ -992,17 +992,14 @@ installs with
 of the password rule changes.
 
 The cipher, native Argon2 and the protections of secrets come from the crate
-[mhfe-core](https://github.com/hobby-eng/mhfe_core), pinned to one version in `Cargo.toml`. Argon2
-is the reference C implementation of its authors, unchanged: the native tool compiles the copy
-inside that crate, and the browser package the one vendored in
+[mhfe-core](https://github.com/hobby-eng/mhfe_core), pinned to one version in `Cargo.toml`. The
+native tool runs Argon2 on RustCrypto's `argon2` crate inside mhfe-core, and the browser package
+on the reference C implementation of its authors, unchanged, vendored in
 [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md). Version 0.3.0 was the last release to
 implement suite 2.
 
-On x86-64 mhfe-core compiles the Argon2 code twice: with SSE2, which every 64-bit x86 processor has,
-and with SSSE3, which is 7 to 10% faster in the [measurements](docs/measurements/README.md). The
-program checks the processor and runs the SSSE3 copy only where SSSE3 is present, so it also runs on
-older AMD processors and on virtual machines that hide SSSE3. Both copies give byte for byte the
-same results, and the tests of mhfe-core run both.
+On x86-64 the `argon2` crate checks the processor and runs its AVX2 code only where AVX2 is present,
+so the program also runs on older processors and on virtual machines that hide AVX2.
 
 The Rust source is licensed under MIT; see [`LICENSE`](LICENSE).
 

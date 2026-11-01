@@ -20,6 +20,13 @@ if [[ ! "$output_dir" =~ ^canonical-output(-[A-Za-z0-9._]+)?$ ]]; then
   exit 2
 fi
 
+# The tests in the container run secret commands. Swap on a disk stops them there, as a container
+# has no terminal to ask at and no way to forbid swap, so say so before an hour of building.
+if [[ -r /proc/swaps ]] && grep -qv -e '^Filename' -e '^/dev/zram' /proc/swaps; then
+  echo "Turn swap off before this build: sudo swapoff -a" >&2
+  exit 2
+fi
+
 # REPRODUCIBLE_NO_CACHE=1 rebuilds every stage from scratch. Comparing such a build with a cached
 # one shows that the output does not depend on what the build cache happens to hold.
 cache_flags=()

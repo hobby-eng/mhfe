@@ -412,6 +412,7 @@ fn isolation_text(
         // No new sockets on macOS is a sandbox that lets a socket be made but not bound or
         // connected.
         (false, true, false) if cfg!(target_os = "macos") => "no network",
+        (false, true, true) if cfg!(target_os = "macos") => "no network or file writes",
         (true, true, true) => "isolated network, no new sockets or file writes",
         (true, true, false) => "isolated network, no new sockets",
         (true, false, true) => "isolated network, no new file writes",

@@ -101,8 +101,7 @@ jobs:
         os: [windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    # Code for macOS alone and the build with Microsoft's compiler are compiled only here, so
-    # warnings fail the job.
+    # Code for macOS or Windows alone is compiled only here, so warnings fail the job.
     env:
       RUSTFLAGS: -D warnings
     steps:
@@ -140,6 +139,9 @@ jobs:
         with:
           persist-credentials: false
           submodules: true
+      # The tests in the container run secret commands, which stop on unencrypted swap there.
+      - name: Turn swap off
+        run: sudo swapoff -a
       - name: Build and verify canonical release assets
         run: scripts/build-reproducible.sh
       - name: Print canonical checksums

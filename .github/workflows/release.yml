@@ -41,6 +41,9 @@ jobs:
         uses: actions-rust-lang/audit@72c09e02f132669d52284a3323acdb503cfc1a24 # v1.2.7
         with:
           createIssues: false
+      # The tests in the container run secret commands, which stop on unencrypted swap there.
+      - name: Turn swap off
+        run: sudo swapoff -a
       # The container's own SHA256SUMS travels with the archives as canonical.sha256, so that the
       # publishing job can prove it received exactly the bytes this job built.
       - name: Build release assets in the canonical container
