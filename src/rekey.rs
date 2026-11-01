@@ -324,9 +324,10 @@ mod tests {
 
     fn container_24() -> String {
         // Any valid 24-word phrase serves as a container's words for the checks before Argon2.
-        crate::phrase::phrase_from_entropy(&[7u8; 32])
+        mhfe_core::Phrase::from_entropy(&[7u8; 32])
             .unwrap()
-            .to_string()
+            .as_str()
+            .to_owned()
     }
 
     fn password(text: &str) -> Password {
@@ -732,9 +733,7 @@ mod tests {
     /// owner confirms it.
     #[test]
     fn a_detected_24_word_phrase_is_confirmed_by_the_wallet_or_the_owner() {
-        let phrase = crate::phrase::phrase_from_entropy(&[7u8; 32])
-            .unwrap()
-            .to_string();
+        let phrase = container_24();
         let rekey = detected(&phrase);
         let reference = Reference::Fingerprint {
             fingerprint: crate::wallet::master_fingerprint(&phrase, "").unwrap(),

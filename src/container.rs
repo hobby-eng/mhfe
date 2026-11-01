@@ -2,14 +2,12 @@
 //! end shows and decides its questions by, kept here so that no front end keeps a copy of the
 //! rules behind them.
 
-use mhfe_core::Suite;
-use zeroize::Zeroizing;
+use mhfe_core::{Phrase, Suite};
 
-use crate::memory::LockedText;
 use crate::packing;
 use crate::phrase::{self, WORD_COUNTS};
 use crate::suite::{built_in_check_lengths, holds_full_state};
-use crate::{other_detected_lengths, read_phrase, wallet, MhfeError, PhraseLength};
+use crate::{read_phrase, wallet, MhfeError, PhraseLength};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -22,7 +20,7 @@ pub const BUILT_IN_CHECK_WORD_COUNTS: [usize; 4] = packing::SHORT_WORD_COUNTS;
 /// have and the checks a recovery of it can be compared with.
 pub struct ContainerFacts {
     /// Every word written out in full and in lower case, one space apart.
-    words: Zeroizing<String>,
+    phrase: Phrase,
     word_count: usize,
     suite: Suite,
 }
@@ -46,10 +44,10 @@ impl ContainerFacts {
     /// or 24 words with [`MhfeError::InvalidContainer`]. Any spacing and letter case and the first
     /// four letters of a word are accepted, as for an original phrase.
     pub fn read(text: &str) -> Result<Self, MhfeError> {
-        let container = phrase::parse_container(text).map_err(MhfeError::InvalidContainer)?;
-        let word_count = container.word_count();
+        let phrase = phrase::read(text, MhfeError::InvalidContainer)?;
+        let word_count = phrase.words();
         Ok(Self {
-            words: phrase::phrase_text(&container),
+            phrase,
             word_count,
             suite: Suite::of_container(word_count)
                 .ok_or(MhfeError::InvalidWordCount(word_count))?,
@@ -59,7 +57,7 @@ impl ContainerFacts {
     /// The container as read: every word written out in full and in lower case, one space apart,
     /// so that a person can compare it with the backup.
     pub fn words(&self) -> &str {
-        &self.words
+        self.phrase.as_str()
     }
 
     /// The number of words of the container: 24, or 12 to 21 for a same-length container.
@@ -159,7 +157,7 @@ impl ContainerFacts {
     /// BIP39 passphrase. A container is a valid phrase too, but that wallet is not the owner's.
     /// It costs one PBKDF2-HMAC-SHA512 of 2,048 iterations, as BIP39 seeds do.
     pub fn fingerprint(&self) -> Result<[u8; 4], MhfeError> {
-        wallet::master_fingerprint(&self.words, "")
+        wallet::master_fingerprint(self.phrase.as_str(), "")
     }
 }
 
@@ -169,8 +167,7 @@ impl ContainerFacts {
 pub struct OriginalFacts {
     /// Every word written out in full and in lower case, one space apart. It is the secret, so it
     /// is kept out of swap and wiped when dropped.
-    words: LockedText,
-    word_count: usize,
+    phrase: Phrase,
     other_lengths: Vec<usize>,
 }
 
@@ -187,29 +184,28 @@ impl OriginalFacts {
     /// 18, 21 or 24 words with [`MhfeError::InvalidPhrase`]. Any spacing and letter case and the
     /// first four letters of a word are accepted.
     pub fn read(phrase: &str) -> Result<Self, MhfeError> {
-        let words = LockedText::copy_of(&read_phrase(phrase)?);
+        let phrase = read_phrase(phrase)?;
         Ok(Self {
-            word_count: words.split(' ').count(),
-            other_lengths: other_detected_lengths(&words)?,
-            words,
+            other_lengths: phrase.other_detected_lengths(),
+            phrase,
         })
     }
 
     /// The phrase as read: every word written out in full and in lower case, one space apart, so
     /// that a person can see what was understood.
     pub fn words(&self) -> &str {
-        &self.words
+        self.phrase.as_str()
     }
 
     /// The number of words of the phrase: 12, 15, 18, 21 or 24.
     pub fn word_count(&self) -> usize {
-        self.word_count
+        self.phrase.words()
     }
 
     /// The lengths other than the phrase's own that a recovery with automatic detection would
     /// also accept from a 24-word container: empty for almost every phrase
-    /// ([`crate::other_detected_lengths`]). When not, the owner keeps the word count and states it
-    /// during recovery.
+    /// ([`mhfe_core::Phrase::other_detected_lengths`]). When not, the owner keeps the word count
+    /// and states it during recovery.
     pub fn other_lengths(&self) -> &[usize] {
         &self.other_lengths
     }
@@ -232,8 +228,8 @@ impl OriginalFacts {
             packing::STATE_WORDS,
         )];
         // A 24-word phrase fills the whole state: its only container has 24 words.
-        if self.word_count < packing::STATE_WORDS {
-            choices.push(ContainerChoice::new(Suite::SameLength, self.word_count));
+        if self.word_count() < packing::STATE_WORDS {
+            choices.push(ContainerChoice::new(Suite::SameLength, self.word_count()));
         }
         choices
     }
@@ -276,9 +272,9 @@ mod tests {
                             wave sausage worth useful legal winner thank year wave sausage worth title";
 
     /// A valid phrase of `words` words: all-zero entropy, as in the BIP39 test vectors.
-    fn zero_phrase(words: usize) -> Zeroizing<String> {
+    fn zero_phrase(words: usize) -> Phrase {
         let bytes = packing::entropy_bytes(words).unwrap();
-        crate::phrase_from_entropy(&vec![0; bytes]).unwrap()
+        Phrase::from_entropy(&vec![0; bytes]).unwrap()
     }
 
     fn words(count: usize) -> PhraseLength {
@@ -325,7 +321,7 @@ mod tests {
     #[test]
     fn a_same_length_container_keeps_its_length_and_has_no_check() {
         for count in BUILT_IN_CHECK_WORD_COUNTS {
-            let container = ContainerFacts::read(&zero_phrase(count)).unwrap();
+            let container = ContainerFacts::read(zero_phrase(count).as_str()).unwrap();
             assert_eq!(container.suite(), Suite::SameLength);
             assert_eq!(container.phrase_lengths(), [count]);
             assert!(container.built_in_check_lengths().is_empty());
@@ -356,15 +352,12 @@ mod tests {
     }
 
     #[test]
-    fn an_original_is_read_as_typed_into_locked_memory() {
+    fn an_original_is_read_as_typed() {
         let typed = "  ABANDON aban\tAband abandon abandon abandon abandon abandon abandon abandon abandon abou ";
         let original = OriginalFacts::read(typed).unwrap();
         assert_eq!(original.words(), ZERO_12);
         assert_eq!(original.word_count(), 12);
         assert!(original.other_lengths().is_empty());
-        // Reserved at its final size, so that no growing copy of the words is left behind.
-        assert_eq!(original.words.capacity(), ZERO_12.len());
-        assert_eq!(original.words.is_locked(), cfg!(unix));
         let refused = OriginalFacts::read(&ZERO_12.replace("about", "abandon"))
             .err()
             .unwrap();
@@ -374,7 +367,7 @@ mod tests {
     #[test]
     fn a_short_original_can_keep_its_length_at_the_cost_of_a_weaker_checksum() {
         for (count, one_in) in [(12, 16), (15, 32), (18, 64), (21, 128)] {
-            let original = OriginalFacts::read(&zero_phrase(count)).unwrap();
+            let original = OriginalFacts::read(zero_phrase(count).as_str()).unwrap();
             assert_eq!(
                 original.container_choices(),
                 [
@@ -401,9 +394,11 @@ mod tests {
         for (text, [short, long]) in AMBIGUOUS_STATES {
             let state = state_from_hex(text);
             let bytes = packing::entropy_bytes(short).unwrap();
-            let phrase = crate::phrase_from_entropy(&state[..bytes]).unwrap();
+            let phrase = Phrase::from_entropy(&state[..bytes]).unwrap();
             assert_eq!(
-                OriginalFacts::read(&phrase).unwrap().other_lengths(),
+                OriginalFacts::read(phrase.as_str())
+                    .unwrap()
+                    .other_lengths(),
                 [long]
             );
         }

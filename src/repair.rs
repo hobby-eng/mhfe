@@ -64,8 +64,8 @@ pub fn require_count(count: usize) -> Result<(), MhfeError> {
 )]
 pub fn repair_words(container: &str, count: usize) -> Result<String, MhfeError> {
     require_count(count)?;
-    phrase::parse_container(container).map_err(MhfeError::InvalidContainer)?;
-    let card = Card::new(&Phrase::read(container)?, count).expect("the count is a card's size");
+    let container = phrase::read(container, MhfeError::InvalidContainer)?;
+    let card = Card::new(&container, count).expect("the count is a card's size");
     Ok(card.as_str().to_owned())
 }
 
@@ -104,7 +104,7 @@ impl ContainerReading {
                 unreadable: unreadable.iter().map(|position| position + 1).collect(),
             };
         }
-        if phrase::parse_container(written).is_ok() {
+        if Phrase::read(written).is_ok() {
             Self::Container
         } else {
             Self::NotAContainer

@@ -4,7 +4,8 @@
 //! ways, the refusal of a wrong checksum and the completion of four-letter prefixes, which every
 //! phrase and container a person types passes through.
 
-use bip39::Language;
+use bip39::{Language, Mnemonic};
+use mhfe_core::Phrase;
 use sha2::Digest;
 
 use crate::self_check::{
@@ -155,9 +156,15 @@ impl WordListCheck {
     fn vector(vector: &TrezorVector) -> Result<(), String> {
         let entropy =
             hex::decode(vector.entropy).map_err(|_| "the built-in cases are damaged".to_owned())?;
-        let phrase = crate::phrase_from_entropy(&entropy).map_err(stopped)?;
-        expect(*phrase == *vector.phrase, "gives other words")?;
-        let parsed = super::parse(vector.phrase).map_err(|_| "is refused".to_owned())?;
+        let phrase = Phrase::from_entropy(&entropy).map_err(stopped)?;
+        expect(phrase.as_str() == vector.phrase, "gives other words")?;
+        expect(
+            super::read_phrase(vector.phrase).is_ok_and(|read| read.as_str() == vector.phrase),
+            "is refused",
+        )?;
+        // bip39's own reader, the only one that gives the entropy: the core keeps it private.
+        let parsed = Mnemonic::parse_in_normalized(Language::English, vector.phrase)
+            .map_err(|_| "is refused".to_owned())?;
         expect(parsed.to_entropy() == entropy, "gives another entropy")
     }
 }
@@ -208,7 +215,7 @@ impl ComponentCheck for WordListCheck {
                 .map_err(|what| format!("a wrong checksum {what}"))
         });
         findings.each("completion", &COMPLETIONS, |&(typed, expected)| {
-            expect(super::complete_word(typed) == expected, "differs")
+            expect(Phrase::read_word(typed) == expected, "differs")
         });
         findings.outcome()
     }
@@ -218,7 +225,6 @@ impl ComponentCheck for WordListCheck {
 mod tests {
     use super::*;
     use crate::self_check::{fails_with, leak};
-    use bip39::Mnemonic;
 
     #[test]
     fn the_word_list_passes_at_both_tiers() {

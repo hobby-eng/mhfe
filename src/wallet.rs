@@ -33,12 +33,11 @@ use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::elliptic_curve::PrimeField;
 use k256::{FieldBytes, ProjectivePoint, Scalar};
 use mhfe_core::wallet_check::Seed;
-use mhfe_core::Phrase;
 use sha2::{Digest, Sha256, Sha512};
 use sha3::Keccak256;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::{phrase, MhfeError};
+use crate::{read_phrase, MhfeError};
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -1067,9 +1066,7 @@ impl ExtendedKey {
     /// The phrase is read by the library's one reader of phrases (AUD-010): any spacing and
     /// letter case, and four letters of a word, as every other phrase input takes it.
     fn master(phrase: &str, passphrase: &str) -> Result<Self, MhfeError> {
-        let mnemonic = phrase::parse(phrase).map_err(MhfeError::InvalidPhrase)?;
-        let phrase = Phrase::from_entropy(&Zeroizing::new(mnemonic.to_entropy()))?;
-        let seed = Seed::derive(&phrase, passphrase);
+        let seed = Seed::derive(&read_phrase(phrase)?, passphrase);
         let master = Self::from_hmac(b"Bitcoin seed", &[seed.as_bytes()])?;
         // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
         if bool::from(master.scalar()?.is_zero()) {
@@ -1595,7 +1592,7 @@ mod tests {
             four_letters,
             format!("  {}\t", ABANDON.replace(' ', "  ")),
         ] {
-            assert_eq!(*crate::read_phrase(&typed).unwrap(), ABANDON, "{typed}");
+            assert_eq!(read_phrase(&typed).unwrap().as_str(), ABANDON, "{typed}");
             assert_eq!(
                 hex::encode(master_fingerprint(&typed, "").unwrap()),
                 "73c5da0a",

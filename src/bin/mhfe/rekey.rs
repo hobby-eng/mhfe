@@ -645,8 +645,8 @@ mod tests {
         // A container of `words` words: a valid phrase of all-zero entropy, as in BIP39's vectors.
         let container = |words: usize| {
             let entropy = vec![0; WordCount::new(words).unwrap().entropy_bytes()];
-            let phrase = mhfe::phrase_from_entropy(&entropy).unwrap();
-            ContainerFacts::read(&phrase).unwrap()
+            let phrase = mhfe_core::Phrase::from_entropy(&entropy).unwrap();
+            ContainerFacts::read(phrase.as_str()).unwrap()
         };
         let stated = |count| PhraseLength::Words(WordCount::new(count).unwrap());
         let length = |input: &mut Input, given: Option<PhraseLength>, words| {

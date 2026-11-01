@@ -147,7 +147,7 @@ let outcome: CheckOutcome =
   reads a length from the recovered state takes: `decrypt` with
   `PhraseLength::Detect`, the readings a check compares with an address or a fingerprint, the
   evidence beside a reference, `Reference::OwnChecks`, the search for missing words, a rekey with
-  its length detected, the guard of hidden wallets and `other_detected_lengths`.
+  its length detected and the guard of hidden wallets.
 - `derive_wallet(mhfe, container, password, passphrase, on_progress)` gives the hidden wallet that
   `password` opens on a 24-word container, read as 24 words, unverified (a hidden wallet behind an
   honest disclosure). A password whose reading passes the built-in check of a 12- to 21-word phrase,
@@ -157,20 +157,18 @@ let outcome: CheckOutcome =
   funded guards against a build or computer that computes MHFE wrongly and would show a wallet no
   correct program finds again.
 - `wallet_check` (a draft of the profile MHFE-WALLET-CHECK-SEED-1). The criterion: a phrase passes
-  when `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(ENT) || seed)` starts with 16 zero bits, its
-  first two bytes being zero. The tag is 24 ASCII bytes with no NUL; `BE32(ENT)` is the entropy's
-  length in bits as a 4-byte big-endian number; `seed` is the raw 64-byte BIP39 seed of the
-  canonical English phrase (lower case, one space between words) with the passphrase in NFKD. A pass
-  is statistical evidence: a wrong password or passphrase passes once in about 65,536, and drawing
-  the phrase this way leaves about 240 of its 256 bits.
+  when `SHA-256("MHFE-WALLET-CHECK-SEED-1" || BE32(256) || seed)` starts with 16 zero bits, its
+  first two bytes being zero. The tag is 24 ASCII bytes with no NUL; `BE32(256)` is the entropy's
+  length in bits as a 4-byte big-endian number, `00 00 01 00`; `seed` is the raw 64-byte BIP39 seed
+  of the canonical English phrase (lower case, one space between words) with the passphrase in
+  NFKD. A pass is statistical evidence: a wrong password or passphrase passes once in about 65,536,
+  and drawing the phrase this way leaves about 240 of its 256 bits.
   - The library offers the check for a 24-word phrase, 256 bits of entropy, with a BIP39 passphrase
     that is not empty, one rule for every front end: without a passphrase the seed is a function of
     the phrase alone, and anyone who saw the phrase could test it. `require_passphrase(passphrase)`
     refuses an empty passphrase (`WALLET_CHECK_NEEDS_PASSPHRASE`), for a front end to ask before
     anything else. `verify(phrase, passphrase)` tests a recovered phrase: an empty passphrase is
     refused first, then a phrase of another length than 24 words (`INVALID_WORD_COUNT`).
-    `verify_entropy(entropy, passphrase)` does the same for the entropy of a 24-word phrase, 32
-    bytes (`INVALID_WORD_COUNT`, by the words it would have, otherwise).
   - `Reference::OwnChecks { passphrase }` checks the original seed phrase's own checks with its
     length detected: the built-in check of whichever 12- to 21-word length passes it, or else, with
     `Some(passphrase)`, which may not be empty, the phrase + passphrase check of the 24-word
@@ -180,22 +178,20 @@ let outcome: CheckOutcome =
     24-word reading only, never a shorter one. Before any Argon2 work a same-length container is
     refused (`NO_WALLET_CHECK`) and then an empty passphrase (`WALLET_CHECK_NEEDS_PASSPHRASE`). It
     never confirms a recovery to encrypt again (see `recover_confirmed` and `rekey::Rekey`).
-  - `passes(entropy, passphrase)` and `phrase_passes(phrase, passphrase)` compute the bare criterion
-    for any passphrase, the empty one included; another length than 24 words does not pass.
+  - `phrase_passes(phrase, passphrase)` computes the bare criterion for any passphrase, the empty
+    one included; another length than 24 words does not pass.
     `RecoveredPhrase::passes_wallet_check(passphrase)`, the source check that every recovery
-    evaluates on each 24-word reading, and the guard of hidden wallets use them; a program that
-    checks a recovery uses `verify` or `verify_entropy`.
+    evaluates on each 24-word reading, and the guard of hidden wallets use it; a program that checks
+    a recovery uses `verify`.
   - `PhraseDraw` draws a new 24-word phrase: `PhraseDraw::unchecked()`, or
     `PhraseDraw::with_check(passphrase)`, which refuses an empty passphrase
     (`WALLET_CHECK_NEEDS_PASSPHRASE`), then `draw(source, on_draws)`. With the check it is
     `mhfe_core::wallet_check::draw`, whose trials run one after another on the calling thread, as
     the specification's proof requires: a program does not race several draws for the first result.
     `on_draws` hears the draws so far every 1,024 (`wallet_check::DRAW_REPORT_INTERVAL`) and stops
-    the draw with an error. `draw` probes the source with `random::check_source` first and reads the
-    phrase it found back, which must meet its wishes and, with the check, pass it again
-    (`INTERNAL_ERROR` otherwise). `is_checked()` says whether the draw has the check. A `NewPhrase`
-    holds the phrase in locked memory (`phrase()`) and says whether it was drawn with the check
-    (`checked()`).
+    the draw with an error. `draw` probes the source with `random::check_source` first.
+    `is_checked()` says whether the draw has the check. A `NewPhrase` holds the phrase in locked
+    memory (`phrase()`) and says whether it was drawn with the check (`checked()`).
   - `PhraseDraw::with_wishes(wishes)` draws a phrase that also meets `word_wishes::WordWishes`;
     `check_bits()` gives the bits the check takes (16, or 0) and `odds()` what the phrase keeps.
   - The public vectors of the criterion: the entropy of 24 zero bytes followed by the big-endian
@@ -402,11 +398,12 @@ let outcome: CheckOutcome =
   whether the system locked it, and `LockedBytes::into_text` turns bytes into text in the same
   buffer under the same lock. `memory::LockedPages` is the lock under one buffer, for a holder of
   its own.
-- `phrase_from_entropy(entropy)` gives the English phrase of 16 to 32 bytes of entropy that a
-  program drew itself, written into a buffer reserved at its final size and wiped when dropped.
+- `mhfe_core::Phrase::from_entropy(entropy)` gives the English phrase of 16 to 32 bytes of entropy
+  that a program drew itself, in a buffer of the core that is wiped when dropped.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
-  can ask again at once. `read_phrase` and `check_container` return the input as it was read, every
-  word in full and in lower case, for showing back to the user.
+  can ask again at once. `read_phrase` returns a `mhfe_core::Phrase`, whose `as_str()`, like the
+  text `check_container` returns, is the input as it was read, every word in full and in lower case,
+  for showing back to the user.
 - `wallet` has the address and fingerprint functions the check uses: `Coin`, `Address` with its
   `AddressType`, `DerivationPath`, `SearchLimits`, `parse_fingerprint`, `master_fingerprint` and
   `find_address(phrase, passphrase, address, path, limits)`, which returns the path where the
@@ -560,8 +557,8 @@ The parts, by identifier and label, and what each compares:
   (`INVALID_DERIVATION_PATH`), an address of another coin (`INVALID_ADDRESS`) and an unknown coin
   (`INVALID_COIN`) are refused. It derives no key, so both tiers run the same cases.
 - `wallet-check`, "Wallet check (MHFE-WALLET-CHECK-SEED-1)": the whole digest and the verdict of a
-  passing and a failing published vector, a draw from a scripted source, read back, and a source of
-  zeros and a check without a passphrase refused. Full: every published vector.
+  passing and a failing published vector, a draw from a scripted source, and a source of zeros and
+  a check without a passphrase refused. Full: every published vector.
 - `word-wishes`, "Chosen word of a new phrase": six phrases drawn with a chosen word, at a fixed
   position (the last one too) or anywhere, some with a word never to use, from a scripted
   xorshift32 stream, each compared with the phrase an independent implementation (the multi-chain

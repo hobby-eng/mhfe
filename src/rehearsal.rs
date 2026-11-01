@@ -656,12 +656,14 @@ pub(crate) fn compare_until(
 
 #[cfg(test)]
 mod tests {
+    use mhfe_core::Phrase;
+
     use super::*;
+    use crate::encrypt;
     use crate::test_support::{
         container_of, reduced, state_from_hex, test_password, wrong_password,
         ABANDON_12 as ABANDON, ABANDON_12_FINGERPRINT, AMBIGUOUS_STATES,
     };
-    use crate::{encrypt, phrase_from_entropy};
 
     /// A check of `container` against `reference` with no progress to report.
     fn quiet_check<E: Argon2Engine>(
@@ -722,10 +724,11 @@ mod tests {
             (&packed[..], Some(12)),
             (&ambiguous[..16], Some(12)),
         ] {
-            let phrase = crate::phrase_from_entropy(entropy).unwrap();
-            let container = container_of(&mut mhfe, &phrase, Suite::TwentyFourWords);
+            let phrase = Phrase::from_entropy(entropy).unwrap();
+            let phrase = phrase.as_str();
+            let container = container_of(&mut mhfe, phrase, Suite::TwentyFourWords);
             let reference = Reference::Fingerprint {
-                fingerprint: wallet::master_fingerprint(&phrase, "").unwrap(),
+                fingerprint: wallet::master_fingerprint(phrase, "").unwrap(),
                 passphrase: "",
             };
             let evidence = evidence_for(&mut mhfe, &container, &reference);
@@ -896,10 +899,10 @@ mod tests {
         // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
         let mut entropy = [0u8; 32];
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
-        let phrase = phrase_from_entropy(&entropy).unwrap();
+        let phrase = Phrase::from_entropy(&entropy).unwrap();
         let container = encrypt(
             &mut mhfe,
-            &phrase,
+            phrase.as_str(),
             &password,
             Suite::TwentyFourWords,
             none,
@@ -985,10 +988,10 @@ mod tests {
         // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
         let mut entropy = [0u8; 32];
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
-        let drawn = phrase_from_entropy(&entropy).unwrap();
+        let drawn = Phrase::from_entropy(&entropy).unwrap();
         let full = encrypt(
             &mut mhfe,
-            &drawn,
+            drawn.as_str(),
             &password,
             Suite::TwentyFourWords,
             none,
@@ -1072,10 +1075,11 @@ mod tests {
     fn a_recovery_is_compared_again_without_its_rounds() {
         let mut mhfe = reduced();
         let password = test_password();
-        let phrase = phrase_from_entropy(&[7u8; 32]).unwrap();
+        let phrase = Phrase::from_entropy(&[7u8; 32]).unwrap();
+        let phrase = phrase.as_str();
         let container = encrypt(
             &mut mhfe,
-            &phrase,
+            phrase,
             &password,
             Suite::TwentyFourWords,
             &mut |_, _| Ok(()),
@@ -1092,7 +1096,7 @@ mod tests {
         assert_eq!(rounds, ROUNDS);
         assert!(!recovered.compare(&own).unwrap().outcome.matches());
         let fingerprint = Reference::Fingerprint {
-            fingerprint: wallet::master_fingerprint(&phrase, "").unwrap(),
+            fingerprint: wallet::master_fingerprint(phrase, "").unwrap(),
             passphrase: "",
         };
         assert!(recovered.compare(&fingerprint).unwrap().outcome.matches());
@@ -1102,13 +1106,13 @@ mod tests {
         );
     }
 
-    /// A public passphrase with which the 12-word test phrase passes the wallet check's criterion
-    /// as 12 words, under BE32(128), which the profile does not define; its 24-word reading fails
+    /// A public passphrase with which the 12-word test phrase would pass under BE32(128), which
+    /// the profile does not define and the core never computes; its 24-word reading fails
     /// (AUD-010, harness crypto-core/short_reading_wallet_check.py).
     const SHORT_READING_PASSPHRASE: &str = "aud010 public probe 11656";
 
-    /// The wallet check compares only the 24-word reading of a recovery: a 12-word original whose
-    /// own reading passes the criterion with a passphrase does not make a match (AUD-010).
+    /// The wallet check compares only the 24-word reading of a recovery: a 12-word original with a
+    /// passphrase that would pass under BE32(128) does not make a match (AUD-010).
     #[test]
     fn a_wallet_check_compares_the_24_word_reading_only() {
         let none = &mut |_, _| Ok(());

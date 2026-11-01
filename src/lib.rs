@@ -92,10 +92,10 @@ pub use container::{
 pub use error::MhfeError;
 pub use hidden::{derive_wallet, HiddenWallets};
 pub use mhfe::{
-    decrypt, decrypt_as, encrypt, other_detected_lengths, Mhfe, PhraseLength, ProgressCallback,
-    RecoveredPhrase, Recovery, RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
+    decrypt, decrypt_as, encrypt, Mhfe, PhraseLength, ProgressCallback, RecoveredPhrase, Recovery,
+    RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
 };
-pub use phrase::{check_container, check_phrase, phrase_from_entropy, read_phrase, WORD_COUNTS};
+pub use phrase::{check_container, check_phrase, read_phrase, WORD_COUNTS};
 pub use rehearsal::{
     check, recover_confirmed, recover_for_check, recover_for_check_in_stages,
     require_built_in_check_length, CheckEvidence, CheckOutcome, Confirmation, RecoveredForCheck,

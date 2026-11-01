@@ -4,8 +4,6 @@
 //! passphrase recognises the right password. The owner always chooses; the check has costs, which
 //! `?` and the README state. Chosen words (`chosen_words`) are met the same way.
 
-use std::time::Instant;
-
 use anstream::{eprint, eprintln};
 use clap::Args;
 use mhfe::memory::LockedText;
@@ -251,10 +249,10 @@ fn read_new_passphrase(input: &mut Input) -> Result<LockedText, Failure> {
 
 /// A new 24-word phrase from the operating system's generator, as `draw` asks: with the wallet
 /// check, drawn on one thread until one passes it, about 65,536 BIP39 seeds and more with chosen
-/// words, which takes minutes and so shows its count. The library probes the generator first and
-/// reads the new phrase back.
+/// words, which takes minutes and so shows its count. The count leaves with the step and the
+/// summary says nothing of the draw: the specification's proof covers a generation that reveals
+/// neither the number of its trials nor its duration. The library probes the generator first.
 fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
-    let started = Instant::now();
     let expected = draw.odds().expected_draws.round() as u128;
     if expected > 1 {
         flow::step();
@@ -270,16 +268,11 @@ fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
         ));
         eprintln!();
     }
-    let drawn = draw.draw(&mut SystemRandom, &mut |draws| {
+    Ok(draw.draw(&mut SystemRandom, &mut |draws| {
         let count = format!("{} draws so far", style::grouped(draws));
         eprint!("\r{}", paint(MUTED, count));
         Ok(())
-    })?;
-    choice::record(
-        "Drawn",
-        &format!("in {} s", started.elapsed().as_secs().max(1)),
-    );
-    Ok(drawn)
+    })?)
 }
 
 /// Shows the new phrase on a private screen until Enter or Escape clears it.

@@ -18,6 +18,7 @@
 //! [`RECOMMENDED_RANDOM_BITS`] is not recommended. The limits keep every wish quick to draw too: a
 //! fixed last word takes about 256 draws, an "anywhere" word about 85.
 
+use mhfe_core::Phrase;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::packing::{self, STATE_BYTES, STATE_WORDS};
@@ -252,7 +253,7 @@ impl WordWishes {
 fn number_of(typed: &str, label: &str) -> Result<u16, MhfeError> {
     // The lower-case copy of a chosen word is part of a secret phrase: wiped when done.
     let lower = Zeroizing::new(typed.trim().to_lowercase());
-    phrase::complete_word(&lower)
+    Phrase::read_word(&lower)
         .and_then(phrase::word_number)
         // The word itself is not repeated: it is about to become part of a secret phrase.
         .ok_or_else(|| wish(format!("{label} is not an English BIP39 word")))
@@ -270,6 +271,8 @@ fn words_text(count: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use bip39::{Language, Mnemonic};
+
     use super::*;
     use crate::wallet_check::PhraseDraw;
 
@@ -697,7 +700,7 @@ mod tests {
         let mut drawn = Drawn::new();
         for _ in 0..DRAWS {
             let new = draw.try_draws(&mut source, MOST_DRAWS).unwrap().unwrap();
-            let read = phrase::parse(new.as_str()).unwrap();
+            let read = Mnemonic::parse_in_normalized(Language::English, new.as_str()).unwrap();
             drawn.push(read.to_entropy().try_into().unwrap());
         }
         drawn

@@ -7,8 +7,7 @@
 //!
 //! Every operation that reads a length from `X` takes it from here: a recovery with
 //! [`crate::PhraseLength::Detect`], a check and what it shows beside its reference, the search for
-//! missing words, a rekey of a phrase whose length is not stated, and the warning at encryption
-//! about a phrase that detection would misread.
+//! missing words, and a rekey of a phrase whose length is not stated.
 
 use crate::mhfe::{RecoveredPhrase, RecoveredState};
 use crate::packing::{self, State, STATE_WORDS};

@@ -1,8 +1,8 @@
 //! Known answers of the wallet check (MHFE-WALLET-CHECK-SEED-1): the self-check `wallet-check`.
 //!
-//! The tag, `BE32(ENT)`, the BIP39 seed and the 16-bit criterion, with the whole digest compared,
-//! a phrase that passes and one that fails, a draw through the source check and the read-back, and
-//! the refusal of a source that fills nothing. The values are the specification's public vectors
+//! The tag, `BE32(256)`, the BIP39 seed and the 16-bit criterion, with the whole digest compared,
+//! a phrase that passes and one that fails, a draw through the source check, and the refusal of a
+//! source that fills nothing. The values are the specification's public vectors
 //! (vectors/profiles/README.md). Where it gives only the first eight hex digits of a digest that
 //! fails, the whole digest was computed with Python's hashlib and unicodedata, an implementation
 //! independent of this one, after it had reproduced the BIP39 English list's SHA-256, BIP-0039's
@@ -139,7 +139,7 @@ impl ComponentCheck for WalletCheckProfile {
         let mut findings = Findings::new();
         findings.each("vector", &vectors, Self::vector);
         // A draw with the check from a source scripted to give the first vector's entropy after
-        // the two probes of the source check: the passing phrase, read back and checked again.
+        // the two probes of the source check: the passing phrase.
         findings.one(|| {
             let first = self
                 .vectors
@@ -164,8 +164,8 @@ impl ComponentCheck for WalletCheckProfile {
         });
         // Without a passphrase, anyone who sees the phrase could test it.
         findings.one(|| {
-            let phrase = crate::phrase::phrase_from_entropy(&entropy(76_562)).map_err(stopped)?;
-            expect_refusal(verify(&phrase, ""), "WALLET_CHECK_NEEDS_PASSPHRASE")
+            let phrase = Phrase::from_entropy(&entropy(76_562)).map_err(stopped)?;
+            expect_refusal(verify(phrase.as_str(), ""), "WALLET_CHECK_NEEDS_PASSPHRASE")
                 .map_err(|what| format!("a check without a passphrase {what}"))
         });
         findings.outcome()

@@ -2,7 +2,7 @@
 //! "Recovering a mnemonic" and their suite 4 forms).
 
 use bip39::Mnemonic;
-use mhfe_core::{Argon2Engine, Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Password, Phrase, Suite, WorkFactor};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::container::ContainerFacts;
@@ -10,7 +10,7 @@ use crate::detection::detected_lengths;
 use crate::feistel::{Geometry, Permutation};
 use crate::memory::{LockedBytes, LockedText};
 use crate::packing::{self, State, STATE_WORDS};
-use crate::phrase::{self, locked_phrase_from_entropy, phrase_from_entropy};
+use crate::phrase;
 use crate::suite::{built_in_check_lengths, require_original, ROUNDS};
 use crate::wallet_check;
 use crate::MhfeError;
@@ -361,7 +361,7 @@ impl<E: Argon2Engine> Mhfe<E> {
             .permutation(password, geometry(suite, &x)?)
             .forward(&x, &mut |round| on_round(round, ENCRYPTION_ROUNDS))?;
         reject_fixed_point(&x, &y)?;
-        let words = phrase_from_entropy(&y)?;
+        let words = Zeroizing::new(Phrase::from_entropy(&y)?.as_str().to_owned());
         on_unchecked(&words)?;
         // Creation step 6: reads the container's words again, recovers them and compares the
         // result with the original. A memory error or another fault during the long computation
@@ -553,22 +553,6 @@ fn reject_fixed_point(x: &[u8], y: &[u8]) -> Result<(), MhfeError> {
     }
 }
 
-/// Creation, before the expensive work: the lengths other than the original's own that automatic
-/// detection would also accept after recovery. Empty for almost every phrase; a random phrase
-/// hits this with probability about 2^-32. When it is not empty, recovery with detection would
-/// report a shorter reading or several candidates, so the owner should record the word count and
-/// select it during recovery. This matters most for a 24-word original, which detection would
-/// otherwise read as a verified shorter phrase.
-pub fn other_detected_lengths(original: &str) -> Result<Vec<usize>, MhfeError> {
-    let source = phrase::parse(original).map_err(MhfeError::InvalidPhrase)?;
-    let words = source.word_count();
-    let x = packing::pack(&locked_entropy(&source))?;
-    Ok(detected_lengths(suite_3_state(&x)?)
-        .into_iter()
-        .filter(|&length| length != words)
-        .collect())
-}
-
 /// The suite and the encrypted state `Y` of a container: its entropy.
 pub(crate) fn container_state(
     container: &Mnemonic,
@@ -584,7 +568,7 @@ fn read_same_length(x: &[u8]) -> Result<RecoveredPhrase, MhfeError> {
     Ok(RecoveredPhrase::new(
         packing::words_of_entropy(x.len()),
         false,
-        locked_phrase_from_entropy(x)?,
+        LockedText::copy_of(Phrase::from_entropy(x)?.as_str()),
         Suite::SameLength,
     ))
 }
@@ -595,7 +579,7 @@ fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
         words,
         // A short length carries a built-in check, which unpack has passed.
         built_in_check_lengths(Suite::TwentyFourWords).contains(&words),
-        locked_phrase_from_entropy(packing::unpack(x, words)?)?,
+        LockedText::copy_of(Phrase::from_entropy(packing::unpack(x, words)?)?.as_str()),
         Suite::TwentyFourWords,
     ))
 }
@@ -623,32 +607,16 @@ mod tests {
     const LEGAL_24: &str = "legal winner thank year wave sausage worth useful legal winner thank year \
                             wave sausage worth useful legal winner thank year wave sausage worth title";
 
-    #[test]
-    fn creation_warns_when_detection_would_accept_another_length() {
-        assert!(other_detected_lengths(ZERO_12).unwrap().is_empty());
-        assert!(other_detected_lengths(LEGAL_24).unwrap().is_empty());
-        for (text, [short, long]) in AMBIGUOUS_STATES {
-            let state = state_from_hex(text);
-            // The short original of this state also passes the 21-word check.
-            let bytes = packing::entropy_bytes(short).unwrap();
-            let original = phrase_from_entropy(&state[..bytes]).unwrap();
-            assert_eq!(other_detected_lengths(&original).unwrap(), [long]);
-            // A 24-word original equal to the whole state would be detected as both lengths.
-            let original = phrase_from_entropy(&state[..]).unwrap();
-            assert_eq!(other_detected_lengths(&original).unwrap(), [short, long]);
-        }
-    }
-
     fn no_progress() -> impl FnMut(u32, u32) -> Result<(), MhfeError> {
         |_, _| Ok(())
     }
 
     /// A phrase of `words` words whose entropy bytes all differ, another for every length.
-    fn varied_phrase(words: usize) -> Zeroizing<String> {
+    fn varied_phrase(words: usize) -> String {
         let entropy: Vec<u8> = (0..packing::entropy_bytes(words).unwrap())
             .map(|index| (index as u8).wrapping_mul(29).wrapping_add(words as u8))
             .collect();
-        phrase_from_entropy(&entropy).unwrap()
+        Phrase::from_entropy(&entropy).unwrap().as_str().to_owned()
     }
 
     /// The recovery of `container` at the stated length `words`.
@@ -884,13 +852,13 @@ mod tests {
     fn a_24_word_reading_offers_the_source_check() {
         let mut entropy = [0u8; 32];
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
-        let phrase = phrase_from_entropy(&entropy).unwrap();
-        assert!(phrase.ends_with("abandon above proof fatigue"));
+        let phrase = Phrase::from_entropy(&entropy).unwrap();
+        assert!(phrase.as_str().ends_with("abandon above proof fatigue"));
         let password = test_password();
         let mut mhfe = reduced();
         let container = encrypt(
             &mut mhfe,
-            &phrase,
+            phrase.as_str(),
             &password,
             Suite::TwentyFourWords,
             &mut no_progress(),
@@ -1007,11 +975,12 @@ mod tests {
                 .permutation(&password, Geometry::SUITE_3)
                 .forward(&x, &mut |_| Ok(()))
                 .unwrap();
-            let container = phrase_from_entropy(&y[..]).unwrap();
+            let container = Phrase::from_entropy(&y[..]).unwrap();
+            let container = container.as_str();
 
             let Recovery::Ambiguous(candidates) = decrypt(
                 &mut mhfe,
-                &container,
+                container,
                 &password,
                 PhraseLength::Detect,
                 &mut no_progress(),
@@ -1028,14 +997,17 @@ mod tests {
             assert_eq!(verified, [true, true, false]);
             for candidate in &candidates {
                 let entropy = &x[..packing::entropy_bytes(candidate.words).unwrap()];
-                assert_eq!(*candidate.phrase, *phrase_from_entropy(entropy).unwrap());
+                assert_eq!(
+                    candidate.phrase(),
+                    Phrase::from_entropy(entropy).unwrap().as_str()
+                );
             }
 
             // A length stated among those that pass resolves the ambiguity, and names the other.
             let chosen = only_phrase(
                 decrypt(
                     &mut mhfe,
-                    &container,
+                    container,
                     &password,
                     PhraseLength::Words(WordCount::new(lengths[0]).unwrap()),
                     &mut no_progress(),
@@ -1052,7 +1024,7 @@ mod tests {
                 .unwrap();
             let Recovery::Ambiguous(readings) = decrypt(
                 &mut mhfe,
-                &container,
+                container,
                 &password,
                 PhraseLength::Words(WordCount::new(other).unwrap()),
                 &mut no_progress(),
@@ -1140,11 +1112,11 @@ mod tests {
                     continue;
                 }
                 let entropy = vec![7u8; packing::entropy_bytes(container_words).unwrap()];
-                let container = phrase_from_entropy(&entropy).unwrap();
+                let container = Phrase::from_entropy(&entropy).unwrap();
                 assert_eq!(
                     decrypt(
                         &mut mhfe,
-                        &container,
+                        container.as_str(),
                         &password,
                         PhraseLength::Words(WordCount::new(chosen).unwrap()),
                         &mut no_progress()
@@ -1161,7 +1133,7 @@ mod tests {
         let mut cases = vec![(LEGAL_24.to_owned(), Suite::SameLength)];
         for words in [12, 15, 18, 21] {
             let entropy = vec![7u8; packing::entropy_bytes(words).unwrap()];
-            let short = phrase_from_entropy(&entropy).unwrap().to_string();
+            let short = Phrase::from_entropy(&entropy).unwrap().as_str().to_owned();
             cases.push((short, Suite::TwentyFourWords));
         }
         for (container, selected) in &cases {

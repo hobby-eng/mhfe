@@ -475,6 +475,8 @@ fn passes_checksum(bits: &WordBits, words: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use mhfe_core::Phrase;
+
     use super::*;
     use crate::encrypt;
     use crate::test_support::{container_of, reduced, test_password, zero_12_container, LEGAL_12};
@@ -496,10 +498,10 @@ mod tests {
         for place in [1, 13, 24] {
             for word in list.iter().step_by(7) {
                 let typed = with(&container, &[(place, word)]);
-                let (numbers, _) = phrase::word_numbers(&typed);
+                let numbers: Vec<u16> = typed.split(' ').filter_map(phrase::word_number).collect();
                 assert_eq!(
                     passes_checksum(&pack(&numbers), numbers.len()),
-                    phrase::parse_container(&typed).is_ok(),
+                    Phrase::read(&typed).is_ok(),
                     "{place} {word}"
                 );
             }
@@ -524,7 +526,7 @@ mod tests {
             assert!(listed.iter().any(|candidate| **candidate == container));
             assert!(listed
                 .iter()
-                .all(|candidate| phrase::parse_container(candidate).is_ok()));
+                .all(|candidate| Phrase::read(candidate).is_ok()));
         }
     }
 
