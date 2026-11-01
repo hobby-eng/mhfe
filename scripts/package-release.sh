@@ -84,6 +84,9 @@ if [[ -z "$source_state" ]]; then
     source_state=modified
   fi
 fi
+# The crate whose C code a native program runs, for BUILD-INFO.txt; the browser package names the
+# vendored commit instead.
+core_version="$(sed -n 's/^mhfe-core = "=\(.*\)"$/\1/p' Cargo.toml)"
 
 add_common_files() {
   local folder="$1"
@@ -101,7 +104,6 @@ add_common_files() {
     echo "source: $source_commit ($source_state)"
     rustc --version --verbose
     wasm-bindgen --version 2>/dev/null || true
-    echo "Argon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb"
   } > "$folder/BUILD-INFO.txt"
 }
 
@@ -141,6 +143,7 @@ cli_package() {
   cp "$binary" "$folder/"
   cp "$launcher" "$folder/"
   add_common_files "$folder"
+  echo "Argon2: mhfe-core $core_version" >> "$folder/BUILD-INFO.txt"
   if [[ "$name" == windows-* ]]; then
     pack_zip "$folder" "mhfe-$version-$name.zip"
   else
@@ -161,7 +164,10 @@ for package in "${packages[@]}"; do
       # and that the files in the archive match it.
       (cd "$folder" && sed -n '/^## SHA-256 of this build$/,$p' README.md | grep -E '^[0-9a-f]{64}  ' |
         sha256sum --check --quiet --strict -)
-      echo "Emscripten 6.0.12" >> "$folder/BUILD-INFO.txt"
+      {
+        echo "Argon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb"
+        echo "Emscripten 6.0.12"
+      } >> "$folder/BUILD-INFO.txt"
       pack_tar "$folder" "mhfe-$version-browser.tar.gz"
       ;;
     *) cli_package "$package" "$triple" "$launcher" "$program" ;;

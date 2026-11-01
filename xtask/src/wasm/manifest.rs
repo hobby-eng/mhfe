@@ -8,13 +8,12 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::Serialize;
-use serde::ser::{SerializeMap, Serializer};
 
 use super::stamp::WASM_FILE;
 use super::{BUILD_SECTION, custom_sections, read, sha256_hex, text, write};
 use crate::{Failure, at};
 
-/// The modules of the package, in the order of modules.json and of the README's list.
+/// The modules of the package.
 pub(super) const MODULES: [&str; 4] = ["core", "repair", "passwords", "wallet"];
 
 /// modules.json, with its keys in this order, which JSON keeps.
@@ -24,7 +23,7 @@ struct Manifest {
     version: String,
     build_id: String,
     runtime: Folder,
-    modules: Modules,
+    modules: BTreeMap<&'static str, Module>,
 }
 
 /// The runtime: its files.
@@ -42,19 +41,6 @@ struct Module {
 
 /// The files of a folder by name, in byte order, with their SHA-256.
 type Files = BTreeMap<String, String>;
-
-/// The modules in the order of MODULES, which a map would sort.
-struct Modules(Vec<(&'static str, Module)>);
-
-impl Serialize for Modules {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut map = serializer.serialize_map(Some(self.0.len()))?;
-        for (name, module) in &self.0 {
-            map.serialize_entry(name, module)?;
-        }
-        map.end()
-    }
-}
 
 /// Writes the manifest and the README of the package in `folder`.
 pub(super) fn run(root: &Path, folder: &Path) -> Result<(), Failure> {
@@ -83,16 +69,16 @@ pub(super) fn render(root: &Path, folder: &Path) -> Result<(String, String), Fai
         .ok_or_else(|| Failure("Cargo.toml names no version.".to_owned()))?;
     let build_id = build_of(folder)?;
     let runtime = files_of(&folder.join("runtime"))?;
-    let mut modules = Vec::with_capacity(MODULES.len());
+    let mut modules = BTreeMap::new();
     for name in MODULES {
         let files = files_of(&folder.join(name))?;
-        modules.push((
+        modules.insert(
             name,
             Module {
                 files,
                 requires: ["runtime"],
             },
-        ));
+        );
     }
     let folders = [("runtime", &runtime)].into_iter();
     let sums: Vec<String> = folders
@@ -113,7 +99,7 @@ pub(super) fn render(root: &Path, folder: &Path) -> Result<(String, String), Fai
         version: version.to_owned(),
         build_id,
         runtime: Folder { files: runtime },
-        modules: Modules(modules),
+        modules,
     };
     let json = serde_json::to_string_pretty(&manifest)
         .map_err(|error| Failure(format!("modules.json: {error}")))?;

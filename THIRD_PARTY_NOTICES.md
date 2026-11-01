@@ -9,7 +9,8 @@ release.
 ## Argon2 reference implementation
 
 - Source: https://github.com/P-H-C/phc-winner-argon2, commit
-  `f57e61e19229e23c4445b85494dbf7c07de721cb`, vendored unchanged in `vendor/phc-winner-argon2/`.
+  `f57e61e19229e23c4445b85494dbf7c07de721cb`, unchanged. The `mhfe` program compiles the copy in the
+  `mhfe-core` crate, and the browser package the copy vendored in `vendor/phc-winner-argon2/`.
 - Copyright 2015 Daniel Dinu, Dmitry Khovratovich, Jean-Philippe Aumasson and Samuel Neves.
 - Offered under CC0 1.0 or the Apache License 2.0, at the user's option. MHFE uses it under the
   **Apache License 2.0**. The licence text is in `vendor/phc-winner-argon2/LICENSE` and ships with

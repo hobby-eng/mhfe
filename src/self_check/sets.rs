@@ -243,11 +243,6 @@ mod tests {
         }
     }
 
-    /// The startup set of the command-line tool stays within its budget: well under half a second
-    /// in a release build, where it takes a few tens of milliseconds. A debug build runs the hashes
-    /// and the curve arithmetic unoptimized, many times slower, so its bound is generous. Run
-    /// `cargo test --release --lib the_startup_set_stays_within_its_budget -- --nocapture` to see
-    /// the time of each check.
     /// Runs `set` at `tier` and prints the time of each check and of all, under `name`.
     fn timed(
         mut set: SelfCheck<'_>,
@@ -271,6 +266,11 @@ mod tests {
         (report, total)
     }
 
+    /// The startup set of the command-line tool stays within its budget: half a second in a release
+    /// build, where it takes about 0.3 s. A debug build runs the hashes and the curve arithmetic
+    /// unoptimized, many times slower, so its bound is generous. Run
+    /// `cargo test --release --lib the_startup_set_stays_within_its_budget -- --nocapture` to see
+    /// the time of each check.
     #[test]
     fn the_startup_set_stays_within_its_budget() {
         use std::time::Duration;
@@ -284,9 +284,9 @@ mod tests {
         assert!(total < budget, "the startup set took {total:?}");
     }
 
-    /// The full self-test of the command-line tool, with the operating system's generator. It
-    /// scans every Unicode scalar value and runs Argon2 at 256 MiB, seconds in a debug build, so it
-    /// runs on request: `cargo test --release --lib -- --ignored the_full_set_passes --nocapture`.
+    /// The full self-test of the command-line tool, with the operating system's generator. It runs
+    /// Argon2 at 256 MiB, seconds in a debug build, so it runs on request:
+    /// `cargo test --release --lib -- --ignored the_full_set_passes --nocapture`.
     #[test]
     #[ignore = "the whole full self-test: seconds and 256 MiB"]
     fn the_full_set_passes_with_the_system_generator() {

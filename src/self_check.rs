@@ -6,7 +6,7 @@
 //! exact output with published test vectors, or with values from an independent implementation
 //! that first reproduced a published vector, and gives each verifier a case it must refuse.
 //!
-//! Two tiers: [`Tier::Startup`] runs at every start in milliseconds, without Argon2 at full size
+//! Two tiers: [`Tier::Startup`] runs at every start in about 0.3 s, without Argon2 at full size
 //! and without live randomness; [`Tier::Full`] adds the slower cases for a self-test the person
 //! asks for. MHFE's own published vectors at their full cost take minutes and gigabytes and stay
 //! in [`crate::self_test`].
@@ -21,7 +21,7 @@ pub mod sets;
 /// How much a self-check runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tier {
-    /// The quick known answers of every start: milliseconds per part, before any secret is asked.
+    /// The quick known answers of every start: about 0.3 s in all, before any secret is asked.
     Startup,
     /// Every startup case and the slower ones, for the self-test a person runs on request.
     Full,

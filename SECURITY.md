@@ -37,51 +37,76 @@ Never include a real seed phrase, password, private key or wallet file.
   `scripts/verify-hidden-input-windows.py` in a Windows pseudo-console; CI runs them on all three
   systems.
 - Every buffer the program owns that holds a password, phrase, passphrase, entropy, state, Argon2
-  key or mask is wiped when it is dropped; short-lived working buffers inside dependencies, such as
-  those of Unicode normalization and BIP39 word parsing, are not. The Argon2 work area is wiped by
-  the C code at the end of every round (`FLAG_clear_internal_memory`, checked by a test); when a
-  round fails, for example because a thread could not be started, the C code returns before that
-  step and the Rust owner wipes the area instead. This is best effort: a compiler, the operating
-  system, swap or a terminal's scrollback can keep copies beyond the program's reach. Standard input
-  and standard output are read and written with the operating system's own calls (`read` and
-  `write`, and the console's UTF-16 calls on Windows), past the standard library's buffers, which
-  are never wiped and would keep the last answer read ahead or the last phrase printed;
-  `clippy.toml` keeps `io::stdin`, `io::stdout` and `println!` out of every other module. Answers
-  read from standard input are limited to 8192 bytes and read one byte at a time into a locked
-  buffer of that size, so nothing after an answer is taken and the program's copy never has to grow
-  and leave an unwiped copy behind. What was typed at the terminal and not read when a hidden
-  prompt or a list ends is discarded, so the rest of a paste never reaches the next answer or the
-  shell. At a terminal, secrets, a new container and a recovered phrase appear on the terminal's
-  alternate screen, which is cleared before the tool returns to the main screen, so they do not
-  enter its scrollback; a terminal that logs its output or a screen recording keeps them all the
-  same.
-- The tool keeps secrets out of core dumps and swap. It forbids core dumps (`RLIMIT_CORE` 0) and,
-  on Linux, makes itself non-dumpable (`PR_SET_DUMPABLE` 0), which also keeps other programs of the
-  same user from attaching to it or reading its memory through `/proc`, so a crash writes nothing
-  to disk; the Argon2 work area is marked `MADV_DONTDUMP` as well. The secrets the program keeps
-  beyond a moment are held in locked memory (`mlock`), so that the system does not write them to
-  swap: the line a secret is typed into at a terminal or read from standard input; the password as
-  Argon2 receives it; a BIP39 passphrase and its normalized form; a password made by the generator
-  or completed by its check word; a seed phrase as text, whether typed, recovered, new or a hidden
-  wallet's, every reading of a recovery that `check` compares with an address or a fingerprint, and
-  the lines of the frame a phrase is shown in at a terminal; the BIP39 seed for an address, a
-  fingerprint or the wallet check and the BIP32 keys derived from it; and a phrase's entropy and
-  the cipher's state, that is the state an encryption starts from until its check is done, both
-  halves of the state through all twelve rounds, the message, salt, Argon2 key and mask of each
-  round, and the state a recovery, a check, a rekey or a hidden wallet recovers. Each of these
-  buffers is reserved at a size it never outgrows, locked before anything is written into it, and
-  unlocked only after it is wiped, also when what is written into it is refused, such as a password
-  that is too long. The system locks whole pages, so each of these buffers has pages of its own.
-  Copies made on the way are wiped when dropped but not locked: the words of a typed phrase while
-  they are read and written out in full, the entropy and the BIP39 seed as the BIP39 library first
-  gives them, the hashes that fill out a short phrase's state, make a round's salt and mask or give
-  a BIP32 key while they are computed, a BIP32 key as a scalar while the curve uses it, the random
-  bytes and word numbers a phrase or password is drawn from, and buffers inside dependencies.
-  Locking is best effort, natively on Linux, macOS and Windows; nothing is locked in a browser.
-  The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
-  can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
-  area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap in memory
-  (zram) is safe. macOS encrypts its swap; on Windows, use BitLocker or no page file.
+  key or mask is wiped when it is dropped; what a dependency keeps on the stack is not, such as the
+  parsing states of the `bip39` crate. mhfe-core therefore overwrites 128 KiB of the stack after
+  each call that computes with a secret, and 16 KiB after every segment and call of the Argon2 C
+  code. The Argon2 work area is wiped by the C code at the end of every round
+  (`FLAG_clear_internal_memory`, checked by a test of mhfe-core); when a round fails, for example
+  because a thread could not be started, the C code returns before that step and mhfe-core wipes
+  the area instead. This is best effort: a compiler, the operating system, swap or a terminal's
+  scrollback can keep copies beyond the program's reach. Standard input and standard output are
+  read and written with the operating system's own calls (`read` and `write`, and the console's
+  UTF-16 calls on Windows), past the standard library's buffers, which are never wiped and would
+  keep the last answer read ahead or the last phrase printed; `clippy.toml` keeps `io::stdin`,
+  `io::stdout` and `println!` out of every other module. Answers read from standard input are
+  limited to 8192 bytes and read one byte at a time into a locked buffer of that size, so nothing
+  after an answer is taken and the program's copy never has to grow and leave an unwiped copy
+  behind. What was typed at the terminal and not read when a hidden prompt or a list ends is
+  discarded, so the rest of a paste never reaches the next answer or the shell. At a terminal,
+  secrets, a new container and a recovered phrase appear on the terminal's alternate screen, which
+  is cleared before the tool returns to the main screen, so they do not enter its scrollback; a
+  terminal that logs its output or a screen recording keeps them all the same.
+- A crash of a command writes no secret to disk, as far as the system allows. Every command but
+  `serve` enters mhfe-core's isolation (`Isolation::enter`) before it reads anything and keeps what
+  reads back as holding. On Linux and macOS it forbids core dumps (`RLIMIT_CORE` 0). On Linux it
+  also makes itself non-dumpable (`PR_SET_DUMPABLE` 0), which keeps other programs of the same user
+  from attaching to it or reading its memory through `/proc`, and on macOS it refuses debuggers
+  (`PT_DENY_ATTACH`), unless one already traces it. A command whose core dumps stay on stops before
+  its first question. Windows has no such setting: secrets and the Argon2 work area are left out of
+  its error reports, and isolation leaves out the heap, but a report still holds the threads'
+  stacks and registers; `mhfe self-test` says so, and a command goes on. The start menu and `serve`
+  hold no secret and enter no isolation, so neither forbids core dumps or makes itself
+  non-dumpable: the menu reads only keys and the kind of a password.
+- The secrets the program keeps beyond a moment are held in locked memory, so that the system does
+  not write them to swap: the line a secret is typed into at a terminal or read from standard
+  input; the password as Argon2 receives it; a BIP39 passphrase and its normalized form; a password
+  made by the generator or completed by its check word; a seed phrase as text, whether typed,
+  recovered, new or a hidden wallet's, every reading of a recovery that `check` compares with an
+  address or a fingerprint, and the lines of the frame a phrase is shown in at a terminal; the
+  BIP39 seed for an address, a fingerprint or the wallet check and the BIP32 keys derived from it;
+  and a phrase's entropy and the cipher's state, that is the state an encryption starts from until
+  its check is done, both halves of the state through all twelve rounds, the message, salt, Argon2
+  key and mask of each round, and the state a recovery, a check, a rekey or a hidden wallet
+  recovers. Each of these buffers is a `Secret` of mhfe-core, reserved at a size it never outgrows,
+  locked before anything is written into it, and unlocked only after it is wiped, also when what is
+  written into it is refused, such as a password that is too long. The system locks whole pages, so
+  each of these buffers has pages of its own. On Linux on x86-64 and AArch64 they are the kernel's
+  secret memory (`memfd_secret`) where it is offered, which no other process, root included, reads
+  directly through `/proc/PID/mem`, `process_vm_readv` or `PTRACE_PEEKDATA`. Otherwise `mlock` holds
+  them on Linux and macOS; on Windows `VirtualLock` does, and they are left out of error reports.
+  Copies made on the way are wiped when dropped but not locked: the words of a typed
+  phrase while they are read and written out in full, the entropy and the BIP39 seed as the BIP39
+  library first gives them, the hashes that fill out a short phrase's state, make a round's salt
+  and mask or give a BIP32 key while they are computed, a BIP32 key as a scalar while the curve uses
+  it, the random bytes and word numbers a phrase or password is drawn from, and buffers inside
+  dependencies. Locking is best effort, natively on Linux, macOS and Windows; nothing is locked in a
+  browser.
+- The Argon2 work area, gigabytes in size, is locked only where the limit on locked memory holds
+  all of it, which on Linux it usually does not (8 MiB by default), and from its blocks a password
+  guess can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when
+  a swap area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap
+  in memory (zram) is safe. macOS encrypts its swap; on Windows, use BitLocker or no page file.
+  Hibernation writes locked memory and the work area to disk: on Linux the kernel refuses to
+  hibernate while secret memory exists, and elsewhere only an encrypted disk protects them.
+- A known limit of mhfe-core 0.1.0: since the Linux change "mm/secretmem: properly account locked
+  pages" (commit 97d34aa65c29, September 2026, in Ubuntu's kernels from 7.0.0-39), the kernel grants
+  secret memory beyond `RLIMIT_MEMLOCK` and refuses only the first write to it, so the core cannot
+  fall back to locked memory, and below about 512 KiB of the limit a command ends with a bus error
+  (exit code 135). The kernel counts the limit per user, so the figure varies a little and depends
+  on the command. At the lowest limits this comes at the first secret, in the checks at start,
+  before anything is read; a search for two missing words, which runs on every processor core, can
+  end this way after the words were typed. Either way the command stops and writes no core dump.
+  The default limit, 8 MiB, is far above this, and the core's next version fixes it.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original seed phrase: a typing mistake or a
   hardware fault cannot silently produce a container that no password opens. At a terminal the
@@ -119,66 +144,70 @@ Never include a real seed phrase, password, private key or wallet file.
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
   (`cargo xtask wasm remove-network-code`), and the only network code in the tool is `mhfe serve`,
   which listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
-- On Linux the kernel enforces this. A command that handles secrets (`encrypt`, `decrypt`, `check`,
-  `rekey`, `new`, `wallets`, `repair`, `repair-words`, `password`) runs under a seccomp filter that
-  refuses to create any socket, and refuses io_uring altogether, whose operations could create one
-  without the system call the filter sees; and under a Landlock ruleset that refuses every write to
-  the file system (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect). Both cover every
-  thread the command starts, Argon2's included, and cannot be undone. A command started directly
-  also moves into a network namespace of its own, with only inactive loopback and no external
-  routes; where the system allows no user namespaces it runs on without one. Its summary says
-  "isolated network, no new sockets or file writes" with the namespace and "no new sockets or file
-  writes" without it. The start menu runs each command in a thread of its own, so that it can still
-  start `mhfe serve`, which is not isolated because the browser it opens must write its profile; a
-  thread cannot get a namespace of its own, so the menu's commands have the filter and the ruleset
-  only. The summary of a command says what the kernel enforces. These boundaries do not revoke
-  descriptors already open: an inherited socket remains in its original network namespace, and an
+- The operating system enforces as much of this as it offers. Every command but `serve` enters
+  isolation before it reads anything: `encrypt`, `decrypt`, `check`, `rekey`, `new`, `wallets`,
+  `repair`, `repair-words`, `password`, `self-test` and `test-benchmark`. It cannot be undone and
+  covers every thread the command starts, Argon2's included. Each protection is read back, and the
+  summary of a command says what holds and warns when the network stays open or other programs
+  can read the memory.
+- On Linux on x86-64 and little-endian AArch64, a seccomp filter refuses to create any socket, and
+  refuses io_uring altogether, whose operations could create one without the system call the filter
+  sees. It also refuses every call that changes the file system, `ptrace`, `process_vm_writev`,
+  `pidfd_getfd` and every `ioctl` but the terminal's. A Landlock ruleset refuses writing, creating,
+  removing and renaming files (Linux 5.13 and later; from Linux 6.7 also TCP bind and connect), and
+  on other architectures it is all that applies. A command also moves into a network namespace of
+  its own, with only inactive loopback and no external routes; where the system allows no user
+  namespaces it runs on without one. Its summary says "isolated network, no new sockets or file
+  writes" with the namespace and "no new sockets or file writes" without it.
+- On macOS a sandbox refuses to bind or connect a socket, and the summary says "no network". Files
+  are not restricted.
+- On Windows the access lists of the process and its threads keep programs of the same user from
+  opening them to read or change them, and a command runs at low integrity, which refuses writes to
+  the user's files and registry. Low-integrity folders and volumes without access control, such as
+  FAT and exFAT USB sticks and SD cards, stay writable, so the summary says "low integrity, most
+  file writes refused". Sockets stay open, since only an administrator can close them, and the
+  summary warns of that. A program of the same user can still duplicate the handle that whatever
+  started the command holds, the start menu or a shell, and reach the command through it.
+- Root, a program with `CAP_SYS_PTRACE`, an administrator and a debugger the tool was started under
+  are not kept out, apart from the secret memory above. These boundaries do not revoke descriptors
+  already open either: an inherited socket remains in its original network namespace, and an
   already writable file, pipe or redirected standard output remains writable. They therefore
   restrict new access rather than guarantee containment of arbitrary compromised code. Start the
   tool from a trusted terminal in the offline environment described above. `serve` remains outside
   these command restrictions so that a browser can reach its localhost listener.
+- The start menu runs each command as a process of its own on the same terminal, isolated as a
+  typed command is and with its own checks at start. The menu itself stays out of isolation, so
+  that it can still start `mhfe serve`, which is not isolated because the browser it opens must
+  write its profile. A command that crashed or was killed could not restore the terminal or leave
+  its private screen, so the menu does both and says so.
 - Ctrl+C ends the tool at once, also inside a round. The operating system then discards all of its
   memory; buffers are not wiped first, because a round can take hours at a high PIM.
 
 ## The C engine and its boundary
 
-Argon2 is the reference C implementation, vendored unchanged (see
-[`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code of the library
-is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
-mhfe-core makes the calls that lock secrets in memory and keep the work area out of core dumps
-(`mlock`, `madvise`). The command-line tool denies unsafe code too, except in
-`src/bin/mhfe/protect.rs`, which forbids core dumps (`setrlimit`, `prctl`), routes Ctrl+\\ and
-Ctrl+Z to the Ctrl+C handler (`sigaction`, `raise`), isolates a command (seccomp through `prctl`,
-Landlock, a network namespace through `unshare`), and reads each protection back by asking for it
-or trying what it forbids (`getrlimit`, `prctl`, `socket`, io_uring, `open`); and in
-`src/bin/mhfe/hidden_input.rs`, which switches the terminal's echo and line mode for a secret's
-prompt and a list (`tcgetattr`/`tcsetattr` on Unix, `GetConsoleMode`/`SetConsoleMode` on Windows,
-where it also has the console carry out control sequences) and restores them, reads the
-terminal's width and whether a key follows Escape (`ioctl`/`select` on Unix,
-`GetConsoleScreenBufferInfo`/`PeekConsoleInputW` on Windows), and tells whether standard output is
-the terminal the private screen is shown on (`fstat` on Unix, `GetConsoleMode` on Windows). The
-engine module keeps these invariants:
+Natively, Argon2 is the reference C implementation inside mhfe-core, which also makes the calls
+that lock secrets, isolate a process and keep the work area out of core dumps. The
+[security notes of mhfe-core](https://github.com/hobby-eng/mhfe_core/blob/v0.1.0/SECURITY.md)
+give the invariants of its C code and what each system offers and leaves open. The browser
+package compiles the same reference code from
+[`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) with Emscripten, with one C file of
+MHFE's own, `src/engine/argon2_browser.c`, which clears the stack behind the reference code.
 
-- `argon2_context` is copied field for field; compile-time assertions check its size, alignment and
-  every field offset on 32- and 64-bit targets, and a test proves that every field reaches the C
-  code, including `flags` and the callbacks.
-- Every pointer handed to C refers to a live Rust buffer of the stated length that outlives the
-  call, or is NULL with length 0. Inputs are shared borrows that C only reads: MHFE never sets the
-  flags that would make C write to the password or secret. The output and the work area are
-  exclusive borrows.
-- On x86-64, `opt.c` is compiled twice, with SSE2 and with SSSE3. MHFE's own
-  `src/engine/argon2_simd.c` runs the SSSE3 copy only for a call whose context carries MHFE's flag
-  in bit 31 of `flags`, which the engine sets only where the processor reports SSSE3; the vendored
-  code reads only the two lowest bits. The choice travels with each call, so no global state is
-  shared.
-- The work area is allocated once per operation and handed to C by the allocation callback. The C
-  API passes no user data to the callback, so the area travels in a thread-local slot that is set
-  just before and cleared just after each call; C calls the callback on the calling thread.
-- `argon2_ctx` joins its four lane threads before it returns and keeps no other global state, so no
-  pointer outlives a call and calls on different threads do not interfere.
-- Every Argon2 error code is turned into an error with the reference implementation's message.
+The only unsafe Rust code of the library is in `src/engine/ffi.rs`, the free-memory queries for
+macOS and Windows; the rest of the library denies it (`#![deny(unsafe_code)]`). The command-line
+tool denies unsafe code too, except in three modules:
 
-The only other unsafe calls in that module are the free-memory queries for macOS and Windows.
+- `src/bin/mhfe/protect.rs` routes Ctrl+\\ and Ctrl+Z to the Ctrl+C handler (`sigaction`, `raise`),
+  passes a request to end on to a command of the start menu (`kill`) and reads the limit on locked
+  memory (`getrlimit`);
+- `src/bin/mhfe/raw_io.rs` reads standard input with the operating system's calls (`read` on Unix,
+  `ReadConsoleW` on a Windows console);
+- `src/bin/mhfe/hidden_input.rs` switches the terminal's echo and line mode for a secret's prompt
+  and a list (`tcgetattr`/`tcsetattr` on Unix, `GetConsoleMode`/`SetConsoleMode` on Windows, where
+  it also has the console carry out control sequences) and restores them, reads the terminal's
+  width and whether a key follows Escape (`ioctl`/`select` on Unix,
+  `GetConsoleScreenBufferInfo`/`PeekConsoleInputW` on Windows), and tells whether standard output
+  is the terminal the private screen is shown on (`fstat` on Unix, `GetConsoleMode` on Windows).
 
 ## Containers of the same length
 

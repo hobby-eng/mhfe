@@ -56,7 +56,7 @@ const MEMORY_FAILURE_CONTAINER = "donate stove tower picnic iron rescue trick sh
 // mhfe's crates, from BIP39 and BIP32 alone with Node's crypto (Node v26.12.1, OpenSSL 3.5.9,
 // scripts/verify-browsers.mjs lines 102-189 at commit f68d6c7, 2026-10-28): the computation first
 // gave the published 73c5da0a and the b4e3f5ed of src/wallet.rs, both of the BIP39 test phrase.
-// The wallet checks follow the definition of MHFE-WALLET-CHECK-SEED-1 in src/wallet_check.rs; that
+// The wallet checks follow the specification's definition of MHFE-WALLET-CHECK-SEED-1; that
 // computation first gave the two public counters: CHECKED_PHRASE passes with "TREZOR" and not
 // without, and EMPTY_CHECKED_PHRASE passes without.
 const FINGERPRINTS = {"phrase":"73c5da0a","phraseWithTrezor":"b4e3f5ed","reducedCostContainer":"4eb1e81f","sameLengthContainer":"ac540b68","fullSizeContainer":"487a156e","checkedPhrase":"f219dad9","checkedPhraseWithTrezor":"bd7744bb","emptyCheckedPhrase":"3dbdb252","ambiguous12Words":"a58e92b5","phraseAs24":"b61c9f21","ambiguousAs21":"1d376894","ambiguousAs24":"16ee844f","wrongPasswordAs24":"09e6cccd"};

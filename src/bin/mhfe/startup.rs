@@ -2,9 +2,10 @@
 //! program is compared with its known answers (`mhfe::self_check`, at its startup tier) and the
 //! protections of the process are read back: a broken build, a faulty processor or memory, or a
 //! damaged table then shows before a secret is typed, not in a container that cannot be recovered.
-//! The checks take a few tens of milliseconds and a few MiB, run offline with public test vectors
-//! only, and show nothing when they pass. A failure stops the tool with exit code 1 and names the
-//! part. `mhfe self-test` runs the same checks and the slower ones of its full tier.
+//! The checks take about 0.3 s in a release build, 0.2 s of it in the waits of the search for
+//! missing words, and a few MiB, run offline with public test vectors only, and show nothing when
+//! they pass. A failure stops the tool with exit code 1 and names the part. `mhfe self-test` runs
+//! the same checks and the slower ones of its full tier.
 
 use std::sync::{Mutex, MutexGuard, Once, PoisonError};
 

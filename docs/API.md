@@ -7,6 +7,10 @@ as a 12- to 21-word original seed phrase. The command-line tool is described in 
 
 ## Rust library
 
+The cipher and the types `Mhfe`, `Password`, `Suite`, `WorkFactor`, `Phrase` and `Argon2Engine` are
+those of the crate `mhfe-core`; this crate adds the front ends' rules and refusals around them, the
+wallet tools and the self-checks.
+
 ```rust
 use mhfe::engine::reserve;
 use mhfe::{check, decrypt, encrypt, CheckOutcome, PhraseLength, Recovery, Reference};
@@ -49,12 +53,12 @@ let outcome: CheckOutcome =
   browser build has no `engine::reserve`: its engine, `engine::browser::BrowserEngine::new`, refuses
   a level above `engine::browser::HIGHEST_BROWSER_MEMORY_LEVEL` (0) with
   `MhfeError::MemoryLevelNotSupportedHere`.
-  The native engine is the vendored reference C code (`engine::NativeEngine`). Like the browser's
-  engine, it fills each round's key with a marker before Argon2 runs and refuses a key left so or
-  set to zeros (`ARGON2_FAILED`). `Mhfe::engine()` gives the engine. `engine::check_can_run` makes
-  the same checks as `engine::reserve` without allocating, so a program can refuse at once and
-  reserve the memory only after the password has been encoded, the order the specification gives
-  for creating a container.
+  The native engine is `mhfe_core::NativeArgon2`, the reference C code inside that crate. The
+  browser's engine fills each round's key with a marker before its Argon2 build runs and refuses a
+  key left so or set to zeros (`ARGON2_FAILED`). `Mhfe::engine()` gives the engine.
+  `engine::check_can_run` makes the same checks as `engine::reserve` without allocating, so a
+  program can refuse at once and reserve the memory only after the password has been encoded, the
+  order the specification gives for creating a container.
 - `Password::new` rejects, never cleans or truncates: a control character (General_Category Cc, such
   as NUL, TAB or a line break), U+2028 or U+2029, any code point that Unicode 18.0.0 does not
   assign, an empty result and more than 1024 bytes after normalization. Private Use characters are
@@ -434,9 +438,10 @@ let outcome: CheckOutcome =
 
 Every buffer and binding this crate owns that holds a password, phrase, passphrase, state, key,
 private scalar or mask is wiped when dropped. Short-lived working buffers inside dependencies, such
-as those of Unicode normalization, BIP39 word parsing and elliptic-curve arithmetic, copies that
-the compiler makes in registers or on the stack, and immutable JavaScript strings in the browser
-are outside its control.
+as those of BIP39 word parsing and elliptic-curve arithmetic, copies that the compiler makes in
+registers or on the stack, and immutable JavaScript strings in the browser are outside its control;
+`mhfe_core` overwrites the stack after each of its calls that computes with a secret, as best
+effort.
 
 ### Self-checks
 
@@ -453,11 +458,11 @@ damaged address. A round trip through the same code alone is never the whole che
 use mhfe::self_check::{sets, Tier};
 
 let mut checks = sets::native(None);            // every part the command-line tool computes
-let report = checks.run_quietly(Tier::Startup); // tens of milliseconds, no live randomness
+let report = checks.run_quietly(Tier::Startup); // about 0.3 s, no live randomness
 report.require_passed()?;                       // MhfeError::SelfCheckFailed for the first failure
 ```
 
-- `Tier::Startup` is the check of every start: milliseconds per part, without Argon2 at full size,
+- `Tier::Startup` is the check of every start: about 0.3 s in all, without Argon2 at full size,
   live randomness, files or network. `Tier::Full` adds the slower cases, for a self-test that a
   person asks for. `Tier::name()` and `Tier::from_name()` use "startup" and "full"; another name is
   `INVALID_REQUEST`. MHFE's own published vectors at full cost take minutes and gigabytes and stay
@@ -498,18 +503,18 @@ The parts, by identifier and label, and what each compares:
 
 - `cipher-hashes`, "Cipher hashes": SHA-256 (FIPS 180-4, two messages), HMAC-SHA-256 (RFC 4231 test
   cases 2 and 6) and BLAKE2b-256, as the rounds use them.
-- `argon2`, "Argon2id": natively the RFC 9106 vector, which sets a secret and associated data, and a
-  call shaped as MHFE makes it at 1 MiB, on each copy of the core the processor runs (SSE2, and
-  SSSE3 where present), with the work area wiped after every call; in a browser the 1 MiB call
-  through the page's Argon2 build. The 1 MiB tag comes from OpenSSL. Every call goes through the
-  written-key guard that the engine puts around each round, natively as in a browser, so a call that
-  returns without writing its key, or writes zeros, is refused. Such a call, or one that returns an
-  error, gives "Argon2id could not run: …", told apart from a wrong tag ("… gives another tag …").
-  Natively that fails the part, so a command stops at start; in a browser an Argon2 build that does
-  not start makes the part not available instead (see [Browser package](#browser-package)).
+- `argon2`, "Argon2id": a call shaped as MHFE makes it at 1 MiB, natively on the copy of the core
+  an operation runs on this processor, in a browser through the page's Argon2 build. The tag comes
+  from OpenSSL. A call that returns an error gives "Argon2id could not run: …", told apart from a
+  wrong tag ("… gives another tag …"), and so in a browser does one that returns without writing
+  its key or writes zeros, which the written-key guard around each round refuses. Natively that
+  fails the part, so a command stops at start; in a browser an Argon2 build that does not start
+  makes the part not available instead (see [Browser package](#browser-package)). The RFC 9106
+  vector, the run on each copy of the core and on one thread, and the wipe of the work area are
+  tests of mhfe-core: they do not run on the user's computer.
 - `argon2-sizes`, "Argon2id at 64 and 256 MiB", full self-test only: 64 MiB with 3 passes and
-  256 MiB with 2 passes on each copy of the core, and once on one thread. A computer that cannot
-  give the memory makes it not available rather than failed.
+  256 MiB with 2 passes, on the same copy of the core. A computer that cannot give the memory makes
+  it not available rather than failed.
 - `cipher-rounds`, "Cipher rounds": 10 of the published vectors of suites 3 and 4 replayed with
   their recorded round keys through `Encryption::run`, with its check and repair words,
   `decrypt`, also at each stated length, and `decrypt_as` with the suite selected; the
@@ -603,8 +608,8 @@ joins them before it returns. A process can enter its own network namespace only
 single thread, so a command runs its checks at start after it has entered its own namespace, where
 the system allows one. The start menu runs them before it opens, with no network namespace: it
 handles no secret, and each of its commands is a process of its own that runs them again.
-`engine::NativeArgon2SizesCheck::default()` takes about 1.5 s and 256 MiB. Both
-native checks call Argon2 through the engine's written-key guard. In a browser,
+`engine::NativeArgon2SizesCheck::default()` takes about a quarter of a second and 256 MiB. In a
+browser,
 `engine::BrowserArgon2Check::new(&argon2)` also offers `verify()`, which gives `SelfCheckFailed`,
 and `engine::BrowserArgon2SizesCheck::new(&argon2)` checks one build at a time.
 `engine::browser::BrowserEngine::verify_known_answer()` is the check the bindings run before every
@@ -663,7 +668,7 @@ is deterministic but looks random. `memory::LockProbe` is the `memory-locking` c
 | `NOT_ENOUGH_MEMORY`               | Less free memory than the level needs, also within a cgroup                                                             |
 | `MEMORY_ALLOCATION_FAILED`        | The operating system refused the memory                                                                                 |
 | `MEMORY_LEVEL_NOT_SUPPORTED_HERE` | The build cannot address that much memory (browser: > 0)                                                                |
-| `ARGON2_FAILED`                   | The Argon2 code reported an error, or returned without writing its key or wrote zeros                                   |
+| `ARGON2_FAILED`                   | The Argon2 code reported an error, or a browser's build returned without writing its key or wrote zeros                 |
 | `INVALID_PASSPHRASE`              | The BIP39 passphrase bytes are not UTF-8                                                                                |
 | `INVALID_REQUEST`                 | A choice the API does not know, or a step out of its order                                                              |
 | `INVALID_COIN`                    | An address's coin is not one the check knows                                                                            |

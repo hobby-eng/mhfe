@@ -1,9 +1,9 @@
 # Vendored Argon2 reference implementation
 
 `vendor/phc-winner-argon2/` holds the reference C implementation of Argon2 by Daniel Dinu, Dmitry
-Khovratovich, Jean-Philippe Aumasson and Samuel Neves. MHFE uses it as its only Argon2 engine: the
-native command-line tool compiles it through `build.rs`, and the browser package compiles it with
-Emscripten through `scripts/build-argon2-wasm.sh`.
+Khovratovich, Jean-Philippe Aumasson and Samuel Neves. The browser package compiles this copy with
+Emscripten through `scripts/build-argon2-wasm.sh`. The native command-line tool runs the same commit
+through the crate mhfe-core, which vendors and compiles it itself.
 
 ## Source
 
@@ -27,13 +27,14 @@ algorithm did not change.
 
 ## Files that are compiled
 
-- Both builds: `src/argon2.c`, `src/core.c`, `src/encoding.c`, `src/thread.c`,
-  `src/blake2/blake2b.c`.
-- Native `x86_64`: `src/opt.c`, compiled twice, with SSE2 and with SSSE3, and MHFE's own
-  `src/engine/argon2_simd.c`, which runs the SSSE3 copy where the processor has SSSE3. Other
-  native architectures, including ARM64, and the browser: `src/ref.c`.
-- Not compiled: `src/bench.c`, `src/genkat.c`, `src/genkat.h`, `src/run.c` and `src/test.c`, which
-  are upstream's own benchmark, test and command-line programs.
+- `src/argon2.c`, `src/core.c`, `src/encoding.c`, `src/thread.c`, `src/ref.c` and
+  `src/blake2/blake2b.c`, in the list `src/engine/argon2-sources.txt`, with MHFE's own wrapper, the
+  separate file `src/engine/argon2_browser.c`. The bridge calls only its `mhfe_argon2id_hash_raw()`,
+  and `core.c` calls its `fill_segment()`, which runs the vendored one, renamed by a `-D` define
+  when it is compiled; both clear the stack the vendored code used.
+- Not compiled: `src/opt.c`, as the SIMD core gave a browser no speed-up and would exclude browsers
+  without WebAssembly SIMD; and `src/bench.c`, `src/genkat.c`, `src/genkat.h`, `src/run.c` and
+  `src/test.c`, which are upstream's own benchmark, test and command-line programs.
 
 ## Licence
 
@@ -97,8 +98,8 @@ links. The points that matter for MHFE:
   to avoid a `libgcc_s` dependency on minimal systems. Both work; MHFE keeps upstream's code.
 - **CPU instructions.** #308 is a crash with an invalid instruction after `opt.c` was compiled for a
   newer processor than the one running it; the failing virtual machine offered SSE2 and SSE3 but not
-  SSSE3. This is why the native `x86_64` program never assumes SSSE3: it checks the processor and
-  falls back to the SSE2 copy of `opt.c`.
+  SSSE3. This is why mhfe-core's native `x86_64` build never assumes SSSE3: it checks the processor
+  and falls back to the SSE2 copy of `opt.c`.
 
 ## Limits worth knowing
 

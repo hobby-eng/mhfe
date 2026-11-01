@@ -2,7 +2,7 @@
 
 This repository is part of the `bip_tools` workspace. If a workspace `AGENTS.md` exists one directory above this repository, read and follow it first. Its core rules: edit only this checkout in place, never create another copy or worktree, never delete project directories, use the toolchains it names, use only public test data, do not commit or push without an explicit request, and write everything in English only (code, comments, commits, documentation).
 
-The specification and vectors for this implementation live in `../mhfe_spec`; an algorithm or vector change must be checked against both. The repository keeps no vector files of its own: the program and the tests read them through the submodule `tests/spec`, pinned at the specification's tag v0.7.0. Clone with `--recurse-submodules`, or run `git submodule update --init`.
+The specification and vectors for this implementation live in `../mhfe_spec`; an algorithm or vector change must be checked against both. The repository keeps no vector files of its own: the program and the tests read them through the submodule `tests/spec`, pinned at the specification's tag v0.7.0. Clone with `--recurse-submodules`, or run `git submodule update --init`. The cipher, native Argon2 and the protections of secrets are the crate `mhfe-core`, pinned in `Cargo.toml`, from `../mhfe_core`: a change to them is made there and comes here with a new version of the crate.
 
 ## Commands
 

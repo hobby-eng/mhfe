@@ -506,7 +506,7 @@ methods are synchronous and return at once.
 If a callback of the page throws, or is async and its promise rejects while the operation runs, the
 operation stops, its worker ends and the promise rejects with `CALLBACK_FAILED`, the page's error
 as its `cause`. A failing `onProgress` of a hidden wallet ends the whole session, and one of a new
-phrase stops every worker of the draw. The client does not wait for a callback's promise, except
+phrase ends its draw. The client does not wait for a callback's promise, except
 for the owner's answer and `onConfirmAgain` in a rekey and the answer of `check()`'s `onNoLength`,
 which it awaits.
 
@@ -694,9 +694,6 @@ loop. Every round also refuses a key that the build left unwritten or set to zer
   `selfTest()` covers the full size.
 - Memory levels above 0, which a browser does not support. Their rounds are still replayed by
   `cipher-rounds` with the keys the published vectors record.
-- The RFC 9106 Argon2 vector, which sets a secret and associated data: the browser's Argon2 builds
-  export only `mhfe_argon2id_hash_raw`, which has neither. The page compares OpenSSL's tags at 1,
-  64 and 256 MiB instead.
 - That Argon2 wiped its memory after a call: where the allocator put the freed work area in the
   Emscripten heap is not reliably known, so the page does not scan for it. The package's checks
   (`cargo xtask package-check`) confirm it for both builds, the stacks the reference code used
@@ -772,9 +769,8 @@ The page should say why these are missing where a user would look for them:
 - `mhfe serve` and the menu entry that serves a tool: they are the launcher that gives a page its
   fast mode, not something a page runs; the package's launcher is `core/mhfe-fast-mode.py` (see
   [Fast and standard mode](#fast-and-standard-mode));
-- the self-test's checks of locked memory, core dumps, isolation and hidden input, the RFC 9106
-  Argon2 vector and the check that Argon2 wiped its memory: a page cannot make them, as
-  [What a browser cannot check](#what-a-browser-cannot-check) explains.
+- the self-test's checks of locked memory, core dumps, isolation and hidden input: a page cannot
+  make them, as [What a browser cannot check](#what-a-browser-cannot-check) explains.
 
 ## What the page should do
 

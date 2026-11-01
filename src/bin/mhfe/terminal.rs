@@ -664,16 +664,11 @@ fn terminal_screen_possible(input: &Input) -> bool {
 /// Every other key is ignored, and so is any key pressed before the wait, such as during a long
 /// draw or recovery, so that a stray one cannot clear the screen too early.
 pub fn wait_to_leave() -> Result<(), Failure> {
-    wait_to_leave_saying("Write it down now: Enter or Escape clears this screen.")
-}
-
-/// [`wait_to_leave`] with another line above the wait, for a screen that needs no writing down.
-pub fn wait_to_leave_saying(line: &str) -> Result<(), Failure> {
     // Keys pressed during the work before this screen wait in the terminal, and one of them would
     // end the wait at once. Restoring the terminal discards them.
     hidden_input::with_keys(|_| Ok(()))?;
     eprintln!();
-    style::warn_here(line, "");
+    style::warn_here("Write it down now: Enter or Escape clears this screen.", "");
     hidden_input::with_keys(|next_key| loop {
         match next_key()? {
             hidden_input::Key::Enter | hidden_input::Key::Quit => return Ok(()),

@@ -348,9 +348,9 @@ mod tests {
     use crate::style::plain;
 
     /// The full self-test passes on this computer, every part once, and fits the text width. It
-    /// scans every Unicode scalar value and runs Argon2 at 256 MiB, about two seconds in a release
-    /// build and ten in a debug one, so it runs on request, as the library's own test of the full
-    /// set: `cargo test --release --bins -- --ignored every_part_passes_the_full_self_test`.
+    /// runs Argon2 at 256 MiB, seconds in a debug build, so it runs on request, as the library's
+    /// own test of the full set:
+    /// `cargo test --release --bins -- --ignored every_part_passes_the_full_self_test`.
     #[test]
     #[ignore = "the whole full self-test: seconds and 256 MiB"]
     fn every_part_passes_the_full_self_test() {

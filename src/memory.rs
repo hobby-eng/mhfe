@@ -2,10 +2,10 @@
 //! of a program to its swap space on disk, where it can outlast the program by years; a locked
 //! page stays in memory. The buffer of a secret is the core's [`Secret`], whose pages hold nothing
 //! else. Locking is best effort: a refusal leaves the secret as it was, and the browser build locks
-//! nothing. A low RLIMIT_MEMLOCK on Linux 7.0 is the exception: the kernel gives secret memory and
-//! refuses only its first write, so mhfe-core 0.1.0 cannot fall back and the process ends with
-//! SIGBUS. Argon2's work area is locked only where the limit on locked memory holds all of it; the
-//! program warns when swap is not encrypted.
+//! nothing. A low RLIMIT_MEMLOCK is the exception on a Linux kernel with commit 97d34aa65c29: it
+//! gives secret memory and refuses only the first write, so mhfe-core 0.1.0 cannot fall back and
+//! the process ends with SIGBUS. Argon2's work area is locked only where the limit on locked
+//! memory holds all of it; the program warns when swap is not encrypted.
 
 use std::fmt;
 use std::ops::Deref;
@@ -103,8 +103,8 @@ pub const TYPED_LINE_BYTES: usize = 8192;
 /// The self-check `memory-locking`: whether this process can keep a secret out of swap, tried on
 /// a buffer of the size a front end locks for each typed line ([`TYPED_LINE_BYTES`]), so that a
 /// pass says that buffer is locked, not only a smaller one (AUD-016-SEC002). It only warns: a
-/// refusal leaves secrets working but able to reach swap. It writes nothing into the buffer, so it
-/// passes under the low RLIMIT_MEMLOCK that ends the process at a first write (see above). Where
+/// refusal leaves secrets working but able to reach swap. Under the low RLIMIT_MEMLOCK above, it
+/// cannot warn: the wipe of its buffer on drop is a first write, which ends the process. Where
 /// nothing is locked at all, it says why. Each buffer is locked as it is made, and
 /// [`LockedText::is_locked`] tells whether that one was.
 pub struct LockProbe {

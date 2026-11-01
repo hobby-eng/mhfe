@@ -32,8 +32,9 @@ Each recovery deliberately takes about one to two minutes and 2 GiB of memory. Y
 someone guessing your password pays that for every guess. An encryption takes twice as long, because
 MHFE then recovers your phrase from the new container once to make sure the container works.
 
-This repository is the implementation: a command-line tool, a Rust library and a browser package.
-The companion [MHFE specification](https://github.com/hobby-eng/mhfe-spec) defines the algorithm.
+This repository is the implementation: a command-line tool, a Rust library and a browser package,
+built on the crate [mhfe-core](https://github.com/hobby-eng/mhfe_core), which holds the cipher. The
+companion [MHFE specification](https://github.com/hobby-eng/mhfe-spec) defines the algorithm.
 This version implements suite `MHFE-BIP39-256-EXPERIMENTAL-3` for 24-word containers and, since
 version 0.5.0, suite `MHFE-BIP39-LP-EXPERIMENTAL-4` for containers of the same length.
 
@@ -212,12 +213,14 @@ fraction of a second, and stops before its first question if a part gives a wron
 [`mhfe self-test`](#mhfe-self-test) says what it tests.
 
 Use it on a trusted computer that stays offline while the phrase and the password are on it, ideally
-a Linux system started from a USB stick with the network off. On Linux MHFE also applies kernel
-restrictions against creating sockets and opening files for writing. MHFE confirms each restriction
-by trying what it forbids; the command's summary shows which ones took effect and warns when one
-that the kernel reported does not hold. Where the system allows it, a command also runs in its own
-network namespace, with only an inactive loopback and no external routes. Descriptors already open
-remain usable, including sockets and redirected output, so these restrictions do not replace a
+a Linux system started from a USB stick with the network off. A command also asks the system to
+close what it can before you type anything. On Linux the kernel refuses it new sockets and changes
+to files, and where the system allows it, the command runs in its own network namespace, with only
+an inactive loopback and no external routes. On macOS a sandbox closes the network. On Windows a
+command runs at low integrity, which refuses most writes to your files; the network stays open,
+since only an administrator can close it, and the summary of a command's settings warns of that.
+MHFE reads each restriction back, and that summary shows which ones took effect. Descriptors already
+open remain usable, including sockets and redirected output, so these restrictions do not replace a
 trusted offline environment. On Windows, Windows PE from a USB stick is better than your everyday
 system; `mhfe.exe` needs nothing beyond Windows itself, though it has not been tested in Windows PE
 yet.
@@ -532,6 +535,10 @@ preselected:
 
 The check has costs:
 
+- The draw takes about 65,536 trials, one after another on one thread, as the specification's proof
+  requires: about a minute and a half on a current computer, and now and then several times that.
+  The screen counts the draws while they run; the summary says nothing of them, since the proof
+  covers a draw that reveals neither their number nor its duration.
 - Keep all funds in the wallet the passphrase opens. The wallet of the phrase alone stays empty and
   is never used: its public history would let an attacker confirm the MHFE password on its own, and
   the searches for the password and the passphrase would add up instead of multiplying. The check
@@ -700,20 +707,20 @@ specification, which gives it byte for byte.
 
 **At every start.** Before a command that handles a secret asks for anything, MHFE tests itself on
 this computer: `new`, `encrypt`, `decrypt`, `check`, `rekey`, `wallets`, `repair`, `repair-words`
-and `password` do so, and the start menu does it once before it opens. Every part of the program is
-compared with known answers, taken from published test vectors or from an independent program that
-first reproduced a published one, and each check is also given something it must refuse, such as a
-wrong repair card, a wrong check word or a damaged address. The parts are the hash functions,
-Argon2id with a small amount of memory, the twelve rounds of the cipher in both directions, the
-formats and the length detection, the password rules, the word list, repair words, the search for
-missing words, the check word, the password generator and the test that refuses a broken random
-generator, wallet keys and addresses, the paths an address check says it will search, the wallet
-check, hidden wallets, rekey, the rehearsal check, the hints of the word lists, the chosen word of a
-new phrase and the list of what to keep. The rounds are replayed with the keys that the published
-MHFE vectors record, so this does not need 2 GiB of memory. The command also reads back whether
-core dumps are off, which of the kernel's restrictions hold and whether memory can be locked. All
-of this takes a few hundredths of a second, uses public test data only and shows nothing when every
-part passes.
+and `password` do so, and the start menu does it before it opens, as each of its commands does
+again. Every part of the program is compared with known answers, taken from published test vectors
+or from an independent program that first reproduced a published one, and each check is also given
+something it must refuse, such as a wrong repair card, a wrong check word or a damaged address. The
+parts are the hash functions, Argon2id with a small amount of memory, the twelve rounds of the
+cipher in both directions, the formats and the length detection, the password rules, the word list,
+repair words, the search for missing words, the check word, the password generator and the test that
+refuses a broken random generator, wallet keys and addresses, the paths an address check says it
+will search, the wallet check, hidden wallets, rekey, the rehearsal check, the hints of the word
+lists, the chosen word of a new phrase and the list of what to keep. The rounds are replayed with
+the keys that the published MHFE vectors record, so this does not need 2 GiB of memory. The command
+also reads back whether core dumps are off, which of the system's restrictions hold and whether
+memory can be locked. All of this takes about a third of a second, uses public test data only and
+shows nothing when every part passes.
 
 If a part gives another answer, the command stops before its first question, with exit code 1:
 
@@ -729,7 +736,8 @@ Damage to a part of the program that no test reaches can go unseen, so check eve
 its `SHA256SUMS` ([Release files](#release-files)) all the same. When a test fails, do not use that
 program or that computer for a real phrase: check the download, try another computer, and report
 it. "Core dumps could not be turned off." stops a command in the same way: the system kept them on,
-so a crash could write your secrets to a disk.
+so a crash could write your secrets to a disk. Windows has no such setting: its error reports leave
+out the heap but hold the threads' stacks, which the self-test says, and a command goes on.
 
 `mhfe serve`, which handles no secret, tests only the hashes, SHA-256 among them, before it compares
 a page with its checksum. `mhfe self-test` runs these tests itself and shows each one. The test
@@ -739,16 +747,14 @@ tool `mhfe test-benchmark`, which handles public test data only, and `--help`, `
 **On request.** `mhfe self-test` runs every test of the start together with slower ones, in a few
 seconds and with about 256 MiB of memory: Argon2id also at 64 and 256 MiB, all 27 published MHFE
 vectors instead of 10, more cases of the formats, the word list, repair words, the wallet check,
-seeds and addresses, every Unicode character against the rule that refuses control characters and
-line separators in a password, with a check that normalization turns no other character into one,
-and 1,024 bytes of the system's random generator. It also tests that the terminal turns its own echo
-off, as every question for a secret needs; such a question itself refuses to read when the echo
-stays on: "The terminal did not turn its echo off; no secret was read." It shows one line for each
-part: "as published", or for the protections and the generator "off", "enforced", "echo off",
-"works" or "healthy". A part that cannot be tested here says "not available here" and why, and a
-yellow "!" marks a protection weaker than it should be; neither is a failure. The test ends with
-"✓ Every part of this program gives its known answers." and exit code 0, or with "A part of this
-program does NOT give its known answers." and exit code 1.
+seeds and addresses, and 1,024 bytes of the system's random generator. It also tests that the
+terminal turns its own echo off, as every question for a secret needs; such a question itself
+refuses to read when the echo stays on: "The terminal did not turn its echo off; no secret was
+read." It shows one line for each part: "as published", or for the protections and the generator
+"off", "enforced", "echo off", "works" or "healthy". A part that cannot be tested here says "not
+available here" and why, and a yellow "!" marks a protection weaker than it should be; neither is a
+failure. The test ends with "✓ Every part of this program gives its known answers." and exit code 0,
+or with "A part of this program does NOT give its known answers." and exit code 1.
 
 **With the published vectors.** `mhfe self-test --vectors` then also encrypts the public suite 3
 vector zero-12 and recovers the public suite 4 vector same-length-zero-12 at their full cost,
@@ -904,6 +910,11 @@ round; the operating system then discards its memory. SIGTERM and a closed termi
 same way at any moment, and Ctrl+\ and Ctrl+Z do so while it works; at a question they are ordinary
 keys. Each of them first restores the terminal and leaves the private screen.
 
+The start menu runs each command as a process of its own. Ctrl+C ends the command and the menu;
+Escape, q and Ctrl+D end the command alone, and the menu comes back. It also comes back after a
+command that crashed or was killed: it restores the terminal, leaves the private screen and says
+"The command crashed or was killed."
+
 ## Release files
 
 A release has archives for Linux (x86-64 and ARM64), macOS (Intel and Apple silicon) and Windows
@@ -976,15 +987,18 @@ installs with
 (`--check` compares without writing, as `ci.yml` does); regenerate it whenever the Unicode version
 of the password rule changes.
 
-Argon2 is the reference C implementation of its authors, vendored unchanged in
-[`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) and used by both the native tool and the
-browser package. Version 0.3.0 was the last release to implement suite 2.
+The cipher, native Argon2 and the protections of secrets come from the crate
+[mhfe-core](https://github.com/hobby-eng/mhfe_core), pinned to one version in `Cargo.toml`. Argon2
+is the reference C implementation of its authors, unchanged: the native tool compiles the copy
+inside that crate, and the browser package the one vendored in
+[`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md). Version 0.3.0 was the last release to
+implement suite 2.
 
-On x86-64 the Argon2 code is compiled twice: with SSE2, which every 64-bit x86 processor has, and
-with SSSE3, which is 7 to 10% faster in the [measurements](docs/measurements/README.md). The program
-checks the processor and runs the SSSE3 copy only where SSSE3 is present, so it also runs on older
-AMD processors and on virtual machines that hide SSSE3. Both copies give byte for byte the same
-results, and the tests run both.
+On x86-64 mhfe-core compiles the Argon2 code twice: with SSE2, which every 64-bit x86 processor has,
+and with SSSE3, which is 7 to 10% faster in the [measurements](docs/measurements/README.md). The
+program checks the processor and runs the SSSE3 copy only where SSSE3 is present, so it also runs on
+older AMD processors and on virtual machines that hide SSSE3. Both copies give byte for byte the
+same results, and the tests of mhfe-core run both.
 
 The Rust source is licensed under MIT; see [`LICENSE`](LICENSE).
 
