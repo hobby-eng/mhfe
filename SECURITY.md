@@ -160,8 +160,8 @@ Never include a real seed phrase, password, private key or wallet file.
   its own, with only inactive loopback and no external routes; where the system allows no user
   namespaces it runs on without one. Its summary says "isolated network, no new sockets or file
   writes" with the namespace and "no new sockets or file writes" without it.
-- On macOS a sandbox refuses to bind or connect a socket, and the summary says "no network". Files
-  are not restricted.
+- On macOS a sandbox refuses network access and file writes, except for the terminal and
+  `/dev/null`, and the summary says "no network or file writes".
 - On Windows the access lists of the process and its threads keep programs of the same user from
   opening them to read or change them, and a command runs at low integrity, which refuses writes to
   the user's files and registry. Low-integrity folders and volumes without access control, such as
