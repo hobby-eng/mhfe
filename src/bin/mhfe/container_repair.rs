@@ -8,11 +8,12 @@ use std::io;
 use anstream::eprintln;
 use clap::Args;
 use mhfe::memory::LockedText;
-use mhfe::repair::{self, ContainerReading, Repaired};
+use mhfe::repair::{self, ContainerReading};
 use mhfe::search::DECOY_SCAN_GAP;
 use mhfe::wallet::SearchLimits;
 use mhfe::word_hints::WordList;
 use mhfe::ContainerFacts;
+use mhfe_core::repair::{Card, Repaired};
 use mhfe_core::{Password, WorkFactor};
 
 use crate::choice::{self, Answer, Question};
@@ -68,10 +69,7 @@ fn count_help() -> String {
 
 /// The numbers of repair words a card has, as text: "2, 4, 6 or 8".
 fn count_list() -> String {
-    let counts: Vec<String> = repair::REPAIR_WORD_COUNTS
-        .iter()
-        .map(ToString::to_string)
-        .collect();
+    let counts: Vec<String> = Card::SIZES.iter().map(ToString::to_string).collect();
     style::or_list(&counts)
 }
 
@@ -386,10 +384,10 @@ fn repair_with_card(
             break repaired;
         }
     };
-    if repaired.changes.is_empty() {
+    if repaired.changes().next().is_none() {
         style::ok(NOTHING_TO_REPAIR);
         return Ok(Some(Reviewed::as_typed(LockedText::copy_of(
-            &repaired.container,
+            repaired.container().as_str(),
         ))));
     }
     if input.is_script() {
@@ -403,7 +401,7 @@ fn repair_with_card(
         }
     }
     Ok(Some(Reviewed {
-        words: LockedText::copy_of(&repaired.container),
+        words: LockedText::copy_of(repaired.container().as_str()),
         repaired: Some(format!(
             "{}, with its repair words",
             repaired_parts(&repaired)
@@ -427,11 +425,11 @@ fn show_repaired(repaired: &Repaired) {
             HEADING,
             format!(
                 "Repaired container phrase, {} words",
-                repaired.container.split(' ').count()
+                repaired.container().words()
             )
         )
     );
-    for line in style::boxed_words(&repaired.container) {
+    for line in style::boxed_words(repaired.container().as_str()) {
         eprintln!("{}", *line);
     }
     report_changes(repaired);
@@ -551,7 +549,7 @@ pub fn ask_count(input: &mut Input, offer_none: bool) -> Result<Option<usize>, F
     // The recommended count first, then the others in order, each with what it repairs.
     let counts: Vec<usize> = std::iter::once(repair::RECOMMENDED_REPAIR_WORDS)
         .chain(
-            repair::REPAIR_WORD_COUNTS
+            Card::SIZES
                 .into_iter()
                 .filter(|&count| count != repair::RECOMMENDED_REPAIR_WORDS),
         )
@@ -688,14 +686,14 @@ const CARD_WORDS_PER_ROW: usize = 4;
 /// became, as a terminal and a script show it.
 fn report_changes(repaired: &Repaired) {
     style::ok(what_was_repaired(repaired));
-    for change in &repaired.changes {
-        let place = if change.on_card { "card" } else { "word" };
-        let read = change.read.as_deref().unwrap_or("unreadable");
+    for change in repaired.changes() {
+        let place = if change.on_card() { "card" } else { "word" };
+        let read = change.read().unwrap_or("unreadable");
         eprintln!(
             "  {} {} → {}",
-            paint(MUTED, format!("{place} {:>2}", change.position)),
+            paint(MUTED, format!("{place} {:>2}", change.position())),
             paint(MUTED, format!("{read:<10}")),
-            paint(STRONG, &change.word)
+            paint(STRONG, change.word())
         );
     }
 }
@@ -719,8 +717,8 @@ fn repaired_parts(repaired: &Repaired) -> String {
         }
     };
     let parts: Vec<String> = [
-        part(&repaired.container_words, "container phrase"),
-        part(&repaired.card_words, "card"),
+        part(&repair::positions(repaired, false), "container phrase"),
+        part(&repair::positions(repaired, true), "card"),
     ]
     .into_iter()
     .flatten()
@@ -734,18 +732,21 @@ mod tests {
 
     #[test]
     fn the_repaired_words_are_listed_plainly() {
-        let repaired = |container: Vec<usize>, card: Vec<usize>| Repaired {
-            container: String::new(),
-            container_words: container,
-            card_words: card,
-            changes: Vec::new(),
+        let container = [vec!["abandon"; 23], vec!["art"]].concat();
+        let card = repair::repair_words(&container.join(" "), 4).unwrap();
+        let repaired = |words: &[usize], on_card: &[usize]| {
+            let mut written = container.clone();
+            let mut read: Vec<&str> = card.split(' ').collect();
+            words.iter().for_each(|&word| written[word - 1] = "?");
+            on_card.iter().for_each(|&word| read[word - 1] = "?");
+            repair::repair(&written.join(" "), &read.join(" ")).unwrap()
         };
         assert_eq!(
-            what_was_repaired(&repaired(vec![3], vec![])),
+            what_was_repaired(&repaired(&[3], &[])),
             "Repaired word 3 of the container phrase."
         );
         assert_eq!(
-            what_was_repaired(&repaired(vec![3, 9, 17], vec![2])),
+            what_was_repaired(&repaired(&[3, 9, 17], &[2])),
             "Repaired words 3, 9 and 17 of the container phrase and word 2 of the card."
         );
     }

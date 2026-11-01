@@ -58,7 +58,7 @@ pub(crate) struct CapacityJson {
 /// What every card repairs, by the library's [`crate::repair::capacity`].
 #[cfg(any(feature = "browser-core", feature = "browser-repair"))]
 pub(crate) fn repair_capacities() -> Vec<CapacityJson> {
-    crate::repair::REPAIR_WORD_COUNTS
+    mhfe_core::repair::Card::SIZES
         .iter()
         .map(|&count| {
             let (unreadable, wrong) = crate::repair::capacity(count);

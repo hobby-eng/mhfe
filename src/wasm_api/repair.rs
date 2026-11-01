@@ -1,13 +1,12 @@
 //! The repair module: the repair words of a container and the repair of a damaged container phrase
 //! (MHFE-REPAIR-1), and its self-check. No Argon2 and no secret: a container alone reveals nothing.
 
+use mhfe_core::repair::Card;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 use super::{js_error, json, repair_capacities, run_self_check, whole_number, CapacityJson};
-use crate::repair::{
-    self, ContainerReading, Repaired, PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS,
-};
+use crate::repair::{self, ContainerReading, PROFILE, RECOMMENDED_REPAIR_WORDS};
 use crate::self_check::sets;
 use crate::wallet::master_fingerprint_text;
 
@@ -27,7 +26,7 @@ pub fn repair_parameters() -> Result<String, JsError> {
     json(&RepairParameters {
         version: env!("CARGO_PKG_VERSION"),
         profile: PROFILE,
-        repair_word_counts: REPAIR_WORD_COUNTS,
+        repair_word_counts: Card::SIZES,
         recommended_repair_words: RECOMMENDED_REPAIR_WORDS,
         repair_capacities: repair_capacities(),
     })
@@ -58,11 +57,11 @@ pub fn repair_words(container: &str, count: f64) -> Result<String, JsError> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ChangeJson<'a> {
+struct ChangeJson {
     on_card: bool,
     position: usize,
-    read: Option<&'a str>,
-    word: &'a str,
+    read: Option<&'static str>,
+    word: &'static str,
 }
 
 #[derive(Serialize)]
@@ -73,9 +72,9 @@ struct RepairedJson<'a> {
     /// wallet's, but a way to tell this container from another.
     container_fingerprint: String,
     unchanged: bool,
-    container_words: &'a [usize],
-    card_words: &'a [usize],
-    changes: Vec<ChangeJson<'a>>,
+    container_words: Vec<usize>,
+    card_words: Vec<usize>,
+    changes: Vec<ChangeJson>,
 }
 
 /// Repairs a container from its container phrase and card words as read, `?` for a word that cannot
@@ -84,24 +83,25 @@ struct RepairedJson<'a> {
 /// that the card belongs to the container phrase, which only a rehearsal against the wallet does.
 #[wasm_bindgen(js_name = repairContainer)]
 pub fn repair_container(written: &str, card: &str) -> Result<String, JsError> {
-    let repaired: Repaired = repair::repair(written, card).map_err(js_error)?;
-    let fingerprint = master_fingerprint_text(&repaired.container, "").map_err(js_error)?;
+    let repaired = repair::repair(written, card).map_err(js_error)?;
+    let container = repaired.container().as_str();
+    let fingerprint = master_fingerprint_text(container, "").map_err(js_error)?;
+    let changes: Vec<ChangeJson> = repaired
+        .changes()
+        .map(|change| ChangeJson {
+            on_card: change.on_card(),
+            position: change.position(),
+            read: change.read(),
+            word: change.word(),
+        })
+        .collect();
     json(&RepairedJson {
-        container: &repaired.container,
+        container,
         container_fingerprint: fingerprint,
-        unchanged: repaired.changes.is_empty(),
-        container_words: &repaired.container_words,
-        card_words: &repaired.card_words,
-        changes: repaired
-            .changes
-            .iter()
-            .map(|change| ChangeJson {
-                on_card: change.on_card,
-                position: change.position,
-                read: change.read.as_deref(),
-                word: &change.word,
-            })
-            .collect(),
+        unchanged: changes.is_empty(),
+        container_words: repair::positions(&repaired, false),
+        card_words: repair::positions(&repaired, true),
+        changes,
     })
 }
 

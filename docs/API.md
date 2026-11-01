@@ -238,15 +238,13 @@ let outcome: CheckOutcome =
   Reed–Solomon code over GF(2^11) whose symbols are the numbers of the BIP39 words, and
   `repair(written, card)` repairs a container phrase from its words as read and its repair words as
   read, `?` or a word outside the list marking an unreadable one. It repairs `2e + s <= k` damaged
-  words, `e` wrong and `s` unreadable, without the password, and returns the container with the
-  positions it repaired (`Repaired`). When no repair within that bound passes the BIP39 checksum it
-  gives `REPAIR_NOT_POSSIBLE`. More damage, or a card of another container phrase, usually ends so,
-  but can also give another container that passes the checksum: a repair does not show that the card
-  belongs to the container phrase or that the container is the original seed phrase; only a
-  rehearsal against the wallet does. `repair_words` reads its card back before it gives it out: the
-  container phrase and the card must form a codeword, and the card must restore as many of the
-  container phrase's first words as it has words when they are unreadable (`INTERNAL_ERROR`
-  otherwise). The module documentation gives the code byte for byte.
+  words, `e` wrong and `s` unreadable, without the password, and returns
+  `mhfe_core::repair::Repaired`, the container and every word it repaired, whose positions
+  `positions(&repaired, on_card)` lists. When no repair within that bound passes the BIP39 checksum
+  it gives `REPAIR_NOT_POSSIBLE`. More damage, or a card of another container phrase, usually ends
+  so, but can also give another container that passes the checksum: a repair does not show that the
+  card belongs to the container phrase or that the container is the original seed phrase; only a
+  rehearsal against the wallet does. `mhfe_core::repair` gives the code byte for byte.
   `ContainerReading::read(written)` says what a container phrase as typed is before anything is
   computed with it: `Container` as it stands; `Marked { unreadable }`, words typed as `?` (the
   `UNREADABLE` mark), with every unreadable word from 1, for which a front end asks for the repair

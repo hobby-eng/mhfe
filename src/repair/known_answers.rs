@@ -6,6 +6,8 @@
 //! (vectors/profiles/README.md) or was computed by an independent Python implementation of the
 //! profile, written from its description, which first reproduced every published card.
 
+use mhfe_core::repair::Card;
+
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
@@ -229,7 +231,7 @@ impl RepairWordsCheck {
     }
 
     fn cards(row: &CardRow) -> Result<(), String> {
-        for (count, card) in super::REPAIR_WORD_COUNTS.into_iter().zip(row.cards) {
+        for (count, card) in Card::SIZES.into_iter().zip(row.cards) {
             let words = super::repair_words(row.container, count).map_err(stopped)?;
             expect(words == card, "gives other words")?;
         }
@@ -254,12 +256,12 @@ impl RepairWordsCheck {
                 let repaired = result.map_err(stopped)?;
                 let expected: Vec<&str> = case.container.split_whitespace().collect();
                 expect(
-                    repaired.container == expected.join(" "),
+                    repaired.container().as_str() == expected.join(" "),
                     "gives another container phrase",
                 )?;
                 expect(
-                    repaired.container_words == container_words
-                        && repaired.card_words == card_words,
+                    super::positions(&repaired, false) == container_words
+                        && super::positions(&repaired, true) == card_words,
                     "repairs other words",
                 )
             }

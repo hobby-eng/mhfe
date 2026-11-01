@@ -9,6 +9,7 @@
 //! sides of the work (SELF_CHECK_FAILED otherwise), which also covers the optimized code a browser
 //! makes of a long-running loop.
 
+use mhfe_core::repair::Card;
 use mhfe_core::{Password, Suite, WorkFactor};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -23,7 +24,7 @@ use crate::engine::{BrowserArgon2Check, BrowserArgon2SizesCheck};
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, Sealed, Stage, StageCallback, WalletPassphrase};
 use crate::rekey::{ConfirmedPhrase, Rekey};
-use crate::repair::{PROFILE as REPAIR_PROFILE, RECOMMENDED_REPAIR_WORDS, REPAIR_WORD_COUNTS};
+use crate::repair::{PROFILE as REPAIR_PROFILE, RECOMMENDED_REPAIR_WORDS};
 use crate::search::{ContainerSearch, Found, DECOY_SCAN_GAP};
 use crate::self_check::{sets, ComponentCheck, SelfCheck};
 use crate::self_test::{SelfTest, SelfTestFault};
@@ -71,7 +72,7 @@ pub fn suite_parameters() -> Result<String, JsError> {
         highest_browser_memory_level: HIGHEST_BROWSER_MEMORY_LEVEL,
         word_counts: WORD_COUNTS,
         built_in_check_word_counts: &BUILT_IN_CHECK_WORD_COUNTS,
-        repair_word_counts: REPAIR_WORD_COUNTS,
+        repair_word_counts: Card::SIZES,
         recommended_repair_words: RECOMMENDED_REPAIR_WORDS,
         hidden_wallet_refusals: &HiddenWallets::KEEPS_SESSION_OPEN,
         repair_capacities: repair_capacities(),

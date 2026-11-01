@@ -693,7 +693,7 @@ idealized checksum model, eight repair words leave roughly `2^168` checksum-vali
 true container nor bypass its MHFE password, but the card is still a partial copy and needs the
 same protection. The repair words use the optional Reed–Solomon profile
 [MHFE-REPAIR-1](https://github.com/hobby-eng/mhfe-spec#optional-repair-words-mhfe-repair-1) of the
-specification; [`src/repair.rs`](src/repair.rs) describes it byte for byte.
+specification, which gives it byte for byte.
 
 ### `mhfe self-test`
 
