@@ -39,9 +39,10 @@ use std::io::{self, Read};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use mhfe::memory::{LockedBytes, LockedText};
+use mhfe::memory::LockedText;
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
 use mhfe::word_hints::WordList;
+use mhfe_core::protect::Secret;
 use zeroize::Zeroizing;
 
 use crate::exit::Failure;
@@ -377,22 +378,17 @@ fn edit_line(
     screen: Option<&mut LineScreen>,
     content: Content,
 ) -> Result<Option<LockedText>, Failure> {
-    use crate::terminal::LINE_CAPACITY;
-
-    let mut closed = false;
     // Locked before anything is typed into it: the line may be a password or a phrase.
-    let line = LockedBytes::build(LINE_CAPACITY, |line| {
-        closed = LineEditor::new(screen, content, line).edit(reader)?;
-        Ok::<(), Failure>(())
-    })?;
+    let mut line = Secret::with_capacity(crate::terminal::LINE_CAPACITY);
+    let closed = LineEditor::new(screen, content, &mut line).edit(reader)?;
     crate::terminal::note_unlocked(line.is_locked());
     if closed {
         return Ok(None);
     }
     // In the same buffer, under the same lock.
-    match line.into_text() {
-        Ok(text) => Ok(Some(text)),
-        Err(_) => Err(Failure::invalid_input(
+    match LockedText::from_secret(line) {
+        Some(text) => Ok(Some(text)),
+        None => Err(Failure::invalid_input(
             "The answer is not valid UTF-8 text.",
         )),
     }
@@ -402,7 +398,7 @@ fn edit_line(
 struct LineEditor<'e, 's> {
     screen: Option<&'e mut LineScreen<'s>>,
     content: Content,
-    line: &'e mut Vec<u8>,
+    line: &'e mut Secret,
     /// Every character of the line as it was taken: its bytes, so that a removal takes off exactly
     /// those, also of bytes that are not UTF-8, and whether it was shown, as only those are taken
     /// off the screen.
@@ -412,11 +408,7 @@ struct LineEditor<'e, 's> {
 }
 
 impl<'e, 's> LineEditor<'e, 's> {
-    fn new(
-        screen: Option<&'e mut LineScreen<'s>>,
-        content: Content,
-        line: &'e mut Vec<u8>,
-    ) -> Self {
+    fn new(screen: Option<&'e mut LineScreen<'s>>, content: Content, line: &'e mut Secret) -> Self {
         Self {
             screen,
             content,
@@ -433,7 +425,7 @@ impl<'e, 's> LineEditor<'e, 's> {
         let mut byte = Zeroizing::new([0u8; 1]);
         loop {
             match reader.read(&mut byte[..]) {
-                Ok(0) if self.line.is_empty() => return Ok(true),
+                Ok(0) if self.line.as_bytes().is_empty() => return Ok(true),
                 Ok(0) => return self.end(),
                 Ok(_) => {}
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
@@ -443,14 +435,14 @@ impl<'e, 's> LineEditor<'e, 's> {
             match (byte[0], words) {
                 (b'\r' | b'\n', _) => return self.end(),
                 // The first bytes of a character that has not arrived whole go without a trace.
-                (BACKSPACE | DELETE, _) if self.complete < self.line.len() => {
+                (BACKSPACE | DELETE, _) if self.complete < self.line.as_bytes().len() => {
                     self.line.truncate(self.complete)
                 }
                 (BACKSPACE | DELETE, _) => self.remove(1)?,
                 (CTRL_U, _) => self.remove(self.entries.len())?,
                 (CTRL_W, Some(_)) => self.remove(self.last_word())?,
                 (TAB, Some(list)) => self.complete_word(list)?,
-                (CTRL_D, _) if self.line.is_empty() => return Ok(true),
+                (CTRL_D, _) if self.line.as_bytes().is_empty() => return Ok(true),
                 (other, _) => self.push(other)?,
             }
         }
@@ -468,13 +460,12 @@ impl<'e, 's> LineEditor<'e, 's> {
     /// character, and the hint follows.
     fn push(&mut self, byte: u8) -> Result<(), Failure> {
         use crate::terminal::LINE_CAPACITY;
-        if self.line.len() == LINE_CAPACITY {
+        if self.line.push(&[byte]).is_err() {
             return Err(Failure::invalid_input(format!(
                 "An answer is longer than {LINE_CAPACITY} bytes; no valid answer is that long."
             )));
         }
-        self.line.push(byte);
-        match std::str::from_utf8(&self.line[self.complete..]) {
+        match std::str::from_utf8(&self.line.as_bytes()[self.complete..]) {
             Ok(character) => {
                 let shown = !character.chars().any(not_shown);
                 if let (true, Some(screen)) = (shown, self.screen.as_mut()) {
@@ -495,9 +486,9 @@ impl<'e, 's> LineEditor<'e, 's> {
     fn take(&mut self, shown: bool) {
         // A character has at most four bytes, and an invalid sequence is taken at its first
         // invalid byte, so the count fits.
-        let bytes = (self.line.len() - self.complete) as u8;
+        let bytes = (self.line.as_bytes().len() - self.complete) as u8;
         self.entries.push(Entry { bytes, shown });
-        self.complete = self.line.len();
+        self.complete = self.line.as_bytes().len();
     }
 
     /// Removes the last `characters` whole characters, and from the screen those it showed. A
@@ -512,21 +503,22 @@ impl<'e, 's> LineEditor<'e, 's> {
             let Some(entry) = self.entries.pop() else {
                 break;
             };
-            let start = self.line.len() - usize::from(entry.bytes);
+            let start = self.line.as_bytes().len() - usize::from(entry.bytes);
             if entry.shown {
                 taken_off += 1;
-                mark_taken_off |= std::str::from_utf8(&self.line[start..])
+                mark_taken_off |= std::str::from_utf8(&self.line.as_bytes()[start..])
                     .is_ok_and(|character| typed_line::text_cells(character) == 0);
             }
             self.line.truncate(start);
         }
-        self.complete = self.line.len();
+        self.complete = self.line.as_bytes().len();
         if let (Some(screen), true) = (self.screen.as_mut(), taken_off > 0) {
             if mark_taken_off {
-                let cell = last_cell(self.line, &self.entries);
+                let line = self.line.as_bytes();
+                let cell = last_cell(line, &self.entries);
                 screen.remove(taken_off + cell.len())?;
                 for &(start, end) in cell.iter().rev() {
-                    if let Ok(character) = std::str::from_utf8(&self.line[start..end]) {
+                    if let Ok(character) = std::str::from_utf8(&line[start..end]) {
                         screen.add(character)?;
                     }
                 }
@@ -539,7 +531,7 @@ impl<'e, 's> LineEditor<'e, 's> {
 
     /// How many characters Ctrl+W deletes: the spaces at the end and the word before them.
     fn last_word(&self) -> usize {
-        let Ok(text) = std::str::from_utf8(&self.line[..self.complete]) else {
+        let Ok(text) = std::str::from_utf8(&self.line.as_bytes()[..self.complete]) else {
             return 0;
         };
         let without_spaces = text.trim_end();
@@ -552,10 +544,10 @@ impl<'e, 's> LineEditor<'e, 's> {
 
     /// Adds what Tab completes of the last word from `list`, and a space once the word is whole.
     fn complete_word(&mut self, list: WordList) -> Result<(), Failure> {
-        if self.complete < self.line.len() {
+        if self.complete < self.line.as_bytes().len() {
             return Ok(());
         }
-        let Ok(text) = std::str::from_utf8(&self.line[..self.complete]) else {
+        let Ok(text) = std::str::from_utf8(&self.line.as_bytes()[..self.complete]) else {
             return Ok(());
         };
         let completion = list.completion(text);
@@ -569,7 +561,8 @@ impl<'e, 's> LineEditor<'e, 's> {
     fn show_hint(&mut self) -> Result<(), Failure> {
         if let Some(screen) = self.screen.as_mut() {
             // A line that is not UTF-8 gets no hint.
-            let text = std::str::from_utf8(&self.line[..self.complete]).unwrap_or_default();
+            let text =
+                std::str::from_utf8(&self.line.as_bytes()[..self.complete]).unwrap_or_default();
             screen.hint(text)?;
         }
         Ok(())
@@ -1347,6 +1340,6 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(&*line, "pass word");
-        assert_eq!(line.is_locked(), cfg!(unix));
+        assert_eq!(line.is_locked(), cfg!(any(unix, windows)));
     }
 }

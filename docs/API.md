@@ -393,14 +393,13 @@ let outcome: CheckOutcome =
   - `Argon2Key { round }`: the recorded input gave another key, so the fault lies in Argon2id;
   - `AfterArgon2`: every input and key was as published, so the fault lies after the last Argon2id
     call of an operation, in its last mask and state update or in writing the result.
-- `memory::LockedText` and `memory::LockedBytes` hold a secret text and secret bytes in memory that
-  is locked (`mlock`) before anything is written into it and unlocked only after it is wiped,
-  natively on Unix; Windows and the browser lock nothing. `build(capacity, fill)` reserves the
-  buffer at its final size, locks it and lets `fill` write into it, so that a `fill` that fails
-  leaves its bytes wiped while still locked; `copy_of` copies into such a buffer, `is_locked()` says
-  whether the system locked it, and `LockedBytes::into_text` turns bytes into text in the same
-  buffer under the same lock. `memory::LockedPages` is the lock under one buffer, for a holder of
-  its own.
+- `memory::LockedText` holds a secret text in a `mhfe_core::protect::Secret`: memory that is locked
+  before anything is written into it and unlocked only after it is wiped, natively; the browser
+  locks nothing. `build(capacity, fill)` reserves the buffer at its final size and lets `fill` write
+  into it with `push` and `push_str`, so that a `fill` that fails leaves it wiped, and a text that
+  outgrows its buffer panics. `copy_of` copies into such a buffer, `from_secret` turns a line a
+  front end read into a `Secret` into text in the same buffer, or `None` when it is not UTF-8, and
+  `is_locked()` says whether the system locked it.
 - `mhfe_core::Phrase::from_entropy(entropy)` gives the English phrase of 16 to 32 bytes of entropy
   that a program drew itself, in a buffer of the core that is wiped when dropped.
 - `check_phrase`, `read_phrase` and `check_container` validate input before any work, so a program
@@ -592,7 +591,7 @@ The parts, by identifier and label, and what each compares:
   source check is known to refuse a stuck source and the spread test a narrow one. Full: the live
   source through `check_source` and `check_spread`; not run without one.
 - `memory-locking`, "Locked memory": passed when memory locks, a warning when the system refuses,
-  not available in WebAssembly and outside Unix.
+  not available in WebAssembly.
 
 The Argon2 checks are closed: their inputs are private constants, they take no cost and no password
 and give only an outcome, so they cannot encrypt anything. The core's `Argon2Engine` takes its cost

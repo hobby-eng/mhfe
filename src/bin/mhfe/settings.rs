@@ -408,14 +408,11 @@ fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
 fn locked_memory_text(outcome: ComponentOutcome, lock_limit: Option<u64>) -> String {
     match outcome {
         ComponentOutcome::Passed => "kept in locked memory, out of swap".to_owned(),
-        ComponentOutcome::Failed(_) | ComponentOutcome::Warning(_) => {
+        _ => {
             let limit = lock_limit
                 .map(|bytes| format!(" (lock limit {})", byte_size(bytes)))
                 .unwrap_or_default();
             paint(WARNING, format!("! not locked, may reach swap{limit}"))
-        }
-        ComponentOutcome::NotAvailable(_) | ComponentOutcome::NotRun(_) => {
-            paint(MUTED, "not locked on this system")
         }
     }
 }
@@ -533,7 +530,6 @@ mod tests {
         for outcome in [
             ComponentOutcome::Passed,
             ComponentOutcome::Warning("refused".to_owned()),
-            ComponentOutcome::NotAvailable("Windows".to_owned()),
         ] {
             // A limit as long as one can be written.
             let text = locked_memory_text(outcome, Some(1023 << 20));

@@ -310,7 +310,9 @@ fn written_form(typed: &str) -> Option<(LockedText, Correction)> {
             if index > 0 {
                 text.push(' ');
             }
-            text.extend(word.chars().map(|letter| letter.to_ascii_lowercase()));
+            for letter in word.chars() {
+                text.push(letter.to_ascii_lowercase());
+            }
         }
         Ok(())
     });

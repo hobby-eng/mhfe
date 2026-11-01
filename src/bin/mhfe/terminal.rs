@@ -11,9 +11,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use anstream::{eprint, eprintln};
-use mhfe::memory::{LockedBytes, LockedText};
+use mhfe::memory::LockedText;
 use mhfe::word_hints::WordList;
 use mhfe::{ContainerFacts, MhfeError, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe_core::protect::Secret;
 use mhfe_core::{Password, Suite};
 use zeroize::Zeroizing;
 
@@ -30,8 +31,7 @@ use crate::settings::Operation;
 use crate::style::{self, paint, ACCENT, MUTED, STRONG};
 
 /// Longest line accepted, line break included: the library's typed-line buffer, which its
-/// memory-locking check probes. The buffer is reserved at this size and reading stops there, so
-/// it is never reallocated, which would leave an unwiped copy of a secret behind.
+/// memory-locking check probes. The buffer holds this much and reading stops there.
 pub(crate) const LINE_CAPACITY: usize = mhfe::memory::TYPED_LINE_BYTES;
 
 /// Says once, when a typed line's buffer could not be locked, that what is typed may reach swap:
@@ -427,51 +427,48 @@ fn read_script_line(lines: &mut raw_io::Stdin, prompt: &str) -> Result<LockedTex
 /// byte at a time, so that nothing after it is taken from the input and kept elsewhere
 /// (raw_io.rs).
 fn read_bounded_line(reader: &mut impl Read) -> Result<Option<LockedText>, Failure> {
-    let mut ended = false;
     // Locked before anything is read into it: a script's line may be a password or a phrase.
-    let line = LockedBytes::build(LINE_CAPACITY, |line| {
-        let mut byte = Zeroizing::new([0u8; 1]);
-        while line.len() < LINE_CAPACITY && line.last() != Some(&b'\n') {
-            match reader.read(&mut byte[..]) {
-                Ok(0) => break,
-                Ok(_) => line.push(byte[0]),
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-                Err(error) => return Err(Failure::from(error)),
-            }
+    let mut line = Secret::with_capacity(LINE_CAPACITY);
+    let mut byte = Zeroizing::new([0u8; 1]);
+    while line.as_bytes().len() < LINE_CAPACITY && line.as_bytes().last() != Some(&b'\n') {
+        match reader.read(&mut byte[..]) {
+            Ok(0) => break,
+            Ok(_) => line.push(&byte[..])?,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(Failure::from(error)),
         }
-        if line.last() != Some(&b'\n') && line.len() == LINE_CAPACITY {
-            // The line break counts towards LINE_CAPACITY, so the answer itself may have one byte
-            // less.
-            return Err(Failure::invalid_input(format!(
-                "An answer is longer than {} bytes; no valid answer is that long.",
-                LINE_CAPACITY - 1
-            )));
-        }
-        ended = line.is_empty();
-        strip_line_ending(line);
-        Ok(())
-    })?;
+    }
+    if line.as_bytes().last() != Some(&b'\n') && line.as_bytes().len() == LINE_CAPACITY {
+        // The line break counts towards LINE_CAPACITY, so the answer itself may have one byte
+        // less.
+        return Err(Failure::invalid_input(format!(
+            "An answer is longer than {} bytes; no valid answer is that long.",
+            LINE_CAPACITY - 1
+        )));
+    }
+    let ended = line.as_bytes().is_empty();
+    strip_line_ending(&mut line);
     note_unlocked(line.is_locked());
     if ended {
         return Ok(None);
     }
     // In the same buffer, under the same lock.
-    match line.into_text() {
-        Ok(text) => Ok(Some(text)),
-        Err(_) => Err(Failure::invalid_input(
+    match LockedText::from_secret(line) {
+        Some(text) => Ok(Some(text)),
+        None => Err(Failure::invalid_input(
             "The answer is not valid UTF-8 text.",
         )),
     }
 }
 
 /// Removes only the line break. Spaces are part of a password and are never trimmed.
-fn strip_line_ending(line: &mut Vec<u8>) {
-    if line.last() == Some(&b'\n') {
-        line.pop();
-        if line.last() == Some(&b'\r') {
-            line.pop();
-        }
-    }
+fn strip_line_ending(line: &mut Secret) {
+    let line_break = match line.as_bytes() {
+        [.., b'\r', b'\n'] => 2,
+        [.., b'\n'] => 1,
+        _ => 0,
+    };
+    line.truncate(line.as_bytes().len() - line_break);
 }
 
 /// Prints a phrase to standard output. For a person: in a frame, numbered, for comparing with
@@ -1016,9 +1013,10 @@ mod tests {
 
     #[test]
     fn only_the_line_break_is_removed() {
-        let mut line = b"  pass word \r\n".to_vec();
+        let mut line = Secret::with_capacity(16);
+        line.push(b"  pass word \r\n").unwrap();
         strip_line_ending(&mut line);
-        assert_eq!(line, b"  pass word ");
+        assert_eq!(line.as_bytes(), b"  pass word ");
     }
 
     #[test]

@@ -75,10 +75,9 @@ Never include a real seed phrase, password, private key or wallet file.
   phrase's state while it is computed, the random bytes and word numbers a phrase or password is
   drawn from, the BIP39 seed for an address, a fingerprint or the wallet check and the keys derived
   from it, each round's Argon2 key, salt and mask, the lines of the frame a phrase is shown in at a
-  terminal, and buffers inside dependencies. The system locks whole pages, and one page may hold
-  several secrets, so the tool counts the secrets on each page and unlocks it only after the last
-  of them is wiped. This is best effort, natively on Linux and macOS; nothing is locked in a
-  browser or on Windows.
+  terminal, and buffers inside dependencies. The system locks whole pages, so each of these buffers
+  has pages of its own. This is best effort, natively on Linux, macOS and Windows; nothing is
+  locked in a browser.
   The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
   can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
   area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap in memory
@@ -146,8 +145,8 @@ Never include a real seed phrase, password, private key or wallet file.
 Argon2 is the reference C implementation, vendored unchanged (see
 [`vendor/phc-winner-argon2.md`](vendor/phc-winner-argon2.md)). All unsafe Rust code of the library
 is in one module, `src/engine/ffi.rs`; the rest of the library denies it (`#![deny(unsafe_code)]`).
-The engine module also makes the calls that lock secrets in memory and keep the work area out of
-core dumps (`mlock`, `madvise`). The command-line tool denies unsafe code too, except in
+mhfe-core makes the calls that lock secrets in memory and keep the work area out of core dumps
+(`mlock`, `madvise`). The command-line tool denies unsafe code too, except in
 `src/bin/mhfe/protect.rs`, which forbids core dumps (`setrlimit`, `prctl`), routes Ctrl+\\ and
 Ctrl+Z to the Ctrl+C handler (`sigaction`, `raise`), isolates a command (seccomp through `prctl`,
 Landlock, a network namespace through `unshare`), and reads each protection back by asking for it
