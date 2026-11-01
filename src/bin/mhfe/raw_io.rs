@@ -5,15 +5,16 @@
 //! freed, wiped or locked, so they would keep a typed password, a pasted phrase, the next answer of
 //! a script or a phrase shown for as long as the tool runs (RUST-13). Here every byte goes straight
 //! between the descriptor and the caller's buffer, which is locked and wiped where it holds a
-//! secret (mhfe::memory). clippy.toml refuses `io::stdin` and `io::stdout` everywhere else.
+//! secret (mhfe::memory): a read through this module, a write through the core's `write_secret`.
+//! clippy.toml refuses `io::stdin` and `io::stdout` everywhere else.
 //!
 //! On Windows a console is read and written in UTF-16, as the standard library does, through
 //! buffers that are wiped when dropped; any other handle, such as a pipe, as it is.
 
 #![allow(
     unsafe_code,
-    reason = "reading and writing a descriptor needs the operating system's calls, which Rust \
-              offers only through unsafe foreign functions"
+    reason = "reading a descriptor needs the operating system's calls, which Rust offers only \
+              through unsafe foreign functions"
 )]
 #![allow(
     clippy::disallowed_methods,
@@ -23,6 +24,8 @@
 
 use std::fmt;
 use std::io::{self, IsTerminal, Write};
+
+use mhfe_core::protect::write_secret;
 
 /// Whether standard input is a terminal.
 pub fn input_is_terminal() -> bool {
@@ -50,7 +53,10 @@ struct Stdout;
 
 impl Write for Stdout {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        platform::write(bytes)
+        // `write_line` formats text, and anstream cuts text only between characters.
+        let text = std::str::from_utf8(bytes).map_err(|_| io::ErrorKind::InvalidData)?;
+        write_secret(text)?;
+        Ok(bytes.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -97,19 +103,12 @@ mod platform {
             usize::try_from(read).map_err(|_| io::Error::last_os_error())
         }
     }
-
-    pub fn write(bytes: &[u8]) -> io::Result<usize> {
-        // SAFETY: `bytes` is valid for reads of its length.
-        let written =
-            unsafe { libc::write(libc::STDOUT_FILENO, bytes.as_ptr().cast(), bytes.len()) };
-        usize::try_from(written).map_err(|_| io::Error::last_os_error())
-    }
 }
 
 #[cfg(windows)]
 mod platform {
     use std::fs::File;
-    use std::io::{self, Read, Write};
+    use std::io::{self, Read};
     use std::mem::ManuallyDrop;
     use std::os::windows::io::FromRawHandle;
     use std::ptr;
@@ -118,8 +117,7 @@ mod platform {
         GetLastError, SetLastError, ERROR_OPERATION_ABORTED, HANDLE,
     };
     use windows_sys::Win32::System::Console::{
-        GetConsoleMode, GetStdHandle, ReadConsoleW, WriteConsoleW, CONSOLE_MODE, STD_INPUT_HANDLE,
-        STD_OUTPUT_HANDLE,
+        GetConsoleMode, GetStdHandle, ReadConsoleW, CONSOLE_MODE, STD_INPUT_HANDLE,
     };
     use zeroize::Zeroizing;
 
@@ -207,42 +205,6 @@ mod platform {
             }
             return Ok(read as usize);
         }
-    }
-
-    pub fn write(bytes: &[u8]) -> io::Result<usize> {
-        // SAFETY: a plain console call.
-        let handle = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
-        if !is_console(handle) {
-            return standard_file(handle).write(bytes);
-        }
-        let text = std::str::from_utf8(bytes).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "a console takes only UTF-8 text",
-            )
-        })?;
-        // Reserved at its largest size, so that it never grows and leaves no unwiped copy.
-        let mut units = Zeroizing::new(Vec::with_capacity(text.len()));
-        units.extend(text.encode_utf16());
-        let mut rest = &units[..];
-        while !rest.is_empty() {
-            let mut written = 0u32;
-            // SAFETY: `rest` is valid for reads of its length in UTF-16 units.
-            let done = unsafe {
-                WriteConsoleW(
-                    handle,
-                    rest.as_ptr(),
-                    rest.len() as u32,
-                    &mut written,
-                    ptr::null(),
-                )
-            };
-            if done == 0 {
-                return Err(io::Error::last_os_error());
-            }
-            rest = &rest[written as usize..];
-        }
-        Ok(bytes.len())
     }
 
     fn is_console(handle: HANDLE) -> bool {
