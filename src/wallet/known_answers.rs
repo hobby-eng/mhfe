@@ -336,8 +336,8 @@ impl Bip32Check {
             hex::decode(case.seed).map_err(|_| "the built-in cases are damaged".to_owned())?;
         let master = ExtendedKey::from_hmac(b"Bitcoin seed", &[&seed]).map_err(stopped)?;
         expect(
-            hex::encode(&master.key[..]) == case.master_key
-                && hex::encode(&master.chain_code[..]) == case.master_chain_code,
+            hex::encode(master.key()) == case.master_key
+                && hex::encode(master.chain_code()) == case.master_chain_code,
             "gives another master key",
         )?;
         if !case.master_fingerprint.is_empty() {
@@ -350,8 +350,7 @@ impl Bip32Check {
         }
         let key = master.derive(case.path).map_err(stopped)?;
         expect(
-            hex::encode(&key.key[..]) == case.key
-                && hex::encode(&key.chain_code[..]) == case.chain_code,
+            hex::encode(key.key()) == case.key && hex::encode(key.chain_code()) == case.chain_code,
             "gives another key",
         )?;
         if !case.public_key.is_empty() {

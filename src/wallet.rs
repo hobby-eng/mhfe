@@ -32,6 +32,7 @@ use k256::elliptic_curve::point::AffineCoordinates;
 use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::elliptic_curve::PrimeField;
 use k256::{FieldBytes, ProjectivePoint, Scalar};
+use mhfe_core::protect::Secret;
 use mhfe_core::wallet_check::Seed;
 use sha2::{Digest, Sha256, Sha512};
 use sha3::Keccak256;
@@ -1055,10 +1056,14 @@ fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
         .into()
 }
 
-/// A BIP32 extended private key. Both halves are wiped when dropped.
+/// The bytes of a chain code and of a private key, each half of an HMAC-SHA512 output (BIP32).
+const CHAIN_CODE_BYTES: usize = 32;
+const PRIVATE_KEY_BYTES: usize = 32;
+
+/// A BIP32 extended private key in pages of its own: the chain code, then the key, as BIP32
+/// serializes them, so that a child key can replace the key at the end of the buffer.
 struct ExtendedKey {
-    key: Zeroizing<[u8; 32]>,
-    chain_code: Zeroizing<[u8; 32]>,
+    secret: Secret,
 }
 
 impl ExtendedKey {
@@ -1085,18 +1090,23 @@ impl ExtendedKey {
             mac.update(part);
         }
         let mut digest = mac.finalize().into_bytes();
-        let mut extended = Self {
-            key: Zeroizing::new([0u8; 32]),
-            chain_code: Zeroizing::new([0u8; 32]),
-        };
-        extended.key.copy_from_slice(&digest[..32]);
-        extended.chain_code.copy_from_slice(&digest[32..]);
+        let mut secret = Secret::with_capacity(CHAIN_CODE_BYTES + PRIVATE_KEY_BYTES);
+        secret.push(&digest[PRIVATE_KEY_BYTES..])?;
+        secret.push(&digest[..PRIVATE_KEY_BYTES])?;
         digest.zeroize();
-        Ok(extended)
+        Ok(Self { secret })
+    }
+
+    fn chain_code(&self) -> &[u8] {
+        &self.secret.as_bytes()[..CHAIN_CODE_BYTES]
+    }
+
+    fn key(&self) -> &[u8] {
+        &self.secret.as_bytes()[CHAIN_CODE_BYTES..]
     }
 
     fn derive(&self, path: &[u32]) -> Result<Self, MhfeError> {
-        let mut key = self.clone_key();
+        let mut key = self.clone_key()?;
         for &index in path {
             key = key.child(index)?;
         }
@@ -1107,30 +1117,30 @@ impl ExtendedKey {
     fn child(&self, index: u32) -> Result<Self, MhfeError> {
         let index_bytes = index.to_be_bytes();
         let mut child = if index >= HARDENED {
-            Self::from_hmac(&self.chain_code[..], &[&[0u8], &self.key[..], &index_bytes])?
+            Self::from_hmac(self.chain_code(), &[&[0u8], self.key(), &index_bytes])?
         } else {
-            Self::from_hmac(&self.chain_code[..], &[&self.public_key()?, &index_bytes])?
+            Self::from_hmac(self.chain_code(), &[&self.public_key()?, &index_bytes])?
         };
         // The child key is IL + parent key (mod n). BIP32 declares the key at this index invalid
         // when IL is not below n or the sum is zero, which happens with probability below 2^-127,
         // and wallets then use the next index. This tool reports it instead of silently checking a
         // different index than the path says.
-        let tweak = parse_scalar(&child.key)?;
+        let tweak = child.scalar()?;
         let sum = Zeroizing::new(*tweak + *self.scalar()?);
         if bool::from(sum.is_zero()) {
             return Err(MhfeError::Internal(format!(
                 "BIP32 has no valid key at index {index} of this path; wallets use the next index"
             )));
         }
-        child
-            .key
-            .copy_from_slice(&Zeroizing::new(sum.to_repr())[..]);
+        // A Secret has no mutable slice: IL is cut, which wipes it, and the sum takes its place.
+        child.secret.truncate(CHAIN_CODE_BYTES);
+        child.secret.push(&Zeroizing::new(sum.to_repr())[..])?;
         Ok(child)
     }
 
     /// The private key as a scalar, wiped when dropped like every scalar binding here.
     fn scalar(&self) -> Result<Zeroizing<Scalar>, MhfeError> {
-        parse_scalar(&self.key)
+        parse_scalar(self.key())
     }
 
     /// The public point `k*G` of the private key `k`.
@@ -1158,16 +1168,16 @@ impl ExtendedKey {
             .map_err(|_| MhfeError::Internal("a public key is not 65 bytes".to_owned()))
     }
 
-    fn clone_key(&self) -> Self {
-        Self {
-            key: self.key.clone(),
-            chain_code: self.chain_code.clone(),
-        }
+    fn clone_key(&self) -> Result<Self, MhfeError> {
+        let mut secret = Secret::with_capacity(self.secret.capacity());
+        secret.push(self.secret.as_bytes())?;
+        Ok(Self { secret })
     }
 }
 
-fn parse_scalar(bytes: &[u8; 32]) -> Result<Zeroizing<Scalar>, MhfeError> {
-    let mut repr = FieldBytes::from(*bytes);
+fn parse_scalar(bytes: &[u8]) -> Result<Zeroizing<Scalar>, MhfeError> {
+    let mut repr = FieldBytes::default();
+    repr.copy_from_slice(bytes);
     let scalar = Option::<Scalar>::from(Scalar::from_repr(repr)).map(Zeroizing::new);
     repr.zeroize();
     scalar.ok_or_else(|| MhfeError::Internal("BIP32 produced a key out of range".to_owned()))
@@ -1614,9 +1624,11 @@ mod tests {
     /// phrase in practice, so they are made up here: zero, and the group order n.
     #[test]
     fn invalid_bip32_keys_are_errors() {
-        let with_key = |key: [u8; 32]| ExtendedKey {
-            key: Zeroizing::new(key),
-            chain_code: Zeroizing::new([7u8; 32]),
+        let with_key = |key: [u8; 32]| {
+            let mut secret = Secret::with_capacity(CHAIN_CODE_BYTES + PRIVATE_KEY_BYTES);
+            secret.push(&[7u8; CHAIN_CODE_BYTES]).unwrap();
+            secret.push(&key).unwrap();
+            ExtendedKey { secret }
         };
         // secp256k1 group order n (SEC 2).
         let order: [u8; 32] =

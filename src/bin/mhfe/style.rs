@@ -5,12 +5,13 @@
 //! in the Windows console. Only the standard sixteen terminal colours are used, so every colour
 //! scheme shows them. Results for scripts never carry colour.
 
+use std::convert::Infallible;
 use std::fmt::{Display, Write};
 use std::path::Path;
 
 use anstream::{eprint, eprintln};
 use anstyle::{AnsiColor, Style};
-use zeroize::Zeroizing;
+use mhfe::memory::LockedText;
 
 use crate::exit::capitalize;
 use crate::flow::{self, Kind};
@@ -51,7 +52,7 @@ fn list<T: AsRef<str>>(items: &[T], conjunction: &str) -> String {
 }
 
 /// `text` in `style`. For public text only: the result is an ordinary string, which is not
-/// wiped. Secret words are painted by [`boxed_words`].
+/// wiped. Secret words are painted into [`locked_rows`].
 pub fn paint(style: Style, text: impl Display) -> String {
     format!("{style}{text}{style:#}")
 }
@@ -447,37 +448,53 @@ const CELL_GAP: usize = 3;
 /// Characters inside the frame: four cells, three gaps and one space on either side.
 const INNER_WIDTH: usize = WORDS_PER_ROW * CELL_WIDTH + (WORDS_PER_ROW - 1) * CELL_GAP + 2;
 
-/// A phrase in a frame, numbered, four words to a row, the numbers grey and the words bold.
-/// The lines are wiped when dropped, because the words may be secret.
-pub fn boxed_words(phrase: &str) -> Vec<Zeroizing<String>> {
+/// Bytes reserved for each row of [`locked_rows`], colour codes included: more than any row takes,
+/// the borders of the frame too.
+const ROW_BYTES: usize = 512;
+
+/// A text of up to `rows` rows that `fill` writes, for rows that may hold secret words. They share
+/// one locked buffer, as a buffer for each row would take a page of its own.
+pub fn locked_rows(rows: usize, fill: impl FnOnce(&mut LockedText)) -> LockedText {
+    let Ok(text) = LockedText::build::<Infallible>(rows * ROW_BYTES, |text| {
+        fill(text);
+        Ok(())
+    });
+    text
+}
+
+/// A phrase in a frame, numbered, four words to a row, the numbers grey and the words bold, a
+/// line of the text for each row.
+pub fn boxed_words(phrase: &str) -> LockedText {
     let border = "─".repeat(INNER_WIDTH);
-    let mut lines = vec![Zeroizing::new(paint(MUTED, format!("┌{border}┐")))];
     let words: Vec<&str> = phrase.split(' ').collect();
-    for (row, chunk) in words.chunks(WORDS_PER_ROW).enumerate() {
-        // Reserved generously so that writing never reallocates and leaves a copy behind.
-        let mut line = Zeroizing::new(String::with_capacity(512));
-        let mut visible = 1;
-        line.push_str(&paint(MUTED, "│"));
-        line.push(' ');
-        for (column, word) in chunk.iter().enumerate() {
-            if column > 0 {
-                line.push_str(&" ".repeat(CELL_GAP));
-                visible += CELL_GAP;
+    let rows = words.chunks(WORDS_PER_ROW);
+    // Two more for the top and the bottom of the frame.
+    locked_rows(rows.len() + 2, |text| {
+        text.push_str(&paint(MUTED, format!("┌{border}┐")));
+        text.push('\n');
+        for (row, chunk) in rows.enumerate() {
+            let mut visible = 1;
+            text.push_str(&paint(MUTED, "│"));
+            text.push(' ');
+            for (column, word) in chunk.iter().enumerate() {
+                if column > 0 {
+                    text.push_str(&" ".repeat(CELL_GAP));
+                    visible += CELL_GAP;
+                }
+                let number = row * WORDS_PER_ROW + column + 1;
+                // Writing into a locked text cannot fail.
+                let _ = write!(
+                    text,
+                    "{MUTED}{number:>3}.{MUTED:#} {STRONG}{word:<8}{STRONG:#}"
+                );
+                visible += CELL_WIDTH;
             }
-            let number = row * WORDS_PER_ROW + column + 1;
-            // Writing into a String cannot fail.
-            let _ = write!(
-                line,
-                "{MUTED}{number:>3}.{MUTED:#} {STRONG}{word:<8}{STRONG:#}"
-            );
-            visible += CELL_WIDTH;
+            text.push_str(&" ".repeat(INNER_WIDTH - visible));
+            text.push_str(&paint(MUTED, "│"));
+            text.push('\n');
         }
-        line.push_str(&" ".repeat(INNER_WIDTH - visible));
-        line.push_str(&paint(MUTED, "│"));
-        lines.push(line);
-    }
-    lines.push(Zeroizing::new(paint(MUTED, format!("└{border}┘"))));
-    lines
+        text.push_str(&paint(MUTED, format!("└{border}┘")));
+    })
 }
 
 /// Cells of a progress bar: two for each of the 12 rounds of a stage.
@@ -636,7 +653,8 @@ mod tests {
     fn every_line_of_the_frame_has_the_same_width() {
         let phrase = "abandon ability able about above absent absorb abstract absurd abuse access \
                       accident";
-        let lines = boxed_words(phrase);
+        let framed = boxed_words(phrase);
+        let lines: Vec<&str> = framed.lines().collect();
         assert_eq!(lines.len(), 5);
         let widths: Vec<usize> = lines
             .iter()
@@ -647,7 +665,7 @@ mod tests {
             "{widths:?}"
         );
         assert_eq!(
-            plain(&lines[1]),
+            plain(lines[1]),
             "│   1. abandon      2. ability      3. able         4. about    │"
         );
     }

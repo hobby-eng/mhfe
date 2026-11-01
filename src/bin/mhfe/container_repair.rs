@@ -3,6 +3,7 @@
 //! from the container phrase, repair it when words rust away, are scratched or were copied wrongly,
 //! without the password and without Argon2.
 
+use std::fmt::Write as _;
 use std::io;
 
 use anstream::eprintln;
@@ -429,8 +430,8 @@ fn show_repaired(repaired: &Repaired) {
             )
         )
     );
-    for line in style::boxed_words(repaired.container().as_str()) {
-        eprintln!("{}", *line);
+    for line in style::boxed_words(repaired.container().as_str()).lines() {
+        eprintln!("{line}");
     }
     report_changes(repaired);
 }
@@ -657,23 +658,28 @@ pub fn print_card(words: &str, input: &Input) -> io::Result<()> {
         paint(HEADING, "Repair card"),
         paint(STRONG, repair::PROFILE)
     );
-    for row in words
-        .split(' ')
-        .enumerate()
-        .collect::<Vec<_>>()
-        .chunks(CARD_WORDS_PER_ROW)
-    {
-        let cells: Vec<String> = row
-            .iter()
-            .map(|(index, word)| {
-                format!(
-                    "{} {}",
-                    paint(MUTED, format!("{:>3}/{count}", index + 1)),
-                    paint(STRONG, format!("{word:<8}"))
-                )
-            })
-            .collect();
-        println!(" {}", cells.join("  "))?;
+    let numbered: Vec<_> = words.split(' ').enumerate().collect();
+    let rows = numbered.chunks(CARD_WORDS_PER_ROW);
+    let card = style::locked_rows(rows.len(), |text| {
+        for row in rows {
+            for (index, word) in row {
+                let gap = if index % CARD_WORDS_PER_ROW == 0 {
+                    " "
+                } else {
+                    "  "
+                };
+                let number = index + 1;
+                // Writing into a locked text cannot fail.
+                let _ = write!(
+                    text,
+                    "{gap}{MUTED}{number:>3}/{count}{MUTED:#} {STRONG}{word:<8}{STRONG:#}"
+                );
+            }
+            text.push('\n');
+        }
+    });
+    for row in card.lines() {
+        println!("{row}")?;
     }
     style::hint("Write it on a card as shown, and keep the card apart from the container phrase.");
     Ok(())
@@ -686,15 +692,22 @@ const CARD_WORDS_PER_ROW: usize = 4;
 /// became, as a terminal and a script show it.
 fn report_changes(repaired: &Repaired) {
     style::ok(what_was_repaired(repaired));
-    for change in repaired.changes() {
-        let place = if change.on_card() { "card" } else { "word" };
-        let read = change.read().unwrap_or("unreadable");
-        eprintln!(
-            "  {} {} → {}",
-            paint(MUTED, format!("{place} {:>2}", change.position())),
-            paint(MUTED, format!("{read:<10}")),
-            paint(STRONG, change.word())
-        );
+    let changes = style::locked_rows(repaired.changes().count(), |text| {
+        for change in repaired.changes() {
+            let place = if change.on_card() { "card" } else { "word" };
+            let position = change.position();
+            let read = change.read().unwrap_or("unreadable");
+            let word = change.word();
+            // Writing into a locked text cannot fail.
+            let _ = writeln!(
+                text,
+                "  {MUTED}{place} {position:>2}{MUTED:#} {MUTED}{read:<10}{MUTED:#} → \
+                 {STRONG}{word}{STRONG:#}"
+            );
+        }
+    });
+    for row in changes.lines() {
+        eprintln!("{row}");
     }
 }
 

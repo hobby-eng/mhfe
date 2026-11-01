@@ -5,6 +5,7 @@
 //! was, and the browser build locks nothing. Argon2's work area is locked only where the limit on
 //! locked memory holds all of it; the program warns when swap is not encrypted.
 
+use std::fmt;
 use std::ops::Deref;
 
 use mhfe_core::protect::Secret;
@@ -67,6 +68,15 @@ impl LockedText {
     /// The size of the buffer, which never changes.
     pub fn capacity(&self) -> usize {
         self.text.capacity()
+    }
+}
+
+/// Lets `write!` format into the text, where `format!` would leave a copy behind. What it writes
+/// must fit, as for [`LockedText::push_str`].
+impl fmt::Write for LockedText {
+    fn write_str(&mut self, text: &str) -> fmt::Result {
+        self.push_str(text);
+        Ok(())
     }
 }
 

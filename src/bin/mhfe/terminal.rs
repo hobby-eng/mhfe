@@ -478,8 +478,8 @@ pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> io::Result<(
     if input.is_script() {
         return println!("{phrase}");
     }
-    for line in style::boxed_words(phrase) {
-        println!("{}", *line)?;
+    for line in style::boxed_words(phrase).lines() {
+        println!("{line}")?;
     }
     eprintln!("{}", paint(MUTED, "On one line, for copying:"));
     println!("{phrase}")?;

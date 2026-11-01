@@ -20,7 +20,6 @@ use mhfe::search::{ContainerSearch, Found, DECOY_SCAN_GAP, MAX_MISSING_FOR_WALLE
 use mhfe::wallet::SearchLimits;
 use mhfe::{estimated_seconds, MhfeError, Reference};
 use mhfe_core::{Mhfe, NativeArgon2, Password, WorkFactor};
-use zeroize::Zeroizing;
 
 use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE};
 use crate::choice::{self, Answer, Question};
@@ -212,10 +211,6 @@ fn ask_scan_gap(input: &mut Input) -> Result<u32, Failure> {
     );
     Ok(gap)
 }
-
-/// Room for one found word in its line: "word 24: ", a BIP39 word of at most 8 letters, the
-/// colour codes around it and ", ", so that the line never grows past its buffer.
-const FOUND_WORD_BYTES: usize = 64;
 
 /// The gaps offered, in the order of [`gap_answers`]; the last answer types any other, as
 /// `--scan-gap` gives one.
@@ -494,22 +489,22 @@ fn use_found(
             )
         )
     );
-    for line in style::boxed_words(&found.container) {
-        eprintln!("{}", *line);
+    for line in style::boxed_words(&found.container).lines() {
+        eprintln!("{line}");
     }
-    // Written into one buffer reserved at its final size and wiped when dropped: the words are
-    // container words (AUD-017-SEC001).
-    let mut places = Zeroizing::new(String::with_capacity(found.words.len() * FOUND_WORD_BYTES));
-    for (index, (position, word)) in found.words.iter().enumerate() {
-        if index > 0 {
-            places.push_str(", ");
+    // The words are container words (AUD-017-SEC001).
+    let places = style::locked_rows(found.words.len(), |places| {
+        for (index, (position, word)) in found.words.iter().enumerate() {
+            if index > 0 {
+                places.push_str(", ");
+            }
+            // Writing into a locked text cannot fail.
+            let _ = write!(places, "word {position}: {STRONG}{word}{STRONG:#}");
         }
-        // Writing into a String cannot fail.
-        let _ = write!(places, "word {position}: {STRONG}{word}{STRONG:#}");
-    }
+    });
     // Not style::ok, which keeps its line for the summary on the main screen: the words found
     // stay on this private screen.
-    eprintln!("{} Found {}, {how}.", paint(GOOD, style::TICK), *places);
+    eprintln!("{} Found {}, {how}.", paint(GOOD, style::TICK), &*places);
     let answers = found_answers();
     let question = Question {
         text: "Use the found container phrase?",
