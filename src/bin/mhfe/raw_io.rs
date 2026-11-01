@@ -121,8 +121,8 @@ mod platform {
     };
     use zeroize::Zeroizing;
 
-    /// A console is read in UTF-16 and handed on as UTF-8. A read into a buffer too small for any
-    /// character takes one, and the bytes that did not fit wait here.
+    /// A console is read one UTF-16 character at a time and handed on as UTF-8. The bytes of a
+    /// character that did not fit a read wait here.
     #[derive(Default)]
     pub struct Reader {
         pending: Zeroizing<[u8; 4]>,
@@ -138,11 +138,8 @@ mod platform {
                 return standard_file(handle).read(buffer);
             }
             if self.start == self.end {
-                if buffer.len() >= self.pending.len() {
-                    return read_characters(handle, buffer);
-                }
                 self.start = 0;
-                self.end = read_characters(handle, &mut self.pending[..])?;
+                self.end = read_character(handle, &mut self.pending)?;
             }
             let count = buffer.len().min(self.end - self.start);
             buffer[..count].copy_from_slice(&self.pending[self.start..self.start + count]);
@@ -151,18 +148,14 @@ mod platform {
         }
     }
 
-    /// Reads what the console has, up to what fits `buffer` of at least four bytes, into it as
-    /// UTF-8, as the standard library does; 0 at the end of the input. A key's escape sequence thus
-    /// comes whole. A character outside the Basic Multilingual Plane comes as two UTF-16 units;
-    /// half of one is refused, as by the standard library.
-    fn read_characters(handle: HANDLE, buffer: &mut [u8]) -> io::Result<usize> {
-        // A unit takes at most three bytes in UTF-8 and a pair of them four, so the pair of a
-        // last unit read still fits.
-        let mut units = Zeroizing::new(vec![0u16; (buffer.len() - 1) / 3 + 1]);
-        let last = units.len() - 1;
-        let mut count = read_units(handle, &mut units[..last])?;
-        if count > 0 && (0xD800..=0xDBFF).contains(&units[count - 1]) {
-            count += read_units(handle, &mut units[count..=count])?;
+    /// Reads one character into `buffer` as UTF-8 and returns its length, 0 at the end of the
+    /// input. A character outside the Basic Multilingual Plane comes as two UTF-16 units; half of
+    /// one is refused, as by the standard library.
+    fn read_character(handle: HANDLE, buffer: &mut [u8; 4]) -> io::Result<usize> {
+        let mut units = Zeroizing::new([0u16; 2]);
+        let mut count = read_units(handle, &mut units[..1])?;
+        if count > 0 && (0xD800..=0xDBFF).contains(&units[0]) {
+            count += read_units(handle, &mut units[1..])?;
         }
         let mut written = 0;
         for character in char::decode_utf16(units[..count].iter().copied()) {

@@ -195,8 +195,8 @@ fn run_list(
 }
 
 /// How soon after a question with no default answer a key counts as typed before it appeared:
-/// keys waiting in the terminal or in the standard library's buffer arrive within microseconds,
-/// while a person needs far longer than this to read the question and answer.
+/// keys waiting in the terminal arrive within microseconds, while a person needs far longer than
+/// this to read the question and answer.
 const TYPED_AHEAD: Duration = Duration::from_millis(200);
 
 /// The line that records an answer: a grey label and the answer in cyan, as a fact of a summary.

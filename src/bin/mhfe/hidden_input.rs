@@ -145,7 +145,7 @@ pub fn with_keys<T>(
     choose: impl FnOnce(&mut dyn FnMut() -> Result<Key, Failure>) -> Result<T, Failure>,
 ) -> Result<T, Failure> {
     with_terminal_switched(platform::single_keys, || {
-        let mut keys = TerminalKeys::new();
+        let mut keys = raw_io::Stdin::default();
         choose(&mut || read_key(&mut keys))
     })
 }
@@ -285,50 +285,27 @@ trait KeySource {
     fn more_within(&mut self, delay: Duration) -> Result<bool, Failure>;
 }
 
-/// The keys typed at the terminal. What a read brings from standard input waits here, so that
-/// only the operating system needs to be asked whether more is coming. Bytes still here when a
-/// choice ends are dropped with this reader: a key pressed once too often must not end up in the
-/// next answer, such as a password.
-struct TerminalKeys {
-    input: raw_io::Stdin,
-    /// Bytes read and not yet taken; wiped when dropped, as they could be typed-ahead text.
-    pending: Zeroizing<Vec<u8>>,
-    next: usize,
-}
-
-impl TerminalKeys {
-    fn new() -> Self {
-        Self {
-            input: raw_io::Stdin::default(),
-            // Reserved at the largest read, so that it is never reallocated and leaves no unwiped
-            // copy.
-            pending: Zeroizing::new(Vec::with_capacity(crate::terminal::LINE_CAPACITY)),
-            next: 0,
-        }
-    }
-}
-
-impl KeySource for TerminalKeys {
+/// The keys typed at the terminal, read one byte at a time: what follows may be typed-ahead text,
+/// which stays in the system's queue, so that no copy of it lies here. Restoring the terminal
+/// discards it when a choice ends: a key pressed once too often must not end up in the next
+/// answer, such as a password.
+impl KeySource for raw_io::Stdin {
     fn next_byte(&mut self) -> Result<Option<u8>, Failure> {
-        if self.next == self.pending.len() {
-            self.pending.resize(crate::terminal::LINE_CAPACITY, 0);
-            self.next = 0;
-            let read = loop {
-                match self.input.read(&mut self.pending) {
-                    Ok(read) => break read,
-                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(error) => return Err(error.into()),
-                }
-            };
-            self.pending.truncate(read);
+        let mut byte = Zeroizing::new([0u8; 1]);
+        loop {
+            match self.read(&mut byte[..]) {
+                Ok(0) => return Ok(None),
+                Ok(_) => return Ok(Some(byte[0])),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error.into()),
+            }
         }
-        let byte = self.pending.get(self.next).copied();
-        self.next += usize::from(byte.is_some());
-        Ok(byte)
     }
 
+    /// The system alone is asked: this follows an Escape, of one byte, and only a longer character
+    /// leaves bytes in raw_io.
     fn more_within(&mut self, delay: Duration) -> Result<bool, Failure> {
-        Ok(self.next < self.pending.len() || platform::input_within(delay)?)
+        platform::input_within(delay)
     }
 }
 
@@ -1043,9 +1020,9 @@ mod tests {
 
     /// RUST-13: a secret is read from standard input past the standard library's buffer, which
     /// would read ahead of it and keep what follows, such as the rest of a paste or a script's next
-    /// answer, for as long as the tool runs. A child process of this test reads one answer as the
-    /// tool does, a password typed at a terminal and a script's line; what follows the answer must
-    /// still wait unread on the terminal or the pipe. At the terminal it is then discarded when the
+    /// answer, for as long as the tool runs. A child process of this test reads as the tool does: a
+    /// password and then a key typed at a terminal, or a script's line; what follows must still
+    /// wait unread on the terminal or the pipe. At the terminal it is then discarded when the
     /// terminal is restored, so that it never reaches the shell.
     #[cfg(unix)]
     #[test]
@@ -1056,11 +1033,12 @@ mod tests {
 
         if let Ok(case) = std::env::var(CHILD) {
             if case == "terminal" {
-                // As read_line reads a hidden line; then, before the terminal is restored, the rest
-                // must still wait on standard input.
+                // As read_line reads a hidden line and a list a key; then, before the terminal is
+                // restored, the rest must still wait on standard input.
                 let waiting = with_terminal_switched(platform::hide, || {
                     let answer = edit_line(&mut raw_io::Stdin::default(), None, Content::Password)?;
                     assert_eq!(answer.unwrap().to_string(), "secret");
+                    assert_eq!(read_key(&mut raw_io::Stdin::default())?, Key::Enter);
                     platform::input_within(Duration::ZERO)
                 });
                 assert!(waiting.unwrap(), "what follows the answer was read ahead");
@@ -1078,7 +1056,7 @@ mod tests {
         // SAFETY: a valid termios for this terminal.
         let set = unsafe { libc::tcsetattr(pty.follower, libc::TCSANOW, &quiet) };
         assert_eq!(set, 0);
-        let typed = b"secret\rnext";
+        let typed = b"secret\r\rnext";
         // SAFETY: the bytes are valid for reads of their length.
         let written = unsafe { libc::write(pty.leader, typed.as_ptr().cast(), typed.len()) };
         assert_eq!(usize::try_from(written).unwrap(), typed.len());
