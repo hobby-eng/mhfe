@@ -355,7 +355,7 @@ mod tests {
     #[ignore = "the whole full self-test: seconds and 256 MiB"]
     fn every_part_passes_the_full_self_test() {
         let _alone = startup::one_test_at_a_time();
-        crate::protect::harden_process();
+        crate::protect::inject_report();
         let started = Instant::now();
         let report = test_every_part();
         assert!(report.passed(), "{:?}", report.first_failure());

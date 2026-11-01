@@ -5,7 +5,7 @@
 //! words. Secrets are only ever typed at a terminal or read from standard input, never taken from
 //! command-line arguments.
 // No unsafe code, except the few operating-system calls in hidden_input.rs, which switch the
-// terminal's echo off, and in protect.rs, which forbid core dumps.
+// terminal's echo off, and in protect.rs, which turn Ctrl+\ and Ctrl+Z into Ctrl+C.
 #![deny(unsafe_code)]
 
 mod cell_widths;
@@ -220,8 +220,6 @@ fn main_help() -> String {
 }
 
 fn main() {
-    // Before anything else, so that no secret can ever be in a core dump.
-    protect::harden_process();
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
     // menu, which runs the same commands, each as a process of its own that comes through the
     // other branch. --help and --version, which clap answers in Cli::try_parse, handle nothing
@@ -281,16 +279,19 @@ fn exit_unparsed(error: clap::Error) -> ! {
 /// while it has a single thread, the handler of Ctrl+C has a thread of its own, and the Argon2
 /// check at start runs on four. The handler comes before the checks, which take a moment, so that
 /// a key pressed in them ends the command as it does later. The start menu, which is no command,
-/// isolates nothing and runs the same checks before it opens (menu.rs).
+/// isolates nothing and runs the same checks but those of isolation before it opens (menu.rs).
 fn prepare(command: &Command) -> Result<(), Failure> {
-    protect::isolate(needs_of(command));
+    let (isolated, checks) = isolation_and_checks_of(command);
+    if isolated {
+        protect::enter();
+    }
     terminal::stop_on_ctrl_c();
-    startup::check(startup_checks_of(command))
+    startup::check(checks)
 }
 
-/// Which checks a command runs at its start (startup.rs). Every command is named, so that a new
-/// one must be decided here.
-fn startup_checks_of(command: &Command) -> startup::Checks {
+/// Whether a command runs isolated (protect.rs), and which checks it runs at its start
+/// (startup.rs). Every command is named, so that a new one must be decided here.
+fn isolation_and_checks_of(command: &Command) -> (bool, startup::Checks) {
     use startup::Checks;
     match command {
         Command::New(_)
@@ -301,26 +302,14 @@ fn startup_checks_of(command: &Command) -> startup::Checks {
         | Command::Wallets(_)
         | Command::Repair(_)
         | Command::RepairWords(_)
-        | Command::Password(_) => Checks::EveryPart,
+        | Command::Password(_) => (true, Checks::EveryPart),
         // It runs every check itself and reports each one.
-        Command::SelfTest(_) => Checks::Nothing,
-        // It compares a page with its SHA-256 before serving it, and handles no secret.
-        Command::Serve(_) => Checks::Hashes,
+        Command::SelfTest(_) => (true, Checks::Nothing),
+        // It compares a page with its SHA-256 before serving it to a browser it may start, which
+        // must write its profile, so it stays out of isolation; it handles no secret.
+        Command::Serve(_) => (false, Checks::Hashes),
         // It times public test data only.
-        Command::TestBenchmark(_) => Checks::Nothing,
-    }
-}
-
-/// What a command needs that isolation would otherwise forbid (protect.rs).
-fn needs_of(command: &Command) -> protect::Needs {
-    match command {
-        // The fast mode serves a page to a browser it may start, which must write its profile; it
-        // handles no secret itself.
-        Command::Serve(_) => protect::Needs {
-            network: true,
-            writes: true,
-        },
-        _ => protect::Needs::NOTHING,
+        Command::TestBenchmark(_) => (true, Checks::Nothing),
     }
 }
 
@@ -381,8 +370,9 @@ mod tests {
         }
     }
 
-    /// Every command that reads a secret checks every part first; the self-test checks them
-    /// itself, the fast mode its hashes, and the test tool none.
+    /// Every command that reads a secret runs isolated and checks every part first; the self-test
+    /// checks them itself, the fast mode, the only one out of isolation, its hashes, and the test
+    /// tool none.
     #[test]
     fn every_secret_command_checks_every_part_at_start() {
         use startup::Checks;
@@ -398,23 +388,26 @@ mod tests {
             &["password"],
         ] {
             assert_eq!(
-                startup_checks_of(&command(arguments)),
-                Checks::EveryPart,
+                isolation_and_checks_of(&command(arguments)),
+                (true, Checks::EveryPart),
                 "{arguments:?}"
             );
         }
-        assert_eq!(startup_checks_of(&command(&["self-test"])), Checks::Nothing);
         assert_eq!(
-            startup_checks_of(&command(&["self-test", "--vectors"])),
-            Checks::Nothing
+            isolation_and_checks_of(&command(&["self-test"])),
+            (true, Checks::Nothing)
         );
         assert_eq!(
-            startup_checks_of(&command(&["serve", "tool.html"])),
-            Checks::Hashes
+            isolation_and_checks_of(&command(&["self-test", "--vectors"])),
+            (true, Checks::Nothing)
         );
         assert_eq!(
-            startup_checks_of(&command(&["test-benchmark"])),
-            Checks::Nothing
+            isolation_and_checks_of(&command(&["serve", "tool.html"])),
+            (false, Checks::Hashes)
+        );
+        assert_eq!(
+            isolation_and_checks_of(&command(&["test-benchmark"])),
+            (true, Checks::Nothing)
         );
     }
 }

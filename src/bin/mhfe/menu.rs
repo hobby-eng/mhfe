@@ -72,11 +72,11 @@ impl Entry {
     }
 }
 
-/// The checks at start, then the menu; each of its commands runs them again in its own process.
-/// When a check fails, the window that a double-click opened stays until Enter, so that the failure
-/// can be read.
+/// The checks at start, then the menu; each of its commands runs them again in its own process,
+/// with those of isolation, which the menu does not enter. When a check fails, the window that a
+/// double-click opened stays until Enter, so that the failure can be read.
 pub fn start() -> Result<i32, Failure> {
-    if let Err(failure) = startup::check(startup::Checks::EveryPart) {
+    if let Err(failure) = startup::check(startup::Checks::Menu) {
         // Ctrl+C at the wait restores the terminal, which the wait switches to single keys.
         terminal::stop_on_ctrl_c();
         eprintln!();

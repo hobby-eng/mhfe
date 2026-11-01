@@ -25,6 +25,8 @@ its number chooses it at once, Ctrl+Up's 5 chooses nothing, q and a lone Escape 
 code 0 and Ctrl+C with 130. The password entry regenerates on Enter and returns on Escape/q;
 help still returns to the menu on Enter. A command of the menu is a process of its own: q in its
 list ends that command and the menu comes back, and Ctrl+C in it ends both with exit code 130.
+
+A command, started directly or from the menu, runs at low integrity, and its summary says so.
 """
 
 import json
@@ -54,6 +56,8 @@ SETTINGS_QUESTION = "Which settings should protect the phrase?"
 # The entry that shows the help, two below the password entry with mhfe self-test between: it is
 # the tenth, past the number keys, so it is reached with the arrows from the password entry.
 HELP_FROM_PASSWORD = 2
+# What the summary of an isolated command says (isolation_text in src/bin/mhfe/settings.rs).
+LOW_INTEGRITY = "low integrity"
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN = "Esc quits"
 BACK_TO_MENU = "Press Enter to return to the menu (Esc quits)."
@@ -130,6 +134,24 @@ def check_password(label, password, expected):
         assert seen == expected, f"{label}: expected {expected!r}, the tool answered {seen!r}"
     finally:
         session.close()
+
+
+def check_low_integrity():
+    """A command runs at low integrity, started directly or from the menu, and the summary it leaves
+    on Ctrl+C says so."""
+    direct = Session()
+    direct.at_password_prompt()
+    menu = Session(arguments=())
+    menu.wait_for(MENU_SHOWN)
+    menu.type(str(ENCRYPT_ENTRY))
+    menu.wait_for(SETTINGS_QUESTION)
+    menu.type(ENTER)
+    menu.wait_for("seed phrase: ")
+    for session in (direct, menu):
+        session.type(CTRL_C)
+        session.wait_for(LOW_INTEGRITY)
+        session.close()
+    print("isolation: a command, started directly or from the menu, runs at low integrity")
 
 
 def check_menu():
@@ -226,6 +248,7 @@ def main():
     assert code == CANCELLED, f"Ctrl+C: exit code {code}"
     print("cancelled: Ctrl+C at the password, exit code 130")
 
+    check_low_integrity()
     check_menu()
 
 

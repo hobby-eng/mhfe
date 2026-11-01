@@ -341,7 +341,12 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
             gray("on a current computer".into())
         ),
     );
-    if let Some(enforced) = isolation_text(crate::protect::isolation()) {
+    let isolation = crate::protect::report();
+    if let Some(enforced) = isolation_text(
+        isolation.empty_network,
+        isolation.no_new_sockets,
+        isolation.no_file_changes,
+    ) {
         style::fact("Isolation", enforced);
     }
     let locking = mhfe::memory::LockProbe::default().run(Tier::Startup);
@@ -350,18 +355,6 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         locked_memory_text(locking, crate::protect::lock_limit()),
     );
     eprintln!();
-    let refuted = crate::protect::isolation_refuted();
-    if !refuted.is_empty() {
-        // The summary above states only what the probes confirmed (protect::verify_isolation).
-        style::warn(
-            &format!(
-                "Isolation is weaker than the kernel reported: {}.",
-                refuted.names().join(", ")
-            ),
-            "",
-        );
-        eprintln!();
-    }
     if matches!(
         operation,
         Operation::Encrypt | Operation::RekeyNew | Operation::New
@@ -378,16 +371,21 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
     }
 }
 
-/// What the kernel forbids this command, for the summary; `None` where it forbids nothing, as
-/// outside Linux.
-fn isolation_text(isolation: crate::protect::Isolation) -> Option<String> {
+/// What the kernel forbids this command, for the summary; `None` where it forbids nothing.
+fn isolation_text(
+    empty_network: bool,
+    no_new_sockets: bool,
+    no_file_changes: bool,
+) -> Option<String> {
     // "New": neither boundary revokes descriptors opened before, such as a redirected standard
     // output. Each text keeps the summary line within 78 columns, its label included.
-    let forbidden = match (
-        isolation.empty_network,
-        isolation.no_network,
-        isolation.no_writes,
-    ) {
+    let forbidden = match (empty_network, no_new_sockets, no_file_changes) {
+        // No file changes on Windows is low integrity, which leaves low-integrity folders and
+        // volumes without access control writable.
+        (false, false, true) if cfg!(windows) => "low integrity, no writes to the user's files",
+        // No new sockets on macOS is a sandbox that lets a socket be made but not bound or
+        // connected.
+        (false, true, false) if cfg!(target_os = "macos") => "no network",
         (true, true, true) => "isolated network, no new sockets or file writes",
         (true, true, false) => "isolated network, no new sockets",
         (true, false, true) => "isolated network, no new file writes",
@@ -512,12 +510,7 @@ mod tests {
     fn the_isolation_line_fits_the_summary() {
         const LABEL: usize = "  Isolation  ".len();
         for bits in 0..8u8 {
-            let isolation = crate::protect::Isolation {
-                empty_network: bits & 1 != 0,
-                no_network: bits & 2 != 0,
-                no_writes: bits & 4 != 0,
-            };
-            if let Some(text) = isolation_text(isolation) {
+            if let Some(text) = isolation_text(bits & 1 != 0, bits & 2 != 0, bits & 4 != 0) {
                 assert!(LABEL + style::visible_width(&text) <= 78, "{text}");
             }
         }

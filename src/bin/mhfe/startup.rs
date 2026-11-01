@@ -19,8 +19,10 @@ use crate::{flow, readme, style};
 /// Which checks a command runs at its start.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Checks {
-    /// Every part: for every command that reads a secret, and for the menu once.
+    /// Every part: for every command that reads a secret.
     EveryPart,
+    /// Every part but the protections of the process, which the start menu does not enter.
+    Menu,
     /// The cipher's hashes alone, SHA-256 among them: for `mhfe serve`, which handles no secret
     /// but compares a page with its SHA-256 before serving it.
     Hashes,
@@ -45,6 +47,7 @@ pub fn every_part<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a>
 pub fn check(checks: Checks) -> Result<(), Failure> {
     let mut set = match checks {
         Checks::EveryPart => every_part(None),
+        Checks::Menu => sets::native(None),
         Checks::Hashes => sets::hashes(),
         Checks::Nothing => return Ok(()),
     };
@@ -213,7 +216,7 @@ mod tests {
     #[test]
     fn every_part_passes_at_start() {
         let _alone = one_test_at_a_time();
-        protect::harden_process();
+        protect::inject_report();
         let mut set = every_part(None);
         let mut seen = Vec::new();
         let report = run_named(
@@ -232,6 +235,7 @@ mod tests {
             None,
             "no part is named once the checks have ended"
         );
+        assert!(check(Checks::Menu).is_ok());
         assert!(check(Checks::Hashes).is_ok());
         assert!(check(Checks::Nothing).is_ok());
     }

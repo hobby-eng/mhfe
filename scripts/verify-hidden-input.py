@@ -30,7 +30,8 @@ again. The summary records how the check word came out and none of the words.
 A command, started directly or from the menu, runs in a network namespace with only inactive
 loopback where the system allows user namespaces. Its summary says "isolated network, no new sockets
 or file writes"; elsewhere it says "no new sockets or file writes" for seccomp and Landlock alone.
-Previously opened descriptors are not revoked by these restrictions.
+On macOS it runs in the sandbox without network, and its summary says "no network". Previously
+opened descriptors are not revoked by these restrictions.
 
 It also drives the menu that `mhfe` shows when it starts without arguments: the arrow keys and Enter
 choose an entry, its number chooses it at once, other escape sequences (Ctrl+Up) and keys do
@@ -290,13 +291,10 @@ COLOUR_CODE = rb"\x1b\[[0-9;]*m"
 # Running text is wrapped to 78 columns; a fact's label is padded to 10 (src/bin/mhfe/style.rs).
 TEXT_WIDTH, FACT_LABEL_WIDTH = 78, 10
 # The parts `mhfe self-test` tests, in the order of its report, and the mark each gets when it
-# gives its known answers or its protection holds (verdicts in src/bin/mhfe/self_test.rs). Only
-# Linux lets a program isolate itself; elsewhere the report says why there is nothing to read
-# back (IsolationCheck in src/bin/mhfe/protect.rs). Hidden input is tested only at a terminal.
+# gives its known answers or its protection holds (verdicts in src/bin/mhfe/self_test.rs). Hidden
+# input is tested only at a terminal.
 # How the self-test words a part that this system cannot test (ComponentOutcome::NotAvailable).
 NOT_AVAILABLE = "not available here: "
-ISOLATED = ("enforced" if sys.platform == "linux"
-            else NOT_AVAILABLE + "this system offers none to a program")
 SELF_TEST_PARTS = (
     ("Cipher hashes", "as published"),
     ("Argon2id", "as published"),
@@ -325,7 +323,7 @@ SELF_TEST_PARTS = (
     ("Chosen word of a new phrase", "as published"),
     ("Locked memory", "works"),
     ("Core dumps", "off"),
-    ("Isolation", ISOLATED),
+    ("Isolation", "enforced"),
     ("Hidden input", "echo off"),
 )
 # The same parts without a terminal on standard input.
@@ -724,9 +722,8 @@ def menu_command(entry, *shown):
 
 def check_empty_network():
     """A command runs in an empty network where the system allows it, started directly or from the
-    menu, and says so in its summary; elsewhere it runs on with the seccomp filter alone."""
-    if sys.platform != "linux":
-        return
+    menu, and says so in its summary; elsewhere on Linux it runs on with the seccomp filter alone,
+    and on macOS in the sandbox without network."""
     direct = Session()
     menu = menu_command(ENCRYPT_ENTRY, SETTINGS_QUESTION, LIST_SHOWN)
     try:
@@ -735,16 +732,16 @@ def check_empty_network():
     finally:
         direct.close()
         menu.close()
-    allowed = user_namespaces_allowed()
-    expected = (
-        b"isolated network, no new sockets or file writes"
-        if allowed
-        else b"Isolation  no new sockets or file writes"
-    )
+    if sys.platform == "darwin":
+        expected, state = b"Isolation  no network", "no network"
+    elif user_namespaces_allowed():
+        expected, state = b"isolated network, no new sockets or file writes", "an empty network"
+    else:
+        expected = b"Isolation  no new sockets or file writes"
+        state = "seccomp alone, as this system allows no namespace"
     for session in (direct, menu):
         shown = re.sub(CONTROL_SEQUENCE, b"", session.output)
         assert expected in shown, f"empty network: {expected!r} not in the summary"
-    state = "an empty network" if allowed else "seccomp alone, as this system allows no namespace"
     print(f"isolation: a command, started directly or from the menu, runs with {state}")
 
 
