@@ -180,8 +180,7 @@ two purposes:
   [plausible deniability](#how-it-works), every password gives an equally valid 24-word phrase, so
   the decoy holds even against someone who knows that MHFE was used, as long as the decoy wallet's
   balance and history look like those of a wallet in real use. Choose the decoy password as
-  randomly as the real one, and choose no word for the real phrase
-  ([a chosen word](#chosen-words) gives it away).
+  randomly as the real one.
 - A hidden wallet behind the one you could disclose, kept secret like your own.
   [`mhfe wallets`](#mhfe-wallets) says how to keep it hidden.
 
@@ -556,63 +555,6 @@ The check has costs:
   specification defines as an
   [optional source profile](https://github.com/hobby-eng/mhfe-spec#optional-source-profile-a-recovery-check-for-new-24-word-phrases)
   and which is still experimental. Keep a copy of this program with the container.
-
-#### Chosen words
-
-Then `mhfe new` asks whether you want to choose a word of the new phrase. We advise against it; the
-reason is below. You may choose one word, typed on the private screen, for a position from 1 to 24
-or for anywhere in the phrase. You may also name one word the phrase must never hold, or give it
-with `--never-use`. MHFE draws phrases until one meets both wishes, so every phrase that meets them
-is equally likely.
-
-Before it draws, MHFE says how many of the 256 random bits remain for someone who knows the word:
-
-- A word at a fixed position takes 11 bits, one anywhere about 6.4, the word never to use about
-  0.02.
-- At 240 bits or more, which is what the check alone leaves, the phrase still has far more than
-  enough.
-- Below 240 it is allowed but not recommended. A word at a fixed position, a word never to use and
-  the check leave 228.98 bits, the least these wishes can leave, or 244.98 without the check.
-
-A chosen word costs more than these bits once someone learns or guesses it: it lets them rule out
-almost every wrong password and tell this wallet from a decoy. Never tell anyone your chosen word.
-Choose no word for a wallet you would protect with a decoy; MHFE says so before it draws. A word
-never to use, on its own, tells too little to matter.
-
-For example, someone who has a copy of your container tries passwords on their own computer.
-Normally, every wrong password turns a 24-word container into another valid 24-word phrase, so the
-phrase itself never tells them whether a guess was right: they can only check each result against
-the blockchain, and a decoy wallet looks as genuine as the real one. Now suppose they know, or
-guess, that you put "zoo" first. They look at each decrypted phrase: a wrong password gives "zoo"
-in first place only about once in 2,048 tries, so they need to check only those few phrases against
-the blockchain, and your BIP39 passphrase no longer multiplies their work as fully as it would. A
-decoy wallet almost always gives itself away: "zoo" is not in first place. All this works only if
-they know or guess the word; if nobody knows or can guess it, the phrase stays as strong as a
-random one. The random bits MHFE states are the worst case, for someone who knows the word. But a
-word people choose themselves often means something to them and can be learned or guessed. This is
-why we advise against this mode.
-
-Why only advise against it? One known word filters out about 2,047 of 2,048 wrong passwords. The
-rest must still be checked against the blockchain, and a strong BIP39 passphrase still multiplies
-the work, though about 2,048 times less than without a chosen word. Only then does the phrase lose
-11 of its 256 bits. A decoy is another matter: someone who knows the word tells it apart about
-2,047 times in 2,048.
-
-The opposite use is possible too: with a hidden wallet behind an honest disclosure, a word you are
-known to like, placed in the wallet you would disclose, is one more sign that this is your real
-wallet; the hidden wallets are random phrases anyway. The wallet's own history remains the main
-evidence.
-
-A word chosen anywhere in the phrase tells less: a random phrase holds a given word somewhere about
-once in 85. Other programs may let you choose a word of a shorter phrase. In a 24-word container
-such a phrase has its built-in check already, so a chosen word costs only randomness there. In a
-container of the same length there is none: one known word works as a check of the password, which
-about one random phrase in 2,048 passes, and unmasks a decoy in the same way.
-
-The chosen word is part of the secret phrase: MHFE never shows it outside the private screen, and
-the summary says only whether there was one. Such a phrase is equally likely among the phrases that
-meet the wishes, not among all phrases; the specification's results assume a uniformly random
-phrase. Choosing a word is a feature of this program, not part of the specification.
 
 ### `mhfe wallets`
 

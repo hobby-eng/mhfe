@@ -28,6 +28,11 @@ builds and the CI checks of the same run go on until they end or are cancelled.
 - **Passwords follow Unicode 18.0.0,** as specification 0.7.0 does.
 - **`mhfe test-vectors` is gone.** The test vectors live in the specification's repository.
 
+## Removed
+
+- `mhfe new` no longer asks for a chosen word, and `--never-use` is gone. Every word of a new phrase
+  is random. The browser package keeps its chosen word.
+
 ## Fixed
 
 - A key pressed early no longer clears a private screen.

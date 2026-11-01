@@ -372,17 +372,8 @@ CHECK_UNMARKED_HINT = ("↑ ↓ choose · 1 or 2 at once · ? explains both\r\n"
                        "Enter selects once one is marked · Esc cancels").encode()
 CHECK_MARKED_HINT = ("↑ ↓ choose · Enter selects · 1 or 2 at once · ? explains both · "
                      "Esc cancels").encode()
-# The question of `mhfe new` about a chosen word (chosen_words.rs in the tool), what it asks on its
-# private screen, the refusal of a position the library does not take, the warnings before the draw
-# and the record of the wishes, which names no word.
-CHOSEN_ASKED = b"Do you want to choose a word of the new phrase?"
-CHOSEN_WORD_ASKED = b"Chosen word, or Enter for none"
-PLACE_ASKED = b"or Enter for anywhere: "
-NEVER_USE_ASKED = b"Word never to use, or Enter for none: "
-PLACE_REFUSED = b"the chosen word needs a"
-RECOGNISABLE = b"If someone learns or guesses your chosen word, it lets them rule out almost"
-AMPLE = b"The phrase keeps about 244 of its 256 random bits: still far more than"
-CHOSEN_RECORDED = b"Chosen     1 word, 1 never to use; about 244 random bits"
+# What `mhfe new` says of the wallet check before the draw.
+AMPLE = b"The phrase keeps about 240 of its 256 random bits: still far more than"
 # The heading of a new phrase, which a draw reaches when it ends.
 NEW_PHRASE_SHOWN = b"New seed phrase, 24 words"
 # The question of `mhfe check` about the reference, the place of "The phrase + passphrase check"
@@ -1391,42 +1382,6 @@ def check_new_check_question():
     print("new: ? explains both answers, ↓ marks the first; Escape cancels, exit code 130")
 
 
-def check_new_chosen_words():
-    """`mhfe new` asks for one chosen word on a private screen: a position the library refuses is
-    named without the word and asked again from the question; a word at the last position and a
-    word never to use keep about 244 random bits, said before the draw with the warning that the
-    word gives the wallet away. Escape at the next question cancels before anything is drawn. The
-    summary records how many words were chosen and the bits kept, never the word."""
-    session = Session(("new", "--pim", "0"))
-    session.wait_for(b"passphrase of the new wallet")
-    # No passphrase: no wallet check, so the question about a word comes next.
-    session.answer(b"\r", CHOSEN_ASKED, LIST_SHOWN)
-    session.answer(b"2", CHOSEN_WORD_ASKED)
-    session.answer(b"zoo\r", PLACE_ASKED)
-    # One word only: the words never to use come next.
-    session.answer(b"25\r", NEVER_USE_ASKED)
-    start = len(session.output)
-    session.answer(b"\r", PLACE_REFUSED, CHOSEN_ASKED, LIST_SHOWN)
-    assert b"zoo" not in session.output[start:], "new: the refusal named the word"
-    session.answer(b"2", CHOSEN_WORD_ASKED)
-    # The chosen word is hinted from the BIP39 list as it is typed.
-    session.answer(b"zo", b"zone  zoo")
-    session.answer(b"o\r", PLACE_ASKED)
-    session.answer(b"24\r", NEVER_USE_ASKED)
-    session.answer(b"abandon\r", RECOGNISABLE, AMPLE, REPAIR_ASKED, LIST_SHOWN)
-    session.answer(ESCAPE, b"Cancelled")
-    assert session.drain_until_exit(10), "new, chosen word: Escape did not end the tool"
-    code, settings = session.close()
-    assert code == CANCELLED, f"new, chosen word: Escape gave exit code {code}"
-    assert settings == session.original, "new, chosen word: terminal settings changed"
-    shown_privately("new, chosen word", session.output, b"zoo")
-    summary = session.output[session.output.rfind(LEAVE_PRIVATE):]
-    assert CHOSEN_RECORDED in summary, "new, chosen word: the wishes were not recorded"
-    assert b"zoo" not in summary, "new, chosen word: the word reached the summary"
-    print("new: one chosen word is typed privately; a wrong position is refused and asked again")
-    print("new: the bits kept and the warning are said before the draw; no word in the summary")
-
-
 def check_new_draw_shows_its_count():
     """`mhfe new` with the wallet check draws on one thread, which takes minutes, so it shows its
     count of draws on one line, and Ctrl+C ends the draw. A phrase found before the first report,
@@ -1438,9 +1393,7 @@ def check_new_draw_shows_its_count():
         session.answer(SECRET + b"\r", CHECK_ASKED, *CHECK_ANSWERS, LIST_SHOWN)
         # A list flushes what was typed before it reads keys, so each answer waits for it.
         session.idle(b"", 0.5)
-        session.answer(b"2", CHOSEN_ASKED, LIST_SHOWN)
-        session.idle(b"", 0.5)
-        session.answer(b"1", REPAIR_ASKED, LIST_SHOWN)
+        session.answer(b"2", AMPLE, REPAIR_ASKED, LIST_SHOWN)
         session.idle(b"", 0.5)
         session.answer(b"1", b"Drawing a phrase that passes the check")
         seen = session.wait_for(b"\r1,024 draws so far", NEW_PHRASE_SHOWN, limit=60)
@@ -1456,40 +1409,25 @@ def check_new_draw_shows_its_count():
 
 
 def check_quit_keys_leave_the_private_screen():
-    """Ctrl+\\ and Ctrl+Z at a visible prompt on a private screen, and SIGTERM, end `mhfe new` as
-    Ctrl+C does: the private screen with the chosen word on it is left, the terminal restored and
-    the exit code 130 (AUD-015-SEC004)."""
+    """Ctrl+\\ and Ctrl+Z at a visible prompt on a private screen, and SIGTERM, end `mhfe repair` as
+    Ctrl+C does: the private screen is left, the terminal restored and the exit code 130
+    (AUD-015-SEC004)."""
     for name, stop in (("Ctrl+\\", b"\x1c"), ("Ctrl+Z", b"\x1a"), ("SIGTERM", None)):
-        session = Session(("new", "--pim", "0"))
-        session.wait_for(b"passphrase of the new wallet")
-        session.answer(b"\r", CHOSEN_ASKED, LIST_SHOWN)
-        session.answer(b"2", CHOSEN_WORD_ASKED)
-        session.answer(b"zoo\r", PLACE_ASKED)
+        session = Session(("repair",))
+        session.wait_for(CONTAINER_ASKED)
+        session.answer(container_with({24: "?"}) + b"\r", CARD_ASKED)
+        session.answer(b"\r", SEARCH_ASKED, b"1 to 5 at once")
+        session.answer(b"1", REFERENCE_ASKED)
         if stop is None:
             session.process.send_signal(signal.SIGTERM)
         else:
             session.type(stop)
-        assert session.drain_until_exit(10), f"new, {name}: the tool did not end"
+        assert session.drain_until_exit(10), f"repair, {name}: the tool did not end"
         code, settings = session.close()
-        assert code == CANCELLED, f"new, {name}: exit code {code}"
-        assert settings == session.original, f"new, {name}: terminal settings changed"
-        shown_privately(f"new, {name}", session.output, b"zoo")
-        assert session.output.rfind(LEAVE_PRIVATE) > session.output.rfind(b"zoo"), name
-    print("new: Ctrl+\\, Ctrl+Z and SIGTERM leave the private screen and end as Ctrl+C does")
-
-
-def check_never_use_is_refused_at_start():
-    """A --never-use word the library refuses whatever word is chosen is refused before the first
-    question, with exit code 2, instead of the chosen-word question coming back again and again
-    (AUD-015-UI002)."""
-    for word in ("notaword", "abandon,zoo"):
-        result = run_plainly(("new", "--never-use", word))
-        assert result.returncode == INVALID_INPUT, f"new --never-use {word}: {result.returncode}"
-        error = result.stderr.decode()
-        assert "wishes for the new phrase cannot be used" in error, error
-        assert word.split(",")[0] not in error, f"new --never-use: the refusal named {word}"
-        assert b"Do you want to choose" not in result.stderr, "new --never-use: a question came"
-    print("new: a --never-use word the library refuses ends the tool before any question")
+        assert code == CANCELLED, f"repair, {name}: exit code {code}"
+        assert settings == session.original, f"repair, {name}: terminal settings changed"
+        assert session.output.rfind(LEAVE_PRIVATE) > session.output.rfind(ENTER_PRIVATE), name
+    print("repair: Ctrl+\\, Ctrl+Z and SIGTERM leave the private screen and end as Ctrl+C does")
 
 
 def check_wallet_check_needs_a_passphrase():
@@ -2258,9 +2196,7 @@ def main():
     check_rekey_numbered()
     check_private_reveals()
     check_new_check_question()
-    check_new_chosen_words()
     check_new_draw_shows_its_count()
-    check_never_use_is_refused_at_start()
     check_quit_keys_leave_the_private_screen()
     check_wallet_check_needs_a_passphrase()
     check_container_repair()

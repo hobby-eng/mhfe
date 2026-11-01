@@ -2,7 +2,7 @@
 //! operating system's generator. If the owner chooses, it is drawn until it passes a wallet check
 //! with the wallet's BIP39 passphrase (a draft; `mhfe::wallet_check`), so that a recovery with the
 //! passphrase recognises the right password. The owner always chooses; the check has costs, which
-//! `?` and the README state. Chosen words (`chosen_words`) are met the same way.
+//! `?` and the README state.
 
 use anstream::{eprint, eprintln};
 use clap::Args;
@@ -16,7 +16,6 @@ use mhfe_core::Suite;
 
 use crate::check;
 use crate::choice::{self, Answer, Help, Question};
-use crate::chosen_words::{self, NeverUseOption};
 use crate::container_repair::RepairWordsOption;
 use crate::encrypt;
 use crate::exit::{self, Failure, SUCCESS};
@@ -40,9 +39,6 @@ pub struct Options {
 
     #[command(flatten)]
     repair_words: RepairWordsOption,
-
-    #[command(flatten)]
-    never_use: NeverUseOption,
 }
 
 /// The top of `mhfe new --help`.
@@ -53,9 +49,7 @@ pub fn about() -> String {
          once for your wallet, and encrypts it into a container under your password. If you \
          choose, the phrase is drawn so that it passes a check with your BIP39 passphrase, \
          which lets a recovery with the passphrase recognise the right password; the check has \
-         costs, which ? explains at the question and the README states. You may also choose one \
-         of its words, which is not recommended, and a word it must never hold; \
-         mhfe new states the random bits the phrase keeps before it draws.",
+         costs, which ? explains at the question and the README states.",
     ])
 }
 
@@ -72,10 +66,6 @@ pub fn help() -> String {
                 "mhfe new --pim 1 --mem 1",
                 "Twice the passes and 3 GiB of memory",
             ),
-            (
-                "mhfe new --never-use zoo",
-                "A new phrase without the word zoo",
-            ),
         ],
         "The new phrase is shown once, on a private screen: write it down for your wallet before \
          you go on. It cannot run in a script.",
@@ -83,7 +73,6 @@ pub fn help() -> String {
 }
 
 pub fn run(options: Options) -> Result<i32, Failure> {
-    options.never_use.check()?;
     options.repair_words.check()?;
     // Every answer is a choice at the terminal; the new phrase is shown only on a private screen,
     // so the command does not start where there can be none (AUD-007-SEC001).
@@ -121,7 +110,15 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     } else {
         PhraseDraw::unchecked()
     };
-    let draw = chosen_words::ask(&mut input, draw, &options.never_use)?;
+    if checked {
+        let bits = draw.odds().random_bits.floor();
+        style::warn(
+            &format!(
+                "The phrase keeps about {bits} of its 256 random bits: still far more than enough."
+            ),
+            "",
+        );
+    }
     let repair_count = options.repair_words.choose(&mut input)?;
     // Held locked from here on; the drawn phrase is wiped at once.
     let phrase = LockedText::copy_of(draw_phrase(draw)?.phrase());
@@ -248,8 +245,8 @@ fn read_new_passphrase(input: &mut Input) -> Result<LockedText, Failure> {
 }
 
 /// A new 24-word phrase from the operating system's generator, as `draw` asks: with the wallet
-/// check, drawn on one thread until one passes it, about 65,536 BIP39 seeds and more with chosen
-/// words, which takes minutes and so shows its count. The count leaves with the step and the
+/// check, drawn on one thread until one passes it, about 65,536 BIP39 seeds, which takes minutes
+/// and so shows its count. The count leaves with the step and the
 /// summary says nothing of the draw: the specification's proof covers a generation that reveals
 /// neither the number of its trials nor its duration. The library probes the generator first.
 fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
@@ -257,13 +254,8 @@ fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
     if expected > 1 {
         flow::step();
         eprintln!();
-        let what = if draw.is_checked() {
-            "a phrase that passes the check"
-        } else {
-            "a phrase with the chosen words"
-        };
         style::hint(&format!(
-            "Drawing {what}, about {} draws.",
+            "Drawing a phrase that passes the check, about {} draws.",
             style::grouped(expected)
         ));
         eprintln!();

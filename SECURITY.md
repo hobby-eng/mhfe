@@ -26,8 +26,8 @@ Never include a real seed phrase, password, private key or wallet file.
   tool never takes secrets from command-line arguments, never writes them to files and never logs
   them. Error messages never contain a phrase, a password or any part of them.
 - A secret's prompt reads the line exactly as typed or pasted. Only Backspace, Ctrl+U, Enter, Ctrl+D
-  on an empty line and Ctrl+C keep their meaning. A line of words, such as a seed phrase, a
-  container phrase or a chosen word, is no password, so there Tab also completes the word being
+  on an empty line and Ctrl+C keep their meaning. A line of words, such as a seed phrase or a
+  container phrase, is no password, so there Tab also completes the word being
   typed as far as the words of its list agree, and Ctrl+W deletes the last word. Every other
   character, including those a terminal would usually act on (Ctrl+S, Ctrl+Q, Ctrl+V, Ctrl+Z,
   Ctrl+\\, and Ctrl+W in a password), reaches the password check, which refuses a control character

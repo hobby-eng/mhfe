@@ -428,8 +428,7 @@ otherwise), and `wallet.cancel()` stops it.
 
 `chosen` holds at most `parameters().maxChosenWords` (1) word for the new phrase, `{ word, position
 }` with `position` from 1 to 24 or `"anywhere"`, and `neverUse` at most
-`parameters().maxNeverUseWords` (1) word it must not hold. Choosing a word is not recommended
-(README, "Chosen words") and is a feature of this program, not of the specification. The chosen
+`parameters().maxNeverUseWords` (1) word it must not hold. Choosing a word is not recommended, since whoever learns it can rule out almost every wrong password and tell the wallet from a decoy, and it is a feature of this package, not of the specification. The chosen
 word is part of the secret phrase: it reaches the worker as bytes that it wipes, and no refusal
 names it. A word outside the English list, a second word of either kind or a chosen word also never
 to use is refused with `INVALID_WORD_WISH`. The phrase is drawn until it meets both wishes, so every

@@ -12,7 +12,6 @@ mod cell_widths;
 mod check;
 mod check_word;
 mod choice;
-mod chosen_words;
 mod container_repair;
 mod container_search;
 mod decrypt;
