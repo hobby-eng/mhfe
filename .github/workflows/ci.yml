@@ -84,7 +84,7 @@ jobs:
       # program: by hand only. A release runs these checks on its canonical archives (release.yml).
       - name: Check the browser package in Chrome and Firefox
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        timeout-minutes: 30
+        timeout-minutes: 60
         uses: ./.github/actions/browser-checks
 
   # The fast tests on Windows and macOS, and the hidden password input in each system's own

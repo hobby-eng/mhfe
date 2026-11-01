@@ -251,9 +251,8 @@ control of crash reports and no isolation of its own.
   worker with its Argon2 work area, the main wallet's BIP39 passphrase and the passwords used so
   far, which it needs to refuse a password used twice, until the page closes it; `close()`
   overwrites them before the worker ends, and a close while a wallet opens stops the worker at
-  once instead. A new phrase with the wallet check is drawn in several workers at once, by
-  default as many as the processor has cores, at most eight, or as many as the page asks for, each
-  from the browser's random generator (`crypto.getRandomValues`), and every worker ends with the
+  once instead. A new phrase with the wallet check is drawn in one worker, one trial after another,
+  from the browser's random generator (`crypto.getRandomValues`), and the worker ends with the
   draw.
 - A password, a BIP39 passphrase, a phrase and dice rolls given to a class are copied into UTF-8
   bytes only after the class's check at start has passed and every setting is checked. The copies

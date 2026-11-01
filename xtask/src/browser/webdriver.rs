@@ -15,8 +15,8 @@ use crate::{Failure, at};
 
 /// How long a driver may take before it says it is ready.
 const START_TIME: Duration = Duration::from_secs(30);
-/// How long one command may take: a page's script may run for its whole timeout, ten minutes.
-const COMMAND_TIME: Duration = Duration::from_secs(660);
+/// How long one command may take: a page's script may run for its whole timeout.
+const COMMAND_TIME: Duration = Duration::from_millis(super::SCRIPT_TIMEOUT_MS + 60_000);
 /// How often a starting driver is asked whether it is ready.
 const POLL_TIME: Duration = Duration::from_millis(100);
 

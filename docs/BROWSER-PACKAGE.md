@@ -411,7 +411,7 @@ const drawn = await wallet.drawPhrase({
   neverUse, // optional
   onProgress: ({ draws }) => showDraws(draws),
 });
-// drawn: { phrase, words, walletCheck, fingerprintWithPassphrase, workers }
+// drawn: { phrase, words, walletCheck, fingerprintWithPassphrase }
 ```
 
 `fingerprint()` and `walletCheck()` read the phrase as every other method does, in any letter case
@@ -421,9 +421,9 @@ passphrase that is not empty (`INVALID_WORD_COUNT`, `WALLET_CHECK_NEEDS_PASSPHRA
 `drawPhrase()` draws a new 24-word phrase from the browser's random generator. A passphrase must be
 typed twice (`PASSPHRASES_DIFFER` otherwise), and `walletCheck` must then be `true` or `false`.
 `walletCheck: true` without a passphrase is refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. A phrase
-with the wallet check takes about 65,536 draws. They are spread over `workers` workers, by default
-as many as the processor has cores, at most eight; a page may ask for 1 to 256. One phrase is drawn
-at a time (`BUSY` otherwise), and `wallet.cancel()` stops it.
+with the wallet check takes about 65,536 draws, one after another in one worker, as the
+specification's proof requires, which takes minutes. One phrase is drawn at a time (`BUSY`
+otherwise), and `wallet.cancel()` stops it.
 
 `chosen` holds at most `parameters().maxChosenWords` (1) word for the new phrase, `{ word, position
 }` with `position` from 1 to 24 or `"anywhere"`, and `neverUse` at most
@@ -476,9 +476,8 @@ The searches for missing words report `{ stage: "search", candidate, candidates 
 `searchDecoy()` at the first candidate, every 64th and the last, and `searchWallet()` with `round`
 and `rounds` of the candidate's recovery as each of its rounds starts.
 
-A new phrase reports `{ stage: "draw", draws }` instead: the draws of all its workers together,
-after every 1,024 draws of each, so in practice only a phrase with the wallet check, which takes
-about 65,536 draws, reports any.
+A new phrase reports `{ stage: "draw", draws }` instead: the draws so far, after every 1,024 draws,
+so in practice only a phrase with the wallet check, which takes about 65,536 draws, reports any.
 
 Each operation runs in a new worker, which is terminated when the operation ends; this also frees
 the 2 GiB of Argon2 memory. A worker that is still loading the WebAssembly when its operation ends

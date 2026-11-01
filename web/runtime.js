@@ -187,8 +187,8 @@ export class WorkerJob {
    * Ends the job once: `error` rejects its promise, null resolves nothing, and the worker stops.
    * A worker that is still loading the WebAssembly stops once it has loaded it, or when it fails,
    * or at the start's time limit: Firefox crashes the whole page when a worker is terminated while
-   * it loads the WebAssembly, as when every worker of a draw fails within milliseconds. Its
-   * request is answered by nobody: its messages are ignored from now on.
+   * it loads the WebAssembly. Its request is answered by nobody: its messages are ignored from now
+   * on.
    */
   stop(error) {
     if (this.#ended) return;
@@ -357,19 +357,6 @@ export class OperationSlot {
       if (this.#running === waiting) this.#running = null;
     }
     return begin();
-  }
-
-  /**
-   * Holds the slot for work the class runs itself, such as a phrase drawn on several workers at
-   * once: cancel() calls `stop(error)`. Returns the function that frees the slot when it ends.
-   */
-  hold(stop) {
-    this.requireIdle();
-    const running = { stop };
-    this.#running = running;
-    return () => {
-      if (this.#running === running) this.#running = null;
-    };
   }
 
   cancel() {
@@ -687,19 +674,15 @@ export class ModuleWorker {
     return this.#check.require(() => this.startupCheck());
   }
 
-  /** Runs an operation of the module in a worker of its own, its secret buffers transferred. */
-  run(message) {
-    return this.start(message).done;
-  }
-
   /**
-   * Starts an operation in a worker of its own, whose messages go to `handlers`, and gives the
-   * job, which can be stopped, with the promise of its result.
+   * Runs an operation of the module in a worker of its own, its secret buffers transferred. A long
+   * operation holds `slot` until it ends, and the worker's messages go to `handlers`.
    */
-  start(message, handlers = {}) {
-    const job = new WorkerJob([this.#workerSource], handlers);
+  run(message, slot = null, handlers = {}) {
+    const scripts = [this.#workerSource];
+    const job = slot === null ? new WorkerJob(scripts, handlers) : slot.job(scripts, handlers);
     const request = { module: this.#module, ...message };
-    return { job, done: job.run(request, secretBuffers(request), this.#wasm) };
+    return job.run(request, secretBuffers(request), this.#wasm);
   }
 
   /** Runs the module's set of known answers at `tier` in a worker of its own. */

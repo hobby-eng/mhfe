@@ -341,7 +341,6 @@ const lateDraw = walletClient.drawPhrase({
   passphrase: "p",
   passphraseRepeat: "p",
   walletCheck: true,
-  workers: 1,
 });
 await assert.rejects(walletClient.drawPhrase(), { code: "BUSY" });
 walletClient.cancel();

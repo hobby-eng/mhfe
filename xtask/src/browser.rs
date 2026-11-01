@@ -40,12 +40,12 @@ const FIREFOX: &str = "158.0";
 /// The pinned geckodriver.
 const GECKODRIVER: &str = "0.37.1";
 /// How long the page's script may run, in milliseconds. The page's other checks take under a
-/// minute; each of its two drawings of a phrase that passes the wallet check takes about 65,536
-/// BIP39 seeds on average, half a minute on eight workers, but the number is random: more than N
-/// times the average happens about once in e^N drawings. Ten minutes leave room for eight times
-/// the average of both together, which two drawings exceed about once in 500,000 pages
-/// (e^-16 x 17), so a page that times out has stopped, not drawn long.
-const SCRIPT_TIMEOUT_MS: u64 = 600_000;
+/// minute; its drawing of a phrase that passes the wallet check takes about 65,536 BIP39 seeds on
+/// average, one after another in one worker: two minutes on a fast computer, perhaps three on a CI
+/// runner. But the number is random: more than N times the average happens about once in e^N
+/// drawings. Half an hour leaves room for nine times three minutes, which a drawing exceeds about
+/// once in 8,000 pages (e^-9), so a page that times out has stopped, not drawn long.
+const SCRIPT_TIMEOUT_MS: u64 = 1_800_000;
 /// The folder of the page and of the drivers' logs, from the root.
 const WORK: &str = "target/browser-check";
 /// The page as the standard mode opens it, in WORK.

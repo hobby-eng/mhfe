@@ -12,8 +12,8 @@
 //! (src/mhfe.rs) and `cargo xtask package-check` check at the same cost; the same-length
 //! container must be REDUCED_COST_SAME_LENGTH_CONTAINER of src/mhfe.rs at that cost. The same
 //! wrapper stands for a browser that cannot give the memory, for one marker password and one marker
-//! container. A run takes a few minutes, mostly for the two phrases per page drawn to pass the
-//! wallet check, about 65,536 BIP39 seeds each.
+//! container. A run takes a few minutes, mostly for the phrase per page drawn to pass the wallet
+//! check, about 65,536 BIP39 seeds on one worker.
 //!
 //! What the reduced cost cannot show: a PIM above 0 (the wrapper refuses any cost but suite 3's, so
 //! the page only checks the cost the core asks for) and the self-test's verdict on the published

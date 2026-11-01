@@ -424,23 +424,19 @@ const drawing = walletClient.drawPhrase({
   passphrase: "p",
   passphraseRepeat: "p",
   walletCheck: true,
-  workers: 3,
   onProgress: ({ draws: count }) => draws.push(count),
 });
 await started();
 await new Promise((resolve) => setTimeout(resolve, 0));
 const drawWorkers = StandInWorker.started.filter((each) => !each.selfCheck);
-assert.equal(drawWorkers.length, 3, "a checked phrase is drawn on several workers");
-assert.ok(drawWorkers.every((each) => each.messages[0].module === "wallet"));
+assert.equal(drawWorkers.length, 1, "a checked phrase is drawn on one worker");
+assert.equal(drawWorkers[0].messages[0].module, "wallet");
 drawWorkers[0].reply({ type: "draws", value: 1024 });
-drawWorkers[1].reply({ type: "draws", value: 1024 });
-drawWorkers[2].reply({ type: "result", result: { phrase: "found", words: 24 } });
-assert.deepEqual(await drawing, { phrase: "found", words: 24, workers: 3 });
+drawWorkers[0].reply({ type: "draws", value: 2048 });
+drawWorkers[0].reply({ type: "result", result: { phrase: "found", words: 24 } });
+assert.deepEqual(await drawing, { phrase: "found", words: 24 });
 assert.deepEqual(draws, [1024, 2048]);
-assert.ok(
-  drawWorkers.every((each) => each.terminated),
-  "the other workers stop",
-);
+assert.ok(drawWorkers[0].terminated, "the worker stops");
 // A chosen word reaches the worker as a secret of its own, which its job wipes; its place, 0 for
 // anywhere, and the words never to use as they are. One worker draws a phrase without the check.
 const wishedDraw = walletClient.drawPhrase({
@@ -452,7 +448,7 @@ assert.equal(new TextDecoder().decode(wishWorker.messages[0].chosenWords), "zoo"
 assert.deepEqual(Array.from(wishWorker.messages[0].places), [0]);
 assert.equal(wishWorker.messages[0].neverUse, "abandon");
 wishWorker.reply({ type: "result", result: { phrase: "found", words: 24 } });
-assert.deepEqual(await wishedDraw, { phrase: "found", words: 24, workers: 1 });
+assert.deepEqual(await wishedDraw, { phrase: "found", words: 24 });
 for (
   const chosen of [
     [{ word: "zoo", position: 0 }],
@@ -523,9 +519,8 @@ assert.ok(
   "the first entry's copy is wiped when its repetition is refused",
 );
 
-// A count of workers out of range is refused before the passphrase is copied, and a worker that
-// cannot be started leaves none of this class's copies behind, stops the workers started and frees
-// the drawing for the next (AUD-012-SEC001).
+// A worker that cannot be started leaves none of this class's copies behind and frees the drawing
+// for the next (AUD-012-SEC001).
 const drawCopies = [];
 globalThis.TextEncoder = class extends RealTextEncoder {
   encode(text) {
@@ -534,41 +529,23 @@ globalThis.TextEncoder = class extends RealTextEncoder {
     return bytes;
   }
 };
-for (const workers of [2 ** 32, 257, 0, 1.5]) {
-  await assert.rejects(
-    walletClient.drawPhrase({
-      passphrase: TEST_PASSPHRASE,
-      passphraseRepeat: TEST_PASSPHRASE,
-      walletCheck: true,
-      workers,
-    }),
-    { name: "TypeError", message: "workers must be a whole number from 1 to 256." },
-  );
-}
-assert.equal(drawCopies.length, 0, "a refused count copies no passphrase");
-// The type of walletCheck and the count of workers are checked whatever the passphrase, before
-// any worker starts (AUD-015-API001).
+// The type of walletCheck is checked whatever the passphrase, before any worker starts and before
+// the passphrase is copied (AUD-015-API001).
 StandInWorker.started.length = 0;
 for (
   const [options, message] of [
     [{ walletCheck: "yes" }, "walletCheck must be true or false."],
     [{ walletCheck: 1 }, "walletCheck must be true or false."],
-    [{ workers: 0 }, "workers must be a whole number from 1 to 256."],
-    [{ workers: "many" }, "workers must be a whole number from 1 to 256."],
     [
-      {
-        passphrase: TEST_PASSPHRASE,
-        passphraseRepeat: TEST_PASSPHRASE,
-        walletCheck: false,
-        workers: -1,
-      },
-      "workers must be a whole number from 1 to 256.",
+      { passphrase: TEST_PASSPHRASE, passphraseRepeat: TEST_PASSPHRASE, walletCheck: "yes" },
+      "walletCheck must be true or false when a passphrase is given.",
     ],
   ]
 ) {
   await assert.rejects(walletClient.drawPhrase(options), { name: "TypeError", message });
 }
 assert.equal(StandInWorker.started.length, 0, "a refused draw starts no worker");
+assert.equal(drawCopies.length, 0, "a refused draw copies no passphrase");
 // A secret given as null is not one left out: only undefined takes a method's empty default, and
 // null is a TypeError, as any other type, before any copy or worker (AUD-016-API003).
 const notSecret = (name) => ({
@@ -610,37 +587,41 @@ worker.reply({
   error: { code: "WALLET_CHECK_NEEDS_PASSPHRASE", message: "the library refuses it" },
 });
 await assert.rejects(checkedWithout, { code: "WALLET_CHECK_NEEDS_PASSPHRASE" });
-const RealSlice = Uint8Array.prototype.slice;
-const passphraseBytes = new TextDecoder();
-let passphraseSlices = 0;
-Uint8Array.prototype.slice = function(...range) {
-  if (passphraseBytes.decode(this) === TEST_PASSPHRASE) {
-    passphraseSlices += 1;
-    // The third copy, the second worker's passphrase, cannot be made.
-    if (passphraseSlices === 3) throw new RangeError("no memory for the copy");
+// The browser refuses the worker of a drawing.
+globalThis.Worker = class {
+  constructor() {
+    throw new Error("refused by the stand-in");
   }
-  return RealSlice.apply(this, range);
 };
-StandInWorker.started.length = 0;
 const brokenDraw = walletClient.drawPhrase({
   passphrase: TEST_PASSPHRASE,
   passphraseRepeat: TEST_PASSPHRASE,
   walletCheck: true,
-  workers: 2,
 });
-await assert.rejects(brokenDraw, { name: "RangeError" });
-Uint8Array.prototype.slice = RealSlice;
-assert.equal(passphraseSlices, 3, "the first worker had its copies before the third failed");
-globalThis.TextEncoder = RealTextEncoder;
+await assert.rejects(brokenDraw, { code: "WORKER_FAILED" });
+globalThis.Worker = StandInWorker;
+await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(drawCopies.length, 2, "the passphrase and its repetition were encoded");
 assert.ok(
   drawCopies.every((bytes) => bytes.every((byte) => byte === 0)),
   "this class's copies are wiped when a worker cannot be started",
 );
-await new Promise((resolve) => setTimeout(resolve, 0));
+// Nor when a chosen word is refused after the passphrase was copied.
+drawCopies.length = 0;
+await assert.rejects(
+  walletClient.drawPhrase({
+    passphrase: TEST_PASSPHRASE,
+    passphraseRepeat: TEST_PASSPHRASE,
+    walletCheck: true,
+    chosen: [{ word: "\uD800", position: 1 }],
+  }),
+  { code: "INVALID_PASSWORD_TEXT" },
+);
+globalThis.TextEncoder = RealTextEncoder;
+assert.equal(drawCopies.length, 2, "the passphrase and its repetition were encoded");
 assert.ok(
-  StandInWorker.started.filter((each) => !each.selfCheck).every((each) => each.terminated),
-  "the worker started is stopped",
+  drawCopies.every((bytes) => bytes.every((byte) => byte === 0)),
+  "this class's copies are wiped when a chosen word is refused",
 );
 // Nor when the empty repetition of a drawing cannot be made, before the passphrase is copied.
 const RealUint8Array = globalThis.Uint8Array;
@@ -675,30 +656,28 @@ const afterBroken = walletClient.drawPhrase();
 await started();
 await new Promise((resolve) => setTimeout(resolve, 0));
 StandInWorker.started.at(-1).reply({ type: "result", result: { phrase: "next", words: 24 } });
-assert.deepEqual(await afterBroken, { phrase: "next", words: 24, workers: 1 });
+assert.deepEqual(await afterBroken, { phrase: "next", words: 24 });
 
-// A progress callback whose promise rejects stops every drawing worker; here the second has not
-// loaded the WebAssembly yet.
-StandInWorker.started.length = 0;
-StandInWorker.loads = false;
+// A progress callback whose promise rejects stops the drawing.
 const failingDraw = walletClient.drawPhrase({
   passphrase: "p",
   passphraseRepeat: "p",
   walletCheck: true,
-  workers: 2,
   onProgress: () => Promise.reject(new Error("the page failed")),
 });
-await started();
-await new Promise((resolve) => setTimeout(resolve, 0));
-const failingWorkers = StandInWorker.started.filter((each) => !each.selfCheck);
-failingWorkers[0].reply({ type: "draws", value: 1024 });
+const failingWorker = await started((message) => message.operation === "drawPhrase");
+failingWorker.reply({ type: "draws", value: 1024 });
 await assert.rejects(failingDraw, { code: "CALLBACK_FAILED" });
+assert.ok(failingWorker.terminated, "the worker that reported stops at once");
 // A worker that has not yet said it loaded the WebAssembly stops once it has: Firefox crashes the
-// page when a worker is terminated while it loads it, as when every worker of a draw failed at
-// once (reported by wallet-tools, 2026-10-08).
-assert.ok(failingWorkers[0].terminated, "the worker that reported stops at once");
-assert.ok(!failingWorkers[1].terminated, "a worker still loading is not terminated");
-failingWorkers[1].reply({ type: "ready", buildId: BUILD_ID });
-assert.ok(failingWorkers[1].terminated, "it stops as soon as it has loaded");
+// page when a worker is terminated while it loads it (reported by wallet-tools, 2026-10-08).
+StandInWorker.loads = false;
+const loadingDraw = walletClient.drawPhrase();
+const loadingWorker = await started((message) => message.operation === "drawPhrase");
+walletClient.cancel();
+await assert.rejects(loadingDraw, (error) => error instanceof MhfeCancelledError);
+assert.ok(!loadingWorker.terminated, "a worker still loading is not terminated");
+loadingWorker.reply({ type: "ready", buildId: BUILD_ID });
+assert.ok(loadingWorker.terminated, "it stops as soon as it has loaded");
 StandInWorker.loads = true;
 console.log("The repair, passwords and wallet classes pass their checks with a stand-in worker.");

@@ -136,8 +136,8 @@ async function checkWallet(wallet) {
 }
 
 /**
- * MhfeWallet.drawPhrase from the browser's randomness, with and without the wallet check, and
- * its workers.
+ * MhfeWallet.drawPhrase from the browser's randomness, with and without the wallet check, on one
+ * worker.
  */
 async function checkDrawPhrase(wallet) {
   const drawn = await wallet.drawPhrase();
@@ -147,9 +147,8 @@ async function checkDrawPhrase(wallet) {
   );
   expect(
     drawn.walletCheck === false
-      && drawn.workers === 1
       && drawn.fingerprintWithPassphrase === (await wallet.fingerprint({ phrase: drawn.phrase })),
-    "a phrase without a passphrase gets no wallet check, from one worker, with its fingerprint",
+    "a phrase without a passphrase gets no wallet check, with its fingerprint",
   );
   // A chosen word: its cost as the library rates it, and a phrase that meets it.
   const oneFixed = await wallet.describeDraw({
@@ -200,7 +199,6 @@ async function checkDrawPhrase(wallet) {
   });
   expect(
     withPassphrase.walletCheck === false
-      && withPassphrase.workers === 1
       && withPassphrase.fingerprintWithPassphrase
         === (await wallet.fingerprint({ phrase: withPassphrase.phrase, passphrase: "TREZOR" })),
     "a phrase with a passphrase and no check has the fingerprint with that passphrase",
@@ -225,16 +223,6 @@ async function checkDrawPhrase(wallet) {
     "WALLET_CHECK_NEEDS_PASSPHRASE",
     "the wallet check without a passphrase is refused",
   );
-  await expectTypeError(
-    wallet.drawPhrase({
-      passphrase: "TREZOR",
-      passphraseRepeat: "TREZOR",
-      walletCheck: true,
-      workers: 0,
-    }),
-    "workers must be a whole number from 1 to 256.",
-    "no workers are refused",
-  );
   // Counts the workers a drawing really starts, through the page's Worker constructor.
   const countingWorkers = async (draw) => {
     const RealWorker = globalThis.Worker;
@@ -252,17 +240,17 @@ async function checkDrawPhrase(wallet) {
     }
   };
   const { result: unchecked, workersStarted: uncheckedWorkers } = await countingWorkers(() =>
-    wallet.drawPhrase({ workers: 3 })
+    wallet.drawPhrase()
   );
   expect(
-    unchecked.walletCheck === false && unchecked.workers === 1 && uncheckedWorkers === 1,
-    "a phrase without the wallet check is drawn by one worker, whatever workers says",
+    unchecked.walletCheck === false && uncheckedWorkers === 1,
+    "a phrase without the wallet check is drawn by one worker",
   );
   return countingWorkers;
 }
 
 /**
- * MhfeWallet.drawPhrase with the wallet check: failing workers, cancellation and progress
+ * MhfeWallet.drawPhrase with the wallet check: a failing worker, cancellation and progress
  * reports.
  */
 async function checkCheckedDraws(wallet, countingWorkers) {
@@ -271,20 +259,20 @@ async function checkCheckedDraws(wallet, countingWorkers) {
     passphraseRepeat: "TREZOR",
     walletCheck: true,
   };
-  // Every worker of a checked draw failing at once, here from a random source of zeros, must
-  // not take the page down: Firefox crashed the page when a worker was terminated while it
-  // loaded the WebAssembly (reported by wallet-tools, 2026-10-08).
+  // The worker of a checked draw failing at once, here from a random source of zeros, must not
+  // take the page down: Firefox crashed the page when a worker was terminated while it loaded
+  // the WebAssembly (reported by wallet-tools, 2026-10-08).
   const zeros = new MhfeWallet({
     workerSource: 'Object.defineProperty(crypto, "getRandomValues", { value: (b) => b.fill(0) });\n'
       + WORKER_SOURCE,
     wasm: await WebAssembly.compile(bytes(WASM_BASE64)),
   });
   await expectRejection(
-    zeros.drawPhrase({ ...checkedDraw, workers: 8 }),
+    zeros.drawPhrase(checkedDraw),
     "RANDOM_FAILED",
-    "eight workers that all fail at once end the drawing with RANDOM_FAILED, the page alive",
+    "a worker that fails at once ends the drawing with RANDOM_FAILED, the page alive",
   );
-  const running = wallet.drawPhrase({ ...checkedDraw, workers: 2 });
+  const running = wallet.drawPhrase(checkedDraw);
   await expectRejection(wallet.drawPhrase(), "BUSY", "a second drawing waits for none: BUSY");
   wallet.cancel();
   await expectRejection(running, "CANCELLED", "cancel() stops a drawing");
@@ -300,17 +288,17 @@ async function checkCheckedDraws(wallet, countingWorkers) {
     && (await wallet.walletCheck({ phrase: drawnPhrase.phrase, passphrase: "TREZOR" }))
     && drawnPhrase.fingerprintWithPassphrase
       === (await wallet.fingerprint({ phrase: drawnPhrase.phrase, passphrase: "TREZOR" }));
-  // The two checked drawings of the page, about 65,536 BIP39 seeds each: one on the default
-  // workers, one on a count given.
+  // The checked drawing of the page, about 65,536 BIP39 seeds one after another.
   const reports = [];
-  const checked = await wallet.drawPhrase({
-    ...checkedDraw,
-    onProgress: (progress) => reports.push(progress),
-  });
-  const defaultWorkers = Math.min(navigator.hardwareConcurrency || 1, 8);
+  const { result: checked, workersStarted } = await countingWorkers(() =>
+    wallet.drawPhrase({
+      ...checkedDraw,
+      onProgress: (progress) => reports.push(progress),
+    })
+  );
   expect(
-    checked.workers === defaultWorkers && (await passesWithTrezor(checked)),
-    `a checked phrase passes the wallet check, drawn on the default ${defaultWorkers} workers`,
+    workersStarted === 1 && (await passesWithTrezor(checked)),
+    "a checked phrase passes the wallet check, drawn by one worker",
   );
   // Whether a report comes at all is chance here: the phrase may be found before 1,024 draws.
   // The drawing stopped after three reports below checks that they come.
@@ -318,22 +306,11 @@ async function checkCheckedDraws(wallet, countingWorkers) {
     reports.every(
       (report, index) => report.stage === "draw" && report.draws === (index + 1) * 1024,
     ),
-    `each of the ${reports.length} reports of the drawing adds the 1,024 draws of one worker`,
-  );
-  const givenWorkers = defaultWorkers > 1 ? defaultWorkers - 1 : 2;
-  const { result: onGiven, workersStarted: givenStarted } = await countingWorkers(() =>
-    wallet.drawPhrase({ ...checkedDraw, workers: givenWorkers })
-  );
-  expect(
-    onGiven.workers === givenWorkers
-      && givenStarted === givenWorkers
-      && (await passesWithTrezor(onGiven)),
-    `a checked phrase drawn on ${givenWorkers} workers, as asked, passes the wallet check`,
+    `each of the ${reports.length} reports of the drawing adds 1,024 draws`,
   );
 
-  // Each worker reports every 1,024 of its draws, so the total grows by 1,024 a report. A phrase
-  // found before the third report (about one drawing in 21) ends the drawing first, so it is
-  // tried again.
+  // A phrase found before the third report (about one drawing in 21) ends the drawing first, so it
+  // is tried again.
   let stoppedReports = [];
   let stopped = null;
   for (let attempt = 0; attempt < 5 && !(stopped instanceof MhfeCancelledError); attempt += 1) {
@@ -341,7 +318,6 @@ async function checkCheckedDraws(wallet, countingWorkers) {
     stopped = await rejectionOf(
       wallet.drawPhrase({
         ...checkedDraw,
-        workers: 2,
         onProgress: (progress) => {
           seen.push(progress);
           if (seen.length === 3) wallet.cancel();
@@ -357,11 +333,11 @@ async function checkCheckedDraws(wallet, countingWorkers) {
       { stage: "draw", draws: 2048 },
       { stage: "draw", draws: 3072 },
     ],
-    "a drawing reports the draws of all workers, 1,024 more each time, until it is cancelled",
+    "a drawing reports its draws, 1,024 more each time, until it is cancelled",
   );
 
-  // The first report comes after 1,024 draws of a worker; a phrase found before it (about one
-  // drawing in 32 on two workers) ends without one, so the drawing is tried again.
+  // The first report comes after 1,024 draws; a phrase found before it (about one drawing in 64)
+  // ends without one, so the drawing is tried again.
   const pageError = new Error("synthetic page error");
   let failure = null;
   let firstReport = null;
@@ -369,7 +345,6 @@ async function checkCheckedDraws(wallet, countingWorkers) {
     failure = await rejectionOf(
       wallet.drawPhrase({
         ...checkedDraw,
-        workers: 2,
         onProgress: (progress) => {
           firstReport ??= progress;
           return Promise.reject(pageError);
@@ -390,7 +365,6 @@ async function checkCheckedDraws(wallet, countingWorkers) {
   });
   expect(
     after.words === 24
-      && after.workers === 1
       && after.fingerprintWithPassphrase
         === (await wallet.fingerprint({ phrase: after.phrase, passphrase: "TREZOR" })),
     "a new drawing runs after one stopped; a passphrase as bytes is read",

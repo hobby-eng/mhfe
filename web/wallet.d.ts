@@ -18,8 +18,6 @@ export interface MhfeNewPhrase {
   walletCheck: boolean;
   /** The master key fingerprint with the passphrase given, which may be empty. */
   fingerprintWithPassphrase: string;
-  /** How many workers drew it. */
-  workers: number;
 }
 
 /** The module's fixed values, from parameters(). */
@@ -97,14 +95,13 @@ export class MhfeWallet extends MhfeModuleClass<MhfeWalletParameters> {
   }): Promise<MhfeDrawOdds>;
   /**
    * With a passphrase, typed twice, `walletCheck` must be given: never preselected. A checked
-   * phrase takes about 65,536 draws, spread over `workers` workers, 1 to 256. The phrase holds
-   * every chosen word and none of `neverUse`, refused as describeDraw() says.
+   * phrase takes about 65,536 draws, one after another in one worker, which takes minutes. The
+   * phrase holds every chosen word and none of `neverUse`, refused as describeDraw() says.
    */
   drawPhrase(options?: {
     passphrase?: MhfeSecret;
     passphraseRepeat?: MhfeSecret;
     walletCheck?: boolean;
-    workers?: number;
     chosen?: MhfeChosenWord[];
     neverUse?: string[];
     onProgress?: (progress: { stage: "draw"; draws: number }) => void | Promise<void>;

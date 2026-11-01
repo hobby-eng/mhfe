@@ -206,9 +206,8 @@ struct NewPhraseJson<'a> {
 /// same text (PASSPHRASES_DIFFER). With `wallet_check`, it draws until the phrase passes
 /// the wallet check with the passphrase, which must not be empty; that takes about 65,536 BIP39
 /// seeds, and `on_draws(draws)` hears the count every 1,024 draws, a throw there stopping it
-/// (CANCELLED). The phrase meets the wishes given as for [`describe_draw`], refused as it says. A
-/// page may run it in several workers at once and take the first result. Returns JSON `{ phrase,
-/// words, walletCheck, fingerprintWithPassphrase }`.
+/// (CANCELLED). The phrase meets the wishes given as for [`describe_draw`], refused as it says.
+/// Returns JSON `{ phrase, words, walletCheck, fingerprintWithPassphrase }`.
 #[expect(
     clippy::too_many_arguments,
     reason = "the WebAssembly boundary takes every input as an argument of its own"

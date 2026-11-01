@@ -32,14 +32,6 @@ import {
 
 export { MhfeCancelledError, MhfeError } from "../runtime/runtime.js";
 
-/** Workers that draw a checked phrase at once by default; each takes a processor core. */
-const MOST_DRAW_WORKERS = 8;
-/**
- * The most workers a page may ask for, far above the cores of any processor a page runs on: a
- * bound, so that a mistaken count is refused before any passphrase is copied (AUD-012-SEC001).
- */
-const HIGHEST_DRAW_WORKERS = 256;
-
 /** The name of this module's operations in the package's worker. */
 const WALLET_MODULE = "wallet";
 /** The build of this file, from `cargo xtask wasm stamp-build-id`; see BUILD_ID in the runtime. */
@@ -148,21 +140,19 @@ export class MhfeWallet extends MhfeModuleClass {
   /**
    * Draws a new 24-word phrase from the browser's random generator. With a passphrase, typed twice,
    * the page must say whether the phrase gets the wallet check (`walletCheck`, a required boolean
-   * then, never preselected). A checked phrase takes about 65,536 BIP39 seeds: it is drawn on
-   * `workers` workers at once, by default as many as the processor's cores up to eight, and the
-   * first phrase found is taken, every passing phrase being equally likely. `chosen`, at most
+   * then, never preselected). A checked phrase takes about 65,536 BIP39 seeds, one after another
+   * in one worker, as the specification's proof requires, which takes minutes. `chosen`, at most
    * parameters().maxChosenWords (1) `{ word, position }` with `position` from 1 to 24 or
    * "anywhere", which is not recommended, and `neverUse`, at most
    * parameters().maxNeverUseWords (1) word the phrase must not hold, are met the same way;
    * describeDraw() tells what they cost first. `onProgress({ stage: "draw", draws })` reports the
-   * draws of all workers; cancel() stops them. Resolves to `{ phrase, words, walletCheck,
-   * fingerprintWithPassphrase, workers }`.
+   * draws so far; cancel() stops them. Resolves to `{ phrase, words, walletCheck,
+   * fingerprintWithPassphrase }`.
    */
   async drawPhrase({
     passphrase,
     passphraseRepeat,
     walletCheck,
-    workers,
     chosen = [],
     neverUse = [],
     onProgress,
@@ -183,7 +173,6 @@ export class MhfeWallet extends MhfeModuleClass {
     if (walletCheck !== undefined && typeof walletCheck !== "boolean") {
       throw new TypeError("walletCheck must be true or false.");
     }
-    if (workers !== undefined) requireWorkers(workers);
     // A page that asked for the check must never get a phrase without it. The rule is the
     // library's (wallet_check::require_passphrase), asked here before any worker starts, with its
     // code and message; `cargo xtask package-check` keeps the two in step.
@@ -195,102 +184,52 @@ export class MhfeWallet extends MhfeModuleClass {
       );
     }
     const checked = hasPassphrase && walletCheck;
-    const count = checked ? (workers ?? defaultWorkers()) : 1;
     // The drawing takes over from the wait for the startup check with nothing in between.
     return this.#slot.after(this.#module.ready(), () =>
-      this.#draw(given, repeat, hasPassphrase, checked, count, wishes, onProgress),
+      this.#draw(given, repeat, hasPassphrase, checked, wishes, onProgress),
     );
   }
 
   /**
-   * Draws on `count` workers at once once the class is ready; see drawPhrase(). This class's own
-   * copies of the passphrase are wiped when the setup ends, however it ends: each worker has
-   * copies of its own, which its job wipes (AUD-012-SEC001).
+   * Draws in a worker of its own, holding the slot, once the class is ready; see drawPhrase(). The
+   * secrets are copied into bytes only now, and until the job owns them, every failure wipes the
+   * copies (AUD-012-SEC001).
    */
-  #draw(passphrase, passphraseRepeat, hasPassphrase, checked, count, wishes, onProgress) {
-    // Made before the first copy of the passphrase, so that nothing can fail between that copy
-    // and the cleanup below (AUD-012-SEC001).
-    let repeat = new Uint8Array(0);
-    let chosenWords = new Uint8Array(0);
-    const first = encodeSecret(passphrase, "passphrase");
+  #draw(passphrase, passphraseRepeat, hasPassphrase, checked, wishes, onProgress) {
+    const message = {
+      operation: "drawPhrase",
+      walletCheck: checked,
+      places: wishes.places,
+      neverUse: wishes.neverUse,
+      // Made before the first copy of the passphrase, so that nothing can fail between that copy
+      // and the cleanup below (AUD-012-SEC001).
+      passphraseRepeat: new Uint8Array(0),
+      chosenWords: new Uint8Array(0),
+    };
     try {
+      message.passphrase = encodeSecret(passphrase, "passphrase");
       if (hasPassphrase) {
-        // The library's rule (wallet_check::require_same_passphrase), which every worker applies
+        // The library's rule (wallet_check::require_same_passphrase), which the worker applies
         // again, is compared here first, so that a refused passphrase never reaches a worker; its
         // code and message are the library's, and `cargo xtask package-check` keeps them
         // in step.
-        repeat = encodeSecret(passphraseRepeat, "repeated passphrase");
+        const first = message.passphrase;
+        const repeat = encodeSecret(passphraseRepeat, "repeated passphrase");
+        message.passphraseRepeat = repeat;
         const same = repeat.length === first.length && repeat.every((byte, i) => byte === first[i]);
         if (!same) {
           throw new MhfeError("PASSPHRASES_DIFFER", "The passphrase and its repetition differ");
         }
       }
-      chosenWords = encodeSecret(wishes.words, "chosen words");
-      const secrets = { passphrase: first, passphraseRepeat: repeat, chosenWords };
-      return this.#startDraws(secrets, wishes, checked, count, onProgress);
-    } finally {
-      first.fill(0);
-      repeat.fill(0);
-      chosenWords.fill(0);
+      message.chosenWords = encodeSecret(wishes.words, "chosen words");
+      return this.#module.run(message, this.#slot, {
+        // Returned, so that a rejected promise of the page stops the drawing too.
+        draws: (draws) => onProgress?.({ stage: "draw", draws }),
+      });
+    } catch (error) {
+      wipeSecrets(message);
+      throw error;
     }
-  }
-
-  /**
-   * Starts `count` workers, each with copies of the `secrets` (the passphrase, its repetition and
-   * the chosen words) and the `wishes`, and settles with the first phrase found or the first
-   * failure. A failure while the workers are started stops those started, wipes the copies not
-   * yet handed to a job and frees the slot.
-   */
-  #startDraws(secrets, wishes, checked, count, onProgress) {
-    return new Promise((resolve, reject) => {
-      const jobs = [];
-      let finished = false;
-      let release = () => {};
-      // The first result or failure ends the drawing, stops every worker and frees the slot.
-      const finish = (error, result) => {
-        if (finished) return;
-        finished = true;
-        release();
-        for (const job of jobs) job.stop(null);
-        if (error === null) resolve({ ...result, workers: count });
-        else reject(error);
-      };
-      try {
-        const draws = new Array(count).fill(0);
-        release = this.#slot.hold((error) => finish(error));
-        for (let index = 0; index < count && !finished; index += 1) {
-          const message = {
-            operation: "drawPhrase",
-            walletCheck: checked,
-            places: wishes.places,
-            neverUse: wishes.neverUse,
-          };
-          let started;
-          try {
-            for (const [field, bytes] of Object.entries(secrets)) message[field] = bytes.slice();
-            started = this.#module.start(message, {
-              // Returned, so that a rejected promise of the page stops the drawing too.
-              draws: (drawn) => {
-                draws[index] = drawn;
-                const total = draws.reduce((sum, value) => sum + value, 0);
-                return onProgress?.({ stage: "draw", draws: total });
-              },
-            });
-          } catch (error) {
-            // Not yet a job's: these copies are this class's to wipe.
-            wipeSecrets(message);
-            throw error;
-          }
-          jobs.push(started.job);
-          started.done.then(
-            (result) => finish(null, result),
-            (error) => finish(error),
-          );
-        }
-      } catch (error) {
-        finish(error);
-      }
-    });
   }
 
   /** Stops a drawing, or its wait for the check; its promise rejects with MhfeCancelledError. */
@@ -323,17 +262,6 @@ function wishesOf(chosen, neverUse) {
     places.push(position === "anywhere" ? 0 : position);
   }
   return { words: words.join(" "), places, neverUse: neverUse.join(" ") };
-}
-
-/** Refuses a number of drawing workers outside 1 to HIGHEST_DRAW_WORKERS. */
-function requireWorkers(workers) {
-  if (!Number.isSafeInteger(workers) || workers < 1 || workers > HIGHEST_DRAW_WORKERS) {
-    throw new TypeError(`workers must be a whole number from 1 to ${HIGHEST_DRAW_WORKERS}.`);
-  }
-}
-
-function defaultWorkers() {
-  return Math.min(globalThis.navigator?.hardwareConcurrency || 1, MOST_DRAW_WORKERS);
 }
 
 /**

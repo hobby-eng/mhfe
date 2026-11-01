@@ -866,11 +866,10 @@ await wallet.drawPhrase({
   passphrase,
   passphraseRepeat,
   walletCheck,
-  workers,
   chosen,
   neverUse,
   onProgress,
-}); // { phrase, words, walletCheck, fingerprintWithPassphrase, workers }
+}); // { phrase, words, walletCheck, fingerprintWithPassphrase }
 await wallet.wordHints({ typed }); // { hint, count, words, completion }, from the BIP39 list
 wallet.cancel(); // rejects the phrase being drawn with MhfeCancelledError
 ```
