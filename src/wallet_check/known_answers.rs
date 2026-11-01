@@ -8,11 +8,22 @@
 //! independent of this one, after it had reproduced the BIP39 English list's SHA-256, BIP-0039's
 //! first seed with "TREZOR" and both published passing digests.
 
-use super::{digest, digest_passes, verify, PhraseDraw, NEW_ENTROPY_BYTES};
+use mhfe_core::wallet_check::Seed;
+use mhfe_core::Phrase;
+use sha2::{Digest, Sha256};
+
+use super::{verify, PhraseDraw, NEW_ENTROPY_BYTES};
 use crate::random::ScriptedSource;
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
+
+/// The domain tag of `T`. A deliberate copy of `DOMAIN` in the core's src/wallet_check.rs, which
+/// keeps `T` to itself and answers only whether it passes, so that the whole of `T` can still be
+/// compared here: a change goes to both, and the vectors' verdicts keep the two in step.
+const TAG: &[u8] = b"MHFE-WALLET-CHECK-SEED-1";
+/// `ENT` of a 24-word phrase, which `T` holds as `BE32(256)`.
+const ENTROPY_BITS: u32 = 8 * NEW_ENTROPY_BYTES as u32;
 
 /// A vector: the entropy 192 zero bits and a 64-bit counter, a passphrase, the whole digest `T`
 /// and whether it passes.
@@ -81,16 +92,18 @@ impl WalletCheckProfile {
         Self { vectors: &VECTORS }
     }
 
-    /// The digest of a vector, compared whole with the published one, and the criterion on it.
+    /// The digest of a vector, compared whole with the published one, and the core's verdict.
     fn vector(vector: &WalletCheckVector) -> Result<(), String> {
-        let entropy = entropy(vector.counter);
-        let digest = digest(&entropy, vector.passphrase).map_err(stopped)?;
+        let phrase = Phrase::from_entropy(&entropy(vector.counter)).map_err(stopped)?;
+        let seed = Seed::derive(&phrase, vector.passphrase);
+        let digest = Sha256::new()
+            .chain_update(TAG)
+            .chain_update(ENTROPY_BITS.to_be_bytes())
+            .chain_update(seed.as_bytes())
+            .finalize();
+        expect(hex::encode(digest) == vector.digest, "gives another digest")?;
         expect(
-            hex::encode(&digest[..]) == vector.digest,
-            "gives another digest",
-        )?;
-        expect(
-            digest_passes(&digest) == vector.passes,
+            seed.passes() == Some(vector.passes),
             if vector.passes {
                 "fails where it must pass"
             } else {
@@ -98,8 +111,10 @@ impl WalletCheckProfile {
             },
         )?;
         if vector.passes {
-            let phrase = crate::phrase::phrase_from_entropy(&entropy).map_err(stopped)?;
-            expect(phrase.ends_with(vector.ends_with), "gives other words")?;
+            expect(
+                phrase.as_str().ends_with(vector.ends_with),
+                "gives other words",
+            )?;
         }
         Ok(())
     }

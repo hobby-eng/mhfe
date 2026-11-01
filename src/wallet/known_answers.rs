@@ -7,11 +7,12 @@
 //! vectors stay in this Rust code: a self-check's label and detail never name a coin or an
 //! address, so that no page text carries them.
 
-use bip39::{Language, Mnemonic};
 use bitcoin_hashes::{hash160, Hash};
+use mhfe_core::wallet_check::Seed;
+use mhfe_core::Phrase;
 
 use super::{
-    bip39_seed, find_address, master_fingerprint, parse_fingerprint, program_for, Address, Coin,
+    find_address, master_fingerprint, parse_fingerprint, program_for, Address, Coin,
     DerivationPath, ExtendedKey, SearchLimits, HARDENED,
 };
 use crate::phrase::known_answers::TREZOR_ENGLISH;
@@ -228,10 +229,10 @@ impl SeedCheck {
     }
 
     fn seed(phrase: &str, passphrase: &str, expected: &str) -> Result<(), String> {
-        let mnemonic = Mnemonic::parse_in(Language::English, phrase)
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
-        let seed = bip39_seed(&mnemonic, passphrase);
-        expect(hex::encode(&seed[..]) == expected, "differs")
+        let phrase =
+            Phrase::read(phrase).map_err(|_| "the built-in cases are damaged".to_owned())?;
+        let seed = Seed::derive(&phrase, passphrase);
+        expect(hex::encode(seed.as_bytes()) == expected, "differs")
     }
 }
 

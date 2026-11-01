@@ -181,10 +181,10 @@ let outcome: CheckOutcome =
     refused (`NO_WALLET_CHECK`) and then an empty passphrase (`WALLET_CHECK_NEEDS_PASSPHRASE`). It
     never confirms a recovery to encrypt again (see `recover_confirmed` and `rekey::Rekey`).
   - `passes(entropy, passphrase)` and `phrase_passes(phrase, passphrase)` compute the bare criterion
-    for an entropy of any length BIP39 takes and any passphrase, the empty one included, with
-    `BE32(ENT)` of that length. `RecoveredPhrase::passes_wallet_check(passphrase)`, the source check
-    that every recovery evaluates on each 24-word reading, and the guard of hidden wallets use
-    them; a program that checks a recovery uses `verify` or `verify_entropy`.
+    for any passphrase, the empty one included; another length than 24 words does not pass.
+    `RecoveredPhrase::passes_wallet_check(passphrase)`, the source check that every recovery
+    evaluates on each 24-word reading, and the guard of hidden wallets use them; a program that
+    checks a recovery uses `verify` or `verify_entropy`.
   - `PhraseDraw` draws a new 24-word phrase: `PhraseDraw::unchecked()`, or
     `PhraseDraw::with_check(passphrase)`, which refuses an empty passphrase
     (`WALLET_CHECK_NEEDS_PASSPHRASE`), then `draw(source, on_draws)`. Natively

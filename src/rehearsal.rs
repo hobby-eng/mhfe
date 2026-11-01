@@ -1114,7 +1114,6 @@ mod tests {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
         let password = test_password();
-        assert!(wallet_check::phrase_passes(ABANDON, SHORT_READING_PASSPHRASE).unwrap());
         let container = encrypt(
             &mut mhfe,
             ABANDON,

@@ -2,16 +2,8 @@
 //! specification defines as an optional source profile ("Optional source profile: a recovery check
 //! for new 24-word phrases"), a creation mode the owner chooses. It is still experimental.
 //!
-//! A new phrase is drawn at random until its check passes. The check, byte for byte: the SHA-256
-//! digest of
-//!
-//! - the ASCII tag `MHFE-WALLET-CHECK-SEED-1`, 24 bytes, with no terminating NUL;
-//! - `BE32(ENT)`, the entropy's length in bits as a 4-byte big-endian number, 256 for 24 words;
-//! - the raw 64-byte BIP39 seed: PBKDF2-HMAC-SHA512 with 2,048 iterations of the canonical English
-//!   phrase of the entropy (its words in lower case, one space apart), with the salt "mnemonic"
-//!   followed by the BIP39 passphrase in NFKD;
-//!
-//! starts with 16 zero bits: its first two bytes are zero.
+//! A new phrase is drawn at random until its check passes. The check itself, on the BIP39 seed of
+//! the phrase and a passphrase, is the core's: [`mhfe_core::wallet_check`] gives it byte for byte.
 //!
 //! The check is defined for a 24-word phrase, whose entropy has 256 bits, and this library offers
 //! it only with a BIP39 passphrase that is not empty, as the specification allows: one rule for
@@ -33,16 +25,15 @@
 //! assume a uniformly random phrase; they do not by themselves cover a phrase drawn to pass the
 //! check. The check never identifies the wallet: only an address or the fingerprint does that.
 
-use sha2::{Digest, Sha256};
+use mhfe_core::wallet_check::Seed;
+use mhfe_core::Phrase;
 use zeroize::Zeroizing;
-
-use bip39::{Language, Mnemonic};
 
 use crate::memory::LockedText;
 use crate::phrase::{self, locked_phrase_from_entropy};
 use crate::random::{check_source, RandomSource};
 use crate::word_wishes::{WishOdds, WordWishes};
-use crate::{wallet, MhfeError};
+use crate::MhfeError;
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -55,57 +46,32 @@ pub(crate) mod known_answers;
 mod threads;
 
 /// The bits the check fixes: 16, so that a wrong password passes once in 65,536, at a cost of 16
-/// of the 256 bits of a 24-word phrase. A new phrase takes about 65,536 BIP39 seeds to find.
+/// of the 256 bits of a 24-word phrase. A new phrase takes about 65,536 BIP39 seeds to find. A
+/// deliberate copy of `CHECK_BITS` in the core's src/wallet_check.rs, which keeps it private, for
+/// what the front ends say of the check: a change goes to both.
 pub const WALLET_CHECK_BITS: u32 = 16;
 /// One in this many wrong passwords passes the check, and a new phrase takes about as many draws:
 /// 2^[`WALLET_CHECK_BITS`], 65,536.
 pub const WALLET_CHECK_ODDS: u64 = 1 << WALLET_CHECK_BITS;
-/// The domain tag, which keeps the check apart from every other hash of the seed. Draft.
-const DOMAIN: &[u8] = b"MHFE-WALLET-CHECK-SEED-1";
 /// The entropy of a new 24-word phrase: 256 bits, the whole state of a container.
 pub const NEW_ENTROPY_BYTES: usize = crate::packing::STATE_BYTES;
 
 /// Whether `entropy` passes the criterion of the wallet check with `passphrase`, which may be empty
-/// here; of any length BIP39 takes. A program that checks a recovery uses [`verify`] or
-/// [`verify_entropy`], which hold the profile's rule.
+/// here. The profile defines it for 24 words alone, so entropy of another length does not pass. A
+/// program that checks a recovery uses [`verify`] or [`verify_entropy`], which hold the profile's
+/// rule.
 pub fn passes(entropy: &[u8], passphrase: &str) -> Result<bool, MhfeError> {
-    Ok(digest_passes(&*digest(entropy, passphrase)?))
-}
-
-/// The digest `T` of `entropy` with `passphrase`: the tagged SHA-256 of its BIP39 seed.
-fn digest(entropy: &[u8], passphrase: &str) -> Result<Zeroizing<[u8; 32]>, MhfeError> {
-    let bits = u32::try_from(entropy.len() * 8).unwrap_or(u32::MAX);
-    let mnemonic = Mnemonic::from_entropy_in(Language::English, entropy)
-        .map_err(|error| MhfeError::Internal(error.to_string()))?;
-    let seed = wallet::bip39_seed(&mnemonic, passphrase);
-    Ok(tagged_digest(bits, &seed[..]))
+    let phrase = Phrase::from_entropy(entropy)?;
+    Ok(Seed::derive(&phrase, passphrase).passes() == Some(true))
 }
 
 /// Whether a seed phrase passes the criterion of the wallet check with `passphrase`, as
-/// [`passes`] does: of any length and with any passphrase.
+/// [`passes`] does: with any passphrase, and a phrase of another length than 24 words does not
+/// pass.
 pub fn phrase_passes(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
     let mnemonic = phrase::parse(text).map_err(MhfeError::InvalidPhrase)?;
     let entropy = Zeroizing::new(mnemonic.to_entropy());
     passes(&entropy, passphrase)
-}
-
-/// Whether a digest `T` starts with [`WALLET_CHECK_BITS`] zero bits: the criterion of the check.
-fn digest_passes(digest: &[u8; 32]) -> bool {
-    let zero_bytes = (WALLET_CHECK_BITS / 8) as usize;
-    digest[..zero_bytes].iter().all(|&byte| byte == 0)
-}
-
-/// `T = SHA-256(DOMAIN || BE32(bits) || seed)`, the digest the check reads; its self-check
-/// compares all of it with the published vectors, not only its first bits.
-fn tagged_digest(bits: u32, seed: &[u8]) -> Zeroizing<[u8; 32]> {
-    Zeroizing::new(
-        Sha256::new()
-            .chain_update(DOMAIN)
-            .chain_update(bits.to_be_bytes())
-            .chain_update(seed)
-            .finalize()
-            .into(),
-    )
 }
 
 /// Draws between two reports to the caller, which can show progress or stop the draw then.
@@ -395,21 +361,6 @@ mod tests {
     const EMPTY_COUNTER: u64 = 98_918;
 
     #[test]
-    fn about_one_seed_in_65536_passes() {
-        // The criterion alone, over counted 64-byte seeds: fast, unlike a BIP39 seed each.
-        const TRIES: u64 = 1 << 20;
-        let passing = (0..TRIES)
-            .filter(|&counter| {
-                let mut seed = [0u8; 64];
-                seed[56..].copy_from_slice(&counter.to_be_bytes());
-                digest_passes(&tagged_digest(256, &seed))
-            })
-            .count();
-        // 16 expected; far outside 4 to 40 would mean the criterion is not uniform.
-        assert!((4..=40).contains(&passing), "{passing}");
-    }
-
-    #[test]
     fn the_check_binds_the_passphrase() {
         let entropy = counted(TREZOR_COUNTER);
         assert!(passes(&entropy, "TREZOR").unwrap());
@@ -514,15 +465,15 @@ mod tests {
         }
     }
 
-    /// The criterion alone takes a phrase of any length, as a recovery's report without a
-    /// passphrase does; the check does not (AUD-010): a public passphrase with which the 12-word
-    /// test phrase passes the criterion is refused by `verify`.
+    /// A short phrase has no check (AUD-010): a public passphrase with which the 12-word test
+    /// phrase would pass under BE32(128), which the profile does not define, does not pass, and
+    /// `verify` refuses the length.
     #[test]
-    fn only_the_criterion_takes_a_short_phrase() {
+    fn a_short_phrase_has_no_check() {
         let twelve = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                       abandon abandon about";
         let passphrase = "aud010 public probe 11656";
-        assert_eq!(phrase_passes(twelve, passphrase), Ok(true));
+        assert_eq!(phrase_passes(twelve, passphrase), Ok(false));
         assert_eq!(
             verify(twelve, passphrase),
             Err(MhfeError::NoWalletCheckAtLength(12))

@@ -22,11 +22,9 @@
 //! # Ok::<(), mhfe::MhfeError>(())
 //! ```
 
-use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
 
-use bip39::Mnemonic;
 use bitcoin_hashes::{hash160, Hash};
 use hmac::{Hmac, KeyInit, Mac};
 use k256::elliptic_curve::group::Group;
@@ -34,12 +32,12 @@ use k256::elliptic_curve::point::AffineCoordinates;
 use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::elliptic_curve::PrimeField;
 use k256::{FieldBytes, ProjectivePoint, Scalar};
+use mhfe_core::wallet_check::Seed;
+use mhfe_core::Phrase;
 use sha2::{Digest, Sha256, Sha512};
 use sha3::Keccak256;
-use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::memory::LockedText;
 use crate::{phrase, MhfeError};
 
 #[cfg(any(
@@ -1058,29 +1056,6 @@ fn tagged_hash(tag: &str, data: &[u8]) -> [u8; 32] {
         .into()
 }
 
-/// The largest growth of UTF-8 text under NFKD: U+FDFA, 3 bytes, decomposes into 33 bytes.
-const NFKD_MAX_GROWTH: usize = 11;
-
-/// The passphrase in NFKD, as BIP39 requires, in a buffer that is wiped when dropped. It is
-/// reserved at the largest size NFKD can produce, so it never grows and leaves no unwiped copy;
-/// `Mnemonic::to_seed` would normalize into an ordinary string instead.
-/// The BIP39 seed of a phrase and a passphrase: PBKDF2-HMAC-SHA512, 2,048 iterations, with the
-/// salt "mnemonic" and the passphrase in NFKD.
-pub(crate) fn bip39_seed(mnemonic: &Mnemonic, passphrase: &str) -> Zeroizing<[u8; 64]> {
-    let normalized = normalized_passphrase(passphrase);
-    Zeroizing::new(mnemonic.to_seed_normalized(&normalized))
-}
-
-/// Locked before the passphrase is written into it, as the passphrase it is made from is.
-fn normalized_passphrase(passphrase: &str) -> LockedText {
-    let Ok(normalized) =
-        LockedText::build::<Infallible>(passphrase.len() * NFKD_MAX_GROWTH, |normalized| {
-            normalized.extend(passphrase.nfkd());
-            Ok(())
-        });
-    normalized
-}
-
 /// A BIP32 extended private key. Both halves are wiped when dropped.
 struct ExtendedKey {
     key: Zeroizing<[u8; 32]>,
@@ -1093,8 +1068,9 @@ impl ExtendedKey {
     /// letter case, and four letters of a word, as every other phrase input takes it.
     fn master(phrase: &str, passphrase: &str) -> Result<Self, MhfeError> {
         let mnemonic = phrase::parse(phrase).map_err(MhfeError::InvalidPhrase)?;
-        let seed = bip39_seed(&mnemonic, passphrase);
-        let master = Self::from_hmac(b"Bitcoin seed", &[&seed[..]])?;
+        let phrase = Phrase::from_entropy(&Zeroizing::new(mnemonic.to_entropy()))?;
+        let seed = Seed::derive(&phrase, passphrase);
+        let master = Self::from_hmac(b"Bitcoin seed", &[seed.as_bytes()])?;
         // BIP32: a master key of zero or not below n is invalid; probability below 2^-127.
         if bool::from(master.scalar()?.is_zero()) {
             return Err(MhfeError::Internal(
@@ -1635,21 +1611,6 @@ mod tests {
             master_fingerprint(&short, ""),
             Err(MhfeError::InvalidPhrase(_))
         ));
-    }
-
-    /// The wiping normalization gives the seed that bip39 itself computes, also for a passphrase
-    /// that NFKD changes, including one that grows the most.
-    #[test]
-    fn the_passphrase_is_normalized_as_bip39_does() {
-        let mnemonic = phrase::parse(ABANDON).unwrap();
-        for passphrase in ["", "TREZOR", "Caf\u{E9} \u{FB01}", "\u{FDFA}\u{FDFA}"] {
-            let normalized = normalized_passphrase(passphrase);
-            assert_eq!(
-                mnemonic.to_seed_normalized(&normalized),
-                mnemonic.to_seed(passphrase),
-                "{passphrase:?}"
-            );
-        }
     }
 
     /// Keys that BIP32 calls invalid give an error, never a panic. They cannot come from a real
