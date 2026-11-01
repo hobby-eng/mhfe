@@ -3,10 +3,9 @@
 //! to and the round's number in the whole operation, so that a front end can show a bar for each
 //! stage and stop the operation between any two rounds.
 
-use mhfe_core::{Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Password, Suite, WorkFactor};
 use zeroize::Zeroizing;
 
-use crate::engine::Argon2Engine;
 use crate::mhfe::{encrypt, Mhfe};
 use crate::repair::{self, repair_words};
 use crate::suite::{built_in_check_lengths, require_original};

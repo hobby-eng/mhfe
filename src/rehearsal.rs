@@ -4,11 +4,10 @@
 //! close it was. The re-encryption guard uses the same comparison: a phrase recovered to be
 //! encrypted again comes out only once it is confirmed.
 
-use mhfe_core::{Password, Suite};
+use mhfe_core::{Argon2Engine, Password, Suite};
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::detection;
-use crate::engine::Argon2Engine;
 use crate::mhfe::{recover_state, PhraseLength, RecoveredPhrase, RecoveredState};
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::packing::STATE_WORDS;

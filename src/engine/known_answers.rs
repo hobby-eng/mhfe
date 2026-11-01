@@ -10,12 +10,10 @@
 //! they run the page's Emscripten build of the same code through the bridge every operation uses.
 
 #[cfg(not(target_arch = "wasm32"))]
-use mhfe_core::NativeArgon2;
+use mhfe_core::{Argon2Engine, NativeArgon2};
 
 #[cfg(not(target_arch = "wasm32"))]
-use super::native::error_of;
-#[cfg(not(target_arch = "wasm32"))]
-use super::Argon2Engine;
+use super::error_of;
 use super::{Argon2Cost, KEY_BYTES, SALT_BYTES};
 use crate::self_check::{hex, ComponentCheck, ComponentOutcome, Tier};
 use crate::MhfeError;
@@ -207,9 +205,11 @@ pub type NativeArgon2SizesCheck = Argon2SizesCheck<NativeAnswers>;
 /// The native engine's tag of [`PASSWORD`] and [`SALT`] at `cost`, in a work area of that size.
 #[cfg(not(target_arch = "wasm32"))]
 fn reserved_call(cost: Argon2Cost, tag: &mut [u8; KEY_BYTES]) -> Result<(), MhfeError> {
-    let mut engine =
-        NativeArgon2::new(cost.memory_kib).map_err(|error| error_of(error, cost.memory_bytes()))?;
-    engine.argon2id(PASSWORD, SALT, cost.memory_kib, cost.passes, tag)
+    let refusal = |error| error_of(error, cost.memory_bytes());
+    let mut engine = NativeArgon2::new(cost.memory_kib).map_err(refusal)?;
+    engine
+        .argon2id(PASSWORD, SALT, cost.memory_kib, cost.passes, tag)
+        .map_err(refusal)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -387,7 +387,6 @@ mod tests {
     /// assert_not_impl_any).
     #[test]
     fn the_checks_are_closed() {
-        use crate::engine::Argon2Engine;
         trait NoEngine<Marker> {
             fn closed() {}
         }

@@ -3,7 +3,7 @@
 
 use mhfe_core::{NativeArgon2, WorkFactor};
 
-use super::{ffi, Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
+use super::{error_of, ffi};
 use crate::suite::{memory_bytes, require_level};
 use crate::MhfeError;
 
@@ -56,32 +56,12 @@ fn check_free_memory(needed_bytes: u64) -> Result<(), MhfeError> {
     }
 }
 
-// A deliberate copy of the trait's signature, which an implementation repeats.
-impl Argon2Engine for NativeArgon2 {
-    fn argon2id(
-        &mut self,
-        password: &[u8],
-        salt: &[u8; SALT_BYTES],
-        memory_kib: u32,
-        passes: u32,
-        key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
-        mhfe_core::Argon2Engine::argon2id(self, password, salt, memory_kib, passes, key)
-            .map_err(|error| error_of(error, Argon2Cost { memory_kib, passes }.memory_bytes()))
-    }
-}
-
-/// The error of a refusal of the core's engine for `bytes` of memory.
-pub(super) fn error_of(error: mhfe_core::Error, bytes: u64) -> MhfeError {
-    match error {
-        mhfe_core::Error::OutOfMemory => MhfeError::MemoryAllocation { bytes },
-        other => other.into(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use mhfe_core::Argon2Engine;
+
     use super::*;
+    use crate::engine::KEY_BYTES;
 
     #[test]
     fn refuses_more_memory_than_the_computer_reports() {
@@ -99,16 +79,12 @@ mod tests {
     fn the_refusals_of_the_core_engine_become_mhfe_errors() {
         let mut engine = NativeArgon2::new(64).unwrap();
         let mut key = [0u8; KEY_BYTES];
+        let refusal = engine
+            .argon2id(b"password", b"0123456789abcdef", 128, 1, &mut key)
+            .unwrap_err();
         assert_eq!(
-            Argon2Engine::argon2id(
-                &mut engine,
-                b"password",
-                b"0123456789abcdef",
-                128,
-                1,
-                &mut key
-            ),
-            Err(MhfeError::MemoryAllocation { bytes: 128 << 10 })
+            error_of(refusal, 128 << 10),
+            MhfeError::MemoryAllocation { bytes: 128 << 10 }
         );
         assert_eq!(
             error_of(mhfe_core::Error::Argon2Failed { code: -33 }, 0),

@@ -5,10 +5,9 @@
 
 use std::cell::RefCell;
 
-use mhfe_core::{Password, WorkFactor};
+use mhfe_core::{Argon2Engine, Password, WorkFactor};
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
-use crate::engine::Argon2Engine;
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
 use crate::rehearsal::{recover_for_rekey, Confirmation, RecoveredForRekey};

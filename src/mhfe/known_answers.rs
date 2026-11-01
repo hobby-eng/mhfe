@@ -12,12 +12,12 @@
 //! [`PublishedRoundKeys`] cannot encrypt anything but a published vector, so it is no reduced-cost
 //! engine: a release build may hold it.
 
-use mhfe_core::{Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Password, Suite, WorkFactor};
 
 use super::published_rounds::PUBLISHED;
 use super::{decrypt, decrypt_as, encrypt, RecoveredPhrase};
 use crate::detection::detected_lengths;
-use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
+use crate::engine::{KEY_BYTES, SALT_BYTES};
 use crate::feistel::{round_mask, round_message, round_salt, Geometry};
 use crate::operation::Encryption;
 use crate::packing::{self, STATE_WORDS};
@@ -126,7 +126,7 @@ pub(crate) fn published_table() -> &'static [PublishedVector] {
 
 /// An engine that answers only the rounds of published vectors, with the keys they record. It
 /// computes no Argon2: the salt and the password after NFKD must be a recorded pair, and anything
-/// else is refused with [`MhfeError::Internal`]. It reads no cost, as the salt binds the settings.
+/// else is refused as a failure of Argon2. It reads no cost, as the salt binds the settings.
 pub(crate) struct PublishedRoundKeys {
     vectors: &'static [PublishedVector],
 }
@@ -151,16 +151,14 @@ impl Argon2Engine for PublishedRoundKeys {
         _: u32,
         _: u32,
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), mhfe_core::Error> {
         let round = self
             .vectors
             .iter()
             .filter(|vector| vector.password_nfkd == password)
             .flat_map(|vector| vector.rounds.iter())
             .find(|round| round.salt == *salt)
-            .ok_or_else(|| {
-                MhfeError::Internal("no published round has this password and salt".to_owned())
-            })?;
+            .ok_or(mhfe_core::Error::Argon2Failed { code: 0 })?;
         key.copy_from_slice(&round.key);
         Ok(())
     }
@@ -183,7 +181,7 @@ impl Argon2Engine for LastKeyChanged {
         memory_kib: u32,
         passes: u32,
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), mhfe_core::Error> {
         self.keys
             .argon2id(password, salt, memory_kib, passes, key)?;
         self.calls += 1;
@@ -492,7 +490,7 @@ impl CipherRoundsCheck {
                     PhraseLength::Detect,
                     &mut |_, _| Ok(()),
                 );
-                expect_refusal(result.map(|_| ()), "INTERNAL_ERROR")
+                expect_refusal(result.map(|_| ()), "ARGON2_FAILED")
             },
         ];
         let table = self.vectors;
@@ -1052,7 +1050,7 @@ mod tests {
         // records, so the replay stops there.
         for (round, what) in [
             (11, "gives another container"),
-            (7, "stops with INTERNAL_ERROR"),
+            (7, "stops with ARGON2_FAILED"),
         ] {
             let mut vectors = PUBLISHED.to_vec();
             let index = vectors
@@ -1090,7 +1088,7 @@ mod tests {
         assert_eq!(
             check.run(Tier::Startup),
             ComponentOutcome::Failed(format!(
-                "vector {} of 10 stops with INTERNAL_ERROR",
+                "vector {} of 10 stops with ARGON2_FAILED",
                 startup_place("unicode-password")
             ))
         );
@@ -1145,12 +1143,10 @@ mod tests {
             .unwrap();
         assert_eq!(key, zero_12.rounds[3].key);
         // The right salt with another password, and an unknown salt, are refused.
-        assert_eq!(
-            keys.argon2id(b"public test passwore", salt, 0, 0, &mut key)
-                .unwrap_err()
-                .code(),
-            "INTERNAL_ERROR"
-        );
+        assert!(matches!(
+            keys.argon2id(b"public test passwore", salt, 0, 0, &mut key),
+            Err(mhfe_core::Error::Argon2Failed { .. })
+        ));
         assert!(keys
             .argon2id(zero_12.password_nfkd, &[0u8; SALT_BYTES], 0, 0, &mut key)
             .is_err());
@@ -1174,7 +1170,7 @@ mod tests {
             &mut |_, _| Ok(()),
             &mut |_| Ok(()),
         );
-        assert_eq!(result.unwrap_err().code(), "INTERNAL_ERROR");
+        assert_eq!(result.unwrap_err().code(), "ARGON2_FAILED");
     }
 
     #[test]
@@ -1259,7 +1255,7 @@ mod tests {
         assert_eq!(
             check.run(Tier::Full),
             ComponentOutcome::Failed(
-                "suite 4 refusal 2 of 63 is refused with INTERNAL_ERROR".to_owned()
+                "suite 4 refusal 2 of 63 is refused with ARGON2_FAILED".to_owned()
             )
         );
     }

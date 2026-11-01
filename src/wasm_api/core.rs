@@ -1567,10 +1567,10 @@ fn sealed_for_page(
 /// the last round. A build that went wrong during the work, such as in the optimized code the
 /// browser made of it, fails here with SELF_CHECK_FAILED, and the result is dropped instead of
 /// returned. The answer is checked after a failed operation too, since a fault of the build is the
-/// more fundamental cause.
+/// more fundamental cause. After it, a failed round gives the page the build's own words.
 fn verified<T>(engine: &BrowserEngine, outcome: Result<T, MhfeError>) -> Result<T, JsError> {
     engine.verify_known_answer().map_err(js_error)?;
-    outcome.map_err(js_error)
+    outcome.map_err(|error| js_error(engine.take_failure().unwrap_or(error)))
 }
 
 /// Tells the worker that round `round` of `rounds` starts, in `stage`. An exception thrown there

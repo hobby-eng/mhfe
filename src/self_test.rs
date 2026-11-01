@@ -12,10 +12,10 @@
 
 use std::fmt;
 
-use mhfe_core::{Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Password, Suite, WorkFactor};
 use serde_json::Value;
 
-use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
+use crate::engine::{KEY_BYTES, SALT_BYTES};
 use crate::mhfe::known_answers::{published_table, PublishedRound, PublishedVector};
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::{decrypt, encrypt, Mhfe, MhfeError, PhraseLength, Recovery, ENCRYPTION_ROUNDS, ROUNDS};
@@ -237,7 +237,7 @@ impl<E: Argon2Engine> Argon2Engine for RoundKeyWitness<'_, E> {
         memory_kib: u32,
         passes: u32,
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), mhfe_core::Error> {
         self.engine
             .argon2id(password, salt, memory_kib, passes, key)?;
         self.calls += 1;
@@ -388,7 +388,7 @@ mod tests {
             memory_kib: u32,
             passes: u32,
             key: &mut [u8; KEY_BYTES],
-        ) -> Result<(), MhfeError> {
+        ) -> Result<(), mhfe_core::Error> {
             if PublishedRoundKeys::of(published_table())
                 .argon2id(password, salt, memory_kib, passes, key)
                 .is_err()
@@ -438,7 +438,7 @@ mod tests {
             memory_kib: u32,
             passes: u32,
             key: &mut [u8; KEY_BYTES],
-        ) -> Result<(), MhfeError> {
+        ) -> Result<(), mhfe_core::Error> {
             self.calls += 1;
             let here = self.calls == self.at;
             let mut salt = *salt;

@@ -3,11 +3,10 @@
 //! width. Nothing records which passwords were used or how many, so the container alone tells
 //! nothing about them.
 
-use mhfe_core::{Password, Suite};
+use mhfe_core::{Argon2Engine, Password, Suite};
 
 use crate::container::ContainerFacts;
 use crate::detection;
-use crate::engine::Argon2Engine;
 use crate::memory::LockedText;
 use crate::mhfe::{recover_state, RecoveredPhrase};
 use crate::{Mhfe, MhfeError, ProgressCallback};

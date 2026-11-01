@@ -2,14 +2,14 @@
 //! code path of every release at full cost, the stand-ins for it, and the public test phrases,
 //! states and password, so that each test builds its setting from one place.
 
-use mhfe_core::{NativeArgon2, Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, NativeArgon2, Password, Suite, WorkFactor};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
-use crate::engine::{Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
+use crate::engine::{Argon2Cost, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
 use crate::packing::State;
-use crate::{encrypt, Mhfe, MhfeError};
+use crate::{encrypt, Mhfe};
 
 /// 256 KiB and one pass: four Argon2 lanes need at least 32 KiB. The reduced-cost containers of
 /// src/mhfe.rs and of the browser tests are made at the same cost.
@@ -75,7 +75,7 @@ impl Argon2Engine for NoArgon2Calls {
         _: u32,
         _: u32,
         _: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), mhfe_core::Error> {
         panic!("Argon2 ran where a refusal should have come first");
     }
 }
@@ -92,7 +92,7 @@ impl Argon2Engine for HashEngine {
         _: u32,
         _: u32,
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), mhfe_core::Error> {
         key.copy_from_slice(&Sha256::digest([password, &salt[..]].concat()));
         Ok(())
     }
@@ -117,7 +117,7 @@ impl Argon2Engine for ReducedEngine {
         _: u32,
         _: u32,
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), mhfe_core::Error> {
         let Argon2Cost { memory_kib, passes } = REDUCED_COST;
         self.0.argon2id(password, salt, memory_kib, passes, key)
     }

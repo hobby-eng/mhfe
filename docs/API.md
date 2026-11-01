@@ -601,7 +601,7 @@ The parts, by identifier and label, and what each compares:
   not available in WebAssembly and outside Unix.
 
 The Argon2 checks are closed: their inputs are private constants, they take no cost and no password
-and give only an outcome, so they cannot encrypt anything. An `engine::Argon2Engine` takes its cost
+and give only an outcome, so they cannot encrypt anything. The core's `Argon2Engine` takes its cost
 with every call, and every operation asks for the cost of its work factor; no release build holds
 the test-only engine that runs below the cost it is asked for (`scripts/check-release-artifacts.sh`
 looks for its marker). `engine::NativeArgon2Check::default()` starts four threads per call and
@@ -619,7 +619,7 @@ operation's first round and after its last.
 `cipher-rounds` and the checks of keep advice, hidden wallets, rekey and rehearsal replay the
 published vectors with `PublishedRoundKeys`, a private engine that answers only the password and
 salt pairs a published vector records, with the key it records, and refuses any other call with
-`INTERNAL_ERROR`. It cannot encrypt anything but a published vector, so a release build may hold
+`ARGON2_FAILED`. It cannot encrypt anything but a published vector, so a release build may hold
 it. Its table, `src/mhfe/published_rounds.rs`, is written by `cargo xtask published-rounds`
 from `tests/spec/vectors/` (`--check` compares without writing), and a unit test compares every
 value with the fixtures.

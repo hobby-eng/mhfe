@@ -32,19 +32,12 @@ impl Argon2Cost {
     }
 }
 
-/// Computes `Argon2id(password, salt)` at the cost each call asks for.
-pub trait Argon2Engine {
-    /// Writes the 32-byte Argon2id tag of `password` and `salt` at `memory_kib` KiB and `passes`
-    /// passes into `key`; an engine that cannot compute it returns [`MhfeError::Argon2`] or the
-    /// error of its memory, never a tag of another cost.
-    fn argon2id(
-        &mut self,
-        password: &[u8],
-        salt: &[u8; SALT_BYTES],
-        memory_kib: u32,
-        passes: u32,
-        key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError>;
+/// The error of a refusal of the core's engine for `bytes` of memory.
+pub(crate) fn error_of(error: mhfe_core::Error, bytes: u64) -> MhfeError {
+    match error {
+        mhfe_core::Error::OutOfMemory => MhfeError::MemoryAllocation { bytes },
+        other => other.into(),
+    }
 }
 
 /// What a key holds before an engine writes it. An engine that leaves it as it was, or gives only

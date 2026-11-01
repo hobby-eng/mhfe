@@ -15,11 +15,10 @@
 //! word, and the first four letters of a word are enough. A candidate that matches proves only
 //! what the reference proves: an address strongly, a fingerprint with 32 bits.
 
-use mhfe_core::{Password, Suite};
+use mhfe_core::{Argon2Engine, Password, Suite};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
-use crate::engine::Argon2Engine;
 use crate::packing;
 use crate::phrase::{self, LIST_SIZE, WORD_BITS, WORD_COUNTS};
 use crate::rehearsal::{self, CheckOutcome, Reference};

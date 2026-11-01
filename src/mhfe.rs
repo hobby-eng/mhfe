@@ -2,12 +2,11 @@
 //! "Recovering a mnemonic" and their suite 4 forms).
 
 use bip39::Mnemonic;
-use mhfe_core::{Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Password, Suite, WorkFactor};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::container::ContainerFacts;
 use crate::detection::detected_lengths;
-use crate::engine::Argon2Engine;
 use crate::feistel::{Geometry, Permutation};
 use crate::memory::{LockedBytes, LockedText};
 use crate::packing::{self, State, STATE_WORDS};
@@ -1226,7 +1225,7 @@ mod tests {
                 memory_kib: u32,
                 passes: u32,
                 key: &mut [u8; 32],
-            ) -> Result<(), MhfeError> {
+            ) -> Result<(), mhfe_core::Error> {
                 HashEngine.argon2id(password, salt, memory_kib, passes, key)?;
                 self.0 = self.0.wrapping_add(1);
                 key[0] ^= self.0;

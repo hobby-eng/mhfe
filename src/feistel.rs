@@ -17,14 +17,16 @@ use std::convert::Infallible;
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 use hmac::{Hmac, KeyInit, Mac};
-use mhfe_core::{Password, WorkFactor};
+use mhfe_core::{Argon2Engine, Password, WorkFactor};
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
+use crate::engine::{error_of, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
 use crate::packing::{self, STATE_BYTES};
-use crate::suite::{DS_MASK, DS_SALT, ROUNDS, SAME_LENGTH_DS_MASK, SAME_LENGTH_DS_SALT};
+use crate::suite::{
+    memory_bytes, DS_MASK, DS_SALT, ROUNDS, SAME_LENGTH_DS_MASK, SAME_LENGTH_DS_SALT,
+};
 use crate::MhfeError;
 
 type Blake2b256 = Blake2b<U32>;
@@ -144,13 +146,15 @@ impl Permutation<'_> {
             key: [0u8; KEY_BYTES],
             mask: Vec::new(),
         };
-        self.engine.argon2id(
-            self.password.as_bytes(),
-            &values.salt,
-            self.work.memory_kib(),
-            self.work.passes(),
-            &mut values.key,
-        )?;
+        self.engine
+            .argon2id(
+                self.password.as_bytes(),
+                &values.salt,
+                self.work.memory_kib(),
+                self.work.passes(),
+                &mut values.key,
+            )
+            .map_err(|error| error_of(error, memory_bytes(self.work)))?;
         values.mask = round_mask(self.geometry, &values.key, &values.message);
         Ok(values)
     }
@@ -311,7 +315,7 @@ mod tests {
                 memory_kib: u32,
                 passes: u32,
                 key: &mut [u8; KEY_BYTES],
-            ) -> Result<(), MhfeError> {
+            ) -> Result<(), mhfe_core::Error> {
                 self.0.push((memory_kib, passes));
                 HashEngine.argon2id(password, salt, memory_kib, passes, key)
             }

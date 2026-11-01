@@ -1,10 +1,12 @@
 //! Argon2id in the browser: the Emscripten build of the same reference C code, which the worker
 //! (web/core-worker.js) hands to the WebAssembly core as a JavaScript object.
 
-use mhfe_core::WorkFactor;
+use std::cell::Cell;
+
+use mhfe_core::{Argon2Engine, WorkFactor};
 use wasm_bindgen::prelude::*;
 
-use super::{Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
+use super::{Argon2Cost, KEY_BYTES, SALT_BYTES};
 use crate::suite::{memory_bytes, require_level};
 use crate::MhfeError;
 
@@ -41,13 +43,20 @@ pub struct BrowserEngine {
     argon2: JsArgon2,
     /// Read by [`BrowserEngine::reserve`] alone: a round takes its cost with its call.
     work: WorkFactor,
+    /// Why a round failed, in the words of the page's build, which the core's error has no room
+    /// for.
+    failure: Cell<Option<MhfeError>>,
 }
 
 impl BrowserEngine {
     /// Refuses memory levels a browser cannot provide before any memory is used.
     pub fn new(argon2: JsArgon2, work: WorkFactor) -> Result<Self, MhfeError> {
         require_level(work, HIGHEST_BROWSER_MEMORY_LEVEL)?;
-        Ok(Self { argon2, work })
+        Ok(Self {
+            argon2,
+            work,
+            failure: Cell::new(None),
+        })
     }
 
     /// Reserves the Argon2 work area now rather than at the first round: a session of several
@@ -66,6 +75,11 @@ impl BrowserEngine {
     /// [`BrowserArgon2Check::verify`]: super::BrowserArgon2Check::verify
     pub fn verify_known_answer(&self) -> Result<(), MhfeError> {
         super::BrowserArgon2Check::new(&self.argon2).verify()
+    }
+
+    /// Why a round failed, to tell the page in place of the failed operation's own error.
+    pub(crate) fn take_failure(&self) -> Option<MhfeError> {
+        self.failure.take()
     }
 }
 
@@ -109,8 +123,16 @@ impl Argon2Engine for BrowserEngine {
         memory_kib: u32,
         passes: u32,
         key: &mut [u8; KEY_BYTES],
-    ) -> Result<(), MhfeError> {
+    ) -> Result<(), mhfe_core::Error> {
         let cost = Argon2Cost { memory_kib, passes };
-        derive_with(&self.argon2, password, salt, cost, key)
+        derive_with(&self.argon2, password, salt, cost, key).map_err(|failure| {
+            let error = match failure {
+                MhfeError::MemoryAllocation { .. } => mhfe_core::Error::OutOfMemory,
+                // The bridge gives text and no number: `failure` holds what the page reads.
+                _ => mhfe_core::Error::Argon2Failed { code: 0 },
+            };
+            self.failure.set(Some(failure));
+            error
+        })
     }
 }
