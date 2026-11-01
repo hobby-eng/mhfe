@@ -183,10 +183,9 @@ two purposes:
   [`mhfe wallets`](#mhfe-wallets) says how to keep it hidden.
 
 Like any wallet, each of them may have its own BIP39 passphrase, which opens yet another wallet from
-the same phrase; it is one more secret, different from all the others. Nothing records which
-passwords you used or how many, so you must remember each one. Each of these wallets depends on this
-exact container and its settings: `mhfe rekey` or the loss of every copy of the container loses
-them, unless their funds were moved first.
+the same phrase; it is one more secret, different from all the others. You must remember each
+password, since nothing records them, and each of these wallets depends on this exact container
+([`mhfe wallets`](#mhfe-wallets)).
 
 **Your original seed phrase.** With your password, MHFE gives back the exact original seed phrase,
 and your wallet opens as before. The strongest arrangement is a 24-word original seed phrase with
@@ -347,11 +346,8 @@ The list always names the passphrase, but MHFE neither asks whether there is one
 Use the password for this phrase and nowhere else, and make another copy of the container only by
 copying its words exactly.
 
-Before you rely on the container, rehearse the recovery with `mhfe check`, typing the words of the
-container phrase as you wrote them down, not from the screen, and keep the backup of your original
-seed phrase until the check matches. This matters most for a container of the same length: its
-shorter checksum lets a miscopied word through more often, and the container then opens another
-wallet without any error.
+Before you rely on the container, rehearse the recovery with `mhfe check` from what you wrote down,
+and keep the backup of your original seed phrase until the check matches.
 
 ### `mhfe check`
 
@@ -566,12 +562,12 @@ commands.
 
 You need not run `mhfe repair` first. `mhfe decrypt`, `mhfe check`, `mhfe rekey` and `mhfe wallets`
 take `?` in the container phrase too and then ask at once for the repair words. Without them, Enter
-alone offers a search for the words typed as `?`, which [Can MHFE find a missing word without the
-repair words?](#can-mhfe-find-a-missing-word-without-the-repair-words) describes. When the words are
-not a valid container, MHFE says so and asks whether to type them again or repair them with the
-card. The repaired container phrase is shown with every word that was repaired, and used only after
-"Use it"; the summary records which words were repaired, never the words themselves. `--repair` asks
-for the repair words right after the container phrase, at a terminal and in a script alike.
+alone offers a search for the words typed as `?`, which [Without the repair
+words](#without-the-repair-words) describes. When the words are not a valid container, MHFE says so
+and asks whether to type them again or repair them with the card. The repaired container phrase is
+shown with every word that was repaired, and used only after "Use it"; the summary records which
+words were repaired, never the words themselves. `--repair` asks for the repair words right after
+the container phrase, at a terminal and in a script alike.
 
 `mhfe repair` repairs a container phrase: type its words with `?` for each word you cannot read,
 then the repair words, with `?` where needed too; the card can be typed as written, with its name
@@ -583,12 +579,6 @@ checksum. Damage beyond what the repair words can repair, or a card from another
 can instead give a wrong result that passes the checksum, and the program cannot always recognise
 this. A successful repair therefore does not confirm the intended wallet.
 
-Without the card, Enter alone at a terminal offers the same search for words typed as `?` as the
-other commands: by the container's own wallet without the password, or, with the password, by your
-wallet or the original seed phrase's own checks. The container's settings are asked once such a
-search is chosen, or given with `--pim` and `--mem`, and `--scan-gap` sets the addresses a search
-for two words covers.
-
 Keep the card apart from the container phrase, so that one accident or one thief does not take
 both. Guard it like the container phrase: a container is what someone needs to try passwords, and
 whoever finds the card together with a damaged or partial copy of the container phrase can repair
@@ -599,6 +589,56 @@ true container nor bypass its MHFE password, but the card is still a partial cop
 same protection. The repair words use the optional Reed–Solomon profile
 [MHFE-REPAIR-1](https://github.com/hobby-eng/mhfe-spec#optional-repair-words-mhfe-repair-1) of the
 specification, which gives it byte for byte.
+
+#### Without the repair words
+
+MHFE can find a missing word without the card, within limits. Type `?` in place of the word in `mhfe
+decrypt`, `check`, `rekey`, `wallets` or `repair`, press Enter where MHFE asks for the repair words,
+and say what you know. The container's settings are asked then, or given with `--pim` and `--mem`.
+MHFE tries every word the BIP39 checksum allows in that place, about 8 candidate containers for one
+missing word of 24 or about 128 for one of 12, and compares each with what you know. A wallet is
+known by one of its receiving or change addresses or by its master key fingerprint, typed in one
+field: eight hex digits are taken as a fingerprint, anything else as an address, and MHFE then asks
+for its coin.
+
+- **The container's own wallet** is the one its 24 words open when typed into a wallet as they are;
+  MHFE shows its master key fingerprint under every container it makes. Each candidate is compared
+  as it is, with no password and no recovery, on every core of the processor, which takes seconds
+  for one missing word and up to a few minutes for two. For two missing words, MHFE looks for an
+  address among the first 20 receiving and 20 change addresses of the first account, the usual gap
+  of a wallet. It asks whether to go further, to 100, 500 or a number of your own, and
+  `--scan-gap N` sets it.
+- **Your wallet** is the wallet of the original seed phrase. MHFE recovers each candidate with your
+  password and compares the result. Each candidate costs a full recovery, one to two minutes at the
+  default settings, so one missing word takes about a quarter of an hour in a 24-word container
+  (about 8 candidates) and two to four hours in a 12-word container of the same length (about 128).
+- **The original seed phrase's passphrase** is all you type besides the password; you never type
+  the phrase you are looking for. MHFE recovers each candidate and checks it by the original seed
+  phrase itself: by its built-in check for a phrase of 12 to 21 words, and by the phrase +
+  passphrase check for a 24-word phrase that `mhfe new` made with that check. A wrong candidate
+  passes this 16-bit check about once in 65,536.
+- **Nothing** is needed for an original seed phrase of 12 to 21 words: its built-in check tells the
+  right candidate after each recovery. A 24-word original seed phrase without the phrase +
+  passphrase check has no check at all, so nothing tells its candidates apart, and MHFE says so.
+
+For a wallet, MHFE then asks whether a BIP39 passphrase is used with the container phrase or with
+the original seed phrase, and asks for it only if you say yes, naming whose it is. For two missing
+words, MHFE offers only the container's own wallet. For a container as long as its original seed
+phrase, which has no check of its own, it offers the container's own wallet and, for one missing
+word, also your wallet. After a refusal or a search that finds nothing, MHFE asks again what you
+know; you type the container phrase only once.
+
+Before a search that recovers candidates, MHFE says how long it takes, and it shows every word it
+finds before it uses it. Without an address or the fingerprint of the container's own wallet, it
+searches for one missing word only. Two missing words make about 16,000 candidates in a 24-word
+container, which would take weeks to recover, and about 260,000 in a 12-word container of the same
+length, which would take half a year to a year. That is the price of the protection itself: the
+cost of a recovery that stops someone guessing your password stops a search through the words just
+as much. MnemoCode, whose phrases are not encrypted, can try every candidate in a moment and so
+finds two missing words with any fingerprint or address.
+
+Repair words have none of these limits: they restore words at once and exactly, without the password
+and without Argon2.
 
 ### `mhfe self-test`
 
@@ -877,55 +917,3 @@ The Rust source is licensed under MIT; see [`LICENSE`](LICENSE).
 
 MHFE was written with extensive use of ChatGPT and Claude and went through numerous cross-checks and
 audits, also made with these tools ([`docs/audits/`](docs/audits/README.md)).
-
-## Questions
-
-### Can MHFE find a missing word without the repair words?
-
-Yes, within limits. Type `?` in place of the word in `mhfe decrypt`, `check`, `rekey` or `wallets`,
-press Enter where MHFE asks for the repair words, and say what you know. MHFE then tries every word
-the BIP39 checksum allows in that place, about 8 candidate containers for one missing word of 24 or
-about 128 for one of 12, and compares each with what you know. A wallet is known by one of its
-receiving or change addresses or by its master key fingerprint, typed in one field: eight hex digits
-are taken as a fingerprint, anything else as an address, and MHFE then asks for its coin.
-
-- **The container's own wallet** is the one its 24 words open when typed into a wallet as they are;
-  MHFE shows its master key fingerprint under every container it makes. Each candidate is compared
-  as it is, with no password and no recovery, on every core of the processor, which takes seconds
-  for one missing word and up to a few minutes for two. For two missing words, MHFE looks for an
-  address among the first 20 receiving and 20 change addresses of the first account, the usual gap
-  of a wallet. It asks whether to go further, to 100, 500 or a number of your own, and
-  `--scan-gap N` sets it.
-- **Your wallet** is the wallet of the original seed phrase. MHFE recovers each candidate with your
-  password and compares the result. Each candidate costs a full recovery, one to two minutes at the
-  default settings, so one missing word takes about a quarter of an hour in a 24-word container
-  (about 8 candidates) and two to four hours in a 12-word container of the same length (about 128).
-- **The original seed phrase's passphrase** is all you type besides the password; you never type
-  the phrase you are looking for. MHFE recovers each candidate and checks it by the original seed
-  phrase itself: by its built-in check for a phrase of 12 to 21 words, and by the phrase +
-  passphrase check for a 24-word phrase that `mhfe new` made with that check. A wrong candidate
-  passes this 16-bit check about once in 65,536.
-- **Nothing** is needed for an original seed phrase of 12 to 21 words: its built-in check tells the
-  right candidate after each recovery. A 24-word original seed phrase without the phrase +
-  passphrase check has no check at all, so nothing tells its candidates apart, and MHFE says so.
-
-For a wallet, MHFE then asks whether a BIP39 passphrase is used with the container phrase or with
-the original seed phrase, and asks for it only if you say yes, naming whose it is. For two missing
-words, MHFE offers only the container's own wallet. For a container as long as its original seed
-phrase, which has no check of its own, it offers the container's own wallet and, for one missing
-word, also your wallet. After a refusal or a search that finds nothing, MHFE asks again what you
-know; you type the container phrase only once.
-
-Before a search that recovers candidates, MHFE says how long it takes, and it shows every word it
-finds before it uses it. Without an address or the fingerprint of the container's own wallet, it
-searches for one missing word only. Two missing words make about 16,000 candidates in a 24-word
-container, which would take weeks to recover, and about 260,000 in a 12-word container of the same
-length, which would take half a year to a year. That is the price of the protection itself: the
-cost of a recovery that stops someone guessing your password stops a search through the words just
-as much. MnemoCode, whose phrases are not encrypted, can try every candidate in a moment and so
-finds two missing words with any fingerprint or address.
-
-Repair words remain the way to rely on: a card of four words, kept apart from the container
-phrase, restores up to four missing or unreadable words, or two wrong ones, at once and exactly,
-without the password and without Argon2. Make them when you encrypt, or later with
-`mhfe repair-words`; [`mhfe repair`](#mhfe-repair) says how they are used.
