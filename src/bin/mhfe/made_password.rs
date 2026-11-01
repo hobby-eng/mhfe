@@ -35,6 +35,18 @@ pub enum PasswordKind {
 }
 
 impl PasswordKind {
+    /// How the program makes a password of this kind; `None` for one the person types.
+    pub fn recipe(self) -> Result<Option<PasswordRecipe>, MhfeError> {
+        Ok(match self {
+            Self::Own => None,
+            Self::Words => Some(PasswordRecipe::words(DEFAULT_WORDS)?),
+            Self::CheckWord => Some(PasswordRecipe::check_word()),
+            Self::Chars => Some(PasswordRecipe::characters(DEFAULT_CHARACTERS)?),
+        })
+    }
+}
+
+impl PasswordKind {
     /// Every kind, in the order a question lists them: the person's own first.
     const ALL: [Self; 4] = [Self::Own, Self::Words, Self::CheckWord, Self::Chars];
     /// The kinds MHFE makes, in the same order.
@@ -158,16 +170,8 @@ pub fn ask_kind(input: &mut Input, operation: Operation) -> Result<PasswordKind,
 pub fn read_made(
     input: &mut Input,
     operation: Operation,
-    kind: PasswordKind,
+    recipe: PasswordRecipe,
 ) -> Result<Password, Failure> {
-    let recipe = match kind {
-        PasswordKind::Words => PasswordRecipe::words(DEFAULT_WORDS)?,
-        PasswordKind::CheckWord => PasswordRecipe::check_word(),
-        PasswordKind::Chars => PasswordRecipe::characters(DEFAULT_CHARACTERS)?,
-        PasswordKind::Own => {
-            return Err(MhfeError::InvalidRequest("own passwords are typed".to_owned()).into())
-        }
-    };
     let made = recipe.make(&mut SystemRandom)?;
     let strength = format!("{}.", recipe.summary());
     loop {

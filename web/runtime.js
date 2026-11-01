@@ -243,7 +243,7 @@ export class WorkerJob {
       this.#answer(reply.question, reply.value);
     } else if (WORKER_NEWS.includes(reply.type)) {
       // News the page did not ask for has no handler and is dropped.
-      this.callPage(this.#ownHandler(reply.type), reply.value, reply.type);
+      this.callPage(this.#ownHandler(reply.type), reply.value);
     } else {
       this.stop(unknownMessage(reply.type));
     }
@@ -270,7 +270,7 @@ export class WorkerJob {
   }
 
   /** Calls a page callback whose result is not awaited; a throw or a rejection stops the job. */
-  callPage(callback, value, name) {
+  callPage(callback, value) {
     try {
       const returned = callback?.(value);
       if (typeof returned?.then === "function") {
@@ -278,11 +278,11 @@ export class WorkerJob {
           // Once the job has ended there is nothing left to stop: the page's rejection stays
           // unhandled, as it would be without this client, instead of being swallowed.
           if (this.#ended) throw cause;
-          this.stop(callbackFailed(name, cause));
+          this.stop(callbackFailed(cause));
         });
       }
     } catch (cause) {
-      this.stop(callbackFailed(name, cause));
+      this.stop(callbackFailed(cause));
     }
   }
 
@@ -301,7 +301,7 @@ export class WorkerJob {
       // A handler that wraps the page's callback may name the failure itself; anything else,
       // an MhfeError of another call included, becomes CALLBACK_FAILED with it as the cause.
       const named = cause instanceof MhfeError && cause.code === "CALLBACK_FAILED";
-      this.stop(named ? cause : callbackFailed(question, cause));
+      this.stop(named ? cause : callbackFailed(cause));
     }
   }
 }
@@ -504,7 +504,7 @@ export function encodeSecret(value, name) {
     if (!isWellFormed(value)) {
       throw new MhfeError(
         "INVALID_PASSWORD_TEXT",
-        `The ${name} contains an unpaired surrogate, which is not valid text.`,
+        `An unpaired surrogate in the ${name} is not valid text.`,
       );
     }
     bytes = new TextEncoder().encode(value);
@@ -580,8 +580,8 @@ export function sentence(text) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function callbackFailed(name, cause) {
-  return new MhfeError("CALLBACK_FAILED", `The page's ${name} callback failed.`, { cause });
+function callbackFailed(cause) {
+  return new MhfeError("CALLBACK_FAILED", "The page's callback failed.", { cause });
 }
 
 // The self-check of a class: known answers of every part the class computes, compared before its
@@ -828,6 +828,7 @@ export class PackageCheck {
     const components = [this.#features(), this.#packageParts()];
     if (this.#secrets) components.push(encodingPart());
     let version = null;
+    let latched = null;
     if (components[0].outcome === "passed") {
       const compiled = await this.#compiles();
       if (compiled !== null) components[0] = compiled;
@@ -841,7 +842,15 @@ export class PackageCheck {
         const rename = step.rename ?? ((component) => component);
         const ran = await step.run(step.skipPassed ? this.#passedIds() : [], {
           componentStart: (part) => onProgress?.({ ...rename(part), running: true }),
-          component: (part) => onProgress?.({ ...rename(part), running: false }),
+          component: (part) => {
+            const named = rename(part);
+            // A failed part closes the class even if its worker dies before the report.
+            if (named.outcome === "failed" && this.#failed === null) {
+              latched = { passed: false, tier, version, buildId: BUILD_ID, components: [named] };
+              this.#failed = latched;
+            }
+            onProgress?.({ ...named, running: false });
+          },
         });
         version ??= ran.version;
         components.push(...this.#placed(ran, step.skipPassed).map(rename));
@@ -854,7 +863,8 @@ export class PackageCheck {
       buildId: BUILD_ID,
       components,
     };
-    if (!report.passed) this.#failed ??= report;
+    // The whole report takes the place of a part latched on the way.
+    if (!report.passed && (this.#failed === null || this.#failed === latched)) this.#failed = report;
     return report;
   }
 

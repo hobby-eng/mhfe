@@ -9,15 +9,17 @@
 //! (scripts/generate-cell-widths.py says which terminals may differ). The line begins right after
 //! its prompt, which begins a row of its own.
 
+use std::fmt::Write as _;
 use std::io::{self, Write};
 
+use mhfe::memory::LockedText;
 use mhfe::word_hints::{Hint, WordList};
 
 use anstyle::Style;
 use zeroize::Zeroizing;
 
 use crate::cell_widths;
-use crate::style::{paint, MUTED, WARNING};
+use crate::style::{locked_rows, paint, MUTED, WARNING};
 
 /// Rows of words at most below the line; the rest is counted on a row of its own.
 const HINT_ROWS: usize = 3;
@@ -136,7 +138,7 @@ impl<'a> LineScreen<'a> {
         self.settle()?;
         let rows = self.rows_of(hints, hints.list.hint(line));
         self.controls.write_all(b"\x1b[J")?;
-        for row in &rows {
+        for row in rows.lines() {
             self.controls.write_all(b"\r\n")?;
             self.controls.flush()?;
             self.text.write_all(row.as_bytes())?;
@@ -144,7 +146,8 @@ impl<'a> LineScreen<'a> {
         }
         if !rows.is_empty() {
             let column = self.column(self.shown) + 1;
-            write!(self.controls, "\x1b[{}A\x1b[{column}G", rows.len())?;
+            let up = rows.lines().count();
+            write!(self.controls, "\x1b[{up}A\x1b[{column}G")?;
         }
         self.controls.flush()
     }
@@ -157,52 +160,65 @@ impl<'a> LineScreen<'a> {
         self.controls.flush()
     }
 
-    /// The rows that show `hint`, each narrower than the terminal so that none wraps.
-    fn rows_of(&self, hints: Hints, hint: Hint) -> Vec<String> {
+    /// The rows that show `hint`, a line of the text each, narrower than the terminal so that none
+    /// wraps. Listed words tell what is being typed, so they stay in locked memory.
+    fn rows_of(&self, hints: Hints, hint: Hint) -> LockedText {
         let name = hints.list.name();
-        match hint {
-            Hint::Nothing => Vec::new(),
+        // One row more than the words take: the one that says how many more there are.
+        locked_rows(HINT_ROWS + 1, |rows| match hint {
+            Hint::Nothing => {}
             Hint::NoWord if hints.says_no_word => {
-                vec![self.hint_row(WARNING, &format!("! No {name} word begins like this."))]
+                self.hint_row(
+                    rows,
+                    WARNING,
+                    &format!("! No {name} word begins like this."),
+                );
             }
-            Hint::NoWord => Vec::new(),
+            Hint::NoWord => {}
             Hint::Count(1) => {
-                vec![self.hint_row(MUTED, &format!("1 {name} word begins with this letter"))]
+                self.hint_row(
+                    rows,
+                    MUTED,
+                    &format!("1 {name} word begins with this letter"),
+                );
             }
-            Hint::Count(count) => vec![self.hint_row(
-                MUTED,
-                &format!("{count} {name} words begin with this letter"),
-            )],
-            Hint::Words(words) => self.word_rows(words),
-        }
+            Hint::Count(count) => {
+                let text = format!("{count} {name} words begin with this letter");
+                self.hint_row(rows, MUTED, &text);
+            }
+            Hint::Words(words) => self.word_rows(rows, words),
+        })
     }
 
     /// `words` in columns, at most [`HINT_ROWS`] rows of them, and how many more on a row of its
-    /// own.
-    fn word_rows(&self, words: &[&str]) -> Vec<String> {
+    /// own. A cell fits [`Self::room`], as the narrowest terminal with hints has room for the
+    /// longest word.
+    fn word_rows(&self, rows: &mut LockedText, words: &[&str]) {
         let longest = words.iter().map(|word| word.len()).max().unwrap_or(0);
         let cell = longest + WORD_GAP;
         let per_row = (self.room() / cell).max(1);
         let shown = words.len().min(per_row * HINT_ROWS);
-        let mut rows: Vec<String> = words[..shown]
-            .chunks(per_row)
-            .map(|row| {
-                let cells: Vec<String> = row.iter().map(|word| format!("{word:<cell$}")).collect();
-                self.hint_row(MUTED, cells.concat().trim_end())
-            })
-            .collect();
-        if shown < words.len() {
-            rows.push(self.hint_row(MUTED, &format!("and {} more", words.len() - shown)));
+        for row in words[..shown].chunks(per_row) {
+            // Writing into a locked text cannot fail.
+            let _ = write!(rows, "{INDENT}{MUTED}");
+            for (index, word) in row.iter().enumerate() {
+                // The last word takes no spaces after it.
+                let width = if index + 1 == row.len() { 0 } else { cell };
+                let _ = write!(rows, "{word:<width$}");
+            }
+            let _ = writeln!(rows, "{MUTED:#}");
         }
-        rows
+        if shown < words.len() {
+            self.hint_row(rows, MUTED, &format!("and {} more", words.len() - shown));
+        }
     }
 
-    /// A hint row in `style`, indented and cut to the room of the terminal, so that a fixed text
-    /// wider than a narrow terminal never wraps onto the row the typed line comes back to
-    /// (AUD-015-UI001). Every hint is ASCII: list words, numbers and fixed text.
-    fn hint_row(&self, style: Style, text: &str) -> String {
+    /// A row of public text in `style`, indented and cut to the room of the terminal, so that a
+    /// fixed text wider than a narrow terminal never wraps onto the row the typed line comes back
+    /// to (AUD-015-UI001). Every hint is ASCII: list words, numbers and fixed text.
+    fn hint_row(&self, rows: &mut LockedText, style: Style, text: &str) {
         let shown = &text[..text.len().min(self.room())];
-        format!("{INDENT}{}", paint(style, shown))
+        rows.push_str(&format!("{INDENT}{}\n", paint(style, shown)));
     }
 
     /// The columns a hint row may fill after its indent: all but the last, where a terminal would
@@ -438,14 +454,13 @@ mod tests {
 
     #[test]
     fn many_words_end_with_how_many_more() {
-        let words: Vec<&str> = (0..40).map(|_| "word").collect();
         let mut written = Vec::new();
         let mut text = Vec::new();
         let screen = LineScreen::new(&mut written, &mut text, 0, 30, BIP39);
-        let rows = screen.word_rows(&words);
+        let rows = screen.rows_of(BIP39.unwrap(), Hint::Words(&["word"; 40]));
         // 27 columns after the indent and the last one: four words of six columns a row.
-        assert_eq!(rows.len(), HINT_ROWS + 1);
-        let last = anstream::adapter::strip_str(&rows[HINT_ROWS]).to_string();
+        assert_eq!(rows.lines().count(), HINT_ROWS + 1);
+        let last = anstream::adapter::strip_str(rows.lines().last().unwrap()).to_string();
         assert_eq!(last, "  and 28 more");
     }
 
@@ -468,8 +483,8 @@ mod tests {
                 Hint::Count(2048),
                 Hint::Words(&["abandon"; 40]),
             ] {
-                for row in screen.rows_of(BIP39.unwrap(), hint) {
-                    let plain = anstream::adapter::strip_str(&row).to_string();
+                for row in screen.rows_of(BIP39.unwrap(), hint).lines() {
+                    let plain = anstream::adapter::strip_str(row).to_string();
                     assert!(plain.len() < columns, "{columns}: {plain}");
                 }
             }

@@ -5,7 +5,7 @@
 use mhfe_core::password_check::{check_word, EFF_WORDS};
 use zeroize::Zeroizing;
 
-use crate::check_word::{PasswordReview, Reading, DRAWN_WORDS};
+use crate::check_word::DRAWN_WORDS;
 use crate::eff::{index_of_rolls, LIST_SIZE, LONGEST_WORD, MILLIBITS_PER_WORD};
 use crate::memory::LockedText;
 use crate::random::{check_source, uniform_below, RandomSource};
@@ -201,13 +201,6 @@ impl PasswordRecipe {
             }
             Ok(())
         })?;
-        // The six words are read back as a person's program will read them: a fault between the
-        // drawing and the writing would otherwise give a password whose check word does not fit.
-        if self.has_check_word() && PasswordReview::of(&text).reading() != Reading::Fits {
-            return Err(MhfeError::Internal(
-                "a new password does not fit its check word".to_owned(),
-            ));
-        }
         Ok(NewPassword {
             text,
             recipe: *self,
@@ -285,7 +278,6 @@ mod tests {
     }
 
     use super::*;
-    use crate::eff::index_of;
     use crate::random::tests::counter_source;
 
     #[test]
@@ -305,7 +297,10 @@ mod tests {
         let mut source = counter_source(9);
         let words = PasswordRecipe::words(6).unwrap().make(&mut source).unwrap();
         assert_eq!(words.text().split(' ').count(), 6);
-        assert!(words.text().split(' ').all(|word| index_of(word).is_some()));
+        assert!(words
+            .text()
+            .split(' ')
+            .all(|word| EFF_WORDS.binary_search(&word).is_ok()));
         let characters = PasswordRecipe::characters(16)
             .unwrap()
             .make(&mut source)

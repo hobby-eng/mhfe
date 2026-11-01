@@ -160,8 +160,8 @@ export class MhfeWallet extends MhfeModuleClass {
     requireCallback(onProgress, "onProgress");
     const wishes = wishesOf(chosen, neverUse);
     this.#slot.requireIdle();
-    // Left out, the passphrase and its repetition are empty; given, each must be a secret, even
-    // where it is not compared, so that a wrong type is never taken as no passphrase.
+    // Left out, the passphrase and its repetition are empty; given, each must be a secret, so
+    // that a wrong type is never taken as no passphrase.
     const given = secretOrEmpty(passphrase, "passphrase");
     const repeat = secretOrEmpty(passphraseRepeat, "repeated passphrase");
     const hasPassphrase = given.length !== 0;
@@ -186,7 +186,7 @@ export class MhfeWallet extends MhfeModuleClass {
     const checked = hasPassphrase && walletCheck;
     // The drawing takes over from the wait for the startup check with nothing in between.
     return this.#slot.after(this.#module.ready(), () =>
-      this.#draw(given, repeat, hasPassphrase, checked, wishes, onProgress),
+      this.#draw(given, repeat, checked, wishes, onProgress),
     );
   }
 
@@ -195,7 +195,7 @@ export class MhfeWallet extends MhfeModuleClass {
    * secrets are copied into bytes only now, and until the job owns them, every failure wipes the
    * copies (AUD-012-SEC001).
    */
-  #draw(passphrase, passphraseRepeat, hasPassphrase, checked, wishes, onProgress) {
+  #draw(passphrase, passphraseRepeat, checked, wishes, onProgress) {
     const message = {
       operation: "drawPhrase",
       walletCheck: checked,
@@ -208,18 +208,16 @@ export class MhfeWallet extends MhfeModuleClass {
     };
     try {
       message.passphrase = encodeSecret(passphrase, "passphrase");
-      if (hasPassphrase) {
-        // The library's rule (wallet_check::require_same_passphrase), which the worker applies
-        // again, is compared here first, so that a refused passphrase never reaches a worker; its
-        // code and message are the library's, and `cargo xtask package-check` keeps them
-        // in step.
-        const first = message.passphrase;
-        const repeat = encodeSecret(passphraseRepeat, "repeated passphrase");
-        message.passphraseRepeat = repeat;
-        const same = repeat.length === first.length && repeat.every((byte, i) => byte === first[i]);
-        if (!same) {
-          throw new MhfeError("PASSPHRASES_DIFFER", "The passphrase and its repetition differ");
-        }
+      // The library's rule (wallet_check::require_same_passphrase), which the worker applies
+      // again, is compared here first, so that a refused passphrase never reaches a worker; its
+      // code and message are the library's, and `cargo xtask package-check` keeps them
+      // in step.
+      const first = message.passphrase;
+      const repeat = encodeSecret(passphraseRepeat, "repeated passphrase");
+      message.passphraseRepeat = repeat;
+      const same = repeat.length === first.length && repeat.every((byte, i) => byte === first[i]);
+      if (!same) {
+        throw new MhfeError("PASSPHRASES_DIFFER", "The passphrase and its repetition differ");
       }
       message.chosenWords = encodeSecret(wishes.words, "chosen words");
       return this.#module.run(message, this.#slot, {

@@ -112,7 +112,7 @@ ARG RELEASE_VERSION
 # container has no .git of its own. They go into BUILD-INFO.txt of every archive.
 ARG SOURCE_COMMIT
 ARG SOURCE_STATE
-RUN test -n "${RELEASE_VERSION}" \
+RUN --network=none test -n "${RELEASE_VERSION}" \
     && package_version="$(cargo metadata --locked --offline --no-deps --format-version 1 | \
          python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "mhfe-experimental"))')" \
     && test "${RELEASE_VERSION}" = "v${package_version}" \

@@ -14,8 +14,9 @@ use crate::eff::{different_dice_words, MILLIBITS_PER_WORD};
 /// About 50 bits, a little under four different dice words (51.7 bits), the least the README
 /// recommends: a weaker password gets a warning before it protects a phrase.
 pub const WEAK_BELOW_BITS: f64 = 50.0;
-/// Only the first 100 characters are read: they tell a weak password from a strong one, and the
-/// reading stays quick for a password thousands of characters long.
+/// Only the first 100 characters are read, but for dice words, which are counted through the whole
+/// text: they tell a weak password from a strong one, and the reading stays quick for a password
+/// thousands of characters long.
 const READ_CHARACTERS: usize = 100;
 /// Shorter dictionary words are not looked for: three letters turn up by chance in random
 /// characters too often to tell anything.
@@ -116,7 +117,26 @@ fn estimated_bits(password: &str) -> f64 {
         .char_indices()
         .nth(READ_CHARACTERS)
         .map_or(password.len(), |(index, _)| index);
-    read_parts(&password[..end], word_lists())
+    let text = &password[..end];
+    match repeated_unit(text) {
+        Some((unit, repeats)) => read_parts(unit, word_lists()) + repeats as f64 * PATTERN_BITS,
+        None => read_parts(text, word_lists()),
+    }
+}
+
+/// The unit of a text that says one shorter unit again and again, with one separator between the
+/// repeats or none, and how many repeats follow it.
+fn repeated_unit(text: &str) -> Option<(&str, usize)> {
+    let bytes = text.as_bytes();
+    [0, 1].into_iter().find_map(|separator| {
+        (1 + separator..=bytes.len() / 2 + separator).find_map(|period| {
+            let unit = period - separator;
+            let repeats = (bytes.len() + separator).is_multiple_of(period)
+                && text.is_char_boundary(unit)
+                && (0..bytes.len()).all(|at| bytes[at] == bytes[at % period]);
+            repeats.then(|| (&text[..unit], (bytes.len() + separator) / period - 1))
+        })
+    })
 }
 
 /// The common passwords and the dictionary, sorted once and shared.
@@ -322,6 +342,9 @@ mod tests {
         assert!(estimated_bits("staplestaplestaple") < once + 3.0);
         assert!(estimated_bits("123456789") < 12.0);
         assert!(estimated_bits("zyxwvutsrq") < 15.0);
+        // One short group said again and again, with a separator or without.
+        assert!(is_weak(estimated_bits("1234 1234 1234 1234 1234")));
+        assert!(is_weak(estimated_bits("abcdabcdabcdabcdabcdabcdabcdabcd")));
     }
 
     #[test]

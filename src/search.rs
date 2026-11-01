@@ -11,9 +11,9 @@
 //!   minutes at the default settings, so that only one missing word is searched: about 8
 //!   candidates in 24 words, 128 in 12; two would take weeks.
 //!
-//! The words typed are read as for a repair: `?` or a word outside the BIP39 list marks a missing
-//! word, and the first four letters of a word are enough. A candidate that matches proves only
-//! what the reference proves: an address strongly, a fingerprint with 32 bits.
+//! The words typed are read as for a repair: `?` marks a missing word, and beside it so does a word
+//! outside the BIP39 list; the first four letters of a word are enough. A candidate that matches
+//! proves only what the reference proves: an address strongly, a fingerprint with 32 bits.
 
 use mhfe_core::{Argon2Engine, Mhfe, Password, Suite};
 use sha2::{Digest, Sha256};
@@ -43,9 +43,9 @@ pub type CandidateProgress<'a> = &'a mut dyn FnMut(usize, usize) -> Result<(), M
 /// Hears every round of a search that recovers each candidate: `(candidate, count, round,
 /// rounds)`; an error stops it.
 pub type RecoveryProgress<'a> = &'a mut dyn FnMut(usize, usize, u32, u32) -> Result<(), MhfeError>;
-/// Compares candidate `index` with the reference, from any of the threads that share them.
-/// Compares one candidate; the second argument says when the search was stopped, which a long
-/// address search asks between its addresses.
+/// Compares candidate `index` with the reference, from any of the threads that share them; the
+/// second argument says when the search was stopped, which a long address search asks between its
+/// addresses.
 type CandidateCompare<'a> =
     &'a (dyn Fn(usize, &dyn Fn() -> bool) -> Result<CheckOutcome, MhfeError> + Sync);
 /// The most missing words a search with the owner's wallet looks for: each candidate takes a full
@@ -63,7 +63,6 @@ pub struct ContainerSearch {
 }
 
 /// A candidate that matched the reference.
-#[derive(Debug)]
 pub struct Found {
     /// The container phrase, every word in full, one space apart.
     pub container: Zeroizing<String>,
@@ -177,15 +176,23 @@ impl ContainerSearch {
         let count = self.count();
         for (index, missing) in self.candidates.iter().enumerate() {
             let container = self.container(missing);
-            let outcome = rehearsal::check(
+            let recovered = rehearsal::recover_for_check(
                 mhfe,
                 &container,
                 password,
                 reference,
                 &mut |round, rounds| on_progress(index + 1, count, round, rounds),
             )?;
-            if outcome.matches() {
-                return Ok(Some(self.found(container, missing, outcome)));
+            let evidence = recovered.compare(reference)?;
+            // With a passphrase the 16-bit check tells candidates apart, though it verifies none.
+            let by_wallet_check = matches!(
+                reference,
+                Reference::OwnChecks {
+                    passphrase: Some(_)
+                }
+            ) && evidence.wallet_check == Some(true);
+            if evidence.outcome.matches() || by_wallet_check {
+                return Ok(Some(self.found(container, missing, evidence.outcome)));
             }
         }
         Ok(None)
@@ -295,35 +302,44 @@ fn compare_candidates(
         abort.store(true, Ordering::Relaxed);
         stop.store(true, Ordering::Relaxed);
     };
-    std::thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| {
-                while !stop.load(Ordering::Relaxed) {
-                    let index = next.fetch_add(1, Ordering::Relaxed);
-                    if index >= count {
-                        break;
+    let worker = || {
+        while !stop.load(Ordering::Relaxed) {
+            let index = next.fetch_add(1, Ordering::Relaxed);
+            if index >= count {
+                break;
+            }
+            match compare(index, &|| abort.load(Ordering::Relaxed)) {
+                Ok(outcome) if outcome.matches() => {
+                    let mut best = matched.lock().unwrap_or_else(|e| e.into_inner());
+                    if best.as_ref().is_none_or(|(found, _)| index < *found) {
+                        *best = Some((index, outcome));
                     }
-                    match compare(index, &|| abort.load(Ordering::Relaxed)) {
-                        Ok(outcome) if outcome.matches() => {
-                            let mut best = matched.lock().unwrap_or_else(|e| e.into_inner());
-                            if best.as_ref().is_none_or(|(found, _)| index < *found) {
-                                *best = Some((index, outcome));
-                            }
-                            stop.store(true, Ordering::Relaxed);
-                        }
-                        Ok(_) => {}
-                        // A comparison abandoned after an abort: the abort's error stands.
-                        Err(_) if abort.load(Ordering::Relaxed) => {}
-                        Err(error) => abort_with(error),
-                    }
-                    done.fetch_add(1, Ordering::Relaxed);
+                    stop.store(true, Ordering::Relaxed);
                 }
-                finished.fetch_add(1, Ordering::Release);
-            });
+                Ok(_) => {}
+                // A comparison abandoned after an abort: the abort's error stands.
+                Err(_) if abort.load(Ordering::Relaxed) => {}
+                Err(error) => abort_with(error),
+            }
+            done.fetch_add(1, Ordering::Relaxed);
+        }
+        finished.fetch_add(1, Ordering::Release);
+    };
+    std::thread::scope(|scope| {
+        // The system may refuse threads, under a limit on tasks: the ones it gives do the work.
+        let started = (0..workers)
+            .filter(|_| {
+                std::thread::Builder::new()
+                    .spawn_scoped(scope, worker)
+                    .is_ok()
+            })
+            .count();
+        if started == 0 {
+            worker();
         }
         // This thread tells how far the comparison has come; an error from it stops the workers.
         // After an abort it is not asked again while the workers end.
-        while finished.load(Ordering::Acquire) < workers {
+        while finished.load(Ordering::Acquire) < started {
             std::thread::sleep(Duration::from_millis(PROGRESS_INTERVAL_MS));
             if abort.load(Ordering::Relaxed) {
                 continue;
@@ -365,40 +381,16 @@ fn compare_candidates(
 
 /// `reference` as the decoy search compares it: an address without a path within `limits`.
 fn decoy_reference<'a>(reference: &Reference<'a>, limits: SearchLimits) -> Reference<'a> {
-    match *reference {
-        Reference::Address {
-            address,
-            passphrase,
-            path: None,
-            ..
-        } => Reference::Address {
-            address,
-            passphrase,
-            path: None,
-            limits,
-        },
-        Reference::Address {
-            address,
-            passphrase,
-            path,
-            limits,
-        } => Reference::Address {
-            address,
-            passphrase,
-            path,
-            limits,
-        },
-        Reference::Fingerprint {
-            fingerprint,
-            passphrase,
-        } => Reference::Fingerprint {
-            fingerprint,
-            passphrase,
-        },
-        Reference::BuiltInCheck { words } => Reference::BuiltInCheck { words },
-        Reference::WalletCheck { passphrase } => Reference::WalletCheck { passphrase },
-        Reference::OwnChecks { passphrase } => Reference::OwnChecks { passphrase },
+    let mut compared = *reference;
+    if let Reference::Address {
+        path: None,
+        limits: own,
+        ..
+    } = &mut compared
+    {
+        *own = limits;
     }
+    compared
 }
 
 /// A search compares with a wallet: an address or a fingerprint. The built-in check and the
@@ -465,7 +457,8 @@ fn set_word(bits: &mut WordBits, index: usize, number: u16) {
 
 /// Whether `words` words packed in `bits` pass the BIP39 checksum: the first
 /// [`packing::checksum_bits`] bits of the SHA-256 of the entropy, which the last word carries after
-/// the entropy's last bits.
+/// the entropy's last bits. A deliberate copy of the bip39 crate's rule, as a search tries millions
+/// of candidates: `the_checksum_agrees_with_the_bip39_library` keeps them in step.
 fn passes_checksum(bits: &WordBits, words: usize) -> bool {
     let entropy_bytes = packing::entropy_of_words(words);
     let hash = Sha256::digest(&bits[..entropy_bytes]);

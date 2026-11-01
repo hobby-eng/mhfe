@@ -17,6 +17,19 @@ pub fn available_memory_bytes() -> Option<u64> {
     ffi::available_memory_bytes()
 }
 
+/// Whether no page of this process can reach swap, as its control group forbids it. Only Linux
+/// has such a limit.
+pub fn swap_forbidden() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        super::cgroup::swap_forbidden()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 /// Checks, without allocating anything, that this build and computer can run `work`: the memory
 /// level is supported and the memory is free.
 /// A program calls it before asking for secrets and reserves the memory after the password is

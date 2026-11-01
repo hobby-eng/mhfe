@@ -16,7 +16,8 @@
 
 use serde_json::Value;
 
-/// The passwords, settings, phrases and length detection of suite 3.
+/// The passwords, settings, phrases and length detection of suite 3. Unlike the others it has no
+/// cfg: the password checks of every module read it, so each WebAssembly carries the whole file.
 pub(crate) const SUITE_3: &str = include_str!("../tests/spec/vectors/suite3/validation-cases.json");
 /// The refusals of suite 4 before Argon2.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]

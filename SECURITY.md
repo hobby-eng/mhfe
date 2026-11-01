@@ -17,7 +17,8 @@ Never include a real seed phrase, password, private key or wallet file.
   container and a recovered seed phrase are shown the same way, until the person presses Enter or
   Escape after writing them down, and a container typed for a recovery or a check is read on a
   private screen as well. Anyone who can see the screen meanwhile can read them. Where no private
-  screen is possible, they are typed without echo. A phrase that the person did not ask to export
+  screen is possible, such as with `TERM=dumb`, secrets are typed without echo, a container is shown
+  as it is typed, and a result goes to the main screen and stays in its scrollback. A phrase that the person did not ask to export
   is shown only on a private screen: `new` and `wallets` refuse to start, and `rekey` does not
   offer the owner's comparison, when standard output is not a terminal that has one, such as when
   it goes to a file, a pipe or another terminal than the one the private screen is shown on. The
@@ -93,9 +94,18 @@ Never include a real seed phrase, password, private key or wallet file.
   browser.
 - The Argon2 work area, gigabytes in size, is locked only where the limit on locked memory holds
   all of it, which on Linux it usually does not (8 MiB by default), and from its blocks a password
-  guess can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when
-  a swap area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap
-  in memory (zram) is safe. macOS encrypts its swap; on Windows, use BitLocker or no page file.
+  guess can be tested cheaply. On Linux a command that reads secrets therefore forbids itself swap
+  before it reads anything: where swap lies on a disk, encrypted or not, it starts itself again in
+  a systemd scope with `MemorySwapMax=0`, so that no page of it, stack, heap and work area included,
+  can reach swap, and reads the limit back. That needs a user session of systemd. Where it cannot
+  be done, swap encrypted with dm-crypt, directly or under LVM, is accepted, as only ciphertext
+  reaches the disk. Any other swap, and swap the tool cannot tell of, is named, and the person is
+  asked whether to go on; without a terminal the command stops. Swap in memory (zram) that writes
+  back to no disk is safe. With swap forbidden and too little memory, the system ends the process
+  rather than write to a disk. macOS encrypts its swap; on Windows, no program can forbid its page
+  file: a command locks the work area and asks whether to go on where Windows refuses, and only
+  BitLocker or no page file covers the rest of its memory. A browser page has no such means at all. What never
+  reaches a disk needs no erasing: TRIM and overwriting do not guarantee that an SSD forgets.
   Hibernation writes locked memory and the work area to disk: on Linux the kernel refuses to
   hibernate while secret memory exists, and elsewhere only an encrypted disk protects them.
 - A known limit of mhfe-core 0.1.0: since the Linux change "mm/secretmem: properly account locked
@@ -109,7 +119,7 @@ Never include a real seed phrase, password, private key or wallet file.
   The default limit, 8 MiB, is far above this, and the core's next version fixes it.
 - `encrypt` asks for the password twice, also with `--stdin`, and then decrypts the new container
   again from its words and compares the result with the original seed phrase: a typing mistake or a
-  hardware fault cannot silently produce a container that no password opens. At a terminal the
+  hardware fault that does not repeat cannot silently produce a container that no password opens. At a terminal the
   container is shown during that check, marked as not yet verified, and the outcome is reported;
   a failed or cancelled check says that the container must not be relied on. With `--stdin`, or
   when standard output goes to a file or another program, the container is printed only after
@@ -142,8 +152,9 @@ Never include a real seed phrase, password, private key or wallet file.
   are wiped. The check word adds no strength and is as secret as the rest of the password.
 - Nothing connects to a network. The browser package loads no remote resources and contains no
   network code: the build replaces the unused file loaders that Emscripten and wasm-bindgen emit
-  (`cargo xtask wasm remove-network-code`), and the only network code in the tool is `mhfe serve`,
-  which listens on 127.0.0.1 for the one page it serves and never receives a secret (see below).
+  (`cargo xtask wasm remove-network-code`), and the only network code in the tool is `mhfe serve`
+  and the optional launcher `mhfe-fast-mode.py`, which listen on 127.0.0.1 for the one page they
+  serve and never receive a secret (see below).
 - The operating system enforces as much of this as it offers. Every command but `serve` enters
   isolation before it reads anything: `encrypt`, `decrypt`, `check`, `rekey`, `new`, `wallets`,
   `repair`, `repair-words`, `password`, `self-test` and `test-benchmark`. It cannot be undone and
@@ -287,8 +298,8 @@ control of crash reports and no isolation of its own.
   are transferred to the worker, so that none stays with the class, and are wiped when the
   operation cannot start; a `Uint8Array` the page passes is copied, not emptied. Text with an
   unpaired surrogate is refused instead of being silently changed by the browser. In the worker,
-  the Rust code takes these bytes into buffers that it wipes, and it wipes its copies of the keys
-  and states; a result that holds a secret is written into a buffer of its final size, which is
+  the Rust code takes these bytes into buffers that it wipes, and it wipes the copies it holds of
+  the keys and states, as far as WebAssembly allows; a result that holds a secret is written into a buffer of its final size, which is
   wiped once the result has become a JavaScript string.
 - What the page holds as a JavaScript string cannot be wiped, since browsers cannot erase strings:
   a password or phrase typed into the page, a recovered or new phrase, the phrase shown to the

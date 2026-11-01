@@ -115,8 +115,10 @@ let outcome: CheckOutcome =
   precedence: `BuiltInCheck` then matches, and `CheckEvidence::built_in_check` names the length
   found; `CheckEvidence::other_lengths` names the others that pass too, by chance, as the
   specification has a check report every length that matches. It returns a `CheckOutcome`:
-  `Matches { path }` or `DoesNotMatch`, where `path` is the derivation path at which a matched
-  address was found (`None` for the other references). No part of the recovered phrase comes out.
+  `Matches { path }`, `DoesNotMatch` or `NotVerified`, where `path` is the derivation path at which
+  a matched address was found (`None` for the other references). `NotVerified` means that only a
+  24-word reading came out, which a wrong password gives too; a pass of its 16-bit check stays in
+  `CheckEvidence::wallet_check`. No part of the recovered phrase comes out.
   `Reference::passphrase()` gives the BIP39 passphrase a reference is compared with, empty when it
   is compared with the wallet without one, and `None` for `BuiltInCheck` and for `OwnChecks` without
   a passphrase, which say nothing about one; `Reference::given_passphrase()` gives it only when it
@@ -226,8 +228,8 @@ let outcome: CheckOutcome =
   count, which a front end states. A draw sets the bits of a fixed word directly, all 11 but for the
   last word, whose checksum bits must come out of the hash, and draws again for every other miss,
   before the check's seed; every phrase that meets the wishes stays equally likely.
-- `word_hints`: the hint below a word being typed from the BIP39 or the EFF list, the owner's rule
-  of 2026-10-08. `WordList::hint(line)` gives, for the last word of a line, `Hint::Count(n)` after
+- `word_hints`: the hint below a word being typed from the BIP39 or the EFF list.
+  `WordList::hint(line)` gives, for the last word of a line, `Hint::Count(n)` after
   one letter, how many words begin with it; `Hint::Words(words)` from `LIST_FROM_LETTERS` (2)
   letters, the words that begin with them; `Hint::NoWord` when none does; and `Hint::Nothing` when
   no word of letters is being typed or the word is whole with no longer word after it.

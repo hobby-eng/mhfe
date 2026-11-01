@@ -1,3 +1,4 @@
+// long: every binding of the core module, a few lines each, which one table of exports keeps whole.
 //! The core module: encryption, recovery, the rehearsal check, rekey, hidden wallets and the
 //! self-test, with Argon2, and the self-checks of these parts and of the page's Argon2 builds.
 //! Each call runs one whole operation synchronously inside its worker; the worker reports
@@ -420,6 +421,8 @@ fn candidate_json<'a>(
 #[derive(Serialize)]
 struct CheckJson {
     matches: bool,
+    /// The result in the specification's words, as the command line prints it.
+    outcome: &'static str,
     /// Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise.
     path: Option<String>,
     /// The original seed phrase's own checks, from the same recovery.
@@ -558,6 +561,7 @@ impl CheckSession {
             .map_err(js_error)?;
         json(&CheckJson {
             matches: evidence.outcome.matches(),
+            outcome: evidence.outcome.words(),
             path: evidence.outcome.path().map(ToString::to_string),
             evidence: EvidenceJson {
                 built_in_check: evidence.built_in_check,

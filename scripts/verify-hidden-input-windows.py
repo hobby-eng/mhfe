@@ -1,5 +1,7 @@
 """Checks the hidden terminal input of the mhfe tool in a Windows pseudo-console (ConPTY).
 
+Python by exception to TOOL-01, until it moves to `cargo xtask`.
+
     python scripts/verify-hidden-input-windows.py [path\\to\\mhfe.exe]
 
 The Windows counterpart of scripts/verify-hidden-input.py, for CI on a Windows machine; it needs

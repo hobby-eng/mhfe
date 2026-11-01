@@ -39,8 +39,8 @@ refuse_builder_paths() {
       return 1
     fi
     while IFS= read -r directory; do
-      # grep finds nothing in a clean file and then fails, which is the expected case.
-      count="$(grep -a -o -F -- "$directory/" "$file" | wc -l || true)"
+      # grep finds nothing in a clean file and exits with 1, which is the expected case.
+      count="$(grep -a -o -F -- "$directory/" "$file" | wc -l || ((PIPESTATUS[0] == 1)))"
       if ((count > 0)); then
         echo "$file names $((count)) paths under $directory, a directory of this builder. Build" \
           "it with the paths remapped (packaging/remap-builder-paths.sh)." >&2

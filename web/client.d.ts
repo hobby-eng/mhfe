@@ -533,6 +533,11 @@ export class MhfeClient {
     },
   ): Promise<{
     matches: boolean;
+    /**
+     * "not verified" when only a 24-word reading came out and no address or fingerprint confirmed
+     * it, which a wrong password gives too; `matches` is false then.
+     */
+    outcome: "matches" | "does not match" | "not verified";
     /** Where a matched address was found, such as "m/84'/0'/0'/0/5"; null otherwise. */
     path: string | null;
     /**
@@ -545,7 +550,7 @@ export class MhfeClient {
      * with the passphrase given, or with none if none was given; null for `{ words }` with a
      * length stated, for a same-length container, and when exactly one shorter length passes its
      * check and the reference did not match the 24-word reading. A phrase drawn without that
-     * check fails it, so that only a pass says anything.
+     * check almost always fails it, so that only a pass says anything.
      */
     evidence: { builtInCheck: number | null; otherLengths: WordCount[]; walletCheck: boolean | null };
   }>;

@@ -180,7 +180,7 @@ refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says which apply
 - `walletCheck` says whether the 24-word reading passes the 16-bit phrase + passphrase check with
   the `passphrase` given, or with none if none was given. It is null for `{ words }` with a length
   stated, for a same-length container, and when exactly one shorter length passes its check and the
-  reference did not match the 24-word reading. A phrase drawn without that check fails it, so only
+  reference did not match the 24-word reading. A phrase drawn without that check almost always fails it, so only
   a pass says anything.
 
 `{ words: 0 }` detects the length: the built-in check of whichever 12- to 21-word length passes it,
@@ -226,8 +226,7 @@ recovery reports it, and it never confirms a rekey.
 - `words` is the phrase's word count, or 0, the default, to detect it. For a same-length container
   it is 0 or the container's own length. With the length detected on a 24-word container
   (`confirmationFor["0"]` is `"walletOrOwner"`), `{ builtInCheck: true }` alone is refused with
-  `REFERENCE_REQUIRED` before the first round (only the 1 MiB known answer of the Argon2 build runs
-  first, as for `check()`): a 24-word original may pass a short check by chance and would be sealed
+  `REFERENCE_REQUIRED` before the first round: a 24-word original may pass a short check by chance and would be sealed
   again as another wallet. An address or the fingerprint is compared with every reading and
   confirms the one it matches, whatever its length; the owner confirms the one reading found.
 - Several lengths that pass by accident, about once in four billion containers, reject
@@ -344,6 +343,7 @@ const { missing, candidates, offersWalletSearch, offersOwnChecks } = await clien
 });
 // The answers offered come from the library: the wallet search for one missing word, and the
 // original seed phrase's own checks where the container carries them, as the command-line tool.
+// A fingerprint has 32 bits: say so with the result, and have it confirmed with an address.
 const fast = await client.searchDecoy({ container: typed, reference: { fingerprint }, passphrase });
 // For two missing words and an address: scanGap, the first-account addresses of each chain
 // searched, parameters().decoyScanGap (20) by default; ask the user, as the command-line tool
@@ -705,8 +705,7 @@ loop. Every round also refuses a key that the build left unwritten or set to zer
 - A random generator that is deterministic but looks random: no test can tell. The checks find one
   that is stuck or narrow.
 - Deliberate tampering: the build identifier catches files of different builds mixed by accident.
-  Tampering is for `SHA256SUMS` and its OpenPGP signature, the build attestations and, in fast
-  mode, the page's `mhfe-fast-mode.sha256`.
+  Tampering is for `SHA256SUMS` and its OpenPGP signature and the build attestations.
 
 ## Fast and standard mode
 
@@ -726,8 +725,9 @@ space and `*` before the name as `sha256sum --binary` writes it. Ship that file 
 HTML file, always under this name. Without it, with another file name in it or with a different
 SHA-256, the launcher refuses with a message and serves nothing. Started without arguments, as by a
 double-click, `mhfe` shows its menu, whose first entry serves the page named in the
-`mhfe-fast-mode.sha256` next to the program; when that file is wrong, the menu says that the fast
-mode is not offered, and why. `mhfe-fast-mode.py` started without arguments serves that page at
+`mhfe-fast-mode.sha256` next to the program; when that file cannot be read or has the wrong form,
+the menu says that the fast mode is not offered, and why; a page that is missing or does not match
+is refused when the entry is chosen. `mhfe-fast-mode.py` started without arguments serves that page at
 once. `mhfe serve <page.html>` and `python3 mhfe-fast-mode.py <page.html>` serve a page elsewhere,
 next to its own checksum file. A page whose own launcher sends these headers does not need either.
 
@@ -966,8 +966,8 @@ bytes once its check at start has passed, transferred to the worker, so that no 
 class, and wiped there; a `Uint8Array` the page passes is always copied into an array of its own,
 never transferred or emptied, whatever its kind. Text with an unpaired surrogate, a phrase included,
 is refused with `INVALID_PASSWORD_TEXT` rather than changed by the browser. The Rust code and the
-Argon2 bridge overwrite every copy of these bytes, the keys and the states they hold, and every
-worker is terminated when its operation or session ends. A cancelled operation, or a session of
+Argon2 bridge overwrite the copies they hold of these bytes, the keys and the states, as far as
+WebAssembly allows, and every worker is terminated when its operation or session ends. A cancelled operation, or a session of
 hidden wallets closed while it opens a wallet, terminates its worker instead, as soon as the worker
 has loaded the WebAssembly if it is still loading it: the browser frees that memory without
 overwriting it. What reaches the page

@@ -45,6 +45,9 @@ MAX_CONNECTIONS = 16
 # Seconds the listener waits for a connection before it looks again. On Windows a waiting
 # accept() does not notice Ctrl+C, so the wait is kept short.
 ACCEPT_INTERVAL = 1.0
+# The most a checksum file and a page may hold, deliberate copies of src/bin/mhfe/serve.rs.
+MAX_CHECKSUM_FILE = 4 * 1024
+MAX_PAGE = 256 * 1024 * 1024
 
 # Sent with every response. COOP and COEP make the page cross-origin isolated; the others keep it
 # from being framed, sniffed, cached or followed by a referrer.
@@ -85,12 +88,12 @@ RUST_WHITESPACE = (
 
 
 class Parser(argparse.ArgumentParser):
-    """argparse, with its error messages shown as every other message is: a mistyped argument may
-    hold control characters (AUD-018)."""
+    """argparse, whose error messages repeat the arguments given: one may be a phrase pasted in the
+    wrong place, so a refusal says none of them."""
 
     def error(self, message):
         self.print_usage(sys.stderr)
-        self.exit(INVALID_INPUT, "{}: error: {}\n".format(self.prog, shown(message)))
+        self.exit(INVALID_INPUT, "{}: error: the arguments cannot be used\n".format(self.prog))
 
 
 def shown(text):
@@ -125,7 +128,7 @@ def respond(head, host, page):
     else an error. The Host check stops DNS rebinding: a web page on another site whose name was
     made to resolve to 127.0.0.1 would send its own name as Host."""
     lines = head.split("\n")
-    request_line = lines[0].rstrip("\r")
+    request_line = lines[0][:-1] if lines[0].endswith("\r") else lines[0]
     parts = request_line.split(" ")
     if len(parts) != 3 or "" in parts:
         return error_response(400, "Bad Request")
@@ -136,8 +139,8 @@ def respond(head, host, page):
     hosts = []
     for line in lines[1:]:
         name, colon, value = line.partition(":")
-        if colon and name.strip().lower() == "host":
-            hosts.append(value.strip())
+        if colon and name.strip(RUST_WHITESPACE).lower() == "host":
+            hosts.append(value.strip(RUST_WHITESPACE))
     if hosts != [host]:
         return error_response(403, "Forbidden")
 
@@ -150,15 +153,13 @@ def respond(head, host, page):
 
 def read_request_head(connection, deadline):
     """The request head up to its empty line, as text. Raises ValueError for a head that is too
-    long, ends early or is not ASCII, and socket.timeout once `deadline` has passed."""
+    long, ends early or is not UTF-8, and socket.timeout once `deadline` has passed."""
     received = b""
     while True:
-        end = received.find(b"\r\n\r\n")
-        if end < 0:
-            # A bare line feed also ends a line, as in the Rust version.
-            end = received.find(b"\n\n")
-        if end >= 0:
-            return received[:end].decode("ascii")
+        # The first empty line, after either line ending, as in the Rust version.
+        ends = [end for end in (received.find(b"\r\n\r\n"), received.find(b"\n\n")) if end >= 0]
+        if ends:
+            return received[: min(ends)].decode("utf-8")
         if len(received) >= MAX_REQUEST_HEAD:
             raise ValueError("request head too long")
         remaining = deadline - time.monotonic()
@@ -205,7 +206,10 @@ def serve(listener, host, page, deadline_seconds=REQUEST_DEADLINE):
         except socket.timeout:
             continue  # No connection yet; looking again lets Ctrl+C through.
         except OSError:
-            return  # The listener was closed.
+            if listener.fileno() == -1:
+                return  # The listener was closed.
+            time.sleep(ACCEPT_INTERVAL)
+            continue
         if not slots.acquire(blocking=False):
             connection.close()
             continue
@@ -225,8 +229,8 @@ def read_checksum_file(directory):
     """The SHA-256 and the page name from the checksum file in `directory`."""
     path = os.path.join(directory, CHECKSUM_FILE)
     try:
-        with open(path, encoding="utf-8") as file:
-            text = file.read()
+        with open(path, encoding="utf-8", newline="") as file:
+            text = file.read(MAX_CHECKSUM_FILE + 1)
     # A file that is not UTF-8 is refused as `mhfe serve` refuses it, not with a traceback.
     except (OSError, UnicodeDecodeError) as error:
         raise Refused(
@@ -236,9 +240,11 @@ def read_checksum_file(directory):
             )
         )
     malformed = Refused(
-        '{} must hold exactly one line, "<SHA-256>  <page>.html" or "<SHA-256> *<page>.html"; '
-        "nothing was served.".format(shown(path))
+        "{} must hold exactly one line: the SHA-256, two spaces and the page's name, or the "
+        "SHA-256, a space and * before the name; nothing was served.".format(shown(path))
     )
+    if len(text) > MAX_CHECKSUM_FILE:
+        raise malformed
     # Lines as Rust's str::lines splits them: at "\n", without a "\r" before it.
     lines = [line[:-1] if line.endswith("\r") else line for line in text.split("\n")]
     lines = [line for line in lines if line.strip(RUST_WHITESPACE)]
@@ -288,7 +294,9 @@ def load_checked_page(path):
         )
     try:
         with open(path, "rb") as file:
-            page = file.read()
+            page = file.read(MAX_PAGE + 1)
+        if len(page) > MAX_PAGE:
+            raise OSError("the file is too large")
     except OSError as error:
         raise Refused(
             "Cannot read {}: {}; nothing was served.".format(shown(path), shown(error.strerror or error))
@@ -344,8 +352,9 @@ def main(arguments):
     port = listener.getsockname()[1]
     address = "http://127.0.0.1:{}/".format(port)
     # The address holds no secret, so handing it to the browser is safe.
-    if options.no_browser or not webbrowser.open(address):
-        print("Open {} in your browser.".format(address), file=sys.stderr)
+    print("Open {} in your browser.".format(address), file=sys.stderr)
+    if not options.no_browser:
+        webbrowser.open(address)
     print("Fast mode is running. Close this window or press Ctrl+C to stop.", file=sys.stderr)
     try:
         serve(listener, "127.0.0.1:{}".format(port), page)

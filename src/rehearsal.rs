@@ -31,6 +31,10 @@ pub enum CheckOutcome {
     },
     /// The recovery does not match the reference.
     DoesNotMatch,
+    /// The recovery gives only a 24-word reading, which only a wallet reference can confirm: a
+    /// wrong password gives one too (APP-6). A pass of its 16-bit check does not change that, and
+    /// stands in [`CheckEvidence::wallet_check`].
+    NotVerified,
 }
 
 impl CheckOutcome {
@@ -43,7 +47,16 @@ impl CheckOutcome {
     pub fn path(&self) -> Option<&DerivationPath> {
         match self {
             Self::Matches { path } => path.as_ref(),
-            Self::DoesNotMatch => None,
+            Self::DoesNotMatch | Self::NotVerified => None,
+        }
+    }
+
+    /// The result in the specification's words.
+    pub fn words(&self) -> &'static str {
+        match self {
+            Self::Matches { .. } => "matches",
+            Self::DoesNotMatch => "does not match",
+            Self::NotVerified => "not verified",
         }
     }
 
@@ -74,11 +87,13 @@ pub struct CheckEvidence {
     /// that reading comes out: no short length's check passes, several do, or the reference
     /// matched the 24-word reading. `None` for the built-in check, for a same-length container,
     /// and when exactly one short length passes and the reference did not match the 24-word
-    /// reading. A phrase drawn without that check fails it, so that only a pass says anything.
+    /// reading. A phrase drawn without that check almost always fails it, so that only a pass says
+    /// anything.
     pub wallet_check: Option<bool>,
 }
 
 /// What the recovered phrase is compared with.
+#[derive(Clone, Copy)]
 pub enum Reference<'a> {
     /// The built-in check value of a 12-, 15-, 18- or 21-word original in a 24-word container,
     /// `words` the length the person states. As in recovery, a check that passes at another short
@@ -377,21 +392,17 @@ fn compare_state(
             CheckOutcome::of(!recovery.detected_lengths().is_empty()),
             None,
         )),
-        Reference::WalletCheck { passphrase } => Ok((
-            CheckOutcome::of(detection::passes_wallet_check(recovery, passphrase)?),
-            None,
-        )),
-        Reference::OwnChecks { passphrase } => Ok((
-            CheckOutcome::of(detection::passes_own_checks(recovery, *passphrase)?),
-            None,
-        )),
+        Reference::WalletCheck { .. } | Reference::OwnChecks { .. } => {
+            let outcome = if recovery.detected_lengths().is_empty() {
+                CheckOutcome::NotVerified
+            } else {
+                CheckOutcome::Matches { path: None }
+            };
+            Ok((outcome, None))
+        }
         Reference::Address { .. } | Reference::Fingerprint { .. } => {
-            // Every reading is compared, whatever length the person has, so that no accidental
-            // match hides the real phrase: 24 stated words give each short length that passes and
-            // then the 24-word reading. A same-length container has its own length alone.
-            let stated = holds_full_state(recovery.suite()).then_some(STATE_WORDS);
             // Held in locked memory while they are compared: an address search can take seconds.
-            for reading in readings(recovery, stated)? {
+            for reading in every_reading(recovery)? {
                 let outcome = compare(reading.phrase(), reference)?;
                 if outcome.matches() {
                     return Ok((outcome, Some(reading.words())));
@@ -400,6 +411,17 @@ fn compare_state(
             Ok((CheckOutcome::DoesNotMatch, None))
         }
     }
+}
+
+/// Every reading of `recovery`, for a wallet reference to be compared with, whatever length the
+/// person has, so that no accidental match hides the real phrase: 24 stated words give each short
+/// length that passes and then the 24-word reading. A same-length container has its own length
+/// alone.
+fn every_reading(recovery: &Recovery) -> Result<Vec<RecoveredPhrase>, MhfeError> {
+    readings(
+        recovery,
+        holds_full_state(recovery.suite()).then_some(STATE_WORDS),
+    )
 }
 
 /// How a phrase recovered to be encrypted again is confirmed (the re-encryption guard).
@@ -520,9 +542,9 @@ impl RecoveredForRekey {
         let readings = self.readings(length)?;
         if let Some(reference) = confirmation.wallet_reference() {
             // An address or the fingerprint tells the readings apart, as the rehearsal check
-            // compares them: the one that matches is the wallet's.
+            // compares them: the one that matches is the wallet's, whatever length was stated.
             before_compare()?;
-            for reading in readings {
+            for reading in every_reading(&self.recovery)? {
                 if compare(reading.phrase(), reference)?.matches() {
                     return Ok(reading);
                 }
@@ -948,18 +970,26 @@ mod tests {
         let reference = Reference::WalletCheck {
             passphrase: "TREZOR",
         };
-        assert!(check(&mut mhfe, &container, &password, &reference, none)
+        // A pass is evidence and no match: the reading stays not verified (REC-5).
+        let evidence = recover_for_check(&mut mhfe, &container, &password, &reference, none)
             .unwrap()
-            .matches());
-        assert!(!check(&mut mhfe, &container, &wrong, &reference, none)
+            .compare(&reference)
+            .unwrap();
+        assert_eq!(evidence.outcome, CheckOutcome::NotVerified);
+        assert_eq!(evidence.wallet_check, Some(true));
+        let evidence = recover_for_check(&mut mhfe, &container, &wrong, &reference, none)
             .unwrap()
-            .matches());
+            .compare(&reference)
+            .unwrap();
+        assert_eq!(evidence.outcome, CheckOutcome::NotVerified);
+        assert_eq!(evidence.wallet_check, Some(false));
         let other = Reference::WalletCheck {
             passphrase: "trezor",
         };
-        assert!(!check(&mut mhfe, &container, &password, &other, none)
-            .unwrap()
-            .matches());
+        assert_eq!(
+            check(&mut mhfe, &container, &password, &other, none),
+            Ok(CheckOutcome::NotVerified)
+        );
         // Without a passphrase the check is not offered: refused before any Argon2 work, as the
         // browser and wallet_check::verify refuse it (AUD-010).
         let mut rounds = 0;
@@ -1010,9 +1040,11 @@ mod tests {
             assert!(evidence.outcome.matches());
             assert_eq!(evidence.built_in_check, Some(12));
         }
-        assert!(!check(&mut mhfe, &short, &wrong, &own(None), none)
-            .unwrap()
-            .matches());
+        // A wrong password leaves a 24-word reading that nothing confirms (APP-6).
+        assert_eq!(
+            check(&mut mhfe, &short, &wrong, &own(None), none),
+            Ok(CheckOutcome::NotVerified)
+        );
         // The public vector of the wallet check: 24 zero bytes and 76,562, with "TREZOR".
         let mut entropy = [0u8; 32];
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
@@ -1022,15 +1054,16 @@ mod tests {
             .unwrap()
             .compare(&own(Some("TREZOR")))
             .unwrap();
-        assert!(evidence.outcome.matches());
+        assert_eq!(evidence.outcome, CheckOutcome::NotVerified);
         assert_eq!(
             (evidence.built_in_check, evidence.wallet_check),
             (None, Some(true))
         );
         for passphrase in [None, Some("trezor")] {
-            assert!(!check(&mut mhfe, &full, &password, &own(passphrase), none)
-                .unwrap()
-                .matches());
+            assert_eq!(
+                check(&mut mhfe, &full, &password, &own(passphrase), none),
+                Ok(CheckOutcome::NotVerified)
+            );
         }
         assert_eq!(
             check(&mut mhfe, &full, &password, &own(Some("")), none),
@@ -1098,7 +1131,10 @@ mod tests {
         })
         .unwrap();
         assert_eq!(rounds, ROUNDS);
-        assert!(!recovered.compare(&own).unwrap().outcome.matches());
+        assert_eq!(
+            recovered.compare(&own).unwrap().outcome,
+            CheckOutcome::NotVerified
+        );
         let fingerprint = Reference::Fingerprint {
             fingerprint: wallet::master_fingerprint(phrase, "").unwrap(),
             passphrase: "",
@@ -1115,8 +1151,8 @@ mod tests {
     /// (AUD-010, harness crypto-core/short_reading_wallet_check.py).
     const SHORT_READING_PASSPHRASE: &str = "aud010 public probe 11656";
 
-    /// The wallet check compares only the 24-word reading of a recovery: a 12-word original with a
-    /// passphrase that would pass under BE32(128) does not make a match (AUD-010).
+    /// A 12-word original is verified by its built-in check: a passphrase that would pass under
+    /// BE32(128) changes nothing, and the wallet check is not computed for it (AUD-010).
     #[test]
     fn a_wallet_check_compares_the_24_word_reading_only() {
         let none = &mut |_, _| Ok(());
@@ -1135,7 +1171,7 @@ mod tests {
         };
         assert_eq!(
             check(&mut mhfe, &container, &password, &reference, none),
-            Ok(CheckOutcome::DoesNotMatch)
+            Ok(CheckOutcome::Matches { path: None })
         );
         let staged = recover_for_check_in_stages(
             &mut mhfe,
@@ -1145,10 +1181,9 @@ mod tests {
             &mut |_, _, _| Ok(()),
         )
         .unwrap();
-        assert_eq!(
-            staged.compare(&reference).unwrap().outcome,
-            CheckOutcome::DoesNotMatch
-        );
+        let evidence = staged.compare(&reference).unwrap();
+        assert_eq!(evidence.outcome, CheckOutcome::Matches { path: None });
+        assert_eq!(evidence.wallet_check, None);
     }
 
     #[test]

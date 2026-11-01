@@ -4,7 +4,6 @@
 
 const WALLET_OPERATIONS = {
   parameters: () => JSON.parse(mhfe.walletParameters()),
-  packageVersion: () => mhfe.packageVersion(),
   selfCheck: (request, host) =>
     host.selfCheck(request.tier, (onStart, onResult) =>
       mhfe.selfCheckWallet(request.tier, request.skip, host.random, onStart, onResult),

@@ -63,9 +63,10 @@ pub const TYPE_AGAIN: &str = "Please type it again.";
 
 impl Input {
     /// The input of a command that has --stdin: a script's lines on standard input when
-    /// `from_standard_input`, a person at the terminal otherwise.
+    /// `from_standard_input`, a person at the terminal otherwise. With --stdin at a terminal it is
+    /// a person too: a script's lines are echoed and no private screen hides them.
     pub fn new(from_standard_input: bool) -> Self {
-        if from_standard_input {
+        if from_standard_input && !raw_io::input_is_terminal() {
             Self::Script(raw_io::Stdin::default())
         } else {
             Self::Terminal {
@@ -139,12 +140,20 @@ impl Input {
     /// Reads a public answer, such as an address, shown while typed.
     pub fn visible(&mut self, prompt: &str) -> Result<LockedText, Failure> {
         match self {
-            Self::Terminal { .. } => {
+            Self::Terminal {
+                command_reads_stdin,
+            } => {
+                if !raw_io::input_is_terminal() {
+                    return Err(Failure::invalid_input(no_terminal_advice(
+                        *command_reads_stdin,
+                    )));
+                }
                 style::prompt(prompt);
                 io::stderr().flush()?;
                 match read_bounded_line(&mut raw_io::Stdin::default())? {
                     Some(line) => Ok(line),
-                    None => Err(Failure::invalid_input("No answer was typed.")),
+                    // Ctrl+D on an empty line: the person closed the input.
+                    None => exit_cancelled(),
                 }
             }
             Self::Script(lines) => read_script_line(lines, prompt),
@@ -156,15 +165,15 @@ impl Input {
     /// completes one and Ctrl+W deletes one; elsewhere as [`Input::visible`].
     pub fn visible_words(&mut self, prompt: &str, list: WordList) -> Result<LockedText, Failure> {
         let hinted = matches!(self, Self::Terminal { .. })
-            && raw_io::input_is_terminal()
-            && io::stderr().is_terminal()
+            && choice::can_run()
             && hidden_input::control_sequences();
         if !hinted {
             return self.visible(prompt);
         }
         match hidden_input::read_line(prompt, true, Content::Words(list))? {
             Some(line) => Ok(line),
-            None => Err(Failure::invalid_input("No answer was typed.")),
+            // Ctrl+D on an empty line: the person closed the input.
+            None => exit_cancelled(),
         }
     }
 
@@ -630,7 +639,7 @@ impl PrivateScreen {
 /// A command that must show a phrase only privately refuses otherwise, before anything secret is
 /// asked (AUD-007-SEC001).
 pub fn can_show_privately(input: &Input) -> bool {
-    output_on_screen() && terminal_screen_possible(input)
+    output_on_screen() && terminal_screen_possible(input) && hidden_input::control_sequences()
 }
 
 /// The input of a command that shows a phrase only on a private screen: the terminal, or the
@@ -653,10 +662,7 @@ pub fn output_on_screen() -> bool {
 }
 
 fn terminal_screen_possible(input: &Input) -> bool {
-    !input.is_script()
-        && raw_io::input_is_terminal()
-        && io::stderr().is_terminal()
-        && std::env::var("TERM").map_or(true, |term| term != "dumb")
+    !input.is_script() && choice::can_run()
 }
 
 /// Asks the person to write down what the private screen shows, and waits for Enter or Escape,
@@ -693,7 +699,7 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
     };
     let screen = PrivateScreen::enter(input, operation.title());
     let (password, check) = loop {
-        if screen.is_active() {
+        if !input.is_script() {
             eprintln!();
             style::hint(what);
             style::hint(check_word::FORGOTTEN_WORD_HINT);
@@ -730,10 +736,7 @@ impl Drop for PrivateScreen {
 /// Switches to the alternate screen for the steps of a command (flow.rs). False where they cannot
 /// be shown privately, or within a screen that is already private.
 pub fn enter_steps(input: &Input) -> bool {
-    if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst)
-        || !can_show_privately(input)
-        || !hidden_input::control_sequences()
-    {
+    if PRIVATE_SCREEN_ACTIVE.load(Ordering::SeqCst) || !can_show_privately(input) {
         return false;
     }
     write_control(ENTER_ALTERNATE_SCREEN);

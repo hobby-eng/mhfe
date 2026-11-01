@@ -335,17 +335,23 @@ fn make_passwords() -> Result<(), Failure> {
         more: Some(readme::PASSWORD),
         record: None,
     };
-    let answers = PasswordKind::MADE.map(PasswordKind::answer);
+    let mut answers: Vec<Answer> = PasswordKind::MADE
+        .into_iter()
+        .map(PasswordKind::answer)
+        .collect();
+    answers.push(Answer::new(
+        "Words from real dice",
+        "you roll five dice for each word",
+    ));
     // Escape here returns to the menu too.
     let Some(chosen) = choice::choose(&question, &answers, None)? else {
         return Ok(());
     };
     let mut arguments = vec![OsString::from("password"), OsString::from("--repeat")];
-    arguments.extend(
-        PasswordKind::MADE[chosen]
-            .password_option()
-            .map(OsString::from),
-    );
+    match PasswordKind::MADE.get(chosen) {
+        Some(kind) => arguments.extend(kind.password_option().map(OsString::from)),
+        None => arguments.push(OsString::from("--dice")),
+    }
     match run_command(&arguments)? {
         // A command that was cancelled alone has said so itself.
         SUCCESS | exit::CANCELLED => Ok(()),

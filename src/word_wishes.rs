@@ -109,15 +109,11 @@ impl WordWishes {
     /// letters of a word enough) with its place, and `never_use`, words the phrase must not hold.
     pub fn new(chosen: &[(Place, &str)], never_use: &[&str]) -> Result<Self, MhfeError> {
         if chosen.len() > MAX_CHOSEN_WORDS {
-            return Err(wish(format!(
-                "choose at most {}",
-                words_text(MAX_CHOSEN_WORDS)
-            )));
+            return Err(wish(format!("choose at most {MAX_CHOSEN_WORDS} word")));
         }
         if never_use.len() > MAX_NEVER_USE_WORDS {
             return Err(wish(format!(
-                "name at most {} never to use",
-                words_text(MAX_NEVER_USE_WORDS)
+                "name at most {MAX_NEVER_USE_WORDS} word never to use"
             )));
         }
         let mut wishes = Self::none();
@@ -126,21 +122,18 @@ impl WordWishes {
                 .never_use
                 .push(number_of(typed, "the word never to use")?);
         }
-        for (index, &(place, typed)) in chosen.iter().enumerate() {
-            let label = if MAX_CHOSEN_WORDS == 1 {
-                "the chosen word".to_owned()
-            } else {
-                format!("chosen word {}", index + 1)
-            };
-            let number = number_of(typed, &label)?;
+        for &(place, typed) in chosen {
+            let number = number_of(typed, "the chosen word")?;
             if wishes.never_use.contains(&number) {
-                return Err(wish(format!("{label} is also a word never to use")));
+                return Err(wish(
+                    "the chosen word is also a word never to use".to_owned(),
+                ));
             }
             match place {
                 Place::Anywhere => wishes.anywhere.push(number),
                 Place::At(position) if !(1..=STATE_WORDS).contains(&position) => {
                     return Err(wish(format!(
-                        "{label} needs a position from 1 to {STATE_WORDS}"
+                        "the chosen word needs a position from 1 to {STATE_WORDS}"
                     )));
                 }
                 Place::At(position) => wishes.fixed.push((position - 1, number)),
@@ -251,9 +244,7 @@ impl WordWishes {
 
 /// The number of a word as typed, `label` naming it in a refusal.
 fn number_of(typed: &str, label: &str) -> Result<u16, MhfeError> {
-    // The lower-case copy of a chosen word is part of a secret phrase: wiped when done.
-    let lower = Zeroizing::new(typed.trim().to_lowercase());
-    Phrase::read_word(&lower)
+    Phrase::read_word(typed.trim())
         .and_then(phrase::word_number)
         // The word itself is not repeated: it is about to become part of a secret phrase.
         .ok_or_else(|| wish(format!("{label} is not an English BIP39 word")))
@@ -261,12 +252,6 @@ fn number_of(typed: &str, label: &str) -> Result<u16, MhfeError> {
 
 fn wish(reason: String) -> MhfeError {
     MhfeError::InvalidWordWish(reason)
-}
-
-/// "1 word" or "2 words".
-fn words_text(count: usize) -> String {
-    let words = if count == 1 { "word" } else { "words" };
-    format!("{count} {words}")
 }
 
 #[cfg(test)]

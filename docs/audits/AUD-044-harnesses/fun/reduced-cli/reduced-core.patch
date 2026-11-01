@@ -1,0 +1,32 @@
+--- ../workingspace/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mhfe-core-0.1.0/src/engine/native.rs	2006-07-24 03:21:28.000000000 +0200
++++ ../tmp/aud044/fun/core-reduced/src/engine/native.rs	2026-11-01 18:34:15.016040011 +0100
+@@ -36,7 +36,7 @@
+     /// Windows when the working set could grow by its size.
+     pub fn new(memory_kib: u32) -> Result<Self, Error> {
+         Ok(Self {
+-            work_area: WorkArea::allocate(memory_kib)?,
++            work_area: WorkArea::allocate(audit_cost(memory_kib, 1).0)?,
+             ssse3: processor_has_ssse3(),
+         })
+     }
+@@ -57,6 +57,7 @@
+         passes: u32,
+         key: &mut [u8; KEY_BYTES],
+     ) -> Result<(), Error> {
++        let (memory_kib, passes) = audit_cost(memory_kib, passes);
+         let inputs = Argon2Inputs {
+             password,
+             salt,
+@@ -73,6 +74,12 @@
+     }
+ }
+ 
++/// AUD-044 probe only: the full-size settings run at 256 KiB and one pass, so that the command-line
++/// flows can run within the audit's limits. Smaller costs, those of the self-checks, stay.
++fn audit_cost(memory_kib: u32, passes: u32) -> (u32, u32) {
++    if memory_kib >= 1 << 21 { (256, 1) } else { (memory_kib, passes) }
++}
++
+ /// Whether this processor can run the SSSE3 copy of the Argon2 core, which only x86-64 builds
+ /// have. Without SSSE3 the SSE2 copy runs, which every 64-bit x86 processor can.
+ pub(super) fn processor_has_ssse3() -> bool {

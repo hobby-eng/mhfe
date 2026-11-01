@@ -1,6 +1,6 @@
 //! `mhfe rekey`: the same seed phrase in a new container, under a new password or new settings.
 //! The old container is recovered and the phrase is confirmed before it is encrypted again (the
-//! re-encryption guard, `recover_confirmed`): by its built-in check at the length the owner
+//! re-encryption guard): by its built-in check at the length the owner
 //! states, by an address or the fingerprint of the wallet, or, if the owner chooses it, by the
 //! owner comparing the phrase, shown on a private screen, with their backup. Encrypting under the
 //! old password and comparing would prove nothing.
@@ -13,10 +13,9 @@ use mhfe::rekey::{ConfirmedPhrase, Rekey};
 use mhfe::wallet::{fingerprint_text, master_fingerprint};
 use mhfe::{
     Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, PhraseLength,
-    RecoveredForRekey, WordCount, ENCRYPTION_ROUNDS, ROUNDS,
+    RecoveredForRekey, Reference, WordCount, ENCRYPTION_ROUNDS, ROUNDS,
 };
 use mhfe_core::{Password, WorkFactor};
-use zeroize::Zeroizing;
 
 use crate::check::{self, WalletReference};
 use crate::choice::{self, Answer, Question};
@@ -142,13 +141,24 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let mut input = Input::terminal_only();
     options.new_password.check(&input)?;
     options.repair_words.check()?;
+    // Refused before anything is typed, and not after the recovery they would otherwise follow.
+    let new_settings = Settings {
+        pim: options.new_pim,
+        memory_level: options.new_memory_level,
+    };
+    new_settings.work_factor()?;
+    if matches!(options.confirm, Some(Kind::Owner)) && !terminal::can_show_privately(&input) {
+        return Err(Failure::invalid_input(
+            "--confirm show needs a terminal that can show the phrase on a private screen.",
+        ));
+    }
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Rekey.title());
     let old_work = settings::choose(options.old, &mut input, Operation::Rekey)?;
     // Shown to everyone, so that it says nothing about this container (specification: a hidden
     // wallet behind an honest disclosure). Nothing is destroyed here: the old container keeps
     // opening every wallet with its passwords, so the warning heads the next screen instead of a
-    // question to answer (the owner's decision of 2026-10-08, in place of AUD-007-FUN002's).
+    // question to answer.
     style::warn(&keep_until_funds_moved(old_work), "");
 
     let read = terminal::read_container(
@@ -170,11 +180,6 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // is detected. It is chosen, and a reference typed, before the long computation, so the user
     // can walk away while it runs.
     let kind = match (options.confirm, rekey.confirmation_needed()) {
-        (Some(Kind::Owner), _) if !terminal::can_show_privately(&input) => {
-            return Err(Failure::invalid_input(
-                "--confirm show needs a terminal that can show the phrase on a private screen.",
-            ))
-        }
         (Some(kind), _) => kind,
         (None, ConfirmationNeeded::BuiltInCheck) => Kind::BuiltInCheck,
         (None, ConfirmationNeeded::WalletOrOwner) => ask_how_to_confirm(&mut input, true)?,
@@ -199,12 +204,12 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // The 16-bit source check of a 24-word reading, which every recovery evaluates, with the
     // passphrase typed for the reference or the empty one; only a pass is said. It never
     // confirms a phrase to seal again: 16 bits are too few.
-    // A copy of a secret, wiped when dropped.
-    let source_passphrase = Zeroizing::new(match &how {
-        How::Wallet(wallet) => wallet.reference().passphrase().unwrap_or("").to_owned(),
-        How::BuiltInCheck | How::Owner => String::new(),
-    });
-    let source_check = match phrase.passes_wallet_check(&source_passphrase)? {
+    let reference = match &how {
+        How::Wallet(wallet) => Some(wallet.reference()),
+        How::BuiltInCheck | How::Owner => None,
+    };
+    let source_passphrase = reference.as_ref().and_then(Reference::passphrase);
+    let source_check = match phrase.passes_wallet_check(source_passphrase.unwrap_or(""))? {
         Some(true) => ", passes the 16-bit check",
         _ => "",
     };
@@ -254,10 +259,6 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         None
     };
 
-    let new_settings = Settings {
-        pim: options.new_pim,
-        memory_level: options.new_memory_level,
-    };
     let new_work = settings::choose(new_settings, &mut input, Operation::RekeyNew)?;
     // A 24-word original too can, by rare chance, read as a shorter phrase after recovery.
     let original = OriginalFacts::read(phrase.phrase())?;

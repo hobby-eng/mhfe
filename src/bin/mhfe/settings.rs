@@ -11,6 +11,7 @@ use mhfe_core::{Mhfe, NativeArgon2, WorkFactor};
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
 use crate::flow;
+use crate::protect::{Swap, SwapArea};
 use crate::readme;
 use crate::style::{self, paint, ACCENT, MUTED, WARNING};
 use crate::terminal::Input;
@@ -129,17 +130,22 @@ pub fn choose(
         defaults
     };
     show(work, operation, asked);
-    warn_about_swap();
     check_resources(work)?;
     Ok(work)
 }
 
-/// Warns, before any secret is typed, when swap could write memory to a disk unencrypted.
-fn warn_about_swap() {
-    let areas = crate::protect::unprotected_swap();
-    if areas.is_empty() {
-        return;
+/// Says what isolation leaves open, before any secret is typed: the Isolation line of a summary
+/// names only what holds, and a command without a summary says this alone.
+pub fn warn_of_isolation_gaps() {
+    if let ComponentOutcome::Warning(detail) = crate::protect::IsolationCheck.run(Tier::Startup) {
+        style::warn(&format!("Isolation is {detail}."), "");
+        eprintln!();
     }
+}
+
+/// Says that swap could write memory to a disk unencrypted and asks whether to go on, before any
+/// secret is typed; the answer "no", and a script that nobody can ask for, stop the command.
+pub fn ask_about_swap(areas: &[SwapArea]) -> Result<(), Failure> {
     // A device name is the system's text: shown escaped, as every path is.
     let names: Vec<String> = areas
         .iter()
@@ -156,13 +162,29 @@ fn warn_about_swap() {
             names.join(", ")
         )
     };
-    // Why it matters, Argon2's work area on a disk for years, is in the README.
-    style::warn(
+    ask_to_go_on(
         &headline,
         "Use encrypted swap or none, best a live system from a USB stick.",
-    );
-    style::more(readme::SAFE_COMPUTER);
-    eprintln!();
+    )
+}
+
+/// Asks whether to go on although memory may reach a disk, with `headline` saying why and `advice`
+/// what to do instead; the answer "no", and a script that nobody can ask for, stop the command.
+fn ask_to_go_on(headline: &str, advice: &str) -> Result<(), Failure> {
+    if choice::can_run() {
+        // Why it matters, Argon2's work area on a disk for years, is in the README.
+        style::warn(headline, advice);
+        style::more(readme::SAFE_COMPUTER);
+        let question = Question::new("Go on although this memory could reach the disk?", "Disk");
+        let answers = [
+            Answer::new("No", "stop here"),
+            Answer::new("Yes", "go on as it is"),
+        ];
+        if choice::choose_here(&question, &answers, None)? == Some(1) {
+            return Ok(());
+        }
+    }
+    Err(Failure::invalid_input(format!("{headline} {advice}")))
 }
 
 /// Asks whether to keep the defaults; true when the person wants to give their own settings. The
@@ -354,12 +376,11 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         "Secrets",
         locked_memory_text(locking, crate::protect::lock_limit()),
     );
-    eprintln!();
-    // The Isolation line names only what holds; what stays open is said here (AUD-043-K04).
-    if let ComponentOutcome::Warning(detail) = crate::protect::IsolationCheck.run(Tier::Startup) {
-        style::warn(&format!("Isolation is {detail}."), "");
-        eprintln!();
+    if let Some(swap) = crate::protect::swap() {
+        style::fact("Swap", swap_text(swap));
     }
+    eprintln!();
+    warn_of_isolation_gaps();
     if matches!(
         operation,
         Operation::Encrypt | Operation::RekeyNew | Operation::New
@@ -403,11 +424,21 @@ fn isolation_text(
     Some(format!("{forbidden} {}", paint(MUTED, "(kernel-enforced)")))
 }
 
+/// What the summary says of swap on a disk.
+fn swap_text(swap: Swap) -> String {
+    match swap {
+        Swap::NotOnDisk => "none on a disk".to_owned(),
+        Swap::Forbidden => "forbidden for this program".to_owned(),
+        Swap::Encrypted => "encrypted, not forbidden".to_owned(),
+        Swap::Allowed => paint(WARNING, "! secrets may reach the disk, as you chose"),
+    }
+}
+
 /// Whether typed secrets are kept in locked memory, out of swap, as the library's memory-locking
 /// check finds it on a buffer of one typed line's size (mhfe::memory::LockProbe), with the most
 /// memory the process may lock when it is refused. A later buffer that cannot be locked is said
 /// when it is read (terminal::note_unlocked). The Argon2 work area is locked only where the limit
-/// holds all of it; the warning about unencrypted swap covers it.
+/// holds all of it; the Swap line covers it.
 fn locked_memory_text(outcome: ComponentOutcome, lock_limit: Option<u64>) -> String {
     match outcome {
         ComponentOutcome::Passed => "kept in locked memory, out of swap".to_owned(),
@@ -440,6 +471,13 @@ fn check_resources(work: WorkFactor) -> Result<(), Failure> {
 /// Reserves the Argon2 memory, after the inputs have been read and checked.
 pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeArgon2>, Failure> {
     let engine = reserve(work).map_err(with_level_hint)?;
+    // Windows has no way to forbid a program its page file: a locked work area stays out of it.
+    if cfg!(windows) && !engine.is_locked() {
+        ask_to_go_on(
+            "Windows did not lock Argon2's memory, so it could reach the page file.",
+            "Use BitLocker or no page file.",
+        )?;
+    }
     Ok(Mhfe::with_engine(work, engine))
 }
 

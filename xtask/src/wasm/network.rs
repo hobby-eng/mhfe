@@ -41,13 +41,19 @@ const GLUE_INIT: (&str, &str) = (
     "    return Object.assign(__wbg_init, { initSync }, exports);",
 );
 /// Code that could reach the network: none of it may remain. Each name counts as a whole word, and
-/// `fetch` only with an opening parenthesis after it, white space allowed between.
-const NETWORK_WORDS: [&str; 5] = [
+/// `fetch` and `import` only with an opening parenthesis after them, white space allowed between.
+/// A Worker from a URL and navigation by assignment cannot be told from legal code by a name.
+const NETWORK_WORDS: [&str; 10] = [
     "fetch",
+    "import",
+    "importScripts",
     "XMLHttpRequest",
     "WebSocket",
+    "WebTransport",
     "EventSource",
+    "RTCPeerConnection",
     "sendBeacon",
+    "serviceWorker",
 ];
 
 /// Replaces the loaders of `files`, Emscripten builds (`argon2`) or the wasm-bindgen glue (`glue`).
@@ -129,7 +135,7 @@ pub(super) fn network_code(text: &str) -> Option<&'static str> {
             let after = &text[at + word.len()..];
             let alone_before = !text[..at].chars().next_back().is_some_and(word_char);
             alone_before
-                && if *word == "fetch" {
+                && if matches!(*word, "fetch" | "import") {
                     after.trim_start_matches(space).starts_with('(')
                 } else {
                     !after.chars().next().is_some_and(word_char)
@@ -149,6 +155,11 @@ mod tests {
             "x=fetch \n (url)",
             "new XMLHttpRequest",
             "a.sendBeacon(b)",
+            "import (url)",
+            "importScripts(url)",
+            "new WebTransport(url)",
+            "new RTCPeerConnection()",
+            "navigator.serviceWorker.register(url)",
         ] {
             assert!(network_code(text).is_some(), "{text}");
         }
@@ -158,6 +169,7 @@ mod tests {
             "fetch.call",
             "MyWebSocket",
             "EventSources",
+            "import x from y",
         ] {
             assert!(network_code(text).is_none(), "{text}");
         }

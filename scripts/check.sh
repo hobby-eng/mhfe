@@ -14,9 +14,13 @@ cd "$repo_root"
 . packaging/remap-builder-paths.sh
 remap_builder_paths "$repo_root"
 
-# The vendored Argon2 code must be byte for byte the recorded upstream files.
-sed -n '/^```text$/,/^```$/p' vendor/phc-winner-argon2.md | grep -v '^```' |
-  (cd vendor/phc-winner-argon2 && sha256sum --check --quiet)
+# The vendored Argon2 code must be byte for byte the recorded upstream files, and nothing else.
+vendored_list() {
+  sed -n '/^```text$/,/^```$/p' vendor/phc-winner-argon2.md | grep -v '^```'
+}
+vendored_list | (cd vendor/phc-winner-argon2 && sha256sum --check --quiet)
+diff <(vendored_list | sed 's/^[0-9a-f]*  //' | LC_ALL=C sort) \
+  <(cd vendor/phc-winner-argon2 && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
 
 # The Rust crates part of THIRD_PARTY_NOTICES.md must match the crates every release target ships.
 # The generator reads their sources offline, so fetch the sources of every target first (a no-op

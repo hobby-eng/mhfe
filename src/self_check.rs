@@ -11,8 +11,8 @@
 //! asks for. MHFE's own published vectors at their full cost take minutes and gigabytes and stay
 //! in [`crate::self_test`].
 //!
-//! This module holds no vector and knows no feature: it only runs checks and collects their
-//! outcomes. It measures no time, since a clock is not available everywhere the library runs.
+//! This module knows no feature, and only its tests hold vectors: it only runs checks and collects
+//! their outcomes. It measures no time, since a clock is not available everywhere the library runs.
 
 use crate::MhfeError;
 

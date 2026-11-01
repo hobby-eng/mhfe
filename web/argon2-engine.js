@@ -51,7 +51,7 @@ function argon2Engine(module) {
           );
         }
         if (code !== 0) {
-          throw new Error(`ARGON2_FAILED: the reference code returned error ${code}`);
+          throw new Error(`the reference code returned error ${code}`);
         }
         key.set(module.HEAPU8.subarray(keyPointer, keyPointer + ARGON2_KEY_BYTES));
       } finally {

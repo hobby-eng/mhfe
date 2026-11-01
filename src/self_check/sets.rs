@@ -1,6 +1,7 @@
 //! The sets of checks each front end runs. A set holds the checks of the parts its front end
 //! computes, and each is built only with its feature: a browser module's WebAssembly carries the
-//! checks and vectors of its own parts and no others.
+//! checks and vectors of its own parts and no others, but for suite 3's validation file
+//! (src/validation_fixtures.rs).
 //!
 //! - [`hashes`]: the cipher's hashes alone.
 //! - [`core()`]: everything the encryption, recovery, rehearsal, rekey and hidden-wallet operations
@@ -157,7 +158,7 @@ pub fn native<'a>(random: Option<&'a mut dyn RandomSource>) -> SelfCheck<'a> {
 mod tests {
     use super::*;
 
-    /// Every check of the plan, in the order the tool runs them, each once.
+    /// Every check, in the order the tool runs them, each once.
     const NATIVE_IDS: [&str; 26] = [
         "cipher-hashes",
         "argon2",

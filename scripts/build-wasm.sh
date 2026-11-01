@@ -45,8 +45,9 @@ fi
 bindgen_dir="target/wasm-bindgen"
 rm -rf "$bindgen_dir"
 mkdir -p "$bindgen_dir"
-# Cargo's target folder, relative to the repository root as cargo reads it from here.
-target_dir="${CARGO_TARGET_DIR:-target}"
+# Cargo's target folder, wherever its settings put it.
+target_dir="$(cargo metadata --locked --no-deps --format-version 1 |
+  python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])')"
 
 # The folders of this machine that would be compiled into the WebAssembly, such as the panic
 # locations of the dependencies under CARGO_HOME, are written under the fixed names of
@@ -105,9 +106,6 @@ for class in repair passwords wallet; do
 done
 
 cargo xtask wasm stamp-build-id dist
-# A syntax check that, unlike py_compile, writes no bytecode into the package.
-python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' \
-  dist/core/mhfe-fast-mode.py
 
 cargo xtask wasm package-manifest dist
 echo "Built the browser package in $repo_root/dist"

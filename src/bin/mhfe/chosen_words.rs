@@ -3,13 +3,13 @@
 //! (mhfe::word_wishes); this module asks and tells.
 
 use clap::Args;
+use mhfe::memory::LockedText;
 use mhfe::wallet_check::PhraseDraw;
 use mhfe::word_hints::WordList;
 use mhfe::word_wishes::{
     Place, Randomness, WishOdds, WordWishes, MAX_CHOSEN_WORDS, MAX_NEVER_USE_WORDS, PHRASE_WORDS,
     RECOMMENDED_RANDOM_BITS,
 };
-use zeroize::Zeroizing;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::{self, Failure};
@@ -93,7 +93,7 @@ pub fn ask(
         };
         let pairs: Vec<(Place, &str)> = chosen
             .iter()
-            .map(|(place, word)| (*place, word.as_str()))
+            .map(|(place, word)| (*place, &**word))
             .collect();
         let never: Vec<&str> = never_use.iter().map(String::as_str).collect();
         match WordWishes::new(&pairs, &never) {
@@ -131,14 +131,14 @@ fn ask_whether(input: &mut Input) -> Result<bool, Failure> {
 
 /// The chosen word with its place, typed hidden on a private screen as part of the secret phrase:
 /// none for Enter alone.
-fn read_chosen(input: &mut Input) -> Result<Vec<(Place, Zeroizing<String>)>, Failure> {
+fn read_chosen(input: &mut Input) -> Result<Vec<(Place, LockedText)>, Failure> {
     let _screen = PrivateScreen::enter(input, Operation::New.title());
     let word = input.secret_words("Chosen word, or Enter for none", WordList::Bip39)?;
     if word.is_empty() {
         return Ok(Vec::new());
     }
     let place = read_place(input)?;
-    Ok(vec![(place, Zeroizing::new(word.to_string()))])
+    Ok(vec![(place, word)])
 }
 
 /// The place of the chosen word: a position in the phrase, or Enter for anywhere. The library

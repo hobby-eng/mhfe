@@ -1,7 +1,7 @@
 //! Known answers of the rehearsal check: the self-check `rehearsal`.
 //!
 //! The published container zero-12 with its password, replayed with its recorded round keys and
-//! compared with each kind of reference: the master key fingerprint 73c5da0a (published), the
+//! compared with each kind of reference: the master key fingerprint 73c5da0a (computed from BIP-0084's published root key), the
 //! receiving address of BIP84's test vector at its path, and the built-in check. A fingerprint
 //! that differs in one bit must not match.
 
@@ -11,7 +11,7 @@ use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findi
 use crate::wallet::{Address, Coin, DerivationPath, SearchLimits};
 use crate::WordCount;
 
-/// The master key fingerprint of zero-12's phrase without a passphrase, published by BIP-0084's
+/// The master key fingerprint of zero-12's phrase without a passphrase, computed from BIP-0084's
 /// test vector and many wallets.
 const FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
 const WRONG_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0b];

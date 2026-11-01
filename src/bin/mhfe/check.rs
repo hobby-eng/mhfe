@@ -1,4 +1,6 @@
-//! `mhfe check`: rehearses a recovery and reports only "matches" or "does not match".
+// long: one command's dialogue from reference to result, read in the order it is asked.
+//! `mhfe check`: rehearses a recovery and reports only "matches", "does not match" or "not
+//! verified".
 //!
 //! Nothing of the recovered phrase is shown, and a wrong password gives no hint of how close
 //! it was. The strong reference is a receiving address of the wallet; the master key fingerprint
@@ -13,8 +15,9 @@ use mhfe::wallet::{
 };
 use mhfe::wallet_check::{self, WALLET_CHECK_BITS};
 use mhfe::{
-    recover_for_check, CheckEvidence, ContainerFacts, MhfeError, PhraseLength, RecoveredForCheck,
-    Reference, ReferenceTarget, WordCount, BUILT_IN_CHECK_WORD_COUNTS, WORD_COUNTS,
+    recover_for_check, CheckEvidence, CheckOutcome, ContainerFacts, MhfeError, PhraseLength,
+    RecoveredForCheck, Reference, ReferenceTarget, WordCount, BUILT_IN_CHECK_WORD_COUNTS,
+    WORD_COUNTS,
 };
 use zeroize::Zeroizing;
 
@@ -43,7 +46,7 @@ pub struct Options {
     address: bool,
 
     /// With --address: the coin (a script's default: bitcoin)
-    #[arg(long, value_name = "COIN", requires = "address", long_help = coin_help())]
+    #[arg(long, value_name = "COIN", long_help = coin_help())]
     coin: Option<Coin>,
 
     /// Compare with the master key fingerprint (quick, weaker)
@@ -55,7 +58,7 @@ pub struct Options {
     words: Option<PhraseLength>,
 
     /// With --address: look only at this derivation path
-    #[arg(long, value_name = "PATH", requires = "address", long_help = path_help())]
+    #[arg(long, value_name = "PATH", long_help = path_help())]
     path: Option<DerivationPath>,
 
     /// Read the answers from standard input (for scripts)
@@ -128,13 +131,15 @@ fn path_help() -> String {
 
 fn stdin_help() -> String {
     style::option_help(&[
-        "Read the answers from standard input (for scripts); needs a reference option.",
+        "Read the answers from standard input (for scripts); needs a reference option. With \
+         --repair the repair words follow the container.",
         "Input: the container, the password, then with --address or --fingerprint the \
          reference and the BIP39 passphrase (an empty line if none), and with --words auto the \
          BIP39 passphrase of the original seed phrase (an empty line if none), one per line. With \
          --address, --coin names the coin of the address; without it the address is \
-         Bitcoin's. Output: \"matches\" with exit code 0, or \"does not match\" with exit \
-         code 3. Several lengths that match are named on standard error.",
+         Bitcoin's. Output: \"matches\" with exit code 0, or \"does not match\" or \"not \
+         verified\" with exit code 3. Several lengths that match, and what else the recovery \
+         shows, are named on standard error.",
     ])
 }
 
@@ -233,6 +238,14 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     if let Some(PhraseLength::Words(words)) = options.words {
         mhfe::require_built_in_check_length(words)?;
     }
+    if (options.coin.is_some() || options.path.is_some())
+        && !options.address
+        && options.words != Some(PhraseLength::Detect)
+    {
+        return Err(Failure::invalid_input(
+            "--coin and --path go with --address or --words auto.",
+        ));
+    }
     let mut input = Input::new(options.stdin);
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, Operation::Check.title());
@@ -311,7 +324,11 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     let mut compared = Compared::with(choice, &reference, &recovered)?;
     // Detection that found no length asks for it: a person states it, and a 24-word phrase is
     // compared with the wallet on the same recovery.
-    if choice == Choice::OwnChecks && !compared.evidence.outcome.matches() && !input.is_script() {
+    if compared.evidence.outcome == CheckOutcome::NotVerified
+        && choice == Choice::OwnChecks
+        && compared.evidence.wallet_check != Some(true)
+        && !input.is_script()
+    {
         compared = ask_length_after_detection(&mut input, &recovered, options.coin, options.path)?;
     }
     drop(recovered);
@@ -328,7 +345,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     eprintln!();
     if input.is_script() {
         // Scripts read exactly these words, so several lengths that match go to standard error.
-        println!("{}", if matches { "matches" } else { "does not match" })?;
+        println!("{}", outcome.words())?;
         if matches && !evidence.other_lengths.is_empty() {
             let first = evidence.built_in_check.iter();
             for &words in first.chain(&evidence.other_lengths) {
@@ -347,22 +364,25 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         if let Some(path) = outcome.path() {
             style::fact("Found at", paint(ACCENT, path));
         }
-        if let (Choice::BuiltInCheck(stated), Some(found)) = (choice, evidence.built_in_check) {
-            if found != stated {
-                style::warn(
-                    &phrase_length::check_finds(found, stated),
-                    &format!("{}.", phrase_length::MORE_RELIABLE),
-                );
-            }
-        }
         if let Some(limit) = match_limit(choice) {
             style::hint(limit);
         }
+    } else if *outcome == CheckOutcome::NotVerified {
+        println!(
+            "{}",
+            paint(style::WARNING, format!("! {}", outcome.words()))
+        )?;
     } else {
-        println!("{}", paint(style::BAD, "✗ does not match"))?;
+        println!("{}", paint(style::BAD, format!("✗ {}", outcome.words())))?;
     }
+    say_what_else_it_shows(choice, &evidence, input.is_script() || !matches);
+    let wallet_check_passed = evidence.wallet_check == Some(true);
     if matches {
         Ok(SUCCESS)
+    } else if wallet_check_passed {
+        style::hint(WALLET_CHECK_LIMIT);
+        style::more(readme::CHECK);
+        Ok(NO_MATCH)
     } else {
         style::hint(match choice {
             Choice::BuiltInCheck(_) => {
@@ -381,6 +401,22 @@ pub fn run(options: Options) -> Result<i32, Failure> {
         });
         style::more(readme::CHECK);
         Ok(NO_MATCH)
+    }
+}
+
+/// What the recovery shows beside the result: a length that differs from the stated one, and, where
+/// `wallet_check_not_listed`, a pass of the 16-bit check.
+fn say_what_else_it_shows(choice: Choice, evidence: &CheckEvidence, wallet_check_not_listed: bool) {
+    if let (Choice::BuiltInCheck(stated), Some(found)) = (choice, evidence.built_in_check) {
+        if found != stated {
+            style::warn(
+                &phrase_length::check_finds(found, stated),
+                &format!("{}.", phrase_length::MORE_RELIABLE),
+            );
+        }
+    }
+    if evidence.wallet_check == Some(true) && wallet_check_not_listed {
+        style::hint(&format!("It passes {}.", wallet_check_line()));
     }
 }
 
@@ -449,9 +485,8 @@ fn matched_lines(
         Choice::BuiltInCheck(words) => {
             Some(built_in_line(evidence.built_in_check.unwrap_or(words)))
         }
-        Choice::WalletCheck => Some(wallet_check_line()),
         // The phrase's own checks are listed below, as the recovery shows them.
-        Choice::OwnChecks => None,
+        Choice::WalletCheck | Choice::OwnChecks => None,
     });
     if let Some(words) = evidence.built_in_check {
         if !matches!(choice, Choice::BuiltInCheck(_)) {
@@ -464,7 +499,7 @@ fn matched_lines(
             .iter()
             .map(|&words| built_in_line(words)),
     );
-    if evidence.wallet_check == Some(true) && !matches!(choice, Choice::WalletCheck) {
+    if evidence.wallet_check == Some(true) {
         lines.push(wallet_check_line());
     }
     lines
@@ -485,12 +520,15 @@ fn match_limit(choice: Choice) -> Option<&'static str> {
         Choice::Fingerprint => {
             Some("A fingerprint is a quick 32-bit check; an address (--address) is stronger.")
         }
-        Choice::BuiltInCheck(_) | Choice::OwnChecks => {
+        Choice::BuiltInCheck(_) | Choice::OwnChecks | Choice::WalletCheck => {
             Some("It does not prove the wallet or its passphrase; an address (--address) does.")
         }
-        Choice::WalletCheck => Some("It does not prove the wallet; an address (--address) does."),
     }
 }
+
+/// What a pass of the phrase + passphrase check leaves open, said under a 24-word reading.
+const WALLET_CHECK_LIMIT: &str = "A 16-bit check does not prove the wallet; an address \
+     (--address) or the fingerprint does.";
 
 /// Asks what to compare with. A same-length container has no built-in check, so it is offered
 /// only the address and the fingerprint.
@@ -887,8 +925,8 @@ pub fn read_passphrase_named(
 }
 
 /// `--passphrase-used yes|no`: the answer to whether a BIP39 passphrase is used, as an option of
-/// the commands that ask it (the owner's rule that every answer that is not a secret is an option
-/// too). The passphrase itself is never an option: it is typed, or a script's line.
+/// the commands that ask it, as every answer that is not a secret is an option too. The passphrase
+/// itself is never an option: it is typed, or a script's line.
 #[derive(Args)]
 pub struct PassphraseUsedOption {
     /// Whether a BIP39 passphrase is used: yes or no
@@ -925,9 +963,8 @@ pub fn ask_passphrase(
 }
 
 /// Why a recovery asks for the passphrase of a 24-word reading: the 16-bit source check, which
-/// every recovery evaluates (the specification's recovery rules). Longer than the usual link, as
-/// the owner asked (2026-10-09): nothing else on the screen says why a tool that only decrypts
-/// wants a passphrase.
+/// every recovery evaluates (the specification's recovery rules). Longer than the usual link:
+/// nothing else on the screen says why a tool that only decrypts wants a passphrase.
 pub const SOURCE_CHECK_WHY: &[&str] = &[
     "A new 24-word phrase can carry a 16-bit check tied to its BIP39",
     "passphrase, as mhfe new offers. The container does not show whether",

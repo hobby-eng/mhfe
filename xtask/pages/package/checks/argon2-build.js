@@ -205,6 +205,7 @@ async function checkRecoveryLengths(created, onRound, reduced, steps) {
     }),
     {
       matches: true,
+      outcome: "matches",
       path: "m/84'/0'/0'/0/0",
       evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
     },
@@ -213,6 +214,7 @@ async function checkRecoveryLengths(created, onRound, reduced, steps) {
   // compared again, as a page that asks for the length when detection finds none compares it.
   assert.deepEqual(operations.check(created.container, PASSWORD, reduced, "words", "0"), {
     matches: true,
+    outcome: "matches",
     path: null,
     evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
   });
@@ -351,6 +353,7 @@ async function checkReferences(created, missingLast, reduced) {
     ),
     {
       matches: true,
+      outcome: "matches",
       path: "m/44'/60'/0'/0/0",
       evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
     },

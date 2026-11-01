@@ -1,3 +1,4 @@
+// long: tables of known answers, data rather than logic.
 //! Known answers of the wallet: the self-checks `wallet-hashes`, `bip39-seed`, `bip32`,
 //! `addresses` and `address-search`.
 //!
@@ -211,7 +212,8 @@ const TREZOR_SEEDS: [&str; 24] = [
 ];
 
 /// The master key fingerprint of [`ABANDON`] with "TREZOR", computed with a pure Python BIP32 that
-/// first reproduced BIP-0032's test vectors; without a passphrase it is the published 73c5da0a.
+/// first reproduced BIP-0032's test vectors; without a passphrase it is 73c5da0a, computed from
+/// BIP-0084's published root key.
 const TREZOR_FINGERPRINT: [u8; 4] = [0xb4, 0xe3, 0xf5, 0xed];
 
 /// The `bip39-seed` check.
@@ -405,7 +407,7 @@ const fn at(coin: Coin, path: &'static str, address: &'static str, startup: bool
 }
 
 /// Where the wallets of [`ABANDON`] put each address, also the table of the wallet's unit tests. The
-/// Bitcoin mainnet values at index 0 are the published vectors of BIP44, BIP49, BIP84 and BIP86,
+/// Bitcoin mainnet values at index 0: BIP84 and BIP86 publish theirs,
 /// and the Dash Platform values the official DIP17/DIP18 vectors; the other Bitcoin values were
 /// computed with Python's hashlib, and the other coins with the audited JavaScript libraries
 /// @scure/bip32, @noble/hashes, @noble/curves and @scure/base, and ethers for EIP-55, each of
@@ -706,7 +708,8 @@ const DAMAGED: [(Coin, &str); 9] = [
     (Coin::Tron, "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdJ"),
 ];
 
-/// The master key fingerprint of [`ABANDON`] without a passphrase, the published 73c5da0a.
+/// The master key fingerprint of [`ABANDON`] without a passphrase, 73c5da0a, computed from
+/// BIP-0084's published root key.
 const ABANDON_FINGERPRINT: [u8; 4] = [0x73, 0xc5, 0xda, 0x0a];
 
 /// Searches the full self-test runs: an address found under the second root of its coin, and one

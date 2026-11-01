@@ -41,7 +41,8 @@ pub(crate) fn read(input: &str, role: fn(String) -> MhfeError) -> Result<Phrase,
 fn reason(refused: Error) -> String {
     match refused {
         Error::InvalidWordCount { words } => format!(
-            "it has {words} words, but a phrase has {}",
+            "it has {words} word{}, but a phrase has {}",
+            if words == 1 { "" } else { "s" },
             word_counts_text()
         ),
         Error::UnknownWord { position } => {

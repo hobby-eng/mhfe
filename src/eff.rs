@@ -15,16 +15,6 @@ pub const LONGEST_WORD: usize = 9;
 /// Dice rolled for one word.
 const DICE_PER_WORD: usize = 5;
 
-/// The position of `word`, compared exactly as written, hyphens included. A deliberate copy of
-/// `index_of` in the core's src/password_check.rs, which keeps it private: a change goes to both.
-pub fn index_of(word: &str) -> Option<u16> {
-    // The list is in byte order, and every position is below 7,776.
-    EFF_WORDS
-        .binary_search(&word)
-        .ok()
-        .map(|index| index as u16)
-}
-
 /// How many different words of the list a text has if it consists only of such words, in any
 /// ASCII letter case, else 0. A repeated word counts once: "abacus abacus abacus abacus" is one
 /// dice word, about 12.9 bits, not four (AUD-005-FUN001). The text is compared in place, so no copy
@@ -66,12 +56,12 @@ mod tests {
 
     #[test]
     fn every_word_is_found_at_its_place_and_only_as_written() {
-        for (index, word) in (0..).zip(EFF_WORDS) {
-            assert_eq!(index_of(word), Some(index));
+        for (index, word) in EFF_WORDS.iter().enumerate() {
+            assert_eq!(EFF_WORDS.binary_search(word), Ok(index));
         }
         assert_eq!(EFF_WORDS[0], "abacus");
         assert_eq!(EFF_WORDS[LIST_SIZE - 1], "zoom");
-        assert_eq!(index_of("Zoom"), None);
+        assert!(EFF_WORDS.binary_search(&"Zoom").is_err());
     }
 
     #[test]

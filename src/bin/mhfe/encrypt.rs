@@ -60,9 +60,9 @@ fn stdin_help() -> String {
     style::option_help(&[
         "Read the answers from standard input (for scripts).",
         "Input: the phrase, the password and the password again, one per line. Output: the \
-         container on one line, printed only after its check has passed. Messages go to \
-         standard error, so standard output holds the container alone. The container has 24 \
-         words unless --same-length is given.",
+         container on one line, printed only after its check has passed, with --repair-words N \
+         its repair words on a second line. Messages go to standard error. The container has \
+         24 words unless --same-length is given.",
     ])
 }
 
@@ -167,7 +167,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
     // The format of the container, which the specification asks to show after creating it.
     style::fact("Format", paint(MUTED, new.suite().id()));
     // Nothing asks whether the wallet has a BIP39 passphrase: in a tool that encrypts a phrase the
-    // question looked suspicious and burdened the person (the owner's decision of 2026-10-08).
+    // question looks suspicious and burdens the person.
     // The list names any passphrase of the wallet instead, at a terminal and in a script alike.
     let keep = new.keep(work, WalletPassphrase::Unknown);
     // Wrapped under its column: the list grows with every item to keep.
@@ -410,7 +410,7 @@ pub fn warn_if_detection_would_mislead(others: &[usize], words: usize) {
     // Set apart from the summary above and below it.
     eprintln!();
     style::warn(
-        &format!("Write down that your phrase has {words} words."),
+        &format!("Write down that your phrase has {words} words, apart from the container."),
         &format!(
             "By rare chance it also reads as {} words: recover it with mhfe decrypt --words \
              {words}.",
@@ -437,9 +437,9 @@ pub fn read_new_password(
         }
         None => made_password::ask_kind(input, operation)?,
     };
-    match kind {
-        PasswordKind::Own => read_typed_password(input, operation),
-        made => made_password::read_made(input, operation, made),
+    match kind.recipe()? {
+        Some(recipe) => made_password::read_made(input, operation, recipe),
+        None => read_typed_password(input, operation),
     }
 }
 
@@ -472,7 +472,7 @@ pub fn read_typed_password(input: &mut Input, operation: Operation) -> Result<Pa
     };
     let (password, strength, check) = loop {
         eprintln!();
-        if screen.is_active() {
+        if !input.is_script() {
             style::hint(what);
         }
         style::hint("Letter case and spaces count.");

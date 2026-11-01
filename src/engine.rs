@@ -86,7 +86,8 @@ pub use known_answers::{BrowserArgon2Check, BrowserArgon2SizesCheck};
 pub use known_answers::{NativeArgon2Check, NativeArgon2SizesCheck};
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::{
-    available_memory_bytes, check_can_run, highest_available_level, reserve, HIGHEST_MEMORY_LEVEL,
+    available_memory_bytes, check_can_run, highest_available_level, reserve, swap_forbidden,
+    HIGHEST_MEMORY_LEVEL,
 };
 
 #[cfg(test)]

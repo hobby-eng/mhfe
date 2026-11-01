@@ -3,7 +3,6 @@
 
 const REPAIR_OPERATIONS = {
   parameters: () => JSON.parse(mhfe.repairParameters()),
-  packageVersion: () => mhfe.packageVersion(),
   selfCheck: (request, host) =>
     host.selfCheck(request.tier, (onStart, onResult) =>
       mhfe.selfCheckRepair(request.tier, request.skip, onStart, onResult),

@@ -262,7 +262,7 @@ pub(crate) fn whole_number(value: f64, code: &str, name: &str) -> Result<u32, Js
         Ok(value as u32)
     } else {
         Err(JsError::new(&format!(
-            "{code}: {name} must be a whole number, not {value}"
+            "{code}: {name} must be a whole number from 0 to 4294967295, not {value}"
         )))
     }
 }

@@ -129,7 +129,7 @@ fn decide(
             ],
             false,
         ),
-        Reading::NotThisShape => unreachable!("only a password of the profile's shape is asked"),
+        Reading::NotThisShape => return Ok(Decision::AsTyped),
     };
     let repairs = review.repairs();
     if let (Some(change), false) = (change, repairs.is_empty()) {

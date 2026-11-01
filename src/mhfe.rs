@@ -54,7 +54,7 @@ impl WordCount {
 }
 
 /// How recovery of a 24-word container learns the length of the original phrase. A same-length
-/// container keeps its original's length and takes only [`PhraseLength::Detect`].
+/// container keeps its original's length, which a stated length must equal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhraseLength {
     /// Tests the 12-, 15-, 18- and 21-word layouts and falls back to 24 words.
@@ -168,7 +168,7 @@ impl RecoveredPhrase {
     /// length, where it does not apply. Every recovery evaluates it on each 24-word reading, as
     /// the container does not show whether the phrase was made with the check (the
     /// specification's recovery rules). A pass makes a right password very likely; a phrase made
-    /// without the check fails it, so a failure means something only to an owner who knows the
+    /// without the check almost always fails it, so a failure means something only to an owner who knows the
     /// wallet was made with it. One BIP39 seed: milliseconds.
     pub fn passes_wallet_check(&self, passphrase: &str) -> Result<Option<bool>, MhfeError> {
         if !self.offers_wallet_check() {

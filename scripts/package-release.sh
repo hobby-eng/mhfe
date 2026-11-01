@@ -71,9 +71,6 @@ archives=()
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
 
-# Documents and licence texts that every archive carries. An archive that brings its own
-# README.md, as the browser package does with its integration guide and the SHA-256 of its
-# files, keeps it and gets the project overview as README-mhfe.md.
 # The commit and the state of the working copy: given by scripts/build-reproducible.sh inside the
 # container, which has no .git, or read from git here (the macOS release jobs).
 source_commit="${SOURCE_COMMIT:-$(git rev-parse HEAD)}"
@@ -88,6 +85,9 @@ fi
 # vendored commit instead.
 core_version="$(sed -n 's/^mhfe-core = "=\(.*\)"$/\1/p' Cargo.toml)"
 
+# Documents and licence texts that every archive carries. An archive that brings its own
+# README.md, as the browser package does with its integration guide and the SHA-256 of its
+# files, keeps it and gets the project overview as README-mhfe.md.
 add_common_files() {
   local folder="$1"
   if [[ -e "$folder/README.md" ]]; then
@@ -118,9 +118,12 @@ pack_tar() {
 pack_zip() {
   local folder="$1" archive="$2"
   # zip stores local times from 1980 on; UTC and one fixed time make it reproducible.
+  rm -f "$output/$archive"
   (
     cd "$folder"
     export TZ=UTC
+    # zip stores each file's mode: the same as pack_tar's, whatever the checkout's umask left.
+    find . -type f -exec chmod u+rwX,go+rX,go-w {} +
     find . -exec touch -d '1980-01-01 00:00:00' {} +
     find . -type f | LC_ALL=C sort | zip -X -q "$output/$archive" -@
   )
@@ -166,7 +169,7 @@ for package in "${packages[@]}"; do
         sha256sum --check --quiet --strict -)
       {
         echo "Argon2: vendor/phc-winner-argon2 at f57e61e19229e23c4445b85494dbf7c07de721cb"
-        echo "Emscripten 6.0.12"
+        sed -n 's/^expected_emscripten="\(.*\)"$/Emscripten \1/p' scripts/build-argon2-wasm.sh
       } >> "$folder/BUILD-INFO.txt"
       pack_tar "$folder" "mhfe-$version-browser.tar.gz"
       ;;
@@ -177,6 +180,6 @@ done
 # Every archive must carry the licence files: LICENSE and THIRD_PARTY_NOTICES.md with its crate list.
 scripts/check-release-artifacts.sh --archives "${archives[@]}"
 
-(cd "$output" && sha256sum -- *.tar.gz *.zip 2>/dev/null > SHA256SUMS || true)
+(shopt -s nullglob && cd "$output" && sha256sum -- *.tar.gz *.zip > SHA256SUMS)
 echo "Release archives in $output:"
 cat "$output/SHA256SUMS"

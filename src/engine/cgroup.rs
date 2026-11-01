@@ -34,6 +34,40 @@ pub(super) fn available_bytes() -> Option<u64> {
     available_with(&membership, &mounts, read)
 }
 
+/// Whether the control group of this process, or one above it, may use no swap. Only cgroup v2
+/// says so in one file.
+pub(super) fn swap_forbidden() -> bool {
+    let membership = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default();
+    let mounts = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+    swap_forbidden_with(&membership, &mounts, |path| {
+        std::fs::read_to_string(path).ok()
+    })
+}
+
+/// [`swap_forbidden`] for the given /proc files.
+fn swap_forbidden_with(
+    membership: &str,
+    mounts: &str,
+    read: impl Fn(&Path) -> Option<String>,
+) -> bool {
+    let Some((Version::V2, group_path)) = memory_group(membership) else {
+        return false;
+    };
+    memory_mount(mounts, Version::V2)
+        .and_then(|(mount_root, mount_point)| {
+            let directory = group_directory(&group_path, &mount_root, &mount_point)?;
+            Some(
+                directory
+                    .ancestors()
+                    .take_while(|group| group.starts_with(&mount_point))
+                    .any(|group| {
+                        read(&group.join("memory.swap.max")).is_some_and(|max| max.trim() == "0")
+                    }),
+            )
+        })
+        .unwrap_or(false)
+}
+
 /// [`available_bytes`] for the given /proc files, reading the control files through `read`.
 fn available_with(
     membership: &str,
@@ -45,7 +79,7 @@ fn available_with(
     let directory = group_directory(&group_path, &mount_root, &mount_point)?;
     match version {
         Version::V2 => available_v2(&directory, &mount_point, read),
-        Version::V1 => available_v1(&directory, read),
+        Version::V1 => available_v1(&directory, &mount_point, read),
     }
 }
 
@@ -119,44 +153,56 @@ fn group_directory(group_path: &str, mount_root: &str, mount_point: &Path) -> Op
     Some(mount_point.join(below))
 }
 
-/// cgroup v2: the smallest room left in the group and in every group above it up to the mount
-/// point. The root group has no memory.max, and "max" means no limit.
+/// The smallest room left in the group at `directory` and in every group above it up to the mount
+/// point, as `room_of` gives it for each; a group without a limit gives none.
+fn smallest_room(
+    directory: &Path,
+    mount_point: &Path,
+    room_of: impl Fn(&Path) -> Option<u64>,
+) -> Option<u64> {
+    directory
+        .ancestors()
+        .take_while(|group| group.starts_with(mount_point))
+        .filter_map(room_of)
+        .min()
+}
+
+/// cgroup v2: the room of each group. The root group has no memory.max, and "max" means no limit.
 fn available_v2(
     directory: &Path,
     mount_point: &Path,
     read: impl Fn(&Path) -> Option<String>,
 ) -> Option<u64> {
-    let mut smallest: Option<u64> = None;
-    for group in directory
-        .ancestors()
-        .take_while(|group| group.starts_with(mount_point))
-    {
-        let Some(limit) = read(&group.join("memory.max")) else {
-            continue;
-        };
-        let Ok(limit) = limit.trim().parse::<u64>() else {
-            continue; // "max"
-        };
+    smallest_room(directory, mount_point, |group| {
+        let limit = read(&group.join("memory.max"))?
+            .trim()
+            .parse::<u64>()
+            .ok()?;
         let usage = read_number(&read, &group.join("memory.current")).unwrap_or(limit);
         let stat = read(&group.join("memory.stat")).unwrap_or_default();
         let reclaimable = stat_value(&stat, "inactive_file").unwrap_or(0);
-        let room = room_left(limit, usage, reclaimable);
-        smallest = Some(smallest.map_or(room, |other| other.min(room)));
-    }
-    smallest
+        Some(room_left(limit, usage, reclaimable))
+    })
 }
 
-/// cgroup v1: memory.stat gives the limit that applies with every group above
-/// (`hierarchical_memory_limit`) and the reclaimable cache of the group and its children.
-fn available_v1(directory: &Path, read: impl Fn(&Path) -> Option<String>) -> Option<u64> {
-    let stat = read(&directory.join("memory.stat"))?;
-    let limit = stat_value(&stat, "hierarchical_memory_limit")?;
-    if limit >= V1_NO_LIMIT_FROM {
-        return None;
-    }
-    let usage = read_number(&read, &directory.join("memory.usage_in_bytes")).unwrap_or(limit);
-    let reclaimable = stat_value(&stat, "total_inactive_file").unwrap_or(0);
-    Some(room_left(limit, usage, reclaimable))
+/// cgroup v1: the room of each group. memory.stat gives the limit that applies with every group
+/// above (`hierarchical_memory_limit`), which may come from one of them, and the reclaimable cache
+/// of the group and its children.
+fn available_v1(
+    directory: &Path,
+    mount_point: &Path,
+    read: impl Fn(&Path) -> Option<String>,
+) -> Option<u64> {
+    smallest_room(directory, mount_point, |group| {
+        let stat = read(&group.join("memory.stat"))?;
+        let limit = stat_value(&stat, "hierarchical_memory_limit")?;
+        if limit >= V1_NO_LIMIT_FROM {
+            return None;
+        }
+        let usage = read_number(&read, &group.join("memory.usage_in_bytes")).unwrap_or(limit);
+        let reclaimable = stat_value(&stat, "total_inactive_file").unwrap_or(0);
+        Some(room_left(limit, usage, reclaimable))
+    })
 }
 
 /// The limit minus the usage that the kernel cannot reclaim.
@@ -236,6 +282,24 @@ mod tests {
         assert_eq!(available_with("0::/user.slice\n", V2_MOUNTS, read), None);
         assert_eq!(available_with("", V2_MOUNTS, files(&[])), None);
         assert_eq!(available_with("0::/\n", "", files(&[])), None);
+    }
+
+    #[test]
+    fn swap_is_forbidden_by_the_group_or_one_above_it() {
+        let mounts = "30 25 0:27 / /sys/fs/cgroup rw - cgroup2 cgroup2 rw\n";
+        let membership = "0::/user.slice/run.scope\n";
+        let read = files(&[(
+            "/sys/fs/cgroup/user.slice/memory.swap.max",
+            "0\n".to_owned(),
+        )]);
+        assert!(swap_forbidden_with(membership, mounts, read));
+        let read = files(&[(
+            "/sys/fs/cgroup/user.slice/run.scope/memory.swap.max",
+            "max\n".to_owned(),
+        )]);
+        assert!(!swap_forbidden_with(membership, mounts, read));
+        let v1 = "4:memory:/docker/abc\n0::/\n";
+        assert!(!swap_forbidden_with(v1, mounts, files(&[])));
     }
 
     #[test]

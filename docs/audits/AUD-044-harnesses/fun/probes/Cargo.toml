@@ -1,0 +1,32 @@
+# AUD-044 fun probes: the library of this checkout, called through its public interface, over
+# mhfe-core with the full-size settings at 256 KiB and one pass (../reduced-cli/reduced-core.patch).
+# Public test data only. The patched core lies in tmp/aud044/fun, never in the repository.
+[package]
+name = "mhfe-fun-probes"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[[bin]]
+name = "fun-probes"
+path = "src/main.rs"
+
+[dependencies]
+mhfe = { package = "mhfe-experimental", path = "../../../../.." }
+mhfe-core = "=0.1.0"
+hex = "=0.4.3"
+sha2 = "=0.11.1"
+
+[patch.crates-io]
+mhfe-core = { path = "../../../../../../tmp/aud044/fun/core-reduced" }
+
+[profile.release]
+codegen-units = 16
+lto = false
+opt-level = 2
+panic = "unwind"
+
+[lints.rust]
+unsafe_code = "deny"

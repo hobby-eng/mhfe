@@ -100,7 +100,7 @@ fn chars_help() -> String {
 fn dice_help() -> String {
     style::option_help(&[
         "Roll real dice instead of using the computer's randomness.",
-        "For each word, roll five dice and type the five numbers, 1 to 6, at a hidden prompt. \
+        "For each word, roll five dice and type the five numbers, 1 to 6, at a prompt. \
          The computer's random generator is then not used at all.",
     ])
 }
@@ -158,6 +158,7 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 }
 
 fn make_one(options: &Options) -> Result<i32, Failure> {
+    crate::settings::warn_of_isolation_gaps();
     if let Some(count) = options.chars {
         return run_characters(count);
     }

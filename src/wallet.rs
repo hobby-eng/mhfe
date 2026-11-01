@@ -1,3 +1,4 @@
+// long: the BIP32 derivation and every coin's address, one wallet read from top to bottom.
 //! Public wallet data for rehearsing a recovery without showing the phrase: the BIP32 master
 //! key fingerprint and the single-key receiving addresses of twelve coins on their standard
 //! paths: Bitcoin on BIP44 (legacy), BIP49 (nested SegWit), BIP84 (native SegWit) and BIP86
@@ -258,8 +259,9 @@ pub struct Address {
 }
 
 impl Address {
-    /// Reads `text` as a single-key receiving address of `coin`. Multisignature and script
-    /// addresses, Zcash shielded addresses and those of other coins are refused.
+    /// Reads `text` as a single-key receiving address of `coin`. A P2SH address is read as nested
+    /// SegWit, which cannot be told from another script. Zcash shielded addresses and those of
+    /// other coins are refused.
     pub fn parse(coin: Coin, text: &str) -> Result<Self, MhfeError> {
         let text = text.trim();
         let address = match coin {
@@ -641,7 +643,7 @@ fn parse_cashaddr(text: &str) -> Result<Address, MhfeError> {
             program: hash.to_vec(),
         }),
         _ => Err(invalid_address(
-            "only single-key addresses (bitcoincash:q…) can be checked",
+            "only bitcoincash:q… addresses can be checked",
         )),
     }
 }
@@ -701,6 +703,10 @@ impl FromStr for DerivationPath {
         }
         let mut path = Vec::new();
         for step in steps {
+            // A BIP32 node keeps its depth in one byte.
+            if path.len() == usize::from(u8::MAX) {
+                return Err(invalid());
+            }
             let (digits, hardened) = match step.strip_suffix(['\'', 'h']) {
                 Some(digits) => (digits, true),
                 None => (step, false),

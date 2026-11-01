@@ -87,6 +87,7 @@ async function checkRehearsal(client, made) {
     await fullCheck({ words: 15 }),
     {
       matches: true,
+      outcome: "matches",
       path: null,
       evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
     },
@@ -96,6 +97,7 @@ async function checkRehearsal(client, made) {
     await fullCheck({ words: 15 }, { password: WRONG_PASSWORD }),
     {
       matches: false,
+      outcome: "does not match",
       path: null,
       evidence: { builtInCheck: null, otherLengths: [], walletCheck: null },
     },
@@ -118,7 +120,12 @@ async function checkRehearsal(client, made) {
         password: PASSWORD,
         reference: { words },
       }),
-      { matches: true, path: null, evidence: { builtInCheck, otherLengths, walletCheck } },
+      {
+        matches: true,
+        outcome: "matches",
+        path: null,
+        evidence: { builtInCheck, otherLengths, walletCheck },
+      },
       `a check of { words: ${words} } names both lengths of an ambiguous container`,
     );
   }
@@ -163,10 +170,19 @@ async function checkRehearsalReferences(client, made, check, matched, notMatched
       await client.check({ container: made.checked, password: PASSWORD, reference, ...options }),
       ["matches", "path"],
     );
+  const notVerified = async (reference) => {
+    const { outcome, evidence } = await client.check({
+      container: made.checked,
+      password: PASSWORD,
+      reference,
+      passphrase: "TREZOR",
+    });
+    return [outcome, evidence.walletCheck];
+  };
   expectEqual(
-    await onChecked({ walletCheck: true }, { passphrase: "TREZOR" }),
-    matched(),
-    "the wallet check with its passphrase passes",
+    await notVerified({ walletCheck: true }),
+    ["not verified", true],
+    "the wallet check with its passphrase passes, and verifies nothing",
   );
   expectEqual(
     await onChecked({ walletCheck: true }, { passphrase: "trezor" }),
@@ -184,9 +200,9 @@ async function checkRehearsalReferences(client, made, check, matched, notMatched
   // The length detected: the passphrase finds the 24-word phrase drawn with its check; without
   // it the page is asked for the length and its fingerprint is compared on the same recovery.
   expectEqual(
-    await onChecked({ words: 0 }, { passphrase: "TREZOR" }),
-    matched(),
-    "the length detected finds a 24-word phrase by the phrase + passphrase check",
+    await notVerified({ words: 0 }),
+    ["not verified", true],
+    "the length detected reports the phrase + passphrase check of a 24-word phrase",
   );
   let lengthAsked = 0;
   const askedLog = progressLog();

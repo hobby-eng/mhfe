@@ -12,7 +12,6 @@ const FALLBACK_NOTE = "the check ran the single-threaded build of the standard m
 
 const CORE_OPERATIONS = {
   parameters: () => JSON.parse(mhfe.suiteParameters()),
-  packageVersion: () => mhfe.packageVersion(),
   describePhrase: (request) => JSON.parse(mhfe.describePhrase(request.phrase)),
   describeContainer: (request) => JSON.parse(mhfe.describeContainer(request.container)),
 
@@ -89,7 +88,7 @@ const CORE_OPERATIONS = {
           ),
         );
       const result = compare(request);
-      if (result.matches || !request.asksLength) return result;
+      if (result.matches || result.evidence.walletCheck || !request.asksLength) return result;
       const next = await host.ask("noLength", null);
       if (next === null) return result;
       try {

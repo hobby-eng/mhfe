@@ -304,13 +304,12 @@ fn with_container_wallet(
                 .map(|path| format!(" at {path}"))
                 .unwrap_or_default();
             let found_by = format!("the container's own wallet: {}{at}", reference.shown());
-            use_found(
-                input,
-                found,
-                None,
-                "with the container's own wallet",
-                Some(found_by),
-            )
+            let how = if reference.is_address() {
+                "with the container's own wallet"
+            } else {
+                "by the 32-bit fingerprint of the container's own wallet: confirm it with an address"
+            };
+            use_found(input, found, None, how, Some(found_by))
         }
         None => {
             style::retry(NOT_FOUND_IN_CONTAINER_WALLET);

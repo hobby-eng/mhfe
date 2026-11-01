@@ -209,14 +209,7 @@ fn main_help() -> String {
     let note = "Secrets are typed on a private screen, never passed as arguments. Use MHFE on a \
                 trusted computer without a network connection. -h gives a short summary of a \
                 command, --help the full explanation.";
-    format!(
-        "{examples}\n{full}\n{}\n{}",
-        style::help_note(note),
-        style::paint(
-            style::WARNING,
-            "Experimental: not independently reviewed; do not use it to protect real funds."
-        )
-    )
+    format!("{examples}\n{full}\n{}", style::help_note(note))
 }
 
 fn main() {
@@ -227,6 +220,12 @@ fn main() {
     // menu, which runs the same commands, each as a process of its own that comes through the
     // other branch. --help and --version, which clap answers in Cli::try_parse, handle nothing
     // secret and run no checks.
+    // TERM=dumb takes no colours, whatever CI or CLICOLOR say, unless CLICOLOR_FORCE insists.
+    if std::env::var_os("TERM").is_some_and(|term| term == "dumb")
+        && std::env::var_os("CLICOLOR_FORCE").is_none()
+    {
+        anstream::ColorChoice::Never.write_global();
+    }
     let result = if std::env::args_os().len() == 1 && choice::can_run() {
         menu::start()
     } else {
@@ -272,19 +271,50 @@ fn exit_unparsed(error: clap::Error) -> ! {
         error.exit();
     }
     anstream::eprintln!();
-    // Rendered as plain text; mhfe adds its own colours.
-    style::usage_error(&error.render().to_string());
+    style::usage_error(&refusal_of(&error));
     std::process::exit(exit::INVALID_INPUT);
 }
 
+/// What a refused command line says, in clap's form: never a value or an argument as it was given,
+/// which may be a phrase pasted in the wrong place (CORE-24). Only the names of options and clap's
+/// usage are repeated.
+fn refusal_of(error: &clap::Error) -> String {
+    use clap::error::{ContextKind, ContextValue, ErrorKind};
+    // Rendered as plain text; mhfe adds its own colours.
+    let rendered = error.render().to_string();
+    let option = match error.get(ContextKind::InvalidArg) {
+        Some(ContextValue::String(name)) => name.as_str(),
+        _ => "an option",
+    };
+    let message = match error.kind() {
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
+            format!("invalid value for {option}")
+        }
+        ErrorKind::UnknownArgument | ErrorKind::TooManyValues => "unexpected argument".to_owned(),
+        ErrorKind::InvalidSubcommand => "unknown command".to_owned(),
+        // These name options and counts only.
+        _ => return rendered,
+    };
+    let tail = rendered
+        .lines()
+        .filter(|line| line.starts_with("Usage:") || line.starts_with("For more"))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    format!("error: {message}\n\n{tail}\n")
+}
+
 /// Isolates a command, sets what ends it and runs its checks at start, before it reads anything.
-/// The order matters (G10 of the self-check plan): a process enters its own network namespace only
+/// The order matters: a process enters its own network namespace only
 /// while it has a single thread, the handler of Ctrl+C has a thread of its own, and the Argon2
 /// check at start runs on four. The handler comes before the checks, which take a moment, so that
 /// a key pressed in them ends the command as it does later. The start menu, which is no command,
 /// isolates nothing and runs the same checks but those of isolation before it opens (menu.rs).
 fn prepare(command: &Command) -> Result<(), Failure> {
     let (isolated, checks) = isolation_and_checks_of(command);
+    // Every command that runs all the checks reads secrets.
+    if matches!(checks, startup::Checks::EveryPart) {
+        protect::keep_off_swap()?;
+    }
     if isolated {
         protect::enter();
     }

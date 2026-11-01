@@ -29,12 +29,6 @@
 //! The menu that `mhfe` shows when it starts without arguments reads single keys in the same
 //! terminal mode: [`with_keys`].
 
-#![allow(
-    unsafe_code,
-    reason = "changing the terminal settings needs the operating system's terminal calls, which \
-              Rust offers only through unsafe foreign functions"
-)]
-
 use std::io::{self, Read};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -599,6 +593,11 @@ fn last_cell(line: &[u8], entries: &[Entry]) -> Vec<(usize, usize)> {
 }
 
 #[cfg(unix)]
+#[allow(
+    unsafe_code,
+    reason = "changing the terminal settings needs the operating system's terminal calls, which \
+              Rust offers only through unsafe foreign functions"
+)]
 mod platform {
     use std::io;
     use std::mem::MaybeUninit;
@@ -740,6 +739,11 @@ mod platform {
 }
 
 #[cfg(windows)]
+#[allow(
+    unsafe_code,
+    reason = "changing the console modes needs the operating system's console calls, which Rust \
+              offers only through unsafe foreign functions"
+)]
 mod platform {
     use std::time::{Duration, Instant};
 
@@ -910,6 +914,10 @@ fn not_shown(character: char) -> bool {
 }
 
 #[cfg(test)]
+#[allow(
+    unsafe_code,
+    reason = "the tests set up terminals through the same calls"
+)]
 mod tests {
     use super::*;
 

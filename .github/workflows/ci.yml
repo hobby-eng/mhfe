@@ -13,7 +13,7 @@ on:
 
 # A newer push to the same branch or pull request makes a running check pointless.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -32,6 +32,10 @@ jobs:
           submodules: true
       - name: Install pinned Rust toolchain
         run: rustup show
+      # A secret command stops on unencrypted swap it cannot forbid, and this runner has no user
+      # systemd to forbid it.
+      - name: Turn swap off
+        run: sudo swapoff -a
       - name: Verify standalone dependency graph
         run: |
           cargo metadata --locked --format-version 1 | python3 -c '

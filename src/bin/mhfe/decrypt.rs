@@ -62,7 +62,8 @@ fn words_help() -> String {
 fn stdin_help() -> String {
     style::option_help(&[
         "Read the answers from standard input (for scripts).",
-        "Input: the container, then the password, one per line, and with --passphrase-used yes \
+        "Input: the container, with --repair then its repair words, then the password, one \
+         per line, and with --passphrase-used yes \
          the BIP39 passphrase of the original seed phrase on a third line, for the 16-bit check \
          of a 24-word reading; without it the check runs with no passphrase. Output: one line \
          per result, \"<words> <verified|unverified> <phrase>\". Messages, the outcome of the \
@@ -344,7 +345,7 @@ fn show_ambiguous(
     {
         Some((found, Some(stated))) if read_as_stated(stated) => style::warn_now(
             &phrase_length::check_finds(found, stated),
-            "Both readings follow, the checked one first: a receiving address of your wallet \
+            "The readings follow, the checked one first: a receiving address of your wallet \
              tells them apart.",
         ),
         _ => style::warn_now(

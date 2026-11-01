@@ -121,7 +121,10 @@ pub fn show_consequences(words: usize) {
     eprintln!();
     style::warn(
         &format!("A wrong password will not be detected: it opens another {words}-word wallet."),
-        "",
+        &format!(
+            "A wrong PIM or memory level neither, and the container shows that your phrase has \
+             {words} words, with the weaker checksum of a phrase of that length."
+        ),
     );
     style::more(readme::CONTAINER_LENGTH);
     eprintln!();

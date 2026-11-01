@@ -1,3 +1,4 @@
+/* oxlint-disable max-lines -- every method of the class, each with what a page must know. */
 // The core module of the mhfe browser package: encryption, recovery, the rehearsal check, rekey,
 // hidden wallets and the self-test, with Argon2. Every operation runs in a new Web Worker, so a
 // long Argon2 computation never blocks the page, cancel() can end it at once, and the worker's
@@ -580,7 +581,7 @@ export class MhfeClient {
    * show nothing, and a reference without a passphrase matches the phrase's wallet without one,
    * which says nothing about funds under a passphrase, so it confirms only a wallet stated to have
    * none: true is refused, as such a wallet is compared with its passphrase. These refusals come
-   * before the first round; only the 1 MiB known answer of the Argon2 build runs first.
+   * before the first round.
    * `passphrase` belongs only to an address or a fingerprint: a non-empty one with the built-in
    * check or the owner is a TypeError.
    */
@@ -1079,6 +1080,9 @@ function describeReference(reference) {
     if (reference[key] !== undefined && kinds[0] !== "address") {
       throw new TypeError(`reference.${key} belongs only to an address reference.`);
     }
+  }
+  if (reference.passphrase !== undefined) {
+    throw new TypeError("passphrase goes beside the reference, not inside it.");
   }
   switch (kinds[0]) {
     case "address":

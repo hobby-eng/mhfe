@@ -462,10 +462,12 @@ const REPAIR_TITLE: &str = Operation::Repair.title();
 pub const WORDS_TITLE: &str = "Make repair words";
 
 pub fn run_repair(options: RepairOptions) -> Result<i32, Failure> {
+    options.settings.work_factor()?;
     let mut input = Input::new(options.stdin);
     // At a terminal every step on a screen of its own, the summary at the end.
     let flow = Flow::start(&input, REPAIR_TITLE);
     style::title(REPAIR_TITLE);
+    settings::warn_of_isolation_gaps();
     // Read and repaired as every command reads a container phrase: its repair words right after
     // it, and without them, a search for words typed as ? (container_search), whose settings are
     // asked only once a search that recovers candidates is chosen.
@@ -518,6 +520,7 @@ pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
     let mut input = Input::new(options.stdin);
     let flow = Flow::start(&input, WORDS_TITLE);
     style::title(WORDS_TITLE);
+    settings::warn_of_isolation_gaps();
     let read = terminal::read_container(&mut input, WORDS_TITLE, CardAsked::Never)?;
     let container = read.facts;
     let count = match options.count {
@@ -589,8 +592,8 @@ const REPAIR_EXPLAINED: &[&str] =
     &["They fix unreadable or miscopied container words without the password."];
 
 /// `--repair-words` of the commands that make a container: encrypt, new and rekey. The answer to
-/// the question whether a new container gets repair words, as an option (the owner's rule that
-/// every answer that is not a secret is an option too).
+/// the question whether a new container gets repair words, as an option, as every answer that is
+/// not a secret is one too.
 #[derive(Args)]
 pub struct RepairWordsOption {
     #[arg(

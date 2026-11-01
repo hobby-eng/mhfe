@@ -1,4 +1,7 @@
+# long: one suite of the terminal's cases, which share one session helper.
 """Checks the terminal input of the mhfe tool in a pseudo-terminal (Linux and macOS).
+
+Python by exception to TOOL-01, until it moves to `cargo xtask`.
 
     python3 scripts/verify-hidden-input.py [path/to/mhfe]
 
@@ -48,8 +51,7 @@ killed, the menu leaves its screen, restores the terminal, says so and comes bac
 
 `mhfe rekey` asks nothing about other wallets on the container: every user gets a warning at the
 top of the container prompt that they do not move to the new container and that the old one and its
-passwords are kept until their funds are moved (the owner's decision of 2026-10-08, in place of
-AUD-007-FUN002's question). No password is asked before it.
+passwords are kept until their funds are moved. No password is asked before it.
 
 A rekey asks whether the wallet has a BIP39 passphrase (multi-chain-wallet-tools AUD-022-API004)
 once, as soon as the kind of confirmation is known, for every kind: the next screen after the
@@ -558,7 +560,9 @@ class Session:
 
 def shown_privately(label, output, secret):
     """The secret was shown on the private screen and nowhere after the tool left it."""
-    entered = output.rfind(ENTER_PRIVATE, 0, output.find(secret))
+    at = output.find(secret)
+    assert at >= 0, f"{label}: the password was never shown"
+    entered = output.rfind(ENTER_PRIVATE, 0, at)
     assert entered >= 0, f"{label}: the password was shown off the private screen"
     left = output.find(LEAVE_PRIVATE, entered)
     assert left >= 0, f"{label}: the private screen was not left"
@@ -1149,6 +1153,22 @@ NOT_AS_SHOWN = b"That is not the password shown: correct your copy from the scre
 MADE_RECORDED = b"Password   made by MHFE: 5 words from the EFF list, about 64.6 bits."
 
 
+def check_real_dice():
+    """Five digits for each word give the word of the list, typed hidden."""
+    session = Session(("password", "--dice", "--words", "4"))
+    for number in range(1, 5):
+        session.wait_for(f"Word {number}: roll five dice".encode())
+        session.type(b"11111\r")
+    session.wait_for(WRITE_IT_DOWN)
+    assert b"abacus abacus abacus abacus" in session.output, "password --dice: no password"
+    session.type(b"\r")
+    assert session.drain_until_exit(10), "password --dice: it did not end"
+    code, settings = session.close()
+    assert code == 0, f"password --dice: exit code {code}"
+    assert settings == session.original, "password --dice: the terminal settings changed"
+    print("password --dice: the digits give the words of the list")
+
+
 def check_made_password():
     """`mhfe encrypt` offers a password made by MHFE: five dice words are shown once on a private
     screen, then typed back from the copy; a wrong copy shows the password again, the right one
@@ -1511,7 +1531,6 @@ REPAIRED_SHOWN = b"Repaired words 3 and 17 of the container phrase."
 USE_ASKED = b"Use the repaired container phrase?"
 REPAIR_OFFERED = b"Type the container phrase again, or repair it?"
 REPAIRED_RECORDED = b"Repaired   words 3 and 17 of the container phrase, with its repair words"
-CONTAINER_ASKED = b"original seed phrase: "
 
 
 def container_with(changes):
@@ -1642,7 +1661,6 @@ def check_repair_command():
 LENGTH_ASKED = b"How many words does your original seed phrase have?"
 DETECT_OFFERED = b"Detect automatically"
 ORIGINAL_PASSPHRASE_ASKED = b"Is a BIP39 passphrase used with the original seed phrase?"
-CONFIRM_ASKED = b"How should the recovered seed phrase be confirmed?"
 
 
 def check_length_detection():
@@ -1669,7 +1687,7 @@ def check_length_detection():
     session.wait_for(CONTAINER_ASKED)
     session.answer(CONTAINER.encode() + b"\r", LENGTH_ASKED, DETECT_OFFERED, LIST_SHOWN)
     session.answer(b"6", b"Old container password")
-    session.answer(SECRET + b"\r", CONFIRM_ASKED, LIST_SHOWN)
+    session.answer(SECRET + b"\r", CONFIRMATION_ASKED, LIST_SHOWN)
     session.answer(CTRL_C, b"Cancelled")
     assert session.drain_until_exit(10), "rekey, detected: Ctrl+C did not end the tool"
     code, _ = session.close()
@@ -1686,7 +1704,7 @@ CONTAINER_PASSPHRASE_ASKED = b"Is a BIP39 passphrase used with the container phr
 CONTAINER_PASSPHRASE_TYPED = b"BIP39 passphrase of the container phrase: "
 NOT_IN_CONTAINER_WALLET = b"The container's own wallet does not match"
 ZERO_12_DECOY_FINGERPRINT = b"487a156e"
-FOUND_SHOWN = b"Found word 24: peace, with the container's own wallet."
+FOUND_SHOWN = b"Found word 24: peace, by the 32-bit fingerprint"
 FOUND_USE_ASKED = b"Use the found container phrase?"
 FOUND_RECORDED = b"Repaired   word 24 of the container phrase, found by a search"
 LONG_SEARCH_WARNED = b"8 candidates, each a full recovery: about 8 to 16 minutes at these"
@@ -1847,8 +1865,10 @@ def check_password_sizes():
 
 def check_usage_errors_and_help():
     """Usage errors read as errors of the tool, and every help fits its width with examples."""
+    refused = run_plainly(("encrypt", "--pim", "abandon")).stderr.decode()
+    assert "Invalid value for --pim <N>" in refused and "abandon" not in refused, refused
     for arguments, message in (
-        (("encrypt", "--no-such-option"), "Unexpected argument '--no-such-option' found"),
+        (("encrypt", "--no-such-option"), "Unexpected argument"),
         (("serve",), "The following required arguments were not provided: <FILE>"),
         (("check", "--address", "--fingerprint"),
          "The argument '--address' cannot be used with '--fingerprint'"),
@@ -2214,7 +2234,8 @@ def main():
 
     session = Session()
     session.at_password_prompt()
-    session.type(SECRET + CTRL_C)
+    session.answer(SECRET, SECRET)
+    session.type(CTRL_C)
     session.wait_for(b"Cancelled")
     code, settings = session.close()
     assert code == CANCELLED, f"Ctrl+C: exit code {code}"
@@ -2233,6 +2254,7 @@ def main():
     check_encrypt_script()
     check_encrypt_numbered()
     check_made_password()
+    check_real_dice()
     check_rekey_numbered()
     check_private_reveals()
     check_new_check_question()

@@ -10,7 +10,9 @@ the OpenPGP private key never enters GitHub Actions.
 
 Before tagging, publish curated notes in `docs/releases/v<version>.md`, check all new commit
 signatures and create a signed annotated tag matching `Cargo.toml`. Run the repository's
-`scripts/check.sh` and a cached/uncached canonical comparison locally; keep heavy builds sequential.
+`scripts/check.sh`, then `scripts/build-reproducible.sh` and `REPRODUCIBLE_NO_CACHE=1
+scripts/build-reproducible.sh canonical-output-uncached`, and compare the two folders; keep heavy
+builds sequential.
 
 ## Sign the downloaded files
 

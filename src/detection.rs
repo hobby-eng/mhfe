@@ -27,16 +27,6 @@ pub(crate) fn twenty_four_word_reading(recovery: &Recovery) -> Result<RecoveredP
         .expect("24 stated words end with that reading"))
 }
 
-/// Whether the 24-word reading passes the phrase + passphrase check with `passphrase`, which may
-/// not be empty. The profile defines the check for that reading alone: a shorter reading would be
-/// a construction it does not define, and a match of its own about once in 65,536 (AUD-010).
-pub(crate) fn passes_wallet_check(
-    recovery: &Recovery,
-    passphrase: &str,
-) -> Result<bool, MhfeError> {
-    wallet_check::verify(twenty_four_word_reading(recovery)?.phrase(), passphrase)
-}
-
 /// Whether a recovery would read the state as a phrase that passes a check: a short length's
 /// built-in check, or the 24-word reading's phrase + passphrase check with `passphrase`, which
 /// may be empty here, or without one, which `mhfe decrypt` reports whatever the passphrase. A
@@ -48,22 +38,6 @@ pub(crate) fn reads_as_checked(recovery: &Recovery, passphrase: &str) -> Result<
     let reading = twenty_four_word_reading(recovery)?;
     Ok(wallet_check::phrase_passes(reading.phrase(), passphrase)?
         || (!passphrase.is_empty() && wallet_check::phrase_passes(reading.phrase(), "")?))
-}
-
-/// Whether the phrase's own checks pass, its length detected: the built-in check of a short
-/// length, or else, with a `passphrase`, the 24-word reading's phrase + passphrase check.
-/// Several short lengths that pass by accident pass all the same.
-pub(crate) fn passes_own_checks(
-    recovery: &Recovery,
-    passphrase: Option<&str>,
-) -> Result<bool, MhfeError> {
-    if !recovery.detected_lengths().is_empty() {
-        return Ok(true);
-    }
-    match passphrase {
-        Some(passphrase) => passes_wallet_check(recovery, passphrase),
-        None => Ok(false),
-    }
 }
 
 #[cfg(test)]
@@ -114,12 +88,10 @@ mod tests {
             let recovery = recovery_of(&entropy(length));
             assert_eq!(recovery.detected_lengths(), [words]);
             assert_eq!(reading_lengths(&recovery), [words, STATE_WORDS]);
-            assert!(passes_own_checks(&recovery, None).unwrap());
         }
         let recovery = recovery_of(&entropy(STATE_BYTES));
         assert!(recovery.detected_lengths().is_empty());
         assert_eq!(reading_lengths(&recovery), [STATE_WORDS]);
-        assert!(!passes_own_checks(&recovery, None).unwrap());
     }
 
     #[test]
@@ -135,7 +107,7 @@ mod tests {
     }
 
     /// The 24-word reading is told by the phrase + passphrase check only with the passphrase the
-    /// phrase was drawn with, and an empty passphrase is refused as the check refuses it.
+    /// phrase was drawn with.
     #[test]
     fn a_24_word_reading_passes_its_own_checks_only_with_its_passphrase() {
         // The public fixture of the wallet check's tests: 24 zero bytes and the counter 76,562,
@@ -144,14 +116,10 @@ mod tests {
         state[24..].copy_from_slice(&76_562u64.to_be_bytes());
         let recovery = recovery_of(&state);
         assert!(recovery.detected_lengths().is_empty());
-        assert!(passes_wallet_check(&recovery, "TREZOR").unwrap());
-        assert!(passes_own_checks(&recovery, Some("TREZOR")).unwrap());
-        assert!(!passes_own_checks(&recovery, Some("trezor")).unwrap());
-        assert!(!passes_own_checks(&recovery, None).unwrap());
-        assert_eq!(
-            passes_own_checks(&recovery, Some("")),
-            Err(MhfeError::WalletCheckNeedsPassphrase)
-        );
+        let reading = twenty_four_word_reading(&recovery).unwrap();
+        assert_eq!(reading.passes_wallet_check("TREZOR"), Ok(Some(true)));
+        assert_eq!(reading.passes_wallet_check("trezor"), Ok(Some(false)));
+        assert_eq!(reading.passes_wallet_check(""), Ok(Some(false)));
     }
 
     /// A hidden wallet's state is refused when a recovery would read it as checked (rule I29).

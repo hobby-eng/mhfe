@@ -227,9 +227,10 @@ yet.
 
 Swap matters too. The system may write memory to a swap area on a disk, including Argon2's work
 area, from which a password guess can be tested cheaply, and the data can stay there for years. On
-Linux MHFE therefore warns when a swap area is not encrypted. Use a computer with encrypted swap or
-none: a live system started from a USB stick usually has none, macOS encrypts its swap, and on
-Windows, use BitLocker or no page file. A command's summary also says whether the secrets you type
+Linux MHFE therefore forbids itself swap before it reads anything, with no action of yours, and the
+Swap line of a summary says so. Where it cannot, and the swap is not encrypted, it asks whether to go
+on. A live system started from a USB stick usually has no swap at all, macOS encrypts its swap, and
+on Windows, use BitLocker or no page file. A command's summary also says whether the secrets you type
 are kept in locked memory, out of swap, and warns when the system refused to lock that memory.
 
 ## Commands
@@ -250,7 +251,7 @@ only where what you type is shown anyway.
 
 Under every seed phrase that mhfe shows, and under a container that it makes or that `mhfe repair`
 repairs, a line gives the master key fingerprint: eight hexadecimal digits that wallet apps show to
-tell wallets apart (Sparrow calls it "Master fingerprint"). A BIP39 passphrase changes the
+tell wallets apart (Sparrow calls it "Master fingerprint"). They do not reveal the phrase. A BIP39 passphrase changes the
 fingerprint, so the line says which wallet it is for. In `mhfe new` it is the wallet with your
 passphrase. Elsewhere it is the wallet without one: `mhfe decrypt` asks for a passphrase only for
 the 16-bit check of a 24-word reading, and `rekey` and `wallets` do not know the passphrase the
@@ -263,7 +264,7 @@ phrase repaired or found inside another command.
 ### `mhfe password`
 
 `mhfe password` makes a password of random words from the [EFF dice list](https://www.eff.org/dice)
-of 7,776 words: use four, better five. `--dice` uses real dice, and `--words N` sets the count.
+of 7,776 words: use four, better five. `--dice` uses real dice, as the menu offers too, and `--words N` sets the count.
 `--chars N` makes N random characters instead (16 by default, about 93.3 bits) from 57 letters and
 digits without look-alikes such as 0 and O; words are easier to type correctly years later. Random
 words and random characters are both drawn from the system's cryptographic random generator, every
@@ -328,7 +329,8 @@ alike.
 
 `mhfe encrypt` asks for the phrase and twice for the password, since a mistyped password would lock
 the phrase away for good. Both are typed on a private screen that shows what you type and is cleared
-as soon as you are done. The words of the seed phrase may be typed in any case or as their first
+as soon as you are done; where no private screen is possible, such as with `TERM=dumb`, they are
+typed without echo and the result stays on the main screen. The words of the seed phrase may be typed in any case or as their first
 four letters, and the word list or the checksum refuses a mistyped word; the password must be typed
 exactly, letter case and spaces included. For a phrase of 12 to 21 words, MHFE next asks how long
 the container should be: 24 words, the recommended default, or the same length as your phrase. `?`
@@ -427,7 +429,7 @@ every 24-word reading. When one comes out, MHFE asks whether a BIP39 passphrase 
 phrase, says why, and tests the reading with that passphrase or with none. It then says whether the
 reading passes the 16-bit check. A pass makes a right password very likely but does not show which
 wallet it is. A failure matters only if your wallet was made with the check, since a phrase made
-without the check fails it. A script gets the test without a passphrase, unless it gives
+without the check almost always fails it. A script gets the test without a passphrase, unless it gives
 `--passphrase-used yes` and the passphrase on the line after the password (the third line, or the
 fourth with `--repair`); that line is read only when a 24-word reading comes out.
 `--passphrase-used yes|no` also answers the question at a terminal.
@@ -838,7 +840,8 @@ Both kinds of container work in the browser too: a page asks for the same length
 
 ## For scripts
 
-`--stdin` reads the answers from standard input, one per line, instead of asking:
+`--stdin` reads the answers from standard input, one per line, instead of asking; at a terminal it
+changes nothing, so that a typed secret stays hidden:
 
 - `encrypt`: the phrase, the password, and the password again. The container has 24 words unless
   `--same-length` is given, and with `--repair-words N` its repair words follow it on a second line
@@ -848,7 +851,8 @@ Both kinds of container work in the browser too: a page asks for the same length
   the original seed phrase follows on the next line, for the 16-bit check; it is read only when a
   24-word reading comes out. With `--repair`, the repair words follow the container on their own
   line, `?` marking unreadable words in either, and the repair is reported on standard error.
-  `check` takes `--repair` the same way.
+  `check` takes `--repair` the same way. The output is one line per reading, `<words>
+  <verified|unverified> <phrase>`.
 - `check`: the container and the password, then with `--address` or `--fingerprint` the reference
   and the BIP39 passphrase (an empty line if the wallet has none); with `--words N` nothing more,
   and with `--words auto` the BIP39 passphrase of the original seed phrase (an empty line if none).
@@ -895,17 +899,17 @@ MHFE's own prompts or the `systemd-ask-password` example above.
 
 The exit code tells what happened:
 
-| Code | Meaning                                                                                             |
-| ---- | --------------------------------------------------------------------------------------------------- |
-| 0    | Done; for `check`, the recovery matches                                                             |
-| 1    | Internal error, a failed self-test, or a failed check of a new container, which is not shown        |
-| 2    | Invalid input: phrase, container, password, setting, address or option                              |
-| 3    | Does not match: wrong password, PIM, memory level, container or selected length                     |
-| 4    | Not enough memory for the memory level                                                              |
-| 130  | Cancelled: Ctrl+C, Escape or q at a list, Ctrl+D at a secret's prompt, SIGTERM or a closed terminal |
+| Code | Meaning                                                                                           |
+| ---- | ------------------------------------------------------------------------------------------------- |
+| 0    | Done; for `check`, the recovery matches                                                           |
+| 1    | Internal error, a failed self-test, or a failed check of a new container, which is not shown      |
+| 2    | Invalid input: phrase, container, password, setting, address or option                            |
+| 3    | Does not match or not verified: wrong password, PIM, memory level, container or selected length   |
+| 4    | Not enough memory for the memory level                                                            |
+| 130  | Cancelled: Ctrl+C, Escape or q at a list, Ctrl+D at an empty prompt, SIGTERM or a closed terminal |
 
 A command is cancelled with Ctrl+C at any moment, with Escape or q at a list of answers, and with
-Ctrl+D at the empty prompt of a secret. Ctrl+C stops the tool at once, even in the middle of a
+Ctrl+D at an empty prompt. Ctrl+C stops the tool at once, even in the middle of a
 round; the operating system then discards its memory. SIGTERM and a closed terminal end it in the
 same way at any moment, and Ctrl+\ and Ctrl+Z do so while it works; at a question they are ordinary
 keys. Each of them first restores the terminal and leaves the private screen.

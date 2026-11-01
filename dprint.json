@@ -23,6 +23,7 @@
     "tests/spec/",
     "THIRD_PARTY_NOTICES.md",
     "vendor/",
+    // Written by hand to the width of its lines: no formatter has run over it yet.
     "web/",
     // page.rs reads this file line by line, and fills the next one in as text.
     "xtask/pages/page-data.js",

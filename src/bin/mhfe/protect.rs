@@ -21,6 +21,8 @@ use std::sync::OnceLock;
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
 use mhfe_core::protect::Isolation;
 
+use crate::exit::Failure;
+
 /// What [`enter`] read back; unset in a process that did not call it, such as the start menu.
 static REPORT: OnceLock<Isolation> = OnceLock::new();
 
@@ -143,16 +145,23 @@ pub const ISOLATION_ID: &str = "isolation";
 /// The `isolation` check: whether [`enter`] closed the network and kept other programs out of the
 /// memory of this process. It is not a failure when it did not: the summary of a command warns of
 /// what stays open, and the command goes on, as it must on Windows, whose network only an
-/// administrator can close for a program (AUD-043-K04).
+/// administrator can close for a program.
 pub struct IsolationCheck;
 
 impl IsolationCheck {
     fn outcome(isolation: Isolation) -> ComponentOutcome {
         let gaps: Vec<&str> = [
-            (isolation.no_new_sockets, "the network stays open"),
+            (
+                isolation.no_new_sockets || isolation.empty_network,
+                "the network stays open",
+            ),
             (
                 isolation.no_memory_reading,
                 "other programs can read the memory",
+            ),
+            (
+                !cfg!(target_os = "linux") || isolation.no_file_changes,
+                "file writes stay open",
             ),
         ]
         .into_iter()
@@ -218,34 +227,145 @@ pub struct SwapArea {
     pub unknown: bool,
 }
 
-/// The swap areas that are not encrypted by dm-crypt, or whose encryption cannot be told. An
-/// area in memory (zram) is safe. Empty when there is no swap or this is not Linux.
-pub fn unprotected_swap() -> Vec<SwapArea> {
+/// How a secret command stands towards swap on a disk, as its summary says it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Swap {
+    /// There is none.
+    NotOnDisk,
+    /// This process may use none, whatever swap the computer has.
+    Forbidden,
+    /// It could not be forbidden, but what reaches the disk is encrypted.
+    Encrypted,
+    /// The person chose to go on with swap that is not encrypted, or that nothing can tell of.
+    Allowed,
+}
+
+static SWAP: OnceLock<Swap> = OnceLock::new();
+
+/// [`keep_off_swap`]'s result; `None` where swap cannot be told, as outside Linux.
+pub fn swap() -> Option<Swap> {
+    SWAP.get().copied()
+}
+
+/// The program that asks the user's systemd for a scope.
+#[cfg(unix)]
+const SYSTEMD_RUN: &str = "/usr/bin/systemd-run";
+/// Its options for a scope whose processes may use no swap.
+#[cfg(unix)]
+const NO_SWAP_SCOPE: [&str; 6] = [
+    "--user",
+    "--scope",
+    "--quiet",
+    "-p",
+    "MemorySwapMax=0",
+    "--",
+];
+/// Set for the program started in that scope, so that a limit that did not hold does not start it
+/// again and again.
+#[cfg(unix)]
+const IN_SCOPE: &str = "MHFE_IN_NO_SWAP_SCOPE";
+
+/// Keeps a secret command's memory off the disk, on Linux, before it reads anything. Locking cannot
+/// do it: the limit on locked memory is far below Argon2's work area, and a stack or a heap is not
+/// locked. Where swap lies on a disk the program starts itself again in a scope without swap, as a
+/// page written before such a limit could still leave. Where that cannot be done, encrypted swap
+/// is accepted and any other is for the person to decide.
+pub fn keep_off_swap() -> Result<(), Failure> {
     if cfg!(target_os = "linux") {
-        unprotected_swap_under(Path::new("/"))
-    } else {
-        // macOS encrypts its swap; Windows keeps its page file without telling.
-        Vec::new()
+        let root = Path::new("/");
+        let swap = if !swap_on_disk_under(root) {
+            Swap::NotOnDisk
+        } else if mhfe::engine::swap_forbidden() {
+            Swap::Forbidden
+        } else {
+            restart_without_swap();
+            let areas = unprotected_swap_under(root);
+            if areas.is_empty() {
+                Swap::Encrypted
+            } else {
+                crate::settings::ask_about_swap(&areas)?;
+                Swap::Allowed
+            }
+        };
+        // Set once: a process prepares one command.
+        let _ = SWAP.set(swap);
+    }
+    Ok(())
+}
+
+/// Starts this program again, with the same arguments and terminal, in a scope without swap.
+/// Returns where that cannot be done: a first scope tries it, as the program is gone once
+/// systemd-run has taken its place.
+fn restart_without_swap() {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        use std::process::{Command, Stdio};
+        let scope = || {
+            let mut command = Command::new(SYSTEMD_RUN);
+            command.args(NO_SWAP_SCOPE);
+            command
+        };
+        let works = std::env::var_os(IN_SCOPE).is_none()
+            && scope()
+                .arg("/bin/true")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success());
+        if let (true, Ok(program)) = (works, std::env::current_exe()) {
+            // Comes back only if the start failed.
+            let _ = scope()
+                .arg(program)
+                .args(std::env::args_os().skip(1))
+                .env(IN_SCOPE, "1")
+                .exec();
+        }
     }
 }
 
-/// [`unprotected_swap`] with /proc and /sys under `root`, so that a test can supply its own.
-fn unprotected_swap_under(root: &Path) -> Vec<SwapArea> {
-    let Ok(swaps) = fs::read_to_string(root.join("proc/swaps")) else {
-        return Vec::new();
-    };
+/// The areas of /proc/swaps under `root`, each with its kind; `None` when it cannot be read.
+fn swap_lines(root: &Path) -> Option<Vec<(String, String)>> {
+    let swaps = fs::read_to_string(root.join("proc/swaps")).ok()?;
     // "Filename Type Size Used Priority", one line per area after the heading; spaces in a name
     // are written as \040.
-    swaps
-        .lines()
-        .skip(1)
-        .filter_map(|line| {
-            let mut fields = line.split_whitespace();
-            Some((
-                fields.next()?.replace("\\040", " "),
-                fields.next()?.to_owned(),
-            ))
+    Some(
+        swaps
+            .lines()
+            .skip(1)
+            .filter_map(|line| {
+                let mut fields = line.split_whitespace();
+                Some((
+                    fields.next()?.replace("\\040", " "),
+                    fields.next()?.to_owned(),
+                ))
+            })
+            .collect(),
+    )
+}
+
+/// Whether any swap can reach a disk, encrypted or not; an inventory that cannot be read counts.
+fn swap_on_disk_under(root: &Path) -> bool {
+    swap_lines(root).is_none_or(|areas| {
+        areas.iter().any(|(name, _)| {
+            let device = name.rsplit('/').next().unwrap_or_default();
+            !stays_in_memory(root, device)
         })
+    })
+}
+
+/// The swap areas under `root` that are not encrypted by dm-crypt, or whose encryption cannot be
+/// told. An area in memory (zram) is safe.
+fn unprotected_swap_under(root: &Path) -> Vec<SwapArea> {
+    let Some(areas) = swap_lines(root) else {
+        return vec![SwapArea {
+            name: "/proc/swaps".to_owned(),
+            unknown: true,
+        }];
+    };
+    areas
+        .into_iter()
         .filter_map(|(name, kind)| {
             let device = match kind.as_str() {
                 "partition" => device_of_node(root, &name),
@@ -264,6 +384,15 @@ fn unprotected_swap_under(root: &Path) -> Vec<SwapArea> {
             }
         })
         .collect()
+}
+
+/// Whether `device` is a zram device that writes back to no disk.
+fn stays_in_memory(root: &Path, device: &str) -> bool {
+    let folder = root.join("sys/block").join(device);
+    device.starts_with("zram")
+        && folder.is_dir()
+        && fs::read_to_string(folder.join("backing_dev"))
+            .map_or(true, |backing| backing.trim() == "none")
 }
 
 /// The kernel's name of the block device at a path such as /dev/sda2 or /dev/mapper/swap.
@@ -300,13 +429,14 @@ const MAX_DEVICE_DEPTH: usize = 8;
 /// Whether a block device is encrypted with dm-crypt, directly or through the devices it is
 /// built on (LVM on LUKS), or lies in memory (zram).
 fn encrypted(root: &Path, device: &str, depth: usize) -> bool {
-    if device.starts_with("zram") {
+    if stays_in_memory(root, device) {
         return true;
     }
     let sysfs = root.join("sys/class/block").join(device);
-    // dm-crypt gives its devices a UUID starting with CRYPT-.
+    // dm-crypt gives its devices a UUID starting with CRYPT-; dm-integrity uses it too, and
+    // encrypts nothing.
     if let Ok(uuid) = fs::read_to_string(sysfs.join("dm/uuid")) {
-        if uuid.starts_with("CRYPT-") {
+        if uuid.starts_with("CRYPT-") && !uuid.starts_with("CRYPT-INTEGRITY-") {
             return true;
         }
     }
@@ -348,6 +478,16 @@ mod tests {
             )
             .unwrap();
             Self(root)
+        }
+
+        /// A zram device, with what it writes back to, where it says.
+        fn memory_device(&self, name: &str, backing: Option<&str>) {
+            self.device(name, None, &[]);
+            let folder = self.0.join("sys/block").join(name);
+            fs::create_dir_all(&folder).unwrap();
+            if let Some(backing) = backing {
+                fs::write(folder.join("backing_dev"), backing).unwrap();
+            }
         }
 
         /// A block device, with a dm UUID and the devices it is built on.
@@ -397,8 +537,51 @@ mod tests {
         // LVM on LUKS: the logical volume is built on the encrypted device.
         system.device("dm-1", Some("CRYPT-LUKS2-abc-root"), &["nvme0n1p2"]);
         system.device("dm-2", Some("LVM-xyz"), &["dm-1"]);
-        system.device("zram0", None, &[]);
+        system.memory_device("zram0", None);
         assert_eq!(system.unprotected(), []);
+    }
+
+    #[test]
+    fn swap_in_memory_is_not_on_a_disk() {
+        let system = FakeSystem::new("/dev/zram0 partition 1024 0 -2\n");
+        system.memory_device("zram0", Some("none\n"));
+        assert!(!swap_on_disk_under(&system.0));
+        assert_eq!(system.unprotected(), []);
+        // Encrypted swap is on a disk all the same, and an empty list means no swap.
+        let system = FakeSystem::new("/dev/dm-0 partition 1024 0 -2\n");
+        system.device("dm-0", Some("CRYPT-PLAIN-swap"), &["sda3"]);
+        assert!(swap_on_disk_under(&system.0));
+        assert!(!swap_on_disk_under(&FakeSystem::new("").0));
+    }
+
+    #[test]
+    fn zram_that_writes_back_to_a_disk_is_unprotected() {
+        let system = FakeSystem::new("/dev/zram0 partition 1024 0 -2\n");
+        system.memory_device("zram0", Some("/dev/sda3\n"));
+        assert!(swap_on_disk_under(&system.0));
+        assert_eq!(system.unprotected().len(), 1);
+    }
+
+    #[test]
+    fn dm_integrity_encrypts_nothing() {
+        let system = FakeSystem::new("/dev/dm-0 partition 1024 0 -2\n");
+        system.device("dm-0", Some("CRYPT-INTEGRITY-swap"), &["sda3"]);
+        system.device("sda3", None, &[]);
+        assert_eq!(system.unprotected().len(), 1);
+    }
+
+    #[test]
+    fn an_unreadable_inventory_counts_as_swap_nothing_can_tell_of() {
+        let system = FakeSystem::new("");
+        fs::remove_file(system.0.join("proc/swaps")).unwrap();
+        assert!(swap_on_disk_under(&system.0));
+        assert_eq!(
+            system.unprotected(),
+            [SwapArea {
+                name: "/proc/swaps".to_owned(),
+                unknown: true,
+            }]
+        );
     }
 
     #[test]
@@ -445,6 +628,7 @@ mod tests {
     fn the_isolation_check_warns_of_what_stays_open() {
         let warning = |gaps: &str| ComponentOutcome::Warning(format!("weaker than needed: {gaps}"));
         let mut isolation = Isolation::default();
+        isolation.no_file_changes = true;
         assert_eq!(
             IsolationCheck::outcome(isolation),
             warning("the network stays open, other programs can read the memory")
@@ -456,6 +640,18 @@ mod tests {
         );
         isolation.no_new_sockets = true;
         assert_eq!(IsolationCheck::outcome(isolation), ComponentOutcome::Passed);
+        isolation.no_new_sockets = false;
+        isolation.empty_network = true;
+        assert_eq!(IsolationCheck::outcome(isolation), ComponentOutcome::Passed);
+        #[cfg(target_os = "linux")]
+        {
+            isolation.no_file_changes = false;
+            assert_eq!(
+                IsolationCheck::outcome(isolation),
+                warning("file writes stay open")
+            );
+            isolation.no_file_changes = true;
+        }
         isolation.no_memory_reading = false;
         assert_eq!(
             IsolationCheck::outcome(isolation),
@@ -463,20 +659,20 @@ mod tests {
         );
     }
 
-    /// Exit codes of the process that [`g10_isolated_command`] forks, which its test process passes
+    /// Exit codes of the process that [`isolated_command_runs_in_its_empty_network`] forks, which its test process passes
     /// on as its own. They are not 0 or 101, the codes of a test process that ran no such child.
     #[cfg(target_os = "linux")]
-    mod g10 {
+    mod isolated_child {
         pub const ISOLATED: i32 = 40;
         pub const NO_NAMESPACE: i32 = 41;
         pub const CHECKS_FAILED: i32 = 42;
         pub const LATE: i32 = 43;
         pub const NO_CHILD: i32 = 44;
-        /// Set for the test process that runs [`super::g10_isolated_command`].
-        pub const VARIABLE: &str = "MHFE_TEST_G10_CHILD";
+        /// Set for the test process that runs [`super::isolated_command_runs_in_its_empty_network`].
+        pub const VARIABLE: &str = "MHFE_TEST_ISOLATED_CHILD";
     }
 
-    /// G10: a command started directly enters its empty network before the checks at start, whose
+    /// A command started directly enters its empty network before the checks at start, whose
     /// Argon2 check runs four threads; a process with more than one thread could not enter it. The
     /// order of main is followed for `mhfe encrypt` in a process of a single thread, as a command
     /// has at that point: forked off a test process of its own that runs nothing else, so that no
@@ -489,12 +685,12 @@ mod tests {
         const LIMIT: std::time::Duration = std::time::Duration::from_secs(120);
         let mut process = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
-                "protect::tests::g10_isolated_command",
+                "protect::tests::isolated_command_runs_in_its_empty_network",
                 "--exact",
                 "--ignored",
                 "--test-threads=1",
             ])
-            .env(g10::VARIABLE, "1")
+            .env(isolated_child::VARIABLE, "1")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -511,12 +707,16 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(20));
         };
         match status.code() {
-            Some(g10::ISOLATED) => {}
-            Some(g10::NO_NAMESPACE) => {
+            Some(isolated_child::ISOLATED) => {}
+            Some(isolated_child::NO_NAMESPACE) => {
                 eprintln!("This system allows no user namespace: order and checks only.")
             }
-            Some(g10::CHECKS_FAILED) => panic!("the checks at start failed after isolation"),
-            Some(g10::LATE) => panic!("the command entered isolation with more than one thread"),
+            Some(isolated_child::CHECKS_FAILED) => {
+                panic!("the checks at start failed after isolation")
+            }
+            Some(isolated_child::LATE) => {
+                panic!("the command entered isolation with more than one thread")
+            }
             other => panic!("the test process ran no isolated command: {other:?}"),
         }
     }
@@ -527,9 +727,9 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     #[ignore = "run by the_empty_network_is_entered_before_the_startup_checks_start_threads"]
-    fn g10_isolated_command() {
+    fn isolated_command_runs_in_its_empty_network() {
         use clap::Parser;
-        if std::env::var_os(g10::VARIABLE).is_none() {
+        if std::env::var_os(isolated_child::VARIABLE).is_none() {
             return;
         }
         let command = crate::Cli::try_parse_from(["mhfe", "encrypt"])
@@ -540,13 +740,13 @@ mod tests {
         let child = unsafe { libc::fork() };
         if child == 0 {
             let code = if crate::prepare(&command).is_err() {
-                g10::CHECKS_FAILED
+                isolated_child::CHECKS_FAILED
             } else if !report().whole_process {
-                g10::LATE
+                isolated_child::LATE
             } else if report().empty_network {
-                g10::ISOLATED
+                isolated_child::ISOLATED
             } else {
-                g10::NO_NAMESPACE
+                isolated_child::NO_NAMESPACE
             };
             // SAFETY: ends the child at once, without running anything of the test's process.
             unsafe { libc::_exit(code) };
@@ -557,7 +757,7 @@ mod tests {
         let code = if waited && libc::WIFEXITED(status) {
             libc::WEXITSTATUS(status)
         } else {
-            g10::NO_CHILD
+            isolated_child::NO_CHILD
         };
         std::process::exit(code);
     }

@@ -577,11 +577,16 @@ fn help_paragraphs(paragraphs: &[&str], width: usize) -> String {
 
 /// A closing paragraph of a help text, in grey, wrapped to the help width.
 pub fn help_note(text: &str) -> String {
-    wrap(text, HELP_WIDTH)
+    let note: String = wrap(text, HELP_WIDTH)
         .iter()
         .map(|line| format!("{}\n", paint(MUTED, line)))
-        .collect()
+        .collect();
+    format!("{note}{}\n", paint(WARNING, SAFETY_LINE))
 }
+
+/// The line that ends every help.
+const SAFETY_LINE: &str =
+    "Experimental: not independently reviewed; do not use it to protect real funds.";
 
 /// The end of a command's help: its examples, then a grey note.
 pub fn examples_with_note(rows: &[(&str, &str)], note: &str) -> String {
@@ -622,6 +627,7 @@ pub fn escaped(text: &str) -> String {
         .collect()
 }
 
+/// `line` without its colour codes.
 #[cfg(test)]
 pub fn plain(line: &str) -> String {
     let mut text = String::new();

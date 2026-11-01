@@ -104,9 +104,8 @@ pub const TYPED_LINE_BYTES: usize = 8192;
 /// a buffer of the size a front end locks for each typed line ([`TYPED_LINE_BYTES`]), so that a
 /// pass says that buffer is locked, not only a smaller one (AUD-016-SEC002). It only warns: a
 /// refusal leaves secrets working but able to reach swap. Under the low RLIMIT_MEMLOCK above, it
-/// cannot warn: the wipe of its buffer on drop is a first write, which ends the process. Where
-/// nothing is locked at all, it says why. Each buffer is locked as it is made, and
-/// [`LockedText::is_locked`] tells whether that one was.
+/// cannot warn: the wipe of its buffer on drop is a first write, which ends the process. Each
+/// buffer is locked as it is made, and [`LockedText::is_locked`] tells whether that one was.
 pub struct LockProbe {
     bytes: usize,
 }
@@ -136,11 +135,6 @@ impl crate::self_check::ComponentCheck for LockProbe {
 
     fn run(&mut self, _: crate::self_check::Tier) -> crate::self_check::ComponentOutcome {
         use crate::self_check::ComponentOutcome;
-        if cfg!(target_arch = "wasm32") {
-            return ComponentOutcome::NotAvailable(
-                "a web page cannot keep its memory out of swap".to_owned(),
-            );
-        }
         if Secret::with_capacity(self.bytes).is_locked() {
             ComponentOutcome::Passed
         } else {

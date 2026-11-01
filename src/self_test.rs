@@ -1,6 +1,6 @@
 //! The self-test: two published test vectors at their full cost on this computer, an encryption
-//! of suite 3 and a recovery of suite 4. A program that passes computes MHFE as the specification
-//! says, here and now; a build or computer fault that the round trip of an encryption cannot see,
+//! of suite 3 and a recovery of suite 4. A program that passes gives the published results for these
+//! two vectors, here and now; a build or computer fault that the round trip of an encryption cannot see,
 //! because it would encrypt and decrypt the same wrong way, shows here. The vectors are public, so
 //! no secret is involved. It takes minutes, so a front end runs it only when the person asks.
 //!

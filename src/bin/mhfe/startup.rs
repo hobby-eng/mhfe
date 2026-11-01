@@ -138,8 +138,8 @@ fn stopped_text(part: Running) -> String {
 
 /// Installs, once, a panic hook that names the part a check was running when the program panicked,
 /// leaves the private screen with the summary so far and the terminal as it found it, and ends
-/// the tool with exit code 1 instead of an abort. Outside the checks it leaves panics to the hook
-/// before it.
+/// the tool with exit code 1 instead of an abort. Outside the checks it leaves the report to the
+/// hook before it and ends the tool the same way, as after a write to a closed standard error.
 fn install_panic_hook() {
     static INSTALLED: Once = Once::new();
     INSTALLED.call_once(|| {
@@ -149,6 +149,9 @@ fn install_panic_hook() {
             let part = RUNNING.try_lock().ok().and_then(|guard| *guard);
             let Some(part) = part else {
                 before(info);
+                if !cfg!(test) {
+                    hidden_input::restore_and_exit(exit_after_panic);
+                }
                 return;
             };
             flow::end_at_exit();
@@ -207,7 +210,7 @@ mod tests {
         assert_eq!(
             library.len(),
             26,
-            "the plan's 22 parts of the library, the address search, the search for missing words, \
+            "the parts of the library, the address search, the search for missing words, \
              the chosen word of a new phrase and the word hints"
         );
     }

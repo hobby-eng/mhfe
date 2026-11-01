@@ -65,17 +65,13 @@ impl Write for Stdout {
 }
 
 /// Writes `arguments` and a line break to standard output, with or without colours as
-/// `anstream::println!` writes them. A closed pipe is ignored, as with `anstream::println!`, which
-/// [`println`] replaces; any other failure is returned, so that a result that cannot be written
-/// does not end the tool as a success.
+/// `anstream::println!` writes them. A failure, a closed pipe included, is returned, so that a
+/// result that cannot be written does not end the tool as a success.
 pub fn write_line(arguments: fmt::Arguments) -> io::Result<()> {
     let choice = anstream::stdout().current_choice();
     let mut raw = Stdout;
     let mut output = anstream::AutoStream::new(&mut raw as &mut dyn Write, choice);
-    match writeln!(output, "{arguments}") {
-        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
-        written => written,
-    }
+    writeln!(output, "{arguments}")
 }
 
 /// `println!` to standard output past the standard library's buffer, which returns the error of a
@@ -223,7 +219,7 @@ mod tests {
     const CHILD: &str = "MHFE_TEST_WRITE_A_LINE";
 
     /// A line that cannot be written is an error for the caller, so that the tool does not end as
-    /// a success, and no panic; a closed pipe is none. Standard output changes only in a child of
+    /// a success, and no panic, also at a closed pipe. Standard output changes only in a child of
     /// its own, since the test harness writes its reports there. /dev/full is Linux's.
     #[test]
     fn a_failed_write_is_returned() {
@@ -236,7 +232,8 @@ mod tests {
             assert_eq!(failed.kind(), io::ErrorKind::StorageFull);
             let (reader, closed) = io::pipe().unwrap();
             drop(reader);
-            write_a_line_to(closed.as_raw_fd()).unwrap();
+            let failed = write_a_line_to(closed.as_raw_fd()).unwrap_err();
+            assert_eq!(failed.kind(), io::ErrorKind::BrokenPipe);
             return;
         }
         let name = "raw_io::tests::a_failed_write_is_returned";

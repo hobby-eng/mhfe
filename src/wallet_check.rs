@@ -82,9 +82,9 @@ pub fn require_passphrase(passphrase: &str) -> Result<(), MhfeError> {
 }
 
 /// The rule of a new wallet's passphrase, typed twice: the repetition must be exactly the same text
-/// (`PASSPHRASES_DIFFER` otherwise). An empty passphrase, none, is typed once and needs none.
+/// (`PASSPHRASES_DIFFER` otherwise), so a repetition alone is no empty passphrase.
 pub fn require_same_passphrase(passphrase: &str, repeat: &str) -> Result<(), MhfeError> {
-    if !passphrase.is_empty() && repeat != passphrase {
+    if repeat != passphrase {
         return Err(MhfeError::PassphrasesDiffer);
     }
     Ok(())
@@ -390,6 +390,10 @@ mod tests {
                 Err(MhfeError::PassphrasesDiffer)
             );
         }
+        assert_eq!(
+            require_same_passphrase("", "TREZOR"),
+            Err(MhfeError::PassphrasesDiffer)
+        );
     }
 
     /// A short phrase has no check (AUD-010): a public passphrase with which the 12-word test

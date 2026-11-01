@@ -1,5 +1,7 @@
 """Tests of packaging/mhfe-fast-mode.py, the Python version of `mhfe serve`.
 
+Python by exception to TOOL-01, until it moves to `cargo xtask`.
+
 They check the same cases as the tests in src/bin/mhfe/serve.rs, so that both launchers behave
 alike, and run a real server on a free port of 127.0.0.1. Only the standard library is used.
 
@@ -272,8 +274,8 @@ class ChecksumFile(unittest.TestCase):
             file.write(b"\xff\xfe  tool.html\n")
         self.assertIn("There is no readable", self.refusal())
 
-    def test_a_mistyped_argument_is_shown_escaped(self):
-        # argparse repeats an unknown argument; its control characters reach no terminal.
+    def test_a_mistyped_argument_is_not_repeated(self):
+        # argparse repeats an unknown argument, which may be a phrase pasted in the wrong place.
         import contextlib
         import io
 
@@ -282,9 +284,8 @@ class ChecksumFile(unittest.TestCase):
             fast_mode.main(["--x\x1b]52;c;QUFB\x07", "--\x9b2J"])
         self.assertEqual(caught.exception.code, fast_mode.INVALID_INPUT)
         text = error.getvalue()
-        self.assertFalse(any(ord(c) < 0x20 and c != "\n" or 0x7F <= ord(c) <= 0x9F for c in text),
-                         repr(text))
-        self.assertIn("\\u{1b}]52;c;QUFB\\u{7}", text)
+        self.assertNotIn("QUFB", text)
+        self.assertIn("the arguments cannot be used", text)
 
     def test_names_are_escaped_as_the_rust_launcher_escapes_them(self):
         # The same input and the same expected text as serve.rs's a_shown_path_holds_no_control_

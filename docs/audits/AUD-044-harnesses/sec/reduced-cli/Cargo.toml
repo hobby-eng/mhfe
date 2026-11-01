@@ -1,0 +1,41 @@
+# AUD-044 SEC probe, the release profile of the program, else as the fun probe: the unchanged sources of the mhfe command line over the library of this checkout,
+# with mhfe-core patched by reduced-core.patch so that the full-size settings run at 256 KiB and one
+# pass. Public test data only. The patched copy lies in tmp/aud044/fun, never in the repository.
+[package]
+name = "mhfe-sec-reduced-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[[bin]]
+name = "mhfe-sec-reduced"
+path = "../../../../../src/bin/mhfe/main.rs"
+
+[dependencies]
+mhfe = { package = "mhfe-experimental", path = "../../../../.." }
+mhfe-core = "=0.1.0"
+anstream = "=1.0.0"
+anstyle = "=1.0.14"
+clap = { version = "=4.6.7", features = ["derive"] }
+ctrlc = { version = "=3.5.2", features = ["termination"] }
+getrandom = "=0.4.3"
+hex = "=0.4.3"
+libc = "=0.2.191"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+sha2 = "=0.11.1"
+zeroize = { version = "=1.9.1", features = ["zeroize_derive"] }
+
+[patch.crates-io]
+mhfe-core = { path = "../../../../../../tmp/aud044/fun/core-reduced" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+
+[lints.rust]
+unsafe_code = "deny"

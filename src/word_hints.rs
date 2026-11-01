@@ -2,10 +2,9 @@
 //! BIP39 list of seed phrases, container phrases, repair words and chosen words, and the EFF large
 //! wordlist of passwords made of words.
 //!
-//! The owner's rule (2026-10-08): from [`LIST_FROM_LETTERS`] letters on, the words that begin with
-//! them; after one letter, how many words do. Both lists are public, so a hint tells nothing that a
-//! person who sees the screen could not look up; a front end shows one only where the typed text
-//! itself is shown. Tab completes a word as far as the words that begin with it agree.
+//! From [`LIST_FROM_LETTERS`] letters on, a hint lists the words that begin with them; after one
+//! letter, how many words do. Both lists are public, so a hint tells nothing that a person who sees
+//! the screen could not look up; a front end shows one only where the typed text itself is shown. Tab completes a word as far as the words that begin with it agree.
 
 use bip39::Language;
 use mhfe_core::password_check::EFF_WORDS;
@@ -42,7 +41,7 @@ pub enum WordList {
 }
 
 /// What a front end shows below a word being typed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Hint {
     /// Nothing: no word is being typed, or the list has it whole and no longer word begins with it.
     Nothing,
@@ -54,8 +53,20 @@ pub enum Hint {
     NoWord,
 }
 
+impl std::fmt::Debug for Hint {
+    /// Its variant alone: the words it lists may tell what is being typed.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Nothing => "Hint::Nothing",
+            Self::Count(_) => "Hint::Count",
+            Self::Words(_) => "Hint::Words",
+            Self::NoWord => "Hint::NoWord",
+        })
+    }
+}
+
 /// What Tab adds to the word being typed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Completion {
     /// The letters every word that begins with the typed ones has next; empty when they differ.
     pub letters: &'static str,

@@ -428,7 +428,7 @@ impl fmt::Display for MhfeError {
                 "the recovered phrase is not yours: the password, PIM, memory level, word count or \
                  container is wrong. Nothing was encrypted again"
             ),
-            Self::InvalidCoin(reason) => write!(f, "unknown coin {reason}"),
+            Self::InvalidCoin(reason) => write!(f, "unknown coin: {reason}"),
             Self::SelfCheckFailed { component, detail } => f.write_str(
                 &crate::self_check::failure_message("the self-test failed", component, detail),
             ),

@@ -40,6 +40,10 @@ const SHA256_HEX_DIGITS: usize = 64;
 
 /// Longest request head accepted; real browsers send far less.
 const MAX_REQUEST_HEAD: usize = 16 * 1024;
+/// The most a checksum file may hold, far above its one line.
+const MAX_CHECKSUM_FILE: u64 = 4 * 1024;
+/// The most a page may hold, far above the largest tool.
+const MAX_PAGE: u64 = 256 * 1024 * 1024;
 /// Time a client has for its whole request head. A limit on each read alone would let a client
 /// that sends one byte at a time keep its connection open for ever.
 const REQUEST_DEADLINE: Duration = Duration::from_secs(10);
@@ -116,10 +120,28 @@ pub fn page_next_to_program() -> Result<Option<PathBuf>, Failure> {
     Ok(Some(directory.join(name)))
 }
 
+/// The bytes of `path`, refused beyond `limit`.
+fn read_limited(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    fs::File::open(path)?
+        .take(limit + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "the file is too large",
+        ));
+    }
+    Ok(bytes)
+}
+
 /// The SHA-256 and the page name from the checksum file in `directory`.
 fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
     let path = directory.join(CHECKSUM_FILE);
-    let text = fs::read_to_string(&path).map_err(|error| {
+    let text = read_limited(&path, MAX_CHECKSUM_FILE).and_then(|bytes| {
+        String::from_utf8(bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+    });
+    let text = text.map_err(|error| {
         Failure::invalid_input(format!(
             "There is no readable {CHECKSUM_FILE} in {}: {error}. The fast mode serves a page \
              only when its checksum file lies next to it; nothing was served.",
@@ -128,8 +150,8 @@ fn read_checksum_file(directory: &Path) -> Result<(String, String), Failure> {
     })?;
     let malformed = || {
         Failure::invalid_input(format!(
-            "{} must hold exactly one line, \"<SHA-256>  <page>.html\" or \"<SHA-256> \
-             *<page>.html\"; nothing was served.",
+            "{} must hold exactly one line: the SHA-256, two spaces and the page's name, or \
+             the SHA-256, a space and * before the name; nothing was served.",
             style::shown_path(&path)
         ))
     };
@@ -178,7 +200,7 @@ fn load_checked_page(file: &Path) -> Result<(Vec<u8>, String), Failure> {
             file_name(file)
         )));
     }
-    let page = fs::read(file).map_err(|error| {
+    let page = read_limited(file, MAX_PAGE).map_err(|error| {
         Failure::invalid_input(format!(
             "Cannot read {}: {error}; nothing was served.",
             style::shown_path(file)
@@ -218,18 +240,19 @@ pub fn help() -> String {
 
 pub fn run(options: Options) -> Result<i32, Failure> {
     let (page, digest) = load_checked_page(&options.file)?;
-    style::ok(format!(
-        "SHA-256 of {} verified: {}",
-        file_name(&options.file),
-        paint(MUTED, &digest)
-    ));
+    style::write_title("Fast mode");
+    style::ok(format!("SHA-256 of {} verified.", file_name(&options.file)));
+    style::fact_wrapped("SHA-256", &paint(MUTED, &digest));
 
     let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))?;
     let port = listener.local_addr()?.port();
     let address = format!("http://127.0.0.1:{port}/");
     let host = format!("127.0.0.1:{port}");
-    if options.no_browser || open_browser(&address).is_err() {
-        eprintln!("Open {} in your browser.", paint(ACCENT, &address));
+    // Always said: an opener that starts can still fail.
+    eprintln!("Open {} in your browser.", paint(ACCENT, &address));
+    if !options.no_browser {
+        // The address is on the screen.
+        let _ = open_browser(&address);
     }
     style::ok(format!(
         "{} {}",

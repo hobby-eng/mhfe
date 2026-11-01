@@ -65,8 +65,6 @@ pub fn ask(
     }
 }
 
-/// Asks the length among `lengths` alone, once detection could not settle it: `explanation` says
-/// why, over the question.
 /// The warning that the built-in check found another length than the one stated, which takes
 /// precedence (the length rules of recovery): one wording for every command (AUD-017-ARC001).
 pub fn check_finds(found: usize, stated: usize) -> String {
@@ -76,6 +74,8 @@ pub fn check_finds(found: usize, stated: usize) -> String {
 /// Why the check takes precedence, said after [`check_finds`].
 pub const MORE_RELIABLE: &str = "A check that passes is far more reliable than memory";
 
+/// Asks the length among `lengths` alone, once detection could not settle it: `explanation` says
+/// why, over the question.
 pub fn ask_stated(
     input: &mut Input,
     lengths: &[usize],

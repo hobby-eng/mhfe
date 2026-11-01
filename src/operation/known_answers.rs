@@ -1,6 +1,6 @@
 //! Known answers of what a new container tells its owner to keep: the self-check `keep-advice`.
 //!
-//! The expected lists follow the rule of [`super::Keep`] (AUD-003-DOC002 and the owner's rule):
+//! The expected lists follow the rule of [`super::Keep`] (AUD-003-DOC002):
 //! with the defaults, the container's words and the password are all; the BIP39 passphrase of a
 //! wallet that has one, or any passphrase where that is not known, the repair words and a PIM or
 //! memory level other than 0 are added when they apply, and the word count when automatic

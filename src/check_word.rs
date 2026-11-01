@@ -70,7 +70,7 @@ impl Correction {
 }
 
 /// One word of the reviewed password replaced so that the six fit.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Repair {
     position: usize,
     word: &'static str,

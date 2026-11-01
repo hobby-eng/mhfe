@@ -9,7 +9,6 @@ use mhfe_core::password_check::{check_word, EFF_WORDS};
 use sha2::Digest;
 
 use super::{PasswordReview, Reading, DRAWN_WORDS};
-use crate::eff::index_of;
 use crate::new_password::PasswordRecipe;
 use crate::self_check::{expect, stopped, ComponentCheck, ComponentOutcome, Findings, Tier};
 
@@ -93,7 +92,10 @@ impl CheckWordCheck {
             .split(' ')
             .take(DRAWN_WORDS)
             .map(|word| {
-                index_of(word).ok_or_else(|| "a built-in word is not in the list".to_owned())
+                EFF_WORDS
+                    .binary_search(&word)
+                    .map(|index| index as u16)
+                    .map_err(|_| "a built-in word is not in the list".to_owned())
             })
             .collect::<Result<_, _>>()?;
         let drawn: [u16; DRAWN_WORDS] = drawn
