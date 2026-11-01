@@ -1289,6 +1289,7 @@ def check_private_reveals():
                                         ("TERM=dumb", False, "dumb")):
             session, reader = run_with_output((command, "--pim", "0"), redirected, term)
             session.wait_for(refused)
+            assert session.drain_until_exit(10), f"{command}, {label}: the refusal did not end"
             code, settings = session.close()
             assert code == INVALID_INPUT, f"{command}, {label}: exit code {code}"
             assert settings == session.original, f"{command}, {label}: terminal settings changed"
@@ -1303,8 +1304,9 @@ def check_private_reveals():
         session = Session((command, "--pim", "0"), stdout=follower)
         os.close(follower)
         session.wait_for(refused)
-        code, settings = session.close()
         label = "standard output on another terminal"
+        assert session.drain_until_exit(10), f"{command}, {label}: the refusal did not end"
+        code, settings = session.close()
         assert code == INVALID_INPUT, f"{command}, {label}: exit code {code}"
         assert settings == session.original, f"{command}, {label}: terminal settings changed"
         for asked in (b"assphrase", b"Password", b"Esc cancels"):

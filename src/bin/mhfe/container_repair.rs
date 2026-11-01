@@ -12,8 +12,8 @@ use mhfe::repair::{self, ContainerReading, Repaired};
 use mhfe::search::DECOY_SCAN_GAP;
 use mhfe::wallet::SearchLimits;
 use mhfe::word_hints::WordList;
-use mhfe::{ContainerFacts, WorkFactor};
-use mhfe_core::Password;
+use mhfe::ContainerFacts;
+use mhfe_core::{Password, WorkFactor};
 
 use crate::choice::{self, Answer, Question};
 use crate::container_search;

@@ -10,7 +10,8 @@
 // clippy recognises test code by this attribute or by #[test].
 #![cfg(test)]
 
-use mhfe::{password, MhfeError, WorkFactor};
+use mhfe::{password, MhfeError};
+use mhfe_core::WorkFactor;
 use serde_json::Value;
 
 fn fixture() -> Value {
@@ -77,7 +78,11 @@ fn settings_are_checked_before_any_allocation() {
             case["memory_level"].as_u64().unwrap() as u32,
         );
         match case.get("expected_error") {
-            Some(code) => assert_eq!(result.unwrap_err().code(), code.as_str().unwrap(), "{id}"),
+            Some(code) => assert_eq!(
+                MhfeError::from(result.unwrap_err()).code(),
+                code.as_str().unwrap(),
+                "{id}"
+            ),
             None => {
                 let work = result.unwrap();
                 assert_eq!(

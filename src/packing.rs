@@ -13,6 +13,8 @@ use zeroize::Zeroizing;
 use crate::memory::LockedBytes;
 use crate::MhfeError;
 
+// The sizes here are deliberate copies of those in the core's src/packing.rs, which keeps them
+// private: a change goes to both.
 pub const STATE_BYTES: usize = 32;
 pub type State = [u8; STATE_BYTES];
 /// The words of a phrase that fills the whole state, three for every four bytes (BIP39): a suite 3

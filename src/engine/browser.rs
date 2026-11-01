@@ -1,10 +1,12 @@
 //! Argon2id in the browser: the Emscripten build of the same reference C code, which the worker
 //! (web/core-worker.js) hands to the WebAssembly core as a JavaScript object.
 
+use mhfe_core::WorkFactor;
 use wasm_bindgen::prelude::*;
 
 use super::{Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
-use crate::{MhfeError, WorkFactor};
+use crate::suite::{memory_bytes, require_level};
+use crate::MhfeError;
 
 /// WebAssembly addresses at most 4 GiB, and the reference code limits a 32-bit build to 2 GiB of
 /// Argon2 memory, so a browser supports memory level 0 only.
@@ -44,7 +46,7 @@ pub struct BrowserEngine {
 impl BrowserEngine {
     /// Refuses memory levels a browser cannot provide before any memory is used.
     pub fn new(argon2: JsArgon2, work: WorkFactor) -> Result<Self, MhfeError> {
-        work.require_level(HIGHEST_BROWSER_MEMORY_LEVEL)?;
+        require_level(work, HIGHEST_BROWSER_MEMORY_LEVEL)?;
         Ok(Self { argon2, work })
     }
 
@@ -53,7 +55,7 @@ impl BrowserEngine {
     pub fn reserve(&self) -> Result<(), MhfeError> {
         self.argon2
             .reserve(self.work.memory_kib())
-            .map_err(|error| error_of(error, self.work.memory_bytes()))
+            .map_err(|error| error_of(error, memory_bytes(self.work)))
     }
 
     /// Runs the known answer of the page's Argon2 build ([`BrowserArgon2Check::verify`]): an

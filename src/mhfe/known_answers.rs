@@ -12,7 +12,7 @@
 //! [`PublishedRoundKeys`] cannot encrypt anything but a published vector, so it is no reduced-cost
 //! engine: a release build may hold it.
 
-use mhfe_core::Password;
+use mhfe_core::{Password, Suite, WorkFactor};
 
 use super::published_rounds::PUBLISHED;
 use super::{decrypt, decrypt_as, encrypt, RecoveredPhrase};
@@ -26,10 +26,7 @@ use crate::self_check::{
     Findings, Tier,
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
-use crate::{
-    Mhfe, MhfeError, PhraseLength, Recovery, Suite, WordCount, WorkFactor, SAME_LENGTH_SUITE_ID,
-    SUITE_ID,
-};
+use crate::{Mhfe, MhfeError, PhraseLength, Recovery, WordCount};
 
 /// One published vector as the checks replay it.
 #[derive(Clone, Copy)]
@@ -608,7 +605,7 @@ impl ComponentCheck for CipherRoundsCheck {
             Ok(fixture) => {
                 findings.one(|| {
                     expect(
-                        fixture.text("suite_id")? == SAME_LENGTH_SUITE_ID,
+                        fixture.text("suite_id")? == Suite::SameLength.id(),
                         "the built-in cases are of another suite",
                     )
                 });
@@ -641,14 +638,15 @@ impl FormatsCheck {
     fn suite_3(&self, findings: &mut Findings) -> Result<(), String> {
         let fixture = Fixture::read(self.suite_3)?;
         expect(
-            fixture.text("suite_id")? == SUITE_ID,
+            fixture.text("suite_id")? == Suite::TwentyFourWords.id(),
             "the built-in cases are of another suite",
         )?;
         findings.each("settings case", fixture.cases("settings")?, |case| {
             let result = WorkFactor::new(
                 fixtures::number_u32(case, "pim")?,
                 fixtures::number_u32(case, "memory_level")?,
-            );
+            )
+            .map_err(MhfeError::from);
             match case.get("expected_error") {
                 Some(_) => expect_refusal(result, fixtures::text(case, "expected_error")?),
                 None => {

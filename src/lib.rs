@@ -2,7 +2,7 @@
 //! `MHFE-BIP39-256-EXPERIMENTAL-3` and `MHFE-BIP39-LP-EXPERIMENTAL-4`.
 //!
 //! [`encrypt`] turns an English BIP39 phrase of 12 to 24 words into a password-protected
-//! 24-word container that is itself a valid BIP39 phrase, or, with [`Suite::SameLength`], a 12- to
+//! 24-word container that is itself a valid BIP39 phrase, or, with `Suite::SameLength`, a 12- to
 //! 21-word phrase into a container of its own length; [`decrypt`] turns the container back into
 //! the original, the container's word count selecting the suite. Every one of the twelve
 //! Feistel rounds runs Argon2id with 2 GiB of memory by default, using the reference C
@@ -12,8 +12,8 @@
 //! protect real funds.
 //!
 //! ```no_run
-//! use mhfe::{decrypt, encrypt, Mhfe, PhraseLength, Recovery, Suite, WorkFactor};
-//! use mhfe_core::Password;
+//! use mhfe::{decrypt, encrypt, Mhfe, PhraseLength, Recovery};
+//! use mhfe_core::{Password, Suite, WorkFactor};
 //!
 //! let password = Password::new("correct horse battery staple")?;
 //! let mut mhfe = Mhfe::new(WorkFactor::default())?; // reserves 2 GiB
@@ -101,7 +101,4 @@ pub use rehearsal::{
     require_built_in_check_length, CheckEvidence, CheckOutcome, Confirmation, RecoveredForCheck,
     RecoveredForRekey, Reference, ReferenceTarget,
 };
-pub use suite::{
-    memory_text, Suite, WorkFactor, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID,
-    SUITE_ID,
-};
+pub use suite::{estimated_seconds, memory_bytes, memory_text, require_original, ROUNDS};

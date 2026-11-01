@@ -71,7 +71,7 @@ pub fn parse(input: &str) -> Result<Mnemonic, String> {
 }
 
 /// Parses a container: a valid phrase of 24 words (suite 3) or of 12, 15, 18 or 21 words
-/// (suite 4, the same-length containers), which [`crate::Suite::of_container`] tells apart.
+/// (suite 4, the same-length containers), which [`mhfe_core::Suite::of_container`] tells apart.
 pub fn parse_container(input: &str) -> Result<Mnemonic, String> {
     parse(input)
 }

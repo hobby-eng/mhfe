@@ -15,7 +15,8 @@ pub const LONGEST_WORD: usize = 9;
 /// Dice rolled for one word.
 const DICE_PER_WORD: usize = 5;
 
-/// The position of `word`, compared exactly as written, hyphens included.
+/// The position of `word`, compared exactly as written, hyphens included. A deliberate copy of
+/// `index_of` in the core's src/password_check.rs, which keeps it private: a change goes to both.
 pub fn index_of(word: &str) -> Option<u16> {
     // The list is in byte order, and every position is below 7,776.
     EFF_WORDS
@@ -28,7 +29,7 @@ pub fn index_of(word: &str) -> Option<u16> {
 /// ASCII letter case, else 0. A repeated word counts once: "abacus abacus abacus abacus" is one
 /// dice word, about 12.9 bits, not four (AUD-005-FUN001). The text is compared in place, so no copy
 /// of it is made; the positions found, which reveal it, are wiped.
-pub fn different_dice_words(text: &str) -> usize {
+pub(crate) fn different_dice_words(text: &str) -> usize {
     // Reserved for every token up front, so the list never grows and leaves no unwiped copy.
     let mut found = Zeroizing::new(Vec::with_capacity(text.split_whitespace().count()));
     for token in text.split_whitespace() {

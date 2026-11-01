@@ -8,11 +8,8 @@ as a 12- to 21-word original seed phrase. The command-line tool is described in 
 ## Rust library
 
 ```rust
-use mhfe::{
-    check, decrypt, encrypt, CheckOutcome, Mhfe, PhraseLength, Recovery, Reference, Suite,
-    WorkFactor,
-};
-use mhfe_core::Password;
+use mhfe::{check, decrypt, encrypt, CheckOutcome, Mhfe, PhraseLength, Recovery, Reference};
+use mhfe_core::{Password, Suite, WorkFactor};
 
 let work = WorkFactor::new(0, 0)?;            // PIM 0..=1023, memory level 0..=21
 let password = Password::new("...")?;        // NFKD with Unicode 18.0.0, 1 to 1024 bytes
@@ -41,13 +38,14 @@ let outcome: CheckOutcome =
 ```
 
 - `WorkFactor` holds the two settings and computes the Argon2 cost with integers only:
-  `memory_kib()`, `passes()`, `estimated_seconds()`.
+  `memory_kib()`, `passes()`. This crate adds `memory_bytes(work)` and `estimated_seconds(work)`.
 - `Mhfe::new`, in native builds only, refuses a memory level the computer cannot provide
   (`MhfeError::NotEnoughMemory`) and reserves the work area once (`MEMORY_ALLOCATION_FAILED` when
   the system refuses it); every round of every operation reuses it. A native build is always 64-bit
-  and supports every level (`engine::HIGHEST_MEMORY_LEVEL` is `MAX_MEMORY_LEVEL`). The browser
-  build has no `Mhfe::new`: its engine, `engine::browser::BrowserEngine::new`, refuses a level above
-  `engine::browser::HIGHEST_BROWSER_MEMORY_LEVEL` (0) with `MhfeError::MemoryLevelNotSupportedHere`.
+  and supports every level (`engine::HIGHEST_MEMORY_LEVEL` is `WorkFactor::MAX_MEMORY_LEVEL`). The
+  browser build has no `Mhfe::new`: its engine, `engine::browser::BrowserEngine::new`, refuses a
+  level above `engine::browser::HIGHEST_BROWSER_MEMORY_LEVEL` (0) with
+  `MhfeError::MemoryLevelNotSupportedHere`.
   The native engine is the vendored reference C code (`engine::NativeEngine`). Like the browser's
   engine, it fills each round's key with a marker before Argon2 runs and refuses a key left so or
   set to zeros (`ARGON2_FAILED`). `Mhfe::engine()` gives the engine. `engine::check_can_run` makes
@@ -117,10 +115,11 @@ let outcome: CheckOutcome =
   wallet has one.
 - `require_built_in_check_length(words)` refuses, before a container is read, a built-in check at
   a length that has none in any container (`INVALID_WORD_COUNT`): only a 12- to 21-word original
-  seed phrase carries one. The crate root also exports `SUITE_ID`, `SAME_LENGTH_SUITE_ID`, `ROUNDS`
-  (12), `ENCRYPTION_ROUNDS` (24), `MAX_PIM` (1023), `MAX_MEMORY_LEVEL` (21), the callback type
-  `ProgressCallback` and `memory_text(bytes)`, which writes a memory size as every front end shows
-  it, such as "2 GiB".
+  seed phrase carries one. The crate root also exports `ROUNDS` (12), `ENCRYPTION_ROUNDS` (24), the
+  callback type `ProgressCallback`, `require_original(suite, words)`, which refuses an original a
+  suite has no container for, and `memory_text(bytes)`, which writes a memory size as every front
+  end shows it, such as "2 GiB". The highest settings are `WorkFactor::MAX_PIM` (1023) and
+  `WorkFactor::MAX_MEMORY_LEVEL` (21).
 - `recover_confirmed(mhfe, container, password, words, confirmation, on_progress)` recovers a phrase
   to encrypt it again under a new password or settings, and returns it only once it is confirmed
   (the re-encryption guard). A 12- to 21-word original seed phrase of a 24-word container passes its

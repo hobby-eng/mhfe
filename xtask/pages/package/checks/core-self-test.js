@@ -98,24 +98,34 @@ assert.deepEqual(shownUnverified, [REDUCED_COST_CONTAINER]);
 assert.equal(knownAnswers, 2);
 
 // The reference code wipes its work area before it frees it, src/engine/argon2_browser.c clears the
-// stack it used, and the bridge wipes its copies of the password, salt and key: after the 1 MiB
-// known answer, a fresh single-threaded build's memory holds about 200 more non-zero bytes than
-// before, allocator records, where a stack left as it was would add about 2 KiB and a work area
-// 1 MiB. Fragile by nature: it depends on where the allocator puts things, so its bound is
-// generous.
+// stacks it used, and the bridge wipes its copies of the password, salt and key: after the 1 MiB
+// known answer, a fresh build's memory holds about 200 more non-zero bytes than before, about 320
+// in the threaded build, allocator and thread records. Stacks left as they were would add about
+// 2 KiB, the lane stacks of the threaded build about 12 KiB, and a work area 1 MiB. That build is
+// the one that shows the clear in fill_segment(), which on a single thread the clear after the call
+// repeats. The clear after the call alone takes off only about 45 bytes, no more than 4 in a row,
+// too few for this bound. Fragile by nature: it depends on where the allocator puts things, so its
+// bound is generous.
 const WIPED_RESIDUE_BYTES = 1024;
-const freshArgon2 = await builds["single-threaded"]();
 const nonZeroBytes = (heap) => heap.reduce((count, byte) => count + (byte === 0 ? 0 : 1), 0);
-const nonZeroBefore = nonZeroBytes(freshArgon2.HEAPU8);
-assert.equal(
-  JSON.parse(core.selfCheckArgon2("startup", [], argon2Engine(freshArgon2), noop, noop)).passed,
-  true,
-);
-const residue = nonZeroBytes(freshArgon2.HEAPU8) - nonZeroBefore;
-assert.ok(residue < WIPED_RESIDUE_BYTES, `the Argon2 memory was wiped: ${residue} bytes remain`);
+const residues = [];
+for (const [name, createModule] of Object.entries(builds)) {
+  const freshArgon2 = await createModule();
+  const nonZeroBefore = nonZeroBytes(freshArgon2.HEAPU8);
+  assert.equal(
+    JSON.parse(core.selfCheckArgon2("startup", [], argon2Engine(freshArgon2), noop, noop)).passed,
+    true,
+  );
+  const residue = nonZeroBytes(freshArgon2.HEAPU8) - nonZeroBefore;
+  assert.ok(
+    residue < WIPED_RESIDUE_BYTES,
+    `the ${name} build's Argon2 memory was wiped: ${residue} bytes remain`,
+  );
+  residues.push(`${residue} in the ${name} build`);
+}
 console.log(
   `Argon2 builds that fail their known answer are refused before round 1 and after the last; `
-    + `${residue} non-zero bytes remain after a known answer.`,
+    + `non-zero bytes left after a known answer: ${residues.join(", ")}.`,
 );
 
 // The self-test tells where it first left the published path, and how. Argon2 at full size takes

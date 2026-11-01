@@ -13,8 +13,8 @@ use std::time::Instant;
 use anstream::{eprint, eprintln};
 use mhfe::memory::{LockedBytes, LockedText};
 use mhfe::word_hints::WordList;
-use mhfe::{ContainerFacts, MhfeError, Suite, ENCRYPTION_ROUNDS, ROUNDS};
-use mhfe_core::Password;
+use mhfe::{ContainerFacts, MhfeError, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe_core::{Password, Suite};
 use zeroize::Zeroizing;
 
 use crate::check_word::{self, Reviewed};
@@ -821,8 +821,9 @@ pub fn read_container(
     // error; the result says so again where it matters.
     let suite = container.suite();
     let note = match suite {
-        Suite::SameLength => " (no built-in check)",
         Suite::TwentyFourWords => "",
+        // Suite 4.
+        _ => " (no built-in check)",
     };
     style::fact("Format", paint(MUTED, format!("{}{note}", suite.id())));
     Ok(ReadContainer {

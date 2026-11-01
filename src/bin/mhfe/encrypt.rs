@@ -7,8 +7,8 @@ use std::io;
 use anstream::eprintln;
 use clap::Args;
 use mhfe::operation::{Encryption, Keep, KeepItem, Sealed, StageCallback, WalletPassphrase};
-use mhfe::{MhfeError, OriginalFacts, Suite, WorkFactor};
-use mhfe_core::Password;
+use mhfe::{require_original, MhfeError, OriginalFacts};
+use mhfe_core::{Password, Suite, WorkFactor};
 
 use crate::check_word;
 use crate::choice;
@@ -294,7 +294,7 @@ fn choose_suite(
 ) -> Result<Suite, Failure> {
     let words = original.word_count();
     if same_length {
-        Suite::SameLength.require_original(words)?;
+        require_original(Suite::SameLength, words)?;
         choice::record(
             "Container",
             &format!("{words} words, the same length as yours (--same-length)"),

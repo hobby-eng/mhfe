@@ -20,7 +20,8 @@ use mhfe::self_check::{ComponentOutcome, ComponentResult, SelfCheckReport, Tier}
 use mhfe::self_test::SelfTest;
 #[cfg(test)]
 use mhfe::self_test::SelfTestFault;
-use mhfe::{WorkFactor, ROUNDS};
+use mhfe::{estimated_seconds, memory_bytes, memory_text, ROUNDS};
+use mhfe_core::WorkFactor;
 
 use crate::exit::{Failure, INTERNAL_ERROR, SUCCESS};
 use crate::flow::{self, Flow, Kind};
@@ -88,12 +89,12 @@ pub fn vectors_cost() -> String {
     const OPERATIONS: u64 = 2;
     // Both vectors use the default settings, PIM 0 and memory level 0.
     let work = WorkFactor::default();
-    let (low, high) = work.estimated_seconds();
+    let (low, high) = estimated_seconds(work);
     format!(
         "about {} to {} minutes, {}",
         (OPERATIONS * low).div_ceil(MINUTE),
         (OPERATIONS * high).div_ceil(MINUTE),
-        work.memory_text()
+        memory_text(memory_bytes(work))
     )
 }
 

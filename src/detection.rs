@@ -80,11 +80,12 @@ pub(crate) fn passes_own_checks(
 
 #[cfg(test)]
 mod tests {
+    use mhfe_core::Suite;
+
     use super::*;
     use crate::memory::LockedBytes;
     use crate::packing::{pack, STATE_BYTES};
     use crate::test_support::{entropy, state_from_hex, state_of, AMBIGUOUS_STATES};
-    use crate::Suite;
 
     /// The recovery of a 24-word container whose state is `state`.
     fn recovery_of(state: &[u8]) -> RecoveredState {

@@ -5,8 +5,8 @@ use anstream::eprintln;
 use clap::Args;
 use mhfe::engine::{check_can_run, highest_available_level};
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
-use mhfe::{Mhfe, WorkFactor, ENCRYPTION_ROUNDS, MAX_MEMORY_LEVEL, ROUNDS};
-use mhfe_core::NativeArgon2;
+use mhfe::{estimated_seconds, memory_bytes, Mhfe, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe_core::{NativeArgon2, WorkFactor};
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
@@ -172,7 +172,7 @@ fn ask_for_own(
     operation: Operation,
     defaults: WorkFactor,
 ) -> Result<bool, Failure> {
-    let (low, high) = defaults.estimated_seconds();
+    let (low, high) = estimated_seconds(defaults);
     let scale = u64::from(rounds_of(operation) / ROUNDS);
     let time = format!("about {}", time_range(low * scale, high * scale));
     let (text, answers) = match operation {
@@ -305,11 +305,11 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         Operation::Repair => "12 rounds a candidate",
     };
     // The estimate is for the twelve rounds of one pass through the cipher.
-    let (low, high) = work.estimated_seconds();
+    let (low, high) = estimated_seconds(work);
     let scale = u64::from(rounds / ROUNDS);
     let gray = |text: String| paint(MUTED, text);
 
-    let memory = format!("({})", work.memory_text());
+    let memory = format!("({})", mhfe::memory_text(memory_bytes(work)));
     let settings = if asked {
         paint(
             ACCENT,
@@ -370,7 +370,7 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         style::warn(
             &format!(
                 "Recovery will need a computer with {} of free memory.",
-                work.memory_text()
+                mhfe::memory_text(memory_bytes(work))
             ),
             "",
         );
@@ -464,22 +464,26 @@ fn memory_levels() -> String {
     const FIRST: u32 = 5;
     let size = |level: u32| format!("{level} = {}", memory_text(level));
     let first: Vec<String> = (0..FIRST).map(size).collect();
-    format!("{}, ... {}", first.join(", "), size(MAX_MEMORY_LEVEL))
+    let last = size(WorkFactor::MAX_MEMORY_LEVEL);
+    format!("{}, ... {last}", first.join(", "))
 }
 
 /// The memory of `level`: "2 GiB", and in whole tebibytes from 1 TiB on, as the highest levels are.
 pub fn memory_text(level: u32) -> String {
-    WorkFactor::new(0, level).map_or_else(|_| String::new(), WorkFactor::memory_text)
+    WorkFactor::new(0, level).map_or_else(
+        |_| String::new(),
+        |work| mhfe::memory_text(memory_bytes(work)),
+    )
 }
 
 /// The PIMs a container takes: "0 to 1023".
 pub fn pim_range() -> String {
-    format!("0 to {}", mhfe::MAX_PIM)
+    format!("0 to {}", WorkFactor::MAX_PIM)
 }
 
 /// The memory levels a container takes: "0 to 21".
 pub fn level_range() -> String {
-    format!("0 to {MAX_MEMORY_LEVEL}")
+    format!("0 to {}", WorkFactor::MAX_MEMORY_LEVEL)
 }
 
 /// "1 to 2 minutes", "17 to 34 hours", "3 to 6 days": both ends in the unit that suits the
@@ -567,9 +571,9 @@ mod tests {
     #[test]
     fn time_ranges_use_one_readable_unit() {
         assert_eq!(time_range(60, 120), "1 to 2 minutes");
-        let highest_pim = WorkFactor::new(1023, 0).unwrap().estimated_seconds();
+        let highest_pim = estimated_seconds(WorkFactor::new(1023, 0).unwrap());
         assert_eq!(time_range(highest_pim.0, highest_pim.1), "17 to 34 hours");
-        let highest_memory = WorkFactor::new(0, 21).unwrap().estimated_seconds();
+        let highest_memory = estimated_seconds(WorkFactor::new(0, 21).unwrap());
         assert_eq!(
             time_range(highest_memory.0, highest_memory.1),
             "25 to 51 hours"

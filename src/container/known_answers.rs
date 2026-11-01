@@ -6,12 +6,14 @@
 //! anywhere. The expected values are the specification's rules, cited per case, applied to the
 //! published vectors' containers and phrases.
 
+use mhfe_core::Suite;
+
 use super::{ConfirmationNeeded, ContainerFacts, OriginalFacts};
 use crate::mhfe::known_answers::published;
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
-use crate::{PhraseLength, Suite, WordCount};
+use crate::{PhraseLength, WordCount};
 
 /// What a container's words tell.
 #[derive(Clone, Copy)]

@@ -3,13 +3,14 @@
 //! to and the round's number in the whole operation, so that a front end can show a bar for each
 //! stage and stop the operation between any two rounds.
 
-use mhfe_core::Password;
+use mhfe_core::{Password, Suite, WorkFactor};
 use zeroize::Zeroizing;
 
 use crate::engine::Argon2Engine;
 use crate::mhfe::{encrypt, Mhfe};
 use crate::repair::{self, repair_words};
-use crate::{check_phrase, MhfeError, OriginalFacts, Suite, WorkFactor, ROUNDS};
+use crate::suite::{built_in_check_lengths, require_original};
+use crate::{check_phrase, MhfeError, OriginalFacts, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -195,7 +196,7 @@ impl Encryption {
         repair_word_count: Option<usize>,
     ) -> Result<Self, MhfeError> {
         let words = check_phrase(original)?;
-        suite.require_original(words)?;
+        require_original(suite, words)?;
         if let Some(count) = repair_word_count {
             repair::require_count(count)?;
         }
@@ -287,9 +288,7 @@ impl Sealed {
     /// in a 24-word container carries a built-in check; a 24-word phrase and a same-length
     /// container do not.
     pub fn built_in_check(&self) -> bool {
-        self.suite
-            .built_in_check_lengths()
-            .contains(&self.original_words)
+        built_in_check_lengths(self.suite).contains(&self.original_words)
     }
 
     /// The other lengths that automatic detection would also accept, almost always none: when not,

@@ -2,7 +2,7 @@
 //! "Recovering a mnemonic" and their suite 4 forms).
 
 use bip39::Mnemonic;
-use mhfe_core::Password;
+use mhfe_core::{Password, Suite, WorkFactor};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::container::ContainerFacts;
@@ -12,9 +12,9 @@ use crate::feistel::{Geometry, Permutation};
 use crate::memory::{LockedBytes, LockedText};
 use crate::packing::{self, State, STATE_WORDS};
 use crate::phrase::{self, locked_phrase_from_entropy, phrase_from_entropy};
-use crate::suite::{Suite, ROUNDS};
+use crate::suite::{built_in_check_lengths, require_original, ROUNDS};
 use crate::wallet_check;
-use crate::{MhfeError, WorkFactor};
+use crate::MhfeError;
 
 // The self-checks of the cipher and the published vectors they replay; see known_answers.rs.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
@@ -27,7 +27,8 @@ mod published_rounds;
 /// more to check it. Returning an error, such as [`MhfeError::Cancelled`], stops before that round.
 pub type ProgressCallback<'a> = &'a mut dyn FnMut(u32, u32) -> Result<(), MhfeError>;
 
-/// Rounds of an encryption: twelve to encrypt and twelve to check the result.
+/// Rounds of an encryption: twelve to encrypt and twelve to check the result. A deliberate copy of
+/// `2 * ROUNDS` in the core's src/cipher.rs, which has no name for it: a change goes to both.
 pub const ENCRYPTION_ROUNDS: u32 = 2 * ROUNDS;
 
 /// The length of an original phrase: 12, 15, 18, 21 or 24 words, the BIP39 lengths MHFE takes.
@@ -258,7 +259,8 @@ impl RecoveredState {
     pub(crate) fn new(suite: Suite, state: LockedBytes) -> Result<Self, MhfeError> {
         let detected = match suite {
             Suite::TwentyFourWords => detected_lengths(suite_3_state(&state)?),
-            Suite::SameLength => Vec::new(),
+            // Suite 4.
+            _ => Vec::new(),
         };
         Ok(Self {
             suite,
@@ -296,7 +298,8 @@ impl RecoveredState {
                     .map(|words| Ok(read_as(x, words)?.compared_with(stated, &self.detected)))
                     .collect()
             }
-            Suite::SameLength => Ok(vec![read_same_length(&self.state)?]),
+            // Suite 4.
+            _ => Ok(vec![read_same_length(&self.state)?]),
         }
     }
 }
@@ -349,11 +352,11 @@ impl<E: Argon2Engine> Mhfe<E> {
         on_round: ProgressCallback<'_>,
         on_unchecked: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
     ) -> Result<Zeroizing<String>, MhfeError> {
-        suite.require_original(packing::words_of_entropy(entropy.len()))?;
+        require_original(suite, packing::words_of_entropy(entropy.len()))?;
         let x = match suite {
             Suite::TwentyFourWords => packing::pack(&entropy)?,
             // Suite 4 encrypts the entropy itself: there is no room for a check value.
-            Suite::SameLength => entropy,
+            _ => entropy,
         };
         let y = self
             .permutation(password, geometry(suite, &x)?)
@@ -506,7 +509,8 @@ pub(crate) fn recover_state<E: Argon2Engine>(
 fn geometry(suite: Suite, state: &[u8]) -> Result<Geometry, MhfeError> {
     match suite {
         Suite::TwentyFourWords => Ok(Geometry::SUITE_3),
-        Suite::SameLength => Geometry::same_length(state.len()),
+        // Suite 4.
+        _ => Geometry::same_length(state.len()),
     }
 }
 
@@ -570,7 +574,8 @@ pub fn other_detected_lengths(original: &str) -> Result<Vec<usize>, MhfeError> {
 pub(crate) fn container_state(
     container: &Mnemonic,
 ) -> Result<(Suite, Zeroizing<Vec<u8>>), MhfeError> {
-    let suite = Suite::of_container(container.word_count())?;
+    let words = container.word_count();
+    let suite = Suite::of_container(words).ok_or(MhfeError::InvalidWordCount(words))?;
     Ok((suite, Zeroizing::new(container.to_entropy())))
 }
 
@@ -590,9 +595,7 @@ fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
     Ok(RecoveredPhrase::new(
         words,
         // A short length carries a built-in check, which unpack has passed.
-        Suite::TwentyFourWords
-            .built_in_check_lengths()
-            .contains(&words),
+        built_in_check_lengths(Suite::TwentyFourWords).contains(&words),
         locked_phrase_from_entropy(packing::unpack(x, words)?)?,
         Suite::TwentyFourWords,
     ))

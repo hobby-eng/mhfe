@@ -3,7 +3,8 @@
 //! when the person chooses it, and its consequences are shown before and after the choice.
 
 use anstream::eprintln;
-use mhfe::{ContainerChoice, OriginalFacts, Suite};
+use mhfe::{ContainerChoice, OriginalFacts};
+use mhfe_core::Suite;
 
 use crate::choice::{self, Answer, Help, Question};
 use crate::exit::Failure;
@@ -51,7 +52,8 @@ pub fn choose(original: &OriginalFacts) -> Result<Suite, Failure> {
 fn label(choice: ContainerChoice) -> String {
     match choice.suite() {
         Suite::TwentyFourWords => format!("{} words (recommended)", choice.word_count()),
-        Suite::SameLength => format!("{} words, the same length as yours", choice.word_count()),
+        // Suite 4.
+        _ => format!("{} words, the same length as yours", choice.word_count()),
     }
 }
 
@@ -61,7 +63,8 @@ pub fn explain(choices: &[ContainerChoice]) {
         eprintln!("{}", paint(STRONG, label(choice)));
         match choice.suite() {
             Suite::TwentyFourWords => explain_24_words(choice),
-            Suite::SameLength => explain_same_length(choice),
+            // Suite 4.
+            _ => explain_same_length(choice),
         }
         eprintln!();
     }

@@ -1003,7 +1003,7 @@ function requireRepetition(password, passwordRepeat, name) {
 function requireSettings(pim, memoryLevel) {
   requireSetting(pim, MAX_PIM, "INVALID_PIM", "pim");
   requireSetting(memoryLevel, MAX_MEMORY_LEVEL, "INVALID_MEMORY_LEVEL", "memoryLevel");
-  // The library's refusal (WorkFactor::require_level), with its code and message, before any
+  // The library's refusal (require_level in src/suite.rs), with its code and message, before any
   // secret reaches a worker; `cargo xtask package-check` keeps the two in step.
   if (memoryLevel > HIGHEST_BROWSER_MEMORY_LEVEL) {
     throw new MhfeError(

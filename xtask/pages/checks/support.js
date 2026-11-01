@@ -30,7 +30,7 @@ const FULL_SIZE_REPAIR_WORDS = {
   8: "appear include vicious move uphold tiger song satoshi",
 };
 // What PIM 1 asks Argon2 for, as the reduced-cost wrapper reports it when it refuses it: the
-// memory of level 0 and 12 x (PIM + 1) passes (src/suite.rs).
+// memory of level 0 and 12 x (PIM + 1) passes (WorkFactor of mhfe-core).
 const PIM_1_COST = "2097152 KiB and 24 passes";
 const REPAIR_WORD_CHOICES = [2, 4, 6, 8];
 const KEEP_24 = [{ item: "containerWords", words: 24 }, { item: "password" }];

@@ -71,9 +71,10 @@ pub enum MhfeError {
         /// The most missing words the search looks for.
         limit: usize,
     },
-    /// The PIM is above [`crate::MAX_PIM`]; the value is the PIM given.
+    /// The PIM is above [`mhfe_core::WorkFactor::MAX_PIM`]; the value is the PIM given.
     InvalidPim(u32),
-    /// The memory level is above [`crate::MAX_MEMORY_LEVEL`]; the value is the level given.
+    /// The memory level is above [`mhfe_core::WorkFactor::MAX_MEMORY_LEVEL`]; the value is the level
+    /// given.
     InvalidMemoryLevel(u32),
     /// The password is empty.
     EmptyPassword,
@@ -296,13 +297,13 @@ impl fmt::Display for MhfeError {
                 write!(
                     f,
                     "the PIM must be a whole number from 0 to {}, not {pim}",
-                    crate::MAX_PIM
+                    mhfe_core::WorkFactor::MAX_PIM
                 )
             }
             Self::InvalidMemoryLevel(level) => write!(
                 f,
                 "the memory level must be a whole number from 0 to {}, not {level}",
-                crate::MAX_MEMORY_LEVEL
+                mhfe_core::WorkFactor::MAX_MEMORY_LEVEL
             ),
             Self::EmptyPassword => write!(f, "the password is empty"),
             Self::PasswordTooLong(bytes) => write!(

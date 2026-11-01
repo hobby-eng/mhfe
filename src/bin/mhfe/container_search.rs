@@ -18,8 +18,8 @@ use anstream::{eprint, eprintln};
 use mhfe::memory::LockedText;
 use mhfe::search::{ContainerSearch, Found, DECOY_SCAN_GAP, MAX_MISSING_FOR_WALLET};
 use mhfe::wallet::SearchLimits;
-use mhfe::{MhfeError, Reference, WorkFactor};
-use mhfe_core::{NativeArgon2, Password};
+use mhfe::{estimated_seconds, MhfeError, Reference};
+use mhfe_core::{NativeArgon2, Password, WorkFactor};
 use zeroize::Zeroizing;
 
 use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE};
@@ -422,7 +422,7 @@ fn starts_long_search(
     search: &ContainerSearch,
     work: WorkFactor,
 ) -> Result<bool, Failure> {
-    let (low, high) = work.estimated_seconds();
+    let (low, high) = estimated_seconds(work);
     let count = search.count() as u64;
     let took = format!(
         "{} candidates, each a full recovery: about {} at these settings.",

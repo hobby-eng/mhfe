@@ -699,8 +699,9 @@ loop. Every round also refuses a key that the build left unwritten or set to zer
   64 and 256 MiB instead.
 - That Argon2 wiped its memory after a call: where the allocator put the freed work area in the
   Emscripten heap is not reliably known, so the page does not scan for it. The package's checks
-  (`cargo xtask package-check`) confirm it for the single-threaded build, the stack the reference
-  code used included: about 200 bytes of allocator records stay non-zero after a 1 MiB call.
+  (`cargo xtask package-check`) confirm it for both builds, the stacks the reference code used
+  included: after a 1 MiB call about 200 bytes of allocator records stay non-zero in the
+  single-threaded build, and about 320 of allocator and thread records in the threaded one.
 - The threaded Argon2 build on a page that is not cross-origin isolated, such as one opened as a
   file: without `SharedArrayBuffer` it cannot run, and its part is not run.
 - Free memory, which a page cannot measure (see [Memory](#memory)).

@@ -17,7 +17,7 @@ use std::convert::Infallible;
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 use hmac::{Hmac, KeyInit, Mac};
-use mhfe_core::Password;
+use mhfe_core::{Password, WorkFactor};
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -25,7 +25,7 @@ use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
 use crate::packing::{self, STATE_BYTES};
 use crate::suite::{DS_MASK, DS_SALT, ROUNDS, SAME_LENGTH_DS_MASK, SAME_LENGTH_DS_SALT};
-use crate::{MhfeError, WorkFactor};
+use crate::MhfeError;
 
 type Blake2b256 = Blake2b<U32>;
 type HmacSha256 = Hmac<Sha256>;
@@ -471,7 +471,7 @@ mod tests {
     fn suite_4_round_messages_carry_the_entropy_size() {
         let fixture: serde_json::Value =
             serde_json::from_str(crate::validation_fixtures::SUITE_4).unwrap();
-        assert_eq!(fixture["suite_id"], crate::SAME_LENGTH_SUITE_ID);
+        assert_eq!(fixture["suite_id"], mhfe_core::Suite::SameLength.id());
         for case in fixture["ent_separation"].as_array().unwrap() {
             let id = case_text(case, "id");
             let bytes = case["entropy_bits"].as_u64().unwrap() as usize / 8;

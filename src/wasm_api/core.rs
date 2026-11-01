@@ -9,7 +9,7 @@
 //! sides of the work (SELF_CHECK_FAILED otherwise), which also covers the optimized code a browser
 //! makes of a long-running loop.
 
-use mhfe_core::Password;
+use mhfe_core::{Password, Suite, WorkFactor};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -31,8 +31,7 @@ use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint
 use crate::{
     recover_for_check_in_stages, Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets,
     Mhfe, MhfeError, OriginalFacts, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
-    RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS,
-    MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
+    RecoveryStatus, ReferenceTarget, WordCount, BUILT_IN_CHECK_WORD_COUNTS, ROUNDS, WORD_COUNTS,
 };
 
 #[derive(Serialize)]
@@ -64,11 +63,11 @@ struct SuiteParameters {
 pub fn suite_parameters() -> Result<String, JsError> {
     json(&SuiteParameters {
         version: env!("CARGO_PKG_VERSION"),
-        suite_id: SUITE_ID,
-        same_length_suite_id: SAME_LENGTH_SUITE_ID,
+        suite_id: Suite::TwentyFourWords.id(),
+        same_length_suite_id: Suite::SameLength.id(),
         rounds: ROUNDS,
-        max_pim: MAX_PIM,
-        max_memory_level: MAX_MEMORY_LEVEL,
+        max_pim: WorkFactor::MAX_PIM,
+        max_memory_level: WorkFactor::MAX_MEMORY_LEVEL,
         highest_browser_memory_level: HIGHEST_BROWSER_MEMORY_LEVEL,
         word_counts: WORD_COUNTS,
         built_in_check_word_counts: &BUILT_IN_CHECK_WORD_COUNTS,
@@ -1517,7 +1516,7 @@ fn repair_count(count: f64) -> Result<Option<usize>, JsError> {
 fn work_from(pim: f64, memory_level: f64) -> Result<WorkFactor, JsError> {
     let pim = whole_number(pim, "INVALID_PIM", "the PIM")?;
     let memory_level = whole_number(memory_level, "INVALID_MEMORY_LEVEL", "the memory level")?;
-    WorkFactor::new(pim, memory_level).map_err(js_error)
+    WorkFactor::new(pim, memory_level).map_err(|error| js_error(error.into()))
 }
 
 fn mhfe_for(

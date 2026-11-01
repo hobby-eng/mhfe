@@ -12,16 +12,13 @@
 
 use std::fmt;
 
-use mhfe_core::Password;
+use mhfe_core::{Password, Suite, WorkFactor};
 use serde_json::Value;
 
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::mhfe::known_answers::{published_table, PublishedRound, PublishedVector};
 use crate::operation::{RoundCounter, Stage, StageCallback};
-use crate::{
-    decrypt, encrypt, Mhfe, MhfeError, PhraseLength, Recovery, Suite, WorkFactor,
-    ENCRYPTION_ROUNDS, ROUNDS,
-};
+use crate::{decrypt, encrypt, Mhfe, MhfeError, PhraseLength, Recovery, ENCRYPTION_ROUNDS, ROUNDS};
 
 /// The public vectors, as the specification publishes them.
 const SUITE_3_VECTOR: &str = include_str!("../tests/spec/vectors/suite3/zero-12.json");
@@ -64,7 +61,7 @@ pub struct SelfTest {
 
 impl SelfTest {
     /// The vectors built into the program. Both use the default settings, PIM 0 and memory level
-    /// 0, at 2 GiB: [`WorkFactor::default`](crate::WorkFactor::default).
+    /// 0, at 2 GiB: [`WorkFactor::default`].
     pub fn published() -> Result<Self, MhfeError> {
         Ok(Self {
             suite_3: Vector::read(SUITE_3_VECTOR)?,

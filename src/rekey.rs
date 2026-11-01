@@ -5,14 +5,14 @@
 
 use std::cell::RefCell;
 
-use mhfe_core::Password;
+use mhfe_core::{Password, WorkFactor};
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
 use crate::rehearsal::{recover_for_rekey, Confirmation, RecoveredForRekey};
-use crate::{Mhfe, MhfeError, PhraseLength, WorkFactor, ROUNDS};
+use crate::{Mhfe, MhfeError, PhraseLength, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -395,7 +395,7 @@ mod tests {
             &mut reduced(old_work),
             ABANDON,
             &old,
-            crate::Suite::TwentyFourWords,
+            mhfe_core::Suite::TwentyFourWords,
             none,
             &mut |_| Ok(()),
         )
@@ -566,7 +566,7 @@ mod tests {
             &mut reduced(work),
             ABANDON,
             &old,
-            crate::Suite::SameLength,
+            mhfe_core::Suite::SameLength,
             &mut |_, _| Ok(()),
             &mut |_| Ok(()),
         )
@@ -621,7 +621,7 @@ mod tests {
             &mut reduced(WorkFactor::default()),
             phrase,
             &old,
-            crate::Suite::TwentyFourWords,
+            mhfe_core::Suite::TwentyFourWords,
             &mut |_, _| Ok(()),
             &mut |_| Ok(()),
         )
@@ -830,7 +830,7 @@ mod tests {
             &mut reduced(WorkFactor::default()),
             ABANDON_12,
             &old,
-            crate::Suite::SameLength,
+            mhfe_core::Suite::SameLength,
             &mut |_, _| Ok(()),
             &mut |_| Ok(()),
         )

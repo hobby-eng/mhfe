@@ -7,6 +7,8 @@
 
 use crate::MhfeError;
 
+// The two sizes are deliberate copies of those in the core's src/engine.rs, which keeps them
+// private: a change goes to both.
 /// Length of the round salt `S_i`.
 pub const SALT_BYTES: usize = 16;
 /// Length of the Argon2id output `K_i`.

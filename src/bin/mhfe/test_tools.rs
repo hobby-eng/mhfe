@@ -5,8 +5,8 @@
 use std::time::Instant;
 
 use clap::Args;
-use mhfe::{decrypt, encrypt, PhraseLength, Suite};
-use mhfe_core::Password;
+use mhfe::{decrypt, encrypt, PhraseLength};
+use mhfe_core::{Password, Suite};
 use serde::Serialize;
 
 use crate::exit::{Failure, SUCCESS};
@@ -95,7 +95,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     let decryption_seconds = started.elapsed().as_secs_f64();
 
     let record = Measurement {
-        suite_id: mhfe::SUITE_ID,
+        suite_id: Suite::TwentyFourWords.id(),
         implementation: format!("mhfe {}", env!("CARGO_PKG_VERSION")),
         argon2_engine: argon2_engine(),
         target: std::env::consts::ARCH,

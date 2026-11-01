@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn mach_estimate_does_not_count_speculative_pages_twice() {
         const PAGE_BYTES: u64 = 4096;
-        let default_level = crate::WorkFactor::default().memory_bytes();
+        let default_level = crate::memory_bytes(mhfe_core::WorkFactor::default());
         assert_eq!(default_level, 2 << 30);
         let available = mach_available_bytes(262_144, 131_072, PAGE_BYTES).unwrap();
         assert_eq!(available, 1_610_612_736);
@@ -183,7 +183,7 @@ mod tests {
 
         // Exactly the memory of a level, and one page fewer, at level 0 (2 GiB) and 1 (3 GiB).
         for level in [0, 1] {
-            let needed = crate::WorkFactor::new(0, level).unwrap().memory_bytes();
+            let needed = crate::memory_bytes(mhfe_core::WorkFactor::new(0, level).unwrap());
             let pages = u32::try_from(needed / PAGE_BYTES).unwrap();
             assert_eq!(mach_available_bytes(pages - 1, 1, PAGE_BYTES), Some(needed));
             assert_eq!(

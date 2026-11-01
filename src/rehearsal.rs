@@ -4,7 +4,7 @@
 //! close it was. The re-encryption guard uses the same comparison: a phrase recovered to be
 //! encrypted again comes out only once it is confirmed.
 
-use mhfe_core::Password;
+use mhfe_core::{Password, Suite};
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::detection;
@@ -12,7 +12,7 @@ use crate::engine::Argon2Engine;
 use crate::mhfe::{recover_state, PhraseLength, RecoveredPhrase, RecoveredState};
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::packing::STATE_WORDS;
-use crate::suite::{Suite, ROUNDS};
+use crate::suite::{built_in_check_lengths, holds_full_state, ROUNDS};
 use crate::wallet::{self, Address, DerivationPath, SearchLimits};
 use crate::wallet_check;
 use crate::{Mhfe, MhfeError, ProgressCallback, WordCount};
@@ -295,10 +295,10 @@ pub(crate) fn refuse_impossible(
     reference: &Reference<'_>,
 ) -> Result<(), MhfeError> {
     // A count no container has is refused where the container is read, after this.
-    let Ok(suite) = Suite::of_container(container_words) else {
+    let Some(suite) = Suite::of_container(container_words) else {
         return Ok(());
     };
-    let built_in_lengths = suite.built_in_check_lengths();
+    let built_in_lengths = built_in_check_lengths(suite);
     match reference {
         Reference::BuiltInCheck { .. } | Reference::OwnChecks { .. }
             if built_in_lengths.is_empty() =>
@@ -308,7 +308,7 @@ pub(crate) fn refuse_impossible(
         Reference::BuiltInCheck { words } if !built_in_lengths.contains(&words.get()) => {
             return Err(MhfeError::NoBuiltInCheckAtLength(words.get()));
         }
-        Reference::WalletCheck { .. } if !suite.holds_full_state() => {
+        Reference::WalletCheck { .. } if !holds_full_state(suite) => {
             return Err(MhfeError::NoWalletCheck { container_words });
         }
         // The wallet check's own rule, the one every front end gets: it needs a passphrase.
@@ -383,7 +383,7 @@ fn compare_state(
             // Every reading is compared, whatever length the person has, so that no accidental
             // match hides the real phrase: 24 stated words give each short length that passes and
             // then the 24-word reading. A same-length container has its own length alone.
-            let stated = recovery.suite().holds_full_state().then_some(STATE_WORDS);
+            let stated = holds_full_state(recovery.suite()).then_some(STATE_WORDS);
             // Held in locked memory while they are compared: an address search can take seconds.
             for reading in recovery.readings(stated)? {
                 let outcome = compare(reading.phrase(), reference)?;

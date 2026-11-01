@@ -1,13 +1,14 @@
 //! Argon2id on the reference C code of mhfe-core, with one work area for all twelve rounds, and the
 //! checks of the computer's memory before it is reserved.
 
-use mhfe_core::NativeArgon2;
+use mhfe_core::{NativeArgon2, WorkFactor};
 
 use super::{ffi, Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
-use crate::{MhfeError, WorkFactor};
+use crate::suite::{memory_bytes, require_level};
+use crate::MhfeError;
 
 /// The highest memory level this build supports: every level, since native builds are 64-bit.
-pub const HIGHEST_MEMORY_LEVEL: u32 = crate::MAX_MEMORY_LEVEL;
+pub const HIGHEST_MEMORY_LEVEL: u32 = WorkFactor::MAX_MEMORY_LEVEL;
 
 /// Free memory as the operating system reports it, or `None` where it gives no figure. On Linux
 /// this is the lower of the computer's figure and the room left in the process's control group,
@@ -21,8 +22,8 @@ pub fn available_memory_bytes() -> Option<u64> {
 /// A program calls it before asking for secrets and reserves the memory after the password is
 /// encoded, the order the specification gives for creating a container.
 pub fn check_can_run(work: WorkFactor) -> Result<(), MhfeError> {
-    work.require_level(HIGHEST_MEMORY_LEVEL)?;
-    check_free_memory(work.memory_bytes())
+    require_level(work, HIGHEST_MEMORY_LEVEL)?;
+    check_free_memory(memory_bytes(work))
 }
 
 /// The highest memory level whose memory the computer reports as free, if it reports any.
@@ -31,7 +32,7 @@ pub fn highest_available_level() -> Option<u32> {
     (0..=HIGHEST_MEMORY_LEVEL)
         .rev()
         .filter_map(|level| WorkFactor::new(0, level).ok())
-        .find(|work| work.memory_bytes() <= available)
+        .find(|&work| memory_bytes(work) <= available)
         .map(WorkFactor::memory_level)
 }
 
@@ -40,7 +41,7 @@ pub fn highest_available_level() -> Option<u32> {
 /// [`MhfeError::MemoryAllocation`] when the system refuses the memory.
 pub fn reserve(work: WorkFactor) -> Result<NativeArgon2, MhfeError> {
     check_can_run(work)?;
-    NativeArgon2::new(work.memory_kib()).map_err(|error| error_of(error, work.memory_bytes()))
+    NativeArgon2::new(work.memory_kib()).map_err(|error| error_of(error, memory_bytes(work)))
 }
 
 fn check_free_memory(needed_bytes: u64) -> Result<(), MhfeError> {

@@ -13,7 +13,8 @@ use mhfe::operation::WalletPassphrase;
 use mhfe::wallet_check::{
     self, NewPhrase, PhraseDraw, NEW_ENTROPY_BYTES, WALLET_CHECK_BITS, WALLET_CHECK_ODDS,
 };
-use mhfe::{OriginalFacts, Suite};
+use mhfe::OriginalFacts;
+use mhfe_core::Suite;
 
 use crate::check;
 use crate::choice::{self, Answer, Help, Question};

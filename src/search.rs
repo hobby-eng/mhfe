@@ -15,7 +15,7 @@
 //! word, and the first four letters of a word are enough. A candidate that matches proves only
 //! what the reference proves: an address strongly, a fingerprint with 32 bits.
 
-use mhfe_core::Password;
+use mhfe_core::{Password, Suite};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -24,8 +24,9 @@ use crate::packing;
 use crate::phrase::{self, LIST_SIZE, WORD_BITS, WORD_COUNTS};
 use crate::rehearsal::{self, CheckOutcome, Reference};
 use crate::repair::ContainerReading;
+use crate::suite::built_in_check_lengths;
 use crate::wallet::SearchLimits;
-use crate::{Mhfe, MhfeError, Suite};
+use crate::{Mhfe, MhfeError};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -206,7 +207,7 @@ impl ContainerSearch {
 
     fn carries_own_checks(&self) -> bool {
         Suite::of_container(self.words.len())
-            .is_ok_and(|suite| !suite.built_in_check_lengths().is_empty())
+            .is_some_and(|suite| !built_in_check_lengths(suite).is_empty())
     }
 
     fn require_one_missing(&self) -> Result<(), MhfeError> {
@@ -476,9 +477,9 @@ fn passes_checksum(bits: &WordBits, words: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encrypt;
     use crate::test_support::{container_of, reduced, test_password, zero_12_container, LEGAL_12};
     use crate::wallet;
-    use crate::{encrypt, Suite};
 
     fn with(container: &str, changes: &[(usize, &'static str)]) -> String {
         let mut words: Vec<&str> = container.split(' ').collect();
