@@ -9,6 +9,7 @@ use super::{js_error, json, repair_capacities, run_self_check, whole_number, Cap
 use crate::repair::{self, ContainerReading, PROFILE, RECOMMENDED_REPAIR_WORDS};
 use crate::self_check::sets;
 use crate::wallet::master_fingerprint_text;
+use crate::ContainerFacts;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,9 +35,9 @@ pub fn repair_parameters() -> Result<String, JsError> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CardJson {
+struct CardJson<'a> {
     profile: &'static str,
-    words: String,
+    words: &'a str,
     repairs_unreadable: usize,
     repairs_wrong: usize,
 }
@@ -45,11 +46,14 @@ struct CardJson {
 #[wasm_bindgen(js_name = repairWords)]
 pub fn repair_words(container: &str, count: f64) -> Result<String, JsError> {
     let count = whole_number(count, "INVALID_REPAIR_WORDS", "the repair word count")? as usize;
-    let words = repair::repair_words(container, count).map_err(js_error)?;
+    // A wrong count is told before a wrong container.
+    repair::require_count(count).map_err(js_error)?;
+    let container = ContainerFacts::read(container).map_err(js_error)?;
+    let card = repair::repair_words(container.phrase(), count).map_err(js_error)?;
     let (unreadable, wrong) = repair::capacity(count);
     json(&CardJson {
         profile: PROFILE,
-        words,
+        words: card.as_str(),
         repairs_unreadable: unreadable,
         repairs_wrong: wrong,
     })

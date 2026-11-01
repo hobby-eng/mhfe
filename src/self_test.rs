@@ -12,13 +12,13 @@
 
 use std::fmt;
 
-use mhfe_core::{Argon2Engine, Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Mhfe, Password, Suite, WorkFactor};
 use serde_json::Value;
 
 use crate::engine::{KEY_BYTES, SALT_BYTES};
 use crate::mhfe::known_answers::{published_table, PublishedRound, PublishedVector};
 use crate::operation::{RoundCounter, Stage, StageCallback};
-use crate::{decrypt, encrypt, Mhfe, MhfeError, PhraseLength, Recovery, ENCRYPTION_ROUNDS, ROUNDS};
+use crate::{decrypt, encrypt, MhfeError, PhraseLength, Recovery, ENCRYPTION_ROUNDS, ROUNDS};
 
 /// The public vectors, as the specification publishes them.
 const SUITE_3_VECTOR: &str = include_str!("../tests/spec/vectors/suite3/zero-12.json");
@@ -113,7 +113,7 @@ impl SelfTest {
             Suite::TwentyFourWords,
             &mut |round, _| rounds.report(Stage::Encrypt, round, &mut *progress),
             &mut |container| {
-                suite_3 = container == self.suite_3.container;
+                suite_3 = container.as_str() == self.suite_3.container;
                 compared = true;
                 Err(MhfeError::Cancelled)
             },

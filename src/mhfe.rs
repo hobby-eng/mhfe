@@ -1,17 +1,17 @@
 //! Creating a container and recovering a phrase (specification: "Creating a container",
-//! "Recovering a mnemonic" and their suite 4 forms).
+//! "Recovering a mnemonic" and their suite 4 forms). The cipher is [`mhfe_core::Mhfe`]: this module
+//! takes the phrases as typed, keeps mhfe's refusals and tells a front end what a reading is.
 
-use bip39::Mnemonic;
-use mhfe_core::{Argon2Engine, Password, Phrase, Suite, WorkFactor};
-use zeroize::{Zeroize, Zeroizing};
+use std::cell::Cell;
+use std::ops::ControlFlow;
+
+use mhfe_core::{Argon2Engine, Mhfe, Password, Phrase, Reading, Suite, WorkFactor};
 
 use crate::container::ContainerFacts;
-use crate::detection::detected_lengths;
-use crate::feistel::{Geometry, Permutation};
-use crate::memory::{LockedBytes, LockedText};
-use crate::packing::{self, State, STATE_WORDS};
-use crate::phrase;
-use crate::suite::{built_in_check_lengths, require_original, ROUNDS};
+use crate::engine::error_of;
+use crate::packing::{self, STATE_WORDS};
+use crate::phrase::{self, read_phrase};
+use crate::suite::{memory_bytes, ROUNDS};
 use crate::wallet_check;
 use crate::MhfeError;
 
@@ -84,8 +84,8 @@ impl PhraseLength {
     }
 }
 
-/// One phrase produced by recovery, read-only: its text stays in the buffer that was locked
-/// before the words were written into it, which no caller can grow or replace (AUD-012-SEC002).
+/// One phrase produced by recovery, read-only: its text stays in the core's [`Phrase`], which no
+/// caller can grow or replace (AUD-012-SEC002).
 ///
 /// It is read through its methods:
 ///
@@ -103,9 +103,8 @@ impl PhraseLength {
 /// }
 /// ```
 pub struct RecoveredPhrase {
-    words: usize,
+    phrase: Phrase,
     verified: bool,
-    phrase: LockedText,
     suite: Suite,
     /// The length the person stated, where the built-in checks gave this reading another.
     stated_words: Option<usize>,
@@ -131,7 +130,7 @@ pub enum RecoveryStatus {
 impl RecoveredPhrase {
     /// The words of the phrase.
     pub fn words(&self) -> usize {
-        self.words
+        self.phrase.words()
     }
 
     /// Whether the phrase passed its check value. Never true for 24 words or for a same-length
@@ -142,17 +141,12 @@ impl RecoveredPhrase {
 
     /// The phrase, with every word written out.
     pub fn phrase(&self) -> &str {
-        &self.phrase
+        self.phrase.as_str()
     }
 
     /// The suite of the container it came from.
     pub fn suite(&self) -> Suite {
         self.suite
-    }
-
-    /// The phrase alone, still in its locked buffer, for a caller that keeps it.
-    pub fn into_phrase(self) -> LockedText {
-        self.phrase
     }
 
     /// What the phrase is known to be, for a recovery that took `length`.
@@ -180,13 +174,13 @@ impl RecoveredPhrase {
         if !self.offers_wallet_check() {
             return Ok(None);
         }
-        wallet_check::phrase_passes(&self.phrase, passphrase).map(Some)
+        wallet_check::phrase_passes(self.phrase(), passphrase).map(Some)
     }
 
     /// Whether this is a 24-word reading of a 24-word container, which the 16-bit source check
     /// applies to: a front end asks for the wallet's BIP39 passphrase whenever one comes out.
     pub fn offers_wallet_check(&self) -> bool {
-        self.words == STATE_WORDS && self.suite == Suite::TwentyFourWords
+        self.words() == STATE_WORDS && self.suite == Suite::TwentyFourWords
     }
 
     /// The length the person stated, where it is not this reading's: the built-in checks found
@@ -203,28 +197,23 @@ impl RecoveredPhrase {
         &self.other_lengths
     }
 
-    /// Takes over `phrase`, whose buffer was locked before the words were written into it.
-    fn new(words: usize, verified: bool, phrase: LockedText, suite: Suite) -> Self {
+    /// `reading` of a container of `suite`, from a recovery with `stated`, beside the 12- to 21-word
+    /// lengths `short` whose built-in check passes.
+    fn new(reading: Reading, suite: Suite, stated: Option<usize>, short: &[usize]) -> Self {
+        let verified = reading.is_verified();
+        let phrase = reading.into_phrase();
+        let words = phrase.words();
         Self {
-            words,
-            verified,
             phrase,
+            verified,
             suite,
-            stated_words: None,
-            other_lengths: Vec::new(),
+            stated_words: stated.filter(|&stated| stated != words),
+            other_lengths: short
+                .iter()
+                .copied()
+                .filter(|&other| other != words)
+                .collect(),
         }
-    }
-
-    /// The reading as a recovery with `stated` gave it, beside the 12- to 21-word lengths `short`
-    /// whose built-in check passes.
-    fn compared_with(mut self, stated: Option<usize>, short: &[usize]) -> Self {
-        self.stated_words = stated.filter(|&stated| stated != self.words);
-        self.other_lengths = short
-            .iter()
-            .copied()
-            .filter(|&words| words != self.words)
-            .collect();
-        self
     }
 }
 
@@ -242,193 +231,6 @@ pub enum Recovery {
     Ambiguous(Vec<RecoveredPhrase>),
 }
 
-/// The recovered state `X` of a container, in locked memory and wiped when it is dropped. `X` comes
-/// out of it only as [`RecoveredState::readings`], as often as needed without new rounds, as a
-/// check or a rekey reads it.
-pub(crate) struct RecoveredState {
-    suite: Suite,
-    state: LockedBytes,
-    /// The 12- to 21-word lengths whose built-in check `X` passes, in ascending order.
-    detected: Vec<usize>,
-}
-
-impl RecoveredState {
-    /// The recovery of a container of `suite` whose state is `state`. Length detection applies to
-    /// a 24-word container alone: a same-length state is its entropy, with no built-in check.
-    pub(crate) fn new(suite: Suite, state: LockedBytes) -> Result<Self, MhfeError> {
-        let detected = match suite {
-            Suite::TwentyFourWords => detected_lengths(suite_3_state(&state)?),
-            // Suite 4.
-            _ => Vec::new(),
-        };
-        Ok(Self {
-            suite,
-            state,
-            detected,
-        })
-    }
-
-    /// The suite of the container, which its word count selected.
-    pub(crate) fn suite(&self) -> Suite {
-        self.suite
-    }
-
-    /// The 12- to 21-word lengths whose built-in check passes: one for a short original, none for
-    /// a 24-word one, a wrong password or a same-length container, and more than one only by
-    /// accident.
-    pub(crate) fn detected_lengths(&self) -> &[usize] {
-        &self.detected
-    }
-
-    /// Step 3 of recovery: the readings of `X` for `stated`, in their order, under the container's
-    /// length rules. A same-length container gives one, of its own length, the only one
-    /// [`ContainerFacts::require_length`] lets a person state. In a 24-word container 24 stated
-    /// words end with the 24-word reading, and a short length stated where no check passes gives
-    /// [`MhfeError::VerifierMismatch`] and no reading.
-    pub(crate) fn readings(
-        &self,
-        stated: Option<usize>,
-    ) -> Result<Vec<RecoveredPhrase>, MhfeError> {
-        match self.suite {
-            Suite::TwentyFourWords => {
-                let x = suite_3_state(&self.state)?;
-                lengths(stated, &self.detected)?
-                    .into_iter()
-                    .map(|words| Ok(read_as(x, words)?.compared_with(stated, &self.detected)))
-                    .collect()
-            }
-            // Suite 4.
-            _ => Ok(vec![read_same_length(&self.state)?]),
-        }
-    }
-}
-
-/// MHFE at one work factor, together with the Argon2 engine that computes it.
-pub struct Mhfe<E: Argon2Engine> {
-    work: WorkFactor,
-    engine: E,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl Mhfe<mhfe_core::NativeArgon2> {
-    /// Checks that the computer has the memory the settings need and reserves it once for all
-    /// twelve rounds.
-    pub fn new(work: WorkFactor) -> Result<Self, MhfeError> {
-        Ok(Self {
-            work,
-            engine: crate::engine::reserve(work)?,
-        })
-    }
-}
-
-impl<E: Argon2Engine> Mhfe<E> {
-    /// Uses `engine`, which computes Argon2id at the cost each round asks for: the browser engine,
-    /// the engine of the self-checks that answers only published rounds, or a cheaper one in tests.
-    #[cfg(any(test, not(target_arch = "wasm32"), feature = "browser-core"))]
-    pub(crate) fn with_engine(work: WorkFactor, engine: E) -> Self {
-        Self { work, engine }
-    }
-
-    /// The engine that computes the rounds, such as the browser engine, whose known answer an
-    /// operation runs again after its last round.
-    pub fn engine(&self) -> &E {
-        &self.engine
-    }
-
-    /// The PIM and memory level every round of this instance runs at.
-    pub fn work_factor(&self) -> WorkFactor {
-        self.work
-    }
-
-    /// Creation from the packing on ([`encrypt`]), for the `entropy` of an original already read.
-    /// It takes the entropy rather than the read phrase, which the caller would hold through the
-    /// rounds outside locked memory (AUD-010).
-    pub(crate) fn encrypt(
-        &mut self,
-        entropy: LockedBytes,
-        password: &Password,
-        suite: Suite,
-        on_round: ProgressCallback<'_>,
-        on_unchecked: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
-    ) -> Result<Zeroizing<String>, MhfeError> {
-        require_original(suite, packing::words_of_entropy(entropy.len()))?;
-        let x = match suite {
-            Suite::TwentyFourWords => packing::pack(&entropy)?,
-            // Suite 4 encrypts the entropy itself: there is no room for a check value.
-            _ => entropy,
-        };
-        let y = self
-            .permutation(password, geometry(suite, &x)?)
-            .forward(&x, &mut |round| on_round(round, ENCRYPTION_ROUNDS))?;
-        reject_fixed_point(&x, &y)?;
-        let words = Zeroizing::new(Phrase::from_entropy(&y)?.as_str().to_owned());
-        on_unchecked(&words)?;
-        // Creation step 6: reads the container's words again, recovers them and compares the
-        // result with the original. A memory error or another fault during the long computation
-        // would otherwise give a container that no longer turns back into the original. Starting
-        // from the words covers their encoding as well as the rounds.
-        let container =
-            phrase::parse_container(&words).map_err(|_| MhfeError::VerificationFailed)?;
-        let (read_suite, y) = container_state(&container)?;
-        if read_suite != suite {
-            return Err(MhfeError::VerificationFailed);
-        }
-        let recovered = self
-            .permutation(password, geometry(suite, &y)?)
-            .inverse(&y, &mut |round| on_round(ROUNDS + round, ENCRYPTION_ROUNDS))?;
-        if recovered[..] == x[..] {
-            Ok(words)
-        } else {
-            Err(MhfeError::VerificationFailed)
-        }
-    }
-
-    /// Steps 1 and 2 of recovery, for a `container` already read: computes `X = Perm^-1(Y)` with
-    /// the suite its word count selects. `X` is written into locked memory, which the caller holds
-    /// while it reads it.
-    pub(crate) fn recover_state(
-        &mut self,
-        container: &Mnemonic,
-        password: &Password,
-        selected: Option<Suite>,
-        on_progress: ProgressCallback<'_>,
-    ) -> Result<RecoveredState, MhfeError> {
-        let (suite, y) = container_state(container)?;
-        match selected {
-            Some(Suite::TwentyFourWords) if suite != Suite::TwentyFourWords => {
-                return Err(MhfeError::InvalidContainer(format!(
-                    "it has {} words, but a 24-word container always has 24",
-                    container.word_count()
-                )))
-            }
-            Some(Suite::SameLength) if suite != Suite::SameLength => {
-                return Err(MhfeError::InvalidContainer(format!(
-                    "it has {STATE_WORDS} words, but a same-length container has {}",
-                    phrase::counts_text(&packing::SHORT_WORD_COUNTS)
-                )))
-            }
-            _ => {}
-        }
-        let x = self
-            .permutation(password, geometry(suite, &y)?)
-            .inverse(&y, &mut |round| on_progress(round, ROUNDS))?;
-        RecoveredState::new(suite, x)
-    }
-
-    fn permutation<'a>(
-        &'a mut self,
-        password: &'a Password,
-        geometry: Geometry,
-    ) -> Permutation<'a> {
-        Permutation {
-            engine: &mut self.engine,
-            password,
-            work: self.work,
-            geometry,
-        }
-    }
-}
-
 /// Encrypts an original phrase and checks the result (creation steps 1 to 6), 24 rounds in
 /// all. With [`Suite::TwentyFourWords`], the default, any original of 12 to 24 words becomes a
 /// 24-word container; with [`Suite::SameLength`], which only the user's own choice may select,
@@ -441,17 +243,22 @@ impl<E: Argon2Engine> Mhfe<E> {
 pub fn encrypt<E: Argon2Engine>(
     mhfe: &mut Mhfe<E>,
     original: &str,
-    // A deliberate copy of the other parameters of Mhfe::encrypt, which it passes on.
     password: &Password,
     suite: Suite,
     on_round: ProgressCallback<'_>,
-    on_unchecked: &mut dyn FnMut(&str) -> Result<(), MhfeError>,
-) -> Result<Zeroizing<String>, MhfeError> {
-    // The entropy and the state are phrase in all but form: both are locked before they are
-    // written, and stay locked through the rounds, while the work area of Argon2 puts the most
-    // pressure on memory. The state is what the check must get back.
-    let entropy = locked_entropy(&phrase::parse(original).map_err(MhfeError::InvalidPhrase)?);
-    mhfe.encrypt(entropy, password, suite, on_round, on_unchecked)
+    on_unchecked: &mut dyn FnMut(&Phrase) -> Result<(), MhfeError>,
+) -> Result<Phrase, MhfeError> {
+    let original = read_phrase(original)?;
+    let work = mhfe.work_factor();
+    let stopped = Stopped::default();
+    mhfe.encrypt(
+        &original,
+        password,
+        suite,
+        &mut |round, rounds| stopped.answer(on_round(round, rounds)),
+        &mut |container| stopped.answer(on_unchecked(container)),
+    )
+    .map_err(|refusal| stopped.error(refusal, work))
 }
 
 /// Recovers the original phrase from a container. Its word count selects the suite: 24 words
@@ -482,8 +289,8 @@ pub fn decrypt_as<E: Argon2Engine>(
     if selected != Some(Suite::TwentyFourWords) {
         ContainerFacts::read(container)?.require_length(length)?;
     }
-    let mut readings = recover_state(mhfe, container, password, selected, on_progress)?
-        .readings(length.stated())?;
+    let recovery = recover_state(mhfe, container, password, selected, on_progress)?;
+    let mut readings = readings(&recovery, length.stated())?;
     if readings.len() == 1 {
         Ok(Recovery::Phrase(readings.remove(0)))
     } else {
@@ -491,107 +298,81 @@ pub fn decrypt_as<E: Argon2Engine>(
     }
 }
 
-/// [`Mhfe::recover_state`] of a container as typed: every operation that recovers one reads it
-/// here.
+/// Steps 1 and 2 of recovery, of a container as typed: computes `X = Perm^-1(Y)` with the suite its
+/// word count selects, refusing a container of another suite than `selected`. Every operation that
+/// recovers one reads it here.
 pub(crate) fn recover_state<E: Argon2Engine>(
     mhfe: &mut Mhfe<E>,
     container: &str,
     password: &Password,
     selected: Option<Suite>,
     on_progress: ProgressCallback<'_>,
-) -> Result<RecoveredState, MhfeError> {
-    let container = phrase::parse_container(container).map_err(MhfeError::InvalidContainer)?;
-    mhfe.recover_state(&container, password, selected, on_progress)
+) -> Result<mhfe_core::Recovery, MhfeError> {
+    let container = phrase::read(container, MhfeError::InvalidContainer)?;
+    let work = mhfe.work_factor();
+    let stopped = Stopped::default();
+    mhfe.decrypt(
+        &container,
+        password,
+        None,
+        selected,
+        &mut |round, rounds| stopped.answer(on_progress(round, rounds)),
+    )
+    .map_err(|refusal| match refusal {
+        mhfe_core::Error::SuiteNotAdmitted { container_words } => {
+            MhfeError::InvalidContainer(if selected == Some(Suite::TwentyFourWords) {
+                format!("it has {container_words} words, but a 24-word container always has 24")
+            } else {
+                format!(
+                    "it has {STATE_WORDS} words, but a same-length container has {}",
+                    phrase::counts_text(&packing::SHORT_WORD_COUNTS)
+                )
+            })
+        }
+        other => stopped.error(other, work),
+    })
 }
 
-/// The permutation of a suite for a state of the container's size.
-fn geometry(suite: Suite, state: &[u8]) -> Result<Geometry, MhfeError> {
-    match suite {
-        Suite::TwentyFourWords => Ok(Geometry::SUITE_3),
-        // Suite 4.
-        _ => Geometry::same_length(state.len()),
+/// Step 3 of recovery: the readings of `recovery` for `stated`, in their order, under the core's
+/// length rules. A same-length container gives one, of its own length, the only one
+/// [`ContainerFacts::require_length`] lets a person state. In a 24-word container 24 stated words
+/// end with the 24-word reading, and a short length stated where no check passes gives
+/// [`MhfeError::VerifierMismatch`] and no reading.
+pub(crate) fn readings(
+    recovery: &mhfe_core::Recovery,
+    stated: Option<usize>,
+) -> Result<Vec<RecoveredPhrase>, MhfeError> {
+    let (suite, short) = (recovery.suite(), recovery.detected_lengths());
+    Ok(recovery
+        .readings(stated)?
+        .into_iter()
+        .map(|reading| RecoveredPhrase::new(reading, suite, stated, short))
+        .collect())
+}
+
+/// The first error of a callback of an operation, kept across the core, whose callbacks can only
+/// say `Break`, which it gives back as [`mhfe_core::Error::Cancelled`].
+#[derive(Default)]
+struct Stopped(Cell<Option<MhfeError>>);
+
+impl Stopped {
+    /// What a callback of the core answers for `outcome`.
+    fn answer(&self, outcome: Result<(), MhfeError>) -> ControlFlow<()> {
+        match outcome {
+            Ok(()) => ControlFlow::Continue(()),
+            Err(error) => {
+                self.0.set(Some(error));
+                ControlFlow::Break(())
+            }
+        }
     }
-}
 
-/// A recovered suite 3 state as the fixed 256-bit array the packing works on, read in place: a
-/// copy would lie outside the locked buffer that holds it.
-fn suite_3_state(x: &[u8]) -> Result<&State, MhfeError> {
-    x.try_into()
-        .map_err(|_| MhfeError::Internal(format!("a suite 3 state has 32 bytes, not {}", x.len())))
-}
-
-/// The length rules of a 24-word container, as the specification's recovery gives them (step 3
-/// and the stated length after it): the word counts of the readings for `stated`, in their order,
-/// when the built-in checks of `short` pass. Every short length's check is tested, also when the
-/// person stated a length, and a check that passes takes precedence over the stated length.
-fn lengths(stated: Option<usize>, short: &[usize]) -> Result<Vec<usize>, MhfeError> {
-    match (stated, short) {
-        // A stated length whose check passes is the result, also among others that pass by
-        // chance.
-        (Some(words), _) if short.contains(&words) => Ok(vec![words]),
-        // No check passes: the 24-word reading, unless a short length was stated, whose check
-        // then fails: a wrong password or setting, or a 24-word phrase.
-        (None | Some(STATE_WORDS), []) => Ok(vec![STATE_WORDS]),
-        (Some(_), []) => Err(MhfeError::VerifierMismatch),
-        // One check passes, at another short length than the one stated, or with none stated.
-        (None, [words]) => Ok(vec![*words]),
-        (Some(stated), [words]) if stated != STATE_WORDS => Ok(vec![*words]),
-        // Several checks pass, or one beside 24 stated words, which pass a short check by chance
-        // about once in 2^32: every reading, the checked ones first and the 24-word one last.
-        _ => Ok(short.iter().copied().chain([STATE_WORDS]).collect()),
+    /// The error of an operation at `work` that the core ended with `refusal`.
+    fn error(&self, refusal: mhfe_core::Error, work: WorkFactor) -> MhfeError {
+        self.0
+            .take()
+            .unwrap_or_else(|| error_of(refusal, memory_bytes(work)))
     }
-}
-
-/// Refuses a container equal to the original. A working implementation meets `Y = X` with
-/// probability 2^-256 (2^-ENT for a same-length container); the check stops a broken engine that
-/// returns its input from exposing the original phrase.
-fn reject_fixed_point(x: &[u8], y: &[u8]) -> Result<(), MhfeError> {
-    if x == y {
-        Err(MhfeError::FixedPoint)
-    } else {
-        Ok(())
-    }
-}
-
-/// The suite and the encrypted state `Y` of a container: its entropy.
-pub(crate) fn container_state(
-    container: &Mnemonic,
-) -> Result<(Suite, Zeroizing<Vec<u8>>), MhfeError> {
-    let words = container.word_count();
-    let suite = Suite::of_container(words).ok_or(MhfeError::InvalidWordCount(words))?;
-    Ok((suite, Zeroizing::new(container.to_entropy())))
-}
-
-/// Reads the state `x` of a same-length container as its only reading, the phrase of its own
-/// length, which has no built-in check.
-fn read_same_length(x: &[u8]) -> Result<RecoveredPhrase, MhfeError> {
-    Ok(RecoveredPhrase::new(
-        packing::words_of_entropy(x.len()),
-        false,
-        LockedText::copy_of(Phrase::from_entropy(x)?.as_str()),
-        Suite::SameLength,
-    ))
-}
-
-/// Reads `X` as a phrase of `words` words; a short length must pass its check.
-fn read_as(x: &State, words: usize) -> Result<RecoveredPhrase, MhfeError> {
-    Ok(RecoveredPhrase::new(
-        words,
-        // A short length carries a built-in check, which unpack has passed.
-        built_in_check_lengths(Suite::TwentyFourWords).contains(&words),
-        LockedText::copy_of(Phrase::from_entropy(packing::unpack(x, words)?)?.as_str()),
-        Suite::TwentyFourWords,
-    ))
-}
-
-/// The entropy of `phrase` in a buffer that is locked before it is written into it, read from the
-/// array that bip39 fills on the stack, which is wiped here, rather than from a vector it would
-/// leave unlocked.
-fn locked_entropy(phrase: &Mnemonic) -> LockedBytes {
-    let (mut array, length) = phrase.to_entropy_array();
-    let entropy = LockedBytes::copy_of(&array[..length]);
-    array.zeroize();
-    entropy
 }
 
 #[cfg(test)]
@@ -637,38 +418,6 @@ mod tests {
         }
     }
 
-    /// The entropy and the state of an encryption are locked before the first round and stay so
-    /// until its check is done, and a recovered state is written into locked memory (AUD-010).
-    #[test]
-    fn the_state_of_an_operation_is_held_in_locked_memory() {
-        let password = test_password();
-        let mut mhfe = reduced();
-        let entropy = locked_entropy(&phrase::parse(ZERO_12).unwrap());
-        let packed = packing::pack(&entropy).unwrap();
-        for (suite, source) in [
-            (Suite::TwentyFourWords, &packed),
-            (Suite::SameLength, &entropy),
-        ] {
-            assert_eq!(source.is_locked(), cfg!(unix));
-            let container = encrypt(
-                &mut mhfe,
-                ZERO_12,
-                &password,
-                suite,
-                &mut no_progress(),
-                &mut |_| Ok(()),
-            )
-            .unwrap();
-            let recovered =
-                recover_state(&mut mhfe, &container, &password, None, &mut no_progress()).unwrap();
-            assert_eq!(recovered.state[..], source[..]);
-            assert_eq!(recovered.state.is_locked(), cfg!(unix));
-        }
-        let entropy = locked_entropy(&phrase::parse(LEGAL_24).unwrap());
-        assert_eq!(entropy[..], [0x7f; 32]);
-        assert_eq!(entropy.is_locked(), cfg!(unix));
-    }
-
     #[test]
     fn round_trips_every_phrase_length_with_the_c_engine() {
         let password = test_password();
@@ -684,30 +433,30 @@ mod tests {
                 &mut |_| Ok(()),
             )
             .unwrap();
-            assert_eq!(container.split(' ').count(), 24);
+            assert_eq!(container.words(), 24);
 
             let detected = only_phrase(
                 decrypt(
                     &mut mhfe,
-                    &container,
+                    container.as_str(),
                     &password,
                     PhraseLength::Detect,
                     &mut no_progress(),
                 )
                 .unwrap(),
             );
-            assert_eq!(*detected.phrase, *original);
-            assert_eq!(detected.words, words);
+            assert_eq!(detected.phrase(), original);
+            assert_eq!(detected.words(), words);
             assert_eq!(detected.verified, words < 24);
 
             // Stating the length gives the same phrase.
             let chosen = recovery_at(
                 &mut mhfe,
-                &container,
+                container.as_str(),
                 &password,
                 WordCount::new(words).unwrap(),
             );
-            assert_eq!(*chosen.phrase, *original);
+            assert_eq!(chosen.phrase(), original);
         }
     }
 
@@ -730,7 +479,7 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
-        assert_eq!(*container, REDUCED_COST_CONTAINER);
+        assert_eq!(container.as_str(), REDUCED_COST_CONTAINER);
     }
 
     #[test]
@@ -751,19 +500,19 @@ mod tests {
         let detected = only_phrase(
             decrypt(
                 &mut mhfe,
-                &container,
+                container.as_str(),
                 &wrong,
                 PhraseLength::Detect,
                 &mut no_progress(),
             )
             .unwrap(),
         );
-        assert_eq!(detected.words, 24);
+        assert_eq!(detected.words(), 24);
         assert!(!detected.verified);
         assert_eq!(
             decrypt(
                 &mut mhfe,
-                &container,
+                container.as_str(),
                 &wrong,
                 PhraseLength::Words(WordCount::new(12).unwrap()),
                 &mut no_progress()
@@ -797,29 +546,30 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
+        let twelve = twelve.as_str();
         // Another short length stated: the 12-word reading, which says what was stated.
         for words in [15, 18, 21] {
-            let found = only_phrase(stated(&twelve, words).unwrap());
-            assert_eq!((found.words, found.verified), (12, true), "{words}");
-            assert_eq!(*found.phrase, *ZERO_12);
+            let found = only_phrase(stated(twelve, words).unwrap());
+            assert_eq!((found.words(), found.verified), (12, true), "{words}");
+            assert_eq!(found.phrase(), ZERO_12);
             assert_eq!(found.stated_words(), Some(words));
             assert!(found.other_lengths().is_empty());
         }
         // The right length stated: the same reading, with nothing to say.
-        let found = only_phrase(stated(&twelve, 12).unwrap());
-        assert_eq!((found.words, found.stated_words()), (12, None));
+        let found = only_phrase(stated(twelve, 12).unwrap());
+        assert_eq!((found.words(), found.stated_words()), (12, None));
         // 24 words stated: the checked 12-word reading first, then the 24-word one, unverified.
-        let Recovery::Ambiguous(readings) = stated(&twelve, 24).unwrap() else {
+        let Recovery::Ambiguous(readings) = stated(twelve, 24).unwrap() else {
             panic!("24 stated beside a passing check must offer both readings");
         };
         let shape: Vec<_> = readings
             .iter()
-            .map(|reading| (reading.words, reading.verified, reading.stated_words()))
+            .map(|reading| (reading.words(), reading.verified, reading.stated_words()))
             .collect();
         assert_eq!(shape, [(12, true, Some(24)), (24, false, None)]);
-        assert_eq!(*readings[0].phrase, *ZERO_12);
+        assert_eq!(readings[0].phrase(), ZERO_12);
         assert!(readings[1]
-            .phrase
+            .phrase()
             .starts_with("abandon abandon abandon abandon abandon abandon"));
         // A 24-word original passes no short check: a stated short length is refused, as a
         // wrong password or setting would be, and 24 stated words give its reading alone.
@@ -832,16 +582,17 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
+        let twenty_four = twenty_four.as_str();
         assert_eq!(
-            stated(&twenty_four, 12).err(),
+            stated(twenty_four, 12).err(),
             Some(MhfeError::VerifierMismatch)
         );
-        let found = only_phrase(stated(&twenty_four, 24).unwrap());
+        let found = only_phrase(stated(twenty_four, 24).unwrap());
         assert_eq!(
-            (found.words, found.verified, found.stated_words()),
+            (found.words(), found.verified, found.stated_words()),
             (24, false, None)
         );
-        assert_eq!(*found.phrase, *LEGAL_24);
+        assert_eq!(found.phrase(), LEGAL_24);
     }
 
     /// Every 24-word reading offers the 16-bit source check with any passphrase, the empty one
@@ -868,7 +619,7 @@ mod tests {
         let read = only_phrase(
             decrypt(
                 &mut mhfe,
-                &container,
+                container.as_str(),
                 &password,
                 PhraseLength::Detect,
                 &mut no_progress(),
@@ -890,7 +641,7 @@ mod tests {
         let read = only_phrase(
             decrypt(
                 &mut mhfe,
-                &short,
+                short.as_str(),
                 &password,
                 PhraseLength::Detect,
                 &mut no_progress(),
@@ -923,44 +674,44 @@ mod tests {
             let opened = only_phrase(
                 decrypt(
                     &mut mhfe,
-                    &container,
+                    container.as_str(),
                     &decoy,
                     PhraseLength::Words(WordCount::new(24).unwrap()),
                     &mut no_progress(),
                 )
                 .unwrap(),
             );
-            assert_eq!(opened.words, 24);
+            assert_eq!(opened.words(), 24);
             assert!(!opened.verified);
             assert_ne!(opened.phrase(), original);
             // An ordinary BIP39 phrase with a valid checksum, usable as a wallet of its own.
-            assert_eq!(phrase::check_phrase(&opened.phrase).unwrap(), 24);
+            assert_eq!(phrase::check_phrase(opened.phrase()).unwrap(), 24);
 
             // Automatic detection gives the same unverified 24-word reading, just as for an
             // honest 24-word original.
             let detected = only_phrase(
                 decrypt(
                     &mut mhfe,
-                    &container,
+                    container.as_str(),
                     &decoy,
                     PhraseLength::Detect,
                     &mut no_progress(),
                 )
                 .unwrap(),
             );
-            assert_eq!((detected.words, detected.verified), (24, false));
+            assert_eq!((detected.words(), detected.verified), (24, false));
             assert_eq!(detected.phrase(), opened.phrase());
 
             let again = encrypt(
                 &mut mhfe,
-                &opened.phrase,
+                opened.phrase(),
                 &decoy,
                 Suite::TwentyFourWords,
                 &mut no_progress(),
                 &mut |_| Ok(()),
             )
             .unwrap();
-            assert_eq!(*again, *container);
+            assert_eq!(again.as_str(), container.as_str());
         }
     }
 
@@ -969,13 +720,18 @@ mod tests {
         let password = test_password();
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), HashEngine);
         for (text, lengths) in AMBIGUOUS_STATES {
-            // Encrypt the ambiguous state X directly, as if a phrase had packed into it.
+            // A 24-word phrase fills the state alone, so that its container holds this very X.
             let x = state_from_hex(text);
-            let y = mhfe
-                .permutation(&password, Geometry::SUITE_3)
-                .forward(&x, &mut |_| Ok(()))
-                .unwrap();
-            let container = Phrase::from_entropy(&y[..]).unwrap();
+            let original = Phrase::from_entropy(&x).unwrap();
+            let container = encrypt(
+                &mut mhfe,
+                original.as_str(),
+                &password,
+                Suite::TwentyFourWords,
+                &mut no_progress(),
+                &mut |_| Ok(()),
+            )
+            .unwrap();
             let container = container.as_str();
 
             let Recovery::Ambiguous(candidates) = decrypt(
@@ -988,7 +744,7 @@ mod tests {
             .unwrap() else {
                 panic!("expected an ambiguous result for {lengths:?}");
             };
-            let found: Vec<_> = candidates.iter().map(|candidate| candidate.words).collect();
+            let found: Vec<_> = candidates.iter().map(RecoveredPhrase::words).collect();
             assert_eq!(found, [lengths[0], lengths[1], 24]);
             let verified: Vec<_> = candidates
                 .iter()
@@ -996,7 +752,7 @@ mod tests {
                 .collect();
             assert_eq!(verified, [true, true, false]);
             for candidate in &candidates {
-                let entropy = &x[..packing::entropy_bytes(candidate.words).unwrap()];
+                let entropy = &x[..packing::entropy_bytes(candidate.words()).unwrap()];
                 assert_eq!(
                     candidate.phrase(),
                     Phrase::from_entropy(entropy).unwrap().as_str()
@@ -1014,7 +770,7 @@ mod tests {
                 )
                 .unwrap(),
             );
-            assert_eq!(chosen.words, lengths[0]);
+            assert_eq!(chosen.words(), lengths[0]);
             assert_eq!(chosen.other_lengths(), [lengths[1]]);
             assert_eq!(chosen.stated_words(), None);
             // A short length stated that does not pass leaves every reading to choose from.
@@ -1032,7 +788,7 @@ mod tests {
             .unwrap() else {
                 panic!("a stated length that fails leaves the ambiguity");
             };
-            let found: Vec<_> = readings.iter().map(|reading| reading.words).collect();
+            let found: Vec<_> = readings.iter().map(RecoveredPhrase::words).collect();
             assert_eq!(found, [lengths[0], lengths[1], 24]);
             assert!(readings
                 .iter()
@@ -1153,18 +909,6 @@ mod tests {
     }
 
     #[test]
-    fn refuses_a_container_equal_to_the_original() {
-        let state = [7u8; packing::STATE_BYTES];
-        assert_eq!(
-            reject_fixed_point(&state, &state),
-            Err(MhfeError::FixedPoint)
-        );
-        let mut different = state;
-        different[31] ^= 1;
-        assert_eq!(reject_fixed_point(&state, &different), Ok(()));
-    }
-
-    #[test]
     fn encryption_checks_its_result_in_24_rounds() {
         let password = test_password();
         let mut steps = Vec::new();
@@ -1236,12 +980,12 @@ mod tests {
                 Ok(())
             },
             &mut |container| {
-                shown.push((last_round.get(), container.to_owned()));
+                shown.push((last_round.get(), container.as_str().to_owned()));
                 Ok(())
             },
         )
         .unwrap();
-        assert_eq!(*container, REDUCED_COST_CONTAINER);
+        assert_eq!(container.as_str(), REDUCED_COST_CONTAINER);
         assert_eq!(shown, [(12, REDUCED_COST_CONTAINER.to_owned())]);
     }
 
@@ -1282,6 +1026,147 @@ mod tests {
         assert_eq!(last_round, 12);
     }
 
+    /// Every round asks for the memory and the passes of the work factor. The other test engines
+    /// ignore what is asked, so no other fast test sees a wrong cost.
+    #[test]
+    fn every_round_asks_for_the_cost_of_the_work_factor() {
+        struct Costs(Vec<(u32, u32)>);
+        // A deliberate copy of the trait's signature, which an implementation repeats.
+        impl Argon2Engine for Costs {
+            fn argon2id(
+                &mut self,
+                password: &[u8],
+                salt: &[u8; 16],
+                memory_kib: u32,
+                passes: u32,
+                key: &mut [u8; 32],
+            ) -> Result<(), mhfe_core::Error> {
+                self.0.push((memory_kib, passes));
+                HashEngine.argon2id(password, salt, memory_kib, passes, key)
+            }
+        }
+        let work = WorkFactor::new(2, 1).unwrap();
+        let mut mhfe = Mhfe::with_engine(work, Costs(Vec::new()));
+        encrypt(
+            &mut mhfe,
+            ZERO_12,
+            &test_password(),
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        // Memory level 1 is 3 GiB, and PIM 2 is three times the 12 passes.
+        assert_eq!(mhfe.engine().0, [(3 << 20, 36); 24]);
+    }
+
+    /// An error of a callback comes back as it is, though the core only knows a stop.
+    #[test]
+    fn a_callback_s_own_error_comes_back_as_it_is() {
+        let own = || MhfeError::Internal("a stop of the test".to_owned());
+        let password = test_password();
+        let suite = Suite::TwentyFourWords;
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), HashEngine);
+        let at_a_round = encrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            suite,
+            &mut |_, _| Err(own()),
+            &mut |_| Ok(()),
+        );
+        assert_eq!(at_a_round.err(), Some(own()));
+        let at_the_container = encrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            suite,
+            &mut no_progress(),
+            &mut |_| Err(own()),
+        );
+        assert_eq!(at_the_container.err(), Some(own()));
+        let in_a_recovery = decrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            PhraseLength::Detect,
+            &mut |_, _| Err(own()),
+        );
+        assert_eq!(in_a_recovery.err(), Some(own()));
+    }
+
+    /// An engine that cannot get its memory is reported with the memory of the settings, which the
+    /// core does not name.
+    #[test]
+    fn a_refused_work_area_names_the_memory_of_the_settings() {
+        struct NoMemory;
+        // A deliberate copy of the trait's signature, which an implementation repeats.
+        impl Argon2Engine for NoMemory {
+            fn argon2id(
+                &mut self,
+                _: &[u8],
+                _: &[u8; 16],
+                _: u32,
+                _: u32,
+                _: &mut [u8; 32],
+            ) -> Result<(), mhfe_core::Error> {
+                Err(mhfe_core::Error::OutOfMemory)
+            }
+        }
+        let password = test_password();
+        let mut mhfe = Mhfe::with_engine(WorkFactor::new(0, 1).unwrap(), NoMemory);
+        let refusal = Some(MhfeError::MemoryAllocation { bytes: 3 << 30 });
+        let encrypted = encrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            Suite::TwentyFourWords,
+            &mut no_progress(),
+            &mut |_| Ok(()),
+        );
+        assert_eq!(encrypted.err(), refusal);
+        let recovered = decrypt(
+            &mut mhfe,
+            ZERO_12,
+            &password,
+            PhraseLength::Detect,
+            &mut no_progress(),
+        );
+        assert_eq!(recovered.err(), refusal);
+    }
+
+    /// A selected suite refuses a container of the other one in mhfe's words, which say what its
+    /// containers have.
+    #[test]
+    fn a_selected_suite_says_what_its_containers_have() {
+        let password = test_password();
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), NoArgon2Calls);
+        let mut refused = |container, selected| {
+            let length = PhraseLength::Detect;
+            decrypt_as(
+                &mut mhfe,
+                container,
+                &password,
+                Some(selected),
+                length,
+                &mut no_progress(),
+            )
+            .err()
+        };
+        assert_eq!(
+            refused(ZERO_12, Suite::TwentyFourWords),
+            Some(MhfeError::InvalidContainer(
+                "it has 12 words, but a 24-word container always has 24".to_owned()
+            ))
+        );
+        assert_eq!(
+            refused(LEGAL_24, Suite::SameLength),
+            Some(MhfeError::InvalidContainer(
+                "it has 24 words, but a same-length container has 12, 15, 18 or 21".to_owned()
+            ))
+        );
+    }
+
     /// The same container must come out of every engine at this reduced cost, as
     /// [`REDUCED_COST_CONTAINER`] for suite 3.
     pub(crate) const REDUCED_COST_SAME_LENGTH_CONTAINER: &str =
@@ -1302,21 +1187,21 @@ mod tests {
                 &mut |_| Ok(()),
             )
             .unwrap();
-            assert_eq!(container.split(' ').count(), words);
-            assert_ne!(*container, *original);
+            assert_eq!(container.words(), words);
+            assert_ne!(container.as_str(), original);
 
             let recovered = only_phrase(
                 decrypt(
                     &mut mhfe,
-                    &container,
+                    container.as_str(),
                     &password,
                     PhraseLength::Detect,
                     &mut no_progress(),
                 )
                 .unwrap(),
             );
-            assert_eq!(*recovered.phrase, *original);
-            assert_eq!(recovered.words, words);
+            assert_eq!(recovered.phrase(), original);
+            assert_eq!(recovered.words(), words);
             assert_eq!(recovered.suite, Suite::SameLength);
             // Nothing in a same-length container confirms a recovery.
             assert!(!recovered.verified);
@@ -1324,11 +1209,11 @@ mod tests {
             // Stating the length gives the same phrase.
             let chosen = recovery_at(
                 &mut mhfe,
-                &container,
+                container.as_str(),
                 &password,
                 WordCount::new(words).unwrap(),
             );
-            assert_eq!(*chosen.phrase, *original);
+            assert_eq!(chosen.phrase(), original);
         }
     }
 
@@ -1344,7 +1229,7 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
-        assert_eq!(*container, REDUCED_COST_SAME_LENGTH_CONTAINER);
+        assert_eq!(container.as_str(), REDUCED_COST_SAME_LENGTH_CONTAINER);
     }
 
     /// A wrong password opens a same-length container as another valid phrase of the same
@@ -1367,26 +1252,26 @@ mod tests {
         let opened = only_phrase(
             decrypt(
                 &mut mhfe,
-                &container,
+                container.as_str(),
                 &decoy,
                 PhraseLength::Detect,
                 &mut no_progress(),
             )
             .unwrap(),
         );
-        assert_eq!((opened.words, opened.verified), (12, false));
+        assert_eq!((opened.words(), opened.verified), (12, false));
         assert_ne!(opened.phrase(), ZERO_12);
-        assert_eq!(phrase::check_phrase(&opened.phrase).unwrap(), 12);
+        assert_eq!(phrase::check_phrase(opened.phrase()).unwrap(), 12);
         let again = encrypt(
             &mut mhfe,
-            &opened.phrase,
+            opened.phrase(),
             &decoy,
             Suite::SameLength,
             &mut no_progress(),
             &mut |_| Ok(()),
         )
         .unwrap();
-        assert_eq!(*again, *container);
+        assert_eq!(again.as_str(), container.as_str());
     }
 
     #[test]
@@ -1411,9 +1296,9 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
-        assert_eq!(standard.split(' ').count(), 24);
-        assert_eq!(same_length.split(' ').count(), 12);
-        assert!(!standard.starts_with(same_length.as_str()));
+        assert_eq!(standard.words(), 24);
+        assert_eq!(same_length.words(), 12);
+        assert!(!standard.as_str().starts_with(same_length.as_str()));
     }
 
     /// A shared validation fixture, `tests/spec/vectors/suite3/validation-cases.json` or
@@ -1477,40 +1362,6 @@ mod tests {
             let error = error.unwrap_or_else(|| panic!("{id}: accepted"));
             assert_eq!(error.code(), text(case, "expected_error"), "{id}");
         }
-    }
-
-    #[test]
-    fn length_detection_matches_the_fixture() {
-        let fixture = fixture_of(crate::validation_fixtures::SUITE_3);
-        for case in cases(&fixture, "length_detection") {
-            let id = text(case, "id");
-            let state: packing::State = hex::decode(text(case, "state_hex"))
-                .unwrap()
-                .try_into()
-                .unwrap();
-            if let Some(entropy) = case.get("entropy_hex") {
-                let packed =
-                    packing::pack(&hex::decode(entropy.as_str().unwrap()).unwrap()).unwrap();
-                assert_eq!(*packed, state, "{id}");
-            }
-            let expected: Vec<usize> = case["matching_short_lengths"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|words| words.as_u64().unwrap() as usize)
-                .collect();
-            assert_eq!(detected_lengths(&state), expected, "{id}");
-        }
-    }
-
-    #[test]
-    fn the_verifier_keeps_digest_byte_order() {
-        let fixture = fixture_of(crate::validation_fixtures::SUITE_3);
-        let case = &fixture["verifier_serialization"];
-        let entropy = hex::decode(text(case, "entropy_hex")).unwrap();
-        let state = packing::pack(&entropy).unwrap();
-        assert_eq!(hex::encode(&state[..]), text(case, "state_hex"));
-        assert_eq!(hex::encode(&state[28..]), text(case, "verifier_hex"));
     }
 
     /// The fixture's refusals of suite 4, before Argon2 as well.

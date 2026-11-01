@@ -15,7 +15,7 @@
 //! word, and the first four letters of a word are enough. A candidate that matches proves only
 //! what the reference proves: an address strongly, a fingerprint with 32 bits.
 
-use mhfe_core::{Argon2Engine, Password, Suite};
+use mhfe_core::{Argon2Engine, Mhfe, Password, Suite};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -25,7 +25,7 @@ use crate::rehearsal::{self, CheckOutcome, Reference};
 use crate::repair::ContainerReading;
 use crate::suite::built_in_check_lengths;
 use crate::wallet::SearchLimits;
-use crate::{Mhfe, MhfeError};
+use crate::MhfeError;
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -600,7 +600,7 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
-        let short = ContainerSearch::new(&with(&same_length, &[(1, "?")])).unwrap();
+        let short = ContainerSearch::new(&with(same_length.as_str(), &[(1, "?")])).unwrap();
         let refused = short.search_own_checks(&mut mhfe, &password, None, &mut |_, _, _, _| Ok(()));
         assert_eq!(refused.err().unwrap().code(), "NO_BUILT_IN_CHECK");
     }

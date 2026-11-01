@@ -60,6 +60,11 @@ impl ContainerFacts {
         self.phrase.as_str()
     }
 
+    /// The container as read, for what takes a phrase, such as [`crate::repair::repair_words`].
+    pub fn phrase(&self) -> &Phrase {
+        &self.phrase
+    }
+
     /// The number of words of the container: 24, or 12 to 21 for a same-length container.
     pub fn word_count(&self) -> usize {
         self.word_count

@@ -440,9 +440,9 @@ async function checkEarlyRefusals(created, reduced) {
     { sameLength: false, words: 24, wrongWordPassesOneIn: 256, otherLengths: [] },
     { sameLength: true, words: 12, wrongWordPassesOneIn: 16, otherLengths: [] },
   ]);
-  // A public 12-word phrase whose packed state also passes the 21-word check (src/packing.rs):
-  // a 24-word container of it can be misread, a same-length one cannot, as the command-line tool
-  // warns only for the first.
+  // A public 12-word phrase whose packed state also passes the 21-word check (the specification's
+  // "Packing"): a 24-word container of it can be misread, a same-length one cannot, as the
+  // command-line tool warns only for the first.
   const ambiguous = JSON.parse(core.describePhrase(encode(AMBIGUOUS_12_WORDS)));
   assert.deepEqual(ambiguous.otherLengths, [21]);
   assert.deepEqual(

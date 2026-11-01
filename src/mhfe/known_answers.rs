@@ -12,21 +12,19 @@
 //! [`PublishedRoundKeys`] cannot encrypt anything but a published vector, so it is no reduced-cost
 //! engine: a release build may hold it.
 
-use mhfe_core::{Argon2Engine, Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Mhfe, Password, Phrase, Suite, WorkFactor};
 
 use super::published_rounds::PUBLISHED;
 use super::{decrypt, decrypt_as, encrypt, RecoveredPhrase};
-use crate::detection::detected_lengths;
 use crate::engine::{KEY_BYTES, SALT_BYTES};
-use crate::feistel::{round_mask, round_message, round_salt, Geometry};
 use crate::operation::Encryption;
-use crate::packing::{self, STATE_WORDS};
+use crate::packing::STATE_WORDS;
 use crate::self_check::{
     digest_outcome, expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, DigestCase,
     Findings, Tier,
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
-use crate::{Mhfe, MhfeError, PhraseLength, Recovery, WordCount};
+use crate::{MhfeError, PhraseLength, Recovery, WordCount};
 
 /// One published vector as the checks replay it.
 #[derive(Clone, Copy)]
@@ -295,7 +293,7 @@ impl ComponentCheck for CipherHashesCheck {
 const ZERO_12_REPAIR_WORDS: (&str, usize, &str) = ("zero-12", 4, "shaft pupil patient jewel");
 
 /// The `cipher-rounds` check: every vector of the tier through encryption, its check and
-/// recovery, then the refusals, and suite 4's round message, salt and mask for each entropy size.
+/// recovery, then the refusals.
 pub(crate) struct CipherRoundsCheck {
     vectors: &'static [PublishedVector],
 }
@@ -440,7 +438,7 @@ impl CipherRoundsCheck {
                 expect(
                     same_reading(checked, published)
                         && checked.stated_words() == Some(STATE_WORDS)
-                        && (read_as_24.words, read_as_24.verified) == (STATE_WORDS, false),
+                        && (read_as_24.words(), read_as_24.verified) == (STATE_WORDS, false),
                     "reads 24 stated words otherwise than the length rules say",
                 )
             },
@@ -539,45 +537,9 @@ pub(crate) fn same_readings(recovery: &Recovery, published: &[PublishedReading])
 
 /// Whether one reading is the published one: its length, its check and its phrase.
 fn same_reading(reading: &RecoveredPhrase, expected: &PublishedReading) -> bool {
-    reading.words == expected.words
+    reading.words() == expected.words
         && reading.verified == expected.verified
-        && *reading.phrase == *expected.phrase
-}
-
-/// Suite 4's round message, salt and mask for each entropy size, with a stand-in key: the
-/// `ent_separation` cases of the suite 4 validation fixture.
-fn entropy_separation(fixture: &Fixture, findings: &mut Findings) {
-    let cases = match fixture.cases("ent_separation") {
-        Ok(cases) => cases,
-        Err(damaged) => return findings.one(|| Err(damaged)),
-    };
-    findings.each("entropy size", cases, |case| {
-        let entropy_bytes = usize::try_from(fixtures::number(case, "entropy_bits")? / 8)
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
-        let geometry = Geometry::same_length(entropy_bytes).map_err(stopped)?;
-        let work = WorkFactor::new(
-            fixtures::number_u32(case, "pim")?,
-            fixtures::number_u32(case, "memory_level")?,
-        )
-        .map_err(stopped)?;
-        let half = fixtures::bytes(case, "half_hex")?;
-        let message = round_message(geometry, work, fixtures::number_u32(case, "round")?, &half);
-        expect(
-            [geometry.ds_salt(), &message].concat() == fixtures::bytes(case, "salt_input_hex")?,
-            "gives another salt input",
-        )?;
-        expect(
-            round_salt(geometry, &message)[..] == fixtures::bytes(case, "salt_hex")?[..],
-            "gives another salt",
-        )?;
-        let key: [u8; KEY_BYTES] = fixtures::bytes(case, "key_hex")?
-            .try_into()
-            .map_err(|_| "the built-in cases are damaged".to_owned())?;
-        expect(
-            round_mask(geometry, &key, &message) == fixtures::bytes(case, "mask_hex")?,
-            "gives another mask",
-        )
-    });
+        && reading.phrase() == expected.phrase
 }
 
 impl ComponentCheck for CipherRoundsCheck {
@@ -599,24 +561,13 @@ impl ComponentCheck for CipherRoundsCheck {
         findings.each("vector", &vectors, |vector| self.replay(vector));
         self.length_rules(&mut findings);
         self.refusals(&mut findings);
-        match Fixture::read(crate::validation_fixtures::SUITE_4) {
-            Ok(fixture) => {
-                findings.one(|| {
-                    expect(
-                        fixture.text("suite_id")? == Suite::SameLength.id(),
-                        "the built-in cases are of another suite",
-                    )
-                });
-                entropy_separation(&fixture, &mut findings);
-            }
-            Err(damaged) => findings.one(|| Err(damaged)),
-        }
         findings.outcome()
     }
 }
 
-/// The `formats` check: the settings, the length detection, the verifier's byte order and the
-/// refusals of bad phrases and containers before any Argon2 work, from the validation fixtures.
+/// The `formats` check: the settings, the length detection and the refusals of bad phrases and
+/// containers before any Argon2 work, from the validation fixtures. A case of length detection
+/// reads its state as a 24-word phrase, which fills the state alone, as the core keeps `X` private.
 /// Startup runs the suite 3 fixture; the full self-test adds the 63 refusals of suite 4. The
 /// refusals run with an engine that answers nothing, so an input that reaches Argon2 fails with
 /// another error code instead of being refused first.
@@ -663,28 +614,15 @@ impl FormatsCheck {
             "length detection case",
             fixture.cases("length_detection")?,
             |case| {
-                let state: packing::State = fixtures::bytes(case, "state_hex")?
-                    .try_into()
-                    .map_err(|_| "the built-in cases are damaged".to_owned())?;
-                if case.get("entropy_hex").is_some() {
-                    let packed =
-                        packing::pack(&fixtures::bytes(case, "entropy_hex")?).map_err(stopped)?;
-                    expect(*packed == state, "packs another state")?;
-                }
+                let state = fixtures::bytes(case, "state_hex")?;
+                let phrase = Phrase::from_entropy(&state).map_err(stopped)?;
                 expect(
-                    detected_lengths(&state) == fixtures::numbers(case, "matching_short_lengths")?,
+                    phrase.other_detected_lengths()
+                        == fixtures::numbers(case, "matching_short_lengths")?,
                     "differs",
                 )
             },
         );
-        findings.one(|| {
-            let case = fixture.case("verifier_serialization")?;
-            let state = packing::pack(&fixtures::bytes(case, "entropy_hex")?).map_err(stopped)?;
-            expect(
-                state[..] == fixtures::bytes(case, "state_hex")?[..],
-                "the verifier is written in another byte order",
-            )
-        });
         let password = Password::new("public test password").map_err(stopped)?;
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), PublishedRoundKeys::none());
         findings.each("phrase case", fixture.cases("phrases")?, |case| {
@@ -727,6 +665,10 @@ impl FormatsCheck {
 
     fn suite_4(&self, findings: &mut Findings) -> Result<(), String> {
         let fixture = Fixture::read(self.suite_4)?;
+        expect(
+            fixture.text("suite_id")? == Suite::SameLength.id(),
+            "the built-in cases are of another suite",
+        )?;
         let password = Password::new("public test password").map_err(stopped)?;
         let mut mhfe = Mhfe::with_engine(WorkFactor::default(), PublishedRoundKeys::none());
         findings.each("suite 4 refusal", fixture.cases("refusals")?, |case| {

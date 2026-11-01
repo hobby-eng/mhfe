@@ -87,7 +87,7 @@ pub fn benchmark(options: BenchmarkOptions) -> Result<i32, Failure> {
     let started = Instant::now();
     decrypt(
         &mut mhfe,
-        &container,
+        container.as_str(),
         &password,
         PhraseLength::Detect,
         &mut |_, _| Ok(()),

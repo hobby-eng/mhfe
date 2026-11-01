@@ -16,9 +16,9 @@
 
 use serde_json::Value;
 
-/// Passwords, settings, phrases, length detection and the verifier's byte order of suite 3.
+/// The passwords, settings, phrases and length detection of suite 3.
 pub(crate) const SUITE_3: &str = include_str!("../tests/spec/vectors/suite3/validation-cases.json");
-/// The round messages of suite 4 for each entropy size, and its refusals before Argon2.
+/// The refusals of suite 4 before Argon2.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) const SUITE_4: &str = include_str!("../tests/spec/vectors/suite4/validation-cases.json");
 
@@ -43,16 +43,6 @@ impl Fixture {
             .ok_or_else(|| DAMAGED.to_owned())
     }
 
-    /// The single case of `section`, which is an object rather than a list.
-    pub(crate) fn case(&self, section: &str) -> Result<&Value, String> {
-        let case = &self.0[section];
-        if case.is_object() {
-            Ok(case)
-        } else {
-            Err(DAMAGED.to_owned())
-        }
-    }
-
     /// A text field of the fixture itself.
     pub(crate) fn text(&self, field: &str) -> Result<&str, String> {
         text(&self.0, field)
@@ -67,7 +57,7 @@ pub(crate) fn number(case: &Value, field: &str) -> Result<u64, String> {
     case[field].as_u64().ok_or_else(|| DAMAGED.to_owned())
 }
 
-/// A number field that fits a `u32`, such as a PIM or a round.
+/// A number field that fits a `u32`, such as a PIM.
 pub(crate) fn number_u32(case: &Value, field: &str) -> Result<u32, String> {
     u32::try_from(number(case, field)?).map_err(|_| DAMAGED.to_owned())
 }

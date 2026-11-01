@@ -6,17 +6,20 @@
 //! 21-word phrase into a container of its own length; [`decrypt`] turns the container back into
 //! the original, the container's word count selecting the suite. Every one of the twelve
 //! Feistel rounds runs Argon2id with 2 GiB of memory by default, using the reference C
-//! implementation of Argon2.
+//! implementation of Argon2. The cipher is [`mhfe_core`]'s; this crate adds the front ends' rules
+//! and refusals around it.
 //!
 //! The construction is experimental and has not been independently reviewed. Do not use it to
 //! protect real funds.
 //!
 //! ```no_run
-//! use mhfe::{decrypt, encrypt, Mhfe, PhraseLength, Recovery};
-//! use mhfe_core::{Password, Suite, WorkFactor};
+//! use mhfe::engine::reserve;
+//! use mhfe::{decrypt, encrypt, PhraseLength, Recovery};
+//! use mhfe_core::{Mhfe, Password, Suite, WorkFactor};
 //!
 //! let password = Password::new("correct horse battery staple")?;
-//! let mut mhfe = Mhfe::new(WorkFactor::default())?; // reserves 2 GiB
+//! let work = WorkFactor::default();
+//! let mut mhfe = Mhfe::with_engine(work, reserve(work)?); // reserves 2 GiB
 //! let original = "abandon abandon abandon abandon abandon abandon \
 //!                 abandon abandon abandon abandon abandon about";
 //! let container = encrypt(
@@ -32,7 +35,7 @@
 //! )?;
 //! let recovery = decrypt(
 //!     &mut mhfe,
-//!     &container,
+//!     container.as_str(),
 //!     &password,
 //!     PhraseLength::Detect,
 //!     &mut |_, _| Ok(()),
@@ -52,7 +55,6 @@ mod detection;
 pub mod eff;
 pub mod engine;
 mod error;
-mod feistel;
 mod hidden;
 pub mod memory;
 mod mhfe;
@@ -92,7 +94,7 @@ pub use container::{
 pub use error::MhfeError;
 pub use hidden::{derive_wallet, HiddenWallets};
 pub use mhfe::{
-    decrypt, decrypt_as, encrypt, Mhfe, PhraseLength, ProgressCallback, RecoveredPhrase, Recovery,
+    decrypt, decrypt_as, encrypt, PhraseLength, ProgressCallback, RecoveredPhrase, Recovery,
     RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
 };
 pub use phrase::{check_container, check_phrase, read_phrase, WORD_COUNTS};

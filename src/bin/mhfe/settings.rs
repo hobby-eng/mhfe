@@ -3,10 +3,10 @@
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::engine::{check_can_run, highest_available_level};
+use mhfe::engine::{check_can_run, highest_available_level, reserve};
 use mhfe::self_check::{ComponentCheck, ComponentOutcome, Tier};
-use mhfe::{estimated_seconds, memory_bytes, Mhfe, ENCRYPTION_ROUNDS, ROUNDS};
-use mhfe_core::{NativeArgon2, WorkFactor};
+use mhfe::{estimated_seconds, memory_bytes, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe_core::{Mhfe, NativeArgon2, WorkFactor};
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
@@ -439,7 +439,8 @@ fn check_resources(work: WorkFactor) -> Result<(), Failure> {
 
 /// Reserves the Argon2 memory, after the inputs have been read and checked.
 pub fn reserve_memory(work: WorkFactor) -> Result<Mhfe<NativeArgon2>, Failure> {
-    Mhfe::new(work).map_err(with_level_hint)
+    let engine = reserve(work).map_err(with_level_hint)?;
+    Ok(Mhfe::with_engine(work, engine))
 }
 
 /// Adds the highest memory level this computer can use now to a refusal for lack of free memory.

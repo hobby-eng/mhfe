@@ -2,14 +2,12 @@
 //! code path of every release at full cost, the stand-ins for it, and the public test phrases,
 //! states and password, so that each test builds its setting from one place.
 
-use mhfe_core::{Argon2Engine, NativeArgon2, Password, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Mhfe, NativeArgon2, Password, Suite, WorkFactor};
 use sha2::{Digest, Sha256};
-use zeroize::Zeroizing;
 
+use crate::encrypt;
 use crate::engine::{Argon2Cost, KEY_BYTES, SALT_BYTES};
-use crate::memory::LockedBytes;
 use crate::packing::State;
-use crate::{encrypt, Mhfe};
 
 /// 256 KiB and one pass: four Argon2 lanes need at least 32 KiB. The reduced-cost containers of
 /// src/mhfe.rs and of the browser tests are made at the same cost.
@@ -50,11 +48,6 @@ pub(crate) const AMBIGUOUS_STATES: [(&str, [usize; 2]); 3] = [
 
 pub(crate) fn state_from_hex(text: &str) -> State {
     hex::decode(text).unwrap().try_into().unwrap()
-}
-
-/// A packed state as the fixed array that `unpack` and detection read.
-pub(crate) fn state_of(packed: &LockedBytes) -> &State {
-    packed[..].try_into().unwrap()
 }
 
 /// Public test entropy of `length` bytes, every byte different.
@@ -146,11 +139,7 @@ pub(crate) fn wrong_password() -> Password {
 }
 
 /// The container of `phrase` in `suite` under [`TEST_PASSWORD`], made by `mhfe`.
-pub(crate) fn container_of(
-    mhfe: &mut Mhfe<ReducedEngine>,
-    phrase: &str,
-    suite: Suite,
-) -> Zeroizing<String> {
+pub(crate) fn container_of(mhfe: &mut Mhfe<ReducedEngine>, phrase: &str, suite: Suite) -> String {
     encrypt(
         mhfe,
         phrase,
@@ -160,6 +149,8 @@ pub(crate) fn container_of(
         &mut |_| Ok(()),
     )
     .unwrap()
+    .as_str()
+    .to_owned()
 }
 
 /// The public container of the suite 3 vector zero-12: [`ABANDON_12`] under [`TEST_PASSWORD`] at

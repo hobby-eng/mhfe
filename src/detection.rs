@@ -5,31 +5,23 @@
 //! passes. With its BIP39 passphrase, a 24-word phrase drawn to pass the phrase + passphrase check
 //! ([`crate::wallet_check`]) can still be told, by 16 bits.
 //!
-//! Every operation that reads a length from `X` takes it from here: a recovery with
-//! [`crate::PhraseLength::Detect`], a check and what it shows beside its reference, the search for
-//! missing words, and a rekey of a phrase whose length is not stated.
+//! [`Recovery`] detects the length, and every operation that reads one from `X` goes through it: a
+//! recovery with [`crate::PhraseLength::Detect`], a check and what it shows beside its reference,
+//! the search for missing words, and a rekey of a phrase whose length is not stated. This module
+//! holds what they ask of a recovery beside that.
 
-use crate::mhfe::{RecoveredPhrase, RecoveredState};
-use crate::packing::{self, State, STATE_WORDS};
+use mhfe_core::Recovery;
+
+use crate::mhfe::{readings, RecoveredPhrase};
+use crate::packing::STATE_WORDS;
 use crate::wallet_check;
 use crate::MhfeError;
-
-/// The 12- to 21-word lengths whose built-in check the state passes, in ascending order: one for a
-/// short original, none for a 24-word one or a wrong password, and more than one only by accident.
-pub(crate) fn detected_lengths(state: &State) -> Vec<usize> {
-    packing::SHORT_WORD_COUNTS
-        .into_iter()
-        .filter(|&words| packing::unpack(state, words).is_ok())
-        .collect()
-}
 
 /// The 24-word reading of a 24-word container, whose entropy is `X` itself: the last of the
 /// readings for 24 stated words, whatever short lengths pass before it.
 #[expect(clippy::expect_used, reason = "24 stated words end with that reading")]
-pub(crate) fn twenty_four_word_reading(
-    recovery: &RecoveredState,
-) -> Result<RecoveredPhrase, MhfeError> {
-    let mut readings = recovery.readings(Some(STATE_WORDS))?;
+pub(crate) fn twenty_four_word_reading(recovery: &Recovery) -> Result<RecoveredPhrase, MhfeError> {
+    let mut readings = readings(recovery, Some(STATE_WORDS))?;
     Ok(readings
         .pop()
         .expect("24 stated words end with that reading"))
@@ -39,7 +31,7 @@ pub(crate) fn twenty_four_word_reading(
 /// not be empty. The profile defines the check for that reading alone: a shorter reading would be
 /// a construction it does not define, and a match of its own about once in 65,536 (AUD-010).
 pub(crate) fn passes_wallet_check(
-    recovery: &RecoveredState,
+    recovery: &Recovery,
     passphrase: &str,
 ) -> Result<bool, MhfeError> {
     wallet_check::verify(twenty_four_word_reading(recovery)?.phrase(), passphrase)
@@ -49,10 +41,7 @@ pub(crate) fn passes_wallet_check(
 /// built-in check, or the 24-word reading's phrase + passphrase check with `passphrase`, which
 /// may be empty here, or without one, which `mhfe decrypt` reports whatever the passphrase. A
 /// hidden wallet must pass none of them (rule I29).
-pub(crate) fn reads_as_checked(
-    recovery: &RecoveredState,
-    passphrase: &str,
-) -> Result<bool, MhfeError> {
+pub(crate) fn reads_as_checked(recovery: &Recovery, passphrase: &str) -> Result<bool, MhfeError> {
     if !recovery.detected_lengths().is_empty() {
         return Ok(true);
     }
@@ -65,7 +54,7 @@ pub(crate) fn reads_as_checked(
 /// length, or else, with a `passphrase`, the 24-word reading's phrase + passphrase check.
 /// Several short lengths that pass by accident pass all the same.
 pub(crate) fn passes_own_checks(
-    recovery: &RecoveredState,
+    recovery: &Recovery,
     passphrase: Option<&str>,
 ) -> Result<bool, MhfeError> {
     if !recovery.detected_lengths().is_empty() {
@@ -79,33 +68,55 @@ pub(crate) fn passes_own_checks(
 
 #[cfg(test)]
 mod tests {
-    use mhfe_core::Suite;
+    use mhfe_core::{Mhfe, Phrase, Suite, WorkFactor};
 
     use super::*;
-    use crate::memory::LockedBytes;
-    use crate::packing::{pack, STATE_BYTES};
-    use crate::test_support::{entropy, state_from_hex, state_of, AMBIGUOUS_STATES};
+    use crate::encrypt;
+    use crate::mhfe::recover_state;
+    use crate::packing::{State, STATE_BYTES};
+    use crate::test_support::{
+        entropy, state_from_hex, test_password, HashEngine, AMBIGUOUS_STATES,
+    };
 
-    /// The recovery of a 24-word container whose state is `state`.
-    fn recovery_of(state: &[u8]) -> RecoveredState {
-        RecoveredState::new(Suite::TwentyFourWords, LockedBytes::copy_of(state)).unwrap()
+    /// The recovery of the 24-word container of the phrase of `entropy`, made with a test engine. A
+    /// short phrase packs into its state, and a 24-word phrase is its state.
+    fn recovery_of(entropy: &[u8]) -> Recovery {
+        let mut mhfe = Mhfe::with_engine(WorkFactor::default(), HashEngine);
+        let password = test_password();
+        let container = encrypt(
+            &mut mhfe,
+            Phrase::from_entropy(entropy).unwrap().as_str(),
+            &password,
+            Suite::TwentyFourWords,
+            &mut |_, _| Ok(()),
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        recover_state(
+            &mut mhfe,
+            container.as_str(),
+            &password,
+            None,
+            &mut |_, _| Ok(()),
+        )
+        .unwrap()
     }
 
     /// The length of every reading worth comparing with a wallet, in their order.
-    fn reading_lengths(recovery: &RecoveredState) -> Vec<usize> {
-        let readings = recovery.readings(Some(STATE_WORDS)).unwrap();
+    fn reading_lengths(recovery: &Recovery) -> Vec<usize> {
+        let readings = readings(recovery, Some(STATE_WORDS)).unwrap();
         readings.iter().map(RecoveredPhrase::words).collect()
     }
 
     #[test]
     fn detection_finds_the_packed_length() {
         for (length, words) in [(16, 12), (20, 15), (24, 18), (28, 21)] {
-            let recovery = recovery_of(&pack(&entropy(length)).unwrap());
+            let recovery = recovery_of(&entropy(length));
             assert_eq!(recovery.detected_lengths(), [words]);
             assert_eq!(reading_lengths(&recovery), [words, STATE_WORDS]);
             assert!(passes_own_checks(&recovery, None).unwrap());
         }
-        let recovery = recovery_of(&pack(&entropy(STATE_BYTES)).unwrap());
+        let recovery = recovery_of(&entropy(STATE_BYTES));
         assert!(recovery.detected_lengths().is_empty());
         assert_eq!(reading_lengths(&recovery), [STATE_WORDS]);
         assert!(!passes_own_checks(&recovery, None).unwrap());
@@ -150,7 +161,7 @@ mod tests {
         let mut state: State = [0; STATE_BYTES];
         state[24..].copy_from_slice(&76_562u64.to_be_bytes());
         let reads =
-            |state: &State, passphrase| reads_as_checked(&recovery_of(state), passphrase).unwrap();
+            |state: &[u8], passphrase| reads_as_checked(&recovery_of(state), passphrase).unwrap();
         assert!(reads(&state, "TREZOR"));
         // The same reading with the main wallet's empty passphrase is another seed, which fails.
         assert!(!reads(&state, ""));
@@ -162,7 +173,6 @@ mod tests {
         assert!(reads(&state, ""));
         assert!(reads(&state, "TREZOR"));
         // A short reading that passes its built-in check reads as checked with any passphrase.
-        let packed = pack(&entropy(16)).unwrap();
-        assert!(reads(state_of(&packed), ""));
+        assert!(reads(&entropy(16), ""));
     }
 }

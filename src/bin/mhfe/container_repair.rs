@@ -524,12 +524,12 @@ pub fn run_words(options: WordsOptions) -> Result<i32, Failure> {
         // Without --count a script is refused by clap, so the person at a terminal is asked.
         None => ask_count(&mut input, false)?.unwrap_or(repair::RECOMMENDED_REPAIR_WORDS),
     };
-    let words = repair::repair_words(container.words(), count)?;
+    let card = repair::repair_words(container.phrase(), count)?;
     let screen = PrivateScreen::enter_to_show(&input);
     if screen.is_active() {
         style::title(WORDS_TITLE);
     }
-    print_card(&words, &input)?;
+    print_card(card.as_str(), &input)?;
     if screen.is_active() {
         terminal::wait_to_leave()?;
     }
@@ -733,10 +733,11 @@ mod tests {
     #[test]
     fn the_repaired_words_are_listed_plainly() {
         let container = [vec!["abandon"; 23], vec!["art"]].concat();
-        let card = repair::repair_words(&container.join(" "), 4).unwrap();
+        let phrase = mhfe_core::Phrase::read(&container.join(" ")).unwrap();
+        let card = repair::repair_words(&phrase, 4).unwrap();
         let repaired = |words: &[usize], on_card: &[usize]| {
             let mut written = container.clone();
-            let mut read: Vec<&str> = card.split(' ').collect();
+            let mut read: Vec<&str> = card.as_str().split(' ').collect();
             words.iter().for_each(|&word| written[word - 1] = "?");
             on_card.iter().for_each(|&word| read[word - 1] = "?");
             repair::repair(&written.join(" "), &read.join(" ")).unwrap()

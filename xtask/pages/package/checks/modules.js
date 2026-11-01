@@ -20,6 +20,8 @@ assert.deepEqual(repairedContainer.containerWords, [3, 17]);
 assert.equal(repairedContainer.unchanged, false);
 assert.equal(repairedContainer.changes[0].read, null);
 expectCode("INVALID_REPAIR_WORDS", () => repair.repairWords(FULL_SIZE_CONTAINER, 3));
+// A wrong count is told before a wrong container, as on the command line.
+expectCode("INVALID_REPAIR_WORDS", () => repair.repairWords("abandon", 3));
 // What a container phrase as typed is: each kind, from the same words.
 const inspected = (words) => JSON.parse(repair.inspectContainer(words));
 assert.deepEqual(inspected(FULL_SIZE_CONTAINER), {

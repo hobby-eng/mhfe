@@ -2,9 +2,9 @@
 //! `tests/spec/vectors/suite3/validation-cases.json` against the library's public interface. Its
 //! expected values were computed independently (Python `hashlib`, `hmac` and `unicodedata`). The
 //! fixture cases that need the library's own modules run with their unit tests: the refusals
-//! before Argon2 of both suites, length detection and the verifier's byte order in src/mhfe.rs,
-//! and the suite 4 round messages of `tests/spec/vectors/suite4/validation-cases.json` in
-//! src/feistel.rs. It also pins the refusals of mhfe-core to mhfe's stable codes.
+//! before Argon2 of both suites in src/mhfe.rs. Length detection, the verifier's byte order and the
+//! suite 4 round messages are the core's, whose tests replay them. This file also pins the refusals
+//! of mhfe-core to mhfe's stable codes.
 
 // The whole file is test code. Saying so lets it unwrap and panic as tests do (clippy.toml), since
 // clippy recognises test code by this attribute or by #[test].

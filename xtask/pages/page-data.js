@@ -33,11 +33,12 @@ const AMBIGUOUS_12_WORDS = "essence drama mule dolphin bitter rain abandon aband
 // The wrong password of the page, one letter off PASSWORD.
 const WRONG_PASSWORD = "public test passwore";
 // The 256-bit states of PHRASE and of AMBIGUOUS_12_WORDS read as other lengths. A state is the
-// phrase's entropy followed by the first bytes of the entropy's SHA-256 (src/packing.rs): for
-// PHRASE 16 zero bytes and the first 16 bytes of their SHA-256, for AMBIGUOUS_12_WORDS
-// 4d48464520616d62000000004dda455a85b22f09e43e0ae5de9322dce19210ad. These phrases were computed
-// from those bytes with the BIP39 English list (SHA-256 of english.txt 2f5eed53...3b24dbda),
-// independently of mhfe; the 21 words are the first 28 bytes, the 24 words all 32.
+// phrase's entropy followed by the first bytes of the entropy's SHA-256 (the specification's
+// "Packing"): for PHRASE 16 zero bytes and the first 16 bytes of their SHA-256, for
+// AMBIGUOUS_12_WORDS 4d48464520616d62000000004dda455a85b22f09e43e0ae5de9322dce19210ad. These
+// phrases were computed from those bytes with the BIP39 English list (SHA-256 of english.txt
+// 2f5eed53...3b24dbda), independently of mhfe; the 21 words are the first 28 bytes, the 24 words
+// all 32.
 //
 // wrongPasswordAs24 is what WRONG_PASSWORD reads from REDUCED_COST_CONTAINER as 24 words. It
 // depends on the reduced cost, so it was taken once from the page; the page also encrypts it again

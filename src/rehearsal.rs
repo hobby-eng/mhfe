@@ -4,17 +4,17 @@
 //! close it was. The re-encryption guard uses the same comparison: a phrase recovered to be
 //! encrypted again comes out only once it is confirmed.
 
-use mhfe_core::{Argon2Engine, Password, Suite};
+use mhfe_core::{Argon2Engine, Mhfe, Password, Recovery, Suite};
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::detection;
-use crate::mhfe::{recover_state, PhraseLength, RecoveredPhrase, RecoveredState};
+use crate::mhfe::{readings, recover_state, PhraseLength, RecoveredPhrase};
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::packing::STATE_WORDS;
 use crate::suite::{built_in_check_lengths, holds_full_state, ROUNDS};
 use crate::wallet::{self, Address, DerivationPath, SearchLimits};
 use crate::wallet_check;
-use crate::{Mhfe, MhfeError, ProgressCallback, WordCount};
+use crate::{MhfeError, ProgressCallback, WordCount};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -266,7 +266,7 @@ pub fn recover_for_check_in_stages<E: Argon2Engine>(
 /// only whether a reference matches, and the state is wiped when it is dropped.
 pub struct RecoveredForCheck {
     container_words: usize,
-    recovery: RecoveredState,
+    recovery: Recovery,
 }
 
 impl RecoveredForCheck {
@@ -321,10 +321,7 @@ pub(crate) fn refuse_impossible(
 }
 
 /// The reference's outcome and the checks of the original seed phrase itself, from `recovery`.
-fn evidence_of(
-    recovery: &RecoveredState,
-    reference: &Reference<'_>,
-) -> Result<CheckEvidence, MhfeError> {
+fn evidence_of(recovery: &Recovery, reference: &Reference<'_>) -> Result<CheckEvidence, MhfeError> {
     let (outcome, matched_words) = compare_state(recovery, reference)?;
     if recovery.suite() == Suite::SameLength {
         return Ok(CheckEvidence {
@@ -360,7 +357,7 @@ fn evidence_of(
 /// The second part of a check: compares `recovery` with `reference`, with the length of the
 /// reading that an address or the fingerprint matched.
 fn compare_state(
-    recovery: &RecoveredState,
+    recovery: &Recovery,
     reference: &Reference<'_>,
 ) -> Result<(CheckOutcome, Option<usize>), MhfeError> {
     match reference {
@@ -384,7 +381,7 @@ fn compare_state(
             // then the 24-word reading. A same-length container has its own length alone.
             let stated = holds_full_state(recovery.suite()).then_some(STATE_WORDS);
             // Held in locked memory while they are compared: an address search can take seconds.
-            for reading in recovery.readings(stated)? {
+            for reading in readings(recovery, stated)? {
                 let outcome = compare(reading.phrase(), reference)?;
                 if outcome.matches() {
                     return Ok((outcome, Some(reading.words())));
@@ -491,7 +488,7 @@ pub(crate) fn recover_for_rekey<E: Argon2Engine>(
 /// without the rounds again (AUD-017-UI002). The state is wiped when it is dropped.
 pub struct RecoveredForRekey {
     facts: ContainerFacts,
-    recovery: RecoveredState,
+    recovery: Recovery,
 }
 
 impl RecoveredForRekey {
@@ -586,8 +583,7 @@ impl RecoveredForRekey {
     /// The readings of the state for `length`, under the length rules of recovery: a built-in
     /// check that passes takes precedence over a stated length.
     fn readings(&self, length: PhraseLength) -> Result<Vec<RecoveredPhrase>, MhfeError> {
-        self.facts.require_length(length)?;
-        self.recovery.readings(length.stated())
+        readings(&self.recovery, length.stated())
     }
 }
 
@@ -657,9 +653,9 @@ pub(crate) fn compare_until(
 #[cfg(test)]
 mod tests {
     use mhfe_core::Phrase;
+    use sha2::{Digest, Sha256};
 
     use super::*;
-    use crate::encrypt;
     use crate::test_support::{
         container_of, reduced, state_from_hex, test_password, wrong_password,
         ABANDON_12 as ABANDON, ABANDON_12_FINGERPRINT, AMBIGUOUS_STATES,
@@ -717,11 +713,11 @@ mod tests {
         // A 24-word phrase drawn without the check fails it, with no passphrase as with one, also
         // one that passes a short check by chance, whose reading a reference still finds. So does
         // the 24-word reading of a short original that passes two checks.
-        let packed = crate::packing::pack(&[0; 16]).unwrap();
+        let packed = [&[0; 16], &Sha256::digest([0; 16])[..16]].concat();
         let ambiguous = state_from_hex(AMBIGUOUS_STATES[0].0);
         for (entropy, built_in_check) in [
             (&[7u8; 32][..], None),
-            (&packed[..], Some(12)),
+            (&packed, Some(12)),
             (&ambiguous[..16], Some(12)),
         ] {
             let phrase = Phrase::from_entropy(entropy).unwrap();
@@ -900,15 +896,7 @@ mod tests {
         let mut entropy = [0u8; 32];
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
         let phrase = Phrase::from_entropy(&entropy).unwrap();
-        let container = encrypt(
-            &mut mhfe,
-            phrase.as_str(),
-            &password,
-            Suite::TwentyFourWords,
-            none,
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        let container = container_of(&mut mhfe, phrase.as_str(), Suite::TwentyFourWords);
         let reference = Reference::WalletCheck {
             passphrase: "TREZOR",
         };
@@ -965,15 +953,7 @@ mod tests {
         let password = test_password();
         let wrong = wrong_password();
         let own = |passphrase| Reference::OwnChecks { passphrase };
-        let short = encrypt(
-            &mut mhfe,
-            ABANDON,
-            &password,
-            Suite::TwentyFourWords,
-            none,
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        let short = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
         for passphrase in [None, Some("TREZOR")] {
             let evidence = recover_for_check(&mut mhfe, &short, &password, &own(passphrase), none)
                 .unwrap()
@@ -989,15 +969,7 @@ mod tests {
         let mut entropy = [0u8; 32];
         entropy[24..].copy_from_slice(&76_562u64.to_be_bytes());
         let drawn = Phrase::from_entropy(&entropy).unwrap();
-        let full = encrypt(
-            &mut mhfe,
-            drawn.as_str(),
-            &password,
-            Suite::TwentyFourWords,
-            none,
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        let full = container_of(&mut mhfe, drawn.as_str(), Suite::TwentyFourWords);
         let evidence = recover_for_check(&mut mhfe, &full, &password, &own(Some("TREZOR")), none)
             .unwrap()
             .compare(&own(Some("TREZOR")))
@@ -1016,15 +988,7 @@ mod tests {
             check(&mut mhfe, &full, &password, &own(Some("")), none),
             Err(MhfeError::WalletCheckNeedsPassphrase)
         );
-        let same_length = encrypt(
-            &mut mhfe,
-            ABANDON,
-            &password,
-            Suite::SameLength,
-            none,
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        let same_length = container_of(&mut mhfe, ABANDON, Suite::SameLength);
         assert_eq!(
             check(&mut mhfe, &same_length, &password, &own(None), none),
             Err(MhfeError::NoBuiltInCheck {
@@ -1077,15 +1041,7 @@ mod tests {
         let password = test_password();
         let phrase = Phrase::from_entropy(&[7u8; 32]).unwrap();
         let phrase = phrase.as_str();
-        let container = encrypt(
-            &mut mhfe,
-            phrase,
-            &password,
-            Suite::TwentyFourWords,
-            &mut |_, _| Ok(()),
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        let container = container_of(&mut mhfe, phrase, Suite::TwentyFourWords);
         let own = Reference::OwnChecks { passphrase: None };
         let mut rounds = 0;
         let recovered = recover_for_check(&mut mhfe, &container, &password, &own, &mut |_, _| {
@@ -1118,15 +1074,7 @@ mod tests {
         let none = &mut |_, _| Ok(());
         let mut mhfe = reduced();
         let password = test_password();
-        let container = encrypt(
-            &mut mhfe,
-            ABANDON,
-            &password,
-            Suite::TwentyFourWords,
-            none,
-            &mut |_| Ok(()),
-        )
-        .unwrap();
+        let container = container_of(&mut mhfe, ABANDON, Suite::TwentyFourWords);
         // The recovery reads as the 12-word phrase, which the built-in check confirms.
         let built_in = Reference::BuiltInCheck {
             words: WordCount::new(12).unwrap(),
@@ -1260,18 +1208,9 @@ mod tests {
         let mut mhfe = reduced();
         let original = "legal winner thank year wave sausage worth useful legal winner thank year \
                         wave sausage worth useful legal winner thank year wave sausage worth title";
-        let container = encrypt(
-            &mut mhfe,
-            original,
-            &password,
-            Suite::TwentyFourWords,
-            &mut |_, _| Ok(()),
-            &mut |_| Ok(()),
-        )
-        .unwrap();
-        let fingerprint = wallet::master_fingerprint(original, "").unwrap();
+        let container = container_of(&mut mhfe, original, Suite::TwentyFourWords);
         let reference = Reference::Fingerprint {
-            fingerprint,
+            fingerprint: wallet::master_fingerprint(original, "").unwrap(),
             passphrase: "",
         };
         assert!(quiet_check(&mut mhfe, &container, &password, &reference)

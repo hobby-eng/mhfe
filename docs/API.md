@@ -8,12 +8,14 @@ as a 12- to 21-word original seed phrase. The command-line tool is described in 
 ## Rust library
 
 ```rust
-use mhfe::{check, decrypt, encrypt, CheckOutcome, Mhfe, PhraseLength, Recovery, Reference};
-use mhfe_core::{Password, Suite, WorkFactor};
+use mhfe::engine::reserve;
+use mhfe::{check, decrypt, encrypt, CheckOutcome, PhraseLength, Recovery, Reference};
+use mhfe_core::{Mhfe, Password, Suite, WorkFactor};
 
 let work = WorkFactor::new(0, 0)?;            // PIM 0..=1023, memory level 0..=21
 let password = Password::new("...")?;        // NFKD with Unicode 18.0.0, 1 to 1024 bytes
-let mut mhfe = Mhfe::new(work)?;              // checks free memory, reserves the Argon2 work area
+// Checks free memory and reserves the Argon2 work area.
+let mut mhfe = Mhfe::with_engine(work, reserve(work)?);
 
 // Suite::TwentyFourWords is the default; Suite::SameLength only on the user's own choice.
 let container = encrypt(
@@ -28,30 +30,31 @@ let container = encrypt(
     &mut |_unchecked| Ok(()),                 // the container, before its check
 )?;
 
-match decrypt(&mut mhfe, &container, &password, PhraseLength::Detect, &mut |_, _| Ok(()))? {
+match decrypt(&mut mhfe, container.as_str(), &password, PhraseLength::Detect, &mut |_, _| Ok(()))? {
     Recovery::Phrase(phrase) => { /* phrase.words(), verified(), phrase(), suite() */ }
     Recovery::Ambiguous(candidates) => { /* show every candidate; the last one is 24 words */ }
 }
 
 let outcome: CheckOutcome =
-    check(&mut mhfe, &container, &password, &reference, &mut |_, _| Ok(()))?;
+    check(&mut mhfe, container.as_str(), &password, &reference, &mut |_, _| Ok(()))?;
 ```
 
 - `WorkFactor` holds the two settings and computes the Argon2 cost with integers only:
   `memory_kib()`, `passes()`. This crate adds `memory_bytes(work)` and `estimated_seconds(work)`.
-- `Mhfe::new`, in native builds only, refuses a memory level the computer cannot provide
+- `mhfe_core::Mhfe` is the cipher, which this crate's functions take. `engine::reserve`, in native
+  builds only, gives its engine: it refuses a memory level the computer cannot provide
   (`MhfeError::NotEnoughMemory`) and reserves the work area once (`MEMORY_ALLOCATION_FAILED` when
   the system refuses it); every round of every operation reuses it. A native build is always 64-bit
   and supports every level (`engine::HIGHEST_MEMORY_LEVEL` is `WorkFactor::MAX_MEMORY_LEVEL`). The
-  browser build has no `Mhfe::new`: its engine, `engine::browser::BrowserEngine::new`, refuses a
-  level above `engine::browser::HIGHEST_BROWSER_MEMORY_LEVEL` (0) with
+  browser build has no `engine::reserve`: its engine, `engine::browser::BrowserEngine::new`, refuses
+  a level above `engine::browser::HIGHEST_BROWSER_MEMORY_LEVEL` (0) with
   `MhfeError::MemoryLevelNotSupportedHere`.
   The native engine is the vendored reference C code (`engine::NativeEngine`). Like the browser's
   engine, it fills each round's key with a marker before Argon2 runs and refuses a key left so or
   set to zeros (`ARGON2_FAILED`). `Mhfe::engine()` gives the engine. `engine::check_can_run` makes
-  the same checks as `Mhfe::new` without allocating, so a program can refuse at once and reserve the
-  memory only after the password has been encoded, the order the specification gives for creating a
-  container.
+  the same checks as `engine::reserve` without allocating, so a program can refuse at once and
+  reserve the memory only after the password has been encoded, the order the specification gives
+  for creating a container.
 - `Password::new` rejects, never cleans or truncates: a control character (General_Category Cc, such
   as NUL, TAB or a line break), U+2028 or U+2029, any code point that Unicode 18.0.0 does not
   assign, an empty result and more than 1024 bytes after normalization. Private Use characters are
@@ -226,8 +229,9 @@ let outcome: CheckOutcome =
   `WordList::completion(line)` is what Tab adds: the letters all those words share next, and
   whether one word is left. The typed word is copied, lower case, only into a buffer that is wiped.
 - `repair` (the optional profile MHFE-REPAIR-1 of the specification):
-  `repair_words(container, count)` gives 2, 4, 6 or 8 repair words for a container, the parity of a
-  Reed–Solomon code over GF(2^11) whose symbols are the numbers of the BIP39 words, and
+  `repair_words(container, count)` gives 2, 4, 6 or 8 repair words for a read container
+  (`ContainerFacts::phrase`), the parity of a Reed–Solomon code over GF(2^11) whose symbols are the
+  numbers of the BIP39 words, as a `mhfe_core::repair::Card`, and
   `repair(written, card)` repairs a container phrase from its words as read and its repair words as
   read, `?` or a word outside the list marking an unreadable one. It repairs `2e + s <= k` damaged
   words, `e` wrong and `s` unreadable, without the password, and returns
@@ -340,10 +344,9 @@ let outcome: CheckOutcome =
   (`PASSWORD_ALREADY_USED`), compared after normalization; `was_used(password)` lets a front end ask
   for another one first.
 - `RecoveredPhrase` is read-only: `phrase()`, `words()`, `verified()` and `suite()` read it,
-  `stated_words()` names a stated length that the built-in checks overruled, `other_lengths()` the
-  other short lengths whose check passes too, by chance, and
-  `into_phrase()` hands over the phrase as the `LockedText` it was recovered into, so that the text
-  never leaves the buffer locked before the words were written into it (AUD-012-SEC002).
+  `stated_words()` names a stated length that the built-in checks overruled and `other_lengths()`
+  the other short lengths whose check passes too, by chance. Its text stays in the core's `Phrase`
+  (AUD-012-SEC002).
   `status(length)` says what a recovered phrase is known to be (`RecoveryStatus`).
   `offers_wallet_check()` is true for a 24-word reading of a 24-word container, and
   `passes_wallet_check(passphrase)` gives its 16-bit source check with the wallet's BIP39
@@ -512,12 +515,12 @@ The parts, by identifier and label, and what each compares:
   `decrypt`, also at each stated length, and `decrypt_as` with the suite selected; the
   length rules on zero-12's container: with 15 words stated it gives its checked 12-word reading,
   which names the 15 stated, and with 24 stated that reading first, naming the 24 stated, and the
-  unverified 24-word reading after it; a length whose check does not match (`VERIFIER_MISMATCH`), a
-  wrong key in the last round of an encryption's check (`VERIFICATION_FAILED`) and settings no
-  vector has; and suite 4's entropy separation. The full self-test replays all 27 vectors.
-- `formats`, "Formats": the suite 3 validation fixture, with its settings, length detection,
-  verifier byte order and the refusals of phrases and containers before any Argon2 work. The full
-  self-test adds the 63 refusals of suite 4.
+  unverified 24-word reading after it; and a length whose check does not match
+  (`VERIFIER_MISMATCH`), a wrong key in the last round of an encryption's check
+  (`VERIFICATION_FAILED`) and settings no vector has. The full self-test replays all 27 vectors.
+- `formats`, "Formats": the suite 3 validation fixture, with its settings, length detection and the
+  refusals of phrases and containers before any Argon2 work. The full self-test adds the 63 refusals
+  of suite 4.
 - `container-facts`, "Container facts": what `ContainerFacts` and `OriginalFacts` say of published
   containers and phrases, and the refusal of a container of 13 words or with a wrong checksum.
 - `keep-advice`, "Keep advice": the exact `keep` lists of sealed published vectors with a

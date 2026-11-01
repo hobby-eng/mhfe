@@ -3,10 +3,10 @@
 //! to and the round's number in the whole operation, so that a front end can show a bar for each
 //! stage and stop the operation between any two rounds.
 
-use mhfe_core::{Argon2Engine, Password, Suite, WorkFactor};
-use zeroize::Zeroizing;
+use mhfe_core::repair::Card;
+use mhfe_core::{Argon2Engine, Mhfe, Password, Phrase, Suite, WorkFactor};
 
-use crate::mhfe::{encrypt, Mhfe};
+use crate::mhfe::encrypt;
 use crate::repair::{self, repair_words};
 use crate::suite::{built_in_check_lengths, require_original};
 use crate::{check_phrase, MhfeError, OriginalFacts, ROUNDS};
@@ -240,7 +240,7 @@ impl Encryption {
                     .repair_word_count
                     .map(|count| repair_words(container, count))
                     .transpose()?;
-                on_unverified(container)
+                on_unverified(container.as_str())
             },
         )?;
         Ok(Sealed {
@@ -255,17 +255,17 @@ impl Encryption {
 
 /// A new container whose check has passed, with its repair words if made.
 pub struct Sealed {
-    container: Zeroizing<String>,
+    container: Phrase,
     suite: Suite,
     original_words: usize,
     other_lengths: Vec<usize>,
-    repair_words: Option<String>,
+    repair_words: Option<Card>,
 }
 
 impl Sealed {
     /// The container's words.
     pub fn container(&self) -> &str {
-        &self.container
+        self.container.as_str()
     }
 
     /// The suite the container was made with.
@@ -275,12 +275,12 @@ impl Sealed {
 
     /// The number of the container's words.
     pub fn container_words(&self) -> usize {
-        self.container.split(' ').count()
+        self.container.words()
     }
 
     /// The repair words, given out only once the check has passed.
     pub fn repair_words(&self) -> Option<&str> {
-        self.repair_words.as_deref()
+        self.repair_words.as_ref().map(Card::as_str)
     }
 
     /// Whether a recovery of this container checks the phrase on its own: a 12- to 21-word phrase

@@ -19,7 +19,7 @@ use mhfe::memory::LockedText;
 use mhfe::search::{ContainerSearch, Found, DECOY_SCAN_GAP, MAX_MISSING_FOR_WALLET};
 use mhfe::wallet::SearchLimits;
 use mhfe::{estimated_seconds, MhfeError, Reference};
-use mhfe_core::{NativeArgon2, Password, WorkFactor};
+use mhfe_core::{Mhfe, NativeArgon2, Password, WorkFactor};
 use zeroize::Zeroizing;
 
 use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE};
@@ -446,7 +446,7 @@ fn run_long(
     search: &ContainerSearch,
     work: WorkFactor,
     run: impl FnOnce(
-        &mut mhfe::Mhfe<NativeArgon2>,
+        &mut Mhfe<NativeArgon2>,
         &mut dyn FnMut(usize, usize, u32, u32) -> Result<(), MhfeError>,
     ) -> Result<Option<Found>, MhfeError>,
 ) -> Result<Option<Found>, Failure> {

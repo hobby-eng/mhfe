@@ -3,13 +3,13 @@
 //! width. Nothing records which passwords were used or how many, so the container alone tells
 //! nothing about them.
 
-use mhfe_core::{Argon2Engine, Password, Suite};
+use mhfe_core::{Argon2Engine, Mhfe, Password, Suite};
 
 use crate::container::ContainerFacts;
 use crate::detection;
 use crate::memory::LockedText;
 use crate::mhfe::{recover_state, RecoveredPhrase};
-use crate::{Mhfe, MhfeError, ProgressCallback};
+use crate::{MhfeError, ProgressCallback};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;

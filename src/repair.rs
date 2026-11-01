@@ -56,17 +56,9 @@ pub fn require_count(count: usize) -> Result<(), MhfeError> {
     Ok(())
 }
 
-/// The repair words of `container`, a valid container of 12 to 24 words: `count` English BIP39
-/// words, one space apart.
-#[expect(
-    clippy::expect_used,
-    reason = "Card::new refuses only a count that require_count refused first"
-)]
-pub fn repair_words(container: &str, count: usize) -> Result<String, MhfeError> {
-    require_count(count)?;
-    let container = phrase::read(container, MhfeError::InvalidContainer)?;
-    let card = Card::new(&container, count).expect("the count is a card's size");
-    Ok(card.as_str().to_owned())
+/// The `count` repair words of `container`, refusing a count as [`require_count`] does.
+pub fn repair_words(container: &Phrase, count: usize) -> Result<Card, MhfeError> {
+    Card::new(container, count).map_err(|_| MhfeError::InvalidRepairWords(wrong_count(count)))
 }
 
 /// What a container phrase as typed is, before anything is computed with it: a container as it
@@ -183,12 +175,17 @@ mod tests {
     use super::*;
     use crate::test_support::zero_12_container;
 
+    /// The repair words of a container as text.
+    fn card_of(container: &str, count: usize) -> Card {
+        repair_words(&Phrase::read(container).unwrap(), count).unwrap()
+    }
+
     #[test]
     fn a_container_phrase_and_its_card_have_nothing_to_repair() {
         let container = zero_12_container();
         for count in Card::SIZES {
-            let card = repair_words(&container, count).unwrap();
-            let repaired = repair(&container, &card).unwrap();
+            let card = card_of(&container, count);
+            let repaired = repair(&container, card.as_str()).unwrap();
             assert_eq!(repaired.container().as_str(), container);
             assert_eq!(repaired.changes().count(), 0);
         }
@@ -247,11 +244,7 @@ mod tests {
         ];
         for (container, cards) in cases {
             for (count, card) in Card::SIZES.into_iter().zip(cards) {
-                assert_eq!(
-                    repair_words(&container, count).unwrap(),
-                    card,
-                    "{count} words"
-                );
+                assert_eq!(card_of(&container, count).as_str(), card, "{count} words");
             }
         }
     }
@@ -349,11 +342,11 @@ mod tests {
     #[test]
     fn unreadable_and_unknown_words_are_marked_and_repaired() {
         let container = zero_12_container();
-        let card = repair_words(&container, 4).unwrap();
+        let card = card_of(&container, 4);
         let mut words: Vec<&str> = container.split(' ').collect();
         words[2] = "?";
         words[16] = "notaword";
-        let repaired = repair(&words.join(" "), &card).unwrap();
+        let repaired = repair(&words.join(" "), card.as_str()).unwrap();
         assert_eq!(repaired.container().as_str(), container);
         assert_eq!(positions(&repaired, false), vec![3, 17]);
     }
@@ -361,13 +354,13 @@ mod tests {
     #[test]
     fn too_much_damage_or_a_wrong_card_is_refused() {
         let container = zero_12_container();
-        let card = repair_words(&container, 2).unwrap();
+        let card = card_of(&container, 2);
         let mut words: Vec<&str> = container.split(' ').collect();
         words[0] = "?";
         words[1] = "?";
         words[2] = "?";
         assert_eq!(
-            repair(&words.join(" "), &card).unwrap_err(),
+            repair(&words.join(" "), card.as_str()).unwrap_err(),
             MhfeError::RepairNotPossible { repair_words: 2 }
         );
         assert_eq!(
@@ -378,7 +371,7 @@ mod tests {
             )
         );
         assert_eq!(
-            repair_words(&container, 3).unwrap_err(),
+            repair_words(&Phrase::read(&container).unwrap(), 3).unwrap_err(),
             MhfeError::InvalidRepairWords("a card has 2, 4, 6 or 8 repair words, not 3".to_owned())
         );
         // The count of a card that is refused leaves out its name and numbers.
@@ -387,7 +380,7 @@ mod tests {
             MhfeError::RepairNotPossible { repair_words: 2 }
         );
         assert_eq!(
-            repair(&words[1..].join(" "), &card).unwrap_err(),
+            repair(&words[1..].join(" "), card.as_str()).unwrap_err(),
             MhfeError::InvalidContainer(
                 "it has 23 words, but a container has 12, 15, 18, 21 or 24; type ? for a word \
                  that cannot be read"
@@ -405,8 +398,8 @@ mod tests {
     fn a_card_of_another_container_phrase_can_give_another_valid_container() {
         let container = [vec!["abandon"; 23], vec!["art"]].concat().join(" ");
         let other = [vec!["abandon"; 23], vec!["diesel"]].concat().join(" ");
-        let card = repair_words(&other, 2).unwrap();
-        let repaired = repair(&container, &card).unwrap();
+        let card = card_of(&other, 2);
+        let repaired = repair(&container, card.as_str()).unwrap();
         assert_eq!(repaired.container().as_str(), other);
         assert_eq!(positions(&repaired, false), [24]);
     }

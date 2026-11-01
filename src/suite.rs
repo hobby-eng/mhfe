@@ -8,16 +8,6 @@ use mhfe_core::{Suite, WorkFactor};
 use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
 use crate::MhfeError;
 
-/// Domain string for the round salt: suite 3's identifier and "/ROUND-SALT", no terminating NUL.
-pub const DS_SALT: &[u8] = b"MHFE-BIP39-256-EXPERIMENTAL-3/ROUND-SALT";
-/// Domain string for the round mask: suite 3's identifier and "/ROUND-MASK", no terminating NUL.
-pub const DS_MASK: &[u8] = b"MHFE-BIP39-256-EXPERIMENTAL-3/ROUND-MASK";
-
-/// Suite 4's salt domain: its identifier and "/ROUND-SALT".
-pub const SAME_LENGTH_DS_SALT: &[u8] = b"MHFE-BIP39-LP-EXPERIMENTAL-4/ROUND-SALT";
-/// Suite 4's mask domain: its identifier and "/ROUND-MASK".
-pub const SAME_LENGTH_DS_MASK: &[u8] = b"MHFE-BIP39-LP-EXPERIMENTAL-4/ROUND-MASK";
-
 /// The lengths of an original whose built-in check a recovery of a container of `suite` can be
 /// compared with: 12 to 21 words in suite 3, none in suite 4, which has no check.
 pub(crate) fn built_in_check_lengths(suite: Suite) -> &'static [usize] {
@@ -114,22 +104,6 @@ mod tests {
         assert_eq!(
             text_of(WorkFactor::new(0, WorkFactor::MAX_MEMORY_LEVEL).unwrap()),
             "3 TiB"
-        );
-    }
-
-    #[test]
-    fn domain_strings_are_built_from_the_suite_identifier() {
-        let suite_3 = Suite::TwentyFourWords.id();
-        assert_eq!(DS_SALT, format!("{suite_3}/ROUND-SALT").as_bytes());
-        assert_eq!(DS_MASK, format!("{suite_3}/ROUND-MASK").as_bytes());
-        let same_length = Suite::SameLength.id();
-        assert_eq!(
-            SAME_LENGTH_DS_SALT,
-            format!("{same_length}/ROUND-SALT").as_bytes()
-        );
-        assert_eq!(
-            SAME_LENGTH_DS_MASK,
-            format!("{same_length}/ROUND-MASK").as_bytes()
         );
     }
 

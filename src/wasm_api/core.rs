@@ -10,7 +10,7 @@
 //! makes of a long-running loop.
 
 use mhfe_core::repair::Card;
-use mhfe_core::{Password, Suite, WorkFactor};
+use mhfe_core::{Mhfe, Password, Suite, WorkFactor};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -31,7 +31,7 @@ use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
 use crate::{
     recover_for_check_in_stages, Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets,
-    Mhfe, MhfeError, OriginalFacts, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
+    MhfeError, OriginalFacts, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
     RecoveryStatus, ReferenceTarget, WordCount, BUILT_IN_CHECK_WORD_COUNTS, ROUNDS, WORD_COUNTS,
 };
 

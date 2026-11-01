@@ -11,6 +11,7 @@ use mhfe_core::repair::Card;
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
+use crate::ContainerFacts;
 
 // The container phrase of the suite 3 vector zero-12.
 use crate::self_check::ZERO_12_CONTAINER as ZERO_12;
@@ -231,9 +232,10 @@ impl RepairWordsCheck {
     }
 
     fn cards(row: &CardRow) -> Result<(), String> {
+        let container = ContainerFacts::read(row.container).map_err(stopped)?;
         for (count, card) in Card::SIZES.into_iter().zip(row.cards) {
-            let words = super::repair_words(row.container, count).map_err(stopped)?;
-            expect(words == card, "gives other words")?;
+            let words = super::repair_words(container.phrase(), count).map_err(stopped)?;
+            expect(words.as_str() == card, "gives other words")?;
         }
         Ok(())
     }

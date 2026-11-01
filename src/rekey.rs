@@ -5,13 +5,13 @@
 
 use std::cell::RefCell;
 
-use mhfe_core::{Argon2Engine, Password, WorkFactor};
+use mhfe_core::{Argon2Engine, Mhfe, Password, WorkFactor};
 
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
 use crate::rehearsal::{recover_for_rekey, Confirmation, RecoveredForRekey};
-use crate::{Mhfe, MhfeError, PhraseLength, ROUNDS};
+use crate::{MhfeError, PhraseLength, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;
@@ -401,7 +401,7 @@ mod tests {
         )
         .unwrap();
         let rekey = Rekey::new(
-            &container,
+            container.as_str(),
             words(12),
             password("public test password"),
             old_work,
@@ -448,7 +448,7 @@ mod tests {
                 &mut |_| Ok(()),
             )
             .unwrap();
-        assert_ne!(sealed.container(), &*container);
+        assert_ne!(sealed.container(), container.as_str());
     }
 
     use crate::test_support::NoArgon2Calls;
@@ -571,7 +571,7 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
-        let rekey = Rekey::new(&container, PhraseLength::Detect, old, work).unwrap();
+        let rekey = Rekey::new(container.as_str(), PhraseLength::Detect, old, work).unwrap();
         let fingerprint = crate::wallet::master_fingerprint(ABANDON, "TREZOR").unwrap();
         let reference = Reference::Fingerprint {
             fingerprint,
@@ -626,7 +626,7 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
-        Rekey::new(&container, length, old, WorkFactor::default()).unwrap()
+        Rekey::new(container.as_str(), length, old, WorkFactor::default()).unwrap()
     }
 
     fn detected(phrase: &str) -> Rekey {
@@ -833,8 +833,13 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
-        let mut rekey =
-            Rekey::new(&container, PhraseLength::Detect, old, WorkFactor::default()).unwrap();
+        let mut rekey = Rekey::new(
+            container.as_str(),
+            PhraseLength::Detect,
+            old,
+            WorkFactor::default(),
+        )
+        .unwrap();
         assert!(rekey.set_length(words(12)).is_ok());
         assert!(matches!(
             rekey.set_length(words(15)),

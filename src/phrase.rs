@@ -1,6 +1,6 @@
 //! Reading seed phrases the way people write them down.
 
-use bip39::{Language, Mnemonic};
+use bip39::Language;
 use mhfe_core::{Error, Phrase};
 
 use crate::packing::{SHORT_WORD_COUNTS, STATE_WORDS};
@@ -53,24 +53,6 @@ fn reason(refused: Error) -> String {
         // Phrase::read gives only those three, but the core's errors are open to new ones.
         other => other.to_string(),
     }
-}
-
-/// [`read`] as bip39 holds the phrase, as the rounds of src/mhfe.rs start from its entropy, which
-/// the core keeps private.
-#[expect(
-    clippy::expect_used,
-    reason = "Phrase::read has checked the words and the checksum that bip39 reads"
-)]
-pub(crate) fn parse(input: &str) -> Result<Mnemonic, String> {
-    let phrase = Phrase::read(input).map_err(reason)?;
-    let mnemonic = Mnemonic::parse_in_normalized(Language::English, phrase.as_str());
-    Ok(mnemonic.expect("a phrase's text is a valid BIP39 phrase"))
-}
-
-/// Parses a container: a valid phrase of 24 words (suite 3) or of 12, 15, 18 or 21 words
-/// (suite 4, the same-length containers), which [`mhfe_core::Suite::of_container`] tells apart.
-pub fn parse_container(input: &str) -> Result<Mnemonic, String> {
-    parse(input)
 }
 
 /// Checks an original phrase before anything is computed and returns its word count, so that
@@ -173,10 +155,14 @@ mod tests {
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
+    /// Why `input` is refused, in mhfe's words.
+    fn refused(input: &str) -> String {
+        reason(Phrase::read(input).unwrap_err())
+    }
+
     #[test]
     fn accepts_spacing_case_and_four_letter_prefixes() {
         let typed = "  ABANDON aban\tAband abandon abandon abandon abandon abandon abandon abandon abandon abou ";
-        assert_eq!(parse(typed).unwrap().to_string(), ZERO_12);
         assert_eq!(read_phrase(typed).unwrap().as_str(), ZERO_12);
     }
 
@@ -184,12 +170,12 @@ mod tests {
     fn rejects_short_or_ambiguous_prefixes_and_unknown_words() {
         let with_short_prefix = ZERO_12.replacen("abandon", "aba", 1);
         assert_eq!(
-            parse(&with_short_prefix).unwrap_err(),
+            refused(&with_short_prefix),
             "word 1 is not in the English BIP39 word list"
         );
         let with_unknown_word = ZERO_12.replacen("about", "aboutx", 1);
         assert_eq!(
-            parse(&with_unknown_word).unwrap_err(),
+            refused(&with_unknown_word),
             "word 12 is not in the English BIP39 word list"
         );
     }
@@ -197,15 +183,13 @@ mod tests {
     #[test]
     fn reports_word_count_and_checksum_problems_without_words() {
         assert_eq!(
-            parse("abandon abandon").unwrap_err(),
+            refused("abandon abandon"),
             "it has 2 words, but a phrase has 12, 15, 18, 21 or 24"
         );
         let bad_checksum = ZERO_12.replace("about", "abandon");
         assert_eq!(
-            parse(&bad_checksum).unwrap_err(),
+            refused(&bad_checksum),
             "its checksum does not match, so a word is wrong or words are out of order"
         );
-        // A 12-word phrase is a same-length container; which suite applies is decided later.
-        assert_eq!(parse_container(ZERO_12).unwrap().word_count(), 12);
     }
 }
