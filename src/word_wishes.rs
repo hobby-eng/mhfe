@@ -696,8 +696,9 @@ mod tests {
         };
         let mut drawn = Drawn::new();
         for _ in 0..DRAWS {
-            let entropy = draw.try_draws(&mut source, MOST_DRAWS).unwrap().unwrap();
-            drawn.push(*entropy);
+            let new = draw.try_draws(&mut source, MOST_DRAWS).unwrap().unwrap();
+            let read = phrase::parse(new.as_str()).unwrap();
+            drawn.push(read.to_entropy().try_into().unwrap());
         }
         drawn
     }

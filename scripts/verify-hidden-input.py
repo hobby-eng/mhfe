@@ -104,7 +104,8 @@ the list do nothing and record nothing, the hint offers "? explains both" on its
 says "Enter selects once one is marked · Esc cancels" on its second, ? shows what each answer gives
 and costs and leaves none marked, ↓ marks "No check" and the hint then fits one line, and Escape
 cancels with exit code 130 before the question about repair words. The passphrase, a synthetic
-one, never reaches the main screen.
+one, never reaches the main screen. A draw with the check shows its count of draws on one line, and
+Ctrl+C ends it.
 
 `mhfe check` offers "The phrase + passphrase check" only with a BIP39 passphrase, as the library
 and the browser package do (AUD-010): after the public zero-12 container, a password and the
@@ -382,6 +383,8 @@ PLACE_REFUSED = b"the chosen word needs a"
 RECOGNISABLE = b"If someone learns or guesses your chosen word, it lets them rule out almost"
 AMPLE = b"The phrase keeps about 244 of its 256 random bits: still far more than"
 CHOSEN_RECORDED = b"Chosen     1 word, 1 never to use; about 244 random bits"
+# The heading of a new phrase, which a draw reaches when it ends.
+NEW_PHRASE_SHOWN = b"New seed phrase, 24 words"
 # The question of `mhfe check` about the reference, the place of "The phrase + passphrase check"
 # for a 24-word container whose original may be shorter, and what an empty passphrase gets there.
 COMPARE_ASKED = b"What should the recovered seed phrase be compared with?"
@@ -1407,6 +1410,34 @@ def check_new_chosen_words():
     print("new: the bits kept and the warning are said before the draw; no word in the summary")
 
 
+def check_new_draw_shows_its_count():
+    """`mhfe new` with the wallet check draws on one thread, which takes minutes, so it shows its
+    count of draws on one line, and Ctrl+C ends the draw. A phrase found before the first report,
+    about one drawing in 64, ends the drawing first, so it is tried again."""
+    for _ in range(5):
+        session = Session(("new", "--pim", "0"))
+        session.wait_for(b"passphrase of the new wallet")
+        session.answer(SECRET + b"\r", b"Repeat the passphrase")
+        session.answer(SECRET + b"\r", CHECK_ASKED, *CHECK_ANSWERS, LIST_SHOWN)
+        # A list flushes what was typed before it reads keys, so each answer waits for it.
+        session.idle(b"", 0.5)
+        session.answer(b"2", CHOSEN_ASKED, LIST_SHOWN)
+        session.idle(b"", 0.5)
+        session.answer(b"1", REPAIR_ASKED, LIST_SHOWN)
+        session.idle(b"", 0.5)
+        session.answer(b"1", b"Drawing a phrase that passes the check")
+        seen = session.wait_for(b"\r1,024 draws so far", NEW_PHRASE_SHOWN, limit=60)
+        if seen != NEW_PHRASE_SHOWN:
+            break
+        session.close()
+    assert seen != NEW_PHRASE_SHOWN, "new: five drawings ended before their first report"
+    session.wait_for(b"\r2,048 draws so far", NEW_PHRASE_SHOWN, limit=60)
+    code, settings = session.close()
+    assert code == CANCELLED, f"new, the draw: Ctrl+C gave exit code {code}"
+    assert settings == session.original, "new, the draw: terminal settings changed"
+    print("new: a draw with the check shows its count on one line; Ctrl+C ends it, exit code 130")
+
+
 def check_quit_keys_leave_the_private_screen():
     """Ctrl+\\ and Ctrl+Z at a visible prompt on a private screen, and SIGTERM, end `mhfe new` as
     Ctrl+C does: the private screen with the chosen word on it is left, the terminal restored and
@@ -2209,6 +2240,7 @@ def main():
     check_private_reveals()
     check_new_check_question()
     check_new_chosen_words()
+    check_new_draw_shows_its_count()
     check_never_use_is_refused_at_start()
     check_quit_keys_leave_the_private_screen()
     check_wallet_check_needs_a_passphrase()

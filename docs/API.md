@@ -187,19 +187,15 @@ let outcome: CheckOutcome =
     checks a recovery uses `verify` or `verify_entropy`.
   - `PhraseDraw` draws a new 24-word phrase: `PhraseDraw::unchecked()`, or
     `PhraseDraw::with_check(passphrase)`, which refuses an empty passphrase
-    (`WALLET_CHECK_NEEDS_PASSPHRASE`), then `draw(source, on_draws)`. Natively
-    `draw_on_every_core(new_source, on_draws)` draws with the check on one thread per processor
-    core, each with its own source from `new_source`, and without the check on the calling thread.
-    `try_draws(source, count)` is the step for a program that runs its own threads or workers. The
-    first passing entropy of any of them is taken, which leaves every passing entropy equally
-    likely; `on_draws` hears the draws, of every thread together, every 1,024
-    (`wallet_check::DRAW_REPORT_INTERVAL`) and stops the draw with an error, as does an error of any
-    thread. `draw` and `draw_on_every_core` probe every source with `random::check_source` first and
-    read the phrase they found back, which must give the same entropy and, with the check, pass it
-    again (`INTERNAL_ERROR` otherwise); `try_draws` does neither, so a program that calls it probes
-    each source with `check_source` first. `is_checked()` says whether the draw has the check. A
-    `NewPhrase` holds the phrase in locked memory (`phrase()`) and says whether it was drawn with
-    the check (`checked()`).
+    (`WALLET_CHECK_NEEDS_PASSPHRASE`), then `draw(source, on_draws)`. With the check it is
+    `mhfe_core::wallet_check::draw`, whose trials run one after another on the calling thread, as
+    the specification's proof requires: a program does not race several draws for the first result.
+    `on_draws` hears the draws so far every 1,024 (`wallet_check::DRAW_REPORT_INTERVAL`) and stops
+    the draw with an error. `draw` probes the source with `random::check_source` first and reads the
+    phrase it found back, which must meet its wishes and, with the check, pass it again
+    (`INTERNAL_ERROR` otherwise). `is_checked()` says whether the draw has the check. A `NewPhrase`
+    holds the phrase in locked memory (`phrase()`) and says whether it was drawn with the check
+    (`checked()`).
   - `PhraseDraw::with_wishes(wishes)` draws a phrase that also meets `word_wishes::WordWishes`;
     `check_bits()` gives the bits the check takes (16, or 0) and `odds()` what the phrase keeps.
   - The public vectors of the criterion: the entropy of 24 zero bytes followed by the big-endian

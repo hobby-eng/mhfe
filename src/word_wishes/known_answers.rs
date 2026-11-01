@@ -127,12 +127,11 @@ impl WordWishesCheck {
             draws += 1;
             stream(bytes)
         };
-        let entropy = draw
+        let phrase = draw
             .try_draws(&mut counted, MOST_DRAWS)
             .map_err(stopped)?
             .ok_or_else(|| "finds no phrase".to_owned())?;
-        let phrase = crate::phrase::phrase_from_entropy(&entropy[..]).map_err(stopped)?;
-        expect(*phrase == *case.phrase, "gives another phrase")?;
+        expect(phrase.as_str() == case.phrase, "gives another phrase")?;
         expect(draws == case.draw, "takes another draw")
     }
 

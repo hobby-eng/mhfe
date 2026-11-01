@@ -2,8 +2,9 @@
 //! specification defines as an optional source profile ("Optional source profile: a recovery check
 //! for new 24-word phrases"), a creation mode the owner chooses. It is still experimental.
 //!
-//! A new phrase is drawn at random until its check passes. The check itself, on the BIP39 seed of
-//! the phrase and a passphrase, is the core's: [`mhfe_core::wallet_check`] gives it byte for byte.
+//! A new phrase is drawn at random until its check passes. The draw and the check itself, on the
+//! BIP39 seed of the phrase and a passphrase, are the core's: [`mhfe_core::wallet_check`] gives
+//! them byte for byte.
 //!
 //! The check is defined for a 24-word phrase, whose entropy has 256 bits, and this library offers
 //! it only with a BIP39 passphrase that is not empty, as the specification allows: one rule for
@@ -25,12 +26,14 @@
 //! assume a uniformly random phrase; they do not by themselves cover a phrase drawn to pass the
 //! check. The check never identifies the wallet: only an address or the fingerprint does that.
 
+use std::ops::ControlFlow;
+
 use mhfe_core::wallet_check::Seed;
 use mhfe_core::Phrase;
 use zeroize::Zeroizing;
 
 use crate::memory::LockedText;
-use crate::phrase::{self, locked_phrase_from_entropy};
+use crate::phrase;
 use crate::random::{check_source, RandomSource};
 use crate::word_wishes::{WishOdds, WordWishes};
 use crate::MhfeError;
@@ -41,9 +44,6 @@ use crate::MhfeError;
     feature = "browser-wallet"
 ))]
 pub(crate) mod known_answers;
-// The draw on several threads at once, for a native program; a page runs its draws in workers.
-#[cfg(not(target_arch = "wasm32"))]
-mod threads;
 
 /// The bits the check fixes: 16, so that a wrong password passes once in 65,536, at a cost of 16
 /// of the 256 bits of a 24-word phrase. A new phrase takes about 65,536 BIP39 seeds to find. A
@@ -76,10 +76,6 @@ pub fn phrase_passes(text: &str, passphrase: &str) -> Result<bool, MhfeError> {
 
 /// Draws between two reports to the caller, which can show progress or stop the draw then.
 pub const DRAW_REPORT_INTERVAL: u64 = 1024;
-/// Hears the number of draws so far, from whichever thread reaches the next report; an error it
-/// returns stops the draw.
-#[cfg(not(target_arch = "wasm32"))]
-pub type SharedDrawReport<'a> = &'a mut (dyn FnMut(u64) -> Result<(), MhfeError> + Send);
 
 /// The rule of the passphrase, for every front end: the wallet check is offered only with a BIP39
 /// passphrase that is not empty (`WALLET_CHECK_NEEDS_PASSPHRASE` otherwise), for a new phrase as
@@ -180,35 +176,37 @@ impl PhraseDraw {
         self.wishes.odds(self.check_bits())
     }
 
-    /// Up to `count` draws from `source`: the first entropy that passes, or `None`. Several
-    /// threads or workers may call it at once; taking the first entropy found by any of them
-    /// leaves every passing entropy equally likely. An entropy of zeros, which a random source
-    /// never gives in practice, means the source filled nothing and is refused.
-    pub fn try_draws(
+    /// One draw from `source` into `entropy`, and whether its phrase meets the wishes. An entropy
+    /// of zeros, which a random source never gives in practice, means the source filled nothing
+    /// and is refused.
+    fn one_draw(
+        &self,
+        source: &mut dyn RandomSource,
+        entropy: &mut [u8; NEW_ENTROPY_BYTES],
+    ) -> Result<bool, MhfeError> {
+        source.fill(&mut entropy[..])?;
+        if entropy.iter().all(|&byte| byte == 0) {
+            return Err(MhfeError::RandomFailed(
+                "it gave an entropy of zeros".to_owned(),
+            ));
+        }
+        // The chosen words' bits are set after the source's bytes are judged, and a phrase that
+        // misses a wish is drawn again, before the check's costly seed.
+        self.wishes.apply(entropy);
+        Ok(self.wishes.met_by(entropy))
+    }
+
+    /// Up to `count` draws from `source`, without the wallet check, which only the core's draw
+    /// makes: the first phrase that meets the wishes, or `None`.
+    pub(crate) fn try_draws(
         &self,
         source: &mut dyn RandomSource,
         count: u64,
-    ) -> Result<Option<Zeroizing<[u8; NEW_ENTROPY_BYTES]>>, MhfeError> {
+    ) -> Result<Option<Phrase>, MhfeError> {
         let mut entropy = Zeroizing::new([0u8; NEW_ENTROPY_BYTES]);
         for _ in 0..count {
-            source.fill(&mut entropy[..])?;
-            if entropy.iter().all(|&byte| byte == 0) {
-                return Err(MhfeError::RandomFailed(
-                    "it gave an entropy of zeros".to_owned(),
-                ));
-            }
-            // The chosen words' bits are set after the source's bytes are judged, and a phrase
-            // that misses a wish is drawn again, before the check's costly seed.
-            self.wishes.apply(&mut entropy);
-            if !self.wishes.met_by(&entropy) {
-                continue;
-            }
-            let found = match &self.passphrase {
-                None => true,
-                Some(passphrase) => passes(&entropy[..], passphrase)?,
-            };
-            if found {
-                return Ok(Some(entropy));
+            if self.one_draw(source, &mut entropy)? {
+                return Ok(Some(Phrase::from_entropy(&entropy[..])?));
             }
         }
         Ok(None)
@@ -224,83 +222,75 @@ impl PhraseDraw {
         on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
     ) -> Result<NewPhrase, MhfeError> {
         check_source(source)?;
-        let mut draws = 0;
-        loop {
-            if let Some(entropy) = self.try_draws(source, DRAW_REPORT_INTERVAL)? {
-                return self.give_out(&entropy);
-            }
-            draws += DRAW_REPORT_INTERVAL;
-            on_draws(draws)?;
-        }
-    }
-
-    /// [`PhraseDraw::draw`] on every processor core at once, natively: one thread per core, each
-    /// with its own source from `new_source`, which it probes ([`check_source`]) before its first
-    /// draw. The first passing entropy any thread finds is taken, which leaves every passing
-    /// entropy equally likely, and the others stop at their next draw. An error of any thread, a
-    /// source that cannot be random among them, ends the draw with that error. `on_draws` hears
-    /// the number of draws of all threads every [`DRAW_REPORT_INTERVAL`] draws, from whichever
-    /// thread reaches it; an error it returns stops the draw. The phrase found is read back before
-    /// it is given out. A draw without the check takes one entropy on the calling thread, as
-    /// [`PhraseDraw::draw`] does.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn draw_on_every_core<S, F>(
-        &self,
-        new_source: F,
-        on_draws: SharedDrawReport<'_>,
-    ) -> Result<NewPhrase, MhfeError>
-    where
-        S: RandomSource,
-        F: Fn() -> S + Sync,
-    {
-        let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
-        self.draw_on_threads(cores, &new_source, on_draws)
-    }
-
-    /// [`PhraseDraw::draw_on_every_core`] on `threads` threads.
-    #[cfg(not(target_arch = "wasm32"))]
-    fn draw_on_threads<S, F>(
-        &self,
-        threads: usize,
-        new_source: &F,
-        on_draws: SharedDrawReport<'_>,
-    ) -> Result<NewPhrase, MhfeError>
-    where
-        S: RandomSource,
-        F: Fn() -> S + Sync,
-    {
-        if !self.is_checked() || threads <= 1 {
-            return self.draw(&mut new_source(), on_draws);
-        }
-        let entropy = threads::ThreadedDraw::new(self, on_draws).run(threads, new_source)?;
-        self.give_out(&entropy)
-    }
-
-    /// The phrase of a drawn `entropy`, read back before it is given out.
-    fn give_out(&self, entropy: &[u8; NEW_ENTROPY_BYTES]) -> Result<NewPhrase, MhfeError> {
-        // Written at its final size into a buffer locked first: Mnemonic::to_string would leave
-        // growing copies of the first words in freed memory (AUD-008-SEC002).
-        let phrase = locked_phrase_from_entropy(&entropy[..])?;
-        self.read_back(&phrase, &entropy[..])?;
+        let phrase = match &self.passphrase {
+            Some(passphrase) => self.checked_phrase(passphrase, source, on_draws)?,
+            None => self.unchecked_phrase(source, on_draws)?,
+        };
+        self.read_back(phrase.as_str())?;
         Ok(NewPhrase {
             phrase,
             checked: self.is_checked(),
         })
     }
 
-    /// Reads a new phrase as a person's program will read it: it must give back the entropy it
-    /// was written from and, when drawn with the check, pass the check again. A fault between the
-    /// drawing and the writing would otherwise give a phrase that is not the one drawn, or one
-    /// whose check fails at the first recovery.
-    fn read_back(&self, phrase: &str, entropy: &[u8]) -> Result<(), MhfeError> {
+    /// The first phrase that meets the wishes. The core's draw always checks, so this one stays
+    /// here.
+    fn unchecked_phrase(
+        &self,
+        source: &mut dyn RandomSource,
+        on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
+    ) -> Result<Phrase, MhfeError> {
+        let mut draws = 0;
+        loop {
+            if let Some(phrase) = self.try_draws(source, DRAW_REPORT_INTERVAL)? {
+                return Ok(phrase);
+            }
+            draws += DRAW_REPORT_INTERVAL;
+            on_draws(draws)?;
+        }
+    }
+
+    /// The phrase of the core's draw, whose trials run one after another, as the specification's
+    /// proof requires: `source` fills each, and a draw that misses a wish is drawn again before the
+    /// core sees it, though it counts for `on_draws`.
+    fn checked_phrase(
+        &self,
+        passphrase: &str,
+        source: &mut dyn RandomSource,
+        on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
+    ) -> Result<Phrase, MhfeError> {
+        let mut draws = 0u64;
+        let mut counted = |entropy: &mut [u8; NEW_ENTROPY_BYTES]| {
+            let met = self.one_draw(source, entropy)?;
+            draws += 1;
+            if draws.is_multiple_of(DRAW_REPORT_INTERVAL) {
+                on_draws(draws)?;
+            }
+            Ok::<bool, MhfeError>(met)
+        };
+        // `Break` gives only `Cancelled`, so the error that stops the draw waits here.
+        let mut stopped = None;
+        let drawn = mhfe_core::wallet_check::draw(passphrase, &mut |entropy| loop {
+            match counted(entropy) {
+                Ok(true) => return ControlFlow::Continue(()),
+                Ok(false) => {}
+                Err(error) => {
+                    stopped = Some(error);
+                    return ControlFlow::Break(());
+                }
+            }
+        });
+        drawn.map_err(|error| stopped.unwrap_or_else(|| error.into()))
+    }
+
+    /// Reads a new phrase as a person's program will read it: it must meet its wishes and, when
+    /// drawn with the check, pass the check again. A fault between the drawing and the writing
+    /// would otherwise give a phrase that is not the one asked for, or one whose check fails at the
+    /// first recovery.
+    fn read_back(&self, phrase: &str) -> Result<(), MhfeError> {
         let read = phrase::parse(phrase)
             .map_err(|_| MhfeError::Internal("a new phrase does not read back".to_owned()))?;
         let read = Zeroizing::new(read.to_entropy());
-        if *read != entropy {
-            return Err(MhfeError::Internal(
-                "a new phrase reads back as another entropy".to_owned(),
-            ));
-        }
         let words: &[u8; NEW_ENTROPY_BYTES] = (&read[..])
             .try_into()
             .map_err(|_| MhfeError::Internal("a new phrase is not 24 words".to_owned()))?;
@@ -322,14 +312,14 @@ impl PhraseDraw {
 
 /// A new phrase, kept out of swap and wiped when dropped.
 pub struct NewPhrase {
-    phrase: LockedText,
+    phrase: Phrase,
     checked: bool,
 }
 
 impl NewPhrase {
     /// The 24 words, one space apart.
     pub fn phrase(&self) -> &str {
-        &self.phrase
+        self.phrase.as_str()
     }
 
     /// Whether it was drawn to pass the wallet check.
@@ -341,6 +331,7 @@ impl NewPhrase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::word_wishes::Place;
 
     /// Entropies of 32 bytes with `counter` in the last eight, as a deterministic stand-in for a
     /// random generator.
@@ -397,8 +388,6 @@ mod tests {
         assert_eq!(counter.get(), TREZOR_COUNTER);
         assert!(checked.checked());
         assert!(verify(checked.phrase(), "TREZOR").unwrap());
-        // Written into a buffer locked first, as a recovered phrase is.
-        assert_eq!(checked.phrase.is_locked(), cfg!(unix));
         let unchecked = PhraseDraw::unchecked()
             .draw(&mut fill, &mut |_| Ok(()))
             .unwrap();
@@ -511,126 +500,78 @@ mod tests {
         ));
     }
 
-    /// A stand-in for the system's generator on one thread: the [`counted`] entropies after
-    /// `next`.
-    #[cfg(not(target_arch = "wasm32"))]
-    struct Counting {
-        next: u64,
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    impl RandomSource for Counting {
-        fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {
-            self.next += 1;
-            bytes.copy_from_slice(&counted(self.next));
+    /// The core's draw stops only with `Cancelled`: what stopped it comes out as it was. A draw
+    /// that misses a wish counts, but never reaches the check.
+    #[test]
+    fn a_checked_draw_keeps_its_errors_and_counts_a_missed_wish() {
+        // Every phrase of these counters holds "abandon", so that no seed is computed here.
+        let next = std::cell::Cell::new(0u64);
+        let mut counting = |bytes: &mut [u8]| {
+            next.set(next.get() + 1);
+            bytes.copy_from_slice(&counted(next.get()));
             Ok(())
-        }
-    }
-
-    /// Sources for the threads of a draw, one per call: the first counts after `first`, each
-    /// other one from 1, where none passes with "TREZOR" before [`TREZOR_COUNTER`]. Whichever
-    /// thread finds a passing entropy first, it is the one of [`TREZOR_COUNTER`].
-    #[cfg(not(target_arch = "wasm32"))]
-    fn thread_sources(first: u64) -> impl Fn() -> Counting + Sync {
-        let made = std::sync::atomic::AtomicUsize::new(0);
-        move || Counting {
-            next: if made.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
-                first
-            } else {
-                0
-            },
-        }
-    }
-
-    /// The draw on several threads gives the phrase the draw on one gives, read back and checked,
-    /// whether on every core or on four threads.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn a_draw_on_several_threads_finds_the_passing_phrase() {
-        let draw = PhraseDraw::with_check("TREZOR").unwrap();
-        let expected = crate::phrase::phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
-        // The first source's two probes take the two counters before the passing one.
-        let first = TREZOR_COUNTER - 3;
-        let found = draw
-            .draw_on_every_core(thread_sources(first), &mut |_| Ok(()))
-            .unwrap();
-        assert_eq!(found.phrase(), &*expected);
-        assert!(found.checked());
-        let found = draw
-            .draw_on_threads(4, &thread_sources(first), &mut |_| Ok(()))
-            .unwrap();
-        assert_eq!(found.phrase(), &*expected);
-        assert!(verify(found.phrase(), "TREZOR").unwrap());
-        // A draw without the check takes one entropy on the calling thread, after the probes.
-        let unchecked = PhraseDraw::unchecked()
-            .draw_on_threads(4, &thread_sources(10), &mut |_| Ok(()))
-            .unwrap();
-        let thirteenth = crate::phrase::phrase_from_entropy(&counted(13)).unwrap();
-        assert_eq!(unchecked.phrase(), &*thirteenth);
-        assert!(!unchecked.checked());
-    }
-
-    /// Every thread probes its own source: one that fills nothing ends the draw with
-    /// RANDOM_FAILED, and the callback can stop it, hearing the count of all threads.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn a_draw_on_several_threads_refuses_a_bad_source_and_stops_when_told() {
-        /// The first source fills nothing; the others count from 1.
-        enum OneBad {
-            Zeros,
-            Counting(Counting),
-        }
-        impl RandomSource for OneBad {
-            fn fill(&mut self, bytes: &mut [u8]) -> Result<(), MhfeError> {
-                match self {
-                    Self::Zeros => {
-                        bytes.fill(0);
-                        Ok(())
-                    }
-                    Self::Counting(counting) => counting.fill(bytes),
-                }
-            }
-        }
-        let draw = PhraseDraw::with_check("TREZOR").unwrap();
-        let made = std::sync::atomic::AtomicUsize::new(0);
-        let one_bad = || {
-            if made.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
-                OneBad::Zeros
-            } else {
-                OneBad::Counting(Counting { next: 0 })
-            }
         };
-        assert!(matches!(
-            draw.draw_on_threads(4, &one_bad, &mut |_| Ok(())),
-            Err(MhfeError::RandomFailed(_))
-        ));
+        let never = WordWishes::new(&[], &["abandon"]).unwrap();
+        let draw = PhraseDraw::with_check("TREZOR").unwrap().with_wishes(never);
+        let told = MhfeError::Internal("told to stop".to_owned());
         let mut heard = Vec::new();
-        let stopped = draw.draw_on_threads(4, &thread_sources(0), &mut |draws| {
+        let stopped = draw.draw(&mut counting, &mut |draws| {
             heard.push(draws);
-            Err(MhfeError::Cancelled)
+            if heard.len() == 2 {
+                return Err(told.clone());
+            }
+            Ok(())
         });
-        assert!(matches!(stopped, Err(MhfeError::Cancelled)));
-        assert_eq!(heard, [DRAW_REPORT_INTERVAL]);
+        assert_eq!(stopped.err(), Some(told));
+        assert_eq!(heard, [DRAW_REPORT_INTERVAL, 2 * DRAW_REPORT_INTERVAL]);
+
+        /// The two probes, the phrase that passes the check, then a failure with an error of its
+        /// own.
+        fn ending() -> impl FnMut(&mut [u8]) -> Result<(), MhfeError> {
+            let mut next = TREZOR_COUNTER - 3;
+            move |bytes| {
+                next += 1;
+                if next > TREZOR_COUNTER {
+                    return Err(MhfeError::RandomFailed("it ended".to_owned()));
+                }
+                bytes.copy_from_slice(&counted(next));
+                Ok(())
+            }
+        }
+        let drawn = |wishes| {
+            PhraseDraw::with_check("TREZOR")
+                .unwrap()
+                .with_wishes(wishes)
+                .draw(&mut ending(), &mut |_| Ok(()))
+        };
+        let holds = WordWishes::new(&[(Place::Anywhere, "proof")], &["zoo"]).unwrap();
+        assert!(drawn(holds).unwrap().phrase().ends_with("proof fatigue"));
+        // That phrase holds this word, so it must not be given out, and the source then fails.
+        let never = WordWishes::new(&[], &["fatigue"]).unwrap();
+        assert!(matches!(drawn(never), Err(MhfeError::RandomFailed(_))));
     }
 
-    /// A phrase is read back before it is given out: one that gives back another entropy, or
-    /// fails its check, is refused.
+    /// A phrase is read back before it is given out: one that fails its check or misses a wish is
+    /// refused.
     #[test]
     fn a_new_phrase_is_read_back() {
-        let entropy = counted(TREZOR_COUNTER);
-        let phrase = crate::phrase::phrase_from_entropy(&entropy).unwrap();
+        let phrase = crate::phrase::phrase_from_entropy(&counted(TREZOR_COUNTER)).unwrap();
         let checked = PhraseDraw::with_check("TREZOR").unwrap();
-        assert_eq!(checked.read_back(&phrase, &entropy), Ok(()));
-        let other = counted(TREZOR_COUNTER + 1);
-        assert!(checked.read_back(&phrase, &other).is_err());
-        let other_phrase = crate::phrase::phrase_from_entropy(&other).unwrap();
+        assert_eq!(checked.read_back(&phrase), Ok(()));
+        let other = crate::phrase::phrase_from_entropy(&counted(TREZOR_COUNTER + 1)).unwrap();
         assert_eq!(
-            checked.read_back(&other_phrase, &other).unwrap_err().code(),
+            checked.read_back(&other).unwrap_err().code(),
             "INTERNAL_ERROR"
         );
+        assert_eq!(PhraseDraw::unchecked().read_back(&other), Ok(()));
+        let never = WordWishes::new(&[], &["abandon"]).unwrap();
         assert_eq!(
-            PhraseDraw::unchecked().read_back(&other_phrase, &other),
-            Ok(())
+            PhraseDraw::unchecked()
+                .with_wishes(never)
+                .read_back(&other)
+                .unwrap_err()
+                .code(),
+            "INTERNAL_ERROR"
         );
     }
 }

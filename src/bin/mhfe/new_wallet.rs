@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use anstream::eprintln;
+use anstream::{eprint, eprintln};
 use clap::Args;
 use mhfe::memory::LockedText;
 use mhfe::operation::WalletPassphrase;
@@ -250,8 +250,9 @@ fn read_new_passphrase(input: &mut Input) -> Result<LockedText, Failure> {
 }
 
 /// A new 24-word phrase from the operating system's generator, as `draw` asks: with the wallet
-/// check, drawn on every processor core until one passes it, about 65,536 BIP39 seeds and more
-/// with chosen words. The library probes the generator first and reads the new phrase back.
+/// check, drawn on one thread until one passes it, about 65,536 BIP39 seeds and more with chosen
+/// words, which takes minutes and so shows its count. The library probes the generator first and
+/// reads the new phrase back.
 fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
     let started = Instant::now();
     let expected = draw.odds().expected_draws.round() as u128;
@@ -267,8 +268,13 @@ fn draw_phrase(draw: PhraseDraw) -> Result<NewPhrase, Failure> {
             "Drawing {what}, about {} draws.",
             style::grouped(expected)
         ));
+        eprintln!();
     }
-    let drawn = draw.draw_on_every_core(|| SystemRandom, &mut |_| Ok(()))?;
+    let drawn = draw.draw(&mut SystemRandom, &mut |draws| {
+        let count = format!("{} draws so far", style::grouped(draws));
+        eprint!("\r{}", paint(MUTED, count));
+        Ok(())
+    })?;
     choice::record(
         "Drawn",
         &format!("in {} s", started.elapsed().as_secs().max(1)),
