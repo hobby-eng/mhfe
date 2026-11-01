@@ -9,9 +9,10 @@ as a 12- to 21-word original seed phrase. The command-line tool is described in 
 
 ```rust
 use mhfe::{
-    check, decrypt, encrypt, CheckOutcome, Mhfe, Password, PhraseLength, Recovery, Reference, Suite,
+    check, decrypt, encrypt, CheckOutcome, Mhfe, PhraseLength, Recovery, Reference, Suite,
     WorkFactor,
 };
+use mhfe_core::Password;
 
 let work = WorkFactor::new(0, 0)?;            // PIM 0..=1023, memory level 0..=21
 let password = Password::new("...")?;        // NFKD with Unicode 18.0.0, 1 to 1024 bytes
@@ -56,7 +57,8 @@ let outcome: CheckOutcome =
 - `Password::new` rejects, never cleans or truncates: a control character (General_Category Cc, such
   as NUL, TAB or a line break), U+2028 or U+2029, any code point that Unicode 18.0.0 does not
   assign, an empty result and more than 1024 bytes after normalization. Private Use characters are
-  allowed. `Password::from_utf8` does the same for bytes.
+  allowed. `password::from_utf8` does the same for bytes. These refusals are the core's, which `?`
+  turns into `MhfeError` with their stable codes.
 - `encrypt` accepts an English phrase of 12 to 24 words in any letter case and spacing, and four or
   more leading letters per word. It refuses the practically impossible case that the container
   equals the original seed phrase (`MhfeError::FixedPoint`). Before it returns the container it
@@ -116,9 +118,9 @@ let outcome: CheckOutcome =
 - `require_built_in_check_length(words)` refuses, before a container is read, a built-in check at
   a length that has none in any container (`INVALID_WORD_COUNT`): only a 12- to 21-word original
   seed phrase carries one. The crate root also exports `SUITE_ID`, `SAME_LENGTH_SUITE_ID`, `ROUNDS`
-  (12), `ENCRYPTION_ROUNDS` (24), `MAX_PIM` (1023), `MAX_MEMORY_LEVEL` (21), `MAX_PASSWORD_BYTES`
-  (1024), the callback type `ProgressCallback` and `memory_text(bytes)`, which writes a memory size
-  as every front end shows it, such as "2 GiB".
+  (12), `ENCRYPTION_ROUNDS` (24), `MAX_PIM` (1023), `MAX_MEMORY_LEVEL` (21), the callback type
+  `ProgressCallback` and `memory_text(bytes)`, which writes a memory size as every front end shows
+  it, such as "2 GiB".
 - `recover_confirmed(mhfe, container, password, words, confirmation, on_progress)` recovers a phrase
   to encrypt it again under a new password or settings, and returns it only once it is confirmed
   (the re-encryption guard). A 12- to 21-word original seed phrase of a 24-word container passes its
@@ -531,12 +533,11 @@ The parts, by identifier and label, and what each compares:
 - `keep-advice`, "Keep advice": the exact `keep` lists of sealed published vectors with a
   passphrase, repair words, other settings and a length that detection would not find alone.
 - `password-unicode`, "Passwords (Unicode 18)": Unicode 18.0.0, the NFKD bytes of the published
-  vector unicode-password and every password case of the validation fixture. The full self-test
-  scans every Unicode scalar value against the refusal of control characters and separators: exactly
-  67 are refused, the 65 of General_Category Cc with U+2028 and U+2029, and NFKD makes none of them
-  from another character. Whether a code point is assigned is checked only at the fixture's cases,
-  which refuse the unassigned U+0378 and U+50000 and the noncharacter U+FFFE
-  (`UNASSIGNED_CHARACTER`); the table of assigned characters is not scanned.
+  vector unicode-password and every password case of the validation fixture, at start and in the
+  full self-test alike. Which code points are refused is checked only at the fixture's cases, such
+  as the unassigned U+0378 and U+50000 and the noncharacter U+FFFE (`UNASSIGNED_CHARACTER`). The
+  scan of every Unicode scalar value is a test of mhfe-core: exactly 67 are refused, the 65 of
+  General_Category Cc with U+2028 and U+2029, and NFKD makes none of them from another character.
 - `bip39-words`, "BIP39 words": the English list's SHA-256, 4 of the 24 Trezor vectors both ways, a
   wrong checksum refused and the completion of four-letter prefixes. Full: all 24.
 - `container-search`, "Search for missing words": the candidates of zero-12's container phrase with

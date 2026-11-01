@@ -12,7 +12,8 @@
 //! protect real funds.
 //!
 //! ```no_run
-//! use mhfe::{decrypt, encrypt, Mhfe, Password, PhraseLength, Recovery, Suite, WorkFactor};
+//! use mhfe::{decrypt, encrypt, Mhfe, PhraseLength, Recovery, Suite, WorkFactor};
+//! use mhfe_core::Password;
 //!
 //! let password = Password::new("correct horse battery staple")?;
 //! let mut mhfe = Mhfe::new(WorkFactor::default())?; // reserves 2 GiB
@@ -58,7 +59,7 @@ mod mhfe;
 pub mod new_password;
 pub mod operation;
 mod packing;
-mod password;
+pub mod password;
 mod phrase;
 pub mod random;
 mod rehearsal;
@@ -94,7 +95,6 @@ pub use mhfe::{
     decrypt, decrypt_as, encrypt, other_detected_lengths, Mhfe, PhraseLength, ProgressCallback,
     RecoveredPhrase, Recovery, RecoveryStatus, WordCount, ENCRYPTION_ROUNDS,
 };
-pub use password::{Password, MAX_PASSWORD_BYTES};
 pub use phrase::{check_container, check_phrase, phrase_from_entropy, read_phrase, WORD_COUNTS};
 pub use rehearsal::{
     check, recover_confirmed, recover_for_check, recover_for_check_in_stages,

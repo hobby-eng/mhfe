@@ -4,12 +4,11 @@
 //! assigned characters, and the refusals of control characters, separators, lengths and invalid
 //! UTF-8. The cases are the `passwords` of the shared validation fixture, which the specification's
 //! `scripts/independent-suite3.py passwords` checks with Python's unicodedata2 18.0.0, and the
-//! password of the published vector unicode-password. The full self-test adds two scans of every
-//! Unicode scalar value: the number of refused characters, and that NFKD makes none of them.
+//! password of the published vector unicode-password.
 
-use unicode_normalization::UnicodeNormalization;
+use mhfe_core::Password;
 
-use super::{is_forbidden_in_password, Password};
+use super::from_utf8;
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
@@ -21,9 +20,6 @@ use crate::MhfeError;
 /// password_nfkd_utf8_hex.
 const UNICODE_PASSWORD: &str = "Caf\u{e9} \u{fb01} \u{ff30}\u{212b}\u{2460} \u{1f510} \u{439}";
 const UNICODE_PASSWORD_NFKD: &str = "43616665cc81206669205041cc8a3120f09f949020d0b8cc86";
-
-/// The refused characters: the 65 of General_Category Cc in Unicode 18.0.0, U+2028 and U+2029.
-const REFUSED_SCALARS: usize = 67;
 
 /// The `password-unicode` check.
 pub(crate) struct PasswordUnicodeCheck {
@@ -49,7 +45,7 @@ impl PasswordUnicodeCheck {
             }
             None => fixtures::bytes(case, "input_utf8_hex")?,
         };
-        let result = Password::from_utf8(&input);
+        let result = from_utf8(&input);
         if case.get("expected_error").is_some() {
             let code = fixtures::text(case, "expected_error")?;
             if case.get("expected_nfkd_bytes").is_some() {
@@ -85,11 +81,6 @@ impl PasswordUnicodeCheck {
     }
 }
 
-/// Every Unicode scalar value.
-fn scalars() -> impl Iterator<Item = char> {
-    (0..=char::MAX as u32).filter_map(char::from_u32)
-}
-
 impl ComponentCheck for PasswordUnicodeCheck {
     fn id(&self) -> &'static str {
         "password-unicode"
@@ -99,7 +90,7 @@ impl ComponentCheck for PasswordUnicodeCheck {
         "Passwords (Unicode 18)"
     }
 
-    fn run(&mut self, tier: Tier) -> ComponentOutcome {
+    fn run(&mut self, _: Tier) -> ComponentOutcome {
         let mut findings = Findings::new();
         findings.one(|| {
             expect(
@@ -117,29 +108,6 @@ impl ComponentCheck for PasswordUnicodeCheck {
         if let Err(damaged) = self.cases(&mut findings) {
             findings.one(|| Err(damaged));
         }
-        if tier == Tier::Full {
-            findings.one(|| {
-                expect(
-                    scalars()
-                        .filter(|&character| is_forbidden_in_password(character))
-                        .count()
-                        == REFUSED_SCALARS,
-                    "another number of characters is refused",
-                )
-            });
-            // The refused characters are checked before NFKD, which is right only if NFKD never
-            // makes one from another character.
-            findings.one(|| {
-                let creates_refused = scalars()
-                    .filter(|&character| !is_forbidden_in_password(character))
-                    .any(|character| {
-                        std::iter::once(character)
-                            .nfkd()
-                            .any(is_forbidden_in_password)
-                    });
-                expect(!creates_refused, "NFKD makes a refused character")
-            });
-        }
         findings.outcome()
     }
 }
@@ -152,15 +120,6 @@ mod tests {
     fn the_password_encoding_passes() {
         assert_eq!(
             PasswordUnicodeCheck::new().run(Tier::Startup),
-            ComponentOutcome::Passed
-        );
-    }
-
-    /// The full tier scans every scalar value twice, which takes seconds in a debug build.
-    #[test]
-    fn the_full_tier_passes() {
-        assert_eq!(
-            PasswordUnicodeCheck::new().run(Tier::Full),
             ComponentOutcome::Passed
         );
     }

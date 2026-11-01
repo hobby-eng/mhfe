@@ -12,13 +12,14 @@
 
 use std::fmt;
 
+use mhfe_core::Password;
 use serde_json::Value;
 
 use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::mhfe::known_answers::{published_table, PublishedRound, PublishedVector};
 use crate::operation::{RoundCounter, Stage, StageCallback};
 use crate::{
-    decrypt, encrypt, Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WorkFactor,
+    decrypt, encrypt, Mhfe, MhfeError, PhraseLength, Recovery, Suite, WorkFactor,
     ENCRYPTION_ROUNDS, ROUNDS,
 };
 

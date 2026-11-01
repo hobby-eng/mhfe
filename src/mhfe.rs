@@ -2,6 +2,7 @@
 //! "Recovering a mnemonic" and their suite 4 forms).
 
 use bip39::Mnemonic;
+use mhfe_core::Password;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::container::ContainerFacts;
@@ -13,7 +14,7 @@ use crate::packing::{self, State, STATE_WORDS};
 use crate::phrase::{self, locked_phrase_from_entropy, phrase_from_entropy};
 use crate::suite::{Suite, ROUNDS};
 use crate::wallet_check;
-use crate::{MhfeError, Password, WorkFactor};
+use crate::{MhfeError, WorkFactor};
 
 // The self-checks of the cipher and the published vectors they replay; see known_answers.rs.
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]

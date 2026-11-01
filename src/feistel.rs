@@ -17,6 +17,7 @@ use std::convert::Infallible;
 use blake2::digest::consts::U32;
 use blake2::{Blake2b, Digest};
 use hmac::{Hmac, KeyInit, Mac};
+use mhfe_core::Password;
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -24,7 +25,7 @@ use crate::engine::{Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
 use crate::packing::{self, STATE_BYTES};
 use crate::suite::{DS_MASK, DS_SALT, ROUNDS, SAME_LENGTH_DS_MASK, SAME_LENGTH_DS_SALT};
-use crate::{MhfeError, Password, WorkFactor};
+use crate::{MhfeError, WorkFactor};
 
 type Blake2b256 = Blake2b<U32>;
 type HmacSha256 = Hmac<Sha256>;

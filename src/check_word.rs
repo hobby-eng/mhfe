@@ -13,9 +13,10 @@ use std::convert::Infallible;
 use std::ops::Range;
 
 use mhfe_core::password_check::Check;
+use mhfe_core::Password;
 
 use crate::memory::LockedText;
-use crate::{MhfeError, Password};
+use crate::MhfeError;
 
 #[cfg(any(
     not(target_arch = "wasm32"),
@@ -241,7 +242,7 @@ pub fn typed_password(
     choice: Option<ReviewChoice>,
 ) -> Result<Password, MhfeError> {
     check_typed_twice(typed, repeat)?;
-    Password::new(&chosen_password(typed, choice)?)
+    Ok(Password::new(&chosen_password(typed, choice)?)?)
 }
 
 /// The reading of a password, with each repair told where the word it replaces lies in `text`,

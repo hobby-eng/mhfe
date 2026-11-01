@@ -78,10 +78,10 @@ impl Deref for LockedText {
     }
 }
 
-/// Bytes that are secret, or may be: the byte form of [`LockedText`], for a password as it is
-/// encoded, the entropy of a phrase, a state of the cipher or a line as it is typed. Its buffer is
-/// locked before the bytes are written into it and stays locked until they are wiped, also when
-/// they are refused while they are written. The bytes may change in place but never grow.
+/// Bytes that are secret, or may be: the byte form of [`LockedText`], for the entropy of a phrase,
+/// a state of the cipher or a line as it is typed. Its buffer is locked before the bytes are
+/// written into it and stays locked until they are wiped, also when they are refused while they
+/// are written. The bytes may change in place but never grow.
 pub struct LockedBytes {
     bytes: Zeroizing<Vec<u8>>,
     // Declared after `bytes`, so that the pages are unlocked only once they are wiped.
@@ -90,9 +90,9 @@ pub struct LockedBytes {
 
 impl LockedBytes {
     /// Bytes that `fill` writes into a buffer reserved at `capacity` bytes and locked first. They
-    /// are held here from the start, so that a `fill` that fails, such as on a password that is
-    /// too long, leaves them wiped while their pages are still locked. `fill` must not write more
-    /// than `capacity` bytes: the buffer must never move.
+    /// are held here from the start, so that a `fill` that fails, such as on a line that is too
+    /// long, leaves them wiped while their pages are still locked. `fill` must not write more than
+    /// `capacity` bytes: the buffer must never move.
     pub fn build<E>(
         capacity: usize,
         fill: impl FnOnce(&mut Vec<u8>) -> Result<(), E>,
@@ -421,10 +421,10 @@ mod tests {
         assert_eq!(back.is_locked(), cfg!(unix));
     }
 
-    /// A `fill` that fails, as on a password that is too long or a line that is too long, gets a
-    /// buffer that is locked while it writes, and the error comes back once the bytes are wiped
-    /// and their pages released. The wipe comes first by the order of the fields, which Rust
-    /// drops in their declared order; reading freed memory to see it would need unsafe code.
+    /// A `fill` that fails, as on a line that is too long, gets a buffer that is locked while it
+    /// writes, and the error comes back once the bytes are wiped and their pages released. The
+    /// wipe comes first by the order of the fields, which Rust drops in their declared order;
+    /// reading freed memory to see it would need unsafe code.
     /// The buffer spans whole pages of its own, so that no other test's guard can hold them.
     #[cfg(unix)]
     #[test]

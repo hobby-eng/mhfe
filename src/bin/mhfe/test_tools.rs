@@ -5,7 +5,8 @@
 use std::time::Instant;
 
 use clap::Args;
-use mhfe::{decrypt, encrypt, Password, PhraseLength, Suite};
+use mhfe::{decrypt, encrypt, PhraseLength, Suite};
+use mhfe_core::Password;
 use serde::Serialize;
 
 use crate::exit::{Failure, SUCCESS};

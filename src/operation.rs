@@ -3,12 +3,13 @@
 //! to and the round's number in the whole operation, so that a front end can show a bar for each
 //! stage and stop the operation between any two rounds.
 
+use mhfe_core::Password;
 use zeroize::Zeroizing;
 
 use crate::engine::Argon2Engine;
 use crate::mhfe::{encrypt, Mhfe};
 use crate::repair::{self, repair_words};
-use crate::{check_phrase, MhfeError, OriginalFacts, Password, Suite, WorkFactor, ROUNDS};
+use crate::{check_phrase, MhfeError, OriginalFacts, Suite, WorkFactor, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;

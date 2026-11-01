@@ -12,6 +12,8 @@
 //! [`PublishedRoundKeys`] cannot encrypt anything but a published vector, so it is no reduced-cost
 //! engine: a release build may hold it.
 
+use mhfe_core::Password;
+
 use super::published_rounds::PUBLISHED;
 use super::{decrypt, decrypt_as, encrypt, RecoveredPhrase};
 use crate::detection::detected_lengths;
@@ -25,8 +27,8 @@ use crate::self_check::{
 };
 use crate::validation_fixtures::{self as fixtures, Fixture};
 use crate::{
-    Mhfe, MhfeError, Password, PhraseLength, Recovery, Suite, WordCount, WorkFactor,
-    SAME_LENGTH_SUITE_ID, SUITE_ID,
+    Mhfe, MhfeError, PhraseLength, Recovery, Suite, WordCount, WorkFactor, SAME_LENGTH_SUITE_ID,
+    SUITE_ID,
 };
 
 /// One published vector as the checks replay it.

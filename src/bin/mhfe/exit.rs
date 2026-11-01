@@ -131,6 +131,12 @@ impl From<MhfeError> for Failure {
     }
 }
 
+impl From<mhfe_core::Error> for Failure {
+    fn from(error: mhfe_core::Error) -> Self {
+        MhfeError::from(error).into()
+    }
+}
+
 impl From<std::io::Error> for Failure {
     fn from(error: std::io::Error) -> Self {
         Self::internal(format!("Input or output failed: {error}"))

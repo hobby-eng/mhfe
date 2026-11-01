@@ -4,13 +4,13 @@
 //! fixture cases that need the library's own modules run with their unit tests: the refusals
 //! before Argon2 of both suites, length detection and the verifier's byte order in src/mhfe.rs,
 //! and the suite 4 round messages of `tests/spec/vectors/suite4/validation-cases.json` in
-//! src/feistel.rs.
+//! src/feistel.rs. It also pins the refusals of mhfe-core to mhfe's stable codes.
 
 // The whole file is test code. Saying so lets it unwrap and panic as tests do (clippy.toml), since
 // clippy recognises test code by this attribute or by #[test].
 #![cfg(test)]
 
-use mhfe::{MhfeError, Password, WorkFactor};
+use mhfe::{password, MhfeError, WorkFactor};
 use serde_json::Value;
 
 fn fixture() -> Value {
@@ -36,7 +36,7 @@ fn passwords_encode_or_fail_as_the_fixture_says() {
                 .repeat(case["count"].as_u64().unwrap() as usize),
             None => hex::decode(text(case, "input_utf8_hex")).unwrap(),
         };
-        let result = Password::from_utf8(&input);
+        let result = password::from_utf8(&input);
         match case.get("expected_error") {
             Some(code) => {
                 let error = result.err().unwrap_or_else(|| panic!("{id}: accepted"));
@@ -92,5 +92,54 @@ fn settings_are_checked_before_any_allocation() {
                 );
             }
         }
+    }
+}
+
+/// Every refusal of the core, by the stable code a `?` gives it. Its last four rows say nothing to
+/// a person: a caller that knows what it passed maps those first, and what still comes here is a
+/// fault of the program.
+#[test]
+fn every_refusal_of_the_core_has_its_stable_code() {
+    use mhfe_core::Error as Core;
+    let refusals = [
+        (Core::EmptyPassword, "EMPTY_PASSWORD"),
+        (Core::PasswordTooLong { bytes: 1025 }, "PASSWORD_TOO_LONG"),
+        (Core::ForbiddenCharacter, "CONTROL_CHARACTER_IN_PASSWORD"),
+        (Core::UnassignedCharacter, "UNASSIGNED_CHARACTER"),
+        (Core::InvalidPim { pim: 1024 }, "INVALID_PIM"),
+        (
+            Core::InvalidMemoryLevel { level: 22 },
+            "INVALID_MEMORY_LEVEL",
+        ),
+        (Core::InvalidWordCount { words: 13 }, "INVALID_WORD_COUNT"),
+        (
+            Core::SameLengthNeedsShortPhrase,
+            "SAME_LENGTH_NEEDS_SHORT_PHRASE",
+        ),
+        (
+            Core::LengthNotAdmitted {
+                container_words: 12,
+            },
+            "LENGTH_CHOICE_NOT_APPLICABLE",
+        ),
+        (Core::VerifierMismatch, "VERIFIER_MISMATCH"),
+        (Core::FixedPoint, "FIXED_POINT"),
+        (Core::CreationCheckFailed, "VERIFICATION_FAILED"),
+        (Core::Argon2Failed { code: -33 }, "ARGON2_FAILED"),
+        (Core::Cancelled, "CANCELLED"),
+        (Core::InvalidEntropyLength { bytes: 15 }, "INTERNAL_ERROR"),
+        (Core::SecretFull { capacity: 8 }, "INTERNAL_ERROR"),
+        (Core::UnknownWord { position: 1 }, "INTERNAL_ERROR"),
+        (Core::InvalidChecksum, "INTERNAL_ERROR"),
+        (
+            Core::SuiteNotAdmitted {
+                container_words: 24,
+            },
+            "INTERNAL_ERROR",
+        ),
+        (Core::OutOfMemory, "INTERNAL_ERROR"),
+    ];
+    for (refusal, code) in refusals {
+        assert_eq!(MhfeError::from(refusal).code(), code, "{refusal:?}");
     }
 }

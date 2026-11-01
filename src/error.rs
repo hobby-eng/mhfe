@@ -308,7 +308,8 @@ impl fmt::Display for MhfeError {
             Self::PasswordTooLong(bytes) => write!(
                 f,
                 "the password is too long: {bytes} bytes after Unicode normalization, \
-                 but at most 1024 are allowed"
+                 but at most {} are allowed",
+                mhfe_core::Password::MAX_BYTES
             ),
             Self::InvalidPasswordUtf8 => write!(f, "the password is not valid UTF-8 text"),
             Self::ControlCharacterInPassword => write!(
@@ -436,6 +437,38 @@ impl fmt::Display for MhfeError {
 }
 
 impl std::error::Error for MhfeError {}
+
+/// A refusal of the core under mhfe's code and message, for the refusals that mean the same
+/// wherever they come from. A refusal of a phrase, a container, a selected suite or an amount of
+/// memory says more once the caller adds what it passed, so that caller maps it first; one that
+/// comes here all the same is a fault of the program, as are the core's own faults.
+impl From<mhfe_core::Error> for MhfeError {
+    fn from(error: mhfe_core::Error) -> Self {
+        use mhfe_core::Error as Core;
+        match error {
+            Core::EmptyPassword => Self::EmptyPassword,
+            Core::PasswordTooLong { bytes } => Self::PasswordTooLong(bytes),
+            Core::ForbiddenCharacter => Self::ControlCharacterInPassword,
+            Core::UnassignedCharacter => Self::UnassignedCharacter,
+            Core::InvalidPim { pim } => Self::InvalidPim(pim),
+            Core::InvalidMemoryLevel { level } => Self::InvalidMemoryLevel(level),
+            Core::InvalidWordCount { words } => Self::InvalidWordCount(words),
+            Core::SameLengthNeedsShortPhrase => Self::SameLengthNeedsShortPhrase,
+            Core::LengthNotAdmitted { container_words } => {
+                Self::LengthChoiceNotApplicable { container_words }
+            }
+            Core::VerifierMismatch => Self::VerifierMismatch,
+            Core::FixedPoint => Self::FixedPoint,
+            Core::CreationCheckFailed => Self::VerificationFailed,
+            // In the wording of the browser's bridge (web/argon2-engine.js).
+            Core::Argon2Failed { code } => {
+                Self::Argon2(format!("the reference code returned error {code}"))
+            }
+            Core::Cancelled => Self::Cancelled,
+            other => Self::Internal(other.to_string()),
+        }
+    }
+}
 
 impl MhfeError {
     /// Stable machine-readable code for the browser API and for scripts.

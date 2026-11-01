@@ -70,16 +70,11 @@ impl Argon2Engine for NativeArgon2 {
     }
 }
 
-/// The error of a refusal of the core's engine for `bytes` of memory, in the wording of the
-/// browser's bridge (web/argon2-engine.js).
+/// The error of a refusal of the core's engine for `bytes` of memory.
 pub(super) fn error_of(error: mhfe_core::Error, bytes: u64) -> MhfeError {
     match error {
         mhfe_core::Error::OutOfMemory => MhfeError::MemoryAllocation { bytes },
-        mhfe_core::Error::Argon2Failed { code } => {
-            MhfeError::Argon2(format!("the reference code returned error {code}"))
-        }
-        // The engine refuses with those two; the core's error type is open to others.
-        other => MhfeError::Internal(other.to_string()),
+        other => other.into(),
     }
 }
 

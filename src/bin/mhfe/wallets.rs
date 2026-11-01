@@ -9,7 +9,8 @@ use std::io;
 
 use anstream::eprintln;
 use clap::Args;
-use mhfe::{HiddenWallets, MhfeError, Password};
+use mhfe::{HiddenWallets, MhfeError};
+use mhfe_core::Password;
 
 use crate::check;
 use crate::choice::{Answer, Question};

@@ -1255,7 +1255,7 @@ mod tests {
     fn the_longest_valid_password_fits() {
         let text = "\u{1D400}".repeat(1024);
         assert_eq!(edited(format!("{text}\r").as_bytes()).unwrap(), text);
-        assert!(mhfe::Password::new(&text).is_ok());
+        assert!(mhfe_core::Password::new(&text).is_ok());
     }
 
     /// The keys in `bytes` up to the first Quit, which the end of the input gives too.

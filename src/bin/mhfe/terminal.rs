@@ -13,7 +13,8 @@ use std::time::Instant;
 use anstream::{eprint, eprintln};
 use mhfe::memory::{LockedBytes, LockedText};
 use mhfe::word_hints::WordList;
-use mhfe::{ContainerFacts, MhfeError, Password, Suite, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe::{ContainerFacts, MhfeError, Suite, ENCRYPTION_ROUNDS, ROUNDS};
+use mhfe_core::Password;
 use zeroize::Zeroizing;
 
 use crate::check_word::{self, Reviewed};
@@ -710,7 +711,8 @@ pub fn read_password(input: &mut Input, operation: Operation) -> Result<Password
                 continue;
             }
         };
-        if let Some(password) = input.accepted(Password::new(&text), TYPE_AGAIN)? {
+        let read = Password::new(&text).map_err(MhfeError::from);
+        if let Some(password) = input.accepted(read, TYPE_AGAIN)? {
             break (password, check);
         }
     };

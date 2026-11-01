@@ -2,14 +2,14 @@
 //! code path of every release at full cost, the stand-ins for it, and the public test phrases,
 //! states and password, so that each test builds its setting from one place.
 
-use mhfe_core::NativeArgon2;
+use mhfe_core::{NativeArgon2, Password};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::engine::{Argon2Cost, Argon2Engine, KEY_BYTES, SALT_BYTES};
 use crate::memory::LockedBytes;
 use crate::packing::State;
-use crate::{encrypt, Mhfe, MhfeError, Password, Suite, WorkFactor};
+use crate::{encrypt, Mhfe, MhfeError, Suite, WorkFactor};
 
 /// 256 KiB and one pass: four Argon2 lanes need at least 32 KiB. The reduced-cost containers of
 /// src/mhfe.rs and of the browser tests are made at the same cost.

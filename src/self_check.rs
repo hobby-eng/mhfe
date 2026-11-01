@@ -387,8 +387,8 @@ pub(crate) fn expect_refusal<T>(result: Result<T, MhfeError>, code: &str) -> Res
 
 /// What a case that should have worked gave instead: its error code only, since an error's text
 /// may hold a vector's words.
-pub(crate) fn stopped(error: MhfeError) -> String {
-    format!("stops with {}", error.code())
+pub(crate) fn stopped(error: impl Into<MhfeError>) -> String {
+    format!("stops with {}", error.into().code())
 }
 
 /// A digest or message authentication code compared with its published value. The function is

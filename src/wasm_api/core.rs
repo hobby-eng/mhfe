@@ -9,6 +9,7 @@
 //! sides of the work (SELF_CHECK_FAILED otherwise), which also covers the optimized code a browser
 //! makes of a long-running loop.
 
+use mhfe_core::Password;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -29,10 +30,9 @@ use crate::self_test::{SelfTest, SelfTestFault};
 use crate::wallet::{fingerprint_text, master_fingerprint_text, parse_fingerprint, Address, Coin};
 use crate::{
     recover_for_check_in_stages, Confirmation, ConfirmationNeeded, ContainerFacts, HiddenWallets,
-    Mhfe, MhfeError, OriginalFacts, Password, PhraseLength, RecoveredForCheck, RecoveredForRekey,
-    Recovery, RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor,
-    BUILT_IN_CHECK_WORD_COUNTS, MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID,
-    WORD_COUNTS,
+    Mhfe, MhfeError, OriginalFacts, PhraseLength, RecoveredForCheck, RecoveredForRekey, Recovery,
+    RecoveryStatus, ReferenceTarget, Suite, WordCount, WorkFactor, BUILT_IN_CHECK_WORD_COUNTS,
+    MAX_MEMORY_LEVEL, MAX_PIM, ROUNDS, SAME_LENGTH_SUITE_ID, SUITE_ID, WORD_COUNTS,
 };
 
 #[derive(Serialize)]
@@ -1480,7 +1480,7 @@ fn password_from(password_utf8: Vec<u8>, choice: &str, position: f64) -> Result<
     let typed = SecretText::new(password_utf8);
     let choice = review_choice(choice, position)?;
     if choice.is_none() {
-        return Password::from_utf8(typed.bytes()).map_err(js_error);
+        return crate::password::from_utf8(typed.bytes()).map_err(js_error);
     }
     let text = typed.text(MhfeError::InvalidPasswordUtf8)?;
     check_word::typed_password(text, None, choice).map_err(js_error)

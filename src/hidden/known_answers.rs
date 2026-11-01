@@ -4,12 +4,13 @@
 //! wallet a password opens is read at the state's full width, a password is not taken twice, and
 //! a reading that passes the built-in check of a shorter phrase is refused (rule I29).
 
+use mhfe_core::Password;
+
 use super::{derive_wallet, HiddenWallets};
 use crate::mhfe::known_answers::{published, published_table};
 use crate::self_check::{
     expect, expect_refusal, stopped, ComponentCheck, ComponentOutcome, Findings, Tier,
 };
-use crate::Password;
 
 /// The phrase the zero-24 container opens with its own password: 32 zero bytes, "abandon" 23 times
 /// and "art". Recomputed independently: its state matches no short length's verifier, and its

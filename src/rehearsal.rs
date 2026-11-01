@@ -4,6 +4,8 @@
 //! close it was. The re-encryption guard uses the same comparison: a phrase recovered to be
 //! encrypted again comes out only once it is confirmed.
 
+use mhfe_core::Password;
+
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::detection;
 use crate::engine::Argon2Engine;
@@ -13,7 +15,7 @@ use crate::packing::STATE_WORDS;
 use crate::suite::{Suite, ROUNDS};
 use crate::wallet::{self, Address, DerivationPath, SearchLimits};
 use crate::wallet_check;
-use crate::{Mhfe, MhfeError, Password, ProgressCallback, WordCount};
+use crate::{Mhfe, MhfeError, ProgressCallback, WordCount};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;

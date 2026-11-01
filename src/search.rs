@@ -15,6 +15,7 @@
 //! word, and the first four letters of a word are enough. A candidate that matches proves only
 //! what the reference proves: an address strongly, a fingerprint with 32 bits.
 
+use mhfe_core::Password;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -24,7 +25,7 @@ use crate::phrase::{self, LIST_SIZE, WORD_BITS, WORD_COUNTS};
 use crate::rehearsal::{self, CheckOutcome, Reference};
 use crate::repair::ContainerReading;
 use crate::wallet::SearchLimits;
-use crate::{Mhfe, MhfeError, Password, Suite};
+use crate::{Mhfe, MhfeError, Suite};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;

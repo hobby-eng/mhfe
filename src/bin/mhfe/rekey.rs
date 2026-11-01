@@ -12,9 +12,10 @@ use mhfe::operation::Stage;
 use mhfe::rekey::{ConfirmedPhrase, Rekey};
 use mhfe::wallet::{fingerprint_text, master_fingerprint};
 use mhfe::{
-    Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, Password,
-    PhraseLength, RecoveredForRekey, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
+    Confirmation, ConfirmationNeeded, ContainerFacts, MhfeError, OriginalFacts, PhraseLength,
+    RecoveredForRekey, WordCount, WorkFactor, ENCRYPTION_ROUNDS, ROUNDS,
 };
+use mhfe_core::Password;
 use zeroize::Zeroizing;
 
 use crate::check::{self, WalletReference};

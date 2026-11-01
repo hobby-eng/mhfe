@@ -5,12 +5,14 @@
 
 use std::cell::RefCell;
 
+use mhfe_core::Password;
+
 use crate::container::{ConfirmationNeeded, ContainerFacts};
 use crate::engine::Argon2Engine;
 use crate::mhfe::RecoveredPhrase;
 use crate::operation::{Encryption, RoundCounter, Sealed, Stage, StageCallback};
 use crate::rehearsal::{recover_for_rekey, Confirmation, RecoveredForRekey};
-use crate::{Mhfe, MhfeError, Password, PhraseLength, WorkFactor, ROUNDS};
+use crate::{Mhfe, MhfeError, PhraseLength, WorkFactor, ROUNDS};
 
 #[cfg(any(not(target_arch = "wasm32"), feature = "browser-core"))]
 pub(crate) mod known_answers;

@@ -219,7 +219,7 @@ impl PasswordRecipe {
         source: &mut dyn RandomSource,
         count: usize,
     ) -> Result<NewPassword, MhfeError> {
-        let text = LockedText::build(count, |text| {
+        let text = LockedText::build::<MhfeError>(count, |text| {
             for _ in 0..count {
                 let index = uniform_below(source, CHARACTERS.len())?;
                 text.push(char::from(CHARACTERS[index]));

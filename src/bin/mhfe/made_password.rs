@@ -10,7 +10,8 @@ use mhfe::memory::LockedText;
 use mhfe::new_password::{
     character_bits, word_bits, PasswordRecipe, DEFAULT_CHARACTERS, DEFAULT_WORDS,
 };
-use mhfe::{MhfeError, Password};
+use mhfe::MhfeError;
+use mhfe_core::Password;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;

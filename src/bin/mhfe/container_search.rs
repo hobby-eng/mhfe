@@ -18,8 +18,8 @@ use anstream::{eprint, eprintln};
 use mhfe::memory::LockedText;
 use mhfe::search::{ContainerSearch, Found, DECOY_SCAN_GAP, MAX_MISSING_FOR_WALLET};
 use mhfe::wallet::SearchLimits;
-use mhfe::{MhfeError, Password, Reference, WorkFactor};
-use mhfe_core::NativeArgon2;
+use mhfe::{MhfeError, Reference, WorkFactor};
+use mhfe_core::{NativeArgon2, Password};
 use zeroize::Zeroizing;
 
 use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE};

@@ -7,7 +7,8 @@ use std::io;
 use anstream::eprintln;
 use clap::Args;
 use mhfe::operation::{Encryption, Keep, KeepItem, Sealed, StageCallback, WalletPassphrase};
-use mhfe::{MhfeError, OriginalFacts, Password, Suite, WorkFactor};
+use mhfe::{MhfeError, OriginalFacts, Suite, WorkFactor};
+use mhfe_core::Password;
 
 use crate::check_word;
 use crate::choice;
@@ -476,7 +477,8 @@ pub fn read_typed_password(input: &mut Input, operation: Operation) -> Result<Pa
         }
         style::hint("Letter case and spaces count.");
         let text = input.password(prompt)?;
-        let Some(password) = input.accepted(Password::new(&text), "Please choose another.")? else {
+        let read = Password::new(&text).map_err(MhfeError::from);
+        let Some(password) = input.accepted(read, "Please choose another.")? else {
             continue;
         };
         let repeated = input.password(repeat)?;
