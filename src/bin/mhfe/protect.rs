@@ -141,8 +141,8 @@ impl ComponentCheck for CoreDumpCheck {
 pub const ISOLATION_ID: &str = "isolation";
 
 /// The `isolation` check: whether [`enter`] closed the network and kept other programs out of the
-/// memory of this process. It is not a failure when it did not: the summary of a command states
-/// only what holds, and the command goes on, as it must on Windows, whose network only an
+/// memory of this process. It is not a failure when it did not: the summary of a command warns of
+/// what stays open, and the command goes on, as it must on Windows, whose network only an
 /// administrator can close for a program (AUD-043-K04).
 pub struct IsolationCheck;
 
@@ -470,7 +470,7 @@ mod tests {
         pub const ISOLATED: i32 = 40;
         pub const NO_NAMESPACE: i32 = 41;
         pub const CHECKS_FAILED: i32 = 42;
-        pub const NOT_EMPTY: i32 = 43;
+        pub const LATE: i32 = 43;
         pub const NO_CHILD: i32 = 44;
         /// Set for the test process that runs [`super::g10_isolated_command`].
         pub const VARIABLE: &str = "MHFE_TEST_G10_CHILD";
@@ -481,7 +481,7 @@ mod tests {
     /// order of main is followed for `mhfe encrypt` in a process of a single thread, as a command
     /// has at that point: forked off a test process of its own that runs nothing else, so that no
     /// other test holds a lock or a descriptor the fork would copy. On a system that allows no
-    /// user namespace only the checks are verified.
+    /// user namespace only the order and the checks are verified.
     #[cfg(target_os = "linux")]
     #[test]
     fn the_empty_network_is_entered_before_the_startup_checks_start_threads() {
@@ -513,10 +513,10 @@ mod tests {
         match status.code() {
             Some(g10::ISOLATED) => {}
             Some(g10::NO_NAMESPACE) => {
-                eprintln!("This system allows no user namespace: checks only.")
+                eprintln!("This system allows no user namespace: order and checks only.")
             }
             Some(g10::CHECKS_FAILED) => panic!("the checks at start failed after isolation"),
-            Some(g10::NOT_EMPTY) => panic!("the network of the isolated command is not empty"),
+            Some(g10::LATE) => panic!("the command entered isolation with more than one thread"),
             other => panic!("the test process ran no isolated command: {other:?}"),
         }
     }
@@ -541,21 +541,12 @@ mod tests {
         if child == 0 {
             let code = if crate::prepare(&command).is_err() {
                 g10::CHECKS_FAILED
-            } else if !report().empty_network {
-                g10::NO_NAMESPACE
+            } else if !report().whole_process {
+                g10::LATE
+            } else if report().empty_network {
+                g10::ISOLATED
             } else {
-                let devices = fs::read_to_string("/proc/self/net/dev").unwrap_or_default();
-                let interfaces: Vec<&str> = devices
-                    .lines()
-                    .skip(2)
-                    .filter_map(|line| line.split(':').next())
-                    .map(str::trim)
-                    .collect();
-                if interfaces == ["lo"] {
-                    g10::ISOLATED
-                } else {
-                    g10::NOT_EMPTY
-                }
+                g10::NO_NAMESPACE
             };
             // SAFETY: ends the child at once, without running anything of the test's process.
             unsafe { libc::_exit(code) };

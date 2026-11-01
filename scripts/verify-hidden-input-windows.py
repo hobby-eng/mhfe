@@ -26,7 +26,8 @@ code 0 and Ctrl+C with 130. The password entry regenerates on Enter and returns 
 help still returns to the menu on Enter. A command of the menu is a process of its own: q in its
 list ends that command and the menu comes back, and Ctrl+C in it ends both with exit code 130.
 
-A command, started directly or from the menu, runs at low integrity, and its summary says so.
+A command, started directly or from the menu, runs at low integrity, and its summary says so. The
+network stays open, which it warns of.
 """
 
 import json
@@ -56,8 +57,10 @@ SETTINGS_QUESTION = "Which settings should protect the phrase?"
 # The entry that shows the help, two below the password entry with mhfe self-test between: it is
 # the tenth, past the number keys, so it is reached with the arrows from the password entry.
 HELP_FROM_PASSWORD = 2
-# What the summary of an isolated command says (isolation_text in src/bin/mhfe/settings.rs).
+# What the summary of an isolated command says (isolation_text in src/bin/mhfe/settings.rs), and
+# what it warns of (IsolationCheck in src/bin/mhfe/protect.rs).
 LOW_INTEGRITY = "low integrity"
+NETWORK_OPEN = "the network stays open"
 # The prompts are matched whole: the "Esc quits" at the end of the first must not pass for the menu.
 MENU_SHOWN = "Esc quits"
 BACK_TO_MENU = "Press Enter to return to the menu (Esc quits)."
@@ -138,7 +141,7 @@ def check_password(label, password, expected):
 
 def check_low_integrity():
     """A command runs at low integrity, started directly or from the menu, and the summary it leaves
-    on Ctrl+C says so."""
+    on Ctrl+C says so. The warning that the network stays open comes before the first prompt."""
     direct = Session()
     direct.at_password_prompt()
     menu = Session(arguments=())
@@ -150,6 +153,7 @@ def check_low_integrity():
     for session in (direct, menu):
         session.type(CTRL_C)
         session.wait_for(LOW_INTEGRITY)
+        assert NETWORK_OPEN in session.output, f"no {NETWORK_OPEN!r} in the command's output"
         session.close()
     print("isolation: a command, started directly or from the menu, runs at low integrity")
 

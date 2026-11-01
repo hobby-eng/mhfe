@@ -66,6 +66,9 @@ pub struct CheckEvidence {
     /// stated one where it passes; `None` for a 24-word one and for a same-length container,
     /// which have none.
     pub built_in_check: Option<usize>,
+    /// The other 12- to 21-word lengths whose built-in check passes too, by chance, about once in
+    /// 2^32 recoveries. A front end names every length that matches, as none tells them apart.
+    pub other_lengths: Vec<usize>,
     /// Whether the 24-word reading passes the phrase + passphrase check of `mhfe new` (the 16-bit
     /// source check) with the reference's passphrase, or the empty one where it has none, where
     /// that reading comes out: no short length's check passes, several do, or the reference
@@ -327,6 +330,7 @@ fn evidence_of(recovery: &Recovery, reference: &Reference<'_>) -> Result<CheckEv
         return Ok(CheckEvidence {
             outcome,
             built_in_check: None,
+            other_lengths: Vec::new(),
             wallet_check: None,
         });
     }
@@ -347,9 +351,15 @@ fn evidence_of(recovery: &Recovery, reference: &Reference<'_>) -> Result<CheckEv
         Reference::BuiltInCheck { words } if short.contains(&words.get()) => Some(words.get()),
         _ => short.first().copied(),
     };
+    let other_lengths = short
+        .iter()
+        .copied()
+        .filter(|&words| Some(words) != built_in_check)
+        .collect();
     Ok(CheckEvidence {
         outcome,
         built_in_check,
+        other_lengths,
         wallet_check,
     })
 }
@@ -701,6 +711,7 @@ mod tests {
         let evidence = evidence_for(&mut mhfe, &container, &reference);
         assert!(evidence.outcome.matches());
         assert_eq!(evidence.built_in_check, Some(12));
+        assert!(evidence.other_lengths.is_empty());
         assert_eq!(evidence.wallet_check, None);
         let with_passphrase = Reference::Fingerprint {
             fingerprint: wallet::master_fingerprint(ABANDON, "TREZOR").unwrap(),
@@ -731,6 +742,43 @@ mod tests {
             assert!(evidence.outcome.matches());
             assert_eq!(evidence.built_in_check, built_in_check);
             assert_eq!(evidence.wallet_check, Some(false));
+        }
+    }
+
+    /// Every length that matches is named, whatever the check is compared with: a stated length
+    /// among them comes first, and one that fails leaves them as with none stated (the
+    /// specification's rehearsal check).
+    #[test]
+    fn a_check_names_every_length_that_matches() {
+        let mut mhfe = reduced();
+        for (text, [first, second]) in AMBIGUOUS_STATES {
+            // A 24-word phrase fills the state alone, so that its container holds this very X.
+            let phrase = Phrase::from_entropy(&state_from_hex(text)).unwrap();
+            let phrase = phrase.as_str();
+            let container = container_of(&mut mhfe, phrase, Suite::TwentyFourWords);
+            let stated = |words| Reference::BuiltInCheck {
+                words: WordCount::new(words).unwrap(),
+            };
+            let other = [12, 15, 18, 21]
+                .into_iter()
+                .find(|words| ![first, second].contains(words))
+                .unwrap();
+            let fingerprint = Reference::Fingerprint {
+                fingerprint: wallet::master_fingerprint(phrase, "").unwrap(),
+                passphrase: "",
+            };
+            for (reference, named, beside) in [
+                (Reference::OwnChecks { passphrase: None }, first, second),
+                (fingerprint, first, second),
+                (stated(first), first, second),
+                (stated(second), second, first),
+                (stated(other), first, second),
+            ] {
+                let evidence = evidence_for(&mut mhfe, &container, &reference);
+                assert!(evidence.outcome.matches());
+                assert_eq!(evidence.built_in_check, Some(named));
+                assert_eq!(evidence.other_lengths, [beside]);
+            }
         }
     }
 

@@ -17,3 +17,7 @@ builds and the CI checks of the same run go on until they end or are cancelled.
   Ctrl+Z is now kept as a character at every prompt, as on Linux and macOS; the standard library
   ended a typed answer at it or dropped it. A result that cannot be written, for example to a full
   disk, now ends the tool with exit code 1 and the reason, instead of a panic.
+- **A check names every length that matches.** When the built-in check of several lengths passes,
+  by chance, `mhfe check` lists each of them, on standard error for a script, and the browser
+  package gives the others in `evidence.otherLengths`, as specification 0.7.0 requires. Only the
+  first was named before.

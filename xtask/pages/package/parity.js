@@ -171,3 +171,40 @@ assert.deepEqual(
   facts.containers.map((choice) => choice.otherLengths),
   [[21], []],
 );
+
+// A check of the published container that two lengths match, which both name: the package replays
+// the vector's round keys, and the program runs the rounds, the one full-cost work of this task.
+const ambiguous = JSON.parse(read("tests/spec/vectors/suite3/ambiguous-12-21.json").toString());
+const roundKeys = new Map(
+  ambiguous.decryption.rounds.map((round) => [round.salt_hex, round.argon2_key_hex]),
+);
+const replayedRounds = {
+  derive: (password, salt, memoryKib, passes, key) =>
+    KNOWN_ANSWER_COSTS.includes(`${memoryKib}/${passes}`)
+      ? engine.derive(password, salt, memoryKib, passes, key)
+      : key.set(Buffer.from(roundKeys.get(Buffer.from(salt).toString("hex")), "hex")),
+};
+const checked = new mhfe.CheckSession(
+  ambiguous.container,
+  encode(ambiguous.inputs.password),
+  "",
+  0,
+  0,
+  0,
+  "words",
+  "0",
+  "",
+  "",
+  noBytes(),
+  replayedRounds,
+  noRound,
+);
+const { evidence } = JSON.parse(checked.compare("words", "0", "", "", noBytes()));
+const lengths = [evidence.builtInCheck, ...evidence.otherLengths];
+assert.deepEqual(lengths, [12, 21]);
+expect(
+  "check --words auto of ambiguous-12-21",
+  ["check", "--stdin", "--words", "auto"],
+  [ambiguous.container, ambiguous.inputs.password, ""],
+  { matches: lengths },
+);

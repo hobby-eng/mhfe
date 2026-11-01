@@ -4,8 +4,8 @@
 //! back, rehearses a recovery without showing the phrase, and makes strong passwords from dice
 //! words. Secrets are only ever typed at a terminal or read from standard input, never taken from
 //! command-line arguments.
-// No unsafe code, except the few operating-system calls in hidden_input.rs, which switch the
-// terminal's echo off, and in protect.rs, which turn Ctrl+\ and Ctrl+Z into Ctrl+C.
+// No unsafe code, except the few operating-system calls of the modules that allow them at their
+// top, each with its reason.
 #![deny(unsafe_code)]
 
 mod cell_widths;
@@ -220,6 +220,9 @@ fn main_help() -> String {
 }
 
 fn main() {
+    // An exception to RUST-09, which hardens the process in the first lines of main: the start
+    // menu and the fast mode hold no secret, and prepare hardens a command before it reads one.
+    //
     // Started without arguments in a terminal, as by a double-click or a launcher script: the
     // menu, which runs the same commands, each as a process of its own that comes through the
     // other branch. --help and --version, which clap answers in Cli::try_parse, handle nothing

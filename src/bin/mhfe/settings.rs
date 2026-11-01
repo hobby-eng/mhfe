@@ -355,6 +355,11 @@ fn show(work: WorkFactor, operation: Operation, asked: bool) {
         locked_memory_text(locking, crate::protect::lock_limit()),
     );
     eprintln!();
+    // The Isolation line names only what holds; what stays open is said here (AUD-043-K04).
+    if let ComponentOutcome::Warning(detail) = crate::protect::IsolationCheck.run(Tier::Startup) {
+        style::warn(&format!("Isolation is {detail}."), "");
+        eprintln!();
+    }
     if matches!(
         operation,
         Operation::Encrypt | Operation::RekeyNew | Operation::New
@@ -382,7 +387,7 @@ fn isolation_text(
     let forbidden = match (empty_network, no_new_sockets, no_file_changes) {
         // No file changes on Windows is low integrity, which leaves low-integrity folders and
         // volumes without access control writable.
-        (false, false, true) if cfg!(windows) => "low integrity, no writes to the user's files",
+        (false, false, true) if cfg!(windows) => "low integrity, most file writes refused",
         // No new sockets on macOS is a sandbox that lets a socket be made but not bound or
         // connected.
         (false, true, false) if cfg!(target_os = "macos") => "no network",

@@ -1,15 +1,17 @@
 //! `cargo xtask parity`: the command-line tool and the browser package give the same results, as
 //! both call the same library: the program's script mode (`--stdin`) here, the package's
-//! WebAssembly in a module worker of the pinned browsers, on public data, without any full-cost
-//! Argon2 work. Build both first: the program with `cargo build --release`, the package with
-//! scripts/build-wasm.sh.
+//! WebAssembly in a module worker of the pinned browsers, on public data. The page does no
+//! full-cost Argon2 work, and the program only for the check below. Build both first: the program
+//! with `cargo build --release`, the package with scripts/build-wasm.sh.
 //!
 //! Compared: the repair words of a container and the repair of a damaged one; the refusals that
 //! come before any round, by their words, which the program writes after "✗ Error:" and a page
-//! reads from the package (sentence() in web/runtime.js); and the other lengths that detection
-//! could read, which the program warns of for the container chosen and readPhrase() lists for each.
+//! reads from the package (sentence() in web/runtime.js); the other lengths that detection could
+//! read, which the program warns of for the container chosen and readPhrase() lists for each; and
+//! the lengths that match in a check of the published ambiguous-12-21, for which the program runs
+//! its rounds, once for each browser, and the page replays the vector's round keys.
 //! Each run of the program also passes its own startup checks and needs the 2 GiB of free memory
-//! that a recovery takes, though none is reserved before these refusals.
+//! that a recovery takes, though none is reserved before the refusals.
 //!
 //! `xtask/pages/package/parity.js` prints, as a line of JSON, each run of the program and what the
 //! package says it must give; this task runs them and compares.
@@ -33,6 +35,8 @@ const INVALID_INPUT: i32 = 2;
 const ERROR_MARK: &str = "✗ Error:";
 /// What the program writes before the other lengths that detection could read.
 const OTHER_LENGTH: &str = "also reads as";
+/// What the program writes before each length that matches.
+const MATCHED_LENGTH: &str = "the built-in check of a";
 
 /// A run of the program, and what the package says it must give.
 #[derive(Deserialize)]
@@ -53,6 +57,8 @@ enum Expected {
     Refuses(String),
     /// A warning of exactly these other lengths.
     Warns(Vec<u32>),
+    /// "matches" on standard output, exit code 0, and exactly these lengths on standard error.
+    Matches(Vec<u32>),
 }
 
 /// The program that `cargo build --release` made, wherever CARGO_TARGET_DIR puts it.
@@ -118,6 +124,13 @@ fn gives(expected: &Expected, code: Option<i32>, stdout: &str, stderr: &str) -> 
                 && lengths.iter().all(all)
                 && stderr.contains(OTHER_LENGTH) != lengths.is_empty()
         }
+        Expected::Matches(lengths) => {
+            let named = |words: &u32| stderr.contains(&format!("{MATCHED_LENGTH} {words}-word"));
+            code == Some(0)
+                && stdout.trim() == "matches"
+                && lengths.iter().all(named)
+                && stderr.matches(MATCHED_LENGTH).count() == lengths.len()
+        }
     }
 }
 
@@ -159,6 +172,9 @@ mod tests {
                            6 or 8 repair\n         words, not 3\n";
     /// A warning of the program before the password, where standard input ended.
     const WARNED: &str = "⚠ This phrase also reads as 21 words.\n✗ Error: Standard input ended\n";
+    /// The lengths that match in a check of the program.
+    const NAMED: &str = "the built-in check of a 12-word original seed phrase\nthe built-in check \
+                         of a 21-word original seed phrase\n";
 
     fn refuses(words: &str) -> Expected {
         Expected::Refuses(words.to_owned())
@@ -214,5 +230,18 @@ mod tests {
         assert!(!gives(&Expected::Warns(Vec::new()), code, "", WARNED));
         assert!(!gives(&Expected::Warns(vec![21]), Some(0), "", WARNED));
         assert!(!gives(&Expected::Warns(Vec::new()), Some(0), "", ""));
+    }
+
+    #[test]
+    fn a_match_must_name_each_length_and_no_other() {
+        let both = Expected::Matches(vec![12, 21]);
+        assert!(gives(&both, Some(0), "matches\n", NAMED));
+        assert!(!gives(&both, Some(3), "matches\n", NAMED));
+        assert!(!gives(&both, Some(0), "does not match\n", NAMED));
+        assert!(!gives(&both, Some(0), "matches\n", ""));
+        let one = Expected::Matches(vec![12]);
+        assert!(!gives(&one, Some(0), "matches\n", NAMED));
+        let another = Expected::Matches(vec![12, 15]);
+        assert!(!gives(&another, Some(0), "matches\n", NAMED));
     }
 }

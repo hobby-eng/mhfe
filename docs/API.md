@@ -109,13 +109,14 @@ let outcome: CheckOutcome =
   or `Fingerprint { fingerprint, passphrase }` for the BIP32 master key fingerprint. As in
   recovery, a built-in check that passes at another 12- to 21-word length than `words` takes
   precedence: `BuiltInCheck` then matches, and `CheckEvidence::built_in_check` names the length
-  found. It returns a `CheckOutcome`: `Matches { path }` or `DoesNotMatch`, where `path` is the
-  derivation path at which a matched address was found (`None` for the other references). No part
-  of the recovered phrase comes out. `Reference::passphrase()` gives the BIP39 passphrase a
-  reference is compared with, empty when it is compared with the wallet without one, and `None` for
-  `BuiltInCheck` and for `OwnChecks` without a passphrase, which say nothing about one;
-  `Reference::given_passphrase()` gives it only when it is not empty, the case that shows that the
-  wallet has one.
+  found; `CheckEvidence::other_lengths` names the others that pass too, by chance, as the
+  specification has a check report every length that matches. It returns a `CheckOutcome`:
+  `Matches { path }` or `DoesNotMatch`, where `path` is the derivation path at which a matched
+  address was found (`None` for the other references). No part of the recovered phrase comes out.
+  `Reference::passphrase()` gives the BIP39 passphrase a reference is compared with, empty when it
+  is compared with the wallet without one, and `None` for `BuiltInCheck` and for `OwnChecks` without
+  a passphrase, which say nothing about one; `Reference::given_passphrase()` gives it only when it
+  is not empty, the case that shows that the wallet has one.
 - `require_built_in_check_length(words)` refuses, before a container is read, a built-in check at
   a length that has none in any container (`INVALID_WORD_COUNT`): only a 12- to 21-word original
   seed phrase carries one. The crate root also exports `ROUNDS` (12), `ENCRYPTION_ROUNDS` (24), the
@@ -744,13 +745,14 @@ await client.check({
   passphrase,
   onProgress,
   onNoLength, // only with { words: 0 }: asked when detection finds no length
-}); // { matches, path, evidence: { builtInCheck, walletCheck } }
+}); // { matches, path, evidence: { builtInCheck, otherLengths, walletCheck } }
 // path: where a matched address was found, null otherwise. evidence, from the same recovery:
 // builtInCheck, the length of a 12- to 21-word reading whose built-in check passes (the stated one
-// where it passes), null otherwise; walletCheck, whether the 24-word reading passes the 16-bit
-// source check with the reference's passphrase or the empty one, where that reading comes out (no
-// short length passes, several do, or an address or fingerprint matched it), null otherwise and
-// always for a stated length { words: n } and a same-length container.
+// where it passes), null otherwise; otherLengths, the other lengths that pass too, by chance, to
+// name beside it; walletCheck, whether the 24-word reading passes the 16-bit source check with the
+// reference's passphrase or the empty one, where that reading comes out (no short length passes,
+// several do, or an address or fingerprint matched it), null otherwise and always for a stated
+// length { words: n } and a same-length container.
 // reference: exactly one of { address, coin, path? }, { fingerprint }, { words } or
 // { walletCheck: true }; coin and path only with an address. A stated length { words: n } matches
 // when the built-in check of any 12- to 21-word length passes, the stated one or another, and

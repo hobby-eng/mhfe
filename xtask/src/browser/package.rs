@@ -62,8 +62,9 @@ const DATA: [&str; 9] = [
     "AMBIGUOUS_12_WORDS",
 ];
 /// The files that the checks read beside the package, from the root.
-const FILES_BESIDE: [&str; 7] = [
+const FILES_BESIDE: [&str; 8] = [
     "Cargo.toml",
+    "tests/spec/vectors/suite3/ambiguous-12-21.json",
     "tests/spec/vectors/suite3/zero-12.json",
     "tests/spec/vectors/suite4/same-length-zero-12.json",
     "vendor/phc-winner-argon2/include/argon2.h",

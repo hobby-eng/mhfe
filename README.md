@@ -361,7 +361,8 @@ not match", never the phrase; for a matched address it also shows where it was f
 `m/84'/0'/0'/0/5`. At a terminal, a match lists each check that passed: the container phrase's BIP39
 checksum, the container's own wallet when a search found missing words with it, the reference it was
 compared with, and those of the original seed phrase's own checks that the same recovery passes, its
-built-in check or the 16-bit phrase + passphrase check.
+built-in check or the 16-bit phrase + passphrase check. In the rare case that the built-in check of
+several lengths passes, each length is listed.
 
 Type the container phrase as you wrote it down, not from the screen. One miscopied word passes the
 BIP39 checksum in one case in 256, or as often as one in 16 for a 12-word container of the same
@@ -849,7 +850,8 @@ Both kinds of container work in the browser too: a page asks for the same length
   Nor can it ask for the coin: `--address` without `--coin` means a Bitcoin address, as in earlier
   versions. The summary then says "Bitcoin, as no --coin was given", and an address that is not
   Bitcoin's is refused with a message that names Bitcoin and `--coin`. For an address of another
-  coin, give `--coin`, such as `--coin ethereum`.
+  coin, give `--coin`, such as `--coin ethereum`. Several lengths that match are named on standard
+  error.
 - `repair`: the container phrase, then the repair words, `?` marking a word that cannot be read in
   either. The output is the repaired container on one line, or nothing when there is nothing to
   repair.

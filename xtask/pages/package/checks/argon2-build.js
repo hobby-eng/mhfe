@@ -203,14 +203,18 @@ async function checkRecoveryLengths(created, onRound, reduced, steps) {
     operations.check(created.container, PASSWORD, reduced, "address", BIP84_ADDRESS, {
       coin: "bitcoin",
     }),
-    { matches: true, path: "m/84'/0'/0'/0/0", evidence: { builtInCheck: 12, walletCheck: null } },
+    {
+      matches: true,
+      path: "m/84'/0'/0'/0/0",
+      evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
+    },
   );
   // The length detected: the 12-word original passes its own checks, and one recovery is
   // compared again, as a page that asks for the length when detection finds none compares it.
   assert.deepEqual(operations.check(created.container, PASSWORD, reduced, "words", "0"), {
     matches: true,
     path: null,
-    evidence: { builtInCheck: 12, walletCheck: null },
+    evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
   });
   const checkSession = new core.CheckSession(
     created.container,
@@ -345,7 +349,11 @@ async function checkReferences(created, missingLast, reduced) {
       "0x9858EfFD232B4033E47d90003D41EC34EcaEda94",
       { coin: "ethereum" },
     ),
-    { matches: true, path: "m/44'/60'/0'/0/0", evidence: { builtInCheck: 12, walletCheck: null } },
+    {
+      matches: true,
+      path: "m/44'/60'/0'/0/0",
+      evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
+    },
   );
   assert.equal(
     operations.check(created.container, PASSWORD, reduced, "fingerprint", PHRASE_FINGERPRINT, {

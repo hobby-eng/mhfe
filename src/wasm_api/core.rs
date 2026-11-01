@@ -431,6 +431,8 @@ struct CheckJson {
 struct EvidenceJson {
     /// The length of a 12- to 21-word original seed phrase whose built-in check passes, or null.
     built_in_check: Option<usize>,
+    /// The other lengths whose built-in check passes too, by chance.
+    other_lengths: Vec<usize>,
     /// Whether the 24-word reading passes the 16-bit phrase + passphrase check, with the
     /// passphrase given or the empty one when none was given. Null for a stated length, for a
     /// same-length container, and when exactly one shorter length passes its built-in check and
@@ -559,6 +561,7 @@ impl CheckSession {
             path: evidence.outcome.path().map(ToString::to_string),
             evidence: EvidenceJson {
                 built_in_check: evidence.built_in_check,
+                other_lengths: evidence.other_lengths,
                 wallet_check: evidence.wallet_check,
             },
         })

@@ -13,7 +13,7 @@ async function checkRehearsal(client, made) {
   // phrase, and the phrase + passphrase check, which a phrase drawn without it fails.
   expectEqual(
     (await fullCheck({ fingerprint: FINGERPRINT })).evidence,
-    { builtInCheck: 12, walletCheck: null },
+    { builtInCheck: 12, otherLengths: [], walletCheck: null },
     "a check lists the built-in check of a 12-word phrase, no wallet check without a passphrase",
   );
   const matched = (path = null) => ({ matches: true, path });
@@ -85,15 +85,43 @@ async function checkRehearsal(client, made) {
   // stated one, so 15 stated words match, and the evidence names the 12 found (AUD-015-FUN001).
   expectEqual(
     await fullCheck({ words: 15 }),
-    { matches: true, path: null, evidence: { builtInCheck: 12, walletCheck: null } },
+    {
+      matches: true,
+      path: null,
+      evidence: { builtInCheck: 12, otherLengths: [], walletCheck: null },
+    },
     "the built-in check of 15 stated words matches at the 12 found, which the evidence names",
   );
   expectEqual(
     await fullCheck({ words: 15 }, { password: WRONG_PASSWORD }),
-    { matches: false, path: null, evidence: { builtInCheck: null, walletCheck: null } },
+    {
+      matches: false,
+      path: null,
+      evidence: { builtInCheck: null, otherLengths: [], walletCheck: null },
+    },
     "where no short check passes, as with the wrong password, the built-in check of 15 words "
       + "does not match",
   );
+  // Every length that matches is named: a stated one among them first, and one that fails leaves
+  // them as with none stated.
+  for (
+    const [words, builtInCheck, otherLengths, walletCheck] of [
+      [0, 12, [21], WALLET_CHECKS.ambiguousAs24],
+      [12, 12, [21], null],
+      [21, 21, [12], null],
+      [15, 12, [21], null],
+    ]
+  ) {
+    expectEqual(
+      await client.check({
+        container: made.ambiguous,
+        password: PASSWORD,
+        reference: { words },
+      }),
+      { matches: true, path: null, evidence: { builtInCheck, otherLengths, walletCheck } },
+      `a check of { words: ${words} } names both lengths of an ambiguous container`,
+    );
+  }
   await expectRejection(
     check({ words: 24 }),
     "INVALID_WORD_COUNT",

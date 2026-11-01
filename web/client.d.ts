@@ -539,14 +539,15 @@ export class MhfeClient {
      * The original seed phrase's own checks, from the same recovery, to list with the match.
      * `builtInCheck` is the length of a 12- to 21-word one whose built-in check passes, the
      * stated one where it passes; with `{ words }` a check that passes at another length takes
-     * precedence and matches, and this names that length. `walletCheck` is whether the 24-word
-     * reading passes the 16-bit phrase + passphrase check with the passphrase given, or with none
-     * if none was given; null for `{ words }` with a length stated, for a same-length container,
-     * and when exactly one shorter length passes its check and the reference did not match the
-     * 24-word reading. A phrase drawn without that check fails it, so that only a pass says
-     * anything.
+     * precedence and matches, and this names that length. `otherLengths` are the other lengths
+     * whose built-in check passes too, by chance: list every one, as nothing tells them apart.
+     * `walletCheck` is whether the 24-word reading passes the 16-bit phrase + passphrase check
+     * with the passphrase given, or with none if none was given; null for `{ words }` with a
+     * length stated, for a same-length container, and when exactly one shorter length passes its
+     * check and the reference did not match the 24-word reading. A phrase drawn without that
+     * check fails it, so that only a pass says anything.
      */
-    evidence: { builtInCheck: number | null; walletCheck: boolean | null };
+    evidence: { builtInCheck: number | null; otherLengths: WordCount[]; walletCheck: boolean | null };
   }>;
   /** The candidates of a container phrase with words typed as "?"; see client.js. */
   searchCandidates(options: { container: string }): Promise<{

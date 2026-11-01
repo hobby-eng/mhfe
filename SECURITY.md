@@ -63,21 +63,21 @@ Never include a real seed phrase, password, private key or wallet file.
   swap: the line a secret is typed into at a terminal or read from standard input; the password as
   Argon2 receives it; a BIP39 passphrase and its normalized form; a password made by the generator
   or completed by its check word; a seed phrase as text, whether typed, recovered, new or a hidden
-  wallet's, and every reading of a recovery that `check` compares with an address or a
-  fingerprint; and a phrase's entropy and the cipher's state, that is the state an encryption
-  starts from until its check is done, both halves of the state through all twelve rounds, the
-  message of each round that holds one of them, and the state a recovery, a check, a rekey or a
-  hidden wallet recovers. Each of these buffers is reserved at a size it never outgrows, locked
-  before anything is written into it, and unlocked only after it is wiped, also when what is
-  written into it is refused, such as a password that is too long. Copies made on the way are
-  wiped when dropped but not locked: the words of a typed phrase while they are read and written
-  out in full, the entropy as the BIP39 library first gives it, the hash that fills out a short
-  phrase's state while it is computed, the random bytes and word numbers a phrase or password is
-  drawn from, the BIP39 seed for an address, a fingerprint or the wallet check and the keys derived
-  from it, each round's Argon2 key, salt and mask, the lines of the frame a phrase is shown in at a
-  terminal, and buffers inside dependencies. The system locks whole pages, so each of these buffers
-  has pages of its own. This is best effort, natively on Linux, macOS and Windows; nothing is
-  locked in a browser.
+  wallet's, every reading of a recovery that `check` compares with an address or a fingerprint, and
+  the lines of the frame a phrase is shown in at a terminal; the BIP39 seed for an address, a
+  fingerprint or the wallet check and the BIP32 keys derived from it; and a phrase's entropy and
+  the cipher's state, that is the state an encryption starts from until its check is done, both
+  halves of the state through all twelve rounds, the message, salt, Argon2 key and mask of each
+  round, and the state a recovery, a check, a rekey or a hidden wallet recovers. Each of these
+  buffers is reserved at a size it never outgrows, locked before anything is written into it, and
+  unlocked only after it is wiped, also when what is written into it is refused, such as a password
+  that is too long. The system locks whole pages, so each of these buffers has pages of its own.
+  Copies made on the way are wiped when dropped but not locked: the words of a typed phrase while
+  they are read and written out in full, the entropy and the BIP39 seed as the BIP39 library first
+  gives them, the hashes that fill out a short phrase's state, make a round's salt and mask or give
+  a BIP32 key while they are computed, a BIP32 key as a scalar while the curve uses it, the random
+  bytes and word numbers a phrase or password is drawn from, and buffers inside dependencies.
+  Locking is best effort, natively on Linux, macOS and Windows; nothing is locked in a browser.
   The Argon2 work area, gigabytes in size, cannot be locked, and from its blocks a password guess
   can be tested cheaply. On Linux the tool therefore warns, before any secret is typed, when a swap
   area is not encrypted with dm-crypt, directly or under LVM, or when it cannot tell; swap in memory

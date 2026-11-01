@@ -134,7 +134,7 @@ fn stdin_help() -> String {
          BIP39 passphrase of the original seed phrase (an empty line if none), one per line. With \
          --address, --coin names the coin of the address; without it the address is \
          Bitcoin's. Output: \"matches\" with exit code 0, or \"does not match\" with exit \
-         code 3.",
+         code 3. Several lengths that match are named on standard error.",
     ])
 }
 
@@ -327,8 +327,14 @@ pub fn run(options: Options) -> Result<i32, Failure> {
 
     eprintln!();
     if input.is_script() {
-        // Scripts read exactly these words.
+        // Scripts read exactly these words, so several lengths that match go to standard error.
         println!("{}", if matches { "matches" } else { "does not match" })?;
+        if matches && !evidence.other_lengths.is_empty() {
+            let first = evidence.built_in_check.iter();
+            for &words in first.chain(&evidence.other_lengths) {
+                style::hint(&built_in_line(words));
+            }
+        }
     } else if matches {
         println!("{}", paint(style::GOOD, format!("{} matches", style::TICK)))?;
         // Every check that passed on a line of its own: the container phrase's checksum, what
@@ -452,6 +458,12 @@ fn matched_lines(
             lines.push(built_in_line(words));
         }
     }
+    lines.extend(
+        evidence
+            .other_lengths
+            .iter()
+            .map(|&words| built_in_line(words)),
+    );
     if evidence.wallet_check == Some(true) && !matches!(choice, Choice::WalletCheck) {
         lines.push(wallet_check_line());
     }
@@ -1010,6 +1022,7 @@ mod tests {
         let evidence = |built_in_check, wallet_check| CheckEvidence {
             outcome: mhfe::CheckOutcome::Matches { path: None },
             built_in_check,
+            other_lengths: Vec::new(),
             wallet_check,
         };
         let built_in = matched_lines(
@@ -1037,6 +1050,7 @@ mod tests {
         let evidence = CheckEvidence {
             outcome: mhfe::CheckOutcome::Matches { path: None },
             built_in_check: Some(15),
+            other_lengths: Vec::new(),
             wallet_check: Some(true),
         };
         let found_by = "the container's own wallet: master key fingerprint e0f73b78";
@@ -1059,5 +1073,30 @@ mod tests {
             matched_lines(Choice::Address, &failing, false, None).len(),
             2
         );
+    }
+
+    /// Every length that matches is a line of its own, whichever way the check was asked.
+    #[test]
+    fn every_matching_length_is_listed() {
+        let evidence = CheckEvidence {
+            outcome: mhfe::CheckOutcome::Matches { path: None },
+            built_in_check: Some(12),
+            other_lengths: vec![21],
+            wallet_check: Some(false),
+        };
+        for choice in [
+            Choice::OwnChecks,
+            Choice::BuiltInCheck(15),
+            Choice::BuiltInCheck(12),
+        ] {
+            assert_eq!(
+                matched_lines(choice, &evidence, false, None),
+                [
+                    "the container phrase passes its BIP39 checksum",
+                    "the built-in check of a 12-word original seed phrase",
+                    "the built-in check of a 21-word original seed phrase",
+                ]
+            );
+        }
     }
 }

@@ -375,9 +375,9 @@ export class MhfeClient {
    * length, and with `passphrase` a 24-word phrase drawn with the phrase + passphrase check is
    * found too) or `{ walletCheck: true }` (the phrase and passphrase check of a 24-word container,
    * with a passphrase). Resolves to `{ matches, path, evidence }`, `path` being where a matched
-   * address was found and null otherwise, `evidence` `{ builtInCheck, walletCheck }` the original
-   * seed phrase's own checks from the same recovery, and never to any part of the phrase.
-   * Progress: "recover" 1 to 12, then once "compare".
+   * address was found and null otherwise, `evidence` `{ builtInCheck, otherLengths, walletCheck }`
+   * the original seed phrase's own checks from the same recovery, every length that matches among
+   * them, and never to any part of the phrase. Progress: "recover" 1 to 12, then once "compare".
    *
    * With `{ words: 0 }`, `onNoLength` is called when detection found no length: ask the user how
    * many words the original seed phrase has, and return `{ words }` (12 to 21) or for 24 words

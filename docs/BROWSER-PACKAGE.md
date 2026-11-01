@@ -121,7 +121,8 @@ const { matches, path, evidence } = await client.check({
 });
 // For a container of that phrase: matches is true and path is "m/84'/0'/0'/0/0", where the
 // address was found. Without a match, and for the other references, path is null.
-// evidence: { builtInCheck, walletCheck }, the original seed phrase's own checks.
+// evidence: { builtInCheck, otherLengths, walletCheck }, the original seed phrase's own checks;
+// otherLengths holds the other lengths that match, by chance, to name beside builtInCheck.
 ```
 
 `pim` and `memoryLevel`, 0 by default, are the container's settings: `encrypt()`, `decrypt()`,
