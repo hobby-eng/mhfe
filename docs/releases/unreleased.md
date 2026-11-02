@@ -35,6 +35,8 @@ builds and the CI checks of the same run go on until they end or are cancelled.
 
 ## Fixed
 
+- Ctrl+C while a typed line or a phrase was being drawn could leave its last part, such as the hint
+  below a password, on the main screen.
 - A key pressed early no longer clears a private screen.
 - Ctrl+C, Ctrl+\ and Ctrl+Z end a command in its checks at start too.
 - Ctrl+D at any empty prompt cancels, with exit code 130.

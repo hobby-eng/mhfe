@@ -94,6 +94,7 @@ impl<'a> LineScreen<'a> {
 
     /// Shows one more character.
     pub fn add(&mut self, character: &str) -> io::Result<()> {
+        let _drawing = crate::hidden_input::drawing();
         self.settle()?;
         let width = cells(character);
         // A wide character does not fit in the last column: the terminal leaves it empty and
@@ -115,6 +116,7 @@ impl<'a> LineScreen<'a> {
 
     /// Takes the last `characters` shown characters off the screen, with any hint below them.
     pub fn remove(&mut self, characters: usize) -> io::Result<()> {
+        let _drawing = crate::hidden_input::drawing();
         self.settle()?;
         let mut cells = 0;
         for _ in 0..characters {
@@ -132,6 +134,7 @@ impl<'a> LineScreen<'a> {
 
     /// Shows the hint for `line`, the text typed so far, below it in place of the one before.
     pub fn hint(&mut self, line: &str) -> io::Result<()> {
+        let _drawing = crate::hidden_input::drawing();
         let Some(hints) = self.hints else {
             return Ok(());
         };
@@ -154,6 +157,7 @@ impl<'a> LineScreen<'a> {
 
     /// Clears the hint once the line is done.
     pub fn finish(&mut self) -> io::Result<()> {
+        let _drawing = crate::hidden_input::drawing();
         if self.hints.is_some() {
             self.controls.write_all(b"\x1b[J")?;
         }

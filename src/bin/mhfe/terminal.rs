@@ -487,6 +487,7 @@ pub fn print_phrase(phrase: &str, wallet: Wallet, input: &Input) -> io::Result<(
     if input.is_script() {
         return println!("{phrase}");
     }
+    let _drawing = hidden_input::drawing();
     for line in style::boxed_words(phrase).lines() {
         println!("{line}")?;
     }

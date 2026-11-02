@@ -50,6 +50,17 @@ pub(crate) use platform::{current as terminal_settings, restore as restore_termi
 /// restores the terminal holds this lock, so the Ctrl+C handler and a prompt never interleave.
 static SAVED: Mutex<Option<platform::Settings>> = Mutex::new(None);
 
+/// Held while a typed line or a secret is drawn, and by the Ctrl+C handler until the tool has
+/// ended: nothing of either is drawn after the private screen is left.
+static DRAWING: Mutex<()> = Mutex::new(());
+
+/// The lock of [`DRAWING`].
+pub fn drawing() -> std::sync::MutexGuard<'static, ()> {
+    DRAWING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// What a line holds, which decides the keys that edit it and the hints below it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Content {
@@ -171,6 +182,7 @@ fn with_terminal_switched<T>(
 /// For the Ctrl+C handler: restores the terminal if a hidden prompt changed it, and keeps the lock
 /// until `exit` has ended the tool, so that no new prompt can change the terminal in between.
 pub fn restore_and_exit(exit: fn() -> !) -> ! {
+    let _drawing = drawing();
     let mut saved = lock_saved();
     if let Some(original) = saved.take() {
         platform::restore(&original);
