@@ -465,7 +465,6 @@ impl From<mhfe_core::Error> for MhfeError {
             Core::Argon2Failed { code } => {
                 Self::Argon2(format!("the reference code returned error {code}"))
             }
-            Core::Cancelled => Self::Cancelled,
             other => Self::Internal(other.to_string()),
         }
     }

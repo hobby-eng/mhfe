@@ -186,13 +186,13 @@ Never include a real seed phrase, password, private key or wallet file.
 
 ## The Argon2 engines and their boundary
 
-Natively, Argon2 is RustCrypto's `argon2` crate inside mhfe-core, which also makes the calls
-that lock secrets, isolate a process and keep the work area out of core dumps. The
-[security notes of mhfe-core](https://github.com/hobby-eng/mhfe_core/blob/v0.2.0/SECURITY.md)
+Natively, Argon2 is RustCrypto's `argon2` crate inside mhfe-core, which also makes the calls that
+lock secrets, isolate a process and keep the work area out of core dumps. The [security notes of
+mhfe-core](https://github.com/hobby-eng/mhfe_core/blob/523f9e48a9dd2c84581e44f7f8636627dd496209/SECURITY.md)
 give what its engine leaves and clears and what each system offers and leaves open. The browser
 package compiles the reference C implementation from
-[`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) with Emscripten, with one C file of
-MHFE's own, `src/engine/argon2_browser.c`, which clears the stack behind the reference code.
+[`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md) with Emscripten, with one C file of MHFE's
+own, `src/engine/argon2_browser.c`, which clears the stack behind the reference code.
 
 The only unsafe Rust code of the library is in `src/engine/ffi.rs`, the free-memory queries for
 macOS and Windows; the rest of the library denies it (`#![deny(unsafe_code)]`). The command-line

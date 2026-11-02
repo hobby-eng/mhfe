@@ -5,7 +5,7 @@
 use std::cell::Cell;
 use std::ops::ControlFlow;
 
-use mhfe_core::{Argon2Engine, Mhfe, Password, Phrase, Reading, Suite, WorkFactor};
+use mhfe_core::{Argon2Engine, Mhfe, Password, Phrase, Reading, Suite};
 
 use crate::container::ContainerFacts;
 use crate::engine::error_of;
@@ -251,14 +251,16 @@ pub fn encrypt<E: Argon2Engine>(
     let original = read_phrase(original)?;
     let work = mhfe.work_factor();
     let stopped = Stopped::default();
-    mhfe.encrypt(
-        &original,
-        password,
-        suite,
-        &mut |round, rounds| stopped.answer(on_round(round, rounds)),
-        &mut |container| stopped.answer(on_unchecked(container)),
-    )
-    .map_err(|refusal| stopped.error(refusal, work))
+    let flow = mhfe
+        .encrypt(
+            &original,
+            password,
+            suite,
+            &mut |round, rounds| stopped.answer(on_round(round, rounds)),
+            &mut |container| stopped.answer(on_unchecked(container)),
+        )
+        .map_err(|refusal| error_of(refusal, memory_bytes(work)))?;
+    stopped.finished(flow)
 }
 
 /// Recovers the original phrase from a container. Its word count selects the suite: 24 words
@@ -311,26 +313,28 @@ pub(crate) fn recover_state<E: Argon2Engine>(
     let container = phrase::read(container, MhfeError::InvalidContainer)?;
     let work = mhfe.work_factor();
     let stopped = Stopped::default();
-    mhfe.decrypt(
-        &container,
-        password,
-        None,
-        selected,
-        &mut |round, rounds| stopped.answer(on_progress(round, rounds)),
-    )
-    .map_err(|refusal| match refusal {
-        mhfe_core::Error::SuiteNotAdmitted { container_words } => {
-            MhfeError::InvalidContainer(if selected == Some(Suite::TwentyFourWords) {
-                format!("it has {container_words} words, but a 24-word container always has 24")
-            } else {
-                format!(
-                    "it has {STATE_WORDS} words, but a same-length container has {}",
-                    phrase::counts_text(&packing::SHORT_WORD_COUNTS)
-                )
-            })
-        }
-        other => stopped.error(other, work),
-    })
+    let flow = mhfe
+        .decrypt(
+            &container,
+            password,
+            None,
+            selected,
+            &mut |round, rounds| stopped.answer(on_progress(round, rounds)),
+        )
+        .map_err(|refusal| match refusal {
+            mhfe_core::Error::SuiteNotAdmitted { container_words } => {
+                MhfeError::InvalidContainer(if selected == Some(Suite::TwentyFourWords) {
+                    format!("it has {container_words} words, but a 24-word container always has 24")
+                } else {
+                    format!(
+                        "it has {STATE_WORDS} words, but a same-length container has {}",
+                        phrase::counts_text(&packing::SHORT_WORD_COUNTS)
+                    )
+                })
+            }
+            other => error_of(other, memory_bytes(work)),
+        })?;
+    stopped.finished(flow)
 }
 
 /// Step 3 of recovery: the readings of `recovery` for `stated`, in their order, under the core's
@@ -351,7 +355,7 @@ pub(crate) fn readings(
 }
 
 /// The first error of a callback of an operation, kept across the core, whose callbacks can only
-/// say `Break`, which it gives back as [`mhfe_core::Error::Cancelled`].
+/// say `Break`, which comes back as the core's result.
 #[derive(Default)]
 struct Stopped(Cell<Option<MhfeError>>);
 
@@ -367,11 +371,12 @@ impl Stopped {
         }
     }
 
-    /// The error of an operation at `work` that the core ended with `refusal`.
-    fn error(&self, refusal: mhfe_core::Error, work: WorkFactor) -> MhfeError {
-        self.0
-            .take()
-            .unwrap_or_else(|| error_of(refusal, memory_bytes(work)))
+    /// The value of an operation the core finished, or the error of the callback that said `Break`.
+    fn finished<T>(&self, flow: ControlFlow<(), T>) -> Result<T, MhfeError> {
+        match flow {
+            ControlFlow::Continue(value) => Ok(value),
+            ControlFlow::Break(()) => Err(self.0.take().unwrap_or(MhfeError::Cancelled)),
+        }
     }
 }
 
@@ -382,6 +387,7 @@ mod tests {
         reduced, state_from_hex, test_password, wrong_password, HashEngine, NoArgon2Calls,
         ReducedEngine, AMBIGUOUS_STATES,
     };
+    use mhfe_core::WorkFactor;
 
     const ZERO_12: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";

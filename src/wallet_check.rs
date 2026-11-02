@@ -246,7 +246,7 @@ impl PhraseDraw {
             }
             Ok::<bool, MhfeError>(met)
         };
-        // `Break` gives only `Cancelled`, so the error that stops the draw waits here.
+        // `Break` carries no error, so the error that stops the draw waits here.
         let mut stopped = None;
         let drawn = mhfe_core::wallet_check::draw(passphrase, &mut |entropy| loop {
             match counted(entropy) {
@@ -258,7 +258,10 @@ impl PhraseDraw {
                 }
             }
         });
-        drawn.map_err(|error| stopped.unwrap_or_else(|| error.into()))
+        match drawn? {
+            ControlFlow::Continue(phrase) => Ok(phrase),
+            ControlFlow::Break(()) => Err(stopped.unwrap_or(MhfeError::Cancelled)),
+        }
     }
 }
 

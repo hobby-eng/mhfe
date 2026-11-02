@@ -904,11 +904,11 @@ installs with
 of the password rule changes.
 
 The cipher, native Argon2 and the protections of secrets come from the crate
-[mhfe-core](https://github.com/hobby-eng/mhfe_core), pinned to one version in `Cargo.toml`. The
-native tool runs Argon2 on RustCrypto's `argon2` crate inside mhfe-core, and the browser package
-on the reference C implementation of its authors, unchanged, vendored in
-[`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md). Version 0.3.0 was the last release to
-implement suite 2.
+[mhfe-core](https://github.com/hobby-eng/mhfe_core), pinned in `Cargo.toml` to one commit of its
+repository until its next release. The native tool runs Argon2 on RustCrypto's `argon2` crate inside
+mhfe-core, and the browser package on the reference C implementation of its authors, unchanged,
+vendored in [`vendor/phc-winner-argon2`](vendor/phc-winner-argon2.md). Version 0.3.0 was the last
+release to implement suite 2.
 
 On x86-64 the `argon2` crate checks the processor and runs its AVX2 code only where AVX2 is present,
 so the program also runs on older processors and on virtual machines that hide AVX2.
