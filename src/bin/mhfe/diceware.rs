@@ -12,6 +12,7 @@ use zeroize::Zeroizing;
 
 use crate::exit::{self, Failure, SUCCESS};
 use crate::flow::{self, Flow};
+use crate::hidden_input;
 use crate::made_password;
 use crate::menu;
 use crate::raw_io::{self, println};
@@ -232,6 +233,7 @@ const TITLE: &str = "Make a password";
 fn show(password: &str, strength: &str, notes: &[&str], flow: Flow) -> Result<i32, Failure> {
     flow::step();
     if raw_io::output_is_terminal() {
+        let _drawing = hidden_input::drawing();
         println!("  {STRONG}{password}{STRONG:#}")?;
         eprintln!();
     } else {

@@ -25,6 +25,7 @@ use crate::check::{self, WalletReference, CONTAINER_PHRASE, ORIGINAL_SEED_PHRASE
 use crate::choice::{self, Answer, Question};
 use crate::container_repair::{Reviewed, SearchContext};
 use crate::exit::{refused, Failure};
+use crate::hidden_input;
 use crate::readme;
 use crate::settings;
 use crate::style::{self, paint, GOOD, HEADING, STRONG};
@@ -488,6 +489,7 @@ fn use_found(
             )
         )
     );
+    let drawing = hidden_input::drawing();
     for line in style::boxed_words(&found.container).lines() {
         eprintln!("{line}");
     }
@@ -504,6 +506,8 @@ fn use_found(
     // Not style::ok, which keeps its line for the summary on the main screen: the words found
     // stay on this private screen.
     eprintln!("{} Found {}, {how}.", paint(GOOD, style::TICK), &*places);
+    // The question below draws under the same lock.
+    drop(drawing);
     let answers = found_answers();
     let question = Question {
         text: "Use the found container phrase?",

@@ -202,7 +202,8 @@ let outcome: CheckOutcome =
     `mhfe_core::wallet_check::draw`, whose trials run one after another on the calling thread, as
     the specification's proof requires: a program does not race several draws for the first result.
     `on_draws` hears the draws so far every 1,024 (`wallet_check::DRAW_REPORT_INTERVAL`) and stops
-    the draw with an error. `draw` probes the source with `random::check_source` first.
+    the draw with an error. `draw` probes the source with `random::check_source` first, and after
+    64 times the expected draws (`draw_limit()`) refuses the generator with `RANDOM_FAILED`.
     `is_checked()` says whether the draw has the check. A `NewPhrase` holds the phrase in locked
     memory (`phrase()`) and says whether it was drawn with the check (`checked()`).
   - `PhraseDraw::with_wishes(wishes)` draws a phrase that also meets `word_wishes::WordWishes`;
@@ -761,16 +762,16 @@ await client.check({
 // name beside it; walletCheck, whether the 24-word reading passes the 16-bit source check with the
 // reference's passphrase or the empty one, where that reading comes out (no short length passes,
 // several do, or an address or fingerprint matched it), null otherwise and always for a stated
-// length { words: n } and a same-length container.
-// reference: exactly one of { address, coin, path? }, { fingerprint }, { words } or
-// { walletCheck: true }; coin and path only with an address. A stated length { words: n } matches
-// when the built-in check of any 12- to 21-word length passes, the stated one or another, and
-// evidence.builtInCheck names that length. { words: 0 } detects the length, and with a passphrase
-// finds a 24-word phrase drawn with the phrase + passphrase check; onNoLength returns { words } or,
-// for 24 words, { address, coin, path?, passphrase? } or { fingerprint, passphrase? }, compared on
-// the same recovery, or null. { walletCheck: true } compares the 24-word reading only and needs a
-// 24-word container (NO_WALLET_CHECK) and then a passphrase (WALLET_CHECK_NEEDS_PASSPHRASE), both
-// checked before the first round.
+// length { words: n } and a same-length container. reference: exactly one of
+// { address, coin, path? }, { fingerprint }, { words } or { walletCheck: true }; coin and path only
+// with an address. A stated length { words: n } matches when the built-in check of any 12- to
+// 21-word length passes, the stated one or another, and evidence.builtInCheck names that length.
+// { words: 0 } detects the length; with a passphrase evidence.walletCheck says whether the 24-word
+// reading passes the phrase + passphrase check; onNoLength returns { words } or, for 24 words,
+// { address, coin, path?, passphrase? } or { fingerprint, passphrase? }, compared on the same
+// recovery, or null. { walletCheck: true } tests the 24-word reading only, whose pass is "not
+// verified", and needs a 24-word container (NO_WALLET_CHECK) and then a passphrase
+// (WALLET_CHECK_NEEDS_PASSPHRASE), both checked before the first round.
 await client.searchCandidates({ container });
 // { missing, candidates, offersWalletSearch, offersOwnChecks }
 await client.searchDecoy({ container, reference, passphrase, scanGap, onProgress }); // no password
@@ -900,8 +901,7 @@ fingerprint with an empty `passphrase` matches the phrase's wallet without one, 
 about funds under a passphrase, so it confirms only a wallet stated to have none: `true` is refused
 there with `INVALID_REQUEST`, as a wallet with a passphrase is compared with it. For a length
 without a built-in check, `{ builtInCheck: true }` is refused with `REFERENCE_REQUIRED` before the
-answer is judged. All these refusals come before the first round; in a browser the worker has then
-run only the small known answer of its Argon2 build. `core/client.d.ts` types an address or a
+answer is judged. All these refusals come before the engine is made, so before any Argon2 work. `core/client.d.ts` types an address or a
 fingerprint confirmation in two forms: with a `passphrase` and an optional `walletHasPassphrase`, or
 without a `passphrase` and with `walletHasPassphrase` required. A type cannot tell an empty
 `passphrase`, so an empty one fits the first form and is refused without the answer when the rekey

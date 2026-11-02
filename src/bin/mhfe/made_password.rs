@@ -15,6 +15,7 @@ use mhfe_core::Password;
 
 use crate::choice::{self, Answer, Question};
 use crate::exit::Failure;
+use crate::hidden_input;
 use crate::readme;
 use crate::settings::Operation;
 use crate::style::{self, STRONG};
@@ -213,9 +214,12 @@ fn show(
     check_word: bool,
 ) -> Result<(), Failure> {
     let screen = PrivateScreen::enter(input, operation.title());
-    eprintln!();
-    eprintln!("  {STRONG}{password}{STRONG:#}");
-    eprintln!();
+    {
+        let _drawing = hidden_input::drawing();
+        eprintln!();
+        eprintln!("  {STRONG}{password}{STRONG:#}");
+        eprintln!();
+    }
     style::hint(strength);
     if check_word {
         style::hint(CHECK_WORD_NOTE);

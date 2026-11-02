@@ -377,8 +377,9 @@ next to the container.
 For a 24-word container whose phrase was drawn to pass a check, as `mhfe new` does on request and
 other programs following the specification can, the list of what to compare with also offers "The
 phrase + passphrase check". This is a 16-bit hash of the BIP39 seed, which comes from the phrase and
-the passphrase together. It asks for the passphrase, which may not be empty, and confirms the
-password and passphrase, not the wallet.
+the passphrase together. It asks for the passphrase, which may not be empty. A pass makes the
+password and the passphrase very likely right, but the result stays "not verified": only an address
+or the fingerprint shows the wallet.
 
 "The container's built-in check" is the check of a 12- to 21-word original seed phrase in a 24-word
 container. It proves the password and settings, but not the wallet or its passphrase. With it, the

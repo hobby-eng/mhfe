@@ -21,6 +21,7 @@ use crate::choice::{self, Answer, Question};
 use crate::container_search;
 use crate::exit::{refused, Failure, SUCCESS};
 use crate::flow::Flow;
+use crate::hidden_input;
 use crate::raw_io::println;
 use crate::readme;
 use crate::settings::{self, Operation, Settings};
@@ -419,19 +420,22 @@ const NOTHING_TO_REPAIR: &str =
 /// The repaired container phrase and every repaired word, below the words as typed. To standard
 /// error, as everything a read container shows: the command's output stays its result alone.
 fn show_repaired(repaired: &Repaired) {
-    eprintln!();
-    eprintln!(
-        "{}",
-        paint(
-            HEADING,
-            format!(
-                "Repaired container phrase, {} words",
-                repaired.container().words()
+    {
+        let _drawing = hidden_input::drawing();
+        eprintln!();
+        eprintln!(
+            "{}",
+            paint(
+                HEADING,
+                format!(
+                    "Repaired container phrase, {} words",
+                    repaired.container().words()
+                )
             )
-        )
-    );
-    for line in style::boxed_words(repaired.container().as_str()).lines() {
-        eprintln!("{line}");
+        );
+        for line in style::boxed_words(repaired.container().as_str()).lines() {
+            eprintln!("{line}");
+        }
     }
     report_changes(repaired);
 }
@@ -654,6 +658,7 @@ pub fn print_card(words: &str, input: &Input) -> io::Result<()> {
     if input.is_script() {
         return println!("{words}");
     }
+    let _drawing = hidden_input::drawing();
     let count = words.split(' ').count();
     eprintln!();
     eprintln!(
@@ -709,6 +714,7 @@ fn report_changes(repaired: &Repaired) {
             );
         }
     });
+    let _drawing = hidden_input::drawing();
     for row in changes.lines() {
         eprintln!("{row}");
     }

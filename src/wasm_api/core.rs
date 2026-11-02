@@ -993,8 +993,8 @@ impl RekeySession {
     /// INVALID_REQUEST. Only a reference with a non-empty passphrase shows the answer, and there
     /// false is refused; everywhere else it is required (see [`Rekey::recover`]). The answer holds
     /// for every confirmation of the rekey. These refusals, and REFERENCE_REQUIRED for a
-    /// confirmation that cannot confirm a phrase of the rekey's length, come before the first
-    /// round; only the Argon2 build's 1 MiB known answer runs before them. Returns JSON
+    /// confirmation that cannot confirm a phrase of the rekey's length, come before the engine is
+    /// made, so before any Argon2 work. Returns JSON
     /// `{ ownerCheck, walletCheck }`: for "owner", the phrase to compare, and the rekey then waits
     /// for `ownerAnswer`; `walletCheck` the 16-bit source check of a 24-word reading with the
     /// reference's passphrase or the empty one, null for other lengths. A refusal after the

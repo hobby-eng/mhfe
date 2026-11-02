@@ -262,6 +262,8 @@ fn draw(
     selected: Option<usize>,
     help_hint: Option<&str>,
 ) -> DrawnRows {
+    // An answer may be a secret, such as a repaired password.
+    let _drawing = hidden_input::drawing();
     let mut lines = draw_question_rows(question);
     let entries: Vec<(&str, &str)> = answers
         .iter()

@@ -69,6 +69,9 @@ fn meets_criterion(phrase: &Phrase, passphrase: &str) -> bool {
 
 /// Draws between two reports to the caller, which can show progress or stop the draw then.
 pub const DRAW_REPORT_INTERVAL: u64 = 1024;
+/// How many times the expected number of draws a draw may take before it stops: a working
+/// generator needs more with a probability of about e^-64, so reaching it means a broken one.
+pub const DRAW_LIMIT_FACTOR: f64 = 64.0;
 
 /// The rule of the passphrase, for every front end: the wallet check is offered only with a BIP39
 /// passphrase that is not empty (`WALLET_CHECK_NEEDS_PASSPHRASE` otherwise), for a new phrase as
@@ -155,6 +158,11 @@ impl PhraseDraw {
         self.wishes.odds(self.check_bits())
     }
 
+    /// The most draws this draw takes: [`DRAW_LIMIT_FACTOR`] times the expected number.
+    pub fn draw_limit(&self) -> u64 {
+        (self.odds().expected_draws * DRAW_LIMIT_FACTOR).ceil() as u64
+    }
+
     /// One draw from `source` into `entropy`, and whether its phrase meets the wishes. An entropy
     /// of zeros, which a random source never gives in practice, means the source filled nothing
     /// and is refused.
@@ -191,10 +199,11 @@ impl PhraseDraw {
         Ok(None)
     }
 
-    /// Draws until a phrase is found. The source is probed first ([`check_source`]), so that a
-    /// source that fills nothing or repeats itself is refused before anything is drawn. `on_draws`
-    /// hears the number of draws so far every [`DRAW_REPORT_INTERVAL`] draws; an error it returns
-    /// stops the draw.
+    /// Draws until a phrase is found, at most [`PhraseDraw::draw_limit`] times, after which it
+    /// refuses the generator with [`MhfeError::RandomFailed`]. The source is probed first
+    /// ([`check_source`]), so that a source that fills nothing or repeats itself is refused before
+    /// anything is drawn. `on_draws` hears the number of draws so far every
+    /// [`DRAW_REPORT_INTERVAL`] draws; an error it returns stops the draw.
     pub fn draw(
         &self,
         source: &mut dyn RandomSource,
@@ -218,12 +227,17 @@ impl PhraseDraw {
         source: &mut dyn RandomSource,
         on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
     ) -> Result<Phrase, MhfeError> {
+        let limit = self.draw_limit();
         let mut draws = 0;
         loop {
-            if let Some(phrase) = self.try_draws(source, DRAW_REPORT_INTERVAL)? {
+            let count = DRAW_REPORT_INTERVAL.min(limit - draws);
+            if let Some(phrase) = self.try_draws(source, count)? {
                 return Ok(phrase);
             }
-            draws += DRAW_REPORT_INTERVAL;
+            draws += count;
+            if draws == limit {
+                return Err(no_phrase_within(limit));
+            }
             on_draws(draws)?;
         }
     }
@@ -237,8 +251,12 @@ impl PhraseDraw {
         source: &mut dyn RandomSource,
         on_draws: &mut dyn FnMut(u64) -> Result<(), MhfeError>,
     ) -> Result<Phrase, MhfeError> {
+        let limit = self.draw_limit();
         let mut draws = 0u64;
         let mut counted = |entropy: &mut [u8; NEW_ENTROPY_BYTES]| {
+            if draws == limit {
+                return Err(no_phrase_within(limit));
+            }
             let met = self.one_draw(source, entropy)?;
             draws += 1;
             if draws.is_multiple_of(DRAW_REPORT_INTERVAL) {
@@ -263,6 +281,13 @@ impl PhraseDraw {
             ControlFlow::Break(()) => Err(stopped.unwrap_or(MhfeError::Cancelled)),
         }
     }
+}
+
+/// The refusal of a generator that gave no phrase in `limit` draws.
+fn no_phrase_within(limit: u64) -> MhfeError {
+    MhfeError::RandomFailed(format!(
+        "it gave no phrase that meets the conditions in {limit} draws"
+    ))
 }
 
 /// A new phrase, kept out of swap and wiped when dropped.
@@ -443,6 +468,27 @@ mod tests {
             PhraseDraw::unchecked().draw(&mut stuck, &mut |_| Ok(())),
             Err(MhfeError::RandomFailed(_))
         ));
+    }
+
+    /// A generator whose phrases never meet the wishes is refused after exactly the draw limit.
+    #[test]
+    fn a_draw_stops_at_its_limit() {
+        // Every phrase of these counters holds "abandon", the word never to use.
+        let next = std::cell::Cell::new(0u64);
+        let mut counting = |bytes: &mut [u8]| {
+            next.set(next.get() + 1);
+            bytes.copy_from_slice(&counted(next.get()));
+            Ok(())
+        };
+        check_source(&mut counting).unwrap();
+        let probes = next.get();
+        next.set(0);
+        let draw = PhraseDraw::unchecked().with_wishes(WordWishes::new(&[], &["abandon"]).unwrap());
+        let limit = draw.draw_limit();
+        assert_eq!(limit, 65, "64 times the expected 1.01 draws");
+        let refused = draw.draw(&mut counting, &mut |_| Ok(()));
+        assert!(matches!(refused, Err(MhfeError::RandomFailed(_))));
+        assert_eq!(next.get(), probes + limit);
     }
 
     /// The core's draw stops only with `Cancelled`: what stopped it comes out as it was. A draw

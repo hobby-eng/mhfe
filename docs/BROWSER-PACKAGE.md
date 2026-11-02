@@ -164,10 +164,11 @@ values, such as the repair word counts and what each repairs.
 
 `check()` takes exactly one reference: `{ address, coin, path? }`, `{ fingerprint }`, `{ words }`,
 the built-in check of a 12- to 21-word original seed phrase, or `{ walletCheck: true }`, the phrase
-and passphrase check, with the wallet's `passphrase`. The wallet check compares the container's
-24-word reading only, never a shorter one, as the profile defines it. Some references cannot apply,
-and these are refused before the first round (the worker runs only the small known answer of its
-Argon2 build first). A same-length container has no built-in check (`NO_BUILT_IN_CHECK`) and no
+and passphrase check, with the wallet's `passphrase`. The wallet check tests the container's 24-word
+reading only, as the profile defines it, and a pass is evidence, not a match: the outcome is "not
+verified", unless a shorter reading passes its built-in check, which matches. Some references cannot
+apply, and these are refused before the first round (the worker runs only the small known answer of
+its Argon2 build first). A same-length container has no built-in check (`NO_BUILT_IN_CHECK`) and no
 wallet check (`NO_WALLET_CHECK`). On a 24-word container the wallet check without a passphrase is
 refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says which apply
 (`builtInCheckLengths`, `offersWalletCheck`).
@@ -183,14 +184,14 @@ refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. `readContainer()` says which apply
   reference did not match the 24-word reading. A phrase drawn without that check almost always fails it, so only
   a pass says anything.
 
-`{ words: 0 }` detects the length: the built-in check of whichever 12- to 21-word length passes it,
-or with a `passphrase`, the phrase + passphrase check of a 24-word phrase drawn with it. Ask the
-user whether a BIP39 passphrase is used with the original seed phrase first. When detection finds
-no length, `onNoLength` is called: ask how many words the original seed phrase has, and return
-`{ words }` for 12 to 21 words, which then does not match, or for 24 words
-`{ address, coin, path?, passphrase? }` or `{ fingerprint, passphrase? }`, compared on the same
-recovery without its rounds again; `null` keeps the result. `onNoLength` with another reference is
-a `TypeError`.
+`{ words: 0 }` detects the length by the built-in check of whichever 12- to 21-word length passes
+it; with a `passphrase`, `evidence.walletCheck` also says whether the 24-word reading passes the
+phrase + passphrase check, which is evidence, not a match. Ask the user whether a BIP39 passphrase
+is used with the original seed phrase first. When detection finds no length, `onNoLength` is called:
+ask how many words the original seed phrase has, and return `{ words }` for 12 to 21 words, which
+then does not match, or for 24 words `{ address, coin, path?, passphrase? }` or `{ fingerprint,
+passphrase? }`, compared on the same recovery without its rounds again; `null` keeps the result.
+`onNoLength` with another reference is a `TypeError`.
 
 ```js
 const resealed = await client.rekey({
@@ -423,8 +424,9 @@ passphrase that is not empty (`INVALID_WORD_COUNT`, `WALLET_CHECK_NEEDS_PASSPHRA
 typed twice (`PASSPHRASES_DIFFER` otherwise), and `walletCheck` must then be `true` or `false`.
 `walletCheck: true` without a passphrase is refused with `WALLET_CHECK_NEEDS_PASSPHRASE`. A phrase
 with the wallet check takes about 65,536 draws, one after another in one worker, as the
-specification's proof requires, which takes minutes. One phrase is drawn at a time (`BUSY`
-otherwise), and `wallet.cancel()` stops it.
+specification's proof requires, which takes minutes. After 64 times the expected draws it stops
+with `RANDOM_FAILED`, which a working generator never reaches. One phrase is drawn at a time
+(`BUSY` otherwise), and `wallet.cancel()` stops it.
 
 `chosen` holds at most `parameters().maxChosenWords` (1) word for the new phrase, `{ word, position
 }` with `position` from 1 to 24 or `"anywhere"`, and `neverUse` at most
@@ -817,9 +819,8 @@ do for them:
   passphrase matches only the phrase's wallet without one, which says nothing about funds under one.
   Say why it is asked, next to the question: so that the list of what to keep is complete; MHFE
   stores no passphrase and asks for one only to compare an address or a fingerprint, or for the
-  fingerprint to rehearse the new container. With an
-  address or a fingerprint, then ask for the passphrase only when the wallet has one, refuse an
-  empty one there, and pass it with the answer;
+  fingerprint to rehearse the new container. With an address or a fingerprint, then ask for the
+  passphrase only when the wallet has one, refuse an empty one there, and pass it with the answer;
 - wherever a container phrase is typed to be decrypted, checked, rekeyed or opened, read it with
   `MhfeRepair.inspectContainer()` first, as the command-line tool does: for "marked" ask for the
   repair words at once, with a way back to the container phrase; for "notAContainer" say why it is
@@ -830,18 +831,17 @@ do for them:
   the user knows, an address or fingerprint of the container's own wallet (`searchDecoy()`, seconds
   for one missing word, minutes for two, and no password), one of their wallet, the original seed
   phrase's (`searchWallet()` with `{ address, coin }` or `{ fingerprint }`), the original seed
-  phrase's passphrase alone (`{ walletCheck: true }`, its built-in check and the phrase +
-  passphrase check of a phrase made by `mhfe new`), or nothing (`{ builtInCheck: true }`, a 12- to
-  21-word original seed phrase only). For a wallet, ask then whether a BIP39 passphrase is used
-  with the container phrase, or with the original seed phrase, naming whose, and pass it, "" for
-  none; the decoy is compared with exactly the passphrase given. Offer only the container's own
-  wallet for two missing words, and no own checks for a same-length container. Before
-  `searchWallet()` say how long it takes: the candidates (`searchCandidates()`) times one recovery
-  in this mode at the settings given (see [Fast and standard mode](#fast-and-standard-mode) for the
-  defaults); it looks for one missing word only, and the decoy search for two, an address then
-  within `scanGap`, asked as the command-line tool asks it. After a refusal or nothing found, ask
-  again what the user knows rather than for the container phrase. Show the words found before the
-  container is used;
+  phrase's passphrase alone (`{ walletCheck: true }`, its built-in check and the phrase + passphrase
+  check of a phrase made by `mhfe new`), or nothing (`{ builtInCheck: true }`, a 12- to 21-word
+  original seed phrase only). For a wallet, ask then whether a BIP39 passphrase is used with the
+  container phrase, or with the original seed phrase, naming whose, and pass it, "" for none; the
+  decoy is compared with exactly the passphrase given. Offer only the container's own wallet for two
+  missing words, and no own checks for a same-length container. Before `searchWallet()` say how long
+  it takes: the candidates (`searchCandidates()`) times one recovery in this mode at the settings
+  given (see [Fast and standard mode](#fast-and-standard-mode) for the defaults); it looks for one
+  missing word only, and the decoy search for two, an address then within `scanGap`, asked as the
+  command-line tool asks it. After a refusal or nothing found, ask again what the user knows rather
+  than for the container phrase. Show the words found before the container is used;
 - show the suite identifier (`suiteId`) when a container is made, and what to keep as the result's
   `keep` list gives it, in its order, adding nothing and leaving nothing out: the container's words
   and the password always; the wallet's BIP39 passphrase, or any passphrase of the wallet where the
@@ -857,11 +857,10 @@ do for them:
 - show the words it has read back to the user in full: `readContainer()` and `readPhrase()` return
   them;
 - before encrypting, also a new phrase, look at `otherLengths` of the container chosen from
-  `readPhrase().containers`: when it is not empty (about one phrase in four billion, and never for
-  a same-length container), tell the user to note the word count and choose it during recovery,
-  because automatic detection would not give the phrase on its own. After an
-  encryption or a rekey, the result's `otherLengths` says the same, and `keep` then lists the word
-  count;
+  `readPhrase().containers`: when it is not empty (about one phrase in four billion, and never for a
+  same-length container), tell the user to note the word count and choose it during recovery,
+  because automatic detection would not give the phrase on its own. After an encryption or a rekey,
+  the result's `otherLengths` says the same, and `keep` then lists the word count;
 - show master key fingerprints openly, with what they are of: `containerFingerprint` is of the
   container's own words, not the wallet; `fingerprintWithoutPassphrase` is of a wallet without a
   BIP39 passphrase; `fingerprintWithPassphrase` is with the passphrase given. They do not reveal the
@@ -874,23 +873,23 @@ do for them:
   "ambiguous", ask the user to compare each candidate with the wallet. Every 24-word reading gets
   the 16-bit source check (`walletCheck`) with the `passphrase` given to `decrypt()`, "" for none:
   the container does not show whether the phrase was made with the check. When a 24-word reading
-  comes out, ask whether a BIP39 passphrase is used with the phrase, and say why in a few
-  sentences, not only a link; ask before the recovery or decrypt again with the answer. Say
-  "passes the 16-bit check" for `true`; for `false` say that it matters only if the wallet was made
-  with the check, as a phrase made without it fails. When the user is done,
-  remove the phrase from the screen, say so, and ask the user to close the page;
+  comes out, ask whether a BIP39 passphrase is used with the phrase, and say why in a few sentences,
+  not only a link; ask before the recovery or decrypt again with the answer. Say "passes the 16-bit
+  check" for `true`; for `false` say that it matters only if the wallet was made with the check, as
+  a phrase made without it almost always fails. When the user is done, remove the phrase from the
+  screen, say so, and ask the user to close the page;
 - offer a check only where `readContainer()` says it applies, and show what an address check will
   search (`MhfeWallet.describeAddress()`) before it runs. Beside a match, list each of the original
-  seed phrase's own checks that `evidence` shows passing, as the command-line tool does, and when
-  `{ words }` matched at another length, say that the check found `evidence.builtInCheck` words;
-- before a rekey, tell every user, whatever the container, in one plain sentence: wallets that
-  other passwords open on the old container do not move to the new one, so keep the old container,
-  its passwords, and a PIM or memory level that is not 0, until you have moved their funds. Your
-  own wallet's addresses do not change. Ask nothing about such wallets, as an answer
-  would be a record of one. Show the phrase of an owner confirmation concealed, ask the owner to
-  compare it with a written record, not with memory, and remove it after the answer. Say afterwards
-  that the old container phrase and password still open the wallet, and that the new container
-  phrase is rehearsed with a check;
+  seed phrase's own checks that `evidence` shows passing, as the command-line tool does, and when `{
+  words }` matched at another length, say that the check found `evidence.builtInCheck` words;
+- before a rekey, tell every user, whatever the container, in one plain sentence: wallets that other
+  passwords open on the old container do not move to the new one, so keep the old container, its
+  passwords, and a PIM or memory level that is not 0, until you have moved their funds. Your own
+  wallet's addresses do not change. Ask nothing about such wallets, as an answer would be a record
+  of one. Show the phrase of an owner confirmation concealed, ask the owner to compare it with a
+  written record, not with memory, and remove it after the answer. Say afterwards that the old
+  container phrase and password still open the wallet, and that the new container phrase is
+  rehearsed with a check;
 - before hidden wallets, say every time that nothing is created or stored and that the container and
   each password give the same wallet every time; ask for the main wallet's BIP39 passphrase every
   time; show no list or count of the wallets opened, as the command-line tool shows them only on its

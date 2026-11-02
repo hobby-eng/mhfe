@@ -272,7 +272,7 @@ impl ContainerSearch {
 /// Compares candidates `0..count` with `compare` and gives the first that matches with its
 /// outcome. Natively the candidates are shared among the processor's cores, each taking the next
 /// one left, while this thread reports how far they have come; a WebAssembly build, which has no
-/// threads here, compares them in turn.
+/// threads here, and a system that refuses every thread compare them in turn.
 #[cfg(not(target_arch = "wasm32"))]
 fn compare_candidates(
     count: usize,
@@ -325,7 +325,7 @@ fn compare_candidates(
         }
         finished.fetch_add(1, Ordering::Release);
     };
-    std::thread::scope(|scope| {
+    let started = std::thread::scope(|scope| {
         // The system may refuse threads, under a limit on tasks: the ones it gives do the work.
         let started = (0..workers)
             .filter(|_| {
@@ -334,9 +334,6 @@ fn compare_candidates(
                     .is_ok()
             })
             .count();
-        if started == 0 {
-            worker();
-        }
         // This thread tells how far the comparison has come; an error from it stops the workers.
         // After an abort it is not asked again while the workers end.
         while finished.load(Ordering::Acquire) < started {
@@ -348,7 +345,11 @@ fn compare_candidates(
                 abort_with(error);
             }
         }
+        started
     });
+    if started == 0 {
+        return compare_in_turn(count, compare, on_progress);
+    }
     if let Some(error) = failure.into_inner().unwrap_or_else(|e| e.into_inner()) {
         return Err(error);
     }
@@ -365,6 +366,16 @@ const PROGRESS_INTERVAL_MS: u64 = 100;
 
 #[cfg(target_arch = "wasm32")]
 fn compare_candidates(
+    count: usize,
+    compare: CandidateCompare<'_>,
+    on_progress: CandidateProgress<'_>,
+) -> Result<Option<(usize, CheckOutcome)>, MhfeError> {
+    compare_in_turn(count, compare, on_progress)
+}
+
+/// [`compare_candidates`] on this thread alone, each candidate after the other, with a report
+/// after each, from which an error stops the comparison.
+fn compare_in_turn(
     count: usize,
     compare: CandidateCompare<'_>,
     on_progress: CandidateProgress<'_>,
@@ -694,5 +705,25 @@ mod tests {
         assert_eq!(result.err(), Some(MhfeError::Cancelled));
         assert_eq!(asked, 1);
         assert!(began.elapsed() < Duration::from_secs(10));
+    }
+
+    /// Without threads, as when the system refuses every one, a cancel from the report after a
+    /// candidate ends the comparison there.
+    #[test]
+    fn a_cancel_ends_a_comparison_in_turn() {
+        let compared = std::sync::atomic::AtomicUsize::new(0);
+        let compare = |_: usize, _: &dyn Fn() -> bool| {
+            compared.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(CheckOutcome::DoesNotMatch)
+        };
+        let result = compare_in_turn(8, &compare, &mut |done, _| {
+            if done == 2 {
+                Err(MhfeError::Cancelled)
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(result.err(), Some(MhfeError::Cancelled));
+        assert_eq!(compared.into_inner(), 2);
     }
 }
